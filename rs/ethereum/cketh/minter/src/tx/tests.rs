@@ -220,14 +220,15 @@ fn should_cbor_encoding_be_stable() {
 }
 
 mod eip7702 {
+    use crate::checked_amount::CheckedAmountOf;
     use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
     use crate::tx::{
         AccessList, AccessListItem, Authorization, Eip7702TransactionRequest, SignedAuthorization,
         SignedEip7702TransactionRequest, StorageKey, TransactionSignature,
     };
-    use assert_matches::assert_matches;
     use ethnum::u256;
     use ic_ethereum_types::Address;
+    use rlp::Encodable;
     use std::str::FromStr;
 
     // Published test vector from the trust-wallet/wallet-core EIP-7702 test suite:
@@ -396,65 +397,105 @@ mod eip7702 {
         assert_eq!(recovered.as_slice(), authority.as_ref());
     }
 
+    /// Cross-checks the minter's hand-rolled EIP-7702 encoding against `alloy`, which encodes the
+    /// same transaction independently: the payload to sign, the broadcast payload of the signed
+    /// transaction, and the hash the transaction is referenced by. `ethers-core` was archived
+    /// before EIP-7702 and could not check any of this.
     #[test]
-    fn should_decode_the_raw_bytes_it_encoded() {
+    fn should_encode_the_same_transaction_as_alloy() {
+        use alloy_consensus::SignableTransaction;
+        use alloy_eips::eip2718::Encodable2718;
+
         for signed_tx in [
             sample_signed_transaction(),
             sample_signed_transaction_with_access_list(),
         ] {
-            let decoded =
-                SignedEip7702TransactionRequest::decode(&signed_tx.raw_transaction_bytes())
-                    .unwrap();
+            let alloy_tx = to_alloy_transaction(signed_tx.transaction());
+            assert_eq!(
+                prefix_with_transaction_type(
+                    crate::tx::SignableTransaction::transaction_type(signed_tx.transaction()),
+                    signed_tx.transaction().rlp_bytes().to_vec()
+                ),
+                alloy_tx.encoded_for_signing()
+            );
 
-            assert_eq!(decoded, signed_tx);
-            assert_eq!(decoded.hash(), signed_tx.hash());
+            let alloy_signed = alloy_tx.into_signed(to_alloy_signature(signed_tx.signature()));
+            assert_eq!(
+                signed_tx.raw_transaction_bytes(),
+                alloy_signed.encoded_2718()
+            );
+            assert_eq!(signed_tx.hash().0, alloy_signed.hash().0);
         }
     }
 
-    #[test]
-    fn should_refuse_to_decode_a_transaction_of_another_type() {
-        let mut raw_transaction = sample_signed_transaction().raw_transaction_bytes();
-        raw_transaction[0] = 2;
-
-        assert_matches!(
-            SignedEip7702TransactionRequest::decode(&raw_transaction),
-            Err(e) if e.contains("got type 2")
-        );
-    }
-
-    #[test]
-    fn should_refuse_to_decode_a_transaction_without_authorizations() {
-        use rlp::{Rlp, RlpStream};
-
-        const AUTHORIZATION_LIST_INDEX: usize = 9;
-        const FIELD_COUNT: usize = 13;
-
-        let raw_transaction = sample_signed_transaction().raw_transaction_bytes();
-        let (transaction_type, payload) = raw_transaction.split_first().unwrap();
-        let fields = Rlp::new(payload);
-        let mut stream = RlpStream::new_list(FIELD_COUNT);
-        for index in 0..FIELD_COUNT {
-            if index == AUTHORIZATION_LIST_INDEX {
-                stream.begin_list(0);
-            } else {
-                stream.append_raw(fields.at(index).unwrap().as_raw(), 1);
-            }
+    fn to_alloy_transaction(transaction: &Eip7702TransactionRequest) -> alloy_consensus::TxEip7702 {
+        alloy_consensus::TxEip7702 {
+            chain_id: transaction.chain_id,
+            nonce: to_u64(transaction.nonce),
+            gas_limit: to_u64(transaction.gas_limit),
+            max_fee_per_gas: to_u128(transaction.max_fee_per_gas),
+            max_priority_fee_per_gas: to_u128(transaction.max_priority_fee_per_gas),
+            to: alloy_primitives::Address::from(transaction.destination.into_bytes()),
+            value: alloy_primitives::U256::from_be_bytes(transaction.amount.to_be_bytes()),
+            access_list: alloy_eips::eip2930::AccessList(
+                transaction
+                    .access_list
+                    .0
+                    .iter()
+                    .map(|item| alloy_eips::eip2930::AccessListItem {
+                        address: alloy_primitives::Address::from(item.address.into_bytes()),
+                        storage_keys: item
+                            .storage_keys
+                            .iter()
+                            .map(|key| alloy_primitives::B256::from(key.0))
+                            .collect(),
+                    })
+                    .collect(),
+            ),
+            authorization_list: transaction
+                .authorization_list
+                .iter()
+                .map(to_alloy_authorization)
+                .collect(),
+            input: alloy_primitives::Bytes::copy_from_slice(&transaction.data),
         }
-        let mut without_authorizations = vec![*transaction_type];
-        without_authorizations.extend(stream.out());
-
-        assert_matches!(
-            SignedEip7702TransactionRequest::decode(&without_authorizations),
-            Err(e) if e.contains("non-empty authorization list")
-        );
     }
 
-    #[test]
-    fn should_refuse_to_decode_an_empty_transaction() {
-        assert_matches!(
-            SignedEip7702TransactionRequest::decode(&[]),
-            Err(e) if e.contains("empty transaction")
-        );
+    fn to_alloy_authorization(
+        authorization: &SignedAuthorization,
+    ) -> alloy_eips::eip7702::SignedAuthorization {
+        alloy_eips::eip7702::SignedAuthorization::new_unchecked(
+            alloy_eips::eip7702::Authorization {
+                chain_id: alloy_primitives::U256::from(authorization.chain_id),
+                address: alloy_primitives::Address::from(authorization.delegate.into_bytes()),
+                nonce: to_u64(authorization.nonce),
+            },
+            u8::from(authorization.y_parity),
+            alloy_primitives::U256::from_be_bytes(authorization.r.to_be_bytes()),
+            alloy_primitives::U256::from_be_bytes(authorization.s.to_be_bytes()),
+        )
+    }
+
+    fn to_alloy_signature(signature: &TransactionSignature) -> alloy_primitives::Signature {
+        alloy_primitives::Signature::new(
+            alloy_primitives::U256::from_be_bytes(signature.r.to_be_bytes()),
+            alloy_primitives::U256::from_be_bytes(signature.s.to_be_bytes()),
+            signature.signature_y_parity,
+        )
+    }
+
+    fn to_u64<Unit>(amount: CheckedAmountOf<Unit>) -> u64 {
+        alloy_primitives::U256::from_be_bytes(amount.to_be_bytes()).to::<u64>()
+    }
+
+    fn to_u128<Unit>(amount: CheckedAmountOf<Unit>) -> u128 {
+        alloy_primitives::U256::from_be_bytes(amount.to_be_bytes()).to::<u128>()
+    }
+
+    fn prefix_with_transaction_type(transaction_type: u8, rlp: Vec<u8>) -> Vec<u8> {
+        let mut prefixed = rlp;
+        prefixed.insert(0, transaction_type);
+        prefixed
     }
 
     /// The sample transaction carries an empty access list, so decoding it exercises neither the
