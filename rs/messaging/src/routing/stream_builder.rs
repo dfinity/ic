@@ -835,23 +835,22 @@ impl StreamBuilderImpl {
             match network_topology.route(refund.recipient().get()) {
                 Some(dst_subnet_id) => {
                     let is_loopback_stream = dst_subnet_id == self.subnet_id;
+                    let dst_subnet_topology = network_topology.subnets().get(&dst_subnet_id);
+                    let dst_subnet_type = dst_subnet_topology.map(|topology| topology.subnet_type);
 
                     // No refunds are routed while either this subnet (the source) or the
                     // destination subnet is cooling down; not even into the loopback stream.
                     // Retain them in the refund pool until neither subnet is cooling down
                     // anymore, rather than dropping them (which would lose their cycles).
-                    if own_subnet_is_cooling_down
-                        || network_topology.is_cooling_down(&dst_subnet_id)
-                    {
+                    let dst_subnet_is_cooling_down =
+                        dst_subnet_topology.is_some_and(|topology| topology.cooling_down);
+                    if own_subnet_is_cooling_down || dst_subnet_is_cooling_down {
                         self.metrics.cooling_down_skipped_refunds.inc();
                         return false;
                     }
 
-                    let is_engine_dst = !is_loopback_stream
-                        && network_topology
-                            .subnets()
-                            .get(&dst_subnet_id)
-                            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
+                    let is_engine_dst =
+                        !is_loopback_stream && dst_subnet_type == Some(SubnetType::CloudEngine);
                     let is_engine_src = !is_loopback_stream && own_is_engine;
                     if is_engine_dst || is_engine_src {
                         // A refund destined to cross the engine boundary should not exist: a
