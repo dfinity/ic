@@ -460,6 +460,19 @@ pub enum CreateTransactionError {
     },
 }
 
+/// Why a sweep could not be turned into a transaction.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum CreateSweepTransactionError {
+    /// The gas prepaid for this sweep cannot pay the current fee, so no transaction is created:
+    /// one priced within the allowance could not be mined, and would hold the sweeper's nonce
+    /// while the resubmission strategy refused to bump it past the same allowance.
+    InsufficientTransactionFee {
+        id: SweepId,
+        allowed_max_transaction_fee: Wei,
+        actual_max_transaction_fee: Wei,
+    },
+}
+
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ResubmitTransactionError<Id> {
     InsufficientTransactionFee {

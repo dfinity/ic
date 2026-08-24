@@ -2,14 +2,12 @@
 //! and the minter's own implementation of it.
 
 use super::{
-    CreateTransactionError, EthWithdrawalRequest, SweepId, SweepRequest, TransactionCallData,
-    WithdrawalRequest,
+    CreateSweepTransactionError, CreateTransactionError, EthWithdrawalRequest, SweepId,
+    SweepRequest, TransactionCallData, WithdrawalRequest,
 };
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{GasAmount, LedgerBurnIndex, TransactionNonce, Wei};
 use crate::tx::{Eip1559TransactionRequest, GasFeeEstimate, ResubmissionStrategy};
-use std::cmp::min;
-use std::convert::Infallible;
 use std::fmt;
 
 /// A request that can flow through a `TransactionPipeline`: it carries an identity used as the
@@ -189,9 +187,7 @@ impl PipelineRequest for WithdrawalRequest {
 
 impl PipelineRequest for SweepRequest {
     type Id = SweepId;
-    /// A sweep pays its gas from the sweeper's own prepaid balance rather than out of the amount
-    /// moved, so there is no fee for it to fail to cover.
-    type Error = Infallible;
+    type Error = CreateSweepTransactionError;
 
     fn id(&self) -> SweepId {
         self.id
@@ -224,7 +220,7 @@ impl PipelineRequest for SweepRequest {
         gas_fee_estimate: GasFeeEstimate,
         gas_limit: GasAmount,
         ethereum_network: EthereumNetwork,
-    ) -> Result<Eip1559TransactionRequest, Infallible> {
+    ) -> Result<Eip1559TransactionRequest, CreateSweepTransactionError> {
         assert!(
             gas_limit > GasAmount::ZERO,
             "BUG: gas limit should be non-zero"
@@ -236,13 +232,20 @@ impl PipelineRequest for SweepRequest {
             .max_transaction_fee
             .into_wei_per_gas(gas_limit)
             .expect("BUG: gas_limit should be non-zero");
+        let min_max_fee_per_gas = gas_fee_estimate.min_max_fee_per_gas();
+        if min_max_fee_per_gas > max_fee_per_gas {
+            return Err(CreateSweepTransactionError::InsufficientTransactionFee {
+                id: self.id,
+                allowed_max_transaction_fee: self.max_transaction_fee,
+                actual_max_transaction_fee: min_max_fee_per_gas
+                    .transaction_cost(gas_limit)
+                    .unwrap_or(Wei::MAX),
+            });
+        }
         Ok(Eip1559TransactionRequest {
             chain_id: ethereum_network.chain_id(),
             nonce,
-            max_priority_fee_per_gas: min(
-                gas_fee_estimate.max_priority_fee_per_gas,
-                max_fee_per_gas,
-            ),
+            max_priority_fee_per_gas: gas_fee_estimate.max_priority_fee_per_gas,
             max_fee_per_gas,
             gas_limit,
             destination: self.destination,
