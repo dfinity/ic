@@ -6,7 +6,7 @@ use ic_consensus_idkg::{
     utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{ReplicaLogger, warn};
+use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
@@ -14,15 +14,35 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon,
-        Payload, RandomBeaconContent, Rank, SummaryPayload, idkg,
+        Payload, RandomBeaconContent, Rank, RegistryCUP, RegistryCupType, SummaryPayload, idkg,
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed, crypto_hash,
         threshold_sig::ni_dkg::NiDkgTag,
     },
+    registry::RegistryClientError,
     signature::ThresholdSignature,
 };
 use phantom_newtype::Id;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum RegistryCupCreationError {
+    #[error("Failed to retrieve subnet replica version at registry version {0}: {1:?}")]
+    ReplicaVersionError(RegistryVersion, RegistryClientError),
+    #[error("Missing subnet replica version at registry version {0}")]
+    ReplicaVersionMissing(RegistryVersion),
+    #[error("Failed constructing NiDKG summary block from CUP contents: {0}")]
+    DkgSummaryCreationError(String),
+    #[error("Failed constructing IDKG summary block from CUP contents: {0}")]
+    IDkgSummaryCreationError(String),
+    #[error("No current threshold transcript with tag {0:?} in registry CUP contents")]
+    ThresholdTranscriptMissing(NiDkgTag),
+    #[error("Failed to retrieve CUP contents from the registry at version {0}: {1:?}")]
+    FailedToGetCupContents(RegistryVersion, RegistryClientError),
+    #[error("Missing registry CUP contents at version {0}")]
+    CupContentsMissing(RegistryVersion),
+}
 
 /// Constructs a genesis/recovery CUP from the CUP contents associated with the
 /// given subnet from the provided CUP contents
@@ -32,73 +52,44 @@ pub fn make_registry_cup_from_cup_contents(
     cup_contents: CatchUpPackageContents,
     registry_version: RegistryVersion,
     logger: &ReplicaLogger,
-) -> Option<CatchUpPackage> {
-    let replica_version = match registry.get_replica_version(subnet_id, registry_version) {
-        Ok(Some(replica_version)) => replica_version,
-        err => {
-            warn!(
-                logger,
-                "Failed to retrieve subnet replica version at registry version {:?}: {:?}",
-                registry_version,
-                err
-            );
-            return None;
-        }
-    };
-    let dkg_summary = match get_dkg_summary_from_cup_contents(
+) -> Result<RegistryCUP, RegistryCupCreationError> {
+    let replica_version = registry
+        .get_replica_version(subnet_id, registry_version)
+        .map_err(|err| RegistryCupCreationError::ReplicaVersionError(registry_version, err))?
+        .ok_or(RegistryCupCreationError::ReplicaVersionMissing(
+            registry_version,
+        ))?;
+
+    let dkg_summary = get_dkg_summary_from_cup_contents(
         cup_contents.clone(),
         subnet_id,
         registry,
         registry_version,
-    ) {
-        Ok(summary) => summary,
-        Err(err) => {
-            warn!(
-                logger,
-                "Failed constructing NiDKG summary block from CUP contents: {}.", err
-            );
-
-            return None;
-        }
-    };
+    )
+    .map_err(RegistryCupCreationError::DkgSummaryCreationError)?;
     let cup_height = Height::new(cup_contents.height);
 
-    let idkg_summary = match bootstrap_idkg_summary(
+    let idkg_summary = bootstrap_idkg_summary(
         cup_contents.clone(),
         subnet_id,
         registry_version,
         registry,
         logger,
-    ) {
-        Ok(summary) => summary,
-        Err(err) => {
-            warn!(
-                logger,
-                "Failed constructing IDKG summary block from CUP contents: {}.", err
-            );
+    )
+    .map_err(RegistryCupCreationError::IDkgSummaryCreationError)?;
 
-            return None;
-        }
-    };
-
-    let Some(low_threshold_transcript) = dkg_summary.current_transcript(&NiDkgTag::LowThreshold)
-    else {
-        warn!(
-            logger,
-            "No current low threshold transcript in registry CUP contents"
-        );
-        return None;
-    };
+    let low_threshold_transcript = dkg_summary
+        .current_transcript(&NiDkgTag::LowThreshold)
+        .ok_or(RegistryCupCreationError::ThresholdTranscriptMissing(
+            NiDkgTag::LowThreshold,
+        ))?;
     let low_dkg_id = low_threshold_transcript.dkg_id.clone();
 
-    let Some(high_threshold_transcript) = dkg_summary.current_transcript(&NiDkgTag::HighThreshold)
-    else {
-        warn!(
-            logger,
-            "No current high threshold transcript in registry CUP contents"
-        );
-        return None;
-    };
+    let high_threshold_transcript = dkg_summary
+        .current_transcript(&NiDkgTag::HighThreshold)
+        .ok_or(RegistryCupCreationError::ThresholdTranscriptMissing(
+            NiDkgTag::HighThreshold,
+        ))?;
     let high_dkg_id = high_threshold_transcript.dkg_id.clone();
 
     // In a NNS subnet recovery case the block validation context needs to reference a registry
@@ -138,8 +129,9 @@ pub fn make_registry_cup_from_cup_contents(
             signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
         },
     };
+    let cup_type = RegistryCupType::from(&cup_contents);
 
-    Some(CatchUpPackage {
+    let cup = CatchUpPackage {
         content: CatchUpContent::new(
             HashedBlock::new(crypto_hash, block),
             HashedRandomBeacon::new(crypto_hash, random_beacon),
@@ -150,7 +142,9 @@ pub fn make_registry_cup_from_cup_contents(
             signer: high_dkg_id,
             signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
         },
-    })
+    };
+
+    Ok(RegistryCUP { cup, cup_type })
 }
 
 /// Constructs a genesis/recovery CUP from the CUP contents associated with the
@@ -159,26 +153,20 @@ pub fn make_registry_cup(
     registry: &dyn RegistryClient,
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
-) -> Option<CatchUpPackage> {
-    let versioned_record = match registry.get_cup_contents(subnet_id, registry.get_latest_version())
-    {
-        Ok(versioned_record) => versioned_record,
-        Err(e) => {
-            warn!(
-                logger,
-                "Failed to retrieve versioned record from the registry {:?}", e,
-            );
-            return None;
-        }
-    };
+) -> Result<RegistryCUP, RegistryCupCreationError> {
+    let latest_registry_version = registry.get_latest_version();
+    let versioned_record = registry
+        .get_cup_contents(subnet_id, latest_registry_version)
+        .map_err(|err| {
+            RegistryCupCreationError::FailedToGetCupContents(latest_registry_version, err)
+        })?;
 
-    let Some(cup_contents) = versioned_record.value else {
-        warn!(
-            logger,
-            "Missing registry CUP contents at version {}", versioned_record.version
-        );
-        return None;
-    };
+    let cup_contents =
+        versioned_record
+            .value
+            .ok_or(RegistryCupCreationError::CupContentsMissing(
+                versioned_record.version,
+            ))?;
 
     make_registry_cup_from_cup_contents(
         registry,
@@ -310,26 +298,27 @@ mod tests {
                 None
             }
         });
-        let result =
+        let RegistryCUP { cup, cup_type } =
             make_registry_cup(&registry_client, subnet_test_id(0), &no_op_logger()).unwrap();
 
+        assert_eq!(cup_type, RegistryCupType::Recovery);
         assert_eq!(
-            result.content.state_hash.get_ref(),
+            cup.content.state_hash.get_ref(),
             &CryptoHash(vec![1, 2, 3, 4, 5])
         );
         assert_eq!(
-            result.content.block.get_value().context.registry_version,
+            cup.content.block.get_value().context.registry_version,
             RegistryVersion::from(12345)
         );
         assert_eq!(
-            result.content.block.get_value().context.certified_height,
+            cup.content.block.get_value().context.certified_height,
             Height::from(54321)
         );
         assert_eq!(
-            result.content.version(),
+            cup.content.version(),
             &ReplicaVersion::try_from("TestID").unwrap()
         );
-        assert_eq!(result.signature.signer.dealer_subnet, subnet_test_id(0));
+        assert_eq!(cup.signature.signer.dealer_subnet, subnet_test_id(0));
     }
 
     /// `RegistryClient` implementation that allows to provide a custom function

@@ -111,6 +111,12 @@ pub(crate) fn should_halt(
 
     let should_halt_by_subnet_record = registry_client
         .get_halt_at_cup_height(subnet_id, registry_version)
+        .inspect_err(|err| {
+            warn!(
+                logger,
+                "Failed querying the registry at version {registry_version}: {err}"
+            )
+        })
         .ok()
         .flatten()
         .warn_if_none(

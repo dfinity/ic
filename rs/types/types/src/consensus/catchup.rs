@@ -401,6 +401,47 @@ impl SignedBytesWithoutDomainSeparator for CatchUpContentProtobufBytes {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub enum RegistryCupType {
+    Genesis,
+    Recovery,
+    SubnetSplitting,
+}
+
+impl From<&subnet_pb::CatchUpPackageContents> for RegistryCupType {
+    fn from(value: &subnet_pb::CatchUpPackageContents) -> Self {
+        match value.cup_type {
+            Some(subnet_pb::catch_up_package_contents::CupType::Genesis(..)) => {
+                RegistryCupType::Genesis
+            }
+            Some(subnet_pb::catch_up_package_contents::CupType::Recovery(..)) => {
+                RegistryCupType::Recovery
+            }
+            Some(subnet_pb::catch_up_package_contents::CupType::SubnetSplitting(..)) => {
+                RegistryCupType::SubnetSplitting
+            }
+            None => {
+                if value.state_hash.is_empty() {
+                    RegistryCupType::Genesis
+                } else {
+                    RegistryCupType::Recovery
+                }
+            }
+        }
+    }
+}
+
+pub struct RegistryCUP {
+    pub cup: CatchUpPackage,
+    pub cup_type: RegistryCupType,
+}
+
+impl From<RegistryCUP> for pb::CatchUpPackage {
+    fn from(RegistryCUP { cup, cup_type: _ }: RegistryCUP) -> Self {
+        cup.into()
+    }
+}
+
 pub struct SubnetSplittingArgs {
     pub destination_subnet_id: SubnetId,
 }
@@ -420,6 +461,17 @@ impl TryFrom<subnet_pb::SubnetSplittingArgs> for SubnetSplittingArgs {
             destination_subnet_id,
         })
     }
+}
+
+/// Types of [`CatchUpPackage`] created by the CUP maker
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum CatchUpPackageType {
+    Normal,
+    /// After delivering a splitting block to the DSM, we immediately create a CUP at the start of
+    /// the next dkg interval and we create a new summary block and a dummy random beacon on the fly.
+    PostSplit {
+        new_subnet_id: SubnetId,
+    },
 }
 
 #[cfg(test)]
