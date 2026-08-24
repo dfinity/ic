@@ -1888,7 +1888,6 @@ pub mod test {
                         reject_code: RejectCode::SysTransient,
                         message: "A transient error occurred.".to_string(),
                     }),
-                    ..empty_canister_http_response(0)
                 };
 
                 let response_metadata = CanisterHttpResponseReceipt {
@@ -1976,7 +1975,6 @@ pub mod test {
                         reject_code: RejectCode::SysFatal,
                         message: "b".repeat(oversized_len),
                     }),
-                    ..empty_canister_http_response(callback_id.get())
                 };
 
                 let dishonest_hash = ic_types::crypto::crypto_hash(&dishonest_response);
@@ -2306,7 +2304,6 @@ pub mod test {
                 let response = CanisterHttpResponse {
                     id: CallbackId::from(0),
                     content: CanisterHttpResponseContent::Reject(reject_content),
-                    ..empty_canister_http_response(0)
                 };
 
                 let response_metadata = CanisterHttpResponseReceipt {
