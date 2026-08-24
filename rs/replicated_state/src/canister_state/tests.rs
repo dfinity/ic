@@ -921,6 +921,10 @@ fn full_refund_resets_consumed_cycles() {
         let mut system_state = CanisterStateFixture::new().canister_state.system_state;
         let use_case = T::cycles_use_case();
         let ctx = format!("{use_case:?} with {cost_schedule:?} cost schedule");
+        // An earlier prepayment for the same use case that is never refunded, so the
+        // gauges must fall back to it (rather than all the way down to zero) once the
+        // prepayment below is refunded in full.
+        let outstanding_cycles = CompoundCycles::<T>::new(Cycles::from(500_u128), cost_schedule);
         let cycles_to_consume = Cycles::from(1000_u128);
         let prepaid_cycles = CompoundCycles::<T>::new(cycles_to_consume, cost_schedule);
         // The cost schedule only waives the real amount charged to the balance;
@@ -931,27 +935,33 @@ fn full_refund_resets_consumed_cycles() {
             "{ctx}"
         );
 
+        system_state.consume_cycles(outstanding_cycles);
         system_state.consume_cycles(prepaid_cycles);
         assert_eq!(
             system_state.balance(),
-            INITIAL_CYCLES - prepaid_cycles.real(),
+            INITIAL_CYCLES - outstanding_cycles.real() - prepaid_cycles.real(),
             "{ctx}"
         );
         assert_eq!(
             system_state.canister_metrics().consumed_cycles(),
-            prepaid_cycles.nominal(),
+            outstanding_cycles.nominal() + prepaid_cycles.nominal(),
             "{ctx}"
         );
 
         // Refund the whole prepayment, e.g. because nothing was transmitted or executed.
         system_state.refund_cycles(prepaid_cycles, prepaid_cycles);
 
-        // Nothing was consumed in the end, so the balance and the gauges must be
-        // back to where they started.
-        assert_eq!(system_state.balance(), INITIAL_CYCLES, "{ctx}");
+        // Nothing was consumed by this prepayment in the end, so the balance and the
+        // gauges must be back to where they were before it, i.e. only the outstanding
+        // prepayment is left.
+        assert_eq!(
+            system_state.balance(),
+            INITIAL_CYCLES - outstanding_cycles.real(),
+            "{ctx}"
+        );
         assert_eq!(
             system_state.canister_metrics().consumed_cycles(),
-            NominalCycles::zero(),
+            outstanding_cycles.nominal(),
             "{ctx}"
         );
         assert_eq!(
@@ -959,10 +969,11 @@ fn full_refund_resets_consumed_cycles() {
                 .canister_metrics()
                 .consumed_cycles_by_use_cases()
                 .get(&use_case),
-            Some(&NominalCycles::zero()),
+            Some(&outstanding_cycles.nominal()),
             "{ctx}"
         );
-        // And the monotonic counter must not have moved either.
+        // And the monotonic counter must not have moved at all: for a refundable use
+        // case it is bumped at refund time only, by `prepayment - refund`.
         assert_eq!(
             system_state
                 .canister_metrics()
