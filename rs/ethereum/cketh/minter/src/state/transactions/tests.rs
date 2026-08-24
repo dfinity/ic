@@ -3002,30 +3002,55 @@ mod sweep_lane {
     }
 
     #[test]
-    fn should_sweep_delegated_addresses_with_an_eip1559_transaction() {
-        let mut pipeline = sweeper_pipeline();
-        pipeline.record_request(sweep_request(0));
+    fn should_sweep_with_the_transaction_type_the_delegations_to_install_call_for() {
+        struct Case {
+            addresses_to_delegate: &'static str,
+            authorizations: Vec<SignedAuthorization>,
+            expected_transaction_type: u8,
+        }
 
-        let tx = create_and_record_sweep_tx(&mut pipeline, sweep_request(0));
+        for case in [
+            Case {
+                addresses_to_delegate: "none",
+                authorizations: vec![],
+                expected_transaction_type: EIP1559_TX_ID,
+            },
+            Case {
+                addresses_to_delegate: "one",
+                authorizations: vec![authorization(1)],
+                expected_transaction_type: SET_CODE_TX_ID,
+            },
+            Case {
+                addresses_to_delegate: "two",
+                authorizations: delegating_sweep_request(0).authorizations,
+                expected_transaction_type: SET_CODE_TX_ID,
+            },
+        ] {
+            let context = format!("{} address(es) to delegate", case.addresses_to_delegate);
+            let request = SweepRequest {
+                authorizations: case.authorizations,
+                ..sweep_request(0)
+            };
+            let mut pipeline = sweeper_pipeline();
+            pipeline.record_request(request.clone());
 
-        assert_eq!(tx.transaction_type(), EIP1559_TX_ID);
-        assert_eq!(tx.authorizations(), &[]);
-    }
+            let tx = create_and_record_sweep_tx(&mut pipeline, request.clone());
 
-    #[test]
-    fn should_install_delegations_with_an_eip7702_transaction() {
-        let mut pipeline = sweeper_pipeline();
-        let request = delegating_sweep_request(0);
-        pipeline.record_request(request.clone());
-
-        let tx = create_and_record_sweep_tx(&mut pipeline, request.clone());
-
-        assert_eq!(tx.transaction_type(), SET_CODE_TX_ID);
-        assert_eq!(tx.authorizations(), request.authorizations.as_slice());
-        assert_eq!(tx.destination(), &request.destination);
-        assert_eq!(tx.amount(), &request.amount);
-        assert_eq!(tx.data(), request.data);
-        assert_eq!(tx.nonce(), TransactionNonce::ZERO);
+            assert_eq!(
+                tx.transaction_type(),
+                case.expected_transaction_type,
+                "{context}"
+            );
+            assert_eq!(
+                tx.authorizations(),
+                request.authorizations.as_slice(),
+                "{context}"
+            );
+            assert_eq!(tx.destination(), &request.destination, "{context}");
+            assert_eq!(tx.amount(), &request.amount, "{context}");
+            assert_eq!(tx.data(), request.data, "{context}");
+            assert_eq!(tx.nonce(), TransactionNonce::ZERO, "{context}");
+        }
     }
 
     #[test]
