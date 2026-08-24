@@ -439,7 +439,7 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 ///    discarded. Paying the requester back is not the pipeline's concern — see
 ///    [`WithdrawalTransactions`].
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub(in crate::state) struct TransactionPipeline<R: PipelineRequest> {
+pub struct TransactionPipeline<R: PipelineRequest> {
     pending_requests: VecDeque<R>,
     // Processed requests (transaction created, sent, or finalized).
     processed_requests: BTreeMap<R::Id, R>,
@@ -450,7 +450,7 @@ pub(in crate::state) struct TransactionPipeline<R: PipelineRequest> {
 }
 
 /// The pipeline sending from the minter's main address, on which user withdrawals travel.
-pub(in crate::state) type MinterTransactionPipeline = TransactionPipeline<WithdrawalRequest>;
+pub type MinterTransactionPipeline = TransactionPipeline<WithdrawalRequest>;
 
 /// The pipeline sending from the minter's dedicated sweeper address.
 pub type SweeperTransactionPipeline = TransactionPipeline<SweepRequest>;
@@ -477,7 +477,7 @@ pub enum ResubmitTransactionError<Id> {
 /// How far a transaction has got through the pipeline. Carries the transaction itself, since
 /// every caller that asks the stage also wants the transaction at it.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub(in crate::state) enum TransactionStage<'a> {
+pub enum TransactionStage<'a> {
     Created(&'a Eip1559TransactionRequest),
     /// The most recently sent transaction, i.e. the one with the highest fee.
     Sent(&'a SignedTransactionRequest),
