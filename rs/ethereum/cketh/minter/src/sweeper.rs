@@ -7,6 +7,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::CKETH_FEE_SUBACCOUNT;
 use crate::eth_rpc_client::{NoReduction, ToReducedWithStrategy};
 use crate::guard::TimerGuard;
 use crate::ledger_client::LedgerClient;
@@ -16,9 +17,7 @@ use crate::numeric::{LedgerBurnIndex, Wei};
 use crate::state::audit::{EventType, process_event};
 use crate::state::transactions::EthWithdrawalRequest;
 use crate::state::{State, TaskType, mutate_state, read_state};
-use crate::{CKETH_FEE_SUBACCOUNT, deposit_address::sweeper_address};
 use ic_canister_log::log;
-use ic_ethereum_types::Address;
 
 /// Tops the sweeper address up when its balance has fallen below the configured low-water mark.
 pub async fn fund_sweeper_address() {
@@ -27,7 +26,7 @@ pub async fn fund_sweeper_address() {
         Err(_) => return,
     };
 
-    let Some(sweeper) = read_state(sweeper_address_from_state) else {
+    let Some(sweeper) = read_state(State::sweeper_address) else {
         log!(
             DEBUG,
             "[fund_sweeper]: SKIPPING: the ECDSA public key is not available yet"
@@ -128,15 +127,6 @@ pub async fn fund_sweeper_address() {
     mutate_state(|s| {
         process_event(s, EventType::AcceptedSweeperFundingRequest(request));
     });
-}
-
-/// The minter's dedicated sweeper address, or `None` while the master public key is still unknown.
-///
-/// Reads the cached key rather than fetching it: a second concurrent `ecdsa_public_key` call traps
-/// the canister, so the first run is delayed until the install-time fetch has cached it.
-pub fn sweeper_address_from_state(state: &State) -> Option<Address> {
-    let (master_public_key, chain_code) = state.public_key_and_chain_code()?;
-    Some(sweeper_address(&master_public_key, &chain_code))
 }
 
 /// Why a funding is or is not due at `sweeper_balance`.
