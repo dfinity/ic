@@ -30,8 +30,8 @@ use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CountBytes, Time};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles,
-    NominalCyclesTesting,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, CyclesUseCaseRefundableKind,
+    Instructions, NominalCycles, NominalCyclesTesting, RequestAndResponseTransmission,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
@@ -910,6 +910,76 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
             .unwrap(),
         (prepaid_cycles - refund).nominal()
     );
+}
+
+/// A full refund (i.e. a refund equal to its prepayment) must still lower the
+/// consumed cycles gauges by the refunded amount, even though it contributes
+/// nothing to the monotonic counters.
+#[test]
+fn full_refund_resets_consumed_cycles() {
+    fn test<T: CyclesUseCaseRefundableKind>(cost_schedule: CanisterCyclesCostSchedule) {
+        let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+        let use_case = T::cycles_use_case();
+        let ctx = format!("{use_case:?} with {cost_schedule:?} cost schedule");
+        let cycles_to_consume = Cycles::from(1000_u128);
+        let prepaid_cycles = CompoundCycles::<T>::new(cycles_to_consume, cost_schedule);
+        // The cost schedule only waives the real amount charged to the balance;
+        // the nominal amount recorded in the metrics is the same either way.
+        assert_eq!(
+            prepaid_cycles.nominal(),
+            NominalCycles::new(cycles_to_consume.get()),
+            "{ctx}"
+        );
+
+        system_state.consume_cycles(prepaid_cycles);
+        assert_eq!(
+            system_state.balance(),
+            INITIAL_CYCLES - prepaid_cycles.real(),
+            "{ctx}"
+        );
+        assert_eq!(
+            system_state.canister_metrics().consumed_cycles(),
+            prepaid_cycles.nominal(),
+            "{ctx}"
+        );
+
+        // Refund the whole prepayment, e.g. because nothing was transmitted or executed.
+        system_state.refund_cycles(prepaid_cycles, prepaid_cycles);
+
+        // Nothing was consumed in the end, so the balance and the gauges must be
+        // back to where they started.
+        assert_eq!(system_state.balance(), INITIAL_CYCLES, "{ctx}");
+        assert_eq!(
+            system_state.canister_metrics().consumed_cycles(),
+            NominalCycles::zero(),
+            "{ctx}"
+        );
+        assert_eq!(
+            system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases()
+                .get(&use_case),
+            Some(&NominalCycles::zero()),
+            "{ctx}"
+        );
+        // And the monotonic counter must not have moved either.
+        assert_eq!(
+            system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases_as_counters()
+                .get(&use_case),
+            Some(&NominalCycles::zero()),
+            "{ctx}"
+        );
+    }
+
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        test::<Instructions>(cost_schedule);
+        test::<RequestAndResponseTransmission>(cost_schedule);
+    }
 }
 
 #[test]
