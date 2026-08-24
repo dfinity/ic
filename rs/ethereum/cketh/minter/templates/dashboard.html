@@ -189,8 +189,8 @@
                         <td>{% if sweeper_funding.sweeper_address.is_some() %}{% call etherscan_address_link(sweeper_funding.sweeper_address.as_ref().unwrap()) %}{% endcall %}{% else %}unknown (ECDSA public key not yet available){% endif %}</td>
                     </tr>
                     <tr id="sweeper-prepaid-gas">
-                        <th>Prepaid gas (last observed balance)</th>
-                        <td>{% if sweeper_funding.observed_balance.is_some() %}{{ sweeper_funding.observed_balance.unwrap() }} Wei, observed at {{ sweeper_funding.observed_at_nanos.unwrap()|timestamp_to_datetime }}{% else %}never observed{% endif %}</td>
+                        <th>Prepaid gas (lower bound)</th>
+                        <td>{{ sweeper_funding.prepaid_gas_lower_bound }} Wei</td>
                     </tr>
                     <tr id="sweeper-funding-bounds">
                         <th>Fund below / up to</th>
