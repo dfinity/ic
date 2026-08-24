@@ -8,15 +8,13 @@ use ic_protobuf::{
     registry::{
         node::v1::NodeRecord,
         replica_version::v1::ReplicaVersionRecord,
-        standard_engine_replica_version::v1::StandardEngineReplicaVersionRecord,
         subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord, SubnetType},
     },
     types::v1::SubnetId as SubnetIdProto,
 };
 use ic_registry_keys::{
     DEFAULT_INITIAL_DKG_SUBNET_ID_KEY, ROOT_SUBNET_ID_KEY, make_catch_up_package_contents_key,
-    make_node_record_key, make_replica_version_key,
-    make_standard_engine_replica_version_record_key, make_subnet_list_record_key,
+    make_node_record_key, make_replica_version_key, make_subnet_list_record_key,
     make_subnet_record_key,
 };
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
@@ -437,6 +435,11 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<ReplicaVersion> {
+        // Not imported at module level, because that would make calls to
+        // `get_replica_version_record` ambiguous between this trait and
+        // `SubnetRegistry`.
+        use crate::replica_version::ReplicaVersionRegistry;
+
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         let Some(subnet_record) = deserialize_registry_value::<SubnetRecord>(bytes)? else {
             return Ok(None);
@@ -481,7 +484,7 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         }
 
         let Some(standard_engine_record) =
-            get_standard_engine_replica_version_record(self, version)?
+            self.get_standard_engine_replica_version_record(version)?
         else {
             return Err(DecodeError {
                 error: format!(
@@ -619,14 +622,6 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
     }
 }
 
-fn get_standard_engine_replica_version_record<T: RegistryClient + ?Sized>(
-    client: &T,
-    version: RegistryVersion,
-) -> RegistryClientResult<StandardEngineReplicaVersionRecord> {
-    let bytes = client.get_value(&make_standard_engine_replica_version_record_key(), version);
-    deserialize_registry_value::<StandardEngineReplicaVersionRecord>(bytes)
-}
-
 /// Computes an engine's upgrade priority, a pseudo-random real/floating point
 /// number in the closed interval [0.0, 1.0].
 ///
@@ -751,7 +746,9 @@ impl<T: RegistryClient + ?Sized> SubnetTransportRegistry for T {
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
+    use ic_protobuf::registry::standard_engine_replica_version::v1::StandardEngineReplicaVersionRecord;
     use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_keys::make_standard_engine_replica_version_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_types::PrincipalId;
     use std::{str::FromStr, sync::Arc};
