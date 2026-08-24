@@ -1290,6 +1290,33 @@ mainnet_icos_images(
     path = "//:mainnet-icos-revisions.json",
 )
 
+mainnet_icos_binaries = use_repo_rule("//bazel:mainnet-icos-binaries.bzl", "mainnet_icos_binaries")
+
+# Mainnet release binaries, published for the same revisions as the mainnet ICOS
+# images above. Declaring them as Bazel dependencies (instead of having the tests
+# download them from the CDN while they run) is what allows the system-tests that
+# use them to also run on the network-isolated local backend. See the
+# mainnet_binaries_runtime_deps dicts in //rs/tests:common.bzl.
+mainnet_icos_binaries(
+    name = "mainnet_nns_binaries",
+    parts = [
+        "guestos",
+        "subnets",
+        "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_binaries(
+    name = "mainnet_app_binaries",
+    parts = [
+        "guestos",
+        "subnets",
+        "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
 mainnet_icos_versions = use_repo_rule("//bazel:mainnet-icos-versions.bzl", "mainnet_icos_versions")
 
 mainnet_icos_versions(
@@ -1369,16 +1396,6 @@ register_toolchains(
 )
 
 new_local_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
-
-# Use libsystemd from the host environment
-# Ideally this is pulled hermetically, but as this is only used by infogetty
-# within IC images, we have less compatibility to worry about, and packaging it
-# this way is easier.
-new_local_repository(
-    name = "libsystemd",
-    build_file = "@//third_party:BUILD.libsystemd.bazel",
-    path = "/usr",
-)
 
 # Use libvirt from the host environment
 # Used for managing virtual machines programmatically.

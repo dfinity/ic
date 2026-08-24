@@ -270,6 +270,8 @@ pub enum SystemApiCallId {
     SubnetSelfSize,
     /// Tracker for `ic0.subnet_self_copy()`
     SubnetSelfCopy,
+    /// Tracker for `ic0.subnet_self_node_count()`
+    SubnetSelfNodeCount,
     /// Tracker for `ic0.stable64_grow()`
     Stable64Grow,
     /// Tracker for `ic0.stable64_read()`
@@ -1432,6 +1434,10 @@ pub trait SystemApi {
         size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
+
+    /// Used to look up the number of nodes currently on the subnet that the
+    /// calling canister is running on.
+    fn ic0_subnet_self_node_count(&self) -> HypervisorResult<u32>;
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

@@ -1,4 +1,4 @@
-use crate::host::command_utilities::handle_command_output;
+use super::command_utilities::handle_command_output;
 use crate::protocol::Response;
 use rusb::{Context, Device, UsbContext};
 use std::io::{Error, Write};

@@ -1,0 +1,17 @@
+[package]
+name = "https_outcalls_test_canister"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+serde = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+
+[[bin]]
+name = "https_outcalls_test_canister"
+path = "src/main.rs"

@@ -44,6 +44,7 @@
 use crate::{
     CanisterId, CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
+    consensus::get_faults_tolerated,
     crypto::{BasicSigOf, CryptoHashOf},
     messages::{CallbackId, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
@@ -282,6 +283,13 @@ impl ReplicationKind {
             Self::Flexible { total_requests, .. } => (*total_requests as usize).max(1),
         }
     }
+}
+
+/// The number of agreeing replicas required to deliver a fully-replicated HTTP outcall
+/// response on a canister-http committee of `committee_size` nodes.
+pub fn canister_http_threshold(committee_size: usize) -> usize {
+    let committee_size = committee_size.max(1);
+    committee_size - get_faults_tolerated(committee_size)
 }
 
 impl From<&ReplicationCounts> for ReplicationKind {
@@ -1495,6 +1503,44 @@ mod tests {
     }
 
     #[test]
+    fn canister_http_threshold_tolerates_a_third_of_the_committee() {
+        // The concrete quorums, including the subnet sizes the pricing tests use.
+        for (committee_size, expected) in [
+            (0, 1),
+            (1, 1),
+            (2, 2),
+            (3, 3),
+            (4, 3),
+            (7, 5),
+            (13, 9),
+            (28, 19),
+            (34, 23),
+            (40, 27),
+        ] {
+            assert_eq!(
+                canister_http_threshold(committee_size),
+                expected,
+                "committee of {committee_size}"
+            );
+        }
+        for committee_size in 0..=64 {
+            let threshold = canister_http_threshold(committee_size);
+            // Never zero, so that a fee can be split into that many shares ...
+            assert!(threshold >= 1, "committee of {committee_size}");
+            // ... never more than the committee that has to reach it ...
+            assert!(
+                threshold <= committee_size.max(1),
+                "committee of {committee_size}"
+            );
+            // ... and always a strict majority, so two disjoint sets cannot both reach it.
+            assert!(
+                2 * threshold > committee_size,
+                "committee of {committee_size}"
+            );
+        }
+    }
+
+    #[test]
     fn max_canister_http_reject_bytes_is_the_size_of_the_largest_reject() {
         // The pricing of an outcall floors every response size at this constant (see
         // `ic_https_outcalls_pricing::fees::max_consensus_fee`), so it has to be the
@@ -1852,6 +1898,18 @@ mod tests {
             result,
             Err(CanisterHttpRequestContextError::TooLongHeaderValue(_))
         );
+    }
+
+    #[test]
+    fn PROBE_max_responses_zero() {
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 3,
+            min_responses: 0,
+            max_responses: 0,
+        }));
+        let ctx = generate_flexible_context(&node_ids, args).expect("ACCEPTED");
+        eprintln!("PROBE: context accepted, kind = {:?}", ctx.replication.kind());
     }
 
     #[test]

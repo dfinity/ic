@@ -33,6 +33,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SubnetSchedule;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
+use ic_replicated_state::metadata_state::UnflushedCheckpointOps;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     CanisterState, CanisterStates, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
@@ -840,6 +841,11 @@ impl SchedulerImpl {
                 .duration_between_allocation_charges(),
         );
         let mut all_rejects = Vec::new();
+        // The deletions of the snapshots of the canisters uninstalled below, recorded
+        // so that their directories are also deleted from the tip. Accumulated here
+        // because `state.metadata` is not accessible from within the closure; merged
+        // into the state's operations after the loop.
+        let mut unflushed_checkpoint_ops = UnflushedCheckpointOps::default();
         // TODO(DSM-103): Charge all canisters every N rounds / seconds (and otherwise
         // do nothing). Ensure that paused execution canisters are charged eventually.
         state.canisters_for_each_mut(|_id, canister| {
@@ -885,7 +891,9 @@ impl SchedulerImpl {
                 canister
                     .system_state
                     .burn_remaining_balance_for_uninstall(cost_schedule);
-                canister.canister_snapshots.delete_snapshots();
+                canister
+                    .canister_snapshots
+                    .delete_snapshots(&mut unflushed_checkpoint_ops);
 
                 info!(
                     self.log,
@@ -895,6 +903,11 @@ impl SchedulerImpl {
                 self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
             }
         });
+
+        state
+            .metadata
+            .unflushed_checkpoint_ops
+            .extend(unflushed_checkpoint_ops);
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
         for rejects in all_rejects.into_iter() {
@@ -1085,6 +1098,17 @@ impl SchedulerImpl {
     //
     // TODO(DSM-103): Consider only aborting actually scheduled canisters.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
+        // Backfill the HTTP/ECDSA outcall cycles from the legacy scalar fields of
+        // `SubnetMetrics` into the corresponding entries of its by-use-case map.
+        // This must run regardless of subnet activity: the subnet-level use cases
+        // are only observed on outcalls, canister deletion and dropped messages,
+        // so tying the migration to an observation would leave the entries stale
+        // forever on a subnet that does none of these.
+        state
+            .metadata
+            .subnet_metrics
+            .migrate_outcalls_cycles_to_use_cases();
+
         let cost_schedule = state.get_own_cost_schedule();
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
