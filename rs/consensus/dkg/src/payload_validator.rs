@@ -420,7 +420,10 @@ mod tests {
     fn validate_dealings_payload_when_wrong_dkg_id_and_in_dkg_pool_fails_test() {
         // Validation should fail if the block contains a dealing without a coresponding config,
         // even if the dealing is present in the validated pool.
-        let dealing: ic_types::crypto::Signed<DealingContent, ic_types::signature::BasicSignature<DealingContent>> = fake_dkg_message(SUBNET_2, NODE_1);
+        let dealing: ic_types::crypto::Signed<
+            DealingContent,
+            ic_types::signature::BasicSignature<DealingContent>,
+        > = fake_dkg_message(SUBNET_2, NODE_1);
         assert_eq!(
             validate_payload_test_case_with_validated_dealings(
                 /*dealings_to_validate=*/ vec![dealing.clone()],
