@@ -146,7 +146,7 @@ fn should_mint_with_ckerc20_setup() {
 
 mod deposit_erc20 {
     use assert_matches::assert_matches;
-    use candid::Principal;
+    use candid::{Nat, Principal};
     use ic_cketh_minter::endpoints::events::EventPayload;
     use ic_cketh_minter::endpoints::{DepositErc20Error, DepositStatus};
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
@@ -329,6 +329,36 @@ mod deposit_erc20 {
             .check_minter_metrics()
             .assert_contains_metric_matching(r"cketh_minter_latest_block_height 2000 \d+")
             .assert_does_not_contain_metric_matching(r"cketh_minter_latest_block_height 1500 \d+");
+    }
+
+    #[test]
+    fn should_report_the_minimum_deposit_amount_of_the_requested_token() {
+        // The first supported token is ckUSDC, whose minimum is $10 worth, i.e. 10 USDC.
+        const CKUSDC_MINIMUM_DEPOSIT: u64 = 10_000_000;
+
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let caller = ckerc20.caller();
+        let token = a_supported_token(&ckerc20);
+        let minimum_from_minter_info = ckerc20
+            .cketh
+            .get_minter_info()
+            .minimum_deposit_amounts
+            .expect("BUG: the ckERC20 feature is active")
+            .into_iter()
+            .find(|minimum| minimum.erc20_contract_address == token)
+            .expect("BUG: a supported token must have a minimum deposit amount")
+            .minimum_deposit_amount;
+
+        let (_ckerc20, response) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token)
+            .expect_deposit_response();
+
+        assert_eq!(
+            response.minimum_deposit_amount,
+            Nat::from(CKUSDC_MINIMUM_DEPOSIT)
+        );
+        // Both endpoints must quote the same threshold as the one the balance scan enforces.
+        assert_eq!(response.minimum_deposit_amount, minimum_from_minter_info);
     }
 
     #[test]

@@ -30,6 +30,7 @@ use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::{self, BurnMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
+use ic_cketh_minter::state::automatic_deposits::DepositRequest;
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
@@ -207,10 +208,14 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
         owner: caller,
         subaccount,
     };
+    let request = DepositRequest::new(account, token);
+    let minimum_deposit_amount = min_deposit(&token);
     let now = Timestamp::from_nanos(ic_cdk::api::time());
 
-    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
-    {
+    if let Some(status) = read_state(|s| {
+        s.automatic_deposits
+            .deposit_status(now, &request, minimum_deposit_amount)
+    }) {
         return Ok(status);
     }
 
@@ -223,15 +228,18 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     // after an upgrade, before the key is cached). Returning its status here keeps `register_deposit_
     // address` from trying to re-arm an already-swept pair. From here on the call is synchronous, so
     // no further scan can interleave before the registration below.
-    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
-    {
+    if let Some(status) = read_state(|s| {
+        s.automatic_deposits
+            .deposit_status(now, &request, minimum_deposit_amount)
+    }) {
         return Ok(status);
     }
     mutate_state(|s| s.register_deposit_address(now, account, token))?;
-    Ok(
-        read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
-            .expect("BUG: a just-registered pair must report a Scanning status"),
-    )
+    Ok(read_state(|s| {
+        s.automatic_deposits
+            .deposit_status(now, &request, minimum_deposit_amount)
+    })
+    .expect("BUG: a just-registered pair must report a Scanning status"))
 }
 
 #[query]

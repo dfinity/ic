@@ -249,6 +249,9 @@ pub enum DepositMode {
 pub struct DepositErc20Response {
     /// The Ethereum deposit address derived for the caller.
     pub address: String,
+    /// Minimum balance, in the token's own units, that the deposit address must hold for the
+    /// balance scan to detect it. A smaller deposit is never detected and never credited.
+    pub minimum_deposit_amount: Nat,
     /// Where the deposit stands in the detect-and-sweep pipeline.
     pub status: DepositStatus,
 }

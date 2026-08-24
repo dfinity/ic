@@ -286,30 +286,33 @@ impl AutomaticDeposits {
         self.sweep.len()
     }
 
-    /// Where the `(account, token)` pair's deposit currently stands, or `None` if the pair is
-    /// neither armed nor has funds queued for sweeping (so it must be registered). Reports
+    /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
+    /// funds queued for sweeping (so it must be registered). Reports
     /// [`DepositStatus::AwaitingSweep`] once funds have been detected and queued, otherwise
     /// [`DepositStatus::Scanning`] while the address is armed and being scanned as of `now`.
+    /// `minimum_deposit_amount` is the balance the address must hold for the scan to detect it,
+    /// reported back to the caller alongside the status.
     pub fn deposit_status(
         &self,
         now: Timestamp,
-        account: &Account,
-        token: Address,
+        request: &DepositRequest,
+        minimum_deposit_amount: Erc20Value,
     ) -> Option<DepositErc20Response> {
-        let request = DepositRequest::new(*account, token);
-        if let Some(entry) = self.sweep.get(&request) {
+        if let Some(entry) = self.sweep.get(request) {
             return Some(DepositErc20Response {
                 address: entry.address.to_string(),
+                minimum_deposit_amount: minimum_deposit_amount.into(),
                 status: DepositStatus::AwaitingSweep(DetectedDeposit {
-                    erc20_contract_address: token.to_string(),
+                    erc20_contract_address: request.token().to_string(),
                     scanned_balance: entry.scanned_balance.into(),
                     detected_at_block: entry.last_scanned_block.into(),
                 }),
             });
         }
-        self.get_entry(now, &request)
+        self.get_entry(now, request)
             .map(|entry| DepositErc20Response {
                 address: entry.value.address.to_string(),
+                minimum_deposit_amount: minimum_deposit_amount.into(),
                 status: DepositStatus::Scanning {
                     valid_until: entry.expires_at.as_nanos(),
                     last_scanned_block: entry.value.last_scanned_block.map(Into::into),
