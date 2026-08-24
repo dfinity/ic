@@ -1024,11 +1024,21 @@ impl SystemState {
         log: &ReplicaLogger,
         charging_from_balance_error: &IntCounter,
     ) {
+        let debit = CompoundCycles::<IngressInduction>::new(
+            self.ingress_induction_cycles_debit,
+            cost_schedule,
+        );
+        // Charge only the part of the debit that the balance can cover. Dropping the
+        // rest is legitimate here (making some of the postponed charges free), so it
+        // must be capped before `consume_cycles()`, which reports what it cannot
+        // charge as a critical error.
+        //
         // We rely on saturating operations of `Cycles` here.
-        let remaining_debit = self.ingress_induction_cycles_debit - self.cycles_balance;
+        let uncharged_debit = debit.real() - self.cycles_balance;
+        self.ingress_induction_cycles_debit = Cycles::zero();
         if strict {
-            debug_assert_eq!(remaining_debit.get(), 0);
-            if remaining_debit.get() > 0 {
+            debug_assert_eq!(uncharged_debit.get(), 0);
+            if uncharged_debit.get() > 0 {
                 // This case is unreachable and may happen only due to a bug: if the
                 // caller has reduced the cycles balance below the cycles debit.
                 charging_from_balance_error.inc();
@@ -1036,17 +1046,17 @@ impl SystemState {
                     log,
                     "[EXC-BUG]: Debited cycles exceed the cycles balance of {} by {}",
                     canister_id,
-                    remaining_debit,
+                    uncharged_debit,
                 );
                 // Continue the execution by dropping the remaining debit, which makes
                 // some of the postponed charges free.
             }
         }
-        self.consume_cycles(CompoundCycles::<IngressInduction>::new(
-            self.ingress_induction_cycles_debit,
-            cost_schedule,
-        ));
-        self.ingress_induction_cycles_debit = Cycles::zero();
+        self.consume_cycles(
+            debit.minus_uncharged(uncharged_debit),
+            log,
+            charging_from_balance_error,
+        );
     }
 
     /// This method is used for maintaining the backwards compatibility.
@@ -2044,7 +2054,18 @@ impl SystemState {
     /// the consumed amount. Should be used either for cases where a prepayment
     /// needs to be made (that will be refunded later with `refund_cycles`) or
     /// a direct charge happens without a prepayment (e.g. when paying for memory).
-    pub fn consume_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
+    ///
+    /// The balances are required to cover the requested amount: the part that
+    /// they cannot cover is neither charged nor reported as consumed, and is
+    /// reported as a critical error instead. Callers that intend to charge only
+    /// what the balances can cover must cap the requested amount themselves,
+    /// e.g. with `CompoundCycles::minus_uncharged()`.
+    pub fn consume_cycles<T: CyclesUseCaseKind>(
+        &mut self,
+        requested_amount: CompoundCycles<T>,
+        log: &ReplicaLogger,
+        charging_from_balance_error: &IntCounter,
+    ) {
         let requested_real = requested_amount.real();
         let use_case = T::cycles_use_case();
         let remaining_amount = match use_case {
@@ -2065,9 +2086,28 @@ impl SystemState {
             | CyclesUseCase::BurnedCycles
             | CyclesUseCase::DroppedMessages => requested_real,
         };
+        // The balance may not cover the whole amount, in which case the subtraction
+        // below saturates at zero and the uncovered part is never actually charged.
+        // Charge and report only the part that the balance could cover, so that the
+        // consumed cycles metrics never exceed the cycles removed from the balance.
+        let uncharged_amount = remaining_amount - self.cycles_balance;
         self.cycles_balance -= remaining_amount;
+        if !uncharged_amount.is_zero() {
+            // This case is unreachable and may happen only due to a bug: every caller
+            // is expected to either cover the requested amount or cap it beforehand.
+            charging_from_balance_error.inc();
+            error!(
+                log,
+                "[EXC-BUG]: Charging {} for {} exceeds the cycles balance of {} by {}",
+                requested_real,
+                use_case.as_str(),
+                self.canister_id,
+                uncharged_amount,
+            );
+        }
+        let charged_amount = requested_amount.minus_uncharged(uncharged_amount);
         self.observe_consumed_cycles_with_use_case(
-            requested_amount.nominal(),
+            charged_amount.nominal(),
             NominalCycles::zero(),
             use_case,
             ConsumingCycles::Prepayment,
@@ -2117,9 +2157,16 @@ impl SystemState {
     pub fn burn_remaining_balance_for_uninstall(
         &mut self,
         cost_schedule: CanisterCyclesCostSchedule,
+        log: &ReplicaLogger,
+        charging_from_balance_error: &IntCounter,
     ) {
+        // The balances cover the whole amount by construction.
         let balance = self.cycles_balance + self.reserved_balance;
-        self.consume_cycles(CompoundCycles::<Uninstall>::new(balance, cost_schedule));
+        self.consume_cycles(
+            CompoundCycles::<Uninstall>::new(balance, cost_schedule),
+            log,
+            charging_from_balance_error,
+        );
     }
 
     /// Observes the consumed cycles for HTTPS outcalls. This should only be

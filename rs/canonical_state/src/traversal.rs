@@ -54,7 +54,9 @@ mod tests {
         CertificationVersion::{self, *},
         all_supported_versions,
     };
+    use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::Global;
+    use ic_metrics::MetricsRegistry;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_features::SubnetFeatures;
     use ic_registry_subnet_type::SubnetType;
@@ -1234,12 +1236,14 @@ mod tests {
             INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
-        canister_state
-            .system_state
-            .consume_cycles(CompoundCycles::<Instructions>::new(
+        canister_state.system_state.consume_cycles(
+            CompoundCycles::<Instructions>::new(
                 Cycles::new(123_456),
                 CanisterCyclesCostSchedule::Normal,
-            ));
+            ),
+            &no_op_logger(),
+            &MetricsRegistry::new().int_counter("error_counter", "Test error counter"),
+        );
         let consumed_by_canisters = canister_state
             .system_state
             .canister_metrics()

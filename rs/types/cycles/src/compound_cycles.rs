@@ -129,6 +129,27 @@ impl<T: CyclesUseCaseKind> CompoundCycles<T> {
     pub fn is_zero(&self) -> bool {
         self.real.is_zero() && self.nominal.is_zero()
     }
+
+    /// Returns this amount reduced by the part of `real()` that could not be
+    /// charged, e.g. because the balance it was to be subtracted from did not
+    /// cover it. Such an amount is never removed from any balance, so it must
+    /// not be reported in the consumed cycles metrics either.
+    ///
+    /// Both parts are reduced by `uncharged`, saturating at zero: they coincide
+    /// under the normal cost schedule, while under the free cost schedule the
+    /// real part is zero, so nothing can be left uncharged and this is a no-op.
+    pub fn minus_uncharged(self, uncharged: Cycles) -> Self {
+        debug_assert!(
+            uncharged <= self.real,
+            "Expected the uncharged amount {uncharged} to be at most the real amount {}",
+            self.real
+        );
+        Self {
+            real: self.real - uncharged,
+            nominal: self.nominal - NominalCycles::new_private(uncharged.get()),
+            _cycles_use_case_marker: self._cycles_use_case_marker,
+        }
+    }
 }
 
 impl<T: CyclesUseCaseKind> Add for CompoundCycles<T> {

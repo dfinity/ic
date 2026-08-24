@@ -276,6 +276,7 @@ impl CanisterManagerBuilder {
         CanisterManager::new(
             hypervisor,
             no_op_logger(),
+            no_op_counter(),
             canister_manager_config(
                 self.subnet_id,
                 subnet_type,
@@ -9220,14 +9221,14 @@ fn assert_canister_metrics_can_be_retrieved(
     let memory_cycles = CompoundCycles::<Memory>::new(Cycles::new(1), cost_schedule);
     test.canister_state_mut(canister_id)
         .system_state
-        .consume_cycles(memory_cycles);
+        .consume_cycles(memory_cycles, &no_op_logger(), &no_op_counter());
 
     // `Instructions` follow the prepay/refund flow where metrics are updated
     // only during the refund step.
     let instructions_cycles = CompoundCycles::<Instructions>::new(Cycles::new(2), cost_schedule);
     test.canister_state_mut(canister_id)
         .system_state
-        .consume_cycles(instructions_cycles);
+        .consume_cycles(instructions_cycles, &no_op_logger(), &no_op_counter());
     test.canister_state_mut(canister_id)
         .system_state
         .refund_cycles(
@@ -9239,24 +9240,24 @@ fn assert_canister_metrics_can_be_retrieved(
         CompoundCycles::<IngressInduction>::new(Cycles::new(3), cost_schedule);
     test.canister_state_mut(canister_id)
         .system_state
-        .consume_cycles(ingress_induction_cycles);
+        .consume_cycles(ingress_induction_cycles, &no_op_logger(), &no_op_counter());
 
     let compute_allocation_cycles =
         CompoundCycles::<ic_types_cycles::ComputeAllocation>::new(Cycles::new(4), cost_schedule);
     test.canister_state_mut(canister_id)
         .system_state
-        .consume_cycles(compute_allocation_cycles);
+        .consume_cycles(compute_allocation_cycles, &no_op_logger(), &no_op_counter());
 
     let canister_creation_cycles =
         CompoundCycles::<CanisterCreation>::new(Cycles::new(5), cost_schedule);
     test.canister_state_mut(canister_id)
         .system_state
-        .consume_cycles(canister_creation_cycles);
+        .consume_cycles(canister_creation_cycles, &no_op_logger(), &no_op_counter());
 
     let uninstall_cycles = CompoundCycles::<Uninstall>::new(Cycles::new(6), cost_schedule);
     test.canister_state_mut(canister_id)
         .system_state
-        .consume_cycles(uninstall_cycles);
+        .consume_cycles(uninstall_cycles, &no_op_logger(), &no_op_counter());
 
     // `RequestAndResponseTransmission` follow the prepay/refund flow where
     // metrics are updated only during the refund step.
@@ -9264,7 +9265,11 @@ fn assert_canister_metrics_can_be_retrieved(
         CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(8), cost_schedule);
     test.canister_state_mut(canister_id)
         .system_state
-        .consume_cycles(request_and_response_transmission_cycles);
+        .consume_cycles(
+            request_and_response_transmission_cycles,
+            &no_op_logger(),
+            &no_op_counter(),
+        );
     test.canister_state_mut(canister_id)
         .system_state
         .refund_cycles(
@@ -9280,7 +9285,7 @@ fn assert_canister_metrics_can_be_retrieved(
     let burned_cycles = CompoundCycles::<BurnedCycles>::new(Cycles::new(10), cost_schedule);
     test.canister_state_mut(canister_id)
         .system_state
-        .consume_cycles(burned_cycles);
+        .consume_cycles(burned_cycles, &no_op_logger(), &no_op_counter());
 
     let expected_cycles_consumed = CyclesConsumed::new(
         memory_cycles.nominal(),

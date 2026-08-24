@@ -81,6 +81,8 @@ pub fn execute_call_or_task(
                         subnet_cycles_config,
                         reveal_top_up,
                         wasm_execution_mode,
+                        round.log,
+                        round.counters.charging_from_balance_error,
                     ) {
                     Ok(cycles) => cycles,
                     Err(err) => {
@@ -610,6 +612,7 @@ impl CallOrTaskHelper {
                         false,
                         round.hypervisor.metrics(),
                         round.log,
+                        round.counters.charging_from_balance_error,
                     )
                 {
                     return finish_err(

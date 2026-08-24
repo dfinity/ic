@@ -871,6 +871,7 @@ impl SchedulerImpl {
                 .cycles_account_manager
                 .charge_canister_for_resource_allocation_and_usage(
                     &self.log,
+                    self.exec_env.charging_from_balance_error(),
                     canister,
                     duration_since_last_charge,
                     subnet_cycles_config,
@@ -888,9 +889,11 @@ impl SchedulerImpl {
                 canister.system_state.clear_canister_history();
                 canister.remove_log();
                 // Burn the remaining balance of the canister.
-                canister
-                    .system_state
-                    .burn_remaining_balance_for_uninstall(cost_schedule);
+                canister.system_state.burn_remaining_balance_for_uninstall(
+                    cost_schedule,
+                    &self.log,
+                    self.exec_env.charging_from_balance_error(),
+                );
                 canister
                     .canister_snapshots
                     .delete_snapshots(&mut unflushed_checkpoint_ops);

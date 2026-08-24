@@ -25,7 +25,7 @@ use ic_types::{
     },
     time::expiry_time_from_now,
 };
-use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use std::sync::Arc;
 
 struct VsrMetrics {
@@ -40,6 +40,8 @@ struct VsrMetrics {
     /// Memory currently used by payloads of statuses in the ingress
     /// history.
     ingress_history_size: IntGauge,
+    /// Critical error for ingress induction costs exceeding the cycles balance.
+    charging_from_balance_error: IntCounter,
 }
 
 const METRIC_INDUCTED_INGRESS_MESSAGES: &str = "mr_inducted_ingress_message_count";
@@ -47,6 +49,8 @@ const METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES: &str = "mr_inducted_ingress_payload
 const METRIC_UNRELIABLE_INDUCT_INGRESS_MESSAGE_DURATION: &str =
     "mr_unreliable_induct_ingress_message_duration_seconds";
 const METRIC_INGRESS_HISTORY_SIZE: &str = "mr_ingress_history_size_bytes";
+
+const CRITICAL_ERROR_CHARGING_FROM_BALANCE: &str = "mr_charging_from_balance";
 
 const LABEL_STATUS: &str = "status";
 
@@ -76,6 +80,8 @@ impl VsrMetrics {
             METRIC_INGRESS_HISTORY_SIZE,
             "Memory currently used by payloads of statuses in the ingress history",
         );
+        let charging_from_balance_error =
+            metrics_registry.error_counter(CRITICAL_ERROR_CHARGING_FROM_BALANCE);
 
         // Initialize all `inducted_ingress_messages` counters with zero, so they are
         // all exported from process start (`IntCounterVec` is really a map).
@@ -98,6 +104,7 @@ impl VsrMetrics {
             inducted_ingress_payload_sizes,
             unreliable_induct_ingress_message_duration,
             ingress_history_size,
+            charging_from_balance_error,
         }
     }
 }
@@ -310,6 +317,8 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                     cost,
                     subnet_cycles_config,
                     reveal_top_up,
+                    &self.log,
+                    &self.metrics.charging_from_balance_error,
                 ) {
                     return Err(IngressInductionError::CanisterOutOfCycles(err));
                 }
