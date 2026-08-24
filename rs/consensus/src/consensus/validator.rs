@@ -88,6 +88,7 @@ enum ValidationFailure {
     DkgPayloadValidationFailed(DkgPayloadValidationFailure),
     IDkgPayloadValidationFailed(IDkgPayloadValidationFailure),
     DkgSummaryNotFound(Height),
+    TranscriptNotFound(Height, NiDkgTag),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
     StateManagerError(StateManagerError),
@@ -310,26 +311,30 @@ impl SignatureVerify for RandomBeaconShare {
 impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpContent>> {
     fn verify_signature(
         &self,
-        membership: &Membership,
+        _membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         _pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
-        let height = self.height();
-        let dkg_id = get_current_transcript_from_summary_block(
+        let high_threshold_transcript = get_current_transcript_from_summary_block(
             self.content.block.as_ref(),
             &NiDkgTag::HighThreshold,
         )
-        .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?
-        .dkg_id
-        .clone();
-        verify_threshold_committee(
-            membership,
-            self.signature.signer,
-            height,
-            CatchUpPackage::committee(),
-        )?;
-        crypto.verify(self, dkg_id)?;
+        .ok_or_else(|| {
+            ValidationFailure::TranscriptNotFound(self.height(), NiDkgTag::HighThreshold)
+        })?;
+        if !high_threshold_transcript
+            .committee
+            .get()
+            .contains(&self.signature.signer)
+        {
+            return Err(InvalidArtifactReason::SignerNotInThresholdCommittee(
+                self.signature.signer,
+            )
+            .into());
+        }
+
+        crypto.verify(self, high_threshold_transcript.dkg_id.clone())?;
         Ok(())
     }
 }
@@ -5239,6 +5244,7 @@ pub mod test {
         RandomBeacon,
         RegistryVersion,
         Height,
+        Signer,
     }
     #[rstest]
     #[case(NODE_1, None, Ok(()))]
@@ -5274,6 +5280,15 @@ pub mod test {
         NODE_1,
         Some(MalformShare::Height),
         Err(InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare { expected: Height::from(20), received: Height::from(10) })
+    )]
+    // The signer must be a member of the high-threshold committee of the transcript in the
+    // *post-split* summary block, not of the committee at the share's height on the pre-split
+    // chain. NODE_3 is in the latter but not in the former, so a share with otherwise valid
+    // (post-split) content signed by NODE_3 must be rejected.
+    #[case::signer_not_in_post_split_committee(
+        NODE_1,
+        Some(MalformShare::Signer),
+        Err(InvalidArtifactReason::SignerNotInThresholdCommittee(NODE_3))
     )]
     fn validate_post_split_cup_share_test(
         #[case] cup_share_node_id: NodeId,
@@ -5409,6 +5424,9 @@ pub mod test {
 
                         share.content.random_beacon =
                             HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon);
+                    }
+                    Some(MalformShare::Signer) => {
+                        share.signature.signer = NODE_3;
                     }
                     None => {}
                 }
