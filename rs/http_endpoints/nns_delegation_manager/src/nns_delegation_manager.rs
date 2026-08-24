@@ -155,10 +155,10 @@ impl DelegationManager {
         delegation
             .is_consistent_with(
                 CanisterRangesCheck::AllSubnetRanges,
-                network_topology.routing_table_for_certification(),
+                network_topology.routing_table(),
                 |subnet_id| {
                     network_topology
-                        .subnets_for_certification()
+                        .subnets()
                         .get(&subnet_id)
                         .map(|subnet_topology| subnet_topology.public_key.as_slice())
                 },

@@ -1212,7 +1212,6 @@ impl<RegistryClient_: RegistryClient> RegistryReader<RegistryClient_> {
             chain_key_enabled_subnets,
             self.bitcoin_config.testnet_canister_id,
             self.bitcoin_config.mainnet_canister_id,
-            None,
             default_initial_dkg_subnet_id,
             api_boundary_nodes,
         ))
