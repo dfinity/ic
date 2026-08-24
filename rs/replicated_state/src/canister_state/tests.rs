@@ -871,10 +871,14 @@ fn canister_state_ingress_induction_cycles_debit_exceeding_balance() {
     assert_eq!(remaining_balance, system_state.balance());
     assert_eq!(Cycles::zero(), system_state.debited_balance());
 
+    // Apply the debit leniently, as the production caller does after a cleanup
+    // callback: the balance not covering the debit is expected there, rather than a
+    // bug, so dropping the uncovered part must stay silent. Passing `strict` would
+    // trip its `debug_assert` and report an `[EXC-BUG]` critical error instead.
     system_state.apply_ingress_induction_cycles_debit(
         system_state.canister_id(),
         cost_schedule,
-        false, // not strict
+        false, // lenient
         &no_op_logger(),
         &mock_metrics(),
     );
