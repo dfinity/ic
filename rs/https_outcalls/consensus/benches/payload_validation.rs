@@ -35,6 +35,7 @@ use ic_types::{
         CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
         CanisterHttpResponseShare, CanisterHttpResponseSignature,
         CanisterHttpResponseWithConsensus, PricingVersion, RefundStatus, Replication,
+        canister_http_threshold,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSigOf, crypto_hash},
@@ -333,7 +334,7 @@ impl<'a> PayloadAssembler<'a> {
     fn assemble(&mut self, signer: &Signer) -> CanisterHttpPayload {
         let subnet_size = self.config.subnet_size;
         let subnet_nodes = NumberOfNodes::from(subnet_size as u32);
-        let threshold = subnet_size - get_faults_tolerated(subnet_size);
+        let threshold = canister_http_threshold(subnet_size);
         let faults_tolerated = get_faults_tolerated(subnet_size);
         // A divergence proof needs enough distinctly-signed shares that even
         // adding all remaining (unseen) committee members cannot push any
