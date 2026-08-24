@@ -1,11 +1,8 @@
-#![allow(deprecated)]
 use crate::PROXIED_CANISTER_CALLS_TRACKER;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
-    api::call::{RejectionCode, call_with_payment},
-    call,
-    call::{Call, CallFailed},
-    caller, print,
+    api::{debug_print, msg_caller},
+    call::{Call, CallFailed, Error as IcCdkCallError, RejectCode},
 };
 use ic_management_canister_types_private::{
     self as management_canister, CanisterInstallMode::Install, CanisterSettingsArgsBuilder,
@@ -144,14 +141,17 @@ async fn try_to_create_and_install_canister(
         settings: Some(settings),
         sender_canister_version: Some(ic_cdk::api::canister_version()),
     };
-    let (id,): (CanisterIdRecord,) = call_with_payment(
-        CanisterId::ic_00().get().0,
-        "create_canister",
-        (create_args,),
-        request.initial_cycles,
-    )
-    .await
-    .map_err(|(code, msg)| format!("error code {}: {}", code as i32, msg))?;
+    let id: CanisterIdRecord = Call::unbounded_wait(CanisterId::ic_00().get().0, "create_canister")
+        .with_arg(create_args)
+        .with_cycles(u128::from(request.initial_cycles))
+        .await
+        .map_err(IcCdkCallError::from)
+        .and_then(|response| {
+            response
+                .candid::<CanisterIdRecord>()
+                .map_err(IcCdkCallError::from)
+        })
+        .map_err(format_call_error)?;
 
     let install_args = InstallCodeArgs {
         mode: Install,
@@ -160,10 +160,12 @@ async fn try_to_create_and_install_canister(
         arg: request.arg,
         sender_canister_version: Some(ic_cdk::api::canister_version()),
     };
-    let install_res: Result<(), (RejectionCode, String)> =
-        call(CanisterId::ic_00().get().0, "install_code", (install_args,)).await;
-
-    install_res.map_err(|(code, msg)| format!("error code {}: {}", code as i32, msg))?;
+    Call::unbounded_wait(CanisterId::ic_00().get().0, "install_code")
+        .with_arg(install_args)
+        .await
+        .map_err(IcCdkCallError::from)
+        .and_then(|response| response.candid_tuple::<()>().map_err(IcCdkCallError::from))
+        .map_err(format_call_error)?;
 
     Ok(id.get_canister_id())
 }
@@ -179,7 +181,7 @@ pub async fn stop_or_start_nns_canister(
 }
 
 pub async fn call_canister(proposal: CallCanisterRequest) {
-    print(format!(
+    debug_print(format!(
         "Calling {}::{}...",
         proposal.canister_id, proposal.method_name,
     ));
@@ -192,7 +194,7 @@ pub async fn call_canister(proposal: CallCanisterRequest) {
 
     let _tracker = ProxiedCanisterCallsTracker::start_tracking(
         &PROXIED_CANISTER_CALLS_TRACKER,
-        PrincipalId::from(caller()),
+        PrincipalId::from(msg_caller()),
         *canister_id,
         method_name,
         payload,
@@ -202,7 +204,7 @@ pub async fn call_canister(proposal: CallCanisterRequest) {
         .await
         .map_err(|(code, msg)| format!("Error: {code}:{msg}"));
 
-    print(format!(
+    debug_print(format!(
         "Call {}::{} returned {:?}",
         proposal.canister_id, proposal.method_name, res,
     ));
@@ -331,6 +333,32 @@ pub async fn create_canister_and_install_code(
 
     let result = main.await;
     CreateCanisterAndInstallCodeResponse::from(result)
+}
+
+/// Formats a failed call as the `error code {code}: {message}` string that
+/// [`try_to_create_and_install_canister`] reports. Reports the same numeric codes
+/// that the deprecated `ic_cdk::api::call` did.
+fn format_call_error(err: IcCdkCallError) -> String {
+    let (code, message) = match err {
+        IcCdkCallError::CallRejected(rejected) => (
+            rejected.raw_reject_code() as i32,
+            rejected.reject_message().to_string(),
+        ),
+        // A response that cannot be decoded means the callee misbehaved.
+        IcCdkCallError::CandidDecodeFailed(err) => {
+            (RejectCode::CanisterError as i32, err.to_string())
+        }
+        // Neither of these ever left this canister, so the call may well succeed
+        // if retried.
+        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
+        IcCdkCallError::CallPerformFailed(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
+    };
+
+    format!("error code {code}: {message}")
 }
 
 /// Hex-encodes `bytes`, truncating to the first 200 bytes with a suffix if longer.

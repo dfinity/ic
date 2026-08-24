@@ -162,7 +162,7 @@ mod tests {
     use std::sync::Arc;
 
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -170,7 +170,6 @@ mod tests {
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         ReplicaVersion,
-        backwards_compatibility::BackwardsCompatible,
         consensus::{BlockPayload, Payload, dkg::SplittingArgs},
         crypto::crypto_hash,
     };
@@ -192,7 +191,7 @@ mod tests {
         let node_ids = [node_test_id(0)];
         let Dependencies {
             mut pool, registry, ..
-        } = dependencies_with_subnet_params(
+        } = DependenciesBuilder::single_subnet(
             pool_config,
             subnet_id,
             vec![
@@ -211,7 +210,8 @@ mod tests {
                         .build(),
                 ),
             ],
-        );
+        )
+        .build();
 
         pool.advance_round_normal_operation_n(CUP_HEIGHT.get());
         Round::new(&mut pool)
@@ -326,11 +326,12 @@ mod tests {
                 );
                 let mut last_summary_block =
                     PoolReader::new(&pool).get_highest_finalized_summary_block();
-                let mut payload = last_summary_block.payload.as_ref().as_summary().clone();
-                payload.dkg.subnet_splitting_status =
-                    BackwardsCompatible::new_for_test_only(test_case.subnet_splitting_status);
-                last_summary_block.payload =
-                    Payload::new(crypto_hash, BlockPayload::Summary(payload));
+                if let Some(subnet_splitting_status) = test_case.subnet_splitting_status {
+                    let mut payload = last_summary_block.payload.as_ref().as_summary().clone();
+                    payload.dkg.subnet_splitting_status = subnet_splitting_status;
+                    last_summary_block.payload =
+                        Payload::new(crypto_hash, BlockPayload::Summary(payload));
+                }
 
                 let status = get_status(
                     test_case.current_height,

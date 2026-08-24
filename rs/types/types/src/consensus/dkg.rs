@@ -4,7 +4,6 @@ use super::*;
 use crate::{
     ReplicaVersion,
     artifact::PbArtifact,
-    backwards_compatibility::BackwardsCompatible,
     crypto::threshold_sig::ni_dkg::{
         NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
         config::NiDkgConfig,
@@ -279,7 +278,7 @@ pub struct DkgSummary {
     /// The number of intervals a DKG for the given remote target was attempted.
     pub remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
     /// Status of the subnet splitting.
-    pub subnet_splitting_status: BackwardsCompatible<SubnetSplittingStatus, false>,
+    pub subnet_splitting_status: SubnetSplittingStatus,
 }
 
 impl DkgSummary {
@@ -307,7 +306,7 @@ impl DkgSummary {
             next_interval_length,
             height,
             remote_dkg_attempts,
-            subnet_splitting_status: BackwardsCompatible::empty(),
+            subnet_splitting_status: SubnetSplittingStatus::NotScheduled,
         }
     }
 
@@ -342,16 +341,6 @@ impl DkgSummary {
     /// Returns a reference to the next transcripts.
     pub fn next_transcripts(&self) -> &BTreeMap<NiDkgTag, NiDkgTranscript> {
         &self.next_transcripts
-    }
-
-    /// Return the set of transcripts (current and next) for all tags.
-    /// This function avoids expensive copying when transcripts are large.
-    pub fn into_transcripts(self) -> Vec<NiDkgTranscript> {
-        self.current_transcripts
-            .into_iter()
-            .chain(self.next_transcripts)
-            .map(|(_, t)| t)
-            .collect()
     }
 
     /// Returns `true` if the provided height is included in the DKG interval
@@ -393,9 +382,6 @@ impl DkgSummary {
 
     pub fn subnet_splitting_status(&self) -> SubnetSplittingStatus {
         self.subnet_splitting_status
-            .as_ref()
-            .copied()
-            .unwrap_or_default()
     }
 }
 
@@ -467,10 +453,9 @@ impl From<&DkgSummary> for pb::Summary {
                 summary.transcripts_for_remote_subnets.as_slice(),
             ),
             remote_dkg_attempts: build_remote_dkg_attempts_vec(&summary.remote_dkg_attempts),
-            subnet_splitting_status: summary
-                .subnet_splitting_status
-                .as_ref()
-                .map(pb::summary::SubnetSplittingStatus::from),
+            subnet_splitting_status: Some(pb::summary::SubnetSplittingStatus::from(
+                summary.subnet_splitting_status,
+            )),
         }
     }
 }
@@ -551,8 +536,8 @@ fn build_transcript_result(
     }
 }
 
-impl From<&SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
-    fn from(status: &SubnetSplittingStatus) -> Self {
+impl From<SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
+    fn from(status: SubnetSplittingStatus) -> Self {
         match status {
             SubnetSplittingStatus::NotScheduled => {
                 pb::summary::SubnetSplittingStatus::NotScheduled(())
@@ -629,8 +614,9 @@ impl TryFrom<pb::Summary> for DkgSummary {
             )
             .map_err(ProxyDecodeError::Other)?,
             remote_dkg_attempts: build_remote_dkg_attempts_map(&summary.remote_dkg_attempts),
-            subnet_splitting_status: BackwardsCompatible::try_from_proto(
+            subnet_splitting_status: try_from_option_field(
                 summary.subnet_splitting_status,
+                "Summary::subnet_splitting_status",
             )?,
         })
     }

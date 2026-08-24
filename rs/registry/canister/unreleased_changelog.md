@@ -9,19 +9,22 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added `maximum_query_instructions` and `maximum_query_walltime_seconds` fields to the
-  subnet record's `ResourceLimits`, allowing the query instruction limit and the maximum query
-  wall-clock time to be configured per subnet via `create_subnet` and `update_subnet`.
-  `maximum_query_instructions` applies both to a single (non-composite) query method execution
-  and to the total across a composite query call graph; `maximum_query_walltime_seconds`
-  bounds the wall-clock time a query (including a composite query call graph) may run. For each,
-  a value of `0` (or unset) means the replica's default is used.
+* Invariant requiring that SEV-enabled subnets may only run a GuestOS version that has
+  `guest_launch_measurements`.
+
+* `cooling_down` field in `SubnetRecord`, settable via `UpdateSubnetRecord` proposals. See
+  `ic_replicated_state::SubnetTopology::cooling_down` for the exact semantics. The field must not
+  be set on mainnet before the replica version rejecting ingress messages to cooling down subnets
+  has been rolled out to all subnets.
 
 ## Changed
 
-* Cloud Engines are now allowed to have blank `replica_version_id` (in their
-  `SubnetRecord`). In this case, `StandardEngineReplicaVersionRecord` is used to
-  determine the Cloud Engine's replica version.
+* `deploy_guestos_to_all_subnet_nodes` now accepts a blank `replica_version_id`
+  for Cloud Engines, provided a `StandardEngineReplicaVersionRecord` exists.
+  This is how a Cloud Engine that pins a version goes back to following the
+  standard engine version. Previously, only engine *creation* could leave
+  `replica_version_id` blank, because this endpoint required the version to be
+  elected, and a blank version never is.
 
 ## Deprecated
 

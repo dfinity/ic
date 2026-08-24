@@ -37,6 +37,7 @@ type MemoryMetrics = record {
     canister_history_size : nat;
     wasm_chunk_store_size : nat;
     snapshots_size : nat;
+    log_memory_store_size : nat;
 };
 
 type DefiniteCanisterSettings = record {
@@ -49,6 +50,7 @@ type DefiniteCanisterSettings = record {
   wasm_memory_limit : nat;
   wasm_memory_threshold : nat;
   environment_variables : vec environment_variable;
+  log_memory_limit : nat;
 };
 
 type LogVisibility = variant {
@@ -109,6 +111,14 @@ type InitArg = record {
     // with the Ethereum blockchain. If not specified, uses the production or
     // staging EVM RPC canister based on the ethereum_network field.
     evm_rpc_id : opt principal;
+
+    // Address of the sweeper smart contract.
+    ethereum_sweeper_contract_address : opt text;
+
+    // Nonce of the next transaction to be sent from the dedicated sweeper address (its own nonce
+    // sequence, kept separate from the main address' so a stuck sweep cannot delay a withdrawal).
+    // Defaults to 0, which is correct for a sweeper address that has never sent a transaction.
+    next_sweeper_transaction_nonce : opt nat;
 };
 
 type UpgradeArg = record {
@@ -143,6 +153,14 @@ type UpgradeArg = record {
 
     // Change the last scraped block number of the deposit with subaccount helper smart contract.
     last_deposit_with_subaccount_scraped_block_number : opt nat;
+
+    // Change the sweeper smart contract address.
+    ethereum_sweeper_contract_address : opt text;
+
+    // Change the nonce of the next transaction sent from the dedicated sweeper address (its own
+    // nonce sequence, kept separate from the main address' so a stuck sweep cannot delay a
+    // withdrawal).
+    next_sweeper_transaction_nonce : opt nat;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
@@ -189,6 +207,10 @@ type MinterInfo = record {
     // Ethereum address controlled by the minter via threshold ECDSA.
     minter_address: opt text;
 
+    // Dedicated Ethereum address controlled by the minter via threshold ECDSA, whose ETH
+    // balance is the prepaid gas available for sweeping funded deposit addresses.
+    sweeper_address: opt text;
+
     // (Deprecated) Address of the ETH helper smart contract.
     // Use `eth_helper_contract_address`.
     smart_contract_address: opt text;
@@ -201,6 +223,9 @@ type MinterInfo = record {
 
     // Address of the ETH or ERC20 deposit with subaccount helper smart contract.
     deposit_with_subaccount_helper_contract_address: opt text;
+
+    // Address of the sweeper smart contract.
+    sweeper_contract_address: opt text;
 
     // Information of supported ERC20 tokens.
     supported_ckerc20_tokens: opt vec CkErc20Token;
@@ -241,7 +266,6 @@ type MinterInfo = record {
     // with the Ethereum blockchain.
     evm_rpc_id : opt principal;
 };
-
 
 type GasFeeEstimate = record {
     // Maximum amount of Wei per gas unit that the transaction is willing to pay in total.
@@ -382,7 +406,13 @@ type WithdrawalError = variant {
 };
 
 // Argument for the deposit_erc20 endpoint.
-type DepositErc20Arg = record { mode : DepositMode };
+type DepositErc20Arg = record {
+    // The Ethereum ERC-20 contract address of the token to deposit (e.g. USDC).
+    // Traps if it cannot be parsed as an Ethereum address. Must be a ckERC20
+    // token supported by the minter.
+    erc20_contract_address : text;
+    mode : DepositMode;
+};
 
 // How the fee for a ckERC20 deposit address registration is settled.
 type DepositMode = variant {
@@ -398,19 +428,44 @@ type DepositMode = variant {
 type DepositErc20Response = record {
     // The Ethereum deposit address derived for the caller.
     address : text;
-    // Timestamp in nanoseconds since the Unix epoch until which a deposit sent
-    // to `address` is guaranteed to be noticed by the minter.
-    valid_until : nat64;
-    // The latest Ethereum block at which this address' balance was scanned, or
-    // null if it has not been scanned yet. Surfaces the balance-scan progress.
-    last_scanned_block : opt nat;
-    // How many times this address' balance has been scanned so far.
-    scan_count : nat64;
+    // Where the deposit stands in the detect-and-sweep pipeline.
+    status : DepositStatus;
+};
+
+// The stage a ckERC20 deposit address is at.
+type DepositStatus = variant {
+    // Armed and being scanned; no deposit at or above the minimum detected yet.
+    Scanning : record {
+        // Timestamp in nanoseconds since the Unix epoch until which a deposit
+        // sent to the address is guaranteed to be noticed by the minter.
+        valid_until : nat64;
+        // The latest Ethereum block at which the address' balance was scanned,
+        // or null if it has not been scanned yet.
+        last_scanned_block : opt nat;
+        // How many times the address' balance has been scanned so far.
+        scan_count : nat64;
+    };
+    // Funds were detected at or above the minimum and queued for sweeping.
+    AwaitingSweep : DetectedDeposit;
+};
+
+// A funded token detected at a deposit address and queued for sweeping.
+type DetectedDeposit = record {
+    // The ERC-20 token contract whose balance was found.
+    erc20_contract_address : text;
+    // The balance scanned for `erc20_contract_address`; may change before the sweep.
+    scanned_balance : nat;
+    // The Ethereum block at which the balance was detected.
+    detected_at_block : nat;
 };
 
 type DepositErc20Error = variant {
-    // The maximum number of concurrently armed deposit addresses has been reached.
-    TooManyActiveAddresses;
+    // The erc20_contract_address is not a ckERC20 token supported by the minter.
+    TokenNotSupported : record {supported_tokens : vec CkErc20Token};
+    // The account already has the maximum number of ERC-20 tokens armed.
+    TooManyTokensForAccount;
+    // The maximum number of concurrently armed deposits (account, token pairs) has been reached.
+    TooManyActiveDeposits;
     // The minter is temporarily unavailable, retry the request.
     TemporarilyUnavailable : text;
 };
@@ -548,6 +603,14 @@ type Event = record {
             from_subaccount : opt blob;
             created_at: opt nat64;
         };
+        AcceptedSweeperFundingRequest : record {
+            withdrawal_amount : nat;
+            destination : text;
+            ledger_burn_index : nat;
+            from : principal;
+            from_subaccount : opt blob;
+            created_at: opt nat64;
+        };
         CreatedTransaction : record {
             withdrawal_id : nat;
             transaction : UnsignedTransaction;
@@ -562,6 +625,31 @@ type Event = record {
         };
         FinalizedTransaction : record {
             withdrawal_id : nat;
+            transaction_receipt : TransactionReceipt;
+        };
+        AcceptedSweepRequest : record {
+            sweep_id : nat;
+            destination : text;
+            amount : nat;
+            // Transaction call data (the delegate sweep call).
+            data : blob;
+            max_transaction_fee : nat;
+            created_at : nat64;
+        };
+        CreatedSweeperTransaction : record {
+            sweep_id : nat;
+            transaction : UnsignedTransaction;
+        };
+        SignedSweeperTransaction : record {
+            sweep_id : nat;
+            raw_transaction : text;
+        };
+        ReplacedSweeperTransaction : record {
+            sweep_id : nat;
+            transaction : UnsignedTransaction;
+        };
+        FinalizedSweeperTransaction : record {
+            sweep_id : nat;
             transaction_receipt : TransactionReceipt;
         };
         ReimbursedEthWithdrawal : record {
@@ -634,11 +722,21 @@ type Event = record {
             registrations : vec record {
                 owner : principal;
                 subaccount : opt Subaccount;
+                erc20_contract_address : text;
                 address : text;
                 expires_at_nanos : nat64;
                 last_scanned_block : opt nat;
                 scan_count : nat64;
             };
+        };
+        AutomaticDepositReceived : record {
+            owner : principal;
+            subaccount : opt Subaccount;
+            address : text;
+            erc20_contract_address : text;
+            last_scanned_block : nat;
+            scan_count : nat64;
+            scanned_balance : nat;
         };
     };
 };
@@ -690,7 +788,7 @@ type MintMemo = variant {
     ReimburseWithdrawal : record {
         // The id corresponding to the withdrawal request.
         withdrawal_id: nat64;
-    };    
+    };
 };
 
 type BurnMemo = variant {
@@ -715,7 +813,7 @@ type BurnMemo = variant {
         ckerc20_withdrawal_id: nat64;
         // The destination of the withdrawal request.
         to_address: text;
-    };    
+    };
 };
 
 type DecodedMemo = variant {

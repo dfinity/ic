@@ -122,6 +122,20 @@ pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =
 const CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT: &str =
     "state_manager_replicated_state_altered_after_checkpoint";
 
+/// Critical error tracking canister directories unexpectedly removed from tip by
+/// `TipRequest::FilterTipCanisters`, which is only meant to be a safety net: every
+/// canister directory removal should be covered by an explicit
+/// `UnflushedCheckpointOp::DeleteCanister`.
+pub(crate) const CRITICAL_ERROR_TIP_CANISTERS_FILTERED: &str =
+    "state_manager_tip_canisters_filtered";
+
+/// Critical error tracking snapshot directories unexpectedly removed from tip by
+/// `TipRequest::FilterTipCanisters`, which is only meant to be a safety net: every
+/// snapshot directory removal should be covered by an explicit
+/// `UnflushedCheckpointOp::DeleteSnapshot`.
+pub(crate) const CRITICAL_ERROR_TIP_SNAPSHOTS_FILTERED: &str =
+    "state_manager_tip_snapshots_filtered";
+
 /// How long to keep archived and diverged states.
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
@@ -199,7 +213,7 @@ pub struct StateManagerMetrics {
     fast_forward_height: IntGauge,
     no_state_clone_count: IntCounter,
     skip_optimization_missing_cert_count: IntCounter,
-    skipped_state_observations: IntCounter,
+    state_observation_blocked_duration: Histogram,
 }
 
 #[derive(Clone)]
@@ -236,6 +250,8 @@ pub struct CheckpointMetrics {
     load_canister_step_duration: HistogramVec,
     load_checkpoint_soft_invariant_broken: IntCounter,
     replicated_state_altered_after_checkpoint: IntCounter,
+    tip_canisters_filtered: IntCounter,
+    tip_snapshots_filtered: IntCounter,
     tip_handler_request_duration: HistogramVec,
     num_page_maps_by_load_status: IntGaugeVec,
     num_loaded_wasm_files_by_source: IntGaugeVec,
@@ -273,6 +289,12 @@ impl CheckpointMetrics {
         let replicated_state_altered_after_checkpoint = metrics_registry
             .error_counter(CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT);
 
+        let tip_canisters_filtered =
+            metrics_registry.error_counter(CRITICAL_ERROR_TIP_CANISTERS_FILTERED);
+
+        let tip_snapshots_filtered =
+            metrics_registry.error_counter(CRITICAL_ERROR_TIP_SNAPSHOTS_FILTERED);
+
         let tip_handler_request_duration = metrics_registry.histogram_vec(
             "state_manager_tip_handler_request_duration_seconds",
             "Duration to execute requests to Tip handling thread in seconds.",
@@ -298,6 +320,8 @@ impl CheckpointMetrics {
             load_canister_step_duration,
             load_checkpoint_soft_invariant_broken,
             replicated_state_altered_after_checkpoint,
+            tip_canisters_filtered,
+            tip_snapshots_filtered,
             tip_handler_request_duration,
             num_page_maps_by_load_status,
             num_loaded_wasm_files_by_source,
@@ -528,9 +552,10 @@ impl StateManagerMetrics {
             "How often we could have skipped state cloning but did not because no certification was available.",
         );
 
-        let skipped_state_observations = metrics_registry.int_counter(
-            "state_manager_skipped_state_observations",
-            "Number of `ReplicatedStateMetrics::observe` invocations skipped because the background metrics thread was still busy.",
+        let metrics_observation_blocked_duration = metrics_registry.histogram(
+            "state_manager_observe_metrics_blocked_duration_seconds",
+            "Duration spent blocked on the critical path handing off a `ReplicatedStateMetrics::observe` invocation to the background metrics thread, in seconds. Zero when enqueued immediately.",
+            decimal_buckets_with_zero(-3, 0),
         );
 
         Self {
@@ -565,7 +590,7 @@ impl StateManagerMetrics {
             fast_forward_height,
             no_state_clone_count,
             skip_optimization_missing_cert_count,
-            skipped_state_observations,
+            state_observation_blocked_duration: metrics_observation_blocked_duration,
         }
     }
 
@@ -1403,7 +1428,11 @@ impl StateManagerImpl {
             invariants: replicated_state_invariants.map(Arc::new),
             worker_thread: WorkerThread::new(
                 "StateMetrics",
-                metrics.skipped_state_observations.clone(),
+                // One slot of slack, so that we need not block if the worker thread has not
+                // been scheduled since the previous round. May hold on to a `ReplicatedState`
+                // (which the State Manager likely also holds, as the latest state).
+                1,
+                metrics.state_observation_blocked_duration.clone(),
             ),
         };
 
@@ -4546,9 +4575,9 @@ impl ReplicatedStateMetricsThread {
     /// Enqueues background metric observations and invariant checks for the given
     /// state.
     ///
-    /// No-op if the worker thread is backlogged with earlier enqueued tasks. Since
-    /// neither metrics nor invariant checks are critical to correct functioning of
-    /// the replica, this is preferable to blocking on the critical path.
+    /// Blocks if the worker thread has not yet picked up the previously enqueued
+    /// observation, recording the time spent blocked in
+    /// `state_manager_observe_metrics_blocked_duration_seconds`.
     fn enqueue_observe_and_check(
         &self,
         state: Arc<ReplicatedState>,

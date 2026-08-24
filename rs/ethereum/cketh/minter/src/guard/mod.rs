@@ -30,7 +30,23 @@ impl RequestsGuardedByPrincipal for PendingWithdrawalRequests {
     }
 
     fn pending_requests_count(state: &State) -> usize {
-        state.eth_transactions.withdrawal_requests_len()
+        state.withdrawal_transactions.requests_len()
+    }
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct PendingDepositRequests;
+
+impl RequestsGuardedByPrincipal for PendingDepositRequests {
+    fn guarded_principals(state: &mut State) -> &mut BTreeSet<Principal> {
+        &mut state.pending_deposit_principals
+    }
+
+    /// Always zero: a deposit registration is not queued for later processing, so there is no
+    /// backlog to apply [`MAX_PENDING`] to. How many pairs may be armed is bounded by the
+    /// watchlist's own capacity and its per-account token cap instead.
+    fn pending_requests_count(_state: &State) -> usize {
+        0
     }
 }
 
@@ -77,6 +93,19 @@ impl<PR: RequestsGuardedByPrincipal> Drop for Guard<PR> {
 pub fn retrieve_withdraw_guard(
     principal: Principal,
 ) -> Result<Guard<PendingWithdrawalRequests>, GuardError> {
+    Guard::new(principal)
+}
+
+/// Serializes a principal's `deposit_erc20` calls.
+///
+/// `deposit_erc20` reads a pair's status, awaits the minter's ECDSA public key, and only then arms
+/// the pair. Without this guard a second call from the same principal could arm the pair — and a
+/// balance scan move it to the sweep queue — while the first is suspended, so the first would then
+/// re-arm a pair that is already awaiting sweep, leaving it in both the watchlist and the sweep
+/// queue.
+pub fn deposit_erc20_guard(
+    principal: Principal,
+) -> Result<Guard<PendingDepositRequests>, GuardError> {
     Guard::new(principal)
 }
 

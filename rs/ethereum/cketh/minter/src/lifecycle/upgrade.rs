@@ -30,6 +30,12 @@ pub struct UpgradeArg {
     pub deposit_with_subaccount_helper_contract_address: Option<String>,
     #[cbor(n(9), with = "icrc_cbor::nat::option")]
     pub last_deposit_with_subaccount_scraped_block_number: Option<Nat>,
+    #[n(10)]
+    pub ethereum_sweeper_contract_address: Option<String>,
+    /// Next transaction nonce of the dedicated sweeper address, on its own nonce sequence.
+    /// Mirrors `next_transaction_nonce` for the main address.
+    #[cbor(n(11), with = "icrc_cbor::nat::option")]
+    pub next_sweeper_transaction_nonce: Option<Nat>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArg>) {

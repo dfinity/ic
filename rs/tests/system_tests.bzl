@@ -45,7 +45,7 @@ def system_test(
         logs = True,
         vm_allocation_mode = None,
         cpus = None,
-        cpus_oversubscription_factor = 2,
+        cpus_oversubscription_factor = 3,
         **kwargs):
     """Declares a system-test.
 

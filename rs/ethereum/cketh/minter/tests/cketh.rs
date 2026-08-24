@@ -29,18 +29,17 @@ use ic_cketh_test_utils::{
     DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS,
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEFAULT_USER_SUBACCOUNT, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
-    DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS,
-    EXPECTED_BALANCE, GAS_USED, JsonRpcProvider, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
-    MINTER_ADDRESS,
+    DEFAULT_WITHDRAWAL_TRANSACTION, DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE,
+    ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, GAS_USED, JsonRpcProvider,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, SWEEPER_ADDRESS,
 };
 use ic_ethereum_types::Address;
-use ic_management_canister_types_private::CanisterStatusType;
+use ic_management_canister_types::CanisterStatusType;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
 use num_traits::cast::ToPrimitive;
 use serde_json::json;
-use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -80,7 +79,7 @@ fn should_deposit_and_withdraw() {
                 subaccount: params.recipient_subaccount,
             },
         };
-        let minter: Principal = cketh.minter_id.into();
+        let minter: Principal = cketh.minter_id;
         let withdrawal_amount = Nat::from(withdrawal_amount);
 
         let cketh = cketh
@@ -157,7 +156,7 @@ fn should_deposit_and_withdraw() {
             },
             EventPayload::SignedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
-                raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
+                raw_transaction: DEFAULT_WITHDRAWAL_TRANSACTION.to_string(),
             },
             EventPayload::FinalizedTransaction {
                 withdrawal_id,
@@ -167,8 +166,7 @@ fn should_deposit_and_withdraw() {
                     effective_gas_price: Nat::from(4277923390_u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Success,
-                    transaction_hash:
-                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+                    transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
                 },
             },
         ]);
@@ -183,7 +181,7 @@ fn should_retrieve_cache_transaction_price() {
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
 
     let result = cketh.eip_1559_transaction_price(None);
-    assert_matches!(result, Err(e) if e.code() == ic_state_machine_tests::ErrorCode::CanisterCalledTrap);
+    assert_matches!(result, Err(e) if e.error_code == pocket_ic::ErrorCode::CanisterCalledTrap);
 
     let cketh = cketh
         .deposit(DepositParams::default())
@@ -214,7 +212,7 @@ fn should_retrieve_cache_transaction_price() {
     assert_eq!(price, second_price);
 
     let price_using_ledger_id =
-        cketh.eip_1559_transaction_price_expecting_ok(Some(cketh.ledger_id.into()));
+        cketh.eip_1559_transaction_price_expecting_ok(Some(cketh.ledger_id));
     assert_eq!(price, price_using_ledger_id);
 }
 
@@ -438,7 +436,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
 #[test]
 fn should_reimburse() {
     let cketh = CkEthSetup::default();
-    let minter: Principal = cketh.minter_id.into();
+    let minter: Principal = cketh.minter_id;
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0".to_string();
@@ -468,7 +466,7 @@ fn should_reimburse() {
     assert_eq!(balance_before_withdrawal, withdrawal_amount);
 
     // advance time so that time does not grow implicitly when executing a round
-    cketh.env.advance_time(Duration::from_secs(1));
+    cketh.advance_time(Duration::from_secs(1));
     let time_at_withdrawal = cketh.env.get_time().as_nanos_since_unix_epoch();
 
     let cketh = cketh
@@ -504,7 +502,7 @@ fn should_reimburse() {
 
     assert_eq!(cketh.balance_of(caller), Nat::from(0_u8));
 
-    cketh.env.advance_time(PROCESS_REIMBURSEMENT);
+    cketh.advance_time(PROCESS_REIMBURSEMENT);
     cketh.env.tick();
 
     let cost_of_failed_transaction = withdrawal_amount
@@ -523,8 +521,7 @@ fn should_reimburse() {
 
     let reimbursed_amount = Nat::from(tx.value.unwrap().as_u128());
     let reimbursed_in_block = withdrawal_id.clone() + Nat::from(1_u8);
-    let failed_tx_hash =
-        "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string();
+    let failed_tx_hash = DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string();
     assert_eq!(
         cketh.retrieve_eth_status(&withdrawal_id),
         RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
@@ -577,7 +574,7 @@ fn should_reimburse() {
             },
             EventPayload::SignedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
-                raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
+                raw_transaction: DEFAULT_WITHDRAWAL_TRANSACTION.to_string(),
             },
             EventPayload::FinalizedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
@@ -587,12 +584,11 @@ fn should_reimburse() {
                     effective_gas_price: Nat::from(4277923390_u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Failure,
-                    transaction_hash:
-                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+                    transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
                 },
             },
             EventPayload::ReimbursedEthWithdrawal {
-                transaction_hash: Some("0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string()),
+                transaction_hash: Some(DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string()),
                 reimbursed_amount,
                 withdrawal_id: withdrawal_id.clone(),
                 reimbursed_in_block: withdrawal_id + Nat::from(1_u8),
@@ -631,7 +627,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
     let first_tx_hash = hash_transaction(expected_tx.clone(), expected_sig);
-    let resubmitted_sent_tx = "0x02f873018084625900808507b81d70e382520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cc412e75c2de80c001a03d58ee49c9dce3b3c646eeb18317b46cc852a5384be9026cb0aa3d59f9b16292a007276dfb5e003bd7f527675e15c8512f1324e6434c62e7ffa4c68971d726fa0b";
+    let resubmitted_sent_tx = "0x02f873018084625900808507b81d70e382520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cc412e75c2de80c001a0a50a97743db2c45bfafaa668abb848ea6a15818d7c704b06c8957827fa68c6e8a04175e5fa7fbda1bb84e254f31acafd0fdf95f094127b0520b4e447e80d1afe37";
     let (resubmitted_tx, resubmitted_tx_sig) = decode_transaction(resubmitted_sent_tx);
     let resubmitted_tx_hash = hash_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
     assert_eq!(
@@ -706,7 +702,7 @@ fn should_not_overlap_when_scrapping_logs() {
     let cketh = CkEthSetup::default();
     let max_eth_logs_block_range = cketh.max_logs_block_range();
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
@@ -757,8 +753,9 @@ fn should_retry_from_same_block_when_scrapping_fails() {
     let max_eth_logs_block_range = cketh.max_logs_block_range();
     let prev_events_len = cketh.get_all_events().len();
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
         .expect_rpc_calls(&cketh);
@@ -786,8 +783,9 @@ fn should_retry_from_same_block_when_scrapping_fails() {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
         .expect_rpc_calls(&cketh);
@@ -813,7 +811,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
 fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
     let cketh = CkEthSetup::default();
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1))
         .build()
@@ -851,7 +849,7 @@ fn should_be_able_to_stop_canister_during_scraping() {
 
     let cketh = CkEthSetup::default();
     let max_eth_logs_block_range = cketh.as_ref().max_logs_block_range();
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     mock_eth_get_block_by_number(&cketh, MAX_BLOCK);
 
     // Starts scraping to create open call contexts.
@@ -874,7 +872,7 @@ fn should_be_able_to_stop_canister_during_scraping() {
     cketh.env.tick();
     cketh.env.tick();
     assert_eq!(
-        cketh.env.canister_http_request_contexts().len(),
+        cketh.env.get_canister_http().len(),
         4,
         "Expected HTTPS outcalls since scraping is still in progress: {}",
         debug_http_outcalls(&cketh.env)
@@ -907,15 +905,15 @@ fn should_be_able_to_stop_canister_during_scraping() {
 
     cketh.tick_until_minter_canister_status(CanisterStatusType::Stopped);
     assert_eq!(
-        cketh.env.canister_http_request_contexts(),
-        BTreeMap::default(),
+        cketh.env.get_canister_http(),
+        Vec::new(),
         "Unexpected pending HTTPS outcalls"
     );
 
     // Restarting the canister should resume scraping from where we stopped
     cketh.start_minter();
     cketh.tick_until_minter_canister_status(CanisterStatusType::Running);
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     mock_eth_get_block_by_number(&cketh, MAX_BLOCK);
 
     from_block = to_block.checked_increment().unwrap();
@@ -939,8 +937,9 @@ fn should_panic_when_last_finalized_block_in_the_past() {
     let cketh = CkEthSetup::default();
     let prev_events_len = cketh.get_all_events().len();
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL - 1))
         .build()
         .expect_rpc_calls(&cketh);
@@ -954,8 +953,9 @@ fn should_panic_when_last_finalized_block_in_the_past() {
         }]);
 
     let last_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 10;
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .with_request_params(json!(["finalized", false]))
         .respond_for_all_with(block_response(last_finalized_block))
         .build()
         .expect_rpc_calls(&cketh);
@@ -1050,7 +1050,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
         .checked_add(BlockNumber::from(max_eth_logs_block_range / 2))
         .unwrap();
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
@@ -1099,7 +1099,7 @@ fn should_skip_single_block_containing_too_many_events() {
     let large_amount_of_logs = multi_logs_for_single_transaction(deposit.clone(), 3_500);
     assert!(serde_json::to_vec(&large_amount_of_logs).unwrap().len() > 2_000_000);
 
-    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3))
         .build()
@@ -1177,6 +1177,16 @@ fn should_skip_single_block_containing_too_many_events() {
         ]);
 }
 
+#[test]
+fn should_derive_minter_address() {
+    let cketh = CkEthSetup::default();
+
+    assert_eq!(
+        Address::from_str(&cketh.minter_address()).unwrap(),
+        Address::from_str(MINTER_ADDRESS).unwrap()
+    );
+}
+
 #[allow(deprecated)]
 #[test]
 fn should_retrieve_minter_info() {
@@ -1190,7 +1200,10 @@ fn should_retrieve_minter_info() {
     assert_eq!(
         info_at_start,
         MinterInfo {
-            minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            // The minter derives its addresses from a timer scheduled at install, so a
+            // fixture that has executed no round has not derived them yet.
+            minter_address: None,
+            sweeper_address: None,
             smart_contract_address: Some(format_ethereum_address_to_eip_55(
                 ETH_HELPER_CONTRACT_ADDRESS
             )),
@@ -1199,6 +1212,7 @@ fn should_retrieve_minter_info() {
             )),
             erc20_helper_contract_address: None,
             deposit_with_subaccount_helper_contract_address: None,
+            sweeper_contract_address: None,
             supported_ckerc20_tokens: None,
             minimum_withdrawal_amount: Some(Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)),
             ethereum_block_height: Some(Finalized),
@@ -1211,8 +1225,8 @@ fn should_retrieve_minter_info() {
             last_deposit_with_subaccount_scraped_block_number: Some(
                 LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()
             ),
-            cketh_ledger_id: Some(cketh.ledger_id.into()),
-            evm_rpc_id: Some(cketh.evm_rpc_id.into()),
+            cketh_ledger_id: Some(cketh.ledger_id),
+            evm_rpc_id: Some(cketh.evm_rpc_id),
         }
     );
 
@@ -1223,6 +1237,8 @@ fn should_retrieve_minter_info() {
     assert_eq!(
         info_after_deposit,
         MinterInfo {
+            minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            sweeper_address: Some(format_ethereum_address_to_eip_55(SWEEPER_ADDRESS)),
             last_observed_block_number: Some(Nat::from(new_eth_scraped_block_number)),
             eth_balance: Some(Nat::from(EXPECTED_BALANCE)),
             last_eth_scraped_block_number: Some(new_eth_scraped_block_number.into()),
@@ -1254,6 +1270,24 @@ fn should_retrieve_minter_info() {
                 .map(|balance| balance - debited_amount),
             ..info_after_deposit
         }
+    );
+}
+
+#[test]
+fn should_retrieve_sweeper_contract_address_after_upgrade() {
+    const SWEEPER_CONTRACT_ADDRESS: &str = "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38";
+
+    let cketh = CkEthSetup::default();
+    assert_eq!(cketh.get_minter_info().sweeper_contract_address, None);
+
+    let cketh = cketh.check_audit_logs_and_upgrade(UpgradeArg {
+        ethereum_sweeper_contract_address: Some(SWEEPER_CONTRACT_ADDRESS.to_string()),
+        ..Default::default()
+    });
+
+    assert_eq!(
+        cketh.get_minter_info().sweeper_contract_address,
+        Some(format_ethereum_address_to_eip_55(SWEEPER_CONTRACT_ADDRESS))
     );
 }
 
@@ -1313,7 +1347,7 @@ mod cketh_evm_rpc {
     fn should_retrieve_block_number() {
         let cketh = CkEthSetup::default();
 
-        cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
             .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3))
             .build()
@@ -1329,11 +1363,11 @@ mod cketh_evm_rpc {
         cketh.stop_minter();
         cketh
             .env
-            .stop_canister(cketh.evm_rpc_id)
+            .stop_canister(cketh.evm_rpc_id, None)
             .expect("Failed to stop EVM RPC canister");
         cketh.start_minter();
 
-        cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        cketh.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         for _ in 0..10 {
             cketh.env.tick();

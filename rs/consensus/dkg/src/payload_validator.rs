@@ -204,15 +204,16 @@ fn validate_dealings_payload(
     for message in &dealings.messages {
         metrics.with_label_values(&["total"]).inc();
 
-        // Skip the rest if already present in DKG pool
+        let Some(config) = configs.get(&message.content.dkg_id) else {
+            return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
+        };
+
+        // Skip the (expensive) crypto verification if the dealing was verified against
+        // this config already, i.e. it is present in the validated DKG pool.
         if dkg_pool.validated_contains(message) {
             metrics.with_label_values(&["dkg_pool_hit"]).inc();
             continue;
         }
-
-        let Some(config) = configs.get(&message.content.dkg_id) else {
-            return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
-        };
 
         // Verify the signature and dealing.
         crypto_validate_dealing(crypto, config, message)?;
@@ -255,7 +256,7 @@ mod tests {
     use super::*;
     use crate::{DkgImpl, DkgKeyManager};
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
     use ic_crypto_test_utils_ni_dkg::{dummy_dealing, dummy_transcript_for_tests};
     use ic_interfaces::{
@@ -298,27 +299,20 @@ mod tests {
     fn test_validate_payload() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 4;
-            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
             let Dependencies {
                 crypto,
                 mut pool,
                 registry,
+                replica_config,
                 state_manager,
                 dkg_pool,
                 ..
-            } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    5,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            );
+            } = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(dkg_interval_length)
+                .build();
 
             let context = ValidationContext {
-                registry_version: RegistryVersion::from(5),
+                registry_version: RegistryVersion::from(1),
                 certified_height: Height::from(0),
                 time: ic_types::time::UNIX_EPOCH,
             };
@@ -335,7 +329,7 @@ mod tests {
                 .unwrap();
             assert!(
                 validate_payload(
-                    subnet_test_id(0),
+                    replica_config.subnet_id,
                     registry.as_ref(),
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
@@ -363,7 +357,7 @@ mod tests {
                 .unwrap();
             assert!(
                 validate_payload(
-                    subnet_test_id(0),
+                    replica_config.subnet_id,
                     registry.as_ref(),
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
@@ -419,6 +413,44 @@ mod tests {
             Err(DkgPayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::MissingDkgConfigForDealing
             ))
+        );
+    }
+
+    #[test]
+    fn validate_dealings_payload_when_wrong_dkg_id_and_in_dkg_pool_fails_test() {
+        // Validation should fail if the block contains a dealing without a coresponding config,
+        // even if the dealing is present in the validated pool.
+        let dealing = fake_dkg_message(SUBNET_2, NODE_1);
+        assert_eq!(
+            validate_payload_test_case_with_validated_dealings(
+                /*dealings_to_validate=*/ vec![dealing.clone()],
+                /*parents_dealings=*/ vec![],
+                /*validated_pool_dealings=*/ vec![dealing],
+                /*max_dealings_per_block=*/ 1,
+                SUBNET_1,
+                /*committee=*/ &[NODE_1],
+            ),
+            Err(DkgPayloadValidationError::InvalidArtifact(
+                InvalidDkgPayloadReason::MissingDkgConfigForDealing
+            ))
+        );
+    }
+
+    #[test]
+    fn validate_dealings_payload_when_valid_and_in_dkg_pool_passes_test() {
+        // A dealing that does have a config is still accepted when it is present in the
+        // validated DKG pool, i.e. the pool is still used to skip the crypto verification.
+        let dealing = fake_dkg_message(SUBNET_1, NODE_1);
+        assert_eq!(
+            validate_payload_test_case_with_validated_dealings(
+                /*dealings_to_validate=*/ vec![dealing.clone()],
+                /*parents_dealings=*/ vec![],
+                /*validated_pool_dealings=*/ vec![dealing],
+                /*max_dealings_per_block=*/ 1,
+                SUBNET_1,
+                /*committee=*/ &[NODE_1],
+            ),
+            Ok(())
         );
     }
 
@@ -522,7 +554,7 @@ mod tests {
                 registry,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config.clone(),
                 SUBNET_1,
                 vec![(
@@ -531,7 +563,8 @@ mod tests {
                         .with_dkg_dealings_per_block(1)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             let mut parent = Block::from(pool.make_next_block());
             parent.payload = Payload::new(
@@ -615,6 +648,28 @@ mod tests {
         subnet_id: SubnetId,
         committee: &[NodeId],
     ) -> ValidationResult<DkgPayloadValidationError> {
+        validate_payload_test_case_with_validated_dealings(
+            dealings_to_validate,
+            parent_dealings,
+            /*validated_pool_dealings=*/ vec![],
+            max_dealings_per_payload,
+            subnet_id,
+            committee,
+        )
+    }
+
+    /// Same as [`validate_payload_test_case`], but additionally inserts
+    /// `validated_pool_dealings` into the validated section of the node-local DKG pool
+    /// before validating the payload.
+    #[allow(clippy::result_large_err)]
+    fn validate_payload_test_case_with_validated_dealings(
+        dealings_to_validate: Vec<Message>,
+        parent_dealings: Vec<Message>,
+        validated_pool_dealings: Vec<Message>,
+        max_dealings_per_payload: u64,
+        subnet_id: SubnetId,
+        committee: &[NodeId],
+    ) -> ValidationResult<DkgPayloadValidationError> {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let registry_version = 1;
 
@@ -625,7 +680,7 @@ mod tests {
                 registry,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config.clone(),
                 subnet_id,
                 vec![(
@@ -634,6 +689,14 @@ mod tests {
                         .with_dkg_dealings_per_block(max_dealings_per_payload)
                         .build(),
                 )],
+            )
+            .build();
+
+            dkg_pool.write().unwrap().apply(
+                validated_pool_dealings
+                    .into_iter()
+                    .map(ChangeAction::AddToValidated)
+                    .collect(),
             );
 
             let mut parent = Block::from(pool.make_next_block());
@@ -728,7 +791,7 @@ mod tests {
                 state_manager,
                 registry_data_provider,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(
@@ -737,7 +800,8 @@ mod tests {
                         .with_dkg_interval_length(dkg_interval_length)
                         .build(),
                 )],
-            );
+            )
+            .build();
             state_manager
                 .get_mut()
                 .expect_get_latest_certified_state()

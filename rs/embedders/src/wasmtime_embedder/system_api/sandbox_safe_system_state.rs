@@ -394,16 +394,10 @@ impl SystemStateModifications {
     ) -> HypervisorResult<RequestMetadataStats> {
         // Append delta logs.
         if !self.canister_log.is_empty() {
-            // TODO(DSM-11): Move this into append_delta_log() once there is only one of it.
             metrics.observe_delta_log_size(self.canister_log.bytes_used());
         }
         system_state
             .log_memory_store
-            .append_delta_log(&mut self.canister_log.clone());
-        // Keep the legacy `canister_log` store up to date so that checkpoints
-        // remain readable by replicas that predate the log memory store.
-        system_state
-            .canister_log
             .append_delta_log(&mut self.canister_log);
 
         // Verify total cycle change is not positive and update cycles balance.
@@ -457,32 +451,22 @@ impl SystemStateModifications {
         let subnet_ids: BTreeSet<PrincipalId> =
             network_topology.subnets().keys().map(|s| s.get()).collect();
         for mut msg in self.requests {
-            if msg.receiver == IC_00 {
+            if !is_composite_query && msg.receiver == IC_00 {
                 match Self::validate_sender_canister_version(&msg, system_state.canister_version())
                 {
                     Ok(()) => {
                         // This is a request to the management canister.
                         // Update the receiver to the appropriate subnet.
-                        let destination = if is_composite_query {
-                            // Requests to the management canister made by a composite
-                            // query (including from its callbacks) are not routed
-                            // based on the method and the payload: they are
-                            // executed by the query handler against the state of the own
-                            // subnet (or rejected by it if the method cannot be executed
-                            // in the non-replicated mode). Note that composite queries
-                            // are always executed in the non-replicated mode.
-                            Ok(own_subnet_id.get())
-                        } else {
-                            routing::resolve_destination(
-                                network_topology,
-                                msg.method_name.as_str(),
-                                msg.method_payload.as_slice(),
-                                own_subnet_id,
-                                system_state.canister_id(),
-                                logger,
-                            )
-                        };
-                        match destination.map(CanisterId::unchecked_from_principal) {
+                        match routing::resolve_destination(
+                            network_topology,
+                            msg.method_name.as_str(),
+                            msg.method_payload.as_slice(),
+                            own_subnet_id,
+                            system_state.canister_id(),
+                            logger,
+                        )
+                        .map(CanisterId::unchecked_from_principal)
+                        {
                             Ok(destination_subnet) => {
                                 msg.receiver = destination_subnet;
                                 Self::push_message(system_state, time, msg, logger)?;
@@ -508,7 +492,7 @@ impl SystemStateModifications {
                         )?;
                     }
                 }
-            } else if subnet_ids.contains(&msg.receiver.get()) {
+            } else if !is_composite_query && subnet_ids.contains(&msg.receiver.get()) {
                 match Self::validate_sender_canister_version(&msg, system_state.canister_version())
                 {
                     Ok(()) => {
@@ -538,6 +522,20 @@ impl SystemStateModifications {
                     }
                 }
             } else {
+                // A request made by a composite query (including from its callbacks) is
+                // neither validated nor routed here, no matter its receiver: if it is
+                // addressed to `IC_00`, it is executed by the query handler against the
+                // state of the own subnet (or rejected by it if the method cannot be
+                // executed in non-replicated mode; note that composite queries are
+                // always executed in non-replicated mode); if it provides a subnet ID
+                // directly as the receiver, it is rejected by the query handler with
+                // `CanisterNotFound` since only requests addressed to `IC_00` are executed
+                // as management canister calls in a composite query.
+                //
+                // In particular, such a request must not be rejected here: the reject
+                // response would be pushed onto the canister's input queue, which is
+                // never inducted while evaluating a query call graph, and hence the
+                // composite query would fail with `CanisterDidNotReply`.
                 Self::push_message(system_state, time, msg, logger)?;
             }
         }

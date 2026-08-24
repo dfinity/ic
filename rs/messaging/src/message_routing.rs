@@ -1134,6 +1134,7 @@ impl<RegistryClient_: RegistryClient> RegistryReader<RegistryClient_> {
                     chain_keys_held,
                     cost_schedule,
                     subnet_admins,
+                    cooling_down: subnet_record.cooling_down,
                 },
             );
         }

@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-dev@sha256:484507d3a8cbd75d81f4cc2e990efdde7a780fefacd6d47d0362032f1bfd7968",
+  "image": "ghcr.io/dfinity/ic-dev@sha256:657e582dca33b7dba6fa8bd30f755fcf49b9c034474fbc7fe45dbf9049bb2d1c",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -23,7 +23,8 @@
   "postStartCommand": "/ic/ci/container/init.sh",
   "containerEnv": {
     "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
-    "USER": "${localEnv:USER}"
+    "USER": "${localEnv:USER}",
+    "LANG": "C.UTF-8"
   },
   "mounts": [
     {

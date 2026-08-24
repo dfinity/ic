@@ -6,7 +6,8 @@ use ic_cketh_minter::checked_amount::CheckedAmountOf;
 use ic_cketh_minter::endpoints::events::{
     AccessListItem as CandidAccessListItem, Event as CandidEvent, EventSource as CandidEventSource,
     GetEventsResult, ReimbursementIndex as CandidReimbursementIndex,
-    TransactionStatus as CandidTransactionStatus, UnsignedTransaction,
+    TransactionReceipt as CandidTransactionReceipt, TransactionStatus as CandidTransactionStatus,
+    UnsignedTransaction,
 };
 use ic_cketh_minter::erc20::CkErc20Token;
 use ic_cketh_minter::eth_logs::{
@@ -18,7 +19,7 @@ use ic_cketh_minter::state::audit::EventType as ET;
 use ic_cketh_minter::state::event::Event;
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest,
+    ReimbursementRequest, SweepId, SweepRequest,
 };
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::{
@@ -69,6 +70,20 @@ fn map_reimbursement_index(index: CandidReimbursementIndex) -> ReimbursementInde
             ledger_id,
             ckerc20_ledger_burn_index: map_nat(ckerc20_ledger_burn_index),
         },
+    }
+}
+
+fn map_transaction_receipt(receipt: CandidTransactionReceipt) -> TransactionReceipt {
+    TransactionReceipt {
+        block_hash: receipt.block_hash.parse().unwrap(),
+        block_number: receipt.block_number.try_into().unwrap(),
+        effective_gas_price: receipt.effective_gas_price.try_into().unwrap(),
+        gas_used: receipt.gas_used.try_into().unwrap(),
+        status: match receipt.status {
+            CandidTransactionStatus::Success => TransactionStatus::Success,
+            CandidTransactionStatus::Failure => TransactionStatus::Failure,
+        },
+        transaction_hash: receipt.transaction_hash.parse().unwrap(),
     }
 }
 
@@ -263,6 +278,21 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                 created_at,
             }),
+            EventPayload::AcceptedSweeperFundingRequest {
+                withdrawal_amount,
+                destination,
+                ledger_burn_index,
+                from,
+                from_subaccount,
+                created_at,
+            } => ET::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
+                withdrawal_amount: withdrawal_amount.try_into().unwrap(),
+                destination: destination.parse().unwrap(),
+                ledger_burn_index: map_nat(ledger_burn_index),
+                from,
+                from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
+                created_at,
+            }),
             EventPayload::CreatedTransaction {
                 withdrawal_id,
                 transaction,
@@ -289,20 +319,50 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 transaction_receipt,
             } => ET::FinalizedTransaction {
                 withdrawal_id: map_nat(withdrawal_id),
-                transaction_receipt: TransactionReceipt {
-                    block_hash: transaction_receipt.block_hash.parse().unwrap(),
-                    block_number: transaction_receipt.block_number.try_into().unwrap(),
-                    effective_gas_price: transaction_receipt
-                        .effective_gas_price
-                        .try_into()
-                        .unwrap(),
-                    gas_used: transaction_receipt.gas_used.try_into().unwrap(),
-                    status: match transaction_receipt.status {
-                        CandidTransactionStatus::Success => TransactionStatus::Success,
-                        CandidTransactionStatus::Failure => TransactionStatus::Failure,
-                    },
-                    transaction_hash: transaction_receipt.transaction_hash.parse().unwrap(),
-                },
+                transaction_receipt: map_transaction_receipt(transaction_receipt),
+            },
+            EventPayload::AcceptedSweepRequest {
+                sweep_id,
+                destination,
+                amount,
+                data,
+                max_transaction_fee,
+                created_at,
+            } => ET::AcceptedSweepRequest(SweepRequest {
+                id: SweepId(sweep_id.0.to_u64().unwrap()),
+                destination: destination.parse().unwrap(),
+                amount: amount.try_into().unwrap(),
+                data: data.into_vec(),
+                max_transaction_fee: max_transaction_fee.try_into().unwrap(),
+                created_at,
+            }),
+            EventPayload::CreatedSweeperTransaction {
+                sweep_id,
+                transaction,
+            } => ET::CreatedSweeperTransaction {
+                sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
+                transaction: map_unsigned_transaction(transaction),
+            },
+            EventPayload::SignedSweeperTransaction {
+                sweep_id,
+                raw_transaction,
+            } => ET::SignedSweeperTransaction {
+                sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
+                transaction: map_signed_transaction(&raw_transaction),
+            },
+            EventPayload::ReplacedSweeperTransaction {
+                sweep_id,
+                transaction,
+            } => ET::ReplacedSweeperTransaction {
+                sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
+                transaction: map_unsigned_transaction(transaction),
+            },
+            EventPayload::FinalizedSweeperTransaction {
+                sweep_id,
+                transaction_receipt,
+            } => ET::FinalizedSweeperTransaction {
+                sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
+                transaction_receipt: map_transaction_receipt(transaction_receipt),
             },
             EventPayload::ReimbursedEthWithdrawal {
                 reimbursed_in_block,
@@ -422,6 +482,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                             |a| ic_cketh_minter::state::event::DepositAddressRegistration {
                                 owner: a.owner,
                                 subaccount: a.subaccount,
+                                erc20_contract_address: a.erc20_contract_address.parse().unwrap(),
                                 address: a.address.parse().unwrap(),
                                 expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
                                 last_scanned_block: a
@@ -433,6 +494,23 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                         .collect(),
                 },
             ),
+            EventPayload::AutomaticDepositReceived {
+                owner,
+                subaccount,
+                address,
+                erc20_contract_address,
+                last_scanned_block,
+                scan_count,
+                scanned_balance,
+            } => ET::AutomaticDepositReceived(ic_cketh_minter::state::event::AutomaticDeposit {
+                owner,
+                subaccount,
+                address: address.parse().unwrap(),
+                erc20_contract_address: erc20_contract_address.parse().unwrap(),
+                last_scanned_block: last_scanned_block.try_into().unwrap(),
+                scan_count: scan_count.try_into().unwrap(),
+                scanned_balance: scanned_balance.try_into().unwrap(),
+            }),
         },
     }
 }

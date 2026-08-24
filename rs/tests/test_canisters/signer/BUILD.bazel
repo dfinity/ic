@@ -13,6 +13,7 @@ rust_library(
         # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:serde",
     ],
 )
@@ -30,6 +31,7 @@ rust_canister(
         "//rs/tests/test_canisters/signer:lib",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic_bls12_381",
         "@crate_index//:serde",
     ],

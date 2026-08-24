@@ -92,7 +92,7 @@ fn canister_status(_: CanisterStatusArgs) -> CanisterStatusResult {
     unreachable!()
 }
 
-#[candid_method(update)]
+#[candid_method(query)]
 fn canister_info(_: CanisterInfoArgs) -> CanisterInfoResult {
     unreachable!()
 }
