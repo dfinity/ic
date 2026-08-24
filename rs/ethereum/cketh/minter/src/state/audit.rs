@@ -72,7 +72,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::AcceptedEthWithdrawalRequest(request) => {
             state
                 .withdrawal_transactions
-                .record_withdrawal_request(request.clone());
+                .record_request(request.clone());
         }
         EventType::AcceptedSweeperFundingRequest(request) => {
             state.sweeper_funding.record_burn(request.withdrawal_amount);
@@ -80,7 +80,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             // funding reimbursable.
             state
                 .withdrawal_transactions
-                .record_withdrawal_request(WithdrawalRequest::SweeperFunding(request.clone()));
+                .record_request(WithdrawalRequest::SweeperFunding(request.clone()));
         }
         EventType::CreatedTransaction {
             withdrawal_id,

@@ -978,13 +978,13 @@ fn state_equivalence() {
         ledger_burn_index: LedgerBurnIndex::new(20),
         ..withdrawal_request1.clone()
     };
-    let pending_withdrawal_requests: VecDeque<WithdrawalRequest> = vec![
+    let pending_requests: VecDeque<WithdrawalRequest> = vec![
         withdrawal_request1.clone().into(),
         withdrawal_request2.clone().into(),
     ]
     .into_iter()
     .collect();
-    let processed_withdrawal_requests = btreemap! {
+    let processed_requests = btreemap! {
         LedgerBurnIndex::new(4) => EthWithdrawalRequest {
             withdrawal_amount: Wei::new(1_000_000_000_000),
             ledger_burn_index: LedgerBurnIndex::new(4),
@@ -1107,8 +1107,8 @@ fn state_equivalence() {
         }),
     };
     let builder = WithdrawalTransactionsBuilder::default()
-        .with_pending_withdrawal_requests(pending_withdrawal_requests)
-        .with_processed_withdrawal_requests(processed_withdrawal_requests)
+        .with_pending_requests(pending_requests)
+        .with_processed_requests(processed_requests)
         .with_created_tx(created_tx)
         .with_sent_tx(sent_tx)
         .with_finalized_tx(finalized_tx)
@@ -1333,7 +1333,7 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             withdrawal_transactions: builder
                 .clone()
-                .with_pending_withdrawal_requests(
+                .with_pending_requests(
                     vec![
                         withdrawal_request2.clone().into(),
                         withdrawal_request1.clone().into()
@@ -1352,9 +1352,7 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             withdrawal_transactions: builder
                 .clone()
-                .with_pending_withdrawal_requests(
-                    vec![withdrawal_request1.into()].into_iter().collect()
-                )
+                .with_pending_requests(vec![withdrawal_request1.into()].into_iter().collect())
                 .build(),
             ..state.clone()
         }),
@@ -1511,7 +1509,7 @@ mod sweeper_funding {
 
         let request = state
             .withdrawal_transactions
-            .withdrawal_requests_iter()
+            .requests_iter()
             .next()
             .expect("BUG: the funding request was not recorded");
         assert_matches!(request, WithdrawalRequest::SweeperFunding(_));
@@ -1532,7 +1530,7 @@ mod eth_balance {
     use crate::state::audit::{EventType, apply_state_transition};
     use crate::state::tests::checked_sub;
     use crate::state::tests::{initial_state, received_eth_event};
-    use crate::state::transactions::{EthWithdrawalRequest, WithdrawalRequest, create_transaction};
+    use crate::state::transactions::{EthWithdrawalRequest, PipelineRequest, WithdrawalRequest};
     use crate::state::{EthBalance, State};
     use crate::test_fixtures::sweeper_funding_request;
     use crate::tx::{SignedEip1559TransactionRequest, TransactionSignature};
@@ -2008,20 +2006,19 @@ mod eth_balance {
         }
 
         fn apply(self, state: &mut State) -> TransactionReceipt {
-            let accepted_withdrawal_request_event = self
-                .withdrawal_request
-                .clone()
-                .into_accepted_withdrawal_request_event();
+            let accepted_withdrawal_request_event =
+                accepted_withdrawal_request_event(self.withdrawal_request.clone());
             apply_state_transition(state, &accepted_withdrawal_request_event);
 
-            let transaction = create_transaction(
-                &self.withdrawal_request,
-                self.nonce,
-                self.tx_fee,
-                self.gas_limit,
-                EthereumNetwork::Sepolia,
-            )
-            .expect("BUG: failed to create transaction");
+            let transaction = self
+                .withdrawal_request
+                .create_transaction(
+                    self.nonce,
+                    self.tx_fee,
+                    self.gas_limit,
+                    EthereumNetwork::Sepolia,
+                )
+                .expect("BUG: failed to create transaction");
             apply_state_transition(
                 state,
                 &EventType::CreatedTransaction {
@@ -2070,6 +2067,18 @@ mod eth_balance {
         let mut state = initial_state();
         add_erc20_token(&mut state);
         state
+    }
+
+    fn accepted_withdrawal_request_event(request: WithdrawalRequest) -> EventType {
+        match request {
+            WithdrawalRequest::CkEth(request) => EventType::AcceptedEthWithdrawalRequest(request),
+            WithdrawalRequest::CkErc20(request) => {
+                EventType::AcceptedErc20WithdrawalRequest(request)
+            }
+            WithdrawalRequest::SweeperFunding(request) => {
+                EventType::AcceptedSweeperFundingRequest(request)
+            }
+        }
     }
 
     fn add_erc20_token(state: &mut State) {

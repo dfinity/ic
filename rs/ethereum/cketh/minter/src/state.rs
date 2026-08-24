@@ -377,8 +377,7 @@ impl State {
             "BUG: unsupported ERC-20 token {}",
             request.erc20_contract_address
         );
-        self.withdrawal_transactions
-            .record_withdrawal_request(request);
+        self.withdrawal_transactions.record_request(request);
     }
 
     pub fn record_finalized_transaction(
@@ -420,7 +419,7 @@ impl State {
             .expect("BUG: missing finalized transaction");
         let withdrawal_request = self
             .withdrawal_transactions
-            .get_processed_withdrawal_request(withdrawal_id)
+            .get_processed_request(withdrawal_id)
             .expect("BUG: missing withdrawal request");
         let charged_tx_fee = match withdrawal_request {
             WithdrawalRequest::CkEth(req) | WithdrawalRequest::SweeperFunding(req) => req
