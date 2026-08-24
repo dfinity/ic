@@ -338,7 +338,7 @@ impl DashboardTemplate {
 
         let mut withdrawal_requests: Vec<_> = state
             .withdrawal_transactions
-            .withdrawal_requests_iter()
+            .requests_iter()
             .cloned()
             .map(|request| match request {
                 WithdrawalRequest::CkEth(req) | WithdrawalRequest::SweeperFunding(req) => {

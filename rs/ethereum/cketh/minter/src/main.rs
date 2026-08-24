@@ -1136,7 +1136,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 let now_nanos = ic_cdk::api::time();
                 let age_nanos = now_nanos.saturating_sub(
                     s.withdrawal_transactions
-                        .oldest_incomplete_withdrawal_timestamp()
+                        .oldest_incomplete_request_timestamp()
                         .unwrap_or(now_nanos),
                 );
                 w.encode_gauge(
