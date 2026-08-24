@@ -265,7 +265,7 @@ mod withdrawal_transactions {
                 ]
             );
 
-            transactions.reschedule_request(first_request.clone());
+            transactions.reschedule_request(first_request.cketh_ledger_burn_index());
             // 1 -> 3 -> 2
             assert_eq!(
                 transactions.requests_batch(5),
@@ -276,7 +276,7 @@ mod withdrawal_transactions {
                 ]
             );
 
-            transactions.reschedule_request(second_request.clone());
+            transactions.reschedule_request(second_request.cketh_ledger_burn_index());
             // 2 -> 1 -> 3
             assert_eq!(
                 transactions.requests_batch(5),
@@ -287,7 +287,7 @@ mod withdrawal_transactions {
                 ]
             );
 
-            transactions.reschedule_request(third_request.clone());
+            transactions.reschedule_request(third_request.cketh_ledger_burn_index());
             // 3 -> 2 -> 1
             assert_eq!(
                 transactions.requests_batch(5),

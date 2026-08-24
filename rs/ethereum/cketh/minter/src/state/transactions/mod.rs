@@ -466,8 +466,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
     }
 
     /// Move an existing request to the back of the queue.
-    pub fn reschedule_request<Req: Into<R>>(&mut self, request: Req) {
-        let id = request.into().id();
+    pub fn reschedule_request(&mut self, id: R::Id) {
         assert_eq!(
             self.pending_requests
                 .iter()
@@ -982,8 +981,8 @@ impl WithdrawalTransactions {
         self.pipeline.record_request(request)
     }
 
-    pub fn reschedule_request<Req: Into<WithdrawalRequest>>(&mut self, request: Req) {
-        self.pipeline.reschedule_request(request)
+    pub fn reschedule_request(&mut self, id: LedgerBurnIndex) {
+        self.pipeline.reschedule_request(id)
     }
 
     pub fn record_signed_transaction(

@@ -288,7 +288,10 @@ fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
                     INFO,
                     "[create_transactions_batch]: Withdrawal request with burn index {ledger_burn_index} has insufficient amount {withdrawal_amount:?} to cover transaction fees: {max_transaction_fee:?}. Request moved back to end of queue."
                 );
-                mutate_state(|s| s.withdrawal_transactions.reschedule_request(request));
+                mutate_state(|s| {
+                    s.withdrawal_transactions
+                        .reschedule_request(ledger_burn_index)
+                });
             }
         };
     }
