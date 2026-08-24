@@ -21,6 +21,7 @@ fn empty_update_payload() -> UpdateSubnetPayload {
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
+        cooling_down: None,
         features: None,
         resource_limits: None,
         chain_key_config: None,

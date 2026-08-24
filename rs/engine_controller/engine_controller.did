@@ -84,6 +84,7 @@ type UpdateSubnetPayload = record {
   subnet_type : opt SubnetType;
   is_halted : opt bool;
   halt_at_cup_height : opt bool;
+  cooling_down : opt bool;
   features : opt SubnetFeatures;
   resource_limits : opt ResourceLimits;
   chain_key_config : opt ChainKeyConfig;
