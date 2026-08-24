@@ -57,10 +57,28 @@ pub fn tcb_version_to_u64(tcb: TcbVersion, generation: Generation) -> Result<u64
     Ok(u64::from_le_bytes(bytes))
 }
 
+/// Converts a raw `u64` TCB version (little-endian layout matching the AMD SEV-SNP ABI)
+/// back to a `TcbVersion`.
+pub fn tcb_version_from_u64(tcb: u64, generation: Generation) -> Result<TcbVersion> {
+    TcbVersion::from_bytes_with(&tcb.to_le_bytes(), generation)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use attestation_testing::attestation_report::AttestationReportBuilder;
+
+    #[test]
+    fn tcb_version_u64_round_trip() {
+        // The legacy (Milan/Genoa) layout does not preserve the FMC version.
+        for (generation, tcb) in [
+            (Generation::Milan, TcbVersion::new(None, 1, 2, 3, 4)),
+            (Generation::Turin, TcbVersion::new(Some(5), 1, 2, 3, 4)),
+        ] {
+            let raw = tcb_version_to_u64(tcb, generation).unwrap();
+            assert_eq!(tcb_version_from_u64(raw, generation).unwrap(), tcb);
+        }
+    }
 
     #[test]
     fn reported_tcb_as_u64_matches_raw_report_bytes() {

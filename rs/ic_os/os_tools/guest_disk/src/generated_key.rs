@@ -32,9 +32,9 @@ impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
             // execution environment)
             /*verify_luks_params=*/
             false,
-            Some(self.metrics_registry),
+            self.metrics_registry,
         )
-        .context("Failed to initialize crypt device")?;
+        .context("Failed to activate crypt device")?;
 
         Ok(())
     }
