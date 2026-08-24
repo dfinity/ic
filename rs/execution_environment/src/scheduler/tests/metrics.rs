@@ -1431,7 +1431,8 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
 
         let removed_cycles =
             CompoundCycles::<Instructions>::new(Cycles::from(1000_u128), cost_schedule);
-        test.canister_state_mut(canister_id)
+        let _uncharged = test
+            .canister_state_mut(canister_id)
             .system_state
             .consume_cycles(removed_cycles);
 
@@ -1546,7 +1547,8 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
 
         let removed_cycles =
             CompoundCycles::<Instructions>::new(Cycles::from(1000_u128), cost_schedule);
-        test.canister_state_mut(canister_id)
+        let _uncharged = test
+            .canister_state_mut(canister_id)
             .system_state
             .consume_cycles(removed_cycles);
 

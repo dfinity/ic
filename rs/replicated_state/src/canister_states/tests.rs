@@ -864,7 +864,7 @@ fn total_consumed_cycles_combines_hot_and_cold() {
     };
 
     fn consume(canister: &mut Arc<CanisterState>, amount: u128) {
-        Arc::make_mut(canister)
+        let _uncharged = Arc::make_mut(canister)
             .system_state
             .consume_cycles(CompoundCycles::<Instructions>::new(
                 Cycles::new(amount),

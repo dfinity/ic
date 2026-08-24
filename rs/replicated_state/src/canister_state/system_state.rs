@@ -1024,11 +1024,17 @@ impl SystemState {
         log: &ReplicaLogger,
         charging_from_balance_error: &IntCounter,
     ) {
-        // We rely on saturating operations of `Cycles` here.
-        let remaining_debit = self.ingress_induction_cycles_debit - self.cycles_balance;
+        // `consume_cycles()` charges only the part of the debit that the balance can
+        // cover and hands back the rest, which is neither charged nor reported as
+        // consumed. Dropping it here makes some of the postponed charges free.
+        let uncharged_debit = self.consume_cycles(CompoundCycles::<IngressInduction>::new(
+            self.ingress_induction_cycles_debit,
+            cost_schedule,
+        ));
+        self.ingress_induction_cycles_debit = Cycles::zero();
         if strict {
-            debug_assert_eq!(remaining_debit.get(), 0);
-            if remaining_debit.get() > 0 {
+            debug_assert_eq!(uncharged_debit.get(), 0);
+            if uncharged_debit.get() > 0 {
                 // This case is unreachable and may happen only due to a bug: if the
                 // caller has reduced the cycles balance below the cycles debit.
                 charging_from_balance_error.inc();
@@ -1036,23 +1042,10 @@ impl SystemState {
                     log,
                     "[EXC-BUG]: Debited cycles exceed the cycles balance of {} by {}",
                     canister_id,
-                    remaining_debit,
+                    uncharged_debit,
                 );
-                // Continue the execution by dropping the remaining debit, which makes
-                // some of the postponed charges free.
             }
         }
-        // Charge only the part of the debit that the balance can cover. The remaining
-        // debit is dropped, so it must not be reported as consumed either. (Passing
-        // the full debit would produce the same metrics, since `consume_cycles()` also
-        // only reports the part that the balance covers, but charging the covered part
-        // explicitly keeps the dropped debit visible here.)
-        let charged_debit = self.ingress_induction_cycles_debit - remaining_debit;
-        self.consume_cycles(CompoundCycles::<IngressInduction>::new(
-            charged_debit,
-            cost_schedule,
-        ));
-        self.ingress_induction_cycles_debit = Cycles::zero();
     }
 
     /// This method is used for maintaining the backwards compatibility.
@@ -2051,9 +2044,16 @@ impl SystemState {
     /// needs to be made (that will be refunded later with `refund_cycles`) or
     /// a direct charge happens without a prepayment (e.g. when paying for memory).
     ///
-    /// The balances are not required to cover the requested amount: the part that
-    /// they cannot cover is not charged and is not reported as consumed either.
-    pub fn consume_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
+    /// The balances are not required to cover the requested amount. Returns the
+    /// part that they could not cover, which is neither charged nor reported as
+    /// consumed. Getting back a non-zero amount is a bug in every caller that
+    /// guarantees a sufficient balance, so such callers should report it as a
+    /// critical error if they have a logger and an error counter at hand.
+    #[must_use]
+    pub fn consume_cycles<T: CyclesUseCaseKind>(
+        &mut self,
+        requested_amount: CompoundCycles<T>,
+    ) -> Cycles {
         let requested_real = requested_amount.real();
         let use_case = T::cycles_use_case();
         let remaining_amount = match use_case {
@@ -2087,6 +2087,7 @@ impl SystemState {
             use_case,
             ConsumingCycles::Prepayment,
         );
+        uncharged_amount
     }
 
     /// Checks if the given amount of cycles from the main balance can be moved to the reserved balance.
@@ -2134,7 +2135,10 @@ impl SystemState {
         cost_schedule: CanisterCyclesCostSchedule,
     ) {
         let balance = self.cycles_balance + self.reserved_balance;
-        self.consume_cycles(CompoundCycles::<Uninstall>::new(balance, cost_schedule));
+        let uncharged =
+            self.consume_cycles(CompoundCycles::<Uninstall>::new(balance, cost_schedule));
+        // The balances cover the whole amount by construction.
+        debug_assert_eq!(uncharged, Cycles::zero());
     }
 
     /// Observes the consumed cycles for HTTPS outcalls. This should only be

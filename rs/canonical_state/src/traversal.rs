@@ -1234,12 +1234,13 @@ mod tests {
             INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
-        canister_state
-            .system_state
-            .consume_cycles(CompoundCycles::<Instructions>::new(
-                Cycles::new(123_456),
-                CanisterCyclesCostSchedule::Normal,
-            ));
+        let _uncharged =
+            canister_state
+                .system_state
+                .consume_cycles(CompoundCycles::<Instructions>::new(
+                    Cycles::new(123_456),
+                    CanisterCyclesCostSchedule::Normal,
+                ));
         let consumed_by_canisters = canister_state
             .system_state
             .canister_metrics()

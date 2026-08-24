@@ -995,7 +995,8 @@ impl CyclesAccountManager {
             reveal_top_up,
         )?;
 
-        system_state.consume_cycles(cycles);
+        // The balance was verified against the threshold above.
+        let _uncharged = system_state.consume_cycles(cycles);
         Ok(())
     }
 

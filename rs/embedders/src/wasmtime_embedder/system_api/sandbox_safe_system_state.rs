@@ -593,14 +593,15 @@ impl SystemStateModifications {
             instructions,
             request_and_response_transmission,
         } = self.consumed_cycles_by_use_case;
+        // The cycle changes were validated above, so the balance covers them.
         if let Some(x) = burned {
-            state.consume_cycles(x);
+            let _uncharged = state.consume_cycles(x);
         }
         if let Some(x) = instructions {
-            state.consume_cycles(x);
+            let _uncharged = state.consume_cycles(x);
         }
         if let Some(x) = request_and_response_transmission {
-            state.consume_cycles(x);
+            let _uncharged = state.consume_cycles(x);
         }
 
         // Apply the reserved cycles. This must succeed because the cycle

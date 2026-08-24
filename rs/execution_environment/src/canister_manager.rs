@@ -1557,7 +1557,8 @@ impl CanisterManager {
             Arc::clone(&self.fd_factory),
         );
 
-        system_state.consume_cycles(creation_fee);
+        // The creation fee was already withdrawn from the sender's balance.
+        let _uncharged = system_state.consume_cycles(creation_fee);
         let mut new_canister = CanisterState::new(
             system_state,
             None,
