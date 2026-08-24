@@ -3,7 +3,8 @@
 //! asserts the minter fails safe.
 //!
 //! Two are bounded *negative* assertions — "the minter must not do X" cannot be proven outright, so
-//! they watch for longer than a withdrawal-timer tick.
+//! they watch across several withdrawal-timer ticks, bought by pushing the instance's clock forward
+//! rather than waiting them out.
 //!
 //! No live fee-spike test: that ceiling is pinned exactly by the unit tests, and reproducing it here
 //! would mean driving anvil's base fee up and waiting out several ticks for little extra signal.
@@ -11,15 +12,21 @@
 use ic_cketh_test_utils::sweeper_funding::{FEE_ACCOUNT_BALANCE, SweeperFundingSetup};
 use std::time::Duration;
 
-/// Longer than a withdrawal-timer tick, so a transfer that was going to happen would have.
-const OBSERVATION_WINDOW: Duration = Duration::from_secs(8 * 60);
-const ABOVE_LOW_WATER_MARK: u128 = 500_000_000_000_000_000; // 0.5 ETH
-/// Sending and finalizing both wait on the 6-minute withdrawal timer, so allow for two ticks.
-const FINALIZATION_DEADLINE: Duration = Duration::from_secs(15 * 60);
+/// Several withdrawal-timer ticks, so a transfer that was going to happen would have — and would
+/// have had more than one chance to.
+const OBSERVATION_TICKS: u32 = 3;
+/// Sending the transaction and seeing it confirmed are separate runs of the withdrawal timer, and
+/// the minter has to observe `finalized` move past it in between. A budget rather than a cost —
+/// driving stops as soon as the row clears — so it is set well above the three ticks that suffice.
+const FINALIZATION_TICKS: u32 = 8;
+/// A budget for the transfer of the one funding a test arranges, on the same footing as the happy
+/// path's: one tick sends it, the spares cover a tick landing before the burn and a tick lost to an
+/// outcall the jump timed out.
+const FUNDING_TICKS: u32 = 6;
 /// How long to wait for the minter to record a funding it has already burned for. Generous for an
-/// inter-canister hop, yet far below the six minutes before the transaction can finalize and clear
-/// the row again.
-const IN_FLIGHT_DEADLINE: Duration = Duration::from_secs(2 * 60);
+/// inter-canister hop, and under no time pressure: the row cannot clear again until a tick is
+/// bought, and nothing here buys one.
+const IN_FLIGHT_DEADLINE: Duration = Duration::from_secs(60);
 
 #[test]
 fn should_not_fund_when_the_fee_account_is_empty() {
@@ -27,10 +34,19 @@ fn should_not_fund_when_the_fee_account_is_empty() {
     assert_eq!(setup.cketh_balance_of(setup.fee_account()), 0);
 
     let sweeper = setup.await_sweeper_address(Duration::from_secs(180));
+    // Asserted here rather than after the observation window: the minter's canister log is a ring
+    // buffer, and every tick that window buys makes each of the minter's periodic timers due at
+    // once, so the window ends with this line long since evicted. Read now it also says something
+    // sharper — the check ran, decided a funding was due, and reported why it could not make one.
+    setup.await_minter_log(
+        "[fund_sweeper]: SKIPPING: failed to burn",
+        Duration::from_secs(180),
+    );
+
     let supply_before = setup.cketh_total_supply();
     let minter_eth_before = setup.anvil_eth_balance(&setup.minter_address());
 
-    setup.assert_no_eth_received(&sweeper, OBSERVATION_WINDOW);
+    setup.assert_no_eth_received(&sweeper, OBSERVATION_TICKS);
 
     assert_eq!(
         setup.cketh_total_supply(),
@@ -42,61 +58,47 @@ fn should_not_fund_when_the_fee_account_is_empty() {
         minter_eth_before,
         "no ETH may leave the main address"
     );
-    assert!(
-        setup
-            .minter_logs()
-            .iter()
-            .any(|line| line.contains("[fund_sweeper]") && line.contains("failed to burn")),
-        "the minter should report why funding was skipped; logs:\n{}",
-        setup.minter_logs().join("\n")
-    );
 }
 
-/// A sweeper that still holds plenty of gas must not be topped up: burning ckETH for gas already in
-/// place would be pure loss, and it is the failure mode a wrongly-defaulted balance read would
-/// cause.
+/// A sweeper that already holds plenty of gas must not be topped up again: burning ckETH for gas
+/// already in place would be pure loss.
+///
+/// Arranged by letting a real funding land, which is the only thing that moves the balance bound the
+/// decision reads — putting ETH at the address behind the minter's back would not, and that is the
+/// point of the bound.
 #[test]
 fn should_not_fund_a_sweeper_above_the_low_water_mark() {
-    // Starts with an empty fee account so the install-time check cannot fund anything: it decides a
-    // funding is due, fails to burn, and changes nothing. That is the only window in which the
-    // sweeper can be arranged, since its address is undiscoverable until the minter caches its key.
-    let setup = SweeperFundingSetup::new_live_with_empty_fee_account();
+    let setup = SweeperFundingSetup::new_live();
     let sweeper = setup.await_sweeper_address(Duration::from_secs(180));
-    // Waits for the install-time check to have *finished* failing, not merely for the address to
-    // exist: it reads the balance and attempts its burn immediately afterwards, so funding the fee
-    // account any earlier would let that burn succeed and a funding proceed.
-    setup.await_minter_log(
-        "[fund_sweeper]: SKIPPING: failed to burn",
-        Duration::from_secs(180),
-    );
-
-    setup.set_eth_balance(&sweeper, ABOVE_LOW_WATER_MARK);
-    // The minter reads at `finalized`, which trails `latest` by two blocks.
-    setup.mine(3);
-    setup.mint_cketh(setup.fee_account(), FEE_ACCOUNT_BALANCE);
+    let funded = setup.await_eth_received(&sweeper, FUNDING_TICKS);
+    // Waits for the transfer to finalize, not merely to land: the minter credits the bound when it
+    // records the finalized transaction, so before that the next check would still see zero.
+    setup.await_funding_finalized(FINALIZATION_TICKS);
 
     // Captured before the timers are re-armed, not after: the post-upgrade check runs on a
-    // zero-delay timer, so a minter that wrongly funded could burn before these queries returned
-    // and both assertions below would then compare against an already-debited state — passing
-    // precisely when the behaviour they reject had happened.
+    // zero-delay timer and reads nothing off the chain, so a minter that wrongly funded again could
+    // burn before these queries returned, and both assertions below would then compare against an
+    // already-debited state — passing precisely when the behaviour they reject had happened.
     let supply_before = setup.cketh_total_supply();
     let fee_account_before = setup.cketh_balance_of(setup.fee_account());
 
-    // The next scheduled check is a whole interval away, so re-arm the timers: from here a funding
-    // could succeed, and the point is that it declines.
+    // The next scheduled check is a whole interval away, so re-arm the timers: from here a second
+    // funding could succeed, and the point is that it declines.
     setup.upgrade_minter();
+    // Without this the test passes for the wrong reason: a task that never ran also produces no
+    // burn. Proving it ran and *declined* is the point. Read before the observation window for the
+    // same ring-buffer reason as in the test above.
+    setup.await_minter_log("at or above the low-water mark", Duration::from_secs(180));
 
-    let start = std::time::Instant::now();
-    while start.elapsed() <= OBSERVATION_WINDOW {
-        std::thread::sleep(Duration::from_secs(10));
-        // Keeps the PocketIC instance — and the minter's timers — alive.
-        let _ = setup.cketh_total_supply();
-    }
+    // Watched by letting withdrawal-timer ticks pass rather than the wall clock: there is nothing
+    // here to poll for — only ticks to give the minter the chance to act, and the assertions below
+    // to show it did not.
+    setup.advance_ticks(OBSERVATION_TICKS);
 
     assert_eq!(
         setup.cketh_total_supply(),
         supply_before,
-        "a topped-up sweeper must not trigger a burn"
+        "a topped-up sweeper must not trigger a second burn"
     );
     assert_eq!(
         setup.cketh_balance_of(setup.fee_account()),
@@ -105,17 +107,16 @@ fn should_not_fund_a_sweeper_above_the_low_water_mark() {
     );
     assert_eq!(
         setup.anvil_eth_balance(&sweeper),
-        ABOVE_LOW_WATER_MARK,
-        "the sweeper balance must be left exactly as it was"
+        funded,
+        "the sweeper balance must be left exactly as the first funding delivered it"
     );
-    // Without this the test passes for the wrong reason: a task that never read the balance also
-    // produces no burn. Proving it ran and *declined* is the point.
     let prepaid = setup
         .dashboard_row("sweeper-prepaid-gas")
         .expect("the dashboard must have a prepaid-gas row");
     assert_ne!(
-        prepaid, "never observed",
-        "the funding task must have observed the balance and declined, not merely skipped"
+        prepaid, "0 Wei",
+        "the bound must carry the funding that landed, or the decision above declined for the \
+         wrong reason"
     );
 }
 
@@ -162,7 +163,7 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
     // Waits for the transaction to finalize rather than watching for a fixed window: without this
     // the assertions below all hold while it is merely still in flight, which proves nothing about
     // what happens when it fails.
-    setup.await_funding_finalized(FINALIZATION_DEADLINE);
+    setup.await_funding_finalized(FINALIZATION_TICKS);
     let status = setup.withdrawal_status(burn_index);
     // Pending reimbursement is imprecise here — nothing will ever settle it — and deliberately so:
     // a status of its own meant adding a variant to `retrieve_eth_status`, which breaks every

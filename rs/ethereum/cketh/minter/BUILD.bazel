@@ -334,10 +334,10 @@ rust_test(
 
 rust_test(
     name = "sweeper_funding_hardening",
-    # Three live scenarios, two of which watch for longer than a withdrawal-timer tick to show the
-    # minter does *not* act. Slower than the happy path by design.
-    size = "enormous",
-    timeout = "eternal",
+    # Three live scenarios, two of which watch across several withdrawal-timer ticks to show the
+    # minter does *not* act. Those ticks are bought by advancing the instance's clock, so the
+    # minutes of minter time they cover cost seconds of wall clock.
+    size = "medium",
     srcs = ["tests/sweeper_funding_hardening.rs"],
     data = [
         ":cketh_minter_debug.wasm.gz",
@@ -354,7 +354,6 @@ rust_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
-    tags = ["long_test"],  # ~9 minutes; two scenarios watch for 8 to show the minter does nothing.
     deps = [
         # Keep sorted.
         ":minter",

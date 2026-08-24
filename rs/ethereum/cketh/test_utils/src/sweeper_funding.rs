@@ -247,12 +247,6 @@ impl SweeperFundingSetup {
             .expect("starting the minter must succeed");
     }
 
-    /// Mines `blocks` on the owned anvil node, so a change made with `set_eth_balance` or `set_code`
-    /// becomes visible at `finalized`, which trails `latest` by two blocks.
-    pub fn mine(&self, blocks: u64) {
-        self.anvil.mine(blocks);
-    }
-
     /// Gives the minter [`TICK_SETTLE`] of *real* time to carry out whatever the last tick started,
     /// mining meanwhile so `finalized` keeps advancing, and returns as soon as `observe` reports
     /// what it watches for has happened.
@@ -304,6 +298,17 @@ impl SweeperFundingSetup {
             );
             spent += 1;
             self.env.advance_time(WITHDRAWAL_TICK);
+        }
+    }
+
+    /// Lets `ticks` withdrawal-timer ticks pass, giving the minter real time to act on each. The
+    /// window a bounded negative assertion watches, for a test whose "must not happen" is not a
+    /// balance the harness can poll for.
+    pub fn advance_ticks(&self, ticks: u32) {
+        self.settle(&mut |_| false);
+        for _ in 0..ticks {
+            self.env.advance_time(WITHDRAWAL_TICK);
+            self.settle(&mut |_| false);
         }
     }
 
@@ -374,11 +379,6 @@ impl SweeperFundingSetup {
         }
     }
 
-    /// Credits `address` with `wei` on the owned anvil node.
-    pub fn set_eth_balance(&self, address: &Address, wei: u128) {
-        self.anvil.set_balance(address, wei);
-    }
-
     /// Waits until the minter has logged a line containing `needle`, polling its log endpoint.
     pub fn await_minter_log(&self, needle: &str, deadline: Duration) {
         let start = Instant::now();
@@ -408,49 +408,50 @@ impl SweeperFundingSetup {
         self.anvil.code(address)
     }
 
-    /// Asserts that `address` receives no ETH for `window`, polling a canister throughout so the
-    /// PocketIC instance stays alive. A bounded negative check — the best available shape for
-    /// "the minter must not do this" — sized well beyond one withdrawal-timer tick.
-    pub fn assert_no_eth_received(&self, address: &Address, window: Duration) {
-        let start = Instant::now();
-        while start.elapsed() <= window {
-            self.anvil.mine(1);
-            let balance = self.anvil.eth_balance(address, "latest");
+    /// Asserts that `address` receives no ETH across `ticks` withdrawal-timer ticks. A bounded
+    /// negative check — the best available shape for "the minter must not do this" — and a stronger
+    /// one than watching the wall clock for the same number of seconds, since every tick is a
+    /// withdrawal-timer interval the minter genuinely runs.
+    pub fn assert_no_eth_received(&self, address: &Address, ticks: u32) {
+        let mut assert_empty = |setup: &Self| {
+            let balance = setup.anvil.eth_balance(address, "latest");
             assert_eq!(
                 balance,
                 0,
                 "{address} unexpectedly received {balance} wei; minter logs:\n{}",
-                self.minter_logs().join("\n")
+                setup.minter_logs().join("\n")
             );
-            // Keeps the instance alive, and its timers with it.
-            let _ = self.cketh_total_supply();
-            std::thread::sleep(Duration::from_secs(5));
+            false // Never satisfied: watching for the whole window is the point.
+        };
+        // Settles before the first tick as well as after the last, so a transfer already in flight
+        // is caught and the final tick's work is observed rather than merely started.
+        self.settle(&mut assert_empty);
+        for _ in 0..ticks {
+            self.env.advance_time(WITHDRAWAL_TICK);
+            self.settle(&mut assert_empty);
         }
     }
 
-    /// Waits until the in-flight funding row clears, i.e. its transaction has finalized, mining
-    /// meanwhile so the minter's `finalized` view keeps advancing.
+    /// Drives the minter until the in-flight funding row clears, i.e. its transaction has finalized,
+    /// mining meanwhile so the minter's `finalized` view keeps advancing.
     ///
-    /// Polls the dashboard rather than the status endpoint: that endpoint is an update call, and
-    /// several minutes of ingress messages at a few seconds apart is enough load to destabilise the
-    /// PocketIC instance.
-    pub fn await_funding_finalized(&self, deadline: Duration) {
-        let start = Instant::now();
-        loop {
-            if self.dashboard_row("sweeper-in-flight-funding").as_deref() == Some("none") {
-                return;
-            }
-            assert!(
-                start.elapsed() <= deadline,
-                "the funding had not finalized after {deadline:?}; minter logs:\n{}",
-                self.minter_logs().join("\n")
-            );
-            self.anvil.mine(1);
-            // Deliberately short: the PocketIC client panics on a transient HTTP failure rather
-            // than retrying, and a pooled connection left idle for ~10s gets closed server-side,
-            // which surfaces as `hyper::Error(IncompleteMessage)` on the next request.
-            std::thread::sleep(Duration::from_secs(2));
-        }
+    /// Costs at least one tick beyond the one that sent the transaction: fetching the receipt is
+    /// the *next* run of the withdrawal timer, and a single jump — however large — only ever makes
+    /// a due timer fire once.
+    ///
+    /// Polls the dashboard rather than the status endpoint: that endpoint is an update call, and a
+    /// steady stream of ingress messages is enough load to destabilise the PocketIC instance.
+    pub fn await_funding_finalized(&self, max_ticks: u32) {
+        self.drive_until(
+            max_ticks,
+            |setup| {
+                format!(
+                    "the funding had not finalized (in-flight row {:?})",
+                    setup.dashboard_row("sweeper-in-flight-funding")
+                )
+            },
+            |setup| setup.dashboard_row("sweeper-in-flight-funding").as_deref() == Some("none"),
+        );
     }
 
     /// The burn index of the funding currently in flight, read from the dashboard. `None` once it has
