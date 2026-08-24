@@ -1096,40 +1096,20 @@ impl DepositErc20Flow {
     }
 }
 
-#[allow(deprecated)]
 pub fn erc20_transfer_data(expected_address: &Address, expected_amount: &Erc20Value) -> Vec<u8> {
-    use ethers_core::abi::{Param, ParamType, Token};
+    use alloy_sol_types::{SolCall, sol};
 
-    let erc20_transfer = ethers_core::abi::Function {
-        name: "transfer".to_string(),
-        inputs: vec![
-            Param {
-                name: "_to".to_string(),
-                kind: ParamType::Address,
-                internal_type: None,
-            },
-            Param {
-                name: "_value".to_string(),
-                kind: ParamType::Uint(256),
-                internal_type: None,
-            },
-        ],
-        outputs: vec![Param {
-            name: "success".to_string(),
-            kind: ParamType::Bool,
-            internal_type: None,
-        }],
-        constant: None,
-        state_mutability: ethers_core::abi::StateMutability::NonPayable,
-    };
+    sol! {
+        function transfer(address to, uint256 value) external returns (bool success);
+    }
+
     assert_eq!(
-        erc20_transfer.short_signature().to_vec(),
+        transferCall::SELECTOR.to_vec(),
         hex::decode("a9059cbb").unwrap()
     );
-    erc20_transfer
-        .encode_input(&[
-            Token::Address(expected_address.to_string().parse().unwrap()),
-            Token::Uint(expected_amount.to_be_bytes().into()),
-        ])
-        .expect("failed to encode transfer data")
+    transferCall {
+        to: alloy_primitives::Address::from(expected_address.into_bytes()),
+        value: alloy_primitives::U256::from_be_bytes(expected_amount.to_be_bytes()),
+    }
+    .abi_encode()
 }
