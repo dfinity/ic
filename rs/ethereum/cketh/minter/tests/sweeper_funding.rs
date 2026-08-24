@@ -2,12 +2,16 @@
 //! ledger, real EVM RPC canister, threshold-ECDSA signature, local anvil. The harness lives in
 //! [`ic_cketh_test_utils::sweeper_funding`].
 //!
-//! Genuinely waits minutes: the transfer is only sent by the minter's 6-minute withdrawal timer.
+//! The transfer is only sent by the minter's 6-minute withdrawal timer, which the harness buys by
+//! pushing the instance's clock forward rather than waiting it out.
 
 use ic_cketh_test_utils::sweeper_funding::SweeperFundingSetup;
 use std::time::Duration;
 
-const FUNDING_DEADLINE: Duration = Duration::from_secs(13 * 60);
+/// A budget, not a cost: driving stops the moment the transfer lands, so this only has to be more
+/// ticks than the run needs. One sends the transfer; the spares cover a tick landing before the
+/// funding task has burned, and a tick lost to an outcall the jump timed out.
+const FUNDING_TICKS: u32 = 6;
 
 #[test]
 fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
@@ -25,7 +29,7 @@ fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
         "the sweeper address must start empty, so any balance proves the funding landed"
     );
 
-    let received = setup.await_eth_received(&sweeper, FUNDING_DEADLINE);
+    let received = setup.await_eth_received(&sweeper, FUNDING_TICKS);
 
     let burned = supply_before - setup.cketh_total_supply();
     assert!(burned > 0, "funding must burn ckETH");
