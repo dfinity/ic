@@ -561,6 +561,27 @@ impl CanisterHttpPoolManagerImpl {
                             ));
                         };
 
+                        if response.id != share.content.id() {
+                            return Some(CanisterHttpChangeAction::HandleInvalid(
+                                share.clone(),
+                                format!(
+                                    "Response is for request ID {} rather than the share's {}",
+                                    response.id,
+                                    share.content.id(),
+                                ),
+                            ));
+                        }
+
+                        if response.canister_id != context.request.sender {
+                            return Some(CanisterHttpChangeAction::HandleInvalid(
+                                share.clone(),
+                                format!(
+                                    "Response is for canister {} rather than the requester {}",
+                                    response.canister_id, context.request.sender,
+                                ),
+                            ));
+                        }
+
                         if share.content.content_hash() != &ic_types::crypto::crypto_hash(response)
                         {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
@@ -770,10 +791,15 @@ pub mod test {
         replicated_state
     }
 
+    /// The canister that makes the outcalls in these tests.
+    fn requester() -> ic_types::CanisterId {
+        ic_types::CanisterId::from(0)
+    }
+
     fn empty_canister_http_response(id: u64) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(id),
-            canister_id: ic_types::CanisterId::from(0),
+            canister_id: requester(),
             content: CanisterHttpResponseContent::Success(Vec::new()),
         }
     }
@@ -784,7 +810,9 @@ pub mod test {
         max_response_bytes: Option<NumBytes>,
     ) -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+            request: ic_test_utilities_types::messages::RequestBuilder::new()
+                .sender(requester())
+                .build(),
             url: "".to_string(),
             max_response_bytes,
             headers: vec![],
@@ -1704,7 +1732,7 @@ pub mod test {
                     let response_body_too_large = vec![0; oversized_len];
                     let response = CanisterHttpResponse {
                         id: CallbackId::from(0),
-                        canister_id: ic_types::CanisterId::from(0),
+                        canister_id: requester(),
                         content: CanisterHttpResponseContent::Success(response_body_too_large),
                     };
 
@@ -1769,7 +1797,7 @@ pub mod test {
                     let response_body_ok = vec![0; max_response_bytes.get() as usize];
                     let response = CanisterHttpResponse {
                         id: CallbackId::from(0),
-                        canister_id: ic_types::CanisterId::from(0),
+                        canister_id: requester(),
                         content: CanisterHttpResponseContent::Success(response_body_ok),
                     };
 
@@ -3192,6 +3220,89 @@ pub mod test {
                         if reason == "is_reject does not match the response content"
                     );
                 }
+
+                // TEST 5: the attached response answers a *different* callback than the
+                // share it travels with -- should be invalid.
+                {
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                    let mut foreign_response = empty_canister_http_response(callback_id.get());
+                    foreign_response.id = CallbackId::from(callback_id.get() + 1);
+
+                    let mut bad_share = share.clone();
+                    bad_share.content.metadata.content_hash = crypto_hash(&foreign_response);
+                    bad_share.signature = crypto
+                        .sign(
+                            &bad_share.content,
+                            committee_member,
+                            RegistryVersion::from(1),
+                        )
+                        .unwrap();
+
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: CanisterHttpResponseArtifact {
+                            share: bad_share,
+                            response: Some(foreign_response),
+                        },
+                        peer_id: committee_member,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
+
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::HandleInvalid(_, reason)
+                        if reason.starts_with("Response is for request ID")
+                    );
+                }
+
+                // TEST 6: the attached response names a canister other than the requester --
+                // should be invalid.
+                {
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                    let mut foreign_response = empty_canister_http_response(callback_id.get());
+                    let oddly_sized = ic_types::PrincipalId::new_self_authenticating(&[1, 2, 3]);
+                    assert_ne!(
+                        oddly_sized.as_slice().len(),
+                        requester().get_ref().as_slice().len(),
+                        "the point of this case is a principal of a different length"
+                    );
+                    foreign_response.canister_id =
+                        ic_types::CanisterId::try_from(oddly_sized).unwrap();
+
+                    let mut bad_share = share.clone();
+                    bad_share.content.metadata.content_hash = crypto_hash(&foreign_response);
+                    bad_share.signature = crypto
+                        .sign(
+                            &bad_share.content,
+                            committee_member,
+                            RegistryVersion::from(1),
+                        )
+                        .unwrap();
+
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: CanisterHttpResponseArtifact {
+                            share: bad_share,
+                            response: Some(foreign_response),
+                        },
+                        peer_id: committee_member,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
+
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::HandleInvalid(_, reason)
+                        if reason.starts_with("Response is for canister")
+                    );
+                }
             })
         });
     }
@@ -3263,7 +3374,7 @@ pub mod test {
                         + 1) as usize;
                     let response = CanisterHttpResponse {
                         id: callback_id,
-                        canister_id: ic_types::CanisterId::from(0),
+                        canister_id: requester(),
                         content: CanisterHttpResponseContent::Success(vec![0; oversized_len]),
                     };
 
@@ -3322,7 +3433,7 @@ pub mod test {
 
                     let response = CanisterHttpResponse {
                         id: callback_id,
-                        canister_id: ic_types::CanisterId::from(0),
+                        canister_id: requester(),
                         content: CanisterHttpResponseContent::Success(vec![
                             0;
                             MAX_CANISTER_HTTP_RESPONSE_BYTES
