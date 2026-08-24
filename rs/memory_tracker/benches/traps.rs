@@ -71,8 +71,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
             },
             // Do the actual measurement
             |data| {
-                black_box(&data.tracker)
-                    .handle_sigsegv(Some(AccessKind::Read), black_box(data.ptr))
+                black_box(&data.tracker).handle_sigsegv(Some(AccessKind::Read), black_box(data.ptr))
             },
         )
     });
