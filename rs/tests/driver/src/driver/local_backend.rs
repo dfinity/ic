@@ -69,10 +69,16 @@ const NIP_IO_DOMAIN: &str = "ipv6.nip.io";
 /// `DNS=` servers the group's `dnsmasq` answers on.
 pub const IN_GROUP_DOMAIN_SUFFIX: &str = "ic.net";
 
-/// How long [`LocalBackend::stop_dnsmasq`] waits for `dnsmasq` to exit after
-/// `SIGTERM` before resorting to `SIGKILL`. It normally exits within
-/// milliseconds; this only bounds the wait if it wedges.
+/// How long [`LocalBackend::stop_dnsmasq`] waits for `dnsmasq` to exit, applied
+/// once after `SIGTERM` and again after the `SIGKILL` that follows if the first
+/// wait runs out. It normally exits within milliseconds; this only bounds the
+/// wait if it wedges. Outlasting the second wait means `SIGKILL` did not take
+/// effect, which no further signal is going to fix.
 const DNSMASQ_STOP_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// How often [`LocalBackend::await_dnsmasq_exit`] re-checks whether `dnsmasq` is
+/// gone. Short enough that a restart is not noticeably delayed by the poll.
+const DNSMASQ_STOP_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 /// Environment variables holding the runfiles paths of the split OVMF (UEFI)
 /// firmware images, provided by the `@ovmf` Bazel repo (extracted from the
@@ -1153,42 +1159,82 @@ impl LocalBackend {
         let bridge = Self::bridge_name(group_name);
         let prefix = Self::group_ipv6_prefix(group_name);
         let ipv4_prefix = Self::group_ipv4_prefix(group_name);
-        self.stop_dnsmasq(&bridge);
+        // Propagate a stop that could not be confirmed rather than starting a
+        // second `dnsmasq`: the one still holding port 53 would make the new one
+        // fail to bind, and `start_dnsmasq`'s error would then point at the wrong
+        // thing.
+        self.stop_dnsmasq(&bridge)?;
         self.start_dnsmasq(group_name, &bridge, &prefix, &ipv4_prefix)
     }
 
     /// Stop the group's `dnsmasq`, if running, and wait for it to exit. It runs as
-    /// the current user, so it is signalled directly via its pid-file.
-    /// Best-effort and idempotent.
+    /// the current user, so it is signalled directly via its pid-file. Idempotent,
+    /// and reports whether the exit could be *confirmed*.
     ///
-    /// The wait matters for [`restart_dnsmasq`](Self::restart_dnsmasq): returning
-    /// while the old instance still holds UDP port 53 on the name-server addresses
-    /// would make the new one fail to bind.
-    fn stop_dnsmasq(&self, bridge: &str) {
+    /// The wait is what makes [`restart_dnsmasq`](Self::restart_dnsmasq) sound:
+    /// returning while the old instance still holds UDP port 53 on the name-server
+    /// addresses would make the new one fail to bind. Signals are delivered
+    /// asynchronously, `SIGKILL` included, so each one is followed by its own wait
+    /// and an unconfirmed exit is an error rather than something to start a second
+    /// `dnsmasq` on top of.
+    ///
+    /// The pid-file is removed either way: it names a process we have given up on,
+    /// so keeping it would only mislead the next caller.
+    fn stop_dnsmasq(&self, bridge: &str) -> Result<()> {
         let pid_path = self.dnsmasq_pid_path(bridge);
-        if let Ok(contents) = std::fs::read_to_string(&pid_path)
+        let stopped = if let Ok(contents) = std::fs::read_to_string(&pid_path)
             && let Ok(pid) = contents.trim().parse::<i32>()
             && Self::dnsmasq_is_alive(pid, &pid_path)
         {
             // SIGTERM lets dnsmasq remove its pid-file on exit.
             let _ = Command::new("kill").arg(pid.to_string()).status();
-            let deadline = Instant::now() + DNSMASQ_STOP_TIMEOUT;
-            while Self::dnsmasq_is_alive(pid, &pid_path) {
-                if Instant::now() >= deadline {
-                    warn!(
-                        self.logger,
-                        "dnsmasq (pid {pid}) did not exit within {DNSMASQ_STOP_TIMEOUT:?} \
-                         of SIGTERM; sending SIGKILL"
-                    );
-                    let _ = Command::new("kill")
-                        .args(["-KILL", &pid.to_string()])
-                        .status();
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(20));
+            let terminated = Self::await_dnsmasq_exit(pid, &pid_path);
+            if terminated.is_err() {
+                warn!(
+                    self.logger,
+                    "dnsmasq (pid {pid}) did not exit within {DNSMASQ_STOP_TIMEOUT:?} of \
+                     SIGTERM; sending SIGKILL"
+                );
+                let _ = Command::new("kill")
+                    .args(["-KILL", &pid.to_string()])
+                    .status();
+                Self::await_dnsmasq_exit(pid, &pid_path).context("dnsmasq survived SIGKILL")
+            } else {
+                terminated
             }
-        }
+        } else {
+            // No pid-file, or it names something that is not a `dnsmasq` of ours
+            // any more; either way there is nothing holding the port.
+            Ok(())
+        };
         let _ = std::fs::remove_file(&pid_path);
+        stopped.with_context(|| format!("stopping the dnsmasq of {bridge}"))
+    }
+
+    /// Wait up to [`DNSMASQ_STOP_TIMEOUT`] for `pid` to stop being a `dnsmasq` of
+    /// ours, per [`dnsmasq_is_alive`](Self::dnsmasq_is_alive).
+    ///
+    /// That observes the process's `argv` going away, which the kernel does while
+    /// tearing the process down — a hair *before* it closes its files. So in
+    /// principle a sample could land in between and read an exiting `dnsmasq` as
+    /// gone while its sockets are still open. Two reasons not to chase that: the
+    /// window is microseconds of non-blocking kernel work against a poll every
+    /// [`DNSMASQ_STOP_POLL_INTERVAL`], and the backstop is loud rather than silent —
+    /// `dnsmasq` refuses to start at all when it cannot bind, so `start_dnsmasq`
+    /// surfaces that error instead of leaving a half-working resolver behind.
+    ///
+    /// Waiting for the pid to disappear outright would be worse, not better:
+    /// `dnsmasq` daemonizes, so it lingers as a zombie until whatever it was
+    /// reparented to reaps it, which under a sandbox is not guaranteed to be prompt.
+    fn await_dnsmasq_exit(pid: i32, pid_path: &Path) -> Result<()> {
+        let deadline = Instant::now() + DNSMASQ_STOP_TIMEOUT;
+        while Self::dnsmasq_is_alive(pid, pid_path) {
+            if Instant::now() >= deadline {
+                bail!("dnsmasq (pid {pid}) was still running {DNSMASQ_STOP_TIMEOUT:?} later");
+            }
+            std::thread::sleep(DNSMASQ_STOP_POLL_INTERVAL);
+        }
+        Ok(())
     }
 
     /// Whether `pid` is a live `dnsmasq` that this backend started with
@@ -1307,9 +1353,12 @@ impl LocalBackend {
             self.logger,
             "Deleting local group {group_name} (bridge {bridge})"
         );
+        // Best-effort here, unlike in `restart_dnsmasq`: the bridge and its
+        // addresses are deleted just below, so a `dnsmasq` that outlives its
+        // SIGKILL has nothing left to serve and nothing left to hold.
 
         // Stop `dnsmasq` before removing the bridge it listens on.
-        self.stop_dnsmasq(&bridge);
+        let _ = self.stop_dnsmasq(&bridge);
 
         // Best effort: stop every VM QEMU process started for this group. Each
         // VM records its pid under `working_dir/vms/<vm>/qemu.pid`; killing it
