@@ -230,55 +230,31 @@ mod config {
 
 mod gate {
     use crate::numeric::Wei;
-    use crate::state::sweeper_funding::{
-        MAX_SWEEPER_BALANCE_AGE_NANOS, ObservedSweeperBalance, PrepaidGasUnavailable,
-        check_prepaid_sweep_gas,
-    };
+    use crate::state::sweeper_funding::{PrepaidGasUnavailable, check_prepaid_sweep_gas};
 
-    const NOW: u64 = 1_700_000_000_000_000_000;
     const GAS: u128 = 1_000_000_000_000_000; // 0.001 ETH
 
-    fn observed(balance: u128, age_nanos: u64) -> Option<ObservedSweeperBalance> {
-        Some(ObservedSweeperBalance {
-            balance: Wei::new(balance),
-            observed_at_nanos: NOW - age_nanos,
-        })
-    }
-
     #[test]
-    fn should_allow_spending_covered_by_a_fresh_observation() {
+    fn should_allow_spending_covered_by_the_bound() {
         assert_eq!(
-            check_prepaid_sweep_gas(observed(10 * GAS, 0), Wei::new(GAS), NOW),
+            check_prepaid_sweep_gas(Wei::new(10 * GAS), Wei::new(GAS)),
             Ok(Wei::new(10 * GAS))
         );
     }
 
     #[test]
-    fn should_allow_spending_exactly_the_observed_balance() {
+    fn should_allow_spending_exactly_the_bound() {
         assert_eq!(
-            check_prepaid_sweep_gas(observed(GAS, 0), Wei::new(GAS), NOW),
+            check_prepaid_sweep_gas(Wei::new(GAS), Wei::new(GAS)),
             Ok(Wei::new(GAS)),
             "the whole prepaid balance is spendable; it was all burned for"
         );
     }
 
     #[test]
-    fn should_refuse_when_never_observed() {
+    fn should_refuse_when_the_bound_is_one_wei_short() {
         assert_eq!(
-            check_prepaid_sweep_gas(None, Wei::new(GAS), NOW),
-            Err(PrepaidGasUnavailable::NeverObserved)
-        );
-        // Not even a zero requirement passes: nothing is known.
-        assert_eq!(
-            check_prepaid_sweep_gas(None, Wei::ZERO, NOW),
-            Err(PrepaidGasUnavailable::NeverObserved)
-        );
-    }
-
-    #[test]
-    fn should_refuse_when_the_observation_is_insufficient() {
-        assert_eq!(
-            check_prepaid_sweep_gas(observed(GAS, 0), Wei::new(GAS + 1), NOW),
+            check_prepaid_sweep_gas(Wei::new(GAS), Wei::new(GAS + 1)),
             Err(PrepaidGasUnavailable::Insufficient {
                 available: Wei::new(GAS),
                 required: Wei::new(GAS + 1),
@@ -287,40 +263,14 @@ mod gate {
     }
 
     #[test]
-    fn should_refuse_a_stale_observation_however_large() {
-        let stale = MAX_SWEEPER_BALANCE_AGE_NANOS + 1;
-
+    fn should_refuse_everything_before_the_first_funding_lands() {
         assert_eq!(
-            check_prepaid_sweep_gas(observed(u128::MAX / 2, stale), Wei::new(GAS), NOW),
-            Err(PrepaidGasUnavailable::Stale { age_nanos: stale }),
-            "a huge but stale balance must not authorise spending"
-        );
-    }
-
-    #[test]
-    fn should_accept_an_observation_at_exactly_the_age_limit() {
-        assert_eq!(
-            check_prepaid_sweep_gas(
-                observed(10 * GAS, MAX_SWEEPER_BALANCE_AGE_NANOS),
-                Wei::new(GAS),
-                NOW
-            ),
-            Ok(Wei::new(10 * GAS)),
-            "the limit is inclusive; one nanosecond past it is stale"
-        );
-    }
-
-    #[test]
-    fn should_treat_an_observation_from_the_future_as_fresh() {
-        let from_the_future = Some(ObservedSweeperBalance {
-            balance: Wei::new(10 * GAS),
-            observed_at_nanos: NOW + 1_000_000_000,
-        });
-
-        assert_eq!(
-            check_prepaid_sweep_gas(from_the_future, Wei::new(GAS), NOW),
-            Ok(Wei::new(10 * GAS)),
-            "saturating age arithmetic must not wrap into an enormous age"
+            check_prepaid_sweep_gas(Wei::ZERO, Wei::new(1)),
+            Err(PrepaidGasUnavailable::Insufficient {
+                available: Wei::ZERO,
+                required: Wei::new(1),
+            }),
+            "an empty bound authorises nothing, whatever the address really holds"
         );
     }
 }

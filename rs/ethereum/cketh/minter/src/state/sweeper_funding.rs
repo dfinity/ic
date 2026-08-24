@@ -109,66 +109,32 @@ impl SweeperFundingAccounting {
     }
 }
 
-/// The sweeper address' ETH balance as last observed on chain: the prepaid sweep gas, cached because
-/// reading it costs an outcall.
-///
-/// Not CBOR-serializable, and deliberately absent after an upgrade: an observation from before one
-/// should not authorise spending after it, and [`check_prepaid_sweep_gas`] refuses on absent.
-#[derive(Clone, Copy, Eq, PartialEq, Debug)]
-pub struct ObservedSweeperBalance {
-    pub balance: Wei,
-    /// IC time of the reading, in nanoseconds.
-    pub observed_at_nanos: u64,
-}
-
-/// How long an observation is trusted for a spending decision.
-///
-/// Two days against a 24-hour [`crate::SWEEPER_FUNDING_INTERVAL`] leaves exactly one tick of slack:
-/// one missed refresh is tolerated, two consecutive misses stop sweeping.
-pub const MAX_SWEEPER_BALANCE_AGE_NANOS: u64 = 2 * 24 * 60 * 60 * 1_000_000_000;
-
 /// Why sweeping is not currently allowed to spend gas.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum PrepaidGasUnavailable {
-    NeverObserved,
-    Stale { age_nanos: u64 },
     Insufficient { available: Wei, required: Wei },
 }
 
-impl ObservedSweeperBalance {
-    fn age_nanos(&self, now_nanos: u64) -> u64 {
-        now_nanos.saturating_sub(self.observed_at_nanos)
-    }
-}
-
-/// Whether the sweeper's last observed balance covers `required` wei of gas for *one* sweep.
+/// Whether the prepaid sweep gas the minter can vouch for covers `required` wei for *one* sweep.
 ///
-/// Fails closed: an unknown or stale observation is an error, since a sweep the sweeper cannot pay
-/// for is wasted work, while a wrongly withheld sweep costs only delay.
+/// `bound` is [`SweeperFundingAccounting::sweeper_balance_lower_bound`], not a reading: it errs low,
+/// so refusing on it can only withhold a sweep that would in fact have been paid for, which costs
+/// delay. Fails closed in that sense — nothing is authorised that the minter's own records do not
+/// already account for.
 ///
-/// A precondition on a snapshot, not an allowance: it neither reserves nor deducts, so a caller
-/// issuing several sweeps between two observations has to subtract what it has already committed.
-/// Two 6-wei sweeps both pass against a 10-wei observation, as does one whose gas the queried block
-/// had not yet accounted for. The backing invariant does not rest on this: funding counts the whole
-/// transfer as spent once it finalizes, so every wei at the sweeper address is already covered by a
-/// burn that preceded it, and drawing it down cannot make spend outrun burn.
-pub fn check_prepaid_sweep_gas(
-    observed: Option<ObservedSweeperBalance>,
-    required: Wei,
-    now_nanos: u64,
-) -> Result<Wei, PrepaidGasUnavailable> {
-    let observed = observed.ok_or(PrepaidGasUnavailable::NeverObserved)?;
-    let age_nanos = observed.age_nanos(now_nanos);
-    if age_nanos > MAX_SWEEPER_BALANCE_AGE_NANOS {
-        return Err(PrepaidGasUnavailable::Stale { age_nanos });
-    }
-    if observed.balance < required {
+/// A precondition on a bound, not an allowance: it neither reserves nor deducts, so a caller issuing
+/// several sweeps has to subtract what it has already committed. Two 6-wei sweeps both pass against
+/// a 10-wei bound. The backing invariant does not rest on this: funding counts the whole transfer as
+/// spent once it finalizes, so every wei at the sweeper address is already covered by a burn that
+/// preceded it, and drawing it down cannot make spend outrun burn.
+pub fn check_prepaid_sweep_gas(bound: Wei, required: Wei) -> Result<Wei, PrepaidGasUnavailable> {
+    if bound < required {
         return Err(PrepaidGasUnavailable::Insufficient {
-            available: observed.balance,
+            available: bound,
             required,
         });
     }
-    Ok(observed.balance)
+    Ok(bound)
 }
 
 /// When to top the sweeper address up, and to what. Derived from the minimum withdrawal amount, so

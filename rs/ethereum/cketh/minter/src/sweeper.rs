@@ -14,7 +14,6 @@ use crate::logs::{DEBUG, INFO};
 use crate::memo::BurnMemo;
 use crate::numeric::{LedgerBurnIndex, Wei};
 use crate::state::audit::{EventType, process_event};
-use crate::state::sweeper_funding::ObservedSweeperBalance;
 use crate::state::transactions::EthWithdrawalRequest;
 use crate::state::{State, TaskType, mutate_state, read_state};
 use ic_canister_log::log;
@@ -40,16 +39,6 @@ pub async fn fund_sweeper_address() {
     // bound errs low, so it can only delay a funding, never authorise one against gas that is not
     // there.
     let sweeper_balance = read_state(|s| s.sweeper_funding.sweeper_balance_lower_bound());
-
-    // Cached before deciding anything: sweeping consults this far more often than it changes, and
-    // recording it even when no funding is due is what keeps the observation fresh.
-    let observed_at_nanos = ic_cdk::api::time();
-    mutate_state(|s| {
-        s.last_observed_sweeper_balance = Some(ObservedSweeperBalance {
-            balance: sweeper_balance,
-            observed_at_nanos,
-        });
-    });
 
     let amount = match read_state(|s| plan_funding(s, sweeper_balance)) {
         FundingDecision::Fund(amount) => amount,
