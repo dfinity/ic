@@ -6,8 +6,8 @@
 mod framework;
 
 use crate::framework::{ConsensusInstance, ConsensusRunnerConfig, TestRunner};
-use ic_consensus::consensus::ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP;
 use ic_consensus_utils::pool_reader::PoolReader;
+use ic_limits::ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::subnet::SubnetRegistry;

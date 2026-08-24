@@ -373,6 +373,31 @@ impl DkgSummary {
         self.height + self.interval_length + Height::from(1)
     }
 
+    /// Returns the height at which a "jump" (used to break the blockchain and resume at a higher
+    /// height) is safe. The returned height is the start height of a future DKG interval (i.e. a
+    /// multiple of the DKG interval length above this summary's height), and is guaranteed to be
+    /// strictly more than [`ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP`] heights above this
+    /// summary's height, i.e. above any height that could have been notarized on the chain being
+    /// broken.
+    ///
+    /// [`ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP`]:
+    /// ic_limits::ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP
+    pub fn get_safe_jump_height(&self) -> Height {
+        // Blocks can be notarized up to `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP` heights above
+        // the certified height (this summary's height, on a chain halted at this summary), so the
+        // jump must land strictly above that.
+        let minimum_distance = ic_limits::ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP + 1;
+        let height = self.height.get();
+        let interval_length = self.interval_length.get();
+
+        let jump_height = height
+            + minimum_distance
+                .div_ceil(interval_length + 1)
+                .saturating_mul(interval_length + 1);
+
+        Height::from(jump_height)
+    }
+
     /// Returns the oldest registry version that is still relevant to DKG.
     pub(crate) fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
         self.current_transcripts()
@@ -847,8 +872,50 @@ mod tests {
     use super::*;
     use crate::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
     use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
+    use rstest::rstest;
     use strum::EnumCount;
     use strum::IntoEnumIterator;
+
+    // With `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP` equal to 70, the jump height must be the
+    // smallest multiple of `interval_length + 1` above the summary height which is at least 71
+    // heights away.
+    #[rstest]
+    #[case::multiple_intervals(/*interval_length=*/ 4, /*expected_distance=*/ 75)]
+    #[case::exactly_one_interval(/*interval_length=*/ 70, /*expected_distance=*/ 71)]
+    #[case::one_interval(/*interval_length=*/ 499, /*expected_distance=*/ 500)]
+    #[case::degenerate_interval(/*interval_length=*/ 0, /*expected_distance=*/ 71)]
+    fn get_safe_jump_height_test(#[case] interval_length: u64, #[case] expected_distance: u64) {
+        const SUMMARY_HEIGHT: u64 = 1_000;
+
+        let summary = DkgSummary::new(
+            /*configs=*/ vec![],
+            /*current_transcripts=*/ BTreeMap::new(),
+            /*next_transcripts=*/ BTreeMap::new(),
+            RegistryVersion::from(1),
+            Height::from(interval_length),
+            /*next_interval_length=*/ Height::from(interval_length),
+            Height::from(SUMMARY_HEIGHT),
+            /*remote_dkg_attempts=*/ BTreeMap::new(),
+            SubnetSplittingStatus::NotScheduled,
+        );
+
+        let jump_height = summary.get_safe_jump_height();
+
+        assert_eq!(
+            jump_height,
+            Height::from(SUMMARY_HEIGHT + expected_distance)
+        );
+        // The jump height is a start height of a future DKG interval...
+        assert_eq!(
+            (jump_height.get() - SUMMARY_HEIGHT) % (interval_length + 1),
+            0
+        );
+        // ... and lies strictly above any height that could have been notarized.
+        assert!(
+            jump_height.get()
+                > SUMMARY_HEIGHT + ic_limits::ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP
+        );
+    }
 
     #[test]
     fn should_correctly_calculate_threshold_for_ni_dkg_tag_low_threshold() {

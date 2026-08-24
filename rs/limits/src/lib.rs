@@ -91,6 +91,18 @@ pub const DKG_INTERVAL_HEIGHT: u64 = 499;
 /// The default upper bound for the number of allowed dkg dealings in a
 /// block.
 pub const DKG_DEALINGS_PER_BLOCK: usize = 1;
+/// In order to have a bound on the advertised consensus pool, we place a limit on
+/// the notarization/certification gap.
+/// We will not notarize or validate artifacts with a height greater than the given
+/// value above the latest certification. During validation, the only exception to
+/// this are CUPs, which have no upper bound on the height to be validated.
+pub const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
+/// In order to have a bound on the advertised consensus pool, we place a limit on
+/// the gap between notarized height and the height of the next pending CUP.
+/// We will not notarize or validate artifacts with a height greater than the given
+/// value above the latest CUP. During validation, the only exception to this are
+/// CUPs, which have no upper bound on the height to be validated.
+pub const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 130;
 
 /// Same order of magnitude as the number of active artifacts.
 /// Please note that we put fairly big number mainly for perfomance reasons so either side of a channel doesn't await.

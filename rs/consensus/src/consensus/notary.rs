@@ -23,10 +23,7 @@
 //! * A node must not issue new notarization share for any round older than the
 //!   latest round, which would break security if it has already finality-signed
 //!   for that round.
-use crate::consensus::{
-    ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP, ACCEPTABLE_NOTARIZATION_CUP_GAP,
-    metrics::NotaryMetrics,
-};
+use crate::consensus::metrics::NotaryMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
@@ -35,6 +32,7 @@ use ic_consensus_utils::{
 };
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_state_manager::StateReader;
+use ic_limits::{ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP, ACCEPTABLE_NOTARIZATION_CUP_GAP};
 use ic_logger::{ReplicaLogger, error, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::NotarizationDelaySettings;
