@@ -17,9 +17,11 @@ const FUNDING_TICKS: u32 = 6;
 fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
     let setup = SweeperFundingSetup::new_live();
 
-    // Only the fee account is funded: sweep gas must come from there and nowhere else.
-    let supply_before = setup.cketh_total_supply();
-    let fee_account_before = setup.cketh_balance_of(setup.fee_account());
+    // Only the fee account is funded: sweep gas must come from there and nowhere else. The ledger
+    // baselines come from the harness, which took them before the minter could burn — the decision
+    // reads nothing off the chain, so its first run lands too fast to snapshot from here.
+    let supply_before = setup.supply_before_funding();
+    let fee_account_before = setup.fee_account_before_funding();
     let minter_eth_before = setup.anvil_eth_balance(&setup.minter_address());
 
     let sweeper = setup.await_funding_decision(Duration::from_secs(120));

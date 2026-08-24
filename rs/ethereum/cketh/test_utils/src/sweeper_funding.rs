@@ -95,6 +95,8 @@ pub struct SweeperFundingSetup {
     minter_id: Principal,
     ledger_id: Principal,
     minter_address: Address,
+    supply_before_funding: u128,
+    fee_account_before_funding: u128,
 }
 
 impl SweeperFundingSetup {
@@ -161,6 +163,8 @@ impl SweeperFundingSetup {
             minter_id,
             ledger_id,
             minter_address: Address::new([0; 20]),
+            supply_before_funding: 0,
+            fee_account_before_funding: 0,
         };
         setup.minter_address = setup.fetch_minter_address();
         setup
@@ -174,8 +178,26 @@ impl SweeperFundingSetup {
         if fee_account_balance > 0 {
             setup.mint_cketh(setup.fee_account(), fee_account_balance);
         }
+        // Taken here, in that same window, and not left to the test: the funding decision reads
+        // nothing off the chain, so the first post-upgrade check burns within milliseconds of the
+        // minter restarting — well before a test that queried the ledger afterwards could see the
+        // pre-burn numbers. Compared against an already-debited baseline, a burn assertion would
+        // report zero burned and fail.
+        setup.supply_before_funding = setup.cketh_total_supply();
+        setup.fee_account_before_funding = setup.cketh_balance_of(setup.fee_account());
         setup.upgrade_minter();
         setup
+    }
+
+    /// ckETH total supply as it stood before the minter could fund anything, so that a test can
+    /// measure the burn a funding made. See [`Self::new_live`] for why the harness holds it.
+    pub fn supply_before_funding(&self) -> u128 {
+        self.supply_before_funding
+    }
+
+    /// The fee account's ckETH balance at that same point, for measuring what the burn debited.
+    pub fn fee_account_before_funding(&self) -> u128 {
+        self.fee_account_before_funding
     }
 
     /// Waits until the minter has credited the harness' deposit, i.e. its ETH balance is non-zero.
