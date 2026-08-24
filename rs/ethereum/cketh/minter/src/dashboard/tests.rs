@@ -32,16 +32,9 @@ fn should_display_sweeper_funding() {
 
     let mut state = initial_state();
     state.sweeper_funding.record_burn(Wei::from(1_000_000_u64));
-    state.sweeper_funding.mark_funding_in_flight(
-        LedgerBurnIndex::new(1),
-        Wei::from(950_000_u64),
-        Some(0),
-    );
-    state.sweeper_funding.record_finalized_funding(
-        LedgerBurnIndex::new(1),
-        Wei::from(900_000_u64),
-        Wei::from(50_000_u64),
-    );
+    state
+        .sweeper_funding
+        .record_finalized_funding(Wei::from(900_000_u64), Wei::from(50_000_u64));
     state.last_observed_sweeper_balance = Some(ObservedSweeperBalance {
         balance: Wei::from(900_000_u64),
         observed_at_nanos: 0,
@@ -59,11 +52,15 @@ fn should_display_sweeper_funding() {
 #[test]
 fn should_display_an_in_flight_sweeper_funding() {
     let mut state = initial_state();
-    state.sweeper_funding.record_burn(Wei::from(1_000_000_u64));
-    state.sweeper_funding.mark_funding_in_flight(
-        LedgerBurnIndex::new(42),
-        Wei::from(900_000_u64),
-        Some(1_620_328_630_000_000_000),
+    // Accepted the way the funding task does it, so the row reports the funding the pipeline
+    // actually holds rather than a value set beside it.
+    apply_state_transition(
+        &mut state,
+        &EventType::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
+            withdrawal_amount: Wei::from(900_000_u64),
+            created_at: Some(1_620_328_630_000_000_000),
+            ..cketh_withdrawal_request_with_index(LedgerBurnIndex::new(42))
+        }),
     );
 
     let dashboard = DashboardTemplate::from_state(&state, DashboardPaginationParameters::default());

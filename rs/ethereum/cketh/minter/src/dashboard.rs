@@ -550,13 +550,14 @@ impl DashboardTemplate {
                     .map(|observed| observed.observed_at_nanos),
                 low_water_mark: state.sweeper_funding_config().low_water_mark,
                 target: state.sweeper_funding_config().target,
-                in_flight: state.sweeper_funding.in_flight_funding().map(|f| {
-                    DashboardInFlightFunding {
-                        ledger_burn_index: f.ledger_burn_index,
-                        amount: f.amount,
-                        created_at: f.created_at_nanos,
-                    }
-                }),
+                in_flight: state
+                    .withdrawal_transactions
+                    .outstanding_sweeper_funding()
+                    .map(|funding| DashboardInFlightFunding {
+                        ledger_burn_index: funding.ledger_burn_index,
+                        amount: funding.withdrawal_amount,
+                        created_at: funding.created_at,
+                    }),
             },
         }
     }

@@ -1195,9 +1195,9 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 // the task refreshes the observation before consulting the guard.
                 w.encode_gauge(
                     "cketh_minter_sweeper_in_flight_funding_age_seconds",
-                    s.sweeper_funding
-                        .in_flight_funding()
-                        .map(|f| match f.created_at_nanos {
+                    s.withdrawal_transactions
+                        .outstanding_sweeper_funding()
+                        .map(|funding| match funding.created_at {
                             Some(created_at_nanos) => {
                                 (ic_cdk::api::time().saturating_sub(created_at_nanos)
                                     / 1_000_000_000) as f64
