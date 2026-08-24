@@ -28,17 +28,11 @@ use std::str::FromStr;
 
 #[test]
 fn should_display_sweeper_funding() {
-    use ic_cketh_minter::state::sweeper_funding::ObservedSweeperBalance;
-
     let mut state = initial_state();
     state.sweeper_funding.record_burn(Wei::from(1_000_000_u64));
     state
         .sweeper_funding
         .record_finalized_funding(Wei::from(900_000_u64), Wei::from(50_000_u64));
-    state.last_observed_sweeper_balance = Some(ObservedSweeperBalance {
-        balance: Wei::from(900_000_u64),
-        observed_at_nanos: 0,
-    });
 
     let dashboard = DashboardTemplate::from_state(&state, DashboardPaginationParameters::default());
 
@@ -46,7 +40,9 @@ fn should_display_sweeper_funding() {
         .has_sweeper_cketh_burned("1_000_000 Wei")
         .has_sweeper_eth_spent("950_000 Wei")
         // 1_000_000 burned - 950_000 spent: the credit that offsets the next funding.
-        .has_sweeper_burned_not_yet_spent("50_000 Wei");
+        .has_sweeper_burned_not_yet_spent("50_000 Wei")
+        // What the funding delivered, which is the bound the next funding decision reads.
+        .has_sweeper_prepaid_gas("900_000 Wei");
 }
 
 #[test]
@@ -76,11 +72,11 @@ fn should_display_no_in_flight_sweeper_funding_when_idle() {
 }
 
 #[test]
-fn should_display_sweeper_funding_without_an_observation() {
+fn should_display_sweeper_funding_before_any_funding_has_landed() {
     let dashboard = initial_dashboard();
 
     DashboardAssert::assert_that(dashboard)
-        .has_sweeper_prepaid_gas("never observed")
+        .has_sweeper_prepaid_gas("0 Wei")
         .has_sweeper_cketh_burned("0 Wei")
         .has_sweeper_eth_spent("0 Wei");
 }

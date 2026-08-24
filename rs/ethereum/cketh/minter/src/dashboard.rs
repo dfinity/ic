@@ -306,10 +306,9 @@ pub struct DashboardSweeperFunding {
     pub cketh_burned: Wei,
     pub eth_spent: Wei,
     pub burned_not_yet_spent: Wei,
-    /// Prepaid gas as last read on chain, as a timestamp rather than an age: `from_state` must stay
-    /// callable outside a canister, where `ic_cdk::api::time()` traps.
-    pub observed_balance: Option<Wei>,
-    pub observed_at_nanos: Option<u64>,
+    /// A lower bound on the prepaid gas at the sweeper address, from what recorded fundings
+    /// delivered there.
+    pub prepaid_gas_lower_bound: Wei,
     pub low_water_mark: Wei,
     pub target: Wei,
     /// The funding between its burn and its finalized transfer, if any. Shown because one that never
@@ -541,12 +540,7 @@ impl DashboardTemplate {
                 cketh_burned: state.sweeper_funding.cumulative_burned(),
                 eth_spent: state.sweeper_funding.cumulative_spent(),
                 burned_not_yet_spent: state.sweeper_funding.burned_not_yet_spent(),
-                observed_balance: state
-                    .last_observed_sweeper_balance
-                    .map(|observed| observed.balance),
-                observed_at_nanos: state
-                    .last_observed_sweeper_balance
-                    .map(|observed| observed.observed_at_nanos),
+                prepaid_gas_lower_bound: state.sweeper_funding.sweeper_balance_lower_bound(),
                 low_water_mark: state.sweeper_funding_config().low_water_mark,
                 target: state.sweeper_funding_config().target,
                 in_flight: state

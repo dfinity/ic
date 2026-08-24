@@ -364,11 +364,12 @@ rust_test(
 
 rust_test(
     name = "sweeper_funding",
-    # Waits on the minter's 6-minute withdrawal timer for the funding transfer to be sent. Its own
-    # deadlines can total 21 minutes, so anything below `eternal` (60 minutes) would have Bazel kill
-    # the test before they fire, replacing their diagnostics with a bare timeout.
-    size = "large",
-    timeout = "eternal",
+    # The funding transfer is only sent by the minter's 6-minute withdrawal timer, but the harness
+    # buys that tick by advancing the instance's clock instead of waiting it out, so the whole live
+    # path runs in seconds. `medium` rather than the `small` Bazel suggests: a real anvil, a real
+    # ledger and a live PocketIC instance leave the 60-second budget of `small` too little room on a
+    # loaded machine.
+    size = "medium",
     srcs = ["tests/sweeper_funding.rs"],
     data = [
         ":cketh_minter_debug.wasm.gz",
@@ -385,7 +386,6 @@ rust_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
-    tags = ["long_test"],  # ~6 minutes, nearly all of it waiting on that timer.
     deps = [
         # Keep sorted.
         ":minter",

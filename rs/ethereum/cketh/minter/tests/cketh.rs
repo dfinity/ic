@@ -19,9 +19,7 @@ use ic_cketh_test_utils::flow::{
     DepositCkEthParams, DepositCkEthWithSubaccountParams, DepositParams, ProcessWithdrawalParams,
     double_and_increment_base_fee_per_gas,
 };
-use ic_cketh_test_utils::mock::{
-    JsonRpcMethod, MockJsonRpcProviders, debug_http_outcalls, pending_outcalls_for,
-};
+use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders, debug_http_outcalls};
 use ic_cketh_test_utils::response::{
     block_response, decode_transaction, default_signed_eip_1559_transaction, empty_logs,
     hash_transaction, multi_logs_for_single_transaction,
@@ -873,18 +871,12 @@ fn should_be_able_to_stop_canister_during_scraping() {
 
     cketh.env.tick();
     cketh.env.tick();
-    // Counts only the scraping outcalls: other periodic tasks (the sweeper-funding check, for one)
-    // have their own in flight at this point, and this assertion is about scraping progress.
     assert_eq!(
-        pending_outcalls_for(&cketh.env, &JsonRpcMethod::EthGetLogs),
+        cketh.env.get_canister_http().len(),
         4,
         "Expected HTTPS outcalls since scraping is still in progress: {}",
         debug_http_outcalls(&cketh.env)
     );
-
-    // Every non-scraping outcall is an open call context of its own, and this test asserts the
-    // canister reaches Stopped with nothing left in flight.
-    cketh.settle_outcalls_other_than_log_scraping();
 
     // At this point:
     // - 1 block range has been scraped
@@ -1383,75 +1375,4 @@ mod cketh_evm_rpc {
             }
         }
     }
-}
-
-/// The funding task must record what it read even when no funding is due, and must record nothing
-/// at all when the read fails. The prepaid-gas gate treats a *fresh* observation as authority to
-/// spend, so a missing one only delays sweeping whereas a fabricated one would authorise it against
-/// gas nobody has seen.
-#[test]
-fn should_record_a_sweeper_balance_observation_only_when_the_read_succeeds() {
-    /// The observation is written by the balance outcall's callback, which needs rounds to run.
-    const TICKS_FOR_THE_CALLBACK: usize = 20;
-
-    // Answering the install-time read is what distinguishes the two fixtures. The successful answer
-    // reports a balance above the low-water mark, so that side is also the no-funding-due path: the
-    // observation has to be refreshed even though nothing is funded.
-    let read_succeeded = CkEthSetup::default();
-    read_succeeded.settle_initial_sweeper_funding_check();
-    let read_failed = CkEthSetup::default();
-    read_failed.fail_initial_sweeper_funding_check();
-    // Ticked the same number of times, so the negative case below is at least as generous as the
-    // positive one and cannot pass merely by being read too early.
-    for _ in 0..TICKS_FOR_THE_CALLBACK {
-        read_succeeded.env.tick();
-        read_failed.env.tick();
-    }
-
-    // Matched as "some number" rather than the exact balance, which is the harness' business.
-    read_succeeded
-        .check_minter_metrics()
-        .assert_contains_metric_matching("cketh_minter_sweeper_gas_balance [0-9]")
-        .assert_contains_metric_matching("cketh_minter_sweeper_gas_balance_age_seconds 0");
-
-    // NaN and +Inf rather than zeroes: "never looked" must stay distinguishable from "no gas left",
-    // since only the latter is a reading the gate may act on.
-    read_failed
-        .check_minter_metrics()
-        .assert_contains_metric_matching("cketh_minter_sweeper_gas_balance NaN")
-        .assert_contains_metric_matching(r"cketh_minter_sweeper_gas_balance_age_seconds \+Inf");
-}
-
-/// The observation must not survive an upgrade. It authorises spending by being *fresh*, so one
-/// taken before an upgrade must not authorise a sweep after it; the gate has to fail closed until a
-/// new balance read completes. Nothing event-sources this cache today, and this test is what would
-/// notice if that changed.
-#[test]
-fn should_forget_the_sweeper_balance_observation_across_an_upgrade() {
-    const TICKS_FOR_THE_CALLBACK: usize = 20;
-
-    let cketh = CkEthSetup::default();
-    // Answering the install-time read is what produces the observation this test then watches being
-    // forgotten. The post-upgrade read is deliberately left unanswered further down.
-    cketh.settle_initial_sweeper_funding_check();
-    for _ in 0..TICKS_FOR_THE_CALLBACK {
-        cketh.env.tick();
-    }
-    // Arrangement, not the assertion: there has to be an observation for its loss to mean anything.
-    cketh
-        .check_minter_metrics()
-        .assert_contains_metric_matching("cketh_minter_sweeper_gas_balance [0-9]");
-
-    let cketh = cketh.upgrade_minter_without_changes();
-
-    // The post-upgrade check re-reads the balance, and this harness deliberately leaves that outcall
-    // unanswered — so the gate stays closed here for as long as no read completes, which is the
-    // property under test rather than a timing artifact.
-    for _ in 0..TICKS_FOR_THE_CALLBACK {
-        cketh.env.tick();
-    }
-    cketh
-        .check_minter_metrics()
-        .assert_contains_metric_matching("cketh_minter_sweeper_gas_balance NaN")
-        .assert_contains_metric_matching(r"cketh_minter_sweeper_gas_balance_age_seconds \+Inf");
 }

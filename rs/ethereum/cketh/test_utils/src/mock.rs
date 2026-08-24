@@ -22,9 +22,7 @@ pub struct MockJsonRpcProviders {
 
 //variants are prefixed by Eth because it's the names of those methods in the Ethereum JSON-RPC API
 #[allow(clippy::enum_variant_names)]
-#[derive(
-    Clone, PartialEq, Debug, strum_macros::Display, strum_macros::EnumString, strum_macros::EnumIter,
-)]
+#[derive(Clone, PartialEq, Debug, strum_macros::Display, strum_macros::EnumString)]
 pub enum JsonRpcMethod {
     #[strum(serialize = "eth_call")]
     EthCall,
@@ -226,20 +224,6 @@ impl StubOnce {
         });
         env.tick();
     }
-}
-
-/// Number of in-flight HTTPS outcalls carrying `method` as their JSON-RPC method. Filtered by
-/// method because the minter's other periodic tasks make outcalls of their own.
-pub fn pending_outcalls_for(env: &PocketIc, method: &JsonRpcMethod) -> usize {
-    let needle = format!("\"{method}\"");
-    env.get_canister_http()
-        .iter()
-        .filter(|request| {
-            std::str::from_utf8(&request.body)
-                .map(|body| body.contains(&needle))
-                .unwrap_or(false)
-        })
-        .count()
 }
 
 pub fn debug_http_outcalls(env: &PocketIc) -> String {
