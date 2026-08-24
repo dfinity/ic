@@ -537,8 +537,7 @@ impl DashboardTemplate {
                 .collect(),
             supported_ckerc20_tokens,
             sweeper_funding: DashboardSweeperFunding {
-                sweeper_address: ic_cketh_minter::sweeper::sweeper_address_from_state(state)
-                    .map(|address| address.to_string()),
+                sweeper_address: state.sweeper_address().map(|address| address.to_string()),
                 cketh_burned: state.sweeper_funding.cumulative_burned(),
                 eth_spent: state.sweeper_funding.cumulative_spent(),
                 burned_not_yet_spent: state.sweeper_funding.burned_not_yet_spent(),
