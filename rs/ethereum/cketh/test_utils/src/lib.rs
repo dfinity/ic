@@ -3,7 +3,7 @@ use crate::events::MinterEventAssert;
 use crate::flow::{
     ApprovalFlow, DepositFlow, DepositParams, LedgerTransactionAssert, WithdrawalFlow,
 };
-use crate::mock::{JsonRpcMethod, MockJsonRpcProviders, debug_http_outcalls, pending_outcalls_for};
+use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use evm_rpc_types::{InstallArgs, OverrideProvider, RegexSubstitution};
@@ -145,18 +145,6 @@ impl PocketIcHttpQuery for &CkEthSetup {
     }
 }
 
-/// A response the minter accepts for `method`, for settling outcalls a test does not care about.
-///
-/// Panics on a method with no canned answer: a new periodic task's outcall should be handled here
-/// deliberately rather than answered with something meaningless.
-fn canned_response_for(method: &JsonRpcMethod) -> &'static str {
-    match method {
-        // 0.1 ETH, comfortably above the sweeper's low-water mark, so no funding is due.
-        JsonRpcMethod::EthGetBalance => "0x16345785d8a0000",
-        other => panic!("BUG: no canned response for {other}; add one deliberately"),
-    }
-}
-
 impl CkEthSetup {
     /// Builds a fresh PocketIC instance (fiduciary subnet only, non-live) and installs the minter,
     /// its ckETH ledger and the EVM RPC canister on it — each under the anonymous controller —
@@ -176,48 +164,6 @@ impl CkEthSetup {
             minter_id: canisters.minter_id,
             evm_rpc_id: canisters.evm_rpc_id,
             support_subaccount: false,
-        }
-    }
-
-    /// Answers the balance read that an install schedules, reporting a sweeper balance above the
-    /// low-water mark so no funding is due.
-    ///
-    /// Opt-in, and deliberately not called from [`Self::new`]: settling it there would have to tick,
-    /// and a fixture that has executed a round lets the install-time timers fire before the test
-    /// drives them, which the flows rely on doing themselves. Left in flight the read is harmless —
-    /// the funding check runs once per `SWEEPER_FUNDING_INTERVAL`, so it does not come back during a
-    /// mocked test — so call this only when an outcall in flight would get in the way: stopping the
-    /// minter, or asserting on the set of pending outcalls.
-    /// Answers every pending outcall that is not log scraping, so a test can assert on the scraping
-    /// calls — or on the canister reaching `Stopped` — without knowing which other periodic task
-    /// happens to be due.
-    ///
-    /// Ticks until at least one such outcall appears, so a task that stops firing fails here rather
-    /// than in whichever test runs next.
-    pub fn settle_outcalls_other_than_log_scraping(&self) {
-        use strum::IntoEnumIterator;
-
-        let others = || -> Vec<JsonRpcMethod> {
-            JsonRpcMethod::iter()
-                .filter(|method| *method != JsonRpcMethod::EthGetLogs)
-                .filter(|method| pending_outcalls_for(&self.env, method) > 0)
-                .collect()
-        };
-        let mut ticks = 0;
-        while others().is_empty() {
-            assert!(
-                ticks < MAX_TICKS,
-                "no outcall other than log scraping after {MAX_TICKS} ticks. Pending outcalls:\n{}",
-                debug_http_outcalls(&self.env)
-            );
-            self.env.tick();
-            ticks += 1;
-        }
-        for method in others() {
-            MockJsonRpcProviders::when(method.clone())
-                .respond_for_all_with(canned_response_for(&method))
-                .build()
-                .expect_rpc_calls(self);
         }
     }
 

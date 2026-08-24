@@ -19,9 +19,7 @@ use ic_cketh_test_utils::flow::{
     DepositCkEthParams, DepositCkEthWithSubaccountParams, DepositParams, ProcessWithdrawalParams,
     double_and_increment_base_fee_per_gas,
 };
-use ic_cketh_test_utils::mock::{
-    JsonRpcMethod, MockJsonRpcProviders, debug_http_outcalls, pending_outcalls_for,
-};
+use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders, debug_http_outcalls};
 use ic_cketh_test_utils::response::{
     block_response, decode_transaction, default_signed_eip_1559_transaction, empty_logs,
     hash_transaction, multi_logs_for_single_transaction,
@@ -873,18 +871,12 @@ fn should_be_able_to_stop_canister_during_scraping() {
 
     cketh.env.tick();
     cketh.env.tick();
-    // Counts only the scraping outcalls: other periodic tasks (the sweeper-funding check, for one)
-    // have their own in flight at this point, and this assertion is about scraping progress.
     assert_eq!(
-        pending_outcalls_for(&cketh.env, &JsonRpcMethod::EthGetLogs),
+        cketh.env.get_canister_http().len(),
         4,
         "Expected HTTPS outcalls since scraping is still in progress: {}",
         debug_http_outcalls(&cketh.env)
     );
-
-    // Every non-scraping outcall is an open call context of its own, and this test asserts the
-    // canister reaches Stopped with nothing left in flight.
-    cketh.settle_outcalls_other_than_log_scraping();
 
     // At this point:
     // - 1 block range has been scraped
