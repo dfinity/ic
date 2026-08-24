@@ -267,7 +267,7 @@ impl CanisterManagerBuilder {
             self.subnet_id,
             no_op_logger(),
             Arc::clone(&cycles_account_manager),
-            SchedulerConfig::application_subnet().dirty_page_overhead,
+            SchedulerConfig::application_subnet().page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             Arc::new(FakeStateManager::new()),
             Path::new("/tmp"),

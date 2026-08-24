@@ -318,7 +318,7 @@ pub struct ExecutionTest {
     current_round: ExecutionRound,
 
     // Read-only fields.
-    dirty_heap_page_overhead: u64,
+    heap_page_overhead: u64,
     instruction_limits: InstructionLimits,
     install_code_instruction_limits: InstructionLimits,
     instruction_limit_per_query_message: NumInstructions,
@@ -355,8 +355,8 @@ impl ExecutionTest {
         Arc::clone(&self.exec_env)
     }
 
-    pub fn dirty_heap_page_overhead(&self) -> u64 {
-        self.dirty_heap_page_overhead
+    pub fn heap_page_overhead(&self) -> u64 {
+        self.heap_page_overhead
     }
 
     pub fn user_id(&self) -> UserId {
@@ -3121,17 +3121,17 @@ impl ExecutionTestBuilder {
             })
             .collect::<BTreeMap<_, _>>();
 
-        let dirty_page_overhead = match self.subnet_type {
-            SubnetType::Application => SchedulerConfig::application_subnet().dirty_page_overhead,
-            SubnetType::System => SchedulerConfig::system_subnet().dirty_page_overhead,
+        let page_overhead = match self.subnet_type {
+            SubnetType::Application => SchedulerConfig::application_subnet().page_overhead,
+            SubnetType::System => SchedulerConfig::system_subnet().page_overhead,
             SubnetType::VerifiedApplication => {
-                SchedulerConfig::verified_application_subnet().dirty_page_overhead
+                SchedulerConfig::verified_application_subnet().page_overhead
             }
-            SubnetType::CloudEngine => SchedulerConfig::cloud_engine().dirty_page_overhead,
+            SubnetType::CloudEngine => SchedulerConfig::cloud_engine().page_overhead,
         };
 
-        let dirty_heap_page_overhead = match self.execution_config.embedders_config.metering_type {
-            MeteringType::New => dirty_page_overhead.get(),
+        let heap_page_overhead = match self.execution_config.embedders_config.metering_type {
+            MeteringType::New => page_overhead.get(),
             _ => 0,
         };
 
@@ -3181,7 +3181,7 @@ impl ExecutionTestBuilder {
             subnet_memory_reservation,
             subnet_available_callbacks: self.execution_config.subnet_callback_soft_limit as i64,
             time: self.time,
-            dirty_heap_page_overhead,
+            heap_page_overhead,
             instruction_limits: InstructionLimits::new(
                 self.subnet_config
                     .scheduler_config
