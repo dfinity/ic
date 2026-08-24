@@ -2906,10 +2906,13 @@ mod sweep_lane {
     use super::{gas_fee_estimate, sign_transaction, transaction_receipt};
     use crate::eth_rpc_client::responses::TransactionStatus;
     use crate::lifecycle::EthereumNetwork;
-    use crate::numeric::{GasAmount, TransactionNonce, Wei};
+    use crate::numeric::{GasAmount, TransactionCount, TransactionNonce, Wei, WeiPerGas};
     use crate::state::transactions::{
-        Eip1559TransactionRequest, PipelineRequest, SweepId, SweepRequest, TransactionPipeline,
+        Eip1559TransactionRequest, PipelineRequest, ResubmitTransactionError, SweepId,
+        SweepRequest, TransactionPipeline,
     };
+    use crate::tx::GasFeeEstimate;
+    use assert_matches::assert_matches;
     use ic_ethereum_types::Address;
 
     const SWEEP_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
@@ -3012,6 +3015,98 @@ mod sweep_lane {
                 data: vec![0xff],
                 ..tx
             },
+        );
+    }
+
+    #[test]
+    fn should_allocate_the_whole_fee_allowance_to_a_sweep_transaction() {
+        let request = sweep_request(0);
+        let Ok(tx) = request.create_transaction(
+            TransactionNonce::ZERO,
+            gas_fee_estimate(),
+            SWEEP_GAS_LIMIT,
+            EthereumNetwork::Sepolia,
+        );
+
+        assert_eq!(
+            tx.max_fee_per_gas,
+            request
+                .max_transaction_fee
+                .into_wei_per_gas(SWEEP_GAS_LIMIT)
+                .unwrap()
+        );
+        assert_eq!(
+            tx.max_fee_per_gas.transaction_cost(SWEEP_GAS_LIMIT),
+            Some(request.max_transaction_fee)
+        );
+        assert_eq!(
+            tx.max_priority_fee_per_gas,
+            gas_fee_estimate().max_priority_fee_per_gas
+        );
+    }
+
+    #[test]
+    fn should_keep_a_sweep_transaction_within_its_fee_allowance_when_the_estimate_spikes() {
+        let request = sweep_request(0);
+        let spiked_fee = GasFeeEstimate {
+            base_fee_per_gas: WeiPerGas::from(10_000_000_000_000_u64),
+            ..gas_fee_estimate()
+        };
+
+        let Ok(tx) = request.create_transaction(
+            TransactionNonce::ZERO,
+            spiked_fee,
+            SWEEP_GAS_LIMIT,
+            EthereumNetwork::Sepolia,
+        );
+
+        assert_eq!(
+            tx.max_fee_per_gas.transaction_cost(SWEEP_GAS_LIMIT),
+            Some(request.max_transaction_fee)
+        );
+    }
+
+    #[test]
+    fn should_cap_the_priority_fee_at_the_fee_allowance() {
+        let request = SweepRequest {
+            max_transaction_fee: Wei::from(100_000_u64),
+            ..sweep_request(0)
+        };
+
+        let Ok(tx) = request.create_transaction(
+            TransactionNonce::ZERO,
+            gas_fee_estimate(),
+            SWEEP_GAS_LIMIT,
+            EthereumNetwork::Sepolia,
+        );
+
+        assert_eq!(tx.max_fee_per_gas, WeiPerGas::ONE);
+        assert_eq!(tx.max_priority_fee_per_gas, tx.max_fee_per_gas);
+    }
+
+    #[test]
+    fn should_refuse_to_resubmit_a_sweep_beyond_its_fee_allowance() {
+        let mut pipeline = sweeper_pipeline();
+        pipeline.record_request(sweep_request(0));
+        let created = create_and_record_sweep_tx(&mut pipeline, sweep_request(0));
+        pipeline.record_signed_transaction(sign_transaction(created));
+
+        let spiked_fee = GasFeeEstimate {
+            base_fee_per_gas: WeiPerGas::from(10_000_000_000_000_u64),
+            ..gas_fee_estimate()
+        };
+        let resubmitted = pipeline.create_resubmit_transactions(TransactionCount::ZERO, spiked_fee);
+
+        assert_matches!(
+            resubmitted.first().expect("BUG: nothing to resubmit"),
+            Err(ResubmitTransactionError::InsufficientTransactionFee {
+                id,
+                allowed_max_transaction_fee,
+                max_transaction_fee,
+                ..
+            }) if *id == SweepId(0)
+                && *allowed_max_transaction_fee == sweep_request(0).max_transaction_fee
+                && *max_transaction_fee > sweep_request(0).max_transaction_fee
         );
     }
 

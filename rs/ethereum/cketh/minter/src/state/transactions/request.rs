@@ -8,6 +8,7 @@ use super::{
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{GasAmount, LedgerBurnIndex, TransactionNonce, Wei};
 use crate::tx::{Eip1559TransactionRequest, GasFeeEstimate, ResubmissionStrategy};
+use std::cmp::min;
 use std::convert::Infallible;
 use std::fmt;
 
@@ -228,13 +229,22 @@ impl PipelineRequest for SweepRequest {
             gas_limit > GasAmount::ZERO,
             "BUG: gas limit should be non-zero"
         );
-        let transaction_price = gas_fee_estimate.to_price(gas_limit);
+        // The fee is prepaid, so the whole allowance is allocated from the beginning: the sweep
+        // then survives a rising `base_fee_per_gas` without a resubmission, and can never cost
+        // more than the allowance the resubmission strategy would enforce anyway.
+        let max_fee_per_gas = self
+            .max_transaction_fee
+            .into_wei_per_gas(gas_limit)
+            .expect("BUG: gas_limit should be non-zero");
         Ok(Eip1559TransactionRequest {
             chain_id: ethereum_network.chain_id(),
             nonce,
-            max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
-            max_fee_per_gas: transaction_price.max_fee_per_gas,
-            gas_limit: transaction_price.gas_limit,
+            max_priority_fee_per_gas: min(
+                gas_fee_estimate.max_priority_fee_per_gas,
+                max_fee_per_gas,
+            ),
+            max_fee_per_gas,
+            gas_limit,
             destination: self.destination,
             amount: self.amount,
             data: self.data.clone(),
