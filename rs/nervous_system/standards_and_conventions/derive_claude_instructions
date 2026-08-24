@@ -25,9 +25,13 @@ LOCAL_DIRECTORY = Path(__file__).resolve().parent
 SOURCE = LOCAL_DIRECTORY / "../STANDARDS_AND_CONVENTIONS.md"
 OUTPUT = LOCAL_DIRECTORY / "claude_author_instructions.md"
 
-FRONT_MATTER = (
+INTRODUCTION = (
     "This file is derived mechanically from STANDARDS_AND_CONVENTIONS.md, and\n"
     "tells Claude how to write code here.\n"
+    "\n"
+    "Since it is difficult to keep all these rules in mind while writing,\n"
+    "after a first draft, review for compliance of newly drafted code against\n"
+    "these rules."
 )
 
 ENCLOSED_BY_DOUBLE_PAREN_RE = re.compile(r"^\(\(\s*$\n(.*?)^\)\)\s*$\n?", re.DOTALL | re.MULTILINE)
@@ -132,7 +136,7 @@ def main():
     kept_chars = non_whitespace_len(text)
     cut_chars = original_chars - kept_chars
 
-    OUTPUT.write_text(FRONT_MATTER + "\n\n" + text, encoding="utf-8")
+    OUTPUT.write_text(INTRODUCTION + "\n\n" + text, encoding="utf-8")
 
     print(f"Wrote {OUTPUT.relative_to(LOCAL_DIRECTORY.parent)}")
     print(f"Original non-whitespace chars: {original_chars}")
