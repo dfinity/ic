@@ -33,6 +33,7 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
 ic-cdk = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic-config = { path = "../../config" }
 ic-limits = { path = "../../limits" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
@@ -84,6 +85,7 @@ itertools = { workspace = true }
 lazy_static = { workspace = true }
 libc = { workspace = true }
 macaddr = { workspace = true }
+network = { path = "../../ic_os/networking/network" }
 nix = { workspace = true }
 num_cpus = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }

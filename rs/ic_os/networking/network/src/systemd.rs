@@ -12,6 +12,27 @@ use macaddr::MacAddr6;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
 
+/// The IPv6 name servers GuestOS is configured with (Cloudflare and Google).
+///
+/// Kept in sync with [`IPV6_NAME_SERVER_NETWORKD_CONTENTS`] by a unit test.
+///
+/// The system-test local backend depends on this being *the* set of addresses a
+/// GuestOS node sends its DNS queries to: it assigns them to the test group's
+/// bridge inside its isolated network namespace and answers on them, which is
+/// how nodes get a resolver without any node-side configuration. See
+/// `LocalBackend::create_group` in
+/// `rs/tests/driver/src/driver/local_backend.rs`.
+pub const IPV6_NAME_SERVERS: [Ipv6Addr; 4] = [
+    // 2606:4700:4700::1111
+    Ipv6Addr::new(0x2606, 0x4700, 0x4700, 0, 0, 0, 0, 0x1111),
+    // 2606:4700:4700::1001
+    Ipv6Addr::new(0x2606, 0x4700, 0x4700, 0, 0, 0, 0, 0x1001),
+    // 2001:4860:4860::8888
+    Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888),
+    // 2001:4860:4860::8844
+    Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8844),
+];
+
 pub const IPV6_NAME_SERVER_NETWORKD_CONTENTS: &str = r#"
 DNS=2606:4700:4700::1111
 DNS=2606:4700:4700::1001
@@ -45,7 +66,8 @@ Kind=bridge
 
 [Bridge]
 ForwardDelaySec=0
-STP=false";
+STP=false
+MulticastSnooping=no";
 
 fn generate_bridge6_network_content(
     ipv6_address: &str,
@@ -155,4 +177,19 @@ fn generate_and_write_systemd_files(
     write(bridge6_path, bridge6_content)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ipv6_name_servers_match_networkd_contents() {
+        let rendered: String = IPV6_NAME_SERVERS
+            .iter()
+            .map(|name_server| format!("DNS={name_server}\n"))
+            .collect();
+
+        assert_eq!(IPV6_NAME_SERVER_NETWORKD_CONTENTS, format!("\n{rendered}"));
+    }
 }

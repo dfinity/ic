@@ -345,16 +345,6 @@ impl DkgSummary {
         &self.next_transcripts
     }
 
-    /// Return the set of transcripts (current and next) for all tags.
-    /// This function avoids expensive copying when transcripts are large.
-    pub fn into_transcripts(self) -> Vec<NiDkgTranscript> {
-        self.current_transcripts
-            .into_iter()
-            .chain(self.next_transcripts)
-            .map(|(_, t)| t)
-            .collect()
-    }
-
     /// Returns `true` if the provided height is included in the DKG interval
     /// corresponding to the current summary. Note that the summary block is
     /// considered to be part of the interval. For example, if the start height

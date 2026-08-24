@@ -1022,6 +1022,15 @@ pub fn syscalls<
         })
         .unwrap();
 
+    linker
+        .func_wrap("ic0", "subnet_self_node_count", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::SUBNET_SELF_NODE_COUNT)?;
+                with_system_api(&mut caller, |s| s.ic0_subnet_self_node_count())
+            }
+        })
+        .unwrap();
+
     match main_memory_type {
         WasmMemoryType::Wasm32 => {
             linker
