@@ -19,10 +19,17 @@
 //! * Any loop waiting on a minter timer **must poll a canister while it waits**. The PocketIC server
 //!   shuts an idle instance down, which stops the minter's timers and looks exactly like a minter
 //!   bug.
-//! * The transfer is only sent by the withdrawal timer, so this harness genuinely waits minutes.
+//! * The transfer is only sent by the withdrawal timer, six minutes after the funding task queued
+//!   the request. Rather than wait that out, these tests *buy* the tick: live mode keeps adding
+//!   wall-clock deltas to whatever the instance's time already is, so pushing it forward with
+//!   [`PocketIc::advance_time`] is additive and never undone — the instance simply runs that far
+//!   ahead of the host from then on, and every timer that has come due fires on the next round.
+//!   That makes two rules, both explained on `SweeperFundingSetup::settle`: ticks are bought one at
+//!   a time, and each one is paid for in real seconds rather than instance time.
 
 use candid::{Decode, Encode, Nat, Principal};
 use evm_rpc_types::{InstallArgs, OverrideProvider, RegexSubstitution};
+use ic_cketh_minter::PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL;
 use ic_cketh_minter::endpoints::CandidBlockTag;
 use ic_cketh_minter::lifecycle::{EthereumNetwork, MinterArg, init::InitArg as MinterInitArgs};
 use ic_ethereum_types::Address;
@@ -50,9 +57,33 @@ const MINTER_ETH_BALANCE: u128 = 100_000_000_000_000_000_000; // 100 ETH
 
 pub const FEE_ACCOUNT_BALANCE: u128 = 1_000_000_000_000_000_000; // 1 ckETH
 
-/// Live mode advances IC time with the wall clock, so the 6-minute withdrawal timer costs 6 real
-/// minutes. This dominates the test's runtime and is why its Bazel target needs a long timeout.
-pub const WITHDRAWAL_DEADLINE: Duration = Duration::from_secs(13 * 60);
+/// One withdrawal-timer interval, plus slack so the timer is unambiguously due. The unit these
+/// tests buy minter time in: however far a single jump goes, each timer that has come due fires
+/// *once*, so two ticks cost two jumps and not one large one.
+const WITHDRAWAL_TICK: Duration =
+    Duration::from_secs(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL.as_secs() + 30);
+
+/// Real time granted after each tick, for the outcalls that tick starts to be dispatched and
+/// answered before the clock moves again.
+///
+/// This is the one number that has to be generous. PocketIC drives the *real* consensus payload
+/// builder, so an outcall still in flight when instance time jumps past
+/// `CANISTER_HTTP_TIMEOUT_INTERVAL` (60 seconds) from when it was made is rejected with
+/// `SysTransient: "Canister http request timed out"` — and every tick here is a jump of six minutes.
+/// The minter retries such a rejection on its next run, so the effect is a wasted tick rather than a
+/// failure, but a settle window too short to drain a whole outcall chain wastes every tick and the
+/// pipeline never advances: at two seconds these tests fail reliably.
+const TICK_SETTLE: Duration = Duration::from_secs(5);
+
+/// Blocks mined per poll, so `finalized` — which trails `latest` by two — keeps moving well ahead of
+/// the transaction the minter is waiting to see confirmed. Mined per poll rather than per tick
+/// because it is `latest` advancing that a tick then lets the minter observe.
+const BLOCKS_PER_POLL: u64 = 2;
+
+/// Deliberately short: the PocketIC client panics on a transient HTTP failure rather than retrying,
+/// and a pooled connection left idle for ~10s gets closed server-side, which surfaces as
+/// `hyper::Error(IncompleteMessage)` on the next request.
+const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
 fn controller() -> Principal {
     Principal::from_slice(&[0x0c; 10])
@@ -64,6 +95,8 @@ pub struct SweeperFundingSetup {
     minter_id: Principal,
     ledger_id: Principal,
     minter_address: Address,
+    supply_before_funding: u128,
+    fee_account_before_funding: u128,
 }
 
 impl SweeperFundingSetup {
@@ -130,6 +163,8 @@ impl SweeperFundingSetup {
             minter_id,
             ledger_id,
             minter_address: Address::new([0; 20]),
+            supply_before_funding: 0,
+            fee_account_before_funding: 0,
         };
         setup.minter_address = setup.fetch_minter_address();
         setup
@@ -143,8 +178,26 @@ impl SweeperFundingSetup {
         if fee_account_balance > 0 {
             setup.mint_cketh(setup.fee_account(), fee_account_balance);
         }
+        // Taken here, in that same window, and not left to the test: the funding decision reads
+        // nothing off the chain, so the first post-upgrade check burns within milliseconds of the
+        // minter restarting — well before a test that queried the ledger afterwards could see the
+        // pre-burn numbers. Compared against an already-debited baseline, a burn assertion would
+        // report zero burned and fail.
+        setup.supply_before_funding = setup.cketh_total_supply();
+        setup.fee_account_before_funding = setup.cketh_balance_of(setup.fee_account());
         setup.upgrade_minter();
         setup
+    }
+
+    /// ckETH total supply as it stood before the minter could fund anything, so that a test can
+    /// measure the burn a funding made. See [`Self::new_live`] for why the harness holds it.
+    pub fn supply_before_funding(&self) -> u128 {
+        self.supply_before_funding
+    }
+
+    /// The fee account's ckETH balance at that same point, for measuring what the burn debited.
+    pub fn fee_account_before_funding(&self) -> u128 {
+        self.fee_account_before_funding
     }
 
     /// Waits until the minter has credited the harness' deposit, i.e. its ETH balance is non-zero.
@@ -197,6 +250,60 @@ impl SweeperFundingSetup {
     /// becomes visible at `finalized`, which trails `latest` by two blocks.
     pub fn mine(&self, blocks: u64) {
         self.anvil.mine(blocks);
+    }
+
+    /// Gives the minter [`TICK_SETTLE`] of *real* time to carry out whatever the last tick started,
+    /// mining meanwhile so `finalized` keeps advancing, and returns as soon as `observe` reports
+    /// what it watches for has happened.
+    ///
+    /// Real time, not instance time, is the currency here: the outcalls a tick starts are dispatched
+    /// by PocketIC's auto-progress loop and answered by anvil, and neither needs the instance's
+    /// clock to move. Advancing time faster than this would only pile more due timers onto a minter
+    /// that has not finished the last batch — `ic-cdk-timers` caps a canister at five concurrent
+    /// global-timer calls and reschedules the rest, so the work is not lost, but nothing is gained
+    /// either.
+    fn settle(&self, observe: &mut impl FnMut(&Self) -> bool) -> bool {
+        let start = Instant::now();
+        loop {
+            self.anvil.mine(BLOCKS_PER_POLL);
+            if observe(self) {
+                return true;
+            }
+            // Required, not diagnostics: the PocketIC server shuts down an instance with no HTTP
+            // traffic, which stops the minter's timers and looks exactly like a minter bug. A loop
+            // that only talks to anvil sends none.
+            let _ = self.cketh_total_supply();
+            if start.elapsed() >= TICK_SETTLE {
+                return false;
+            }
+            std::thread::sleep(POLL_INTERVAL);
+        }
+    }
+
+    /// Settles, and buys withdrawal-timer ticks until `observe` is satisfied or `max_ticks` are
+    /// spent. Settling first means a condition already met costs no ticks at all.
+    ///
+    /// `what` is rendered only on failure, so it can read state that is worth knowing at that point
+    /// and would say nothing at the start.
+    fn drive_until(
+        &self,
+        max_ticks: u32,
+        what: impl Fn(&Self) -> String,
+        mut observe: impl FnMut(&Self) -> bool,
+    ) {
+        let mut spent = 0;
+        while !self.settle(&mut observe) {
+            assert!(
+                spent < max_ticks,
+                "{} within {max_ticks} withdrawal-timer ticks ({:?} of minter time); \
+                 minter logs:\n{}",
+                what(self),
+                WITHDRAWAL_TICK * max_ticks,
+                self.minter_logs().join("\n")
+            );
+            spent += 1;
+            self.env.advance_time(WITHDRAWAL_TICK);
+        }
     }
 
     pub fn fee_account(&self) -> Account {
@@ -307,35 +414,25 @@ impl SweeperFundingSetup {
         nat_to_u128(Decode!(&reply, Nat).unwrap())
     }
 
-    /// Waits until `recipient` holds ETH on anvil, mining so `finalized` keeps advancing.
-    pub fn await_eth_received(&self, recipient: &Address, deadline: Duration) -> u128 {
-        let start = Instant::now();
-        let mut statuses: Vec<u128> = Vec::new();
-        loop {
-            self.anvil.mine(1);
-            let balance = self.anvil.eth_balance(recipient, "latest");
-            if balance > 0 {
-                return balance;
-            }
-            // Required, not diagnostics: the PocketIC server shuts down an instance with no HTTP
-            // traffic, and a loop that only talks to anvil sends none.
-            let supply = self.cketh_total_supply();
-            if statuses.last() != Some(&supply) {
-                statuses.push(supply);
-            }
-            if start.elapsed() > deadline {
-                panic!(
-                    "no ETH reached {recipient} within {deadline:?}\n\
-                     minter address: {} (balance {})\n\
-                     ckETH total supply over time: {statuses:?}\n\
-                     --- minter logs ---\n{}",
-                    self.minter_address,
-                    self.anvil.eth_balance(&self.minter_address, "latest"),
-                    self.minter_logs().join("\n"),
-                );
-            }
-            std::thread::sleep(Duration::from_secs(5));
-        }
+    /// Drives the minter until `recipient` holds ETH on anvil, mining so `finalized` keeps
+    /// advancing, and returns the balance it received.
+    ///
+    /// Budget at least two ticks: the funding task's burn is on its own timer, so the first tick can
+    /// land before there is any request to send.
+    pub fn await_eth_received(&self, recipient: &Address, max_ticks: u32) -> u128 {
+        self.drive_until(
+            max_ticks,
+            |setup| {
+                format!(
+                    "no ETH reached {recipient} (minter address {}, balance {}, ckETH supply {})",
+                    setup.minter_address,
+                    setup.anvil.eth_balance(&setup.minter_address, "latest"),
+                    setup.cketh_total_supply(),
+                )
+            },
+            |setup| setup.anvil.eth_balance(recipient, "latest") > 0,
+        );
+        self.anvil.eth_balance(recipient, "latest")
     }
 
     pub fn anvil_eth_balance(&self, address: &Address) -> u128 {

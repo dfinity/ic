@@ -3,7 +3,7 @@ use crate::events::MinterEventAssert;
 use crate::flow::{
     ApprovalFlow, DepositFlow, DepositParams, LedgerTransactionAssert, WithdrawalFlow,
 };
-use crate::mock::{JsonRpcMethod, MockJsonRpcProviders, debug_http_outcalls, pending_outcalls_for};
+use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use evm_rpc_types::{InstallArgs, OverrideProvider, RegexSubstitution};
@@ -145,21 +145,6 @@ impl PocketIcHttpQuery for &CkEthSetup {
     }
 }
 
-/// 0.1 ETH: comfortably above the sweeper's low-water mark, so no funding is due.
-const TOPPED_UP_SWEEPER_BALANCE: &str = "0x16345785d8a0000";
-
-/// A response the minter accepts for `method`, for settling outcalls a test does not care about.
-///
-/// Panics on a method with no canned answer: a new periodic task's outcall should be handled here
-/// deliberately rather than answered with something meaningless.
-fn canned_response_for(method: &JsonRpcMethod) -> &'static str {
-    match method {
-        // 0.1 ETH, comfortably above the sweeper's low-water mark, so no funding is due.
-        JsonRpcMethod::EthGetBalance => TOPPED_UP_SWEEPER_BALANCE,
-        other => panic!("BUG: no canned response for {other}; add one deliberately"),
-    }
-}
-
 impl CkEthSetup {
     /// Builds a fresh PocketIC instance (fiduciary subnet only, non-live) and installs the minter,
     /// its ckETH ledger and the EVM RPC canister on it — each under the anonymous controller —
@@ -180,85 +165,6 @@ impl CkEthSetup {
             evm_rpc_id: canisters.evm_rpc_id,
             support_subaccount: false,
         }
-    }
-
-    /// Answers the balance read that an install schedules, reporting a sweeper balance above the
-    /// low-water mark so no funding is due.
-    ///
-    /// Opt-in, and deliberately not called from [`Self::new`]: settling it there would have to tick,
-    /// and a fixture that has executed a round lets the install-time timers fire before the test
-    /// drives them, which the flows rely on doing themselves. Left in flight the read is harmless —
-    /// the funding check runs once per `SWEEPER_FUNDING_INTERVAL`, so it does not come back during a
-    /// mocked test — so call this only when an outcall in flight would get in the way: stopping the
-    /// minter, or asserting on the set of pending outcalls.
-    /// Answers every pending outcall that is not log scraping, so a test can assert on the scraping
-    /// calls — or on the canister reaching `Stopped` — without knowing which other periodic task
-    /// happens to be due.
-    ///
-    /// Ticks until at least one such outcall appears, so a task that stops firing fails here rather
-    /// than in whichever test runs next.
-    pub fn settle_outcalls_other_than_log_scraping(&self) {
-        use strum::IntoEnumIterator;
-
-        let others = || -> Vec<JsonRpcMethod> {
-            JsonRpcMethod::iter()
-                .filter(|method| *method != JsonRpcMethod::EthGetLogs)
-                .filter(|method| pending_outcalls_for(&self.env, method) > 0)
-                .collect()
-        };
-        let mut ticks = 0;
-        while others().is_empty() {
-            assert!(
-                ticks < MAX_TICKS,
-                "no outcall other than log scraping after {MAX_TICKS} ticks. Pending outcalls:\n{}",
-                debug_http_outcalls(&self.env)
-            );
-            self.env.tick();
-            ticks += 1;
-        }
-        for method in others() {
-            MockJsonRpcProviders::when(method.clone())
-                .respond_for_all_with(canned_response_for(&method))
-                .build()
-                .expect_rpc_calls(self);
-        }
-    }
-
-    /// Answers the sweeper-balance read the install schedules with a balance above the low-water
-    /// mark, so no funding is due.
-    pub fn settle_initial_sweeper_funding_check(&self) {
-        self.answer_initial_sweeper_balance_read(TOPPED_UP_SWEEPER_BALANCE);
-    }
-
-    /// As [`Self::settle_initial_sweeper_funding_check`], but answers with something the decoder
-    /// rejects, so the funding task takes its early return and records no observation. That early
-    /// return is unreachable from outside any other way.
-    pub fn fail_initial_sweeper_funding_check(&self) {
-        // Not a hex quantity, so decoding it fails: the minter has no way to read a balance from
-        // this, which is what makes the task skip without recording an observation.
-        const UNREADABLE: &str = "not a quantity";
-        self.answer_initial_sweeper_balance_read(UNREADABLE);
-    }
-
-    /// Answers that same read with `response`, whatever it is.
-    fn answer_initial_sweeper_balance_read<T: serde::Serialize>(&self, response: T) {
-        // Waits for the outcall rather than ticking a fixed number of times, so a check that stops
-        // firing fails here instead of surfacing in whichever test runs next.
-        let mut ticks = 0;
-        while pending_outcalls_for(&self.env, &JsonRpcMethod::EthGetBalance) == 0 {
-            assert!(
-                ticks < MAX_TICKS,
-                "no eth_getBalance outcall after {MAX_TICKS} ticks; the install-time sweeper \
-                 funding check did not fire. Pending outcalls:\n{}",
-                debug_http_outcalls(&self.env)
-            );
-            self.env.tick();
-            ticks += 1;
-        }
-        MockJsonRpcProviders::when(JsonRpcMethod::EthGetBalance)
-            .respond_for_all_with(response)
-            .build()
-            .expect_rpc_calls(self);
     }
 
     pub fn add_support_for_subaccount(self) -> Self {

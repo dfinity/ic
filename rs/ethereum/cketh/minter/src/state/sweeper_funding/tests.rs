@@ -37,6 +37,47 @@ mod accounting {
         assert_eq!(accounting.cumulative_burned(), Wei::ZERO);
         assert_eq!(accounting.cumulative_spent(), Wei::ZERO);
         assert_eq!(accounting.burned_not_yet_spent(), Wei::ZERO);
+        assert_eq!(accounting.sweeper_balance_lower_bound(), Wei::ZERO);
+    }
+
+    #[test]
+    fn should_not_credit_the_sweeper_balance_bound_before_the_funding_finalizes() {
+        let mut accounting = SweeperFundingAccounting::default();
+        accounting.record_burn(Wei::new(BURN));
+
+        assert_eq!(
+            accounting.sweeper_balance_lower_bound(),
+            Wei::ZERO,
+            "a burn alone has moved no ETH, so it bounds nothing"
+        );
+    }
+
+    #[test]
+    fn should_bound_the_sweeper_balance_by_what_fundings_delivered() {
+        let mut accounting = SweeperFundingAccounting::default();
+        for _ in 1..=3 {
+            accounting.record_burn(Wei::new(BURN));
+            accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
+        }
+
+        assert_eq!(
+            accounting.sweeper_balance_lower_bound(),
+            Wei::new(3 * (BURN - FEE)),
+            "the bound counts the transfers, not the burns that paid for them"
+        );
+    }
+
+    #[test]
+    fn should_not_credit_the_sweeper_balance_bound_for_a_failed_funding() {
+        let mut accounting = SweeperFundingAccounting::default();
+        accounting.record_burn(Wei::new(BURN));
+        accounting.record_finalized_funding(Wei::ZERO, Wei::new(FEE));
+
+        assert_eq!(
+            accounting.sweeper_balance_lower_bound(),
+            Wei::ZERO,
+            "a failed funding delivered nothing, however much it burned"
+        );
     }
 
     #[test]

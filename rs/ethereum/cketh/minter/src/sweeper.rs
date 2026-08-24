@@ -8,7 +8,6 @@
 mod tests;
 
 use crate::CKETH_FEE_SUBACCOUNT;
-use crate::eth_rpc_client::{NoReduction, ToReducedWithStrategy};
 use crate::guard::TimerGuard;
 use crate::ledger_client::LedgerClient;
 use crate::logs::{DEBUG, INFO};
@@ -20,7 +19,9 @@ use crate::state::transactions::EthWithdrawalRequest;
 use crate::state::{State, TaskType, mutate_state, read_state};
 use ic_canister_log::log;
 
-/// Tops the sweeper address up when its balance has fallen below the configured low-water mark.
+/// Tops the sweeper address up when the balance the minter can vouch for has fallen below the
+/// configured low-water mark. Reads state, decides, burns, records — no chain read, because the
+/// minter already knows a lower bound on that balance from its own events.
 pub async fn fund_sweeper_address() {
     let _guard = match TimerGuard::new(TaskType::SweeperFunding) {
         Ok(guard) => guard,
@@ -35,26 +36,10 @@ pub async fn fund_sweeper_address() {
         return;
     };
 
-    let block_height = read_state(|s| s.ethereum_block_height.clone()).into();
-    let sweeper_balance =
-        match crate::eth_rpc_client::get_balance::eth_get_balance(&sweeper, block_height)
-            .await
-            // No client-side reduction: the balance is whatever the EVM RPC canister's own
-            // consensus agreed on — a threshold of the providers — and a result it reports as
-            // inconsistent stays an error. Settling for fewer providers than the threshold demands
-            // is not a trade worth making on the number that decides whether ckETH gets burned.
-            .reduce_with_strategy(NoReduction)
-        {
-            Ok(balance) => balance,
-            Err(e) => {
-                // Not treated as a zero balance: that would burn ckETH for gas already in place.
-                log!(
-                    INFO,
-                    "[fund_sweeper]: SKIPPING: failed to read the balance of {sweeper}: {e:?}"
-                );
-                return;
-            }
-        };
+    // What the minter's own records say reached the sweeper address, rather than a chain read: the
+    // bound errs low, so it can only delay a funding, never authorise one against gas that is not
+    // there.
+    let sweeper_balance = read_state(|s| s.sweeper_funding.sweeper_balance_lower_bound());
 
     // Cached before deciding anything: sweeping consults this far more often than it changes, and
     // recording it even when no funding is due is what keeps the observation fresh.
@@ -71,7 +56,8 @@ pub async fn fund_sweeper_address() {
         FundingDecision::NotDue => {
             log!(
                 DEBUG,
-                "[fund_sweeper]: SKIPPING: {sweeper} holds {sweeper_balance}, at or above the low-water mark"
+                "[fund_sweeper]: SKIPPING: {sweeper} holds at least {sweeper_balance}, at or above \
+                 the low-water mark"
             );
             return;
         }
@@ -101,7 +87,7 @@ pub async fn fund_sweeper_address() {
 
     log!(
         INFO,
-        "[fund_sweeper]: {sweeper} holds {sweeper_balance}; funding it with {amount}, \
+        "[fund_sweeper]: {sweeper} holds at least {sweeper_balance}; funding it with {amount}, \
          burning as much ckETH"
     );
 
@@ -158,7 +144,10 @@ pub enum FundingDecision {
     NotDue,
 }
 
-/// Decides whether a funding is due at `sweeper_balance`.
+/// Decides whether a funding is due at `sweeper_balance`, which callers supply as a *lower* bound on
+/// the sweeper address' real balance. Erring low can only make a funding look due when it is not,
+/// which over-provisions gas the minter has burned for; the reverse would spend ETH against gas that
+/// is not there.
 ///
 /// Refuses while an earlier funding is still somewhere in the withdrawal pipeline, i.e. between its
 /// burn and its finalized transfer. That is prudence rather than a correctness requirement: each

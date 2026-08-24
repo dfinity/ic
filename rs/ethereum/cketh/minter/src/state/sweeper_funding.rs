@@ -88,6 +88,14 @@ impl SweeperFundingAccounting {
         self.cumulative_burned
     }
 
+    /// A lower bound on the sweeper address' ETH balance: what finalized fundings delivered. Nothing
+    /// debits it yet; when sweeping lands it will subtract the gas submitted sweeps provisioned, so
+    /// the bound stays conservative. ETH sent to the address by anyone else only pushes the true
+    /// balance above it.
+    pub fn sweeper_balance_lower_bound(&self) -> Wei {
+        self.cumulative_transferred
+    }
+
     /// ckETH burned for sweeping that has not been spent yet: the burn of a funding in flight, plus
     /// the fees earlier fundings provisioned but did not pay. Panics rather than saturating if spend
     /// ever exceeds burn, which would mean ckETH is under-backed.
