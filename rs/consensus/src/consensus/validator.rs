@@ -1348,7 +1348,7 @@ impl Validator {
         match subnet_splitting::get_status(
             self.registry_client.as_ref(),
             self.replica_config.subnet_id,
-            last_summary_block.context.registry_version,
+            &last_summary_block,
             proposal.context.registry_version,
         )
         .map_err(ValidationFailure::SubnetSplittingStatusError)?
@@ -1358,21 +1358,36 @@ impl Validator {
                 // If a subnet splitting is scheduled, then this means that
                 // `scheduled_at <= proposal.context.registry_version`
                 // (see `subnet_splitting::get_status`).
-                // This should not happen for a data block, because the registry version should be
-                // frozen to a version lower than `scheduled_at` until reaching a summary.
                 if !proposal.payload.is_summary() {
-                    return Err(
-                        InvalidArtifactReason::RegistryVersionNotFrozenDuringSubnetSplitting {
-                            context_registry_version: proposal.context.registry_version,
-                            subnet_split_scheduled_at: scheduled_at,
-                        }
-                        .into(),
-                    );
-                }
+                    // Until the summary block starting the split, the registry version of data
+                    // blocks is frozen to a version lower than `scheduled_at`, so a data block
+                    // must never look up a scheduled split. The only exception are the (empty)
+                    // data blocks built on top of a `Scheduled` summary block while the subnet is
+                    // halting: they keep the registry version frozen at the last summary's
+                    // version, i.e. exactly `scheduled_at`.
+                    let is_frozen_continuation = matches!(
+                        last_summary_block
+                            .payload
+                            .as_ref()
+                            .as_summary()
+                            .dkg
+                            .subnet_splitting_status(),
+                        SubnetSplittingStatus::Scheduled(_)
+                    ) && proposal.context.registry_version
+                        == last_summary_block.context.registry_version;
 
-                // The summary block should contain precisely the registry version at which the
-                // subnet splitting is scheduled.
-                if proposal.context.registry_version != scheduled_at {
+                    if !is_frozen_continuation {
+                        return Err(
+                            InvalidArtifactReason::RegistryVersionNotFrozenDuringSubnetSplitting {
+                                context_registry_version: proposal.context.registry_version,
+                                subnet_split_scheduled_at: scheduled_at,
+                            }
+                            .into(),
+                        );
+                    }
+                } else if proposal.context.registry_version != scheduled_at {
+                    // The summary block should contain precisely the registry version at which the
+                    // subnet splitting is scheduled.
                     return Err(
                         InvalidArtifactReason::WrongRegistryVersionAtSubnetSplittingSummary {
                             context_registry_version: proposal.context.registry_version,
@@ -3557,6 +3572,131 @@ pub mod test {
                         }
                     )) if context_registry_version == context.registry_version
                         && expected_registry_version == SUBNET_SPLIT_REGISTRY_VERSION
+                );
+            }
+        })
+    }
+
+    /// On top of the summary block starting the split (`Scheduled` status), the subnet is halting
+    /// and the (empty) data blocks must keep the registry version frozen at *precisely* the
+    /// version at which the split is scheduled, i.e. the version adopted by that summary block.
+    /// Anything above it is invalid.
+    #[rstest]
+    #[case::at_the_scheduled_version(SUBNET_SPLIT_REGISTRY_VERSION)]
+    #[case::above_the_scheduled_version(SUBNET_SPLIT_REGISTRY_VERSION.increment())]
+    fn test_data_block_on_top_of_the_summary_block_starting_the_split(
+        #[case] block_registry_version: RegistryVersion,
+    ) {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
+                state_manager,
+                registry_data_provider,
+                registry,
+                mut pool,
+                time_source,
+                replica_config,
+                ..
+            } = ValidatorAndDependenciesBuilder::single_subnet(
+                pool_config,
+                SOURCE_SUBNET_ID,
+                (1..=SUBNET_SPLIT_REGISTRY_VERSION.get())
+                    .map(|version| {
+                        (
+                            version,
+                            SubnetRecordBuilder::from(&committee)
+                                .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                                .build(),
+                        )
+                    })
+                    .collect(),
+            )
+            .build();
+            payload_builder
+                .get_mut()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| Ok(()));
+            schedule_subnet_split(&registry_data_provider, &registry, replica_config.subnet_id);
+
+            // Advance past the summary block starting the split. It adopts
+            // `SUBNET_SPLIT_REGISTRY_VERSION` (the latest version) and gets `Scheduled` status.
+            pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH + 1);
+            let scheduled_summary_block =
+                PoolReader::new(&pool).get_highest_finalized_summary_block();
+            assert_eq!(
+                scheduled_summary_block
+                    .payload
+                    .as_ref()
+                    .as_summary()
+                    .dkg
+                    .subnet_splitting_status(),
+                SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    source_subnet_id: replica_config.subnet_id,
+                    destination_subnet_id: DESTINATION_SUBNET_ID,
+                }),
+            );
+            assert_eq!(
+                scheduled_summary_block.context.registry_version,
+                SUBNET_SPLIT_REGISTRY_VERSION,
+            );
+
+            // Make a version above the scheduled one available locally, so that the invalid case
+            // below is rejected because the registry version is not frozen, and not simply because
+            // the version is not available locally.
+            add_subnet_record(
+                &registry_data_provider,
+                SUBNET_SPLIT_REGISTRY_VERSION.increment().get(),
+                replica_config.subnet_id,
+                SubnetRecordBuilder::from(&committee)
+                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                    .build(),
+            );
+            registry.reload();
+
+            let mut test_block = make_next_block(&pool);
+            test_block.content.as_mut().context.registry_version = block_registry_version;
+            test_block.update_content();
+            let payload = &test_block.content.as_ref().payload;
+            assert!(
+                !payload.is_summary() && payload.as_ref().is_empty(),
+                "expected an empty data block on top of the summary block starting the split",
+            );
+
+            // Sanity check: the subnet is indeed halting/halted at this height.
+            assert_matches!(
+                status::get_status(
+                    test_block.height(),
+                    &scheduled_summary_block,
+                    registry.as_ref(),
+                    replica_config.subnet_id,
+                    &PoolReader::new(&pool),
+                    &no_op_logger(),
+                ),
+                Some(Status::Halting | Status::Halted)
+            );
+
+            let context = test_block.content.as_ref().context.clone();
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(context.certified_height);
+            time_source.set_time(context.time).unwrap();
+
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
+            if block_registry_version == SUBNET_SPLIT_REGISTRY_VERSION {
+                assert_matches!(result, Ok(()));
+            } else {
+                assert_matches!(
+                    result,
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidArtifactReason::RegistryVersionNotFrozenDuringSubnetSplitting {
+                            context_registry_version,
+                            subnet_split_scheduled_at,
+                        }
+                    )) if context_registry_version == block_registry_version
+                        && subnet_split_scheduled_at == SUBNET_SPLIT_REGISTRY_VERSION
                 );
             }
         })

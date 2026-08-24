@@ -42,9 +42,6 @@ pub fn validate_payload(
     log: &ReplicaLogger,
 ) -> ValidationResult<DkgPayloadValidationError> {
     let current_height = parent.height.increment();
-    let registry_version = pool_reader
-        .registry_version(current_height)
-        .ok_or(DkgPayloadValidationFailure::FailedToGetRegistryVersion)?;
 
     let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
     let is_dkg_start_height = last_dkg_summary.get_next_start_height() == current_height;
@@ -61,9 +58,9 @@ pub fn validate_payload(
                 registry_client,
                 crypto,
                 pool_reader,
+                last_summary_block,
                 last_dkg_summary,
                 &parent,
-                registry_version,
                 state_reader,
                 validation_context,
                 log.clone(),
@@ -106,6 +103,10 @@ pub fn validate_payload(
                     InvalidDkgPayloadReason::DkgDealingAtStartHeight(current_height).into(),
                 );
             }
+
+            let registry_version = pool_reader
+                .registry_version(current_height)
+                .ok_or(DkgPayloadValidationFailure::FailedToGetRegistryVersion)?;
             let max_dealings_per_block = registry_client
                 .get_dkg_dealings_per_block(subnet_id, registry_version)
                 .map_err(DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock)?

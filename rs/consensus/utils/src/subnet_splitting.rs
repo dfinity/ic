@@ -31,35 +31,89 @@ pub enum StatusError {
     CatchUpContentsMissingInRegistry(RegistryVersion),
     #[error("Failed to deserialize CatchUpContents: {0}")]
     CatchUpContentsDeserializationError(ProxyDecodeError),
+    #[error(
+        "The looked up registry version {looked_up_registry_version} is smaller than the last \
+        summary block's registry version {last_summary_block_registry_version}"
+    )]
+    LookedUpRegistryVersionSmallerThanLastSummaryBlock {
+        looked_up_registry_version: RegistryVersion,
+        last_summary_block_registry_version: RegistryVersion,
+    },
 }
 
 /// Returns whether a split of `subnet_id` is still pending, as seen from
 /// `looked_up_registry_version`.
 ///
-/// A [`CupType::SubnetSplitting`] record is never deleted — a later split, a recovery or the
-/// genesis record just overwrite it — so its presence alone doesn't mean the split is still ahead
-/// of us. Three versions decide that:
+/// `looked_up_registry_version` must be at least `last_summary_block`'s registry version:
+/// validation context registry versions never decrease along the chain, so a smaller version can
+/// never legitimately be asked about. As defense-in-depth, such a call fails with
+/// [`StatusError::LookedUpRegistryVersionSmallerThanLastSummaryBlock`].
+///
+/// If `last_summary_block` is itself the summary block starting a split (its DKG summary has
+/// [`SubnetSplittingStatus::Scheduled`]), the split is pending by definition and the registry is
+/// not consulted at all: the subnet is halting, and the registry version must stay frozen at the
+/// version adopted by that summary block — the version at which the split was scheduled — until
+/// the post-split CUP replaces the chain. This holds regardless of what the registry contains at
+/// `looked_up_registry_version`; in particular, a recovery record may have already overwritten
+/// the subnet splitting record.
+///
+/// Otherwise, the registry decides. A [`CupType::SubnetSplitting`] record is never deleted — a
+/// later split, a recovery or the genesis record just overwrite it — so its presence alone
+/// doesn't mean the split is still ahead of us. Three versions decide that:
 ///
 /// * `looked_up_registry_version` is only an upper bound: the lookup returns the latest CUP
 ///   contents record written at or below it.
 /// * That record's own version is the version the subnet must adopt for the split to happen, and
 ///   is reported as `scheduled_at`.
-/// * `last_summary_block_registry_version` is the watermark: the block maker bumps the registry
+/// * `last_summary_block`'s registry version is the watermark: the block maker bumps the registry
 ///   version to `scheduled_at` exactly at the summary block starting the split (see
 ///   `BlockMaker::get_stable_registry_version`), so a record at or below the last summary's version
 ///   describes a split already picked up — [`Status::NotScheduled`].
 ///
-/// Two consequences: a lookup at or below `last_summary_block_registry_version` never reports
-/// [`Status::Scheduled`], and a fixed `looked_up_registry_version` flips to
-/// [`Status::NotScheduled`] once a summary block adopts `scheduled_at`.
-/// Said differently, the following invariant holds for a returned [`Status::Scheduled`] value:
-/// `last_summary_block_registry_version < scheduled_at <= looked_up_registry_version`.
+/// Consequently, the following invariant holds for a returned [`Status::Scheduled`] value:
+/// `last_summary_block.context.registry_version < scheduled_at <= looked_up_registry_version` when
+/// the last summary block is not `Scheduled`, and
+/// `scheduled_at == last_summary_block.context.registry_version` when it is.
 pub fn get_status(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
-    last_summary_block_registry_version: RegistryVersion,
+    last_summary_block: &Block,
     looked_up_registry_version: RegistryVersion,
 ) -> Result<Status, StatusError> {
+    // Validation context registry versions never decrease along the chain, so every version we
+    // are asked about must be at least the last summary block's version. This should never happen
+    // in practice and is only checked as defense-in-depth.
+    if looked_up_registry_version < last_summary_block.context.registry_version {
+        return Err(
+            StatusError::LookedUpRegistryVersionSmallerThanLastSummaryBlock {
+                looked_up_registry_version,
+                last_summary_block_registry_version: last_summary_block.context.registry_version,
+            },
+        );
+    }
+
+    // While the last summary block is itself the summary starting a split, the split stays
+    // pending regardless of what the registry contains at `looked_up_registry_version` (e.g. a
+    // recovery record could have already overwritten the subnet splitting record): the subnet is
+    // halting, and the registry version stays frozen at the version adopted by that summary block
+    // — the version at which the split was scheduled — until the post-split CUP replaces the
+    // chain.
+    if let SubnetSplittingStatus::Scheduled(SplittingArgs {
+        destination_subnet_id,
+        source_subnet_id: _,
+    }) = last_summary_block
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg
+        .subnet_splitting_status()
+    {
+        return Ok(Status::Scheduled {
+            destination_subnet_id,
+            scheduled_at: last_summary_block.context.registry_version,
+        });
+    }
+
     let versioned_record = registry_client
         .get_cup_contents(subnet_id, looked_up_registry_version)
         .map_err(|err| StatusError::FailedToGetCatchUpContents(looked_up_registry_version, err))?;
@@ -74,7 +128,7 @@ pub fn get_status(
         return Ok(Status::NotScheduled);
     };
 
-    if versioned_record.version <= last_summary_block_registry_version {
+    if versioned_record.version <= last_summary_block.context.registry_version {
         // The last summary block already references this version, so this record corresponds to a
         // past subnet split rather than a pending one.
         return Ok(Status::NotScheduled);
@@ -239,6 +293,27 @@ mod tests {
     }
 
     #[rstest]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+        REGISTRY_CUP_REGISTRY_VERSION,
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+    )]
+    #[case(REGISTRY_CUP_REGISTRY_VERSION, REGISTRY_CUP_REGISTRY_VERSION)]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION,
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+    )]
     fn get_status_should_return_not_scheduled_when_latest_cup_is_not_subnet_splitting_test(
         #[values(
             None,
@@ -251,24 +326,24 @@ mod tests {
         )]
         cup_type: Option<CupType>,
         #[values(
-            REGISTRY_CUP_REGISTRY_VERSION.decrement(),
-            REGISTRY_CUP_REGISTRY_VERSION,
-            REGISTRY_CUP_REGISTRY_VERSION.increment(),
+            SubnetSplittingStatus::NotScheduled,
+            SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                new_subnet_id: SOURCE_SUBNET_ID,
+            }),
         )]
-        last_summary_block_registry_version: RegistryVersion,
-        #[values(
-            REGISTRY_CUP_REGISTRY_VERSION.decrement(),
-            REGISTRY_CUP_REGISTRY_VERSION,
-            REGISTRY_CUP_REGISTRY_VERSION.increment(),
-        )]
-        looked_up_registry_version: RegistryVersion,
+        last_summary_block_status: SubnetSplittingStatus,
+        #[case] last_summary_block_registry_version: RegistryVersion,
+        #[case] looked_up_registry_version: RegistryVersion,
     ) {
         let registry = set_up_registry(cup_type);
 
         let status = get_status(
             registry.as_ref(),
             SUBNET_1,
-            last_summary_block_registry_version,
+            &make_summary_block(
+                last_summary_block_status,
+                last_summary_block_registry_version,
+            ),
             looked_up_registry_version,
         )
         .expect("Should succeed given correct inputs");
@@ -286,6 +361,13 @@ mod tests {
         REGISTRY_CUP_REGISTRY_VERSION.increment(),
     )]
     fn get_status_should_return_scheduled_test(
+        #[values(
+            SubnetSplittingStatus::NotScheduled,
+            SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                new_subnet_id: SOURCE_SUBNET_ID,
+            }),
+        )]
+        last_summary_block_status: SubnetSplittingStatus,
         #[case] last_summary_block_registry_version: RegistryVersion,
         #[case] looked_up_registry_version: RegistryVersion,
     ) {
@@ -298,7 +380,10 @@ mod tests {
         let status = get_status(
             registry.as_ref(),
             SOURCE_SUBNET_ID,
-            last_summary_block_registry_version,
+            &make_summary_block(
+                last_summary_block_status,
+                last_summary_block_registry_version,
+            ),
             looked_up_registry_version,
         )
         .expect("Should succeed given correct inputs");
@@ -310,8 +395,9 @@ mod tests {
                 scheduled_at: REGISTRY_CUP_REGISTRY_VERSION,
             }
         );
-        // Asserting the invariant described in the function documentation:
-        // `last_summary_block_registry_version < scheduled_at <= looked_up_registry_version`.
+        // Asserting the invariant described in the function documentation, which holds because
+        // the last summary block is not `Scheduled`:
+        // `last_summary_block.context.registry_version < scheduled_at <= looked_up_registry_version`.
         assert!(
             last_summary_block_registry_version < REGISTRY_CUP_REGISTRY_VERSION
                 && REGISTRY_CUP_REGISTRY_VERSION <= looked_up_registry_version
@@ -323,10 +409,6 @@ mod tests {
         REGISTRY_CUP_REGISTRY_VERSION.decrement(),
         REGISTRY_CUP_REGISTRY_VERSION.decrement(),
     )]
-    #[case(
-        REGISTRY_CUP_REGISTRY_VERSION,
-        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
-    )]
     #[case(REGISTRY_CUP_REGISTRY_VERSION, REGISTRY_CUP_REGISTRY_VERSION)]
     #[case(
         REGISTRY_CUP_REGISTRY_VERSION,
@@ -334,17 +416,16 @@ mod tests {
     )]
     #[case(
         REGISTRY_CUP_REGISTRY_VERSION.increment(),
-        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
-    )]
-    #[case(
-        REGISTRY_CUP_REGISTRY_VERSION.increment(),
-        REGISTRY_CUP_REGISTRY_VERSION,
-    )]
-    #[case(
-        REGISTRY_CUP_REGISTRY_VERSION.increment(),
         REGISTRY_CUP_REGISTRY_VERSION.increment(),
     )]
-    fn get_status_should_return_not_scheduled_when_subnet_splitting_was_already_done_test(
+    fn get_status_should_return_not_scheduled_when_subnet_splitting_not_reached_or_already_done(
+        #[values(
+            SubnetSplittingStatus::NotScheduled,
+            SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                new_subnet_id: SOURCE_SUBNET_ID,
+            }),
+        )]
+        last_summary_block_status: SubnetSplittingStatus,
         #[case] last_summary_block_registry_version: RegistryVersion,
         #[case] looked_up_registry_version: RegistryVersion,
     ) {
@@ -357,7 +438,10 @@ mod tests {
         let status = get_status(
             registry.as_ref(),
             SOURCE_SUBNET_ID,
-            last_summary_block_registry_version,
+            &make_summary_block(
+                last_summary_block_status,
+                last_summary_block_registry_version,
+            ),
             looked_up_registry_version,
         )
         .expect("Should succeed given correct inputs");
@@ -365,7 +449,148 @@ mod tests {
         assert_eq!(status, Status::NotScheduled);
     }
 
-    fn make_summary_block_with_status(subnet_splitting_status: SubnetSplittingStatus) -> Block {
+    /// Validation context registry versions never decrease along the chain, so `get_status` can
+    /// never legitimately be asked about a version smaller than the last summary block's version.
+    /// As defense-in-depth, such a call must fail — regardless of the other inputs.
+    #[rstest]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION,
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+    )]
+    #[case(
+        REGISTRY_CUP_REGISTRY_VERSION.increment(),
+        REGISTRY_CUP_REGISTRY_VERSION,
+    )]
+    fn get_status_should_fail_when_looked_up_version_is_smaller_than_last_summary_version_test(
+        #[values(
+            None,
+            Some(CupType::Genesis(GenesisArgs { height: 0 })),
+            Some(CupType::Recovery(RecoveryArgs {
+                height: 1_000,
+                time: 1,
+                state_hash: vec![],
+            })),
+            Some(CupType::SubnetSplitting(
+                ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
+                    destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
+                },
+            )),
+        )]
+        cup_type: Option<CupType>,
+        #[values(
+            SubnetSplittingStatus::NotScheduled,
+            SubnetSplittingStatus::Scheduled(SplittingArgs {
+                source_subnet_id: SOURCE_SUBNET_ID,
+                destination_subnet_id: DESTINATION_SUBNET_ID,
+            }),
+            SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                new_subnet_id: SOURCE_SUBNET_ID,
+            }),
+        )]
+        last_summary_block_status: SubnetSplittingStatus,
+        #[case] last_summary_block_registry_version: RegistryVersion,
+        #[case] looked_up_registry_version: RegistryVersion,
+    ) {
+        let registry = set_up_registry(cup_type);
+
+        let result = get_status(
+            registry.as_ref(),
+            SOURCE_SUBNET_ID,
+            &make_summary_block(
+                last_summary_block_status,
+                last_summary_block_registry_version,
+            ),
+            looked_up_registry_version,
+        );
+
+        assert_matches!(
+            result,
+            Err(StatusError::LookedUpRegistryVersionSmallerThanLastSummaryBlock {
+                looked_up_registry_version: looked_up,
+                last_summary_block_registry_version: last_summary,
+            }) if looked_up == looked_up_registry_version
+                && last_summary == last_summary_block_registry_version
+        );
+    }
+
+    /// While the last summary block is itself the one starting the split (`Scheduled` status), the
+    /// split stays pending even though the last summary already references the split's registry
+    /// version: the subnet is halting and the registry version stays frozen at `scheduled_at` for
+    /// all blocks built on top, until the post-split CUP replaces the chain. This holds regardless
+    /// of the record found at `looked_up_registry_version`.
+    #[rstest]
+    fn get_status_should_return_scheduled_when_last_summary_block_starts_the_split_test(
+        #[values(
+            None,
+            Some(CupType::Genesis(GenesisArgs { height: 0 })),
+            Some(CupType::Recovery(RecoveryArgs {
+                height: 1_000,
+                time: 1,
+                state_hash: vec![],
+            })),
+            Some(CupType::SubnetSplitting(
+                ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
+                    destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
+                },
+            )),
+        )]
+        cup_type: Option<CupType>,
+        #[values(REGISTRY_CUP_REGISTRY_VERSION, REGISTRY_CUP_REGISTRY_VERSION.increment())]
+        looked_up_registry_version: RegistryVersion,
+    ) {
+        let registry = set_up_registry(cup_type);
+
+        let status = get_status(
+            registry.as_ref(),
+            SOURCE_SUBNET_ID,
+            // The summary block starting the split adopts `REGISTRY_CUP_REGISTRY_VERSION`, the
+            // version at which the split is scheduled.
+            &make_scheduled_summary_block(),
+            looked_up_registry_version,
+        )
+        .expect("Should succeed given correct inputs");
+
+        assert_eq!(
+            status,
+            Status::Scheduled {
+                destination_subnet_id: DESTINATION_SUBNET_ID,
+                scheduled_at: REGISTRY_CUP_REGISTRY_VERSION,
+            }
+        );
+    }
+
+    /// While the last summary block is the one starting the split, the registry is not consulted
+    /// at all, so the status is available even when the registry is not.
+    #[rstest]
+    fn get_status_should_return_scheduled_when_last_summary_block_starts_the_split_and_registry_is_unreadable_test(
+        #[values(REGISTRY_CUP_REGISTRY_VERSION, REGISTRY_CUP_REGISTRY_VERSION.increment())]
+        looked_up_registry_version: RegistryVersion,
+    ) {
+        let status = get_status(
+            &ErrorRegistryClient,
+            SOURCE_SUBNET_ID,
+            &make_scheduled_summary_block(),
+            looked_up_registry_version,
+        )
+        .expect("Should succeed without consulting the registry");
+
+        assert_eq!(
+            status,
+            Status::Scheduled {
+                destination_subnet_id: DESTINATION_SUBNET_ID,
+                scheduled_at: REGISTRY_CUP_REGISTRY_VERSION,
+            }
+        );
+    }
+
+    fn make_summary_block(
+        subnet_splitting_status: SubnetSplittingStatus,
+        registry_version: RegistryVersion,
+    ) -> Block {
         let mut summary = SummaryPayload::fake();
         summary.dkg.subnet_splitting_status =
             BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
@@ -380,10 +605,14 @@ mod tests {
             rank: Rank(0),
             context: ValidationContext {
                 certified_height: Height::new(0),
-                registry_version: REGISTRY_CUP_REGISTRY_VERSION,
+                registry_version,
                 time: UNIX_EPOCH,
             },
         }
+    }
+
+    fn make_summary_block_with_status(subnet_splitting_status: SubnetSplittingStatus) -> Block {
+        make_summary_block(subnet_splitting_status, REGISTRY_CUP_REGISTRY_VERSION)
     }
 
     fn make_scheduled_summary_block() -> Block {

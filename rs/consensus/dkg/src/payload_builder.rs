@@ -75,9 +75,9 @@ pub fn create_payload(
             registry_client,
             crypto,
             pool_reader,
+            last_summary_block,
             last_dkg_summary,
             parent,
-            last_summary_block.context.registry_version,
             state_reader,
             validation_context,
             logger,
@@ -430,9 +430,9 @@ pub(super) fn create_summary_payload(
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
-    last_summary: &DkgSummary,
+    last_summary_block: &Block,
+    last_dkg_summary: &DkgSummary,
     parent: &Block,
-    registry_version: RegistryVersion,
     state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
@@ -443,7 +443,7 @@ pub(super) fn create_summary_payload(
     let (mut all_dealings, completed_dkgs) = utils::get_dkg_dealings(pool_reader, parent);
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
-    for (dkg_id, config) in last_summary.configs.iter() {
+    for (dkg_id, config) in last_dkg_summary.configs.iter() {
         if dkg_id.target_subnet.is_remote() {
             // Skip remote DKGs
             continue;
@@ -478,7 +478,7 @@ pub(super) fn create_summary_payload(
     let height = parent.height.increment();
 
     // Current transcripts come from next transcripts of the last_summary.
-    let current_transcripts = as_next_transcripts(last_summary, &logger);
+    let current_transcripts = as_next_transcripts(last_dkg_summary, &logger);
 
     let vet_key_ids = vetkd_key_ids_for_subnet(
         subnet_id,
@@ -515,12 +515,12 @@ pub(super) fn create_summary_payload(
         .map_err(DkgPayloadCreationError::StateManagerError)?;
 
     let remote_dkg_attempts = get_updated_remote_dkg_attempts(
-        last_summary,
+        last_dkg_summary,
         state.get_ref(),
         get_completed_target_ids(&completed_dkgs),
     );
 
-    let interval_length = last_summary.next_interval_length;
+    let interval_length = last_dkg_summary.next_interval_length;
     let next_interval_length = get_dkg_interval_length(
         registry_client,
         validation_context.registry_version,
@@ -545,7 +545,7 @@ pub(super) fn create_summary_payload(
     let subnet_splitting_status = get_subnet_splitting_status(
         subnet_id,
         registry_client,
-        registry_version,
+        last_summary_block,
         validation_context.registry_version,
     )?;
 
@@ -553,7 +553,7 @@ pub(super) fn create_summary_payload(
         local_configs,
         current_transcripts,
         next_transcripts,
-        registry_version,
+        /* registry_version=*/ last_summary_block.context.registry_version,
         interval_length,
         next_interval_length,
         height,
@@ -563,18 +563,20 @@ pub(super) fn create_summary_payload(
 }
 
 /// Returns the subnet splitting status to be recorded in the summary created at
-/// `looked_up_registry_version`, given that the last summary block referenced
-/// `last_summary_registry_version`.
+/// `looked_up_registry_version`, given the last summary block. Note that a summary created on top
+/// of a summary block which itself has [`SubnetSplittingStatus::Scheduled`] keeps the `Scheduled`
+/// status: the split stays pending, and the registry version stays frozen at the scheduled
+/// version, until the post-split CUP replaces the chain.
 fn get_subnet_splitting_status(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    last_summary_registry_version: RegistryVersion,
+    last_summary_block: &Block,
     looked_up_registry_version: RegistryVersion,
 ) -> Result<SubnetSplittingStatus, DkgPayloadCreationError> {
     let status = subnet_splitting::get_status(
         registry_client,
         subnet_id,
-        last_summary_registry_version,
+        last_summary_block,
         looked_up_registry_version,
     )
     .map_err(|err| DkgPayloadCreationError::SubnetSplittingStatusError(err.to_string()))?;
@@ -1007,15 +1009,41 @@ mod tests {
     };
     use ic_types::consensus::dkg::RemoteDkgAttempts;
     use ic_types::{
-        RegistryVersion,
+        RegistryVersion, ReplicaVersion,
         backwards_compatibility::BackwardsCompatible,
-        consensus::{BlockPayload, Payload, dkg::SplittingArgs},
-        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
+        consensus::{BlockPayload, Payload, Rank, SummaryPayload, dkg::SplittingArgs},
+        crypto::{
+            CryptoHash, CryptoHashOf,
+            threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
+        },
         subnet_id_into_protobuf,
         time::UNIX_EPOCH,
     };
     use rstest::rstest;
     use std::collections::{BTreeMap, BTreeSet};
+
+    /// Wraps the given DKG summary into a summary block whose validation context references
+    /// `registry_version`.
+    fn make_summary_block(dkg_summary: DkgSummary, registry_version: RegistryVersion) -> Block {
+        Block {
+            version: ReplicaVersion::default(),
+            parent: CryptoHashOf::from(CryptoHash(vec![])),
+            payload: Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(SummaryPayload {
+                    dkg: dkg_summary,
+                    idkg: None,
+                }),
+            ),
+            height: Height::new(0),
+            rank: Rank(0),
+            context: ValidationContext {
+                certified_height: Height::new(0),
+                registry_version,
+                time: UNIX_EPOCH,
+            },
+        }
+    }
 
     // Tests creation of local configs.
     #[test]
@@ -1405,13 +1433,15 @@ mod tests {
             let cup_contents = registry
                 .get_cup_contents(subnet_id, registry.get_latest_version())
                 .expect("Failed to retreive the DKG transcripts from registry");
+            let registry_cup_version = cup_contents.version;
             let mut genesis_summary = get_dkg_summary_from_cup_contents(
                 cup_contents.value.expect("Missing CUP contents"),
                 subnet_id,
                 &*registry,
-                cup_contents.version,
+                registry_cup_version,
             )
             .expect("Failed to get DKG summary from CUP contents");
+            let genesis_block = make_summary_block(genesis_summary.clone(), registry_cup_version);
 
             // Let's ensure we have no summaries for the whole DKG interval.
             for _ in 0..dkg_interval_len {
@@ -1421,15 +1451,15 @@ mod tests {
             }
 
             let latest_block = pool.get_cache().finalized_block();
-            let create_summary_payload = |last_summary: &DkgSummary| {
+            let create_summary_payload = |last_summary_block: &Block| {
                 create_summary_payload(
                     subnet_test_id(222),
                     registry.as_ref(),
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
-                    &last_summary.clone(),
+                    last_summary_block,
+                    &last_summary_block.payload.as_ref().as_summary().dkg,
                     &latest_block,
-                    RegistryVersion::from(112),
                     state_manager.as_ref(),
                     &ValidationContext {
                         registry_version: RegistryVersion::from(112),
@@ -1443,7 +1473,7 @@ mod tests {
             };
 
             // Test the regular case (Both DKGs succeeded)
-            let next_summary = create_summary_payload(&genesis_summary);
+            let next_summary = create_summary_payload(&genesis_block);
             for conf in next_summary.configs.values() {
                 let tag = &conf.dkg_id().dkg_tag;
                 match tag {
@@ -1459,7 +1489,9 @@ mod tests {
             // behaviour of DKG failing validations.
             // In this case, the `current_transcripts` are being reshared.
             genesis_summary.configs.clear();
-            let next_summary = create_summary_payload(&genesis_summary);
+            let genesis_block_without_configs =
+                make_summary_block(genesis_summary, registry_cup_version);
+            let next_summary = create_summary_payload(&genesis_block_without_configs);
             for conf in next_summary.configs.values() {
                 let tag = &conf.dkg_id().dkg_tag;
                 match tag {
@@ -1806,6 +1838,13 @@ mod tests {
                 last_summary_registry_version,
             )
             .expect("Failed to get DKG summary from CUP contents");
+            let genesis_summary_block =
+                make_summary_block(genesis_summary.clone(), last_summary_registry_version);
+            // Sanity check
+            assert_eq!(
+                genesis_summary_block.context.registry_version,
+                last_summary_registry_version
+            );
 
             // Schedule the split by adding a subnet splitting CUP contents record for the source
             // subnet at `split_registry_version`.
@@ -1834,9 +1873,9 @@ mod tests {
                 registry.as_ref(),
                 crypto.as_ref(),
                 &PoolReader::new(&pool),
+                &genesis_summary_block,
                 &genesis_summary,
                 &parent,
-                last_summary_registry_version,
                 state_manager.as_ref(),
                 &ValidationContext {
                     registry_version: split_registry_version,
@@ -1852,7 +1891,7 @@ mod tests {
                 get_subnet_splitting_status(
                     source_subnet_id,
                     registry.as_ref(),
-                    last_summary_registry_version,
+                    &genesis_summary_block,
                     split_registry_version,
                 )
                 .expect("Failed to get the subnet splitting status"),
@@ -1870,13 +1909,43 @@ mod tests {
                 })
             );
 
-            // The summary block starting the split adopts `split_registry_version`, so from the
-            // next summary on the split is not pending anymore.
+            // While the last summary block is the one starting the split (`Scheduled` status,
+            // referencing `split_registry_version`), the split stays pending: the registry
+            // version stays frozen at `split_registry_version` for the blocks built on top,
+            // until the post-split CUP replaces the chain. In particular, a further summary
+            // created on top keeps the `Scheduled` status.
+            let scheduled_summary_block =
+                make_summary_block(summary.clone(), split_registry_version);
             assert_eq!(
                 get_subnet_splitting_status(
                     source_subnet_id,
                     registry.as_ref(),
+                    &scheduled_summary_block,
                     split_registry_version,
+                )
+                .expect("Failed to get the subnet splitting status"),
+                SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    source_subnet_id,
+                    destination_subnet_id,
+                })
+            );
+
+            // Once the last summary block references `split_registry_version` without being the
+            // summary starting the split (e.g. the summary of the post-split CUP), the split is
+            // not pending anymore.
+            let mut post_split_summary = genesis_summary;
+            post_split_summary.subnet_splitting_status = BackwardsCompatible::new_for_test_only(
+                Some(SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                    new_subnet_id: source_subnet_id,
+                })),
+            );
+            let post_split_summary_block =
+                make_summary_block(post_split_summary, split_registry_version);
+            assert_eq!(
+                get_subnet_splitting_status(
+                    source_subnet_id,
+                    registry.as_ref(),
+                    &post_split_summary_block,
                     split_registry_version,
                 )
                 .expect("Failed to get the subnet splitting status"),
