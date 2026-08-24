@@ -1,5 +1,5 @@
-//! What it takes for a request to travel a [`TransactionPipeline`], and the minter's own
-//! implementation of it.
+//! What it takes for a request to travel a [`TransactionPipeline`](super::TransactionPipeline),
+//! and the minter's own implementation of it.
 
 use super::{CreateTransactionError, EthWithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::lifecycle::EthereumNetwork;
@@ -7,7 +7,7 @@ use crate::numeric::{GasAmount, LedgerBurnIndex, TransactionNonce, Wei};
 use crate::tx::{Eip1559TransactionRequest, GasFeeEstimate, ResubmissionStrategy};
 use std::fmt;
 
-/// A request that can flow through a [`TransactionPipeline`]: it carries an identity used as the
+/// A request that can flow through a `TransactionPipeline`: it carries an identity used as the
 /// pipeline's alternate map key, and knows the EIP-1559 transaction it turns into.
 ///
 /// Implemented so far only by [`WithdrawalRequest`], the minter's main-address pipeline
