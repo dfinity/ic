@@ -547,7 +547,7 @@ impl DepositCkErc20 {
         }
     }
 
-    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+    pub fn to_log_entry(&self) -> alloy_rpc_types_eth::Log {
         match self {
             Self::CkErc20(params) => params.to_log_entry(),
             Self::CkErc20WithSubaccount(params) => params.to_log_entry(),
@@ -577,7 +577,7 @@ impl DepositCkErc20Params {
         }
     }
 
-    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+    pub fn to_log_entry(&self) -> alloy_rpc_types_eth::Log {
         let amount_hex = format!("0x{:0>64x}", self.ckerc20_amount);
         let topics = vec![
             RECEIVED_ERC20_EVENT_TOPIC.to_string(),
@@ -642,7 +642,7 @@ impl DepositCkErc20WithSubaccountParams {
         }
     }
 
-    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+    pub fn to_log_entry(&self) -> alloy_rpc_types_eth::Log {
         let data = {
             let amount_hex = format!("{:0>64x}", self.ckerc20_amount);
             assert_eq!(amount_hex.len(), 64);
@@ -701,7 +701,7 @@ fn erc20_default_deposit_transaction_data() -> DepositTransactionData {
 pub struct CkErc20DepositFlow {
     pub setup: CkErc20Setup,
     params: DepositCkErc20,
-    override_erc20_log_entry: Box<dyn Fn(ethers_core::types::Log) -> ethers_core::types::Log>,
+    override_erc20_log_entry: Box<dyn Fn(alloy_rpc_types_eth::Log) -> alloy_rpc_types_eth::Log>,
 }
 
 impl AsRef<CkEthSetup> for CkErc20DepositFlow {
@@ -720,7 +720,7 @@ impl CkErc20DepositFlow {
     }
 
     pub fn with_override_erc20_log_entry<
-        F: Fn(ethers_core::types::Log) -> ethers_core::types::Log + 'static,
+        F: Fn(alloy_rpc_types_eth::Log) -> alloy_rpc_types_eth::Log + 'static,
     >(
         mut self,
         override_mock: F,

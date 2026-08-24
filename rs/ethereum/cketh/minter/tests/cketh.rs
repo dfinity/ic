@@ -413,20 +413,20 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
         .retrieve_fee_history(move |mock| {
             mock.modify_response(
                 JsonRpcProvider::Provider1,
-                &mut |response: &mut ethers_core::types::FeeHistory| {
-                    response.oldest_block = 0x17740742_u64.into()
+                &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                    response.oldest_block = 0x17740742_u64
                 },
             )
             .modify_response(
                 JsonRpcProvider::Provider2,
-                &mut |response: &mut ethers_core::types::FeeHistory| {
-                    response.oldest_block = 0x17740743_u64.into()
+                &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                    response.oldest_block = 0x17740743_u64
                 },
             )
             .modify_response(
                 JsonRpcProvider::Provider3,
-                &mut |response: &mut ethers_core::types::FeeHistory| {
-                    response.oldest_block = 0x17740744_u64.into()
+                &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                    response.oldest_block = 0x17740744_u64
                 },
             )
         })

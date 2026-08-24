@@ -36,45 +36,25 @@ fn should_use_meaningful_constants() {
 
 #[test]
 fn should_have_meaningful_ckerc20_withdrawal_transaction_fee() {
-    fn convert_fee_history(fee_history: ethers_core::types::FeeHistory) -> FeeHistory {
-        let mut bytes = [0_u8; 32];
-        fee_history.oldest_block.to_big_endian(&mut bytes);
-        let oldest_block: Nat256 = Nat256::from_be_bytes(bytes);
-
-        let base_fee_per_gas = fee_history
-            .base_fee_per_gas
-            .into_iter()
-            .map(|val| {
-                let mut bytes = [0_u8; 32];
-                val.to_big_endian(&mut bytes);
-                Nat256::from_be_bytes(bytes)
-            })
-            .collect();
-
-        let reward = fee_history
-            .reward
-            .into_iter()
-            .map(|inner_vec| {
-                inner_vec
-                    .into_iter()
-                    .map(|val| {
-                        let mut bytes = [0_u8; 32];
-                        val.to_big_endian(&mut bytes);
-                        Nat256::from_be_bytes(bytes)
-                    })
-                    .collect()
-            })
-            .collect();
-
+    fn convert_fee_history(fee_history: alloy_rpc_types_eth::FeeHistory) -> FeeHistory {
         FeeHistory {
-            oldest_block,
-            base_fee_per_gas,
+            oldest_block: Nat256::from(fee_history.oldest_block),
+            base_fee_per_gas: fee_history
+                .base_fee_per_gas
+                .into_iter()
+                .map(Nat256::from)
+                .collect(),
             gas_used_ratio: fee_history.gas_used_ratio,
-            reward,
+            reward: fee_history
+                .reward
+                .unwrap_or_default()
+                .into_iter()
+                .map(|rewards| rewards.into_iter().map(Nat256::from).collect())
+                .collect(),
         }
     }
 
-    let fee_history_core: ethers_core::types::FeeHistory =
+    let fee_history_core: alloy_rpc_types_eth::FeeHistory =
         serde_json::from_value(fee_history_json_value()).unwrap();
     let fee_history = convert_fee_history(fee_history_core);
 
