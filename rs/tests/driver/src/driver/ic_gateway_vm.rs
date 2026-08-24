@@ -15,7 +15,7 @@ use url::Url;
 
 use crate::{
     driver::{
-        dev_root_ca::{dev_root_ca, dev_root_ca_cert_pem},
+        dev_root_ca::dev_root_ca,
         farm::{
             Certificate, DemoCertificate, DnsRecord, DnsRecordType, HostFeature, PlaynetCertificate,
         },
@@ -68,36 +68,6 @@ impl DeployedIcGatewayVm {
     /// Retrieves the underlying VM.
     pub fn get_vm(&self) -> AllocatedVm {
         self.vm.clone()
-    }
-
-    /// The extra trust anchor a client needs in order to verify the gateway's
-    /// TLS certificate, if any.
-    ///
-    /// On the [`SystemTestBackend::Local`] backend the certificate is issued by
-    /// the dev root CA (see [`DevRootCa`]) rather than by a public one, so a
-    /// driver-side client has to add that CA to its roots:
-    /// `builder.add_root_certificate(cert)`. `reqwest` *adds* it to the
-    /// platform's roots rather than replacing them, so the client keeps trusting
-    /// everything it trusted before. On [`SystemTestBackend::Farm`] the playnet
-    /// certificate chains to a public CA and `None` is returned.
-    ///
-    /// This covers the gateway only. Clients that dial an API boundary node
-    /// directly still need `danger_accept_invalid_certs`, and for a different
-    /// reason: `IcNodeSnapshot::get_public_url` hands them an IP-literal URL, which
-    /// no name in the node's certificate can match. (Whether that certificate has a
-    /// CA at all depends on the test — under `with_api_boundary_nodes_playnet` it
-    /// is issued by `LocalApiBoundaryNodesPlaynet`'s ephemeral CA, and otherwise the
-    /// node self-signs it via `generate_ic_boundary_tls_cert`.)
-    pub fn root_certificate(&self) -> Result<Option<reqwest::Certificate>> {
-        match SystemTestBackend::read_attribute(&self.env) {
-            SystemTestBackend::Local => {
-                let cert_pem = dev_root_ca_cert_pem()?;
-                let cert = reqwest::Certificate::from_pem(cert_pem.as_bytes())
-                    .context("parsing the dev root CA certificate as a trust anchor")?;
-                Ok(Some(cert))
-            }
-            SystemTestBackend::Farm => Ok(None),
-        }
     }
 }
 
@@ -270,24 +240,7 @@ sudo networkctl reconfigure enp2s0
             self.universal_vm.name,
             health_url.as_str()
         );
-        // The gateway domain resolves for the driver as well as for the VMs — the
-        // wildcard record above, plus the resolver
-        // `LocalBackend::install_group_resolv_conf` gave the driver — so the only
-        // thing the Local backend needs here is the trust anchor for a certificate
-        // the dev root CA issued rather than a public one.
-        let root_cert = match backend {
-            SystemTestBackend::Local => Some(
-                reqwest::Certificate::from_pem(dev_root_ca_cert_pem()?.as_bytes())
-                    .context("parsing the dev root CA certificate as a trust anchor")?,
-            ),
-            SystemTestBackend::Farm => None,
-        };
-        block_on(await_status_is_healthy(
-            &env.logger(),
-            health_url,
-            msg,
-            root_cert,
-        ))
+        block_on(await_status_is_healthy(&env.logger(), health_url, msg))
     }
 
     /// Loads existing playnet configuration or creates a new one.
@@ -814,23 +767,12 @@ async fn await_dns_propagation(logger: &Logger, base_domain: &str) -> Result<()>
     .await
 }
 
-async fn await_status_is_healthy(
-    logger: &Logger,
-    url: Url,
-    msg: String,
-    root_cert: Option<reqwest::Certificate>,
-) -> Result<()> {
+async fn await_status_is_healthy(logger: &Logger, url: Url, msg: String) -> Result<()> {
     info!(logger, "Waiting for IcGatewayVm to become healthy ...");
 
     let request = Request::new(Method::GET, url);
     retry_with_msg_async!(&msg, logger, READY_TIMEOUT, RETRY_INTERVAL, || async {
-        let mut builder = Client::builder();
-        // On the Local backend the certificate is issued by the dev root CA, so
-        // add it as a trust anchor rather than skipping verification.
-        if let Some(cert) = root_cert.as_ref() {
-            builder = builder.add_root_certificate(cert.clone());
-        }
-        let client = builder.build()?;
+        let client = Client::builder().build()?;
         let response = client
             .execute(request.try_clone().unwrap())
             .await

@@ -66,13 +66,6 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
     let dapp_url = format!("https://{canister_id}.{ic_gateway_domain}");
     let log = env.logger();
 
-    // On the Local backend the gateway's certificate is issued by the dev root CA
-    // rather than by a public one, so trust that CA. Its domain — and, thanks to
-    // the group's wildcard record, this canister's subdomain of it — resolves on
-    // both backends, so nothing else is needed.
-    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
-    let root_cert = ic_gateway.root_certificate().unwrap();
-
     block_on(async {
         ic_system_test_driver::retry_with_msg_async!(
             format!("get html from {}", dapp_url),
@@ -80,14 +73,11 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
             secs(600),
             secs(30),
             async || {
-                let mut builder = reqwest::Client::builder()
+                let client = reqwest::Client::builder()
                     .use_rustls_tls()
                     .https_only(true)
-                    .http1_only();
-                if let Some(cert) = &root_cert {
-                    builder = builder.add_root_certificate(cert.clone());
-                }
-                let client = builder.build()?;
+                    .http1_only()
+                    .build()?;
 
                 let resp = client
                     .get(dapp_url.clone())
