@@ -204,9 +204,11 @@ fn decode_signed_transaction(
     (request, signature)
 }
 fn map_signed_sweep_transaction(raw_transaction: &str) -> SignedSweepTransaction {
+    use std::str::FromStr;
+
     const EIP_7702_TRANSACTION_TYPE: u8 = 4;
 
-    let raw_bytes = hex::decode(raw_transaction.trim_start_matches("0x"))
+    let raw_bytes = ethers_core::types::Bytes::from_str(raw_transaction)
         .expect("BUG: sent sweep transaction is not hex-encoded");
     if raw_bytes.first() == Some(&EIP_7702_TRANSACTION_TYPE) {
         let signed = SignedEip7702TransactionRequest::decode(&raw_bytes)

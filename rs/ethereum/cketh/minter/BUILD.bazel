@@ -343,7 +343,6 @@ rust_binary(
         "@crate_index//:ethers-core",
         "@crate_index//:ethnum",
         "@crate_index//:flate2",
-        "@crate_index//:hex",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:num-traits",
         "@crate_index//:rlp",
