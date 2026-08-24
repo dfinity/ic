@@ -192,33 +192,33 @@ pub enum EventType {
     /// The minter created a sweep transaction.
     #[n(29)]
     CreatedSweeperTransaction {
-        #[n(1)]
+        #[n(0)]
         sweep_id: SweepId,
-        #[n(2)]
+        #[n(1)]
         transaction: Eip1559TransactionRequest,
     },
     /// The minter signed a sweep transaction.
     #[n(30)]
     SignedSweeperTransaction {
-        #[n(1)]
+        #[n(0)]
         sweep_id: SweepId,
-        #[n(2)]
+        #[n(1)]
         transaction: SignedEip1559TransactionRequest,
     },
     /// The minter replaced a sweep transaction after a fee bump.
     #[n(31)]
     ReplacedSweeperTransaction {
-        #[n(1)]
+        #[n(0)]
         sweep_id: SweepId,
-        #[n(2)]
+        #[n(1)]
         transaction: Eip1559TransactionRequest,
     },
     /// The minter observed a sweep transaction being included in a finalized Ethereum block.
     #[n(32)]
     FinalizedSweeperTransaction {
-        #[n(1)]
+        #[n(0)]
         sweep_id: SweepId,
-        #[n(2)]
+        #[n(1)]
         transaction_receipt: TransactionReceipt,
     },
 }
