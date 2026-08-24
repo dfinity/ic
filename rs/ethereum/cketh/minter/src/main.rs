@@ -316,6 +316,7 @@ async fn get_minter_info() -> MinterInfo {
 
         MinterInfo {
             minter_address: s.minter_address().map(|a| a.to_string()),
+            sweeper_address: s.sweeper_address().map(|a| a.to_string()),
             smart_contract_address: eth_helper_contract_address.clone(),
             eth_helper_contract_address,
             erc20_helper_contract_address,
