@@ -88,9 +88,9 @@ const DNSMASQ_STOP_TIMEOUT: Duration = Duration::from_secs(5);
 /// gone. Short enough that a restart is not noticeably delayed by the poll.
 const DNSMASQ_STOP_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
-/// The bundle the driver's own TLS clients read their root certificates from, and
-/// which [`LocalBackend::install_dev_root_ca`] shadows with a copy that also
-/// contains the dev root CA.
+/// Where the driver's own TLS clients read their root certificates from when the
+/// environment does not say otherwise; see
+/// [`system_ca_bundle`](LocalBackend::system_ca_bundle).
 ///
 /// This exact path is load-bearing, through a chain worth spelling out because
 /// nothing type-checks it: `reqwest::ClientBuilder::build` constructs a
@@ -99,7 +99,7 @@ const DNSMASQ_STOP_POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// nor `SSL_CERT_DIR` set — defers to `openssl_probe::probe()`, and this is the
 /// first candidate in its Linux list. `rs/tests/BUILD.bazel` builds a bundle at the
 /// same path for the colocated driver image, for the same reason.
-const SYSTEM_CA_BUNDLE: &str = "/etc/ssl/certs/ca-certificates.crt";
+const DEFAULT_SYSTEM_CA_BUNDLE: &str = "/etc/ssl/certs/ca-certificates.crt";
 
 /// Environment variables holding the runfiles paths of the split OVMF (UEFI)
 /// firmware images, provided by the `@ovmf` Bazel repo (extracted from the
@@ -363,7 +363,7 @@ impl LocalBackend {
         // that neither depends on the other having run first.
         Self::mount(
             None,
-            "/",
+            Path::new("/"),
             libc::MS_REC | libc::MS_PRIVATE,
             "making / private in the owned mount namespace",
         )?;
@@ -431,7 +431,7 @@ impl LocalBackend {
 
         Self::mount(
             Some(&path),
-            "/etc/resolv.conf",
+            Path::new("/etc/resolv.conf"),
             libc::MS_BIND,
             "bind-mounting the generated resolv.conf over /etc/resolv.conf",
         )
@@ -446,6 +446,40 @@ impl LocalBackend {
             "system-test-ca-certificates.crt.{}",
             std::process::id()
         ))
+    }
+
+    /// The CA bundle `rustls-native-certs` will actually read, which is the file
+    /// [`install_dev_root_ca`](Self::install_dev_root_ca) has to append to.
+    ///
+    /// Mirrors `rustls_native_certs::load_native_certs`: `SSL_CERT_FILE` names the
+    /// bundle whenever it is set, and `openssl_probe`'s first Linux candidate
+    /// ([`DEFAULT_SYSTEM_CA_BUNDLE`]) is used otherwise.
+    ///
+    /// Honouring that variable is not politeness. CI runners set it — Namespace points
+    /// it at its own worker bundle — and an earlier version of this code *refused to
+    /// run* when it was set, which passed locally and failed every `_local` target
+    /// there. Appending to whichever bundle the environment designates works in both
+    /// places, and keeps whatever roots that bundle carries.
+    ///
+    /// `SSL_CERT_DIR` set *without* `SSL_CERT_FILE` is the one shape this cannot
+    /// serve: `rustls-native-certs` then reads only those directories and no bundle at
+    /// all, so there is no file to append to — and a new file cannot be added to a
+    /// directory the driver does not own, for the reasons in
+    /// [`install_dev_root_ca`](Self::install_dev_root_ca). Nothing sets it that way
+    /// today; if something starts to, this fails loudly rather than quietly leaving
+    /// the CA out.
+    fn system_ca_bundle() -> Result<PathBuf> {
+        if let Some(file) = std::env::var_os("SSL_CERT_FILE") {
+            return Ok(PathBuf::from(file));
+        }
+        if let Some(dirs) = std::env::var_os("SSL_CERT_DIR") {
+            bail!(
+                "SSL_CERT_DIR is set ({dirs:?}) without SSL_CERT_FILE, so the driver's \
+                 TLS clients would read only those directories and never a CA bundle, \
+                 leaving nowhere to install the dev root CA"
+            );
+        }
+        Ok(PathBuf::from(DEFAULT_SYSTEM_CA_BUNDLE))
     }
 
     /// Put the dev root CA in the driver's own trust store, by bind-mounting a copy
@@ -495,24 +529,10 @@ impl LocalBackend {
     /// by `LocalApiBoundaryNodesPlaynet`'s ephemeral CA, and otherwise the node
     /// self-signs it via `generate_ic_boundary_tls_cert`.)
     fn install_dev_root_ca() -> Result<()> {
-        // When either of these is set, `rustls-native-certs` loads *only* what they
-        // name and skips the platform store altogether — so an inherited value would
-        // silently make the mount below invisible. It checks neither for existence,
-        // so being set at all is enough. Nothing sets them today (no `env_inherit` in
-        // `rs/tests` mentions them); this is insurance against something that would
-        // otherwise be very hard to diagnose.
-        for var in ["SSL_CERT_FILE", "SSL_CERT_DIR"] {
-            if let Some(value) = std::env::var_os(var) {
-                bail!(
-                    "{var} is set ({value:?}), which would make the driver's TLS clients \
-                     read only what it names and so never see the dev root CA this \
-                     installs in {SYSTEM_CA_BUNDLE}"
-                );
-            }
-        }
-
-        let mut bundle = std::fs::read_to_string(SYSTEM_CA_BUNDLE)
-            .with_context(|| format!("reading the system CA bundle {SYSTEM_CA_BUNDLE}"))?;
+        let bundle_path = Self::system_ca_bundle()?;
+        let bundle_path_display = bundle_path.display();
+        let mut bundle = std::fs::read_to_string(&bundle_path)
+            .with_context(|| format!("reading the system CA bundle {bundle_path_display}"))?;
         let dev_root_ca_pem = dev_root_ca_cert_pem()?;
         // Guard the separator rather than trusting the bundle to end in a newline:
         // `-----END CERTIFICATE----------BEGIN CERTIFICATE-----` parses as neither,
@@ -534,7 +554,7 @@ impl LocalBackend {
 
         Self::mount(
             Some(&path),
-            SYSTEM_CA_BUNDLE,
+            &bundle_path,
             libc::MS_BIND,
             "bind-mounting the generated CA bundle over the system one",
         )?;
@@ -543,11 +563,11 @@ impl LocalBackend {
         // unreachable — a mount that did not take, a short write, a stale target —
         // and none of that surfaces until a TLS handshake fails, six minutes into a
         // test, in a retry loop. One extra read turns that into an error here.
-        let installed = std::fs::read_to_string(SYSTEM_CA_BUNDLE)
-            .with_context(|| format!("reading back {SYSTEM_CA_BUNDLE}"))?;
+        let installed = std::fs::read_to_string(&bundle_path)
+            .with_context(|| format!("reading back {bundle_path_display}"))?;
         if !installed.contains(&dev_root_ca_pem) {
             bail!(
-                "the dev root CA is missing from {SYSTEM_CA_BUNDLE} after mounting {} \
+                "the dev root CA is missing from {bundle_path_display} after mounting {} \
                  over it",
                 path.display()
             );
@@ -561,12 +581,13 @@ impl LocalBackend {
     /// `source` is `None` for a propagation change, which takes none; the
     /// filesystem type and the mount data are always `NULL`, because every call
     /// site is either a bind mount or a propagation change and neither uses them.
-    fn mount(source: Option<&Path>, target: &str, flags: libc::c_ulong, what: &str) -> Result<()> {
+    fn mount(source: Option<&Path>, target: &Path, flags: libc::c_ulong, what: &str) -> Result<()> {
         let source = source
             .map(|source| CString::new(source.as_os_str().as_bytes()))
             .transpose()
             .with_context(|| format!("{what}: the source path contains a NUL byte"))?;
-        let target = CString::new(target).expect("mount target contains a NUL byte");
+        let target =
+            CString::new(target.as_os_str().as_bytes()).expect("mount target contains a NUL byte");
         // SAFETY: both strings are NUL-terminated and outlive the call. A NULL
         // source is what `mount(2)` expects for a propagation change (the kernel
         // never looks at it), and a NULL filesystem type and data are what it
