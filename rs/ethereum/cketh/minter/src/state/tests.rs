@@ -14,7 +14,8 @@ use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::event::{Event, EventType};
 use crate::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
+    Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex, SweepId,
+    SweeperTransactionPipeline,
 };
 use crate::state::{Erc20Balances, State};
 use crate::test_fixtures::{
@@ -680,6 +681,7 @@ prop_compose! {
         last_scraped_block_number in arb_nat(),
         evm_rpc_id in proptest::option::of(arb_principal()),
         sweeper_contract_address in proptest::option::of(arb_address()),
+        next_sweeper_transaction_nonce in proptest::option::of(arb_nat()),
     ) -> InitArg {
         InitArg {
             ethereum_network: EthereumNetwork::Sepolia,
@@ -692,6 +694,7 @@ prop_compose! {
             last_scraped_block_number,
             evm_rpc_id,
             ethereum_sweeper_contract_address: sweeper_contract_address.map(|addr| addr.to_string()),
+            next_sweeper_transaction_nonce,
         }
     }
 }
@@ -709,8 +712,10 @@ prop_compose! {
         deposit_with_subaccount_helper_contract_address in proptest::option::of(arb_address()),
         last_deposit_with_subaccount_scraped_block_number in proptest::option::of(arb_nat()),
         sweeper_contract_address in proptest::option::of(arb_address()),
+        next_sweeper_transaction_nonce in proptest::option::of(arb_nat()),
     ) -> UpgradeArg {
         UpgradeArg {
+            next_sweeper_transaction_nonce,
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
             ethereum_block_height,
             minimum_withdrawal_amount,
@@ -1165,6 +1170,8 @@ fn state_equivalence() {
     };
     let state = State {
         sweeper_funding: Default::default(),
+        sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
+        next_sweep_id: SweepId(0),
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
         cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
