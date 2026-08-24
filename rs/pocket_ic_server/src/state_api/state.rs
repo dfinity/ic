@@ -49,6 +49,7 @@ use ic_gateway::{
     },
     setup_router,
 };
+use ic_limits::MAX_INGRESS_TTL;
 use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
 use itertools::Itertools;
 use pocket_ic::RejectResponse;
@@ -91,6 +92,13 @@ pub(crate) const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
 
 // The timeout for executing an operation in auto progress mode.
 const AUTO_PROGRESS_OPERATION_TIMEOUT: Duration = Duration::from_secs(10);
+// The maximum staleness of the initial certified time applied in auto progress mode by the time
+// `auto_progress` reports readiness. Kept well below `MAX_INGRESS_TTL` so that the first
+// `AdvanceTimeAndTick` (which catches up all wall-clock time elapsed since that timestamp was
+// captured) cannot overtake the expiry of an ingress message submitted right after
+// `auto_progress` returned, which would retroactively expire that message.
+const MAX_INITIAL_CERTIFIED_TIME_STALENESS: Duration =
+    Duration::from_secs(MAX_INGRESS_TTL.as_secs() / 5);
 // The minimum delay between consecutive attempts to run an operation in auto progress mode.
 const MIN_OPERATION_DELAY: Duration = Duration::from_millis(100);
 // The minimum delay between consecutive attempts to read the graph in auto progress mode.
@@ -987,68 +995,87 @@ impl ApiState {
             let (tx, mut rx) = mpsc::channel::<()>(1);
             let (ready_tx, ready_rx) = oneshot::channel::<()>();
             let handle = spawn(async move {
-                let mut now = SystemTime::now();
-                let time = ic_types::Time::from_nanos_since_unix_epoch(
-                    now.duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_nanos() as u64,
-                );
-                let op = SetCertifiedTime { time };
-                if Self::execute_operation(
-                    instances_clone.clone(),
-                    graph.clone(),
-                    instance_id,
-                    op,
-                    &mut rx,
-                )
-                .await
-                .is_some()
-                {
-                    debug!("Starting auto progress for instance {}.", instance_id);
-                    // The initial `SetCertifiedTime` has been applied (or was rejected as
-                    // `SettingTimeIntoPast`, i.e., the instance time is already ahead of it):
-                    // let `auto_progress` return only now, so that an ingress message submitted
-                    // after `auto_progress` returns can no longer carry an expiry derived from
-                    // the instance time before the jump to the current time — such a message
-                    // would expire retroactively, never getting executed and thus timing out.
-                    // The receiver is dropped if `auto_progress` was cancelled; that is fine.
-                    let _ = ready_tx.send(());
-                    loop {
-                        let old = std::mem::replace(&mut now, SystemTime::now());
-                        let op = AdvanceTimeAndTick(now.duration_since(old).unwrap_or_default());
-                        if Self::execute_operation(
-                            instances_clone.clone(),
-                            graph.clone(),
-                            instance_id,
-                            op,
-                            &mut rx,
-                        )
-                        .await
-                        .is_none()
-                        {
-                            break;
-                        }
-                        let op = ProcessCanisterHttpInternal;
-                        if Self::execute_operation(
-                            instances_clone.clone(),
-                            graph.clone(),
-                            instance_id,
-                            op,
-                            &mut rx,
-                        )
-                        .await
-                        .is_none()
-                        {
-                            break;
-                        }
-                        let sleep_duration = std::cmp::max(artificial_delay, MIN_OPERATION_DELAY);
-                        sleep(sleep_duration).await;
-                        if received_stop_signal(&mut rx) {
-                            break;
-                        }
+                let mut now;
+                // Set the (certified) time of the instance to the current system time.
+                // `execute_operation` can wait arbitrarily long for a busy instance, so the
+                // timestamp may already be stale by the time it is applied; re-apply a fresh
+                // timestamp until the staleness stays below
+                // `MAX_INITIAL_CERTIFIED_TIME_STALENESS` — otherwise the first
+                // `AdvanceTimeAndTick` below could jump the instance time past the expiry of
+                // an ingress message submitted after `auto_progress` returns, retroactively
+                // expiring it (the very failure the readiness signal below prevents).
+                loop {
+                    now = SystemTime::now();
+                    let time = ic_types::Time::from_nanos_since_unix_epoch(
+                        now.duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_nanos() as u64,
+                    );
+                    let op = SetCertifiedTime { time };
+                    if Self::execute_operation(
+                        instances_clone.clone(),
+                        graph.clone(),
+                        instance_id,
+                        op,
+                        &mut rx,
+                    )
+                    .await
+                    .is_none()
+                    {
+                        // Received a stop signal before the initial time was applied: exit
+                        // without signaling readiness (dropping `ready_tx` unblocks
+                        // `auto_progress`, which still reports success — auto progress mode
+                        // was enabled and then stopped again).
+                        return;
                     }
-                    debug!("Stopping auto progress for instance {}.", instance_id);
+                    if now.elapsed().unwrap_or_default() <= MAX_INITIAL_CERTIFIED_TIME_STALENESS {
+                        break;
+                    }
                 }
+                debug!("Starting auto progress for instance {}.", instance_id);
+                // The initial `SetCertifiedTime` has been applied (or was rejected as
+                // `SettingTimeIntoPast`, i.e., the instance time is already ahead of it):
+                // let `auto_progress` return only now, so that an ingress message submitted
+                // after `auto_progress` returns can no longer carry an expiry derived from
+                // the instance time before the jump to the current time — such a message
+                // would expire retroactively, never getting executed and thus timing out.
+                // The receiver is dropped if `auto_progress` was cancelled; that is fine.
+                let _ = ready_tx.send(());
+                loop {
+                    let old = std::mem::replace(&mut now, SystemTime::now());
+                    let op = AdvanceTimeAndTick(now.duration_since(old).unwrap_or_default());
+                    if Self::execute_operation(
+                        instances_clone.clone(),
+                        graph.clone(),
+                        instance_id,
+                        op,
+                        &mut rx,
+                    )
+                    .await
+                    .is_none()
+                    {
+                        break;
+                    }
+                    let op = ProcessCanisterHttpInternal;
+                    if Self::execute_operation(
+                        instances_clone.clone(),
+                        graph.clone(),
+                        instance_id,
+                        op,
+                        &mut rx,
+                    )
+                    .await
+                    .is_none()
+                    {
+                        break;
+                    }
+                    let sleep_duration = std::cmp::max(artificial_delay, MIN_OPERATION_DELAY);
+                    sleep(sleep_duration).await;
+                    if received_stop_signal(&mut rx) {
+                        break;
+                    }
+                }
+                debug!("Stopping auto progress for instance {}.", instance_id);
             });
             instance.progress_thread = Some(ProgressThread { handle, sender: tx });
             // Drop the locks before waiting: the progress thread's first operation acquires

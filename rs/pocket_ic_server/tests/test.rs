@@ -1176,13 +1176,25 @@ fn auto_progress() {
 /// would then retroactively expire the message, making it unselectable forever, and the
 /// update call would fail with
 /// `BadIngressMessage("Failed to answer to ingress ... after 100 rounds.")`.
+///
+/// Losing the race requires the spawned progress task to go unpolled across a whole
+/// response round trip, so a single round rarely fails without the readiness wait
+/// (~1-3% under CPU load); the server deliberately provides no hook to hold back the
+/// progress task's initial operation, so instead the race is run on several fresh
+/// instances to amplify the probability of catching a regression.
 #[test]
 fn ingress_after_auto_progress() {
-    let pic = PocketIcBuilder::new().with_application_subnet().build();
-    let canister_id = deploy_counter_canister_to_any_subnet(&pic);
+    let server_url = start_server();
+    for _ in 0..10 {
+        let pic = PocketIcBuilder::new()
+            .with_application_subnet()
+            .with_server_url(server_url.clone())
+            .build();
+        let canister_id = deploy_counter_canister_to_any_subnet(&pic);
 
-    pic.auto_progress();
+        pic.auto_progress();
 
-    pic.update_call(canister_id, Principal::anonymous(), "write", vec![])
-        .unwrap();
+        pic.update_call(canister_id, Principal::anonymous(), "write", vec![])
+            .unwrap();
+    }
 }

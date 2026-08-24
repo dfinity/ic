@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - The endpoint `/instances/<instance_id>/auto_progress` does not return before the (certified) time of the PocketIC instance
-  has been set to the current system time so that ingress messages submitted after this endpoint returns cannot expire retroactively.
+  has reached the current system time so that ingress messages submitted after this endpoint returns cannot expire retroactively.
 
 
 
