@@ -69,7 +69,7 @@ mod retrieve_eth_guard {
 
         fn record_withdrawal_request(ledger_burn_index: LedgerBurnIndex) {
             mutate_state(|s| {
-                s.eth_transactions
+                s.withdrawal_transactions
                     .record_withdrawal_request(EthWithdrawalRequest {
                         withdrawal_amount: Wei::ONE,
                         destination: Address::ZERO,
@@ -80,6 +80,66 @@ mod retrieve_eth_guard {
                     })
             })
         }
+    }
+
+    fn principal_with_id(id: u64) -> Principal {
+        Principal::try_from_slice(&id.to_le_bytes()).unwrap()
+    }
+}
+
+mod deposit_erc20_guard {
+    use crate::guard::tests::init_state;
+    use crate::guard::{GuardError, MAX_CONCURRENT, deposit_erc20_guard, retrieve_withdraw_guard};
+    use candid::Principal;
+
+    #[test]
+    fn should_error_on_reentrant_principal() {
+        init_state();
+        let principal = principal_with_id(1);
+        let _guard = deposit_erc20_guard(principal).unwrap();
+
+        assert_eq!(
+            deposit_erc20_guard(principal),
+            Err(GuardError::AlreadyProcessing)
+        );
+    }
+
+    #[test]
+    fn should_allow_reentrant_principal_after_drop() {
+        init_state();
+        let principal = principal_with_id(1);
+        {
+            let _guard = deposit_erc20_guard(principal).unwrap();
+        }
+
+        assert!(deposit_erc20_guard(principal).is_ok());
+    }
+
+    #[test]
+    fn should_allow_limited_number_of_principals() {
+        init_state();
+        let guards: Vec<_> = (0..MAX_CONCURRENT)
+            .map(|i| deposit_erc20_guard(principal_with_id(i as u64)).unwrap())
+            .collect();
+
+        assert_eq!(
+            deposit_erc20_guard(principal_with_id(MAX_CONCURRENT as u64)),
+            Err(GuardError::TooManyConcurrentRequests)
+        );
+
+        drop(guards);
+        assert!(deposit_erc20_guard(principal_with_id(MAX_CONCURRENT as u64)).is_ok());
+    }
+
+    #[test]
+    fn should_not_share_the_lock_with_withdrawals() {
+        init_state();
+        let principal = principal_with_id(1);
+        let _deposit = deposit_erc20_guard(principal).unwrap();
+
+        // A deposit in flight must not block the same principal from withdrawing, and vice versa:
+        // the two guards track separate principal sets.
+        assert!(retrieve_withdraw_guard(principal).is_ok());
     }
 
     fn principal_with_id(id: u64) -> Principal {

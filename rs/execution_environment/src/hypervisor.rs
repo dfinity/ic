@@ -5,7 +5,7 @@ use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnet
 use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
     WasmtimeEmbedder,
-    wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
+    wasm_executor::{CreatedExecutionState, WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
     wasm_utils::decoding::decoded_wasm_size,
     wasmtime_embedder::system_api::{
         ApiType, ExecutionParameters, sandbox_safe_system_state::SandboxSafeSystemState,
@@ -19,11 +19,14 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{binary_buckets_with_zero, decimal_buckets_with_zero, linear_buckets};
-use ic_replicated_state::{ExecutionState, NetworkTopology, ReplicatedState, SystemState};
+use ic_replicated_state::{
+    ExecutionState, Memory, NetworkTopology, NumWasmPages, ReplicatedState, SystemState,
+    canister_state::{execution_state::WasmExecutionMode, num_bytes_try_from},
+};
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
-    CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
-    methods::FuncRef,
+    CanisterId, DiskBytes, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES, NumBytes,
+    NumInstructions, SubnetId, Time, messages::RequestMetadata, methods::FuncRef,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
@@ -135,6 +138,56 @@ impl CanisterLogMetrics for HypervisorMetrics {
     }
 }
 
+/// Indicates whether the memory is kept or replaced with new (initial) memory.
+/// Applicable to both the stable memory and the main memory of a canister.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum MemoryHandling {
+    /// Retain the memory.
+    Keep,
+    /// Reset the memory.
+    Replace,
+}
+
+/// Specifies the handling of the canister's memories.
+/// * On install and re-install:
+///   - Replace both the stable memory and the main memory.
+/// * On upgrade:
+///   - Always retain the stable memory.
+///   - Retain the main memory if and only if the `wasm_memory_persistence: opt keep`
+///     upgrade option is used, and erase it otherwise. That option is meant for
+///     canisters with enhanced orthogonal persistence (Motoko) and is only valid
+///     for those; such a canister may still opt into erasing its main memory by
+///     passing `wasm_memory_persistence: opt replace`.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub struct CanisterMemoryHandling {
+    pub stable_memory_handling: MemoryHandling,
+    pub main_memory_handling: MemoryHandling,
+}
+
+/// Specifies where the memories of a newly created execution state come from.
+///
+/// `Hypervisor::create_execution_state` always builds the initial memories of
+/// the new Wasm module (the module's declared minimum memory with its data
+/// segments applied); this type tells it what to do with them afterwards.
+#[derive(Debug)]
+// The `Explicit` variant is much larger than the others, but a `MemorySource`
+// is constructed once per operation and consumed right away.
+#[allow(clippy::large_enum_variant)]
+pub enum MemorySource<'a> {
+    /// Install and re-install: use the newly installed module's initial memories.
+    Fresh,
+    /// Upgrade: carry over the memories of `old` as directed by `handling`.
+    Preserve {
+        old: &'a ExecutionState,
+        handling: CanisterMemoryHandling,
+    },
+    /// Snapshot restore: install the memories provided by the caller.
+    Explicit {
+        wasm_memory: Memory,
+        stable_memory: Memory,
+    },
+}
+
 #[doc(hidden)]
 pub struct Hypervisor {
     wasm_executor: Arc<dyn WasmExecutor>,
@@ -160,6 +213,7 @@ impl Hypervisor {
         last_install_timestamp: Time,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
+        new_memories: MemorySource<'_>,
     ) -> (NumInstructions, HypervisorResult<ExecutionState>) {
         // If a wasm instruction has no arguments then it can be represented as
         // a single byte. So taking the length of the wasm source is a
@@ -185,7 +239,12 @@ impl Hypervisor {
             Arc::clone(&self.compilation_cache),
         );
         match creation_result {
-            Ok((mut execution_state, compilation_cost, compilation_result)) => {
+            Ok(CreatedExecutionState {
+                mut execution_state,
+                compilation_cost,
+                compilation_result,
+                declares_wasm_memory,
+            }) => {
                 if let Some(compilation_result) = compilation_result {
                     self.metrics.observe_compilation_metrics(
                         &compilation_result,
@@ -193,15 +252,48 @@ impl Hypervisor {
                         self.compilation_cache.disk_bytes(),
                     );
                 }
+                // The Wasm memory of the freshly created execution state is the
+                // module's initial memory, i.e. its declared minimum memory.
+                let declared_wasm_memory_size =
+                    declares_wasm_memory.then_some(execution_state.wasm_memory.size);
                 // Stamp the deployment-round install time onto the freshly
                 // created execution state. This is the single choke point for
                 // creating execution states, so every install/upgrade/snapshot
                 // restore is forced to provide it.
                 execution_state.last_install_timestamp = Some(last_install_timestamp);
+                // Same for the memories: the embedder always creates the
+                // initial memories of the new module, which the caller may want
+                // to replace with the preserved (or snapshotted) ones.
+                match new_memories {
+                    MemorySource::Fresh => {}
+                    MemorySource::Preserve { old, handling } => {
+                        // Cloning a `Memory` is cheap: cloning its page delta,
+                        // a persistent map, only clones the root node of its
+                        // tree, whose subtrees are `Arc`s, and its checkpoint
+                        // files, page allocator and sandbox handle are `Arc`s
+                        // as well.
+                        if handling.stable_memory_handling == MemoryHandling::Keep {
+                            execution_state.stable_memory = old.stable_memory.clone();
+                        }
+                        if handling.main_memory_handling == MemoryHandling::Keep {
+                            execution_state.wasm_memory = old.wasm_memory.clone();
+                        }
+                    }
+                    MemorySource::Explicit {
+                        wasm_memory,
+                        stable_memory,
+                    } => {
+                        execution_state.wasm_memory = wasm_memory;
+                        execution_state.stable_memory = stable_memory;
+                    }
+                }
                 let total_cost = self.create_execution_state_base_cost
                     + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
                 round_limits.instructions -= as_round_instructions(total_cost);
-                (total_cost, Ok(execution_state))
+                let result =
+                    Self::validate_wasm_memory(&execution_state, declared_wasm_memory_size)
+                        .map(|()| execution_state);
+                (total_cost, result)
             }
             Err(err) => {
                 let total_cost = self.create_execution_state_base_cost + compilation_cost;
@@ -209,6 +301,58 @@ impl Hypervisor {
                 (total_cost, Err(err))
             }
         }
+    }
+
+    /// Checks that the Wasm memory of a newly created execution state is
+    /// compatible with the Wasm module that the execution state was created for.
+    /// `declared_wasm_memory_size` is the minimum memory size declared by the
+    /// module and `None` if the module declares no Wasm memory.
+    fn validate_wasm_memory(
+        execution_state: &ExecutionState,
+        declared_wasm_memory_size: Option<NumWasmPages>,
+    ) -> HypervisorResult<()> {
+        let max_wasm_memory_size = match execution_state.wasm_execution_mode {
+            WasmExecutionMode::Wasm32 => NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
+            WasmExecutionMode::Wasm64 => NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
+        };
+        let wasm_memory_size = execution_state.wasm_memory_usage();
+        if wasm_memory_size > max_wasm_memory_size {
+            return Err(HypervisorError::InvalidWasmMemory {
+                message: format!(
+                    "the Wasm memory ({wasm_memory_size} bytes) exceeds the maximum \
+                     Wasm memory ({max_wasm_memory_size} bytes) allowed for the Wasm \
+                     execution mode of the canister module."
+                ),
+            });
+        }
+
+        match declared_wasm_memory_size {
+            None => {
+                if wasm_memory_size.get() != 0 {
+                    return Err(HypervisorError::InvalidWasmMemory {
+                        message: format!(
+                            "the Wasm memory ({wasm_memory_size} bytes) is not empty \
+                             although the canister module declares no Wasm memory."
+                        ),
+                    });
+                }
+            }
+            Some(declared_wasm_memory_size) => {
+                let declared_wasm_memory_size = num_bytes_try_from(declared_wasm_memory_size)
+                    .expect("could not convert from wasm memory number of pages to bytes");
+                if wasm_memory_size < declared_wasm_memory_size {
+                    return Err(HypervisorError::InvalidWasmMemory {
+                        message: format!(
+                            "the Wasm memory ({wasm_memory_size} bytes) is smaller than \
+                             the minimum Wasm memory ({declared_wasm_memory_size} bytes) \
+                             declared by the canister module."
+                        ),
+                    });
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub(crate) fn new(

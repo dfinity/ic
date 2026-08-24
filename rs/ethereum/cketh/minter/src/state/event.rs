@@ -1,8 +1,9 @@
+use crate::deposit_address::DepositAddress;
 use crate::erc20::CkErc20Token;
 use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
-use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex};
+use crate::numeric::{BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
@@ -176,6 +177,15 @@ pub enum EventType {
     /// Emitted at pre-upgrade and replayed to restore the in-heap registry.
     #[n(25)]
     RegisteredDepositAddresses(#[n(0)] DepositAddressRegistry),
+    /// A funded `(account, token)` pair was found by a balance scan and moved out of the
+    /// watchlist into the balance-sweep queue. Recorded the moment the funds are detected, so
+    /// the sweep queue is durable even across an ungraceful trap (unlike the pre-upgrade
+    /// snapshot).
+    #[n(26)]
+    AutomaticDepositReceived(#[n(0)] AutomaticDeposit),
+    /// The minter burned ckETH from its fee subaccount to top up the sweeper address with gas.
+    #[n(27)]
+    AcceptedSweeperFundingRequest(#[n(0)] EthWithdrawalRequest),
 }
 
 /// Full snapshot of the ckERC20 deposit address registry. Carries the limits in
@@ -195,7 +205,30 @@ pub struct DepositAddressRegistry {
     pub registrations: Vec<DepositAddressRegistration>,
 }
 
-/// A single entry of the ckERC20 deposit address registry snapshot.
+/// Payload of [`EventType::AutomaticDepositReceived`]: a funded `(account, token)` pair moved
+/// into the balance-sweep queue by a balance scan, together with the balance detected. One
+/// event per funded pair, so replaying it removes the pair from the watchlist and queues it
+/// for sweeping.
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+pub struct AutomaticDeposit {
+    #[cbor(n(0), with = "icrc_cbor::principal")]
+    pub owner: Principal,
+    #[cbor(n(1), with = "minicbor::bytes")]
+    pub subaccount: Option<[u8; 32]>,
+    #[n(2)]
+    pub address: DepositAddress,
+    #[n(3)]
+    pub erc20_contract_address: Address,
+    #[n(4)]
+    pub last_scanned_block: BlockNumber,
+    #[n(5)]
+    pub scan_count: u32,
+    /// The balance detected for `erc20_contract_address` at `last_scanned_block`.
+    #[n(6)]
+    pub scanned_balance: Erc20Value,
+}
+
+/// A single entry of the ckERC20 deposit registry snapshot.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct DepositAddressRegistration {
     #[cbor(n(0), with = "icrc_cbor::principal")]
@@ -203,15 +236,17 @@ pub struct DepositAddressRegistration {
     #[cbor(n(1), with = "minicbor::bytes")]
     pub subaccount: Option<[u8; 32]>,
     #[n(2)]
-    pub address: Address,
+    pub address: DepositAddress,
     #[n(3)]
-    pub expires_at_nanos: Timestamp,
-    /// Latest block number at which this address's balance was scanned; `None` if
-    /// never scanned.
+    pub erc20_contract_address: Address,
     #[n(4)]
-    pub last_scanned_block: Option<BlockNumber>,
-    /// How many times this address has been scanned.
+    pub expires_at_nanos: Timestamp,
+    /// Latest block number at which this pair's balance was scanned; `None` if
+    /// never scanned.
     #[n(5)]
+    pub last_scanned_block: Option<BlockNumber>,
+    /// How many times this pair has been scanned.
+    #[n(6)]
     pub scan_count: u32,
 }
 

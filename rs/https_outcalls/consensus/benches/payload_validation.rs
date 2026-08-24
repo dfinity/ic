@@ -1,14 +1,14 @@
 //! Benchmark for the validation of canister HTTP outcall
 //! payloads.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
-use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
+use ic_https_outcalls_consensus::payload_builder::{CanisterHttpPayloadBuilderImpl, PastPayloads};
 use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
 use ic_interfaces::crypto::BasicSigner;
 use ic_interfaces_registry::RegistryClient;
@@ -35,6 +35,7 @@ use ic_types::{
         CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
         CanisterHttpResponseShare, CanisterHttpResponseSignature,
         CanisterHttpResponseWithConsensus, PricingVersion, RefundStatus, Replication,
+        canister_http_threshold,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSigOf, crypto_hash},
@@ -148,7 +149,7 @@ fn bench_payload_verification(c: &mut Criterion) {
                     black_box(target.builder.validate_canister_http_payload_impl(
                         black_box(&target.payload),
                         black_box(&target.validation_context),
-                        black_box(HashSet::new()),
+                        black_box(PastPayloads::default()),
                     ))
                     .expect("validation failed");
                 })
@@ -178,11 +179,12 @@ fn build_target(
         })
         .build();
 
-    let deps = dependencies_with_subnet_params(
+    let deps = DependenciesBuilder::single_subnet(
         pool_config,
         subnet_id,
         vec![(REGISTRY_VERSION.get(), subnet_record)],
-    );
+    )
+    .build();
 
     let registry_client: Arc<dyn RegistryClient> = deps.registry.clone();
 
@@ -332,7 +334,7 @@ impl<'a> PayloadAssembler<'a> {
     fn assemble(&mut self, signer: &Signer) -> CanisterHttpPayload {
         let subnet_size = self.config.subnet_size;
         let subnet_nodes = NumberOfNodes::from(subnet_size as u32);
-        let threshold = subnet_size - get_faults_tolerated(subnet_size);
+        let threshold = canister_http_threshold(subnet_size);
         let faults_tolerated = get_faults_tolerated(subnet_size);
         // A divergence proof needs enough distinctly-signed shares that even
         // adding all remaining (unseen) committee members cannot push any
@@ -463,11 +465,13 @@ impl<'a> PayloadAssembler<'a> {
         }
 
         let payload = CanisterHttpPayload {
+            out_of_cycles: vec![],
             responses,
             timeouts: vec![],
             divergence_responses,
             flexible_responses,
             flexible_errors: vec![],
+            async_receipts: vec![],
         };
 
         assert!(

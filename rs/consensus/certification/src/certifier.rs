@@ -691,8 +691,7 @@ mod tests {
     use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
     use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
     use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize_partial;
-    use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{Dependencies, dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_tree_hash::{Digest, Witness, sparse_labeled_tree_from_paths};
     use ic_interfaces::{
         certification::CertificationPool,
@@ -703,7 +702,6 @@ mod tests {
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::consensus::{BlockPayload, HashedBlock, Payload, dkg::SplittingArgs};
     use ic_types::{
@@ -826,7 +824,7 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 1);
+                } = DependenciesBuilder::new(pool_config.clone(), 1).build();
 
                 let certifier = CertifierImpl::new(
                     replica_config,
@@ -862,7 +860,7 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
                 pool.advance_round_normal_operation();
                 add_expectations(state_manager.clone(), 1, 4);
                 let metrics_registry = MetricsRegistry::new();
@@ -928,7 +926,7 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 pool.advance_round_normal_operation_n(6);
                 add_expectations(state_manager.clone(), 1, 4);
@@ -1065,7 +1063,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies(pool_config.clone(), 6);
+            } = DependenciesBuilder::new(pool_config.clone(), 6).build();
             // make the mock state manager return empty hashes for heights 3, 4 and 5
             add_expectations(state_manager.clone(), 3, 5);
             let metrics_registry = MetricsRegistry::new();
@@ -1145,7 +1143,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies(pool_config.clone(), 7);
+            } = DependenciesBuilder::new(pool_config.clone(), 7).build();
             pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(10));
             // make the mock state manager return empty hashes for heights 3, 4 and 5
             add_expectations(state_manager.clone(), 3, 5);
@@ -1218,7 +1216,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies(pool_config.clone(), 4);
+            } = DependenciesBuilder::new(pool_config.clone(), 4).build();
             pool.advance_round_normal_operation_n(10);
             // make the mock state manager return empty hashes for heights 3, 4 and 5
             add_expectations(state_manager.clone(), 3, 5);
@@ -1290,7 +1288,7 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 1);
+                } = DependenciesBuilder::new(pool_config.clone(), 1).build();
                 pool.advance_round_normal_operation_n(10);
                 // make the mock state manager return empty hashes for heights 3, 4 and 5
                 add_expectations(state_manager.clone(), 3, 5);
@@ -1463,7 +1461,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies(pool_config.clone(), 4);
+            } = DependenciesBuilder::new(pool_config.clone(), 4).build();
             // make the mock state manager return empty hashes for heights 4 and 5
             add_expectations(state_manager.clone(), 4, 5);
             let metrics_registry = MetricsRegistry::new();
@@ -1561,7 +1559,7 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 let metrics_registry = MetricsRegistry::new();
                 let cert_pool = CertificationPoolImpl::new(
@@ -1639,23 +1637,6 @@ mod tests {
 
     // DKG interval length used for subnet-splitting tests.
     const TEST_DKG_INTERVAL: u64 = 9;
-
-    fn dependencies_for_splitting_tests(
-        pool_config: ArtifactPoolConfig,
-        nodes: u64,
-    ) -> Dependencies {
-        let committee = (0..nodes).map(node_test_id).collect::<Vec<_>>();
-        dependencies_with_subnet_params(
-            pool_config,
-            subnet_test_id(0),
-            vec![(
-                1,
-                SubnetRecordBuilder::from(&committee)
-                    .with_dkg_interval_length(TEST_DKG_INTERVAL)
-                    .build(),
-            )],
-        )
-    }
 
     // Advances `pool` by TEST_DKG_INTERVAL rounds so the next block is a DKG
     // summary block, then inserts and finalizes that summary block after setting
@@ -1753,7 +1734,9 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies_for_splitting_tests(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4)
+                    .with_dkg_interval_length(TEST_DKG_INTERVAL)
+                    .build();
 
                 let metrics_registry = MetricsRegistry::new();
                 let cert_pool = CertificationPoolImpl::new(
@@ -1815,7 +1798,9 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies_for_splitting_tests(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4)
+                    .with_dkg_interval_length(TEST_DKG_INTERVAL)
+                    .build();
 
                 let metrics_registry = MetricsRegistry::new();
                 let cert_pool = CertificationPoolImpl::new(
@@ -1882,7 +1867,9 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies_for_splitting_tests(pool_config.clone(), 1);
+                } = DependenciesBuilder::new(pool_config.clone(), 1)
+                    .with_dkg_interval_length(TEST_DKG_INTERVAL)
+                    .build();
 
                 let certifier = CertifierImpl::new(
                     replica_config,

@@ -71,6 +71,7 @@ pub struct MinterInfo {
     pub eth_helper_contract_address: Option<String>,
     pub erc20_helper_contract_address: Option<String>,
     pub deposit_with_subaccount_helper_contract_address: Option<String>,
+    pub sweeper_contract_address: Option<String>,
     pub supported_ckerc20_tokens: Option<Vec<CkErc20Token>>,
     pub minimum_withdrawal_amount: Option<Nat>,
     pub ethereum_block_height: Option<CandidBlockTag>,
@@ -215,6 +216,9 @@ pub struct WithdrawalArg {
 /// Argument for the `deposit_erc20` endpoint.
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct DepositErc20Arg {
+    /// The Ethereum ERC-20 contract address of the token to deposit (e.g. USDC). Traps if it
+    /// cannot be parsed as an Ethereum address. Must be a ckERC20 token supported by the minter.
+    pub erc20_contract_address: String,
     pub mode: DepositMode,
 }
 
@@ -237,20 +241,49 @@ pub enum DepositMode {
 pub struct DepositErc20Response {
     /// The Ethereum deposit address derived for the caller.
     pub address: String,
-    /// Timestamp in nanoseconds since the Unix epoch until which a deposit sent
-    /// to `address` is guaranteed to be noticed by the minter.
-    pub valid_until: u64,
-    /// The latest Ethereum block at which this address' balance was scanned, or
-    /// `None` if it has not been scanned yet. Surfaces the balance-scan progress.
-    pub last_scanned_block: Option<Nat>,
-    /// How many times this address' balance has been scanned so far.
-    pub scan_count: u64,
+    /// Where the deposit stands in the detect-and-sweep pipeline.
+    pub status: DepositStatus,
+}
+
+/// The stage a ckERC20 deposit address is at. Extensible with `Sweeping`/`Swept`
+/// once sweeping lands (DEFI-2924).
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub enum DepositStatus {
+    /// Armed and being scanned; no deposit at or above the minimum detected yet.
+    Scanning {
+        /// Timestamp in nanoseconds since the Unix epoch until which a deposit
+        /// sent to the address is guaranteed to be noticed by the minter.
+        valid_until: u64,
+        /// The latest Ethereum block at which the address' balance was scanned,
+        /// or `None` if it has not been scanned yet.
+        last_scanned_block: Option<Nat>,
+        /// How many times the address' balance has been scanned so far.
+        scan_count: u64,
+    },
+    /// Funds were detected at or above the minimum and queued for sweeping.
+    AwaitingSweep(DetectedDeposit),
+}
+
+/// A funded token detected at a deposit address and queued for sweeping.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct DetectedDeposit {
+    /// The ERC-20 token contract whose balance was found.
+    pub erc20_contract_address: String,
+    /// The balance scanned for `erc20_contract_address`; may change before the sweep.
+    pub scanned_balance: Nat,
+    /// The Ethereum block at which the balance was detected.
+    pub detected_at_block: Nat,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum DepositErc20Error {
-    /// The maximum number of concurrently armed deposit addresses has been reached.
-    TooManyActiveAddresses,
+    /// The `erc20_contract_address` is not a ckERC20 token supported by the minter.
+    TokenNotSupported { supported_tokens: Vec<CkErc20Token> },
+    /// The account already has the maximum number of ERC-20 tokens armed.
+    TooManyTokensForAccount,
+    /// The maximum number of concurrently armed deposits (`(account, token)` pairs) has been
+    /// reached.
+    TooManyActiveDeposits,
     /// The minter is temporarily unavailable, retry the request.
     TemporarilyUnavailable(String),
 }
@@ -464,6 +497,14 @@ pub mod events {
             from_subaccount: Option<[u8; 32]>,
             created_at: Option<u64>,
         },
+        AcceptedSweeperFundingRequest {
+            withdrawal_amount: Nat,
+            destination: String,
+            ledger_burn_index: Nat,
+            from: Principal,
+            from_subaccount: Option<[u8; 32]>,
+            created_at: Option<u64>,
+        },
         CreatedTransaction {
             withdrawal_id: Nat,
             transaction: UnsignedTransaction,
@@ -539,12 +580,22 @@ pub mod events {
             capacity: u64,
             registrations: Vec<DepositAddressRegistration>,
         },
+        AutomaticDepositReceived {
+            owner: Principal,
+            subaccount: Option<[u8; 32]>,
+            address: String,
+            erc20_contract_address: String,
+            last_scanned_block: Nat,
+            scan_count: u64,
+            scanned_balance: Nat,
+        },
     }
 
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct DepositAddressRegistration {
         pub owner: Principal,
         pub subaccount: Option<[u8; 32]>,
+        pub erc20_contract_address: String,
         pub address: String,
         pub expires_at_nanos: u64,
         pub last_scanned_block: Option<Nat>,

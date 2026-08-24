@@ -119,6 +119,7 @@
     // ====================================
     http_handler: {
         listen_addr: "[::]:8080",
+        extra_api_boundary_node_trust_anchors_pem: {{ extra_api_boundary_node_trust_anchors_pem }},
     },
 
     // ====================================
@@ -247,6 +248,7 @@ table ip6 filter {\n\
     nd-router-advert,\n\
     nd-neighbor-solicit,\n\
     nd-neighbor-advert,\n\
+    mld-listener-query,\n\
   }\n\
 \n\
   set rate_limit {\n\
@@ -396,6 +398,7 @@ table ip6 filter {\n\
     nd-router-advert,\n\
     nd-neighbor-solicit,\n\
     nd-neighbor-advert,\n\
+    mld-listener-query,\n\
   }\n\
 \n\
   set rate_limit {\n\
@@ -569,7 +572,7 @@ table ip6 filter {\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
     ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v6_counter drop\n\
-    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert, mld-listener-query } accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
     ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9091, 9100, 9324, 19531, 19100, 19522 } accept\n\
