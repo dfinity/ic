@@ -160,6 +160,7 @@ pub struct SystemMetadata {
     /// 2).
     pub heap_delta_estimate: NumBytes,
 
+    #[validate_eq(CompareWithValidateEq)]
     pub subnet_metrics: SubnetMetrics,
 
     /// The set of Wasm modules we expect to be present in the [`Hypervisor`]'s
@@ -467,7 +468,7 @@ pub struct OwnSubnetInfo {
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct SubnetMetrics {
     consumed_cycles_by_deleted_canisters: NominalCycles,
     consumed_cycles_http_outcalls: NominalCycles,
@@ -483,6 +484,19 @@ pub struct SubnetMetrics {
     ///
     /// Transactions here refer to all messages processed in replicated mode.
     pub update_transactions_total: u64,
+    /// The total cycles consumed by the canisters that currently exist on this
+    /// subnet, i.e. the sum of `CanisterMetrics::consumed_cycles()` over all of
+    /// them.
+    ///
+    /// A *derived* aggregate over `ReplicatedState::canister_states`, refreshed by
+    /// `ReplicatedState::refresh_consumed_cycles_by_canisters` as part of committing
+    /// a state, just before it is hashed. Computing it is `O(|hot canisters|)`; see
+    /// [`crate::CanisterStates::total_consumed_cycles`].
+    ///
+    /// Transient: not persisted, and re-derived from the canisters by
+    /// `ReplicatedState::new_from_checkpoint` on checkpoint load.
+    #[validate_eq(Ignore)]
+    pub consumed_cycles_by_canisters: NominalCycles,
 }
 
 impl SubnetMetrics {
@@ -679,6 +693,19 @@ impl SubnetMetrics {
         }
 
         total
+    }
+
+    /// All cycles removed from circulation on the subnet, by both deleted and
+    /// still-existing canisters: the subnet-level aggregate
+    /// ([`Self::consumed_cycles_total`]) plus [`Self::consumed_cycles_by_canisters`],
+    /// the end-of-round fold over the canisters that currently exist.
+    ///
+    /// **This is the single definition of the quantity, deliberately.** Every
+    /// consumer must agree on it bit for bit, starting with the certified state
+    /// tree at `/subnet/<subnet_id>/metrics` (from certification version `V29`).
+    /// Both terms are plain stored fields, so this is `O(1)`.
+    pub fn consumed_cycles_total_including_canisters(&self) -> NominalCycles {
+        self.consumed_cycles_total() + self.consumed_cycles_by_canisters
     }
 
     /// Legacy computation of the total consumed cycles, used by the canonical

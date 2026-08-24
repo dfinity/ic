@@ -552,6 +552,79 @@ fn rejoining_node_doesnt_accumulate_states() {
     })
 }
 
+/// `SubnetMetrics::consumed_cycles_by_canisters` is a *derived* aggregate that is
+/// deliberately not persisted: `ReplicatedState::new_from_checkpoint` re-derives it
+/// from the canisters it loads.
+///
+/// This pins the property that makes that safe: a replica restarting from a
+/// checkpoint sees the same value — and hence certifies the same
+/// `/subnet/<subnet_id>/metrics` leaf and produces the same state hash — as one
+/// that kept running.
+#[test]
+fn consumed_cycles_by_canisters_is_rederived_at_restart() {
+    use ic_types_cycles::{
+        CompoundCycles, Cycles, Instructions, NominalCycles, NominalCyclesTesting,
+    };
+
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        insert_dummy_canister(&mut state, canister_test_id(101));
+
+        // Charge one of the canisters, so the aggregate is non-trivial.
+        state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap()
+            .system_state
+            .consume_cycles(CompoundCycles::<Instructions>::new(
+                Cycles::new(123_456),
+                CanisterCyclesCostSchedule::Normal,
+            ));
+
+        // The value `commit_and_certify` must refresh the field to; it does so itself,
+        // so the test does not set it up. Only canister 100 was charged, and the
+        // `Normal` cost schedule values a cycle at par.
+        let expected = state.canister_states().total_consumed_cycles();
+        assert_eq!(expected, NominalCycles::new(123_456));
+        assert_eq!(
+            state.metadata.subnet_metrics.consumed_cycles_by_canisters,
+            NominalCycles::zero()
+        );
+
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+        let hash_before = wait_for_checkpoint(&state_manager, Height(1));
+        assert_eq!(
+            state_manager
+                .get_latest_state()
+                .take()
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_by_canisters,
+            expected,
+            "commit_and_certify did not refresh consumed_cycles_by_canisters"
+        );
+
+        // Restart and reload the checkpoint.
+        let state_manager = restart_fn(state_manager, None);
+        let hash_after = wait_for_checkpoint(&state_manager, Height(1));
+        let (_height, state) = state_manager.take_tip();
+
+        // Re-derived from the loaded canisters.
+        assert_eq!(
+            state.metadata.subnet_metrics.consumed_cycles_by_canisters, expected,
+            "consumed_cycles_by_canisters was not re-derived at checkpoint load"
+        );
+        assert_eq!(
+            state.metadata.subnet_metrics.consumed_cycles_by_canisters,
+            state.canister_states().total_consumed_cycles(),
+            "stored aggregate disagrees with a fresh fold over the canisters"
+        );
+
+        // Same value in, same certified state hash out.
+        assert_eq!(hash_before, hash_after);
+    });
+}
+
 #[test]
 fn temporary_directory_gets_cleaned() {
     state_manager_restart_test(|state_manager, restart_fn| {

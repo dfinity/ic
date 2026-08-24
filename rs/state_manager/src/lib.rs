@@ -3563,6 +3563,12 @@ impl StateManager for StateManagerImpl {
             .observe(state.canister_states().hot_len() as f64);
         state.repartition_canister_states();
 
+        // Like the repartitioning above, this must stay unconditional; see
+        // `ReplicatedState::refresh_consumed_cycles_by_canisters`. Pinned by
+        // `consumed_cycles_by_canisters_is_rederived_at_restart` in
+        // `tests/state_manager.rs`.
+        state.refresh_consumed_cycles_by_canisters();
+
         let assert_tip_is_none = |states: &SharedState| {
             // The following assert validates that we don't have two clients
             // modifying TIP at the same time and that each commit_and_certify()
