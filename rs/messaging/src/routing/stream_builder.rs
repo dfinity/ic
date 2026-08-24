@@ -14,7 +14,7 @@ use ic_types::messages::{
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload,
     RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
-use ic_types::{CanisterId, CountBytes, SubnetId};
+use ic_types::{CountBytes, SubnetId};
 use ic_types_cycles::{CompoundCycles, Cycles};
 #[cfg(test)]
 use mockall::automock;
@@ -453,11 +453,6 @@ impl StreamBuilderImpl {
         let refund_limit = self.max_stream_messages / 2;
         self.route_refunds(&mut state, refund_limit, &network_topology, &mut streams);
 
-        // No canister can have the subnet's own principal as its canister ID, so this
-        // identifies the messages taken from the subnet's own output queues. Those are
-        // only ever responses, as the management canister makes no calls of its own.
-        let own_subnet_as_canister_id = CanisterId::from(self.subnet_id);
-
         let own_subnet_is_cooling_down = network_topology.is_cooling_down(&self.subnet_id);
 
         let mut requests_to_reject = Vec::new();
@@ -476,7 +471,10 @@ impl StreamBuilderImpl {
             // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
             let msg = msg.clone();
 
-            let is_subnet_output_response = msg.sender() == own_subnet_as_canister_id;
+            // No canister can have the subnet's own principal as its canister ID, so this
+            // identifies the messages taken from the subnet's own output queues. Those are
+            // only ever responses, as the management canister makes no calls of its own.
+            let is_subnet_output_response = msg.sender().get() == self.subnet_id.get();
 
             match network_topology.route(msg.receiver().get()) {
                 // Destination subnet found.
