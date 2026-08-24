@@ -52,19 +52,27 @@ use std::time::{Duration, Instant};
 const NIP_IO_DOMAIN: &str = "ipv6.nip.io";
 
 /// The domain suffix under which the group's `dnsmasq` answers for names the
-/// driver registers explicitly with [`LocalBackend::add_dns_record`], as opposed
-/// to the addresses it synthesises under [`NIP_IO_DOMAIN`].
+/// driver registers explicitly with [`LocalBackend::add_dns_record`] or
+/// [`LocalBackend::add_wildcard_dns_record`], as opposed to the addresses it
+/// synthesises under [`NIP_IO_DOMAIN`].
 ///
-/// Resolvable only from inside a test group. Used for the API boundary nodes
-/// (`apibn-{idx}.ic.net`, see `InternetComputer::setup_api_bn_local_playnet`) and
-/// for the IC gateway (`<vm name>.ic.net`, see
-/// `IcGatewayVm::load_or_create_local_playnet`). On Farm those names are handed
-/// out without DNS records, or replaced by a playnet FQDN.
+/// Resolvable from inside a test group, and from the driver, which shares the
+/// group's resolver (see [`LocalBackend::install_group_resolv_conf`]). Used for
+/// the API boundary nodes (`apibn-{idx}.ic.net`, see
+/// `InternetComputer::setup_api_bn_local_playnet`) and for the IC gateway
+/// (`<vm name>.ic.net`, see `IcGatewayVm::load_or_create_local_playnet`). On Farm
+/// those names are handed out without DNS records, or replaced by a playnet
+/// FQDN.
 ///
 /// It must not be a `.local` name: both GuestOS and HostOS resolve through
 /// `systemd-resolved`, which routes `*.local` to mDNS and never to the unicast
 /// `DNS=` servers the group's `dnsmasq` answers on.
 pub const IN_GROUP_DOMAIN_SUFFIX: &str = "ic.net";
+
+/// How long [`LocalBackend::stop_dnsmasq`] waits for `dnsmasq` to exit after
+/// `SIGTERM` before resorting to `SIGKILL`. It normally exits within
+/// milliseconds; this only bounds the wait if it wedges.
+const DNSMASQ_STOP_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Environment variables holding the runfiles paths of the split OVMF (UEFI)
 /// firmware images, provided by the `@ovmf` Bazel repo (extracted from the
@@ -820,6 +828,13 @@ impl LocalBackend {
         );
         Self::run_shell(&create_script, "create group bridge")?;
 
+        // Truncate the two files the group's DNS records live in, both to drop
+        // records an interrupted run left behind and so they exist before
+        // `dnsmasq` starts. They deliberately survive a `dnsmasq` *restart* (see
+        // `add_wildcard_dns_record`), which is why this happens here rather than
+        // in `start_dnsmasq`.
+        self.reset_dns_records(&bridge)?;
+
         // Start `dnsmasq`. Non-IC-node VMs (e.g. universal VMs) SLAAC their
         // global address from its RA; IC GuestOS nodes use a static config instead.
         // The same `dnsmasq` also serves DHCPv4 on the group's IPv4 `/24` for
@@ -846,6 +861,64 @@ impl LocalBackend {
             .working_dir
             .join("dnsmasq")
             .join(format!("{bridge}.hosts"))
+    }
+
+    /// Path of the file the group's *wildcard* DNS records are accumulated in by
+    /// [`add_wildcard_dns_record`](Self::add_wildcard_dns_record), and turned into
+    /// `--address` options by
+    /// [`dnsmasq_wildcard_args`](Self::dnsmasq_wildcard_args).
+    ///
+    /// Deliberately shaped like the `--addn-hosts` file next to it — one
+    /// `<address> <name>` pair per line — even though `dnsmasq` never reads it
+    /// itself.
+    fn dnsmasq_wildcards_path(&self, bridge: &str) -> PathBuf {
+        self.active_local_backend
+            .working_dir
+            .join("dnsmasq")
+            .join(format!("{bridge}.wildcards"))
+    }
+
+    /// Create the group's `dnsmasq` working dir and truncate both DNS record
+    /// files, so they exist and are empty before `dnsmasq` first starts. Called
+    /// from [`create_group`](Self::create_group); see the comment there for why
+    /// not from [`start_dnsmasq`](Self::start_dnsmasq).
+    fn reset_dns_records(&self, bridge: &str) -> Result<()> {
+        let dnsmasq_dir = self.active_local_backend.working_dir.join("dnsmasq");
+        std::fs::create_dir_all(&dnsmasq_dir).with_context(|| {
+            format!("creating dnsmasq working dir at {}", dnsmasq_dir.display())
+        })?;
+        for path in [
+            self.dnsmasq_hosts_path(bridge),
+            self.dnsmasq_wildcards_path(bridge),
+        ] {
+            std::fs::write(&path, "").with_context(|| format!("truncating {}", path.display()))?;
+        }
+        Ok(())
+    }
+
+    /// The `--address=/<name>/<addr>` options for the wildcard records registered
+    /// for `bridge` so far, read back from
+    /// [`dnsmasq_wildcards_path`](Self::dnsmasq_wildcards_path).
+    fn dnsmasq_wildcard_args(&self, bridge: &str) -> Result<Vec<String>> {
+        let path = self.dnsmasq_wildcards_path(bridge);
+        let contents = match std::fs::read_to_string(&path) {
+            Ok(contents) => contents,
+            // A group that never got as far as `reset_dns_records` has no
+            // wildcards to serve.
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
+            Err(err) => return Err(err).with_context(|| format!("reading {}", path.display())),
+        };
+        contents
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| {
+                let (addr, name) =
+                    line.trim().split_once(char::is_whitespace).ok_or_else(|| {
+                        anyhow!("malformed wildcard record {line:?} in {}", path.display())
+                    })?;
+                Ok(format!("--address=/{}/{addr}", name.trim()))
+            })
+            .collect()
     }
 
     /// Spawn a minimal `dnsmasq` on `bridge` serving three roles:
@@ -876,11 +949,15 @@ impl LocalBackend {
         let log_path = dnsmasq_dir.join(format!("{bridge}.log"));
         // Remove a stale pid-file from a previous interrupted run.
         let _ = std::fs::remove_file(&pid_path);
-        // Truncate the hosts-file, both to drop any records such a run left and
-        // so it exists before `dnsmasq` starts: a missing `--addn-hosts` file is
-        // tolerated, but relying on it being picked up later is needless risk.
-        std::fs::write(&hosts_path, "")
-            .with_context(|| format!("creating {}", hosts_path.display()))?;
+        // The wildcard records registered so far. Unlike the `--addn-hosts` file,
+        // these are *command-line* options, which is why registering one has to
+        // restart `dnsmasq`; see `add_wildcard_dns_record`. Empty on the first
+        // start, since `create_group` truncates the file it reads.
+        let wildcard_args: String = self
+            .dnsmasq_wildcard_args(bridge)?
+            .into_iter()
+            .map(|arg| format!(" {arg}"))
+            .collect();
 
         info!(
             self.logger,
@@ -898,13 +975,19 @@ impl LocalBackend {
         // (`enp2s0`). `dnsmasq` daemonizes (writing its pid-file) and is
         // signalled via it in teardown.
         //
-        // DNS: `--no-resolv --no-hosts` keeps the resolver hermetic — it neither
-        // reads the driver host's `/etc/resolv.conf` nor its `/etc/hosts`. With
-        // no upstream server left to forward to, anything it cannot answer is
-        // REFUSED rather than leaked. It answers from two sources:
+        // DNS: `--no-resolv --no-hosts` keeps the resolver hermetic — it reads
+        // neither `/etc/resolv.conf` nor `/etc/hosts`. Both matter: with no
+        // upstream server left to forward to, anything it cannot answer is REFUSED
+        // rather than leaked — and `/etc/resolv.conf` in this mount namespace is
+        // the generated file naming *these very addresses*
+        // (`install_group_resolv_conf`), so reading it would make `dnsmasq` forward
+        // to itself. It answers from three sources:
         //
         // * `--addn-hosts` — records tests register through
         //   [`add_dns_record`](Self::add_dns_record).
+        // * `--address` — the wildcard records tests register through
+        //   [`add_wildcard_dns_record`](Self::add_wildcard_dns_record), each
+        //   answering for a name *and every subdomain of it*.
         // * `--synth-domain` — synthesises `<address>.ipv6.nip.io` for the
         //   group's `/64`, with `:` written as `-`, mirroring the public
         //   `nip.io` wildcard service that tests use to name a VM by its
@@ -939,7 +1022,8 @@ impl LocalBackend {
                  --no-resolv \
                  --no-hosts \
                  --addn-hosts={hosts} \
-                 --synth-domain={NIP_IO_DOMAIN},{prefix}/64",
+                 --synth-domain={NIP_IO_DOMAIN},{prefix}/64\
+                 {wildcard_args}",
             pid = pid_path.display(),
             lease = lease_path.display(),
             log = log_path.display(),
@@ -958,7 +1042,10 @@ impl LocalBackend {
     /// accumulate across calls.
     ///
     /// This is how the local backend replaces Farm's playnet DNS: see
-    /// `InternetComputer::setup_api_bn_local_playnet`.
+    /// `InternetComputer::setup_api_bn_local_playnet`. Use
+    /// [`add_wildcard_dns_record`](Self::add_wildcard_dns_record) when the
+    /// subdomains of `name` have to resolve as well; a hosts file has no
+    /// wildcards.
     pub fn add_dns_record(&self, group_name: &str, name: &str, addr: IpAddr) -> Result<()> {
         let bridge = Self::bridge_name(group_name);
         let hosts_path = self.dnsmasq_hosts_path(&bridge);
@@ -996,17 +1083,146 @@ impl LocalBackend {
         Ok(())
     }
 
-    /// Stop the group's `dnsmasq`, if running. It runs as the current user, so
-    /// it is signalled directly via its pid-file. Best-effort and idempotent.
+    /// Register a *wildcard* DNS record with the group's `dnsmasq`, so that
+    /// `name` **and every subdomain of it, at any depth** resolve to `addrs` — on
+    /// every VM in the group, and in the driver, which shares their resolver (see
+    /// [`install_group_resolv_conf`](Self::install_group_resolv_conf)).
+    ///
+    /// This is the local replacement for the apex record plus the `*` and `*.raw`
+    /// `CNAME`s Farm's playnet DNS serves for the IC gateway, whose per-canister
+    /// subdomains (`<canister id>.<domain>`, `<canister id>.raw.<domain>`) clients
+    /// are expected to reach; see `IcGatewayVm::configure_dns_records`. Mixing
+    /// address families in `addrs` is fine — `dnsmasq` answers each query type
+    /// from the matching `--address` option — and takes the whole set at once
+    /// because a single record is what costs a restart, not a single address.
+    ///
+    /// It does cost a `dnsmasq` restart, unlike
+    /// [`add_dns_record`](Self::add_dns_record), because a wildcard needs
+    /// `--address`, and nothing re-reads a *command-line* option: `SIGHUP` re-reads
+    /// the hosts-shaped files and `--servers-file`, and a servers-file admits
+    /// nothing but `server` and `rev-server`. Prefer `add_dns_record` when an exact
+    /// name is enough.
+    pub fn add_wildcard_dns_record(
+        &self,
+        group_name: &str,
+        name: &str,
+        addrs: &[IpAddr],
+    ) -> Result<()> {
+        if addrs.is_empty() {
+            return Ok(());
+        }
+        let bridge = Self::bridge_name(group_name);
+        let wildcards_path = self.dnsmasq_wildcards_path(&bridge);
+
+        info!(
+            self.logger,
+            "Registering wildcard DNS record {name} (and its subdomains) -> {addrs:?} \
+             with the dnsmasq of group {group_name}"
+        );
+
+        let mut wildcards_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&wildcards_path)
+            .with_context(|| format!("opening {}", wildcards_path.display()))?;
+        for addr in addrs {
+            writeln!(wildcards_file, "{addr} {name}")
+                .with_context(|| format!("appending to {}", wildcards_path.display()))?;
+        }
+        drop(wildcards_file);
+
+        self.restart_dnsmasq(group_name)
+    }
+
+    /// Stop and restart the group's `dnsmasq` so it picks up command-line options
+    /// derived from state that changed since it started — currently only the
+    /// wildcard records of
+    /// [`add_wildcard_dns_record`](Self::add_wildcard_dns_record).
+    ///
+    /// The record files are left alone (they are truncated once, by
+    /// [`create_group`](Self::create_group)), so records registered before the
+    /// restart survive it.
+    ///
+    /// Restarting is safe for VMs that are already up: IC GuestOS nodes are
+    /// statically configured and never consult the RA; a VM that SLAAC'd its
+    /// address holds it for the `--dhcp-range ... ra-only` lifetime, which far
+    /// outlives the gap; DHCPv4 leases live in the lease-file `dnsmasq` re-reads at
+    /// startup; and the only real loss is its DNS cache. A guest that happens to
+    /// query during the gap retries.
+    fn restart_dnsmasq(&self, group_name: &str) -> Result<()> {
+        let bridge = Self::bridge_name(group_name);
+        let prefix = Self::group_ipv6_prefix(group_name);
+        let ipv4_prefix = Self::group_ipv4_prefix(group_name);
+        self.stop_dnsmasq(&bridge);
+        self.start_dnsmasq(group_name, &bridge, &prefix, &ipv4_prefix)
+    }
+
+    /// Stop the group's `dnsmasq`, if running, and wait for it to exit. It runs as
+    /// the current user, so it is signalled directly via its pid-file.
+    /// Best-effort and idempotent.
+    ///
+    /// The wait matters for [`restart_dnsmasq`](Self::restart_dnsmasq): returning
+    /// while the old instance still holds UDP port 53 on the name-server addresses
+    /// would make the new one fail to bind.
     fn stop_dnsmasq(&self, bridge: &str) {
         let pid_path = self.dnsmasq_pid_path(bridge);
         if let Ok(contents) = std::fs::read_to_string(&pid_path)
             && let Ok(pid) = contents.trim().parse::<i32>()
+            && Self::dnsmasq_is_alive(pid, &pid_path)
         {
             // SIGTERM lets dnsmasq remove its pid-file on exit.
             let _ = Command::new("kill").arg(pid.to_string()).status();
+            let deadline = Instant::now() + DNSMASQ_STOP_TIMEOUT;
+            while Self::dnsmasq_is_alive(pid, &pid_path) {
+                if Instant::now() >= deadline {
+                    warn!(
+                        self.logger,
+                        "dnsmasq (pid {pid}) did not exit within {DNSMASQ_STOP_TIMEOUT:?} \
+                         of SIGTERM; sending SIGKILL"
+                    );
+                    let _ = Command::new("kill")
+                        .args(["-KILL", &pid.to_string()])
+                        .status();
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
         }
         let _ = std::fs::remove_file(&pid_path);
+    }
+
+    /// Whether `pid` is a live `dnsmasq` that this backend started with
+    /// `pid_path`, decided by looking for the `--pid-file=<pid_path>` argument
+    /// [`start_dnsmasq`](Self::start_dnsmasq) passed it in
+    /// `/proc/<pid>/cmdline`.
+    ///
+    /// That one check settles both of the questions
+    /// [`stop_dnsmasq`](Self::stop_dnsmasq) has to answer before it signals:
+    ///
+    /// * **Is it still ours?** The pid comes from a pid-file that a `dnsmasq` which
+    ///   died on its own never got to remove, so it can name a pid the kernel has
+    ///   since handed to something else — and `stop_dnsmasq` escalates to
+    ///   `SIGKILL`, which is not a signal to send to a stranger. The pid-file path
+    ///   is unique per group, so nothing else carries it in its `argv`.
+    /// * **Is it still running?** A zombie's `cmdline` reads back empty, so this
+    ///   answers `false` for one — which is what we want, since a zombie holds no
+    ///   sockets. `dnsmasq` does become one briefly: it daemonizes, so it is not a
+    ///   child of this process and lingers until whoever it was reparented to reaps
+    ///   it.
+    ///
+    /// The process *name* is no help here, which is worth knowing before reaching
+    /// for it: Bazel links the `dnsmasq` runfiles entry under a hashed basename, so
+    /// `/proc/<pid>/comm` holds a 15-character truncation of that hash rather than
+    /// anything resembling `dnsmasq`.
+    fn dnsmasq_is_alive(pid: i32, pid_path: &Path) -> bool {
+        let Ok(cmdline) = std::fs::read(format!("/proc/{pid}/cmdline")) else {
+            return false;
+        };
+        // `cmdline` is NUL-separated and `--pid-file=<path>` is passed as a single
+        // word, so searching the raw bytes cannot match across two arguments.
+        let mut needle = b"--pid-file=".to_vec();
+        needle.extend_from_slice(pid_path.as_os_str().as_bytes());
+        cmdline.windows(needle.len()).any(|word| word == needle)
     }
 
     /// Path of a VM's QEMU pid-file (written via `-pidfile` in [`start_vm`]).
