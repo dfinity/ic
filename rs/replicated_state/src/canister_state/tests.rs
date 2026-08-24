@@ -857,6 +857,25 @@ fn canister_state_ingress_induction_cycles_debit() {
     );
 }
 
+#[test]
+fn canister_state_ingress_induction_cycles_debit_requires_paused_execution() {
+    let system_state = &mut CanisterStateFixture::new().canister_state.system_state;
+
+    // A pending debit without a paused execution breaks the invariant: nothing would
+    // be bound to apply the debit.
+    system_state.add_postponed_charge_to_ingress_induction_cycles_debit(Cycles::new(42));
+    assert_matches!(
+        system_state.check_invariants(),
+        Err(msg) if msg.contains("Pending ingress induction cycles debit")
+    );
+
+    // With a paused execution the invariant holds.
+    system_state
+        .task_queue
+        .enqueue(ExecutionTask::PausedInstallCode(PausedExecutionId(0)));
+    assert_eq!(Ok(()), system_state.check_invariants());
+}
+
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
 #[test]
