@@ -145,6 +145,18 @@ impl PocketIcHttpQuery for &CkEthSetup {
     }
 }
 
+/// A response the minter accepts for `method`, for settling outcalls a test does not care about.
+///
+/// Panics on a method with no canned answer: a new periodic task's outcall should be handled here
+/// deliberately rather than answered with something meaningless.
+fn canned_response_for(method: &JsonRpcMethod) -> &'static str {
+    match method {
+        // 0.1 ETH, comfortably above the sweeper's low-water mark, so no funding is due.
+        JsonRpcMethod::EthGetBalance => "0x16345785d8a0000",
+        other => panic!("BUG: no canned response for {other}; add one deliberately"),
+    }
+}
+
 impl CkEthSetup {
     /// Builds a fresh PocketIC instance (fiduciary subnet only, non-live) and installs the minter,
     /// its ckETH ledger and the EVM RPC canister on it — each under the anonymous controller —
@@ -157,10 +169,6 @@ impl CkEthSetup {
         install_evm_rpc(&env, &canisters, &backend);
         install_minter(&env, &canisters, &backend);
 
-        // Deliberately no call to the minter here, not even to check its address against
-        // `MINTER_ADDRESS`: `minter_address` is an update call, and a fixture that has executed a
-        // round lets the install-time timers fire before the test drives them, which the flows rely
-        // on doing themselves. `should_derive_the_expected_minter_address` checks the constant.
         Self {
             env,
             caller: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID),
@@ -180,25 +188,37 @@ impl CkEthSetup {
     /// the funding check runs once per `SWEEPER_FUNDING_INTERVAL`, so it does not come back during a
     /// mocked test — so call this only when an outcall in flight would get in the way: stopping the
     /// minter, or asserting on the set of pending outcalls.
-    pub fn settle_initial_sweeper_funding_check(&self) {
-        const TOPPED_UP: &str = "0x16345785d8a0000"; // 0.1 ETH
-        // Waits for the outcall rather than ticking a fixed number of times, so a check that stops
-        // firing fails here instead of surfacing in whichever test runs next.
+    /// Answers every pending outcall that is not log scraping, so a test can assert on the scraping
+    /// calls — or on the canister reaching `Stopped` — without knowing which other periodic task
+    /// happens to be due.
+    ///
+    /// Ticks until at least one such outcall appears, so a task that stops firing fails here rather
+    /// than in whichever test runs next.
+    pub fn settle_outcalls_other_than_log_scraping(&self) {
+        use strum::IntoEnumIterator;
+
+        let others = || -> Vec<JsonRpcMethod> {
+            JsonRpcMethod::iter()
+                .filter(|method| *method != JsonRpcMethod::EthGetLogs)
+                .filter(|method| pending_outcalls_for(&self.env, method) > 0)
+                .collect()
+        };
         let mut ticks = 0;
-        while pending_outcalls_for(&self.env, &JsonRpcMethod::EthGetBalance) == 0 {
+        while others().is_empty() {
             assert!(
                 ticks < MAX_TICKS,
-                "no eth_getBalance outcall after {MAX_TICKS} ticks; the install-time sweeper \
-                 funding check did not fire. Pending outcalls:\n{}",
+                "no outcall other than log scraping after {MAX_TICKS} ticks. Pending outcalls:\n{}",
                 debug_http_outcalls(&self.env)
             );
             self.env.tick();
             ticks += 1;
         }
-        MockJsonRpcProviders::when(JsonRpcMethod::EthGetBalance)
-            .respond_for_all_with(TOPPED_UP)
-            .build()
-            .expect_rpc_calls(self);
+        for method in others() {
+            MockJsonRpcProviders::when(method.clone())
+                .respond_for_all_with(canned_response_for(&method))
+                .build()
+                .expect_rpc_calls(self);
+        }
     }
 
     pub fn add_support_for_subaccount(self) -> Self {
@@ -525,9 +545,6 @@ impl CkEthSetup {
             )
             .unwrap();
         self.start_minter();
-        // Deliberately not settled again after an upgrade: advancing time to it perturbs the other
-        // periodic timers and breaks unrelated tests, and `stop_minter` drains pending outcalls
-        // anyway. Assertions counting pending outcalls should filter by method.
     }
 
     pub fn submit_stop_minter(&self) -> RawMessageId {

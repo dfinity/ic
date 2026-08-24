@@ -22,7 +22,9 @@ pub struct MockJsonRpcProviders {
 
 //variants are prefixed by Eth because it's the names of those methods in the Ethereum JSON-RPC API
 #[allow(clippy::enum_variant_names)]
-#[derive(Clone, PartialEq, Debug, strum_macros::Display, strum_macros::EnumString)]
+#[derive(
+    Clone, PartialEq, Debug, strum_macros::Display, strum_macros::EnumString, strum_macros::EnumIter,
+)]
 pub enum JsonRpcMethod {
     #[strum(serialize = "eth_call")]
     EthCall,
