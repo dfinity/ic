@@ -458,13 +458,20 @@ impl LocalBackend {
     /// stage of the IC-OS Dockerfiles, see [`dev_root_ca_cert_pem`] — so the driver
     /// and the nodes end up trusting the gateway on the same terms.
     ///
-    /// A bind mount is the mechanism because the obvious alternative cannot work. A
-    /// mount namespace isolates the mount *table*, not file contents, so dropping a
-    /// `.crt` into `/etc/ssl/certs` the way `update-ca-certificates` does would
-    /// escape the namespace and mutate the container — and the driver is
-    /// unprivileged there in any case. Shadowing the *bundle* rather than the
-    /// directory leaves OpenSSL's hashed-symlink `CApath` layout intact for whatever
-    /// reads it that way.
+    /// A bind mount over an *existing* entry is the only option, which is worth
+    /// spelling out because two simpler-looking routes are dead ends. Adding a new
+    /// file beside the bundle fails on `mount(2)`, which will not create a directory
+    /// entry: the target has to exist already, and the driver cannot create one —
+    /// `/etc/ssl/certs` belongs to root, root is not mapped into the driver's user
+    /// namespace, and so the `CAP_DAC_OVERRIDE` it holds there does not apply to it.
+    /// Writing the file for real, the way `update-ca-certificates` does, escapes the
+    /// namespace altogether: it isolates the mount *table*, not file contents.
+    ///
+    /// Shadowing the bundle rather than the whole directory is then the better of
+    /// what is left. It reaches OpenSSL's `CApath` consumers, which look up
+    /// `<subject hash>.0` symlinks and would miss a plainly named file (though
+    /// `rustls-native-certs` would have read one, since it loads every regular file
+    /// in the directory), and it avoids reproducing the directory's ~240 entries.
     ///
     /// Appending, never replacing: the original bytes are copied verbatim first, so
     /// this can only widen the driver's trust, never narrow it. That matters,

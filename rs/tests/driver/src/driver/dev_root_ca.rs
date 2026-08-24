@@ -4,9 +4,10 @@
 //! Shared by the two things that care about it: the local backend, which puts it
 //! in the driver's own trust store (`LocalBackend::install_dev_root_ca`), and the
 //! IC gateway, which issues its TLS leaf from it
-//! (`IcGatewayVm::load_or_create_local_playnet`). It lives in its own module
-//! rather than in either of those because it belongs to neither — what trusts it
-//! is the IC-OS images.
+//! (`IcGatewayVm::load_or_create_local_playnet`). Its own module because neither
+//! consumer can host it: `local_backend` would own the `rcgen`/`rsa` issuance
+//! machinery it never calls, and `ic_gateway_vm` would make the backend depend on
+//! the gateway.
 
 use anyhow::{Context, Result};
 use rcgen::{CertificateParams, KeyPair};
@@ -71,16 +72,9 @@ pub(crate) fn dev_root_ca() -> Result<DevRootCa> {
         .context("re-encoding the dev root CA key as PKCS#8")?;
     let key = KeyPair::from_pem(&key_pkcs8_pem).context("loading the dev root CA key")?;
 
-    // `from_ca_cert_pem` extracts what is needed to act as an issuer, of which
-    // `signed_by` uses one thing: the subject name, which becomes the leaf's
-    // issuer. (It carries the CA's subject key identifier across too, but that
-    // reaches the leaf as an authority key identifier only when
-    // `use_authority_key_identifier_extension` is set, and `CertificateParams::new`
-    // leaves it false — the leaf's only extension is its SAN.) `self_signed` then
-    // re-signs the CA merely to obtain an `rcgen::Certificate` to pass as that
-    // issuer; the result is not the checked-in certificate byte for byte and is
-    // never served. What makes the chain verify is the issuer name plus the
-    // signature, both of which are the real CA's.
+    // `self_signed` re-signs the CA only to get an `rcgen::Certificate` to pass to
+    // `signed_by` as the issuer. The result is *not* the checked-in certificate byte
+    // for byte and is never served -- `cert_pem` above is what goes on the wire.
     let cert = CertificateParams::from_ca_cert_pem(&cert_pem)
         .context("parsing the dev root CA certificate")?
         .self_signed(&key)
