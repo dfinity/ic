@@ -66,12 +66,11 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
     let dapp_url = format!("https://{canister_id}.{ic_gateway_domain}");
     let log = env.logger();
 
-    // On the Local backend the driver cannot resolve the gateway domain (nor its
-    // per-canister subdomains), so resolve the requested host directly to the
-    // gateway VM, and trust the CA that issued its certificate.
+    // On the Local backend the gateway's certificate is issued by the dev root CA
+    // rather than by a public one, so trust that CA. Its domain — and, thanks to
+    // the group's wildcard record, this canister's subdomain of it — resolves on
+    // both backends, so nothing else is needed.
     let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
-    let parsed_dapp_url = Url::parse(&dapp_url).unwrap();
-    let resolve_override = ic_gateway.resolve_override_for_url(&parsed_dapp_url);
     let root_cert = ic_gateway.root_certificate().unwrap();
 
     block_on(async {
@@ -85,9 +84,6 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
                     .use_rustls_tls()
                     .https_only(true)
                     .http1_only();
-                if let Some((domain, addr)) = &resolve_override {
-                    builder = builder.resolve(domain, *addr);
-                }
                 if let Some(cert) = &root_cert {
                     builder = builder.add_root_certificate(cert.clone());
                 }

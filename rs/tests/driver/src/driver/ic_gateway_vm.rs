@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use std::{
     fs,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::Path,
     time::Duration,
 };
@@ -148,37 +148,6 @@ impl DeployedIcGatewayVm {
     /// Retrieves the underlying VM.
     pub fn get_vm(&self) -> AllocatedVm {
         self.vm.clone()
-    }
-
-    /// Returns a custom DNS resolution override for reaching the gateway at the
-    /// given `url`, if one is needed for the active system-test backend.
-    ///
-    /// On the [`SystemTestBackend::Local`] backend the gateway's domain is
-    /// `<name>.ic.net`, which the group's `dnsmasq` resolves for the *VMs* — but
-    /// not for the driver, which sits in the group's network namespace yet reads
-    /// the host's `/etc/resolv.conf`, whose nameserver is unreachable from there.
-    /// Nor does `dnsmasq` answer for the per-canister subdomains
-    /// `<canister_id>.<name>.ic.net`, since it is served a hosts file, which has
-    /// no wildcards. A driver-side client therefore has to resolve the requested
-    /// host itself. This returns `(host, [vm_ipv6]:443)` for the host of `url`,
-    /// to be passed to `reqwest`'s `.resolve(host, addr)`.
-    ///
-    /// Note that `resolve` overrides only the *exact* host passed to it (it does
-    /// *not* apply to subdomains), so the host of the actual request URL — e.g.
-    /// `<canister_id>.<name>.ic.net` — must be used, not the apex domain. On the
-    /// [`SystemTestBackend::Farm`] backend DNS resolves the gateway domain, so no
-    /// override is needed and `None` is returned.
-    ///
-    /// The certificate needs no equivalent workaround: see
-    /// [`Self::root_certificate`].
-    pub fn resolve_override_for_url(&self, url: &Url) -> Option<(String, SocketAddr)> {
-        match SystemTestBackend::read_attribute(&self.env) {
-            SystemTestBackend::Local => {
-                let host = url.host_str()?.to_string();
-                Some((host, SocketAddr::new(IpAddr::V6(self.vm.ipv6), 443)))
-            }
-            SystemTestBackend::Farm => None,
-        }
     }
 
     /// The extra trust anchor a client needs in order to verify the gateway's
@@ -381,29 +350,22 @@ sudo networkctl reconfigure enp2s0
             self.universal_vm.name,
             health_url.as_str()
         );
-        // The driver does not use the group's `dnsmasq` as its resolver — it is in
-        // the group's network namespace but reads the host's `/etc/resolv.conf`,
-        // whose nameserver is unreachable from there — so on the Local backend it
-        // has to resolve the gateway domain itself. The certificate needs no such
-        // workaround: it is issued by the dev root CA, which is added as a trust
-        // anchor rather than skipping verification altogether.
-        let (resolve, root_cert) = match backend {
-            SystemTestBackend::Local => {
-                let resolve = Some((
-                    ic_gateway_fqdn.clone(),
-                    SocketAddr::new(IpAddr::V6(vm_ipv6), 443),
-                ));
-                let cert = reqwest::Certificate::from_pem(dev_root_ca_cert_pem()?.as_bytes())
-                    .context("parsing the dev root CA certificate as a trust anchor")?;
-                (resolve, Some(cert))
-            }
-            SystemTestBackend::Farm => (None, None),
+        // The gateway domain resolves for the driver as well as for the VMs — the
+        // wildcard record above, plus the resolver
+        // `LocalBackend::install_group_resolv_conf` gave the driver — so the only
+        // thing the Local backend needs here is the trust anchor for a certificate
+        // the dev root CA issued rather than a public one.
+        let root_cert = match backend {
+            SystemTestBackend::Local => Some(
+                reqwest::Certificate::from_pem(dev_root_ca_cert_pem()?.as_bytes())
+                    .context("parsing the dev root CA certificate as a trust anchor")?,
+            ),
+            SystemTestBackend::Farm => None,
         };
         block_on(await_status_is_healthy(
             &env.logger(),
             health_url,
             msg,
-            resolve,
             root_cert,
         ))
     }
@@ -455,10 +417,9 @@ sudo networkctl reconfigure enp2s0
     ///
     /// The certificate covers the apex domain and both the `*.<domain>` and
     /// `*.raw.<domain>` wildcards, matching the records the Farm path creates, so
-    /// the gateway can also serve canister subdomains. Only the apex is
-    /// registered with the group's `dnsmasq` though (see
-    /// [`Self::configure_dns_records`]), so a subdomain still has to be resolved
-    /// by the client -- see [`DeployedIcGatewayVm::resolve_override_for_url`].
+    /// the gateway can also serve canister subdomains. The group's `dnsmasq`
+    /// resolves those subdomains to match, via the wildcard record
+    /// [`Self::configure_dns_records`] registers.
     fn load_or_create_local_playnet(
         &self,
         env: &TestEnv,
@@ -534,28 +495,22 @@ sudo networkctl reconfigure enp2s0
         let mut records = match SystemTestBackend::read_attribute(env) {
             SystemTestBackend::Local => {
                 // The group's `dnsmasq` is the local replacement for Farm's
-                // playnet DNS. Only the apex is registered, because dnsmasq's
-                // `--addn-hosts` file is a hosts file and so has no wildcards.
-                // Driver-side clients cope by resolving the exact request host
-                // themselves, see
-                // `DeployedIcGatewayVm::resolve_override_for_url`. Clients *inside*
-                // a VM cannot: `prometheus_vm` writes `<canister id>.raw.<domain>`
-                // scrape targets that the Prometheus VM resolves through this
-                // dnsmasq, and those have never resolved on this backend — the
-                // domain was an equally unresolvable `.local` name before. Fixing
-                // it means `--address=/<domain>/<addr>` on dnsmasq's command line,
-                // which `SIGHUP` does not re-read, so it would have to be known at
-                // `start_dnsmasq` time or cost a restart.
+                // playnet DNS, and a wildcard record is the local equivalent of the
+                // three records the Farm arm below creates: `--address` answers for
+                // the apex *and every subdomain at any depth*, which covers both
+                // the `*` and the `*.raw` `CNAME`s. So the per-canister hosts
+                // `<canister id>.<domain>` and `<canister id>.raw.<domain>` resolve
+                // here too — for driver-side clients and for clients inside a VM
+                // (`prometheus_vm` writes scrape targets of exactly that shape).
                 let group_name = GroupSetup::read_attribute(env).infra_group_name;
                 let backend = LocalBackend::from_test_env(env)?;
-                let addrs = playnet
+                let addrs: Vec<IpAddr> = playnet
                     .aaaa_records
                     .iter()
                     .map(|addr| IpAddr::V6(*addr))
-                    .chain(playnet.a_records.iter().map(|addr| IpAddr::V4(*addr)));
-                for addr in addrs {
-                    backend.add_dns_record(&group_name, ic_gateway_fqdn, addr)?;
-                }
+                    .chain(playnet.a_records.iter().map(|addr| IpAddr::V4(*addr)))
+                    .collect();
+                backend.add_wildcard_dns_record(&group_name, ic_gateway_fqdn, &addrs)?;
                 return Ok(());
             }
             SystemTestBackend::Farm => {
@@ -943,7 +898,6 @@ async fn await_status_is_healthy(
     logger: &Logger,
     url: Url,
     msg: String,
-    resolve: Option<(String, SocketAddr)>,
     root_cert: Option<reqwest::Certificate>,
 ) -> Result<()> {
     info!(logger, "Waiting for IcGatewayVm to become healthy ...");
@@ -951,12 +905,8 @@ async fn await_status_is_healthy(
     let request = Request::new(Method::GET, url);
     retry_with_msg_async!(&msg, logger, READY_TIMEOUT, RETRY_INTERVAL, || async {
         let mut builder = Client::builder();
-        // On the Local backend the driver cannot resolve the gateway domain, so
-        // point it at the VM directly, and trust the CA that issued the
-        // certificate.
-        if let Some((domain, addr)) = resolve.as_ref() {
-            builder = builder.resolve(domain, *addr);
-        }
+        // On the Local backend the certificate is issued by the dev root CA, so
+        // add it as a trust anchor rather than skipping verification.
         if let Some(cert) = root_cert.as_ref() {
             builder = builder.add_root_certificate(cert.clone());
         }
