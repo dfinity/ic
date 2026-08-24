@@ -3004,29 +3004,29 @@ mod sweep_lane {
     #[test]
     fn should_sweep_with_the_transaction_type_the_delegations_to_install_call_for() {
         struct Case {
-            addresses_to_delegate: &'static str,
+            scenario: &'static str,
             authorizations: Vec<SignedAuthorization>,
             expected_transaction_type: u8,
         }
 
         for case in [
             Case {
-                addresses_to_delegate: "none",
+                scenario: "every swept address already delegated",
                 authorizations: vec![],
                 expected_transaction_type: EIP1559_TX_ID,
             },
             Case {
-                addresses_to_delegate: "one",
+                scenario: "one swept address still to delegate",
                 authorizations: vec![authorization(1)],
                 expected_transaction_type: SET_CODE_TX_ID,
             },
             Case {
-                addresses_to_delegate: "two",
-                authorizations: delegating_sweep_request(0).authorizations,
+                scenario: "two swept addresses still to delegate",
+                authorizations: vec![authorization(1), authorization(2)],
                 expected_transaction_type: SET_CODE_TX_ID,
             },
         ] {
-            let context = format!("{} address(es) to delegate", case.addresses_to_delegate);
+            let context = case.scenario;
             let request = SweepRequest {
                 authorizations: case.authorizations,
                 ..sweep_request(0)
