@@ -550,6 +550,15 @@ mod tests {
         NodeId::from(PrincipalId::new_node_test_id(i))
     }
 
+    /// A flexible replication delegated to a committee of `total_requests` nodes.
+    fn flexible(total_requests: u64, min_responses: u32, max_responses: u32) -> Replication {
+        Replication::Flexible {
+            committee: (0..total_requests).map(node).collect(),
+            min_responses,
+            max_responses,
+        }
+    }
+
     fn metadata(content_size: u32) -> CanisterHttpResponseMetadata {
         CanisterHttpResponseMetadata {
             id: CallbackId::from(1),
@@ -1517,68 +1526,91 @@ mod tests {
     }
 
     #[test]
+    fn max_usage_fee_flexible_does_not_depend_on_max_responses() {
+        // The consensus reserve is priced for a response from every delegated replica
+        // rather than for the `max_responses` that are delivered, so that each replica's
+        // allowance can cover its own response (see [`max_consensus_fee`]). Asking for
+        // fewer responses back therefore does not make the outcall any cheaper.
+        let subnet_size = NumberOfNodes::from(13);
+        let reference = max_usage_fee(&flexible(7, 2, 7), None, subnet_size);
+        for max_responses in 2..=7 {
+            assert_eq!(
+                max_usage_fee(&flexible(7, 2, max_responses), None, subnet_size),
+                reference,
+                "max_responses = {max_responses}"
+            );
+        }
+    }
+
+    #[test]
     fn max_usage_fee_is_a_whole_number_of_allowances_and_bounds_every_usage() {
         // The reported maximum is a multiple of the number of participating replicas, so
         // that splitting it into allowances loses nothing. It is [`usage_fee`] that rounds
         // up to one (see [`usage_fee_is_a_whole_number_of_allowances`]), so the maximum
         // adds nothing of its own on top of the worst case it reports.
-        for replication in [
-            Replication::FullyReplicated,
-            Replication::NonReplicated(node(0)),
-            // A committee of 11, i.e. fewer allowances than the subnet has replicas, and
-            // one whose worst case is not a whole number of them before the rounding.
-            Replication::Flexible {
-                committee: (0..11).map(node).collect(),
-                min_responses: 2,
-                max_responses: 7,
-            },
-        ] {
-            let subnet_size = NumberOfNodes::from(13);
-            let replication_kind = replication.kind();
-            let node_count = replication_kind.node_count(subnet_size) as u128;
-            let reported = max_usage_fee(&replication, None, subnet_size);
+        for subnet_size in [1_u32, 4, 13, 34, 40].map(NumberOfNodes::from) {
+            let flexible_replications = (1..=u64::from(subnet_size.get())).flat_map(|total| {
+                (0..=total as u32).flat_map(move |min| {
+                    (min..=total as u32).map(move |max| flexible(total, min, max))
+                })
+            });
+            for replication in [
+                Replication::FullyReplicated,
+                Replication::NonReplicated(node(0)),
+            ]
+            .into_iter()
+            .chain(flexible_replications)
+            {
+                let replication_kind = replication.kind();
+                let node_count = replication_kind.node_count(subnet_size) as u128;
+                let reported = max_usage_fee(&replication, None, subnet_size);
 
-            assert_eq!(reported.get() % node_count, 0, "{replication:?}");
-            // The worst case reaches the reported maximum exactly, so it is not just an
-            // upper bound but the one an outcall without a response limit can hit ...
-            assert_eq!(
-                usage_fee(
-                    replication_kind,
-                    MAX_RESPONSE_TIME,
-                    NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
-                    MAX_INSTRUCTIONS_PER_QUERY_MESSAGE,
-                    NumBytes::from(max_http_outcall_response_size(None)),
-                    subnet_size,
-                ),
-                reported,
-                "{replication:?}"
-            );
-            // ... and nothing short of it is priced above it.
-            for (roundtrip, raw_bytes, instructions, transformed_bytes) in [
-                (Duration::ZERO, 0, 0, 0),
-                (Duration::from_millis(1), 1, 1, 1),
-                (Duration::from_secs(30), 1_000_000, 2_500_000_000, 1_000_000),
-                (
-                    MAX_RESPONSE_TIME,
-                    MAX_CANISTER_HTTP_RESPONSE_BYTES,
-                    MAX_INSTRUCTIONS_PER_QUERY_MESSAGE.get(),
-                    max_http_outcall_response_size(None) - 1,
-                ),
-            ] {
-                let usage = usage_fee(
-                    replication_kind,
-                    roundtrip,
-                    NumBytes::from(raw_bytes),
-                    NumInstructions::from(instructions),
-                    NumBytes::from(transformed_bytes),
-                    subnet_size,
+                assert_eq!(
+                    reported.get() % node_count,
+                    0,
+                    "{replication:?} on {subnet_size} nodes"
                 );
-                assert!(
-                    usage <= reported,
-                    "{replication:?}: the usage fee {usage} of a {raw_bytes}-byte response \
-                     transformed into {transformed_bytes} bytes exceeds the reported \
-                     maximum {reported}"
+                // The worst case reaches the reported maximum exactly, so it is not just an
+                // upper bound but the one an outcall without a response limit can hit ...
+                assert_eq!(
+                    usage_fee(
+                        replication_kind,
+                        MAX_RESPONSE_TIME,
+                        NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
+                        MAX_INSTRUCTIONS_PER_QUERY_MESSAGE,
+                        NumBytes::from(max_http_outcall_response_size(None)),
+                        subnet_size,
+                    ),
+                    reported,
+                    "{replication:?} on {subnet_size} nodes"
                 );
+                // ... and nothing short of it is priced above it.
+                for (roundtrip, raw_bytes, instructions, transformed_bytes) in [
+                    (Duration::ZERO, 0, 0, 0),
+                    (Duration::from_millis(1), 1, 1, 1),
+                    (Duration::from_secs(30), 1_000_000, 2_500_000_000, 1_000_000),
+                    (
+                        MAX_RESPONSE_TIME,
+                        MAX_CANISTER_HTTP_RESPONSE_BYTES,
+                        MAX_INSTRUCTIONS_PER_QUERY_MESSAGE.get(),
+                        max_http_outcall_response_size(None) - 1,
+                    ),
+                ] {
+                    let usage = usage_fee(
+                        replication_kind,
+                        roundtrip,
+                        NumBytes::from(raw_bytes),
+                        NumInstructions::from(instructions),
+                        NumBytes::from(transformed_bytes),
+                        subnet_size,
+                    );
+                    assert!(
+                        usage <= reported,
+                        "{replication:?} on {subnet_size} nodes: the usage fee {usage} of a \
+                     {raw_bytes}-byte response transformed into {transformed_bytes} bytes \
+                     exceeds the reported maximum {reported}"
+                    );
+                }
             }
         }
     }
