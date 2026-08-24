@@ -30,8 +30,8 @@ use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CountBytes, Time};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles,
-    NominalCyclesTesting,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, Instructions,
+    Memory as MemoryUseCase, NominalCycles, NominalCyclesTesting,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
@@ -857,6 +857,50 @@ fn canister_state_ingress_induction_cycles_debit() {
     );
 }
 
+#[test]
+fn canister_state_ingress_induction_cycles_debit_exceeding_balance() {
+    let system_state = &mut CanisterStateFixture::new().canister_state.system_state;
+    let initial_balance = system_state.balance();
+    let ingress_induction_debit = Cycles::new(42);
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    system_state.add_postponed_charge_to_ingress_induction_cycles_debit(ingress_induction_debit);
+
+    // Mimic a cleanup callback burning the cycles balance below the pending debit.
+    let remaining_balance = Cycles::new(10);
+    system_state.remove_cycles(initial_balance - remaining_balance);
+    assert_eq!(remaining_balance, system_state.balance());
+    assert_eq!(Cycles::zero(), system_state.debited_balance());
+
+    system_state.apply_ingress_induction_cycles_debit(
+        system_state.canister_id(),
+        cost_schedule,
+        false, // strict
+        &no_op_logger(),
+        &mock_metrics(),
+    );
+
+    // The whole balance is charged and the rest of the debit is dropped.
+    assert_eq!(
+        Cycles::zero(),
+        system_state.ingress_induction_cycles_debit()
+    );
+    assert_eq!(Cycles::zero(), system_state.balance());
+    // Only the charged part of the debit is reported as consumed; the dropped part
+    // must not show up in the consumed cycles metrics.
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles().get(),
+        remaining_balance.get()
+    );
+    assert_eq!(
+        *system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::IngressInduction)
+            .unwrap(),
+        NominalCycles::new(remaining_balance.get()),
+    );
+}
+
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
 #[test]
@@ -909,6 +953,61 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
         (prepaid_cycles - refund).nominal()
+    );
+}
+
+#[test]
+fn consume_cycles_exceeding_balance_reports_only_the_charged_amount() {
+    let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    // Request more cycles than the balance can cover.
+    let requested_cycles =
+        CompoundCycles::<Instructions>::new(INITIAL_CYCLES + Cycles::new(1000), cost_schedule);
+    system_state.consume_cycles(requested_cycles);
+
+    // The balance is drained and only the drained amount is reported as consumed,
+    // i.e. the part of the request that the balance could not cover is not.
+    assert_eq!(Cycles::zero(), system_state.balance());
+    assert_eq!(
+        NominalCycles::new(INITIAL_CYCLES.get()),
+        system_state.canister_metrics().consumed_cycles()
+    );
+    assert_eq!(
+        *system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap(),
+        NominalCycles::new(INITIAL_CYCLES.get()),
+    );
+}
+
+#[test]
+fn consume_cycles_exceeding_balance_and_reserved_balance_reports_only_the_charged_amount() {
+    let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let reserved_cycles = Cycles::new(1000);
+    system_state.reserve_cycles(reserved_cycles).unwrap();
+
+    // Request more cycles than the reserved balance and the balance together can cover.
+    let requested_cycles =
+        CompoundCycles::<MemoryUseCase>::new(INITIAL_CYCLES + Cycles::new(500), cost_schedule);
+    system_state.consume_cycles(requested_cycles);
+
+    // Both balances are drained and only the drained amount is reported as consumed.
+    assert_eq!(Cycles::zero(), system_state.balance());
+    assert_eq!(Cycles::zero(), system_state.reserved_balance());
+    assert_eq!(
+        NominalCycles::new(INITIAL_CYCLES.get()),
+        system_state.canister_metrics().consumed_cycles()
+    );
+    assert_eq!(
+        *system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::Memory)
+            .unwrap(),
+        NominalCycles::new(INITIAL_CYCLES.get()),
     );
 }
 
