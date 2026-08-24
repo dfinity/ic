@@ -220,6 +220,17 @@ impl SignableTransaction for Eip7702TransactionRequest {
     }
 }
 
+// TODO(DEFI-2970): drop this decoder in favour of one from `alloy`, whose `TxEip7702` already
+// implements it. It is hand-written because the only EIP-7702-aware library is not a dependency
+// yet: `ethers-core`, which the replay tests use to decode EIP-1559 transactions, was archived
+// before EIP-7702 and stops at transaction type `0x02`.
+//
+// It also sits in productive code although only tests call it, because no test-only home is
+// reachable from all of its callers: `ic-cketh-test-utils` cannot serve this crate's own unit
+// tests, since those compile this crate a second time under `cfg(test)` and would receive
+// `Eip7702TransactionRequest` values of the other compilation, while the `dump_stable_memory`
+// binary links this library and so cannot see `#[cfg(test)]` items either. Moving to `alloy`
+// removes the decoder from here altogether, which settles both.
 impl SignedEip7702TransactionRequest {
     /// Decodes the payload a signed EIP-7702 transaction is broadcast as, i.e.
     /// `0x04 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, to,
