@@ -433,7 +433,9 @@ type DepositErc20Response = record {
     // The Ethereum deposit address derived for the caller.
     address : text;
     // Minimum balance, in the token's own units, that the deposit address must hold for the
-    // balance scan to detect it. A smaller deposit is never detected and never credited.
+    // balance scan to detect it. The scan reads the address' whole balance for the token, so
+    // several smaller transfers count together; the funds stay undetected only while their
+    // total is below this.
     minimum_deposit_amount : nat;
     // Where the deposit stands in the detect-and-sweep pipeline.
     status : DepositStatus;
@@ -877,7 +879,7 @@ service : (MinterArg) -> {
     // The account is derived from the caller's principal and the subaccount in the argument.
     // Returns the EIP-55 checksummed deposit address together with `valid_until`, the timestamp
     // (nanoseconds since the Unix epoch) until which a deposit to it is guaranteed to be noticed,
-    // and the minimum amount of the requested token that a deposit must reach to be noticed.
+    // and the minimum balance of the requested token the address must hold to be noticed.
     deposit_erc20 : (DepositErc20Arg) -> (variant { Ok : DepositErc20Response; Err : DepositErc20Error });
 
     // Retrieve the status of a Eth withdrawal request.
