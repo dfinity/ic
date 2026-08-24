@@ -874,7 +874,7 @@ fn canister_state_ingress_induction_cycles_debit_exceeding_balance() {
     system_state.apply_ingress_induction_cycles_debit(
         system_state.canister_id(),
         cost_schedule,
-        false, // strict
+        false, // not strict
         &no_op_logger(),
         &mock_metrics(),
     );
