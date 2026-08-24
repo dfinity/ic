@@ -490,11 +490,9 @@ impl StreamBuilderImpl {
                     // subnet (the source) or the destination subnet is cooling down; not
                     // even into the loopback stream.
                     //
-                    // The subnet's own output responses are exempt for as long as this
-                    // subnet is cooling down, so that it can still respond to the calls it
-                    // has already accepted; whether or not the destination subnet is cooling
-                    // down, the loopback stream included. They are only held back if this
-                    // subnet is not cooling down but the destination subnet is.
+                    // Subnet output queues of cooling down subnets (only holding responses) are
+                    // exempt, so they can deliver responses (before the subnet is deleted) to all
+                    // the calls they have already accepted.
                     //
                     // Retain the message (along with everything behind it in the same queue)
                     // until the subnet that holds it back stops cooling down, rather than
