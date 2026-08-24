@@ -1043,9 +1043,10 @@ impl SystemState {
             }
         }
         // Charge only the part of the debit that the balance can cover. The remaining
-        // debit is dropped, so it must not be reported as consumed either: passing the
-        // full debit to `consume_cycles()` would saturate the balance at zero but still
-        // record the full amount in the consumed cycles metrics.
+        // debit is dropped, so it must not be reported as consumed either. (Passing
+        // the full debit would produce the same metrics, since `consume_cycles()` also
+        // only reports the part that the balance covers, but charging the covered part
+        // explicitly keeps the dropped debit visible here.)
         let charged_debit = self.ingress_induction_cycles_debit - remaining_debit;
         self.consume_cycles(CompoundCycles::<IngressInduction>::new(
             charged_debit,
@@ -2049,6 +2050,9 @@ impl SystemState {
     /// the consumed amount. Should be used either for cases where a prepayment
     /// needs to be made (that will be refunded later with `refund_cycles`) or
     /// a direct charge happens without a prepayment (e.g. when paying for memory).
+    ///
+    /// The balances are not required to cover the requested amount: the part that
+    /// they cannot cover is not charged and is not reported as consumed either.
     pub fn consume_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
         let requested_real = requested_amount.real();
         let use_case = T::cycles_use_case();
@@ -2070,9 +2074,15 @@ impl SystemState {
             | CyclesUseCase::BurnedCycles
             | CyclesUseCase::DroppedMessages => requested_real,
         };
+        // The balance may not cover the whole amount, in which case the subtraction
+        // below saturates at zero and the uncovered part is never actually charged.
+        // Report only the part that the balance could cover as consumed, so that the
+        // consumed cycles metrics never exceed the cycles removed from the balance.
+        let uncharged_amount = remaining_amount - self.cycles_balance;
         self.cycles_balance -= remaining_amount;
+        let charged_amount = requested_amount.minus_uncharged(uncharged_amount);
         self.observe_consumed_cycles_with_use_case(
-            requested_amount.nominal(),
+            charged_amount.nominal(),
             NominalCycles::zero(),
             use_case,
             ConsumingCycles::Prepayment,
