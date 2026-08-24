@@ -196,10 +196,6 @@ impl PipelineRequest for SweepRequest {
         self.id
     }
 
-    fn created_at(&self) -> Option<u64> {
-        Some(self.created_at)
-    }
-
     fn resubmission_strategy(&self) -> ResubmissionStrategy {
         ResubmissionStrategy::GuaranteeEthAmount {
             allowed_max_transaction_fee: self.max_transaction_fee,
