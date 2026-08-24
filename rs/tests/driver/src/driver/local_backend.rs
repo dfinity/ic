@@ -13,11 +13,19 @@
 //! issuance, HTTP file upload, multi-tenant scheduling); those operations warn
 //! and return dummy values or `bail!`.
 //!
+//! The driver also gives itself a private view of two `/etc` files, in the mount
+//! namespace [`LocalBackend::ensure_administrable_netns`] creates: a
+//! `resolv.conf` naming the group's own `dnsmasq`, and a CA bundle that also
+//! trusts the dev root CA. Together they are what let a driver-side client reach
+//! the group's IC gateway by name over verified HTTPS, exactly as it would on
+//! Farm, with no per-client configuration.
+//!
 //! In the QEMU command line built by [`LocalBackend::start_vm`], each virtio/PCIe
 //! device sits behind its own `pcie-root-port` so the guest's predictable
 //! interface names stay deterministic (primary NIC -> `enp1s0`, IPv4 NIC ->
 //! `enp2s0`).
 
+use crate::driver::dev_root_ca::dev_root_ca_cert_pem;
 use crate::driver::farm::{VMCreateResponse, VmSpec};
 use crate::driver::resource::DiskImage;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
@@ -79,6 +87,19 @@ const DNSMASQ_STOP_TIMEOUT: Duration = Duration::from_secs(5);
 /// How often [`LocalBackend::await_dnsmasq_exit`] re-checks whether `dnsmasq` is
 /// gone. Short enough that a restart is not noticeably delayed by the poll.
 const DNSMASQ_STOP_POLL_INTERVAL: Duration = Duration::from_millis(20);
+
+/// The bundle the driver's own TLS clients read their root certificates from, and
+/// which [`LocalBackend::install_dev_root_ca`] shadows with a copy that also
+/// contains the dev root CA.
+///
+/// This exact path is load-bearing, through a chain worth spelling out because
+/// nothing type-checks it: `reqwest::ClientBuilder::build` constructs a
+/// `rustls_platform_verifier::Verifier`, whose Unix implementation calls
+/// `rustls_native_certs::load_native_certs`, which — with neither `SSL_CERT_FILE`
+/// nor `SSL_CERT_DIR` set — defers to `openssl_probe::probe()`, and this is the
+/// first candidate in its Linux list. `rs/tests/BUILD.bazel` builds a bundle at the
+/// same path for the colocated driver image, for the same reason.
+const SYSTEM_CA_BUNDLE: &str = "/etc/ssl/certs/ca-certificates.crt";
 
 /// Environment variables holding the runfiles paths of the split OVMF (UEFI)
 /// firmware images, provided by the `@ovmf` Bazel repo (extracted from the
@@ -246,6 +267,12 @@ impl LocalBackend {
     /// `ip`/`dnsmasq` operations to run with `CAP_NET_ADMIN`/`CAP_NET_RAW`/
     /// `CAP_NET_BIND_SERVICE` over that namespace — without any *host* capability
     ///
+    /// It also installs the per-group `/etc` overrides that make that namespace
+    /// usable from the driver's own code — a resolver
+    /// ([`install_group_resolv_conf`](Self::install_group_resolv_conf)) and a trust
+    /// store ([`install_dev_root_ca`](Self::install_dev_root_ca)) — so the name is
+    /// narrower than what the function does.
+    ///
     /// `unshare(CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWNET)` creates a private
     /// user namespace, in which the caller holds a full capability set (it is the
     /// namespace's creator), plus a mount and a network namespace owned by it — so
@@ -329,9 +356,21 @@ impl LocalBackend {
         // needs `CAP_NET_ADMIN`, so it fails fast (with the `ip` error) if the
         // ambient capabilities did not take effect.
         Self::run_shell("ip link set dev lo up", "bring up lo in the owned netns")?;
-        // Finally, give the driver itself a resolver, now that it owns a mount
-        // namespace to install one in.
+        // Detach the mount namespace's propagation before mounting anything into
+        // it, so neither install below can escape. A host that leaves `/` shared —
+        // the systemd default — would otherwise have the real files replaced for as
+        // long as the mount lived. Done here rather than inside either installer so
+        // that neither depends on the other having run first.
+        Self::mount(
+            None,
+            "/",
+            libc::MS_REC | libc::MS_PRIVATE,
+            "making / private in the owned mount namespace",
+        )?;
+        // Finally the two per-group `/etc` overrides, which are what make the
+        // driver resolve and trust the group's own services.
         Self::install_group_resolv_conf()?;
+        Self::install_dev_root_ca()?;
         Ok(())
     }
 
@@ -365,11 +404,6 @@ impl LocalBackend {
     /// driver-side client reach the IC gateway by name rather than having to
     /// resolve the host for itself.
     ///
-    /// `/` is remounted `MS_REC | MS_PRIVATE` first, so the bind mount cannot
-    /// propagate back out. A host that leaves `/` shared — the systemd default —
-    /// would otherwise have its real `/etc/resolv.conf` replaced for as long as
-    /// the mount lived.
-    ///
     /// Four details worth knowing:
     ///
     /// * `mount(2)` needs `CAP_SYS_ADMIN` over the mount namespace's *user*
@@ -387,15 +421,6 @@ impl LocalBackend {
     ///   addresses, so a lookup before that fails fast instead of hanging.
     ///   Nothing resolves a name that early.
     fn install_group_resolv_conf() -> Result<()> {
-        // Stop mount propagation out of this namespace before mounting anything
-        // into it.
-        Self::mount(
-            None,
-            "/",
-            libc::MS_REC | libc::MS_PRIVATE,
-            "making / private in the owned mount namespace",
-        )?;
-
         let contents: String = IPV6_NAME_SERVERS
             .iter()
             .map(|name_server| format!("nameserver {name_server}\n"))
@@ -410,6 +435,117 @@ impl LocalBackend {
             libc::MS_BIND,
             "bind-mounting the generated resolv.conf over /etc/resolv.conf",
         )
+    }
+
+    /// Path of the generated CA bundle
+    /// [`install_dev_root_ca`](Self::install_dev_root_ca) bind-mounts over
+    /// [`SYSTEM_CA_BUNDLE`]. Same placement, and for the same reasons, as
+    /// [`generated_resolv_conf_path`](Self::generated_resolv_conf_path).
+    fn generated_ca_bundle_path() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "system-test-ca-certificates.crt.{}",
+            std::process::id()
+        ))
+    }
+
+    /// Put the dev root CA in the driver's own trust store, by bind-mounting a copy
+    /// of [`SYSTEM_CA_BUNDLE`] with that CA appended over the original.
+    ///
+    /// This is what lets a driver-side client verify the local IC gateway's
+    /// certificate without any code of its own: the CA is simply one of the roots
+    /// every TLS client in the process tree already loads. The guests arrive at the
+    /// same place by a different route — `update-ca-certificates` in the `output_dev`
+    /// stage of the IC-OS Dockerfiles, see [`dev_root_ca_cert_pem`] — so the driver
+    /// and the nodes end up trusting the gateway on the same terms.
+    ///
+    /// A bind mount is the mechanism because the obvious alternative cannot work. A
+    /// mount namespace isolates the mount *table*, not file contents, so dropping a
+    /// `.crt` into `/etc/ssl/certs` the way `update-ca-certificates` does would
+    /// escape the namespace and mutate the container — and the driver is
+    /// unprivileged there in any case. Shadowing the *bundle* rather than the
+    /// directory leaves OpenSSL's hashed-symlink `CApath` layout intact for whatever
+    /// reads it that way.
+    ///
+    /// Appending, never replacing: the original bytes are copied verbatim first, so
+    /// this can only widen the driver's trust, never narrow it. That matters,
+    /// because the driver has clients that need the public roots ([`Farm::new`] and
+    /// the log-upload client in `group.rs`), and because `dfx` and every other child
+    /// inherits this mount too.
+    ///
+    /// What is being trusted deserves saying plainly: a CA whose private key is
+    /// checked into a public repository, valid until 2122, becomes trusted by every
+    /// TLS client in the driver's process tree. That is acceptable only because the
+    /// tree lives in a network namespace with no route off the host (see
+    /// [`ensure_administrable_netns`](Self::ensure_administrable_netns)), so the only
+    /// servers it can reach are the group's own VMs. Giving the local backend
+    /// outbound connectivity would invalidate that reasoning, not just this comment.
+    ///
+    /// This covers the gateway only. Clients that dial an API boundary node directly
+    /// still need `danger_accept_invalid_certs`, for an unrelated reason:
+    /// `IcNodeSnapshot::get_public_url` hands them an IP-literal URL, which no name
+    /// in the node's certificate can match. (Whether that certificate has a CA at
+    /// all depends on the test — under `with_api_boundary_nodes_playnet` it is issued
+    /// by `LocalApiBoundaryNodesPlaynet`'s ephemeral CA, and otherwise the node
+    /// self-signs it via `generate_ic_boundary_tls_cert`.)
+    fn install_dev_root_ca() -> Result<()> {
+        // When either of these is set, `rustls-native-certs` loads *only* what they
+        // name and skips the platform store altogether — so an inherited value would
+        // silently make the mount below invisible. It checks neither for existence,
+        // so being set at all is enough. Nothing sets them today (no `env_inherit` in
+        // `rs/tests` mentions them); this is insurance against something that would
+        // otherwise be very hard to diagnose.
+        for var in ["SSL_CERT_FILE", "SSL_CERT_DIR"] {
+            if let Some(value) = std::env::var_os(var) {
+                bail!(
+                    "{var} is set ({value:?}), which would make the driver's TLS clients \
+                     read only what it names and so never see the dev root CA this \
+                     installs in {SYSTEM_CA_BUNDLE}"
+                );
+            }
+        }
+
+        let mut bundle = std::fs::read_to_string(SYSTEM_CA_BUNDLE)
+            .with_context(|| format!("reading the system CA bundle {SYSTEM_CA_BUNDLE}"))?;
+        let dev_root_ca_pem = dev_root_ca_cert_pem()?;
+        // Guard the separator rather than trusting the bundle to end in a newline:
+        // `-----END CERTIFICATE----------BEGIN CERTIFICATE-----` parses as neither,
+        // and a PEM that fails to parse is reported by `rustls-platform-verifier`
+        // through `log::warn!` — for which the driver installs no implementation, so
+        // it would go nowhere.
+        if !bundle.ends_with('\n') {
+            bundle.push('\n');
+        }
+        bundle.push_str(&dev_root_ca_pem);
+
+        let path = Self::generated_ca_bundle_path();
+        std::fs::write(&path, &bundle)
+            .with_context(|| format!("writing the generated CA bundle {}", path.display()))?;
+        // `write` honours the umask, and this shadows a world-readable file that
+        // every child in the tree reads.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
+            .with_context(|| format!("making {} world-readable", path.display()))?;
+
+        Self::mount(
+            Some(&path),
+            SYSTEM_CA_BUNDLE,
+            libc::MS_BIND,
+            "bind-mounting the generated CA bundle over the system one",
+        )?;
+
+        // Read it back. Every step above can succeed while leaving the CA
+        // unreachable — a mount that did not take, a short write, a stale target —
+        // and none of that surfaces until a TLS handshake fails, six minutes into a
+        // test, in a retry loop. One extra read turns that into an error here.
+        let installed = std::fs::read_to_string(SYSTEM_CA_BUNDLE)
+            .with_context(|| format!("reading back {SYSTEM_CA_BUNDLE}"))?;
+        if !installed.contains(&dev_root_ca_pem) {
+            bail!(
+                "the dev root CA is missing from {SYSTEM_CA_BUNDLE} after mounting {} \
+                 over it",
+                path.display()
+            );
+        }
+        Ok(())
     }
 
     /// `mount(2)`, which the `nix` crate cannot offer here because the workspace
