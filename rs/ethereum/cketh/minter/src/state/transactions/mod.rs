@@ -230,7 +230,9 @@ pub struct SweepRequest {
     #[n(2)]
     pub amount: Wei,
     /// Transaction call data: the sweeper contract's batch call, naming the deposit addresses to
-    /// sweep, the IC account each is credited to, and the tokens to move.
+    /// sweep, the IC account each is credited to, and the tokens to move. Its size is bounded by
+    /// the number of deposits the enqueuing side puts in one batch, which is where that limit
+    /// lives.
     #[n(3)]
     pub data: Vec<u8>,
     /// Ceiling on the transaction fee, used as the resubmission fee cap.
