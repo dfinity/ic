@@ -253,7 +253,6 @@ mod tests {
     };
     use ic_types::{
         Height, ReplicaVersion, Time,
-        backwards_compatibility::BackwardsCompatible,
         batch::ValidationContext,
         consensus::{BlockPayload, Payload, Rank, SummaryPayload, dkg::PostSplitArgs},
         crypto::{CryptoHash, CryptoHashOf},
@@ -592,8 +591,7 @@ mod tests {
         registry_version: RegistryVersion,
     ) -> Block {
         let mut summary = SummaryPayload::fake();
-        summary.dkg.subnet_splitting_status =
-            BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
+        summary.dkg.subnet_splitting_status = subnet_splitting_status;
         Block {
             version: ReplicaVersion::default(),
             parent: CryptoHashOf::from(CryptoHash(vec![])),

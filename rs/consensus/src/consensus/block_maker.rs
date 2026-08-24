@@ -1719,12 +1719,10 @@ mod tests {
                 if test_case.last_summary_block_has_scheduled_status {
                     let mut summary_payload = last_summary.payload.as_ref().as_summary().clone();
                     summary_payload.dkg.subnet_splitting_status =
-                        ic_types::backwards_compatibility::BackwardsCompatible::new_for_test_only(
-                            Some(SubnetSplittingStatus::Scheduled(dkg::SplittingArgs {
-                                source_subnet_id: SOURCE_SUBNET_ID,
-                                destination_subnet_id: DESTINATION_SUBNET_ID,
-                            })),
-                        );
+                        SubnetSplittingStatus::Scheduled(dkg::SplittingArgs {
+                            source_subnet_id: SOURCE_SUBNET_ID,
+                            destination_subnet_id: DESTINATION_SUBNET_ID,
+                        });
                     last_summary.payload = Payload::new(
                         ic_types::crypto::crypto_hash,
                         BlockPayload::Summary(summary_payload),

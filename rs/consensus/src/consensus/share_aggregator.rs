@@ -273,7 +273,6 @@ mod tests {
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         CryptoHashOfState, NodeId, RegistryVersion, SubnetId,
-        backwards_compatibility::BackwardsCompatible,
         consensus::{
             BlockPayload, CatchUpPackage, CatchUpPackageShare, CatchUpShareContent,
             FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare, Payload,
@@ -575,8 +574,7 @@ mod tests {
                 block.context.certified_height = block.height;
                 block.context.registry_version = SPLITTING_REGISTRY_VERSION;
                 let mut payload = block.payload.as_ref().as_summary().clone();
-                payload.dkg.subnet_splitting_status =
-                    BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
+                payload.dkg.subnet_splitting_status = subnet_splitting_status;
                 block.payload = Payload::new(
                     ic_types::crypto::crypto_hash,
                     BlockPayload::Summary(payload),

@@ -1010,7 +1010,6 @@ mod tests {
     use ic_types::consensus::dkg::RemoteDkgAttempts;
     use ic_types::{
         RegistryVersion, ReplicaVersion,
-        backwards_compatibility::BackwardsCompatible,
         consensus::{BlockPayload, Payload, Rank, SummaryPayload, dkg::SplittingArgs},
         crypto::{
             CryptoHash, CryptoHashOf,
@@ -1610,8 +1609,7 @@ mod tests {
     ) -> Block {
         let mut block = pool.get_cache().finalized_block();
         let mut summary = block.payload.as_ref().as_summary().clone();
-        summary.dkg.subnet_splitting_status =
-            BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
+        summary.dkg.subnet_splitting_status = subnet_splitting_status;
         block.payload = Payload::new(
             ic_types::crypto::crypto_hash,
             BlockPayload::Summary(summary),
@@ -1934,11 +1932,10 @@ mod tests {
             // summary starting the split (e.g. the summary of the post-split CUP), the split is
             // not pending anymore.
             let mut post_split_summary = genesis_summary;
-            post_split_summary.subnet_splitting_status = BackwardsCompatible::new_for_test_only(
-                Some(SubnetSplittingStatus::PostSplit(PostSplitArgs {
+            post_split_summary.subnet_splitting_status =
+                SubnetSplittingStatus::PostSplit(PostSplitArgs {
                     new_subnet_id: source_subnet_id,
-                })),
-            );
+                });
             let post_split_summary_block =
                 make_summary_block(post_split_summary, split_registry_version);
             assert_eq!(

@@ -2180,7 +2180,6 @@ pub mod test {
     };
     use ic_types::{
         CryptoHashOfState, ReplicaVersion, Time,
-        backwards_compatibility::BackwardsCompatible,
         batch::{BatchPayload, IngressPayload},
         consensus::{
             BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof, Finalization,
@@ -5384,8 +5383,7 @@ pub mod test {
                 block.context.certified_height = block.height;
                 block.context.registry_version = SUBNET_SPLIT_REGISTRY_VERSION;
                 let mut payload = block.payload.as_ref().as_summary().clone();
-                payload.dkg.subnet_splitting_status =
-                    BackwardsCompatible::new_for_test_only(Some(subnet_splitting_status));
+                payload.dkg.subnet_splitting_status = subnet_splitting_status;
                 block.payload = Payload::new(
                     ic_types::crypto::crypto_hash,
                     BlockPayload::Summary(payload),
@@ -5571,8 +5569,7 @@ pub mod test {
             let mut proposal = pool.make_next_block();
             let block = proposal.content.as_mut();
             let mut payload = block.payload.as_ref().as_summary().clone();
-            payload.dkg.subnet_splitting_status =
-                BackwardsCompatible::new_for_test_only(Some(cup_subnet_splitting_status));
+            payload.dkg.subnet_splitting_status = cup_subnet_splitting_status;
             block.payload = Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(payload),

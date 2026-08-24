@@ -88,8 +88,8 @@
     "tag": "release-2026-08-19"
   },
   "internet_identity_frontend": {
-    "sha256": "ef4f04868f0c32227989cb7ac529bcb16e6bd7fb9874fb21779c020a6282b343",
-    "tag": "release-2026-08-14"
+    "sha256": "1b028cc9ec9e7d121a2d8a0bf01328dfb331c6fd34aac8cb968de208dc0d5b4d",
+    "tag": "release-2026-08-21"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -112,16 +112,16 @@
     "sha256": "b646b205a5f967350b71812ca36b3dd6d18dd4074f6ed9060d3874dd6e588bfa"
   },
   "registry": {
-    "rev": "8aa4680e378f3248e7e7b9b8237915aded999bd9",
-    "sha256": "42158099a88bf49109f342e44cbe19cbb70c43b09b45a2957dab6093f1db8658"
+    "rev": "c748b8e76b90ceef329c055e6f7b38a00aae8745",
+    "sha256": "696fd31db414182fccccbe03c2bf2885ed47341097aeeb1a35f70d493fff1daa"
   },
   "root": {
     "rev": "3ec5d044f5dc45a93943ec14258891a1c3c272be",
     "sha256": "b98b52203f8f4aa9b18156ffce35d13f1a65b8a9c7b1787a8626923278fdf958"
   },
   "sns-wasm": {
-    "rev": "8aa4680e378f3248e7e7b9b8237915aded999bd9",
-    "sha256": "c113d676b24cd366ad5ae03971644eefaa2189d48a4473dcd6fa62f8e9f172f2"
+    "rev": "c748b8e76b90ceef329c055e6f7b38a00aae8745",
+    "sha256": "5988bbcab7786d9cad1d713d1ef256eeb13bb16fbf4135d61fee9af160df2473"
   },
   "sns_aggregator_test": {
     "sha256": "58f3cdf3320adb0864ff2e7d880af5c9b75e056240ff47a9f3e6eda3b17066f1",

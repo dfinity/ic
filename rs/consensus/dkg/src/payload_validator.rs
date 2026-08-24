@@ -205,15 +205,16 @@ fn validate_dealings_payload(
     for message in &dealings.messages {
         metrics.with_label_values(&["total"]).inc();
 
-        // Skip the rest if already present in DKG pool
+        let Some(config) = configs.get(&message.content.dkg_id) else {
+            return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
+        };
+
+        // Skip the (expensive) crypto verification if the dealing was verified against
+        // this config already, i.e. it is present in the validated DKG pool.
         if dkg_pool.validated_contains(message) {
             metrics.with_label_values(&["dkg_pool_hit"]).inc();
             continue;
         }
-
-        let Some(config) = configs.get(&message.content.dkg_id) else {
-            return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
-        };
 
         // Verify the signature and dealing.
         crypto_validate_dealing(crypto, config, message)?;
@@ -417,6 +418,44 @@ mod tests {
     }
 
     #[test]
+    fn validate_dealings_payload_when_wrong_dkg_id_and_in_dkg_pool_fails_test() {
+        // Validation should fail if the block contains a dealing without a coresponding config,
+        // even if the dealing is present in the validated pool.
+        let dealing = fake_dkg_message(SUBNET_2, NODE_1);
+        assert_eq!(
+            validate_payload_test_case_with_validated_dealings(
+                /*dealings_to_validate=*/ vec![dealing.clone()],
+                /*parents_dealings=*/ vec![],
+                /*validated_pool_dealings=*/ vec![dealing],
+                /*max_dealings_per_block=*/ 1,
+                SUBNET_1,
+                /*committee=*/ &[NODE_1],
+            ),
+            Err(DkgPayloadValidationError::InvalidArtifact(
+                InvalidDkgPayloadReason::MissingDkgConfigForDealing
+            ))
+        );
+    }
+
+    #[test]
+    fn validate_dealings_payload_when_valid_and_in_dkg_pool_passes_test() {
+        // A dealing that does have a config is still accepted when it is present in the
+        // validated DKG pool, i.e. the pool is still used to skip the crypto verification.
+        let dealing = fake_dkg_message(SUBNET_1, NODE_1);
+        assert_eq!(
+            validate_payload_test_case_with_validated_dealings(
+                /*dealings_to_validate=*/ vec![dealing.clone()],
+                /*parents_dealings=*/ vec![],
+                /*validated_pool_dealings=*/ vec![dealing],
+                /*max_dealings_per_block=*/ 1,
+                SUBNET_1,
+                /*committee=*/ &[NODE_1],
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
     fn validate_dealings_payload_when_invalid_dealer_fails_test() {
         assert_eq!(
             validate_payload_test_case(
@@ -610,6 +649,28 @@ mod tests {
         subnet_id: SubnetId,
         committee: &[NodeId],
     ) -> ValidationResult<DkgPayloadValidationError> {
+        validate_payload_test_case_with_validated_dealings(
+            dealings_to_validate,
+            parent_dealings,
+            /*validated_pool_dealings=*/ vec![],
+            max_dealings_per_payload,
+            subnet_id,
+            committee,
+        )
+    }
+
+    /// Same as [`validate_payload_test_case`], but additionally inserts
+    /// `validated_pool_dealings` into the validated section of the node-local DKG pool
+    /// before validating the payload.
+    #[allow(clippy::result_large_err)]
+    fn validate_payload_test_case_with_validated_dealings(
+        dealings_to_validate: Vec<Message>,
+        parent_dealings: Vec<Message>,
+        validated_pool_dealings: Vec<Message>,
+        max_dealings_per_payload: u64,
+        subnet_id: SubnetId,
+        committee: &[NodeId],
+    ) -> ValidationResult<DkgPayloadValidationError> {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let registry_version = 1;
 
@@ -631,6 +692,13 @@ mod tests {
                 )],
             )
             .build();
+
+            dkg_pool.write().unwrap().apply(
+                validated_pool_dealings
+                    .into_iter()
+                    .map(ChangeAction::AddToValidated)
+                    .collect(),
+            );
 
             let mut parent = Block::from(pool.make_next_block());
             parent.payload = Payload::new(
