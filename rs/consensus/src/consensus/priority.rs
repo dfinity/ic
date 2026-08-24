@@ -3,8 +3,9 @@ use ic_interfaces::{
     consensus_pool::ConsensusPool,
     p2p::consensus::{Bouncer, BouncerValue, BouncerValue::*},
 };
-use ic_limits::ACCEPTABLE_NOTARIZATION_CUP_GAP;
 use ic_types::{Height, artifact::ConsensusMessageId, consensus::ConsensusMessageHash};
+
+use crate::consensus::ACCEPTABLE_NOTARIZATION_CUP_GAP;
 
 /// Return a bouncer function that matches the given consensus pool.
 pub fn new_bouncer(
@@ -17,7 +18,7 @@ pub fn new_bouncer(
     let finalized_height = pool_reader.get_finalized_height();
     let notarized_height = pool_reader.get_notarized_height();
     let beacon_height = pool_reader.get_random_beacon_height();
-    let safe_jump_height = pool_reader.get_safe_jump_height();
+    let next_summary_height = pool_reader.get_next_summary_height();
 
     Box::new(move |id: &'_ ConsensusMessageId| {
         compute_bouncer(
@@ -27,7 +28,7 @@ pub fn new_bouncer(
             finalized_height,
             notarized_height,
             beacon_height,
-            safe_jump_height,
+            next_summary_height,
             id,
         )
     })
@@ -45,7 +46,7 @@ fn compute_bouncer(
     finalized_height: Height,
     notarized_height: Height,
     beacon_height: Height,
-    safe_jump_height: Height,
+    next_summary_height: Height,
     id: &ConsensusMessageId,
 ) -> BouncerValue {
     let height = id.height;
@@ -111,9 +112,7 @@ fn compute_bouncer(
         ConsensusMessageHash::CatchUpPackageShare(_) => {
             if height <= cup_height {
                 Unwanted
-            } else if height <= safe_jump_height {
-                // The next CUP is created at most at the safe jump height (the height at which the
-                // blockchain can be resumed at after a break).
+            } else if height <= next_summary_height {
                 Wants
             } else {
                 MaybeWantsLater
@@ -216,12 +215,9 @@ mod tests {
 
             let pool_reader = PoolReader::new(&pool);
             let cup_height = pool_reader.get_catch_up_height();
-            let safe_jump_height = pool_reader.get_safe_jump_height();
+            let next_summary_height = pool_reader.get_next_summary_height();
             assert_eq!(cup_height, Height::new(dkg_interval + 1));
-            // With `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP` = 70, the safe jump height is
-            // ceil(71 / 10) * 10 = 80 heights above the latest finalized summary block (at
-            // height 10).
-            assert_eq!(safe_jump_height, Height::new(dkg_interval + 1 + 80));
+            assert_eq!(next_summary_height, Height::new(2 * (dkg_interval + 1)));
 
             let cup_share_id_at = |height| ConsensusMessageId {
                 hash: ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(CryptoHash(
@@ -236,13 +232,13 @@ mod tests {
             // Shares at or below the current CUP height are useless.
             assert_eq!(bouncer(&cup_share_id_at(Height::new(0))), Unwanted);
             assert_eq!(bouncer(&cup_share_id_at(cup_height)), Unwanted);
-            // Shares between the current CUP height (exclusive) and the safe jump height
-            // (inclusive) should be fetched.
+            // Shares between the current CUP height (exclusive) and the next summary
+            // height (inclusive) should be fetched.
             assert_eq!(bouncer(&cup_share_id_at(cup_height.increment())), Wants);
-            assert_eq!(bouncer(&cup_share_id_at(safe_jump_height)), Wants);
-            // Shares beyond the safe jump height might become useful later.
+            assert_eq!(bouncer(&cup_share_id_at(next_summary_height)), Wants);
+            // Shares beyond the next summary height might become useful later.
             assert_eq!(
-                bouncer(&cup_share_id_at(safe_jump_height.increment())),
+                bouncer(&cup_share_id_at(next_summary_height.increment())),
                 MaybeWantsLater
             );
         })

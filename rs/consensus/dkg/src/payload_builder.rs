@@ -963,9 +963,8 @@ pub fn get_post_split_dkg_summary(
         .value
         .ok_or_else(|| format!("Empty cup contents at registry version {registry_version}"))?;
 
-    // Resume the post-split subnet at a DKG start height above any height that could have been
-    // notarized on the pre-split chain.
-    cup_contents.height = last_summary.get_safe_jump_height().get();
+    // During subnet splitting we skip one DKG interval
+    cup_contents.height = last_summary.get_next_start_height().get();
 
     get_dkg_summary_from_cup_contents_with_subnet_splitting(
         cup_contents,

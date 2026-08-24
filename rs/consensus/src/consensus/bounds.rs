@@ -6,9 +6,12 @@ use ic_consensus_utils::{
     MINIMUM_CHAIN_LENGTH, pool_reader::PoolReader, registry_version_at_height,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_limits::{ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP, ACCEPTABLE_NOTARIZATION_CUP_GAP};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{consensus::get_faults_tolerated, replica_config::ReplicaConfig};
+
+use crate::consensus::{
+    ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP, ACCEPTABLE_NOTARIZATION_CUP_GAP,
+};
 
 /// Summary of when the consensus pool exceeds certain bounds.
 #[derive(Eq, PartialEq, Debug)]

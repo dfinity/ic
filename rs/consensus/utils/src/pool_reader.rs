@@ -559,16 +559,13 @@ impl<'a> PoolReader<'a> {
             .get_next_start_height()
     }
 
-    /// Returns the safe jump height of the highest finalized summary block, i.e. the height at
-    /// which the blockchain can be resumed at after a break (see
-    /// `DkgSummary::get_safe_jump_height`).
-    pub fn get_safe_jump_height(&self) -> Height {
+    pub fn get_next_summary_height(&self) -> Height {
         self.get_highest_finalized_summary_block()
             .payload
             .as_ref()
             .as_summary()
             .dkg
-            .get_safe_jump_height()
+            .get_next_start_height()
     }
 }
 
@@ -694,45 +691,33 @@ pub mod test {
     }
 
     #[test]
-    fn test_get_safe_jump_height() {
+    fn test_get_next_summary_height() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 3;
             let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1)
                 .with_dkg_interval_length(interval_length)
                 .build();
 
-            // With `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP` = 70, the safe jump height is the
-            // smallest multiple of `interval_length + 1` above the latest finalized summary
-            // block's height which is at least 71 heights away: ceil(71 / 4) * 4 = 72.
-            let safe_jump_distance = 72;
-
             // At genesis the highest finalized summary block is the genesis block.
+            let next_summary_height = Height::from(interval_length + 1);
             let pool_reader = PoolReader::new(&pool);
-            assert_eq!(
-                pool_reader.get_safe_jump_height(),
-                Height::from(safe_jump_distance)
-            );
+            assert_eq!(pool_reader.get_next_summary_height(), next_summary_height);
 
-            // Advancing within the current DKG interval doesn't change the safe jump height.
+            // Advancing within the current DKG interval doesn't change the next summary
+            // height.
             pool.advance_round_normal_operation_n(interval_length);
             let pool_reader = PoolReader::new(&pool);
-            assert_eq!(
-                pool_reader.get_safe_jump_height(),
-                Height::from(safe_jump_distance)
-            );
+            assert_eq!(pool_reader.get_next_summary_height(), next_summary_height);
 
-            // Crossing the interval boundary *without* creating a CUP advances the safe jump
-            // height, while the next CUP height stays behind.
+            // Crossing the interval boundary *without* creating a CUP advances the next
+            // summary height, while the next CUP height stays behind.
             pool.advance_round_normal_operation_no_cup_n(1);
             let pool_reader = PoolReader::new(&pool);
             assert_eq!(
-                pool_reader.get_safe_jump_height(),
-                Height::from(interval_length + 1 + safe_jump_distance)
+                pool_reader.get_next_summary_height(),
+                Height::from(2 * (interval_length + 1))
             );
-            assert_eq!(
-                pool_reader.get_next_cup_height(),
-                Height::from(interval_length + 1)
-            );
+            assert_eq!(pool_reader.get_next_cup_height(), next_summary_height);
         })
     }
 
