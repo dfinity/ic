@@ -1043,10 +1043,10 @@ impl SystemState {
             }
         }
         // Charge only the part of the debit that the balance can cover. The remaining
-        // debit is dropped, so it must not be reported as consumed either. (Passing
-        // the full debit would produce the same metrics, since `consume_cycles()` also
-        // only reports the part that the balance covers, but charging the covered part
-        // explicitly keeps the dropped debit visible here.)
+        // debit is dropped, so it must not be reported as consumed either. This is the
+        // one caller that legitimately charges less than it requests, so it caps the
+        // amount here instead of leaving that to the defense in depth in
+        // `consume_cycles()`.
         let charged_debit = self.ingress_induction_cycles_debit - remaining_debit;
         self.consume_cycles(CompoundCycles::<IngressInduction>::new(
             charged_debit,
@@ -2051,8 +2051,10 @@ impl SystemState {
     /// needs to be made (that will be refunded later with `refund_cycles`) or
     /// a direct charge happens without a prepayment (e.g. when paying for memory).
     ///
-    /// The balances are not required to cover the requested amount: the part that
-    /// they cannot cover is not charged and is not reported as consumed either.
+    /// Callers are expected to cover the requested amount out of the balances, or
+    /// to cap the requested amount at what the balances cover. As defense in depth
+    /// against a caller that does neither, any part that the balances cannot cover
+    /// is neither charged nor reported as consumed.
     pub fn consume_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
         let requested_real = requested_amount.real();
         let use_case = T::cycles_use_case();
@@ -2074,10 +2076,11 @@ impl SystemState {
             | CyclesUseCase::BurnedCycles
             | CyclesUseCase::DroppedMessages => requested_real,
         };
-        // The balance may not cover the whole amount, in which case the subtraction
-        // below saturates at zero and the uncovered part is never actually charged.
-        // Report only the part that the balance could cover as consumed, so that the
-        // consumed cycles metrics never exceed the cycles removed from the balance.
+        // Should the balance not cover the whole amount, the subtraction below
+        // saturates at zero and the uncovered part is never actually charged. Report
+        // only the part that the balance could cover as consumed, so that the consumed
+        // cycles metrics never exceed the cycles removed from the balance. This is
+        // defense in depth: the balance is expected to cover the whole amount.
         let uncharged_amount = remaining_amount - self.cycles_balance;
         self.cycles_balance -= remaining_amount;
         let charged_amount = requested_amount.minus_uncharged(uncharged_amount);

@@ -869,7 +869,14 @@ fn canister_state_ingress_induction_cycles_debit_exceeding_balance() {
     let remaining_balance = Cycles::new(10);
     system_state.remove_cycles(initial_balance - remaining_balance);
     assert_eq!(remaining_balance, system_state.balance());
-    assert_eq!(Cycles::zero(), system_state.debited_balance());
+    // The whole debit is still pending and now exceeds the remaining balance: the
+    // state the lenient debit below has to cope with, and the reason it ends up
+    // charging the whole balance and dropping the rest.
+    assert_eq!(
+        ingress_induction_debit,
+        system_state.ingress_induction_cycles_debit()
+    );
+    assert!(ingress_induction_debit > remaining_balance);
 
     // Apply the debit leniently, as the production caller does after a cleanup
     // callback: the balance not covering the debit is expected there, rather than a
