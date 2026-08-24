@@ -850,6 +850,31 @@ impl TransactionPipeline {
             || !self.sent_tx.is_empty()
     }
 
+    /// The sweeper funding whose transaction has not finalized yet, if any.
+    ///
+    /// Read off the three stages that precede finalization — pending, created, sent — rather than
+    /// tracked next to them, so it cannot disagree with the pipeline it describes. The processed
+    /// requests are only looked up by index, never scanned: that map keeps every request the minter
+    /// ever processed, and this is read on the metrics path.
+    pub fn outstanding_sweeper_funding(&self) -> Option<&EthWithdrawalRequest> {
+        fn as_funding(request: &WithdrawalRequest) -> Option<&EthWithdrawalRequest> {
+            match request {
+                WithdrawalRequest::SweeperFunding(request) => Some(request),
+                WithdrawalRequest::CkEth(_) | WithdrawalRequest::CkErc20(_) => None,
+            }
+        }
+
+        self.pending_withdrawal_requests
+            .iter()
+            .chain(
+                self.created_tx
+                    .alt_keys()
+                    .chain(self.sent_tx.alt_keys())
+                    .filter_map(|burn_index| self.processed_withdrawal_requests.get(burn_index)),
+            )
+            .find_map(as_funding)
+    }
+
     fn remove_withdrawal_request(&mut self, request: &WithdrawalRequest) {
         self.pending_withdrawal_requests.retain(|r| r != request);
     }
@@ -1164,6 +1189,10 @@ impl WithdrawalTransactions {
 
     pub fn has_pending_requests(&self) -> bool {
         self.pipeline.has_pending_requests()
+    }
+
+    pub fn outstanding_sweeper_funding(&self) -> Option<&EthWithdrawalRequest> {
+        self.pipeline.outstanding_sweeper_funding()
     }
 
     pub fn reimbursement_requests_iter(

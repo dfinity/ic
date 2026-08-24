@@ -12,22 +12,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::logs::INFO;
-use crate::numeric::{LedgerBurnIndex, Wei};
-use ic_canister_log::log;
-
-/// A funding whose burn is recorded but whose transfer has not finalized yet. Kept so that only one
-/// funding is ever outstanding, and so a wedged one is visible instead of merely absent.
-#[derive(Clone, Copy, Eq, PartialEq, Debug)]
-pub struct InFlightFunding {
-    pub ledger_burn_index: LedgerBurnIndex,
-    /// The ETH the transfer will move.
-    pub amount: Wei,
-    /// IC time the funding was accepted, so a wedged one shows up as a climbing age. Optional
-    /// because the request's own field is: the minter always sets it, but the type allows its
-    /// absence and inventing a timestamp here would report an age that is not real.
-    pub created_at_nanos: Option<u64>,
-}
+use crate::numeric::Wei;
 
 /// How much ckETH has been burned for sweeping and how much of it has actually been spent: the two
 /// sides of the invariant above.
@@ -41,8 +26,6 @@ pub struct SweeperFundingAccounting {
     /// Grows at the same point by the fee the transaction paid, which it does either way. Together
     /// with the amount transferred it is the spend, which never overtakes the burn.
     cumulative_transaction_fees: Wei,
-    /// The funding between its burn and its finalized transfer. At most one.
-    in_flight: Option<InFlightFunding>,
 }
 
 impl Default for SweeperFundingAccounting {
@@ -51,7 +34,6 @@ impl Default for SweeperFundingAccounting {
             cumulative_burned: Wei::ZERO,
             cumulative_transferred: Wei::ZERO,
             cumulative_transaction_fees: Wei::ZERO,
-            in_flight: None,
         }
     }
 }
@@ -65,68 +47,9 @@ impl SweeperFundingAccounting {
             .expect("BUG: overflow in cumulative burned for sweeping");
     }
 
-    /// Earmarks a funding until its transfer settles, which is what
-    /// [`plan_funding`](crate::sweeper::plan_funding) refuses a second funding on.
-    ///
-    /// Logs rather than trapping when one is already earmarked, and earmarks the newer one. Nothing
-    /// about the burn-first invariant rests on this: each funding burns for its own transfer, so
-    /// two of them in flight are still each covered by their own burn. Keeping to one at a time is
-    /// prudence — it keeps a single funding on the withdrawal nonce lane and the accounting easy to
-    /// follow — and trapping the event replay over a prudence rule would be out of proportion.
-    pub fn mark_funding_in_flight(
-        &mut self,
-        ledger_burn_index: LedgerBurnIndex,
-        amount: Wei,
-        created_at_nanos: Option<u64>,
-    ) {
-        if let Some(earmarked) = self.in_flight {
-            log!(
-                INFO,
-                "[mark_funding_in_flight]: UNEXPECTED: sweeper funding {ledger_burn_index} of {} \
-                 was accepted while funding {} of {} is still in flight; earmarking the new one",
-                amount,
-                earmarked.ledger_burn_index,
-                earmarked.amount,
-            );
-        }
-        self.in_flight = Some(InFlightFunding {
-            ledger_burn_index,
-            amount,
-            created_at_nanos,
-        });
-    }
-
-    /// The funding between its burn and its finalized transfer, if any.
-    pub fn in_flight_funding(&self) -> Option<InFlightFunding> {
-        self.in_flight
-    }
-
     /// Records a finalized funding transaction: `transferred` reached the sweeper address (zero if
     /// the transaction failed) and `transaction_fee` was spent on gas either way.
-    ///
-    /// Takes the burn index so the earmark is released by name rather than blindly: releasing the
-    /// wrong one would otherwise surface at the *next* funding, where the cause is far harder to
-    /// see. A mismatch is logged and the earmark left alone — this runs in the finalization path
-    /// that user withdrawals share, so trapping here would block them too, and leaving an earmark
-    /// in place only holds off further funding, which is the safe direction.
-    pub fn record_finalized_funding(
-        &mut self,
-        ledger_burn_index: LedgerBurnIndex,
-        transferred: Wei,
-        transaction_fee: Wei,
-    ) {
-        match self.in_flight {
-            Some(earmarked) if earmarked.ledger_burn_index == ledger_burn_index => {
-                self.in_flight = None
-            }
-            earmarked => log!(
-                INFO,
-                "[record_finalized_funding]: UNEXPECTED: finalizing sweeper funding \
-                 {ledger_burn_index}, but the earmarked funding is {:?}; leaving it earmarked, \
-                 which holds off further funding until it settles",
-                earmarked.map(|funding| funding.ledger_burn_index),
-            ),
-        }
+    pub fn record_finalized_funding(&mut self, transferred: Wei, transaction_fee: Wei) {
         self.cumulative_transferred = self
             .cumulative_transferred
             .checked_add(transferred)

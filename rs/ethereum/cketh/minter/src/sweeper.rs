@@ -12,9 +12,8 @@ use crate::guard::TimerGuard;
 use crate::ledger_client::LedgerClient;
 use crate::logs::{DEBUG, INFO};
 use crate::memo::BurnMemo;
-use crate::numeric::Wei;
+use crate::numeric::{LedgerBurnIndex, Wei};
 use crate::state::audit::{EventType, process_event};
-use crate::state::sweeper_funding::InFlightFunding;
 use crate::state::transactions::EthWithdrawalRequest;
 use crate::state::{State, TaskType, mutate_state, read_state};
 use crate::{CKETH_FEE_SUBACCOUNT, deposit_address::sweeper_address};
@@ -77,13 +76,14 @@ pub async fn fund_sweeper_address() {
             );
             return;
         }
-        FundingDecision::AlreadyInFlight(in_flight) => {
+        FundingDecision::AlreadyInFlight {
+            ledger_burn_index,
+            amount,
+        } => {
             log!(
                 INFO,
-                "[fund_sweeper]: SKIPPING: funding {} of {} is still in flight; \
-                 one funding at a time",
-                in_flight.ledger_burn_index,
-                in_flight.amount,
+                "[fund_sweeper]: SKIPPING: funding {ledger_burn_index} of {amount} is still in \
+                 flight; one funding at a time"
             );
             return;
         }
@@ -145,7 +145,10 @@ pub enum FundingDecision {
     /// Move this much ETH to the sweeper address, burning as much ckETH for it.
     Fund(Wei),
     /// A previous funding is still between its burn and its finalized transfer.
-    AlreadyInFlight(InFlightFunding),
+    AlreadyInFlight {
+        ledger_burn_index: LedgerBurnIndex,
+        amount: Wei,
+    },
     /// The minter's deposit-backed ETH does not cover the funding.
     InsufficientBalance {
         available: Wei,
@@ -156,14 +159,18 @@ pub enum FundingDecision {
 
 /// Decides whether a funding is due at `sweeper_balance`.
 ///
-/// Refuses while an earlier funding sits between its burn and its finalized transfer. That is
-/// prudence rather than a correctness requirement: each funding burns for its own transfer, so two
-/// in flight are still each covered by their own burn. One at a time keeps a single funding on the
-/// withdrawal nonce lane and the accounting easy to follow. A stuck funding therefore blocks later
-/// ones, which is the safe direction but needs its own metric to be visible.
+/// Refuses while an earlier funding is still somewhere in the withdrawal pipeline, i.e. between its
+/// burn and its finalized transfer. That is prudence rather than a correctness requirement: each
+/// funding burns for its own transfer, so two in flight are still each covered by their own burn.
+/// One at a time keeps a single funding on the withdrawal nonce lane and the accounting easy to
+/// follow. A stuck funding therefore blocks later ones, which is the safe direction but needs its
+/// own metric to be visible.
 pub fn plan_funding(state: &State, sweeper_balance: Wei) -> FundingDecision {
-    if let Some(in_flight) = state.sweeper_funding.in_flight_funding() {
-        return FundingDecision::AlreadyInFlight(in_flight);
+    if let Some(outstanding) = state.withdrawal_transactions.outstanding_sweeper_funding() {
+        return FundingDecision::AlreadyInFlight {
+            ledger_burn_index: outstanding.ledger_burn_index,
+            amount: outstanding.withdrawal_amount,
+        };
     }
     match state.sweeper_funding_config().amount_due(sweeper_balance) {
         None => FundingDecision::NotDue,

@@ -2139,7 +2139,7 @@ mod withdrawal_transactions {
         use crate::state::transactions::ResubmitTransactionError;
         use crate::state::transactions::tests::{
             DEFAULT_CREATED_AT, DEFAULT_PRINCIPAL, DEFAULT_WITHDRAWAL_AMOUNT,
-            create_and_record_signed_transaction,
+            ckerc20_withdrawal_request_with_index, create_and_record_signed_transaction,
         };
         use crate::state::transactions::{
             CreateTransactionError, EthWithdrawalRequest, NotReimbursable, ReimbursementIndex,
@@ -2176,6 +2176,71 @@ mod withdrawal_transactions {
                 ReimbursementIndex::try_from(&request),
                 Err(NotReimbursable),
                 "a funding request must not yield a reimbursement index"
+            );
+        }
+
+        #[test]
+        fn should_report_the_outstanding_funding_until_its_transaction_finalizes() {
+            let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
+            let funding = sweeper_funding_payload();
+
+            transactions.record_withdrawal_request(sweeper_funding_request());
+            assert_eq!(
+                transactions.outstanding_sweeper_funding(),
+                Some(&funding),
+                "a queued funding is outstanding"
+            );
+
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                sweeper_funding_request(),
+                gas_fee_estimate(),
+            );
+            assert_eq!(
+                transactions.outstanding_sweeper_funding(),
+                Some(&funding),
+                "a funding whose transaction is waiting to be signed is outstanding"
+            );
+
+            let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+            assert_eq!(
+                transactions.outstanding_sweeper_funding(),
+                Some(&funding),
+                "a funding whose transaction was sent is outstanding until it finalizes"
+            );
+
+            transactions.record_finalized_transaction(
+                funding.ledger_burn_index,
+                transaction_receipt(&signed_tx, TransactionStatus::Success),
+            );
+            assert_eq!(
+                transactions.outstanding_sweeper_funding(),
+                None,
+                "a finalized funding is no longer outstanding, however long it stays among the \
+                 processed requests"
+            );
+        }
+
+        #[test]
+        fn should_not_report_a_user_withdrawal_as_an_outstanding_funding() {
+            let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
+            let cketh = cketh_withdrawal_request_with_index(LedgerBurnIndex::new(15));
+
+            transactions.record_withdrawal_request(cketh.clone());
+            transactions.record_withdrawal_request(ckerc20_withdrawal_request_with_index(
+                LedgerBurnIndex::new(16),
+                LedgerBurnIndex::new(17),
+            ));
+            assert_eq!(transactions.outstanding_sweeper_funding(), None);
+
+            let created_tx =
+                create_and_record_transaction(&mut transactions, cketh, gas_fee_estimate());
+            create_and_record_signed_transaction(&mut transactions, created_tx);
+
+            assert_eq!(
+                transactions.outstanding_sweeper_funding(),
+                None,
+                "only a funding is a funding, at whatever stage the others are"
             );
         }
 
