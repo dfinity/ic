@@ -521,6 +521,31 @@ pub mod events {
             withdrawal_id: Nat,
             transaction_receipt: TransactionReceipt,
         },
+        AcceptedSweepRequest {
+            sweep_id: Nat,
+            destination: String,
+            amount: Nat,
+            /// Transaction call data (the delegate sweep call).
+            data: ByteBuf,
+            max_transaction_fee: Nat,
+            created_at: u64,
+        },
+        CreatedSweeperTransaction {
+            sweep_id: Nat,
+            transaction: UnsignedTransaction,
+        },
+        SignedSweeperTransaction {
+            sweep_id: Nat,
+            raw_transaction: String,
+        },
+        ReplacedSweeperTransaction {
+            sweep_id: Nat,
+            transaction: UnsignedTransaction,
+        },
+        FinalizedSweeperTransaction {
+            sweep_id: Nat,
+            transaction_receipt: TransactionReceipt,
+        },
         ReimbursedEthWithdrawal {
             reimbursed_in_block: Nat,
             withdrawal_id: Nat,
