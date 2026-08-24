@@ -174,7 +174,7 @@ impl CatchUpPackageMaker {
             warn!(
                 every_n_seconds => 5,
                 self.log,
-                "Failed to get the catch up package type: {err}"
+                "Failed to get the catch up package type: {err}",
             )
         })
         .ok()?;
@@ -276,7 +276,7 @@ impl CatchUpPackageMaker {
                     every_n_seconds => 5,
                     self.log,
                     "Cannot make CUP at height {summary_height}: `get_state_hash_at` \
-                    succeeded but `get_state_at` failed with {err}. Will retry"
+                    succeeded but `get_state_at` failed with {err}. Will retry",
                 )
             })
             .ok()?;
@@ -289,7 +289,7 @@ impl CatchUpPackageMaker {
                 warn!(
                     every_n_seconds => 5,
                     self.log,
-                    "Couldn't get a block for a CUP: {err}"
+                    "Couldn't get a block for a CUP: {err}",
                 )
             })
             .ok()?;
@@ -300,7 +300,7 @@ impl CatchUpPackageMaker {
                 warn!(
                     every_n_seconds => 5,
                     self.log,
-                    "Couldn't get a random beacon for a CUP: {err}"
+                    "Couldn't get a random beacon for a CUP: {err}",
                 )
             })
             .ok()?;
@@ -311,7 +311,7 @@ impl CatchUpPackageMaker {
                     warn!(
                         every_n_seconds => 5,
                         self.log,
-                        "Couldn't find transcript at height {cup_height}"
+                        "Couldn't find transcript at height {cup_height}",
                     );
                     None
                 })?;
@@ -339,7 +339,7 @@ impl CatchUpPackageMaker {
                 error!(
                     every_n_seconds => 5,
                     self.log,
-                    "Couldn't create a signature at height {cup_height}: {err}"
+                    "Couldn't create a signature at height {cup_height}: {err}",
                 )
             })
             .ok()?;
@@ -347,7 +347,7 @@ impl CatchUpPackageMaker {
         debug!(
             every_n_seconds => 5,
             self.log,
-            "Proposing a CatchUpPackageShare (type: {cup_type:?}) at height {cup_height}"
+            "Proposing a CatchUpPackageShare (type: {cup_type:?}) at height {cup_height}",
         );
         Some(CatchUpPackageShare {
             content: share_content,
