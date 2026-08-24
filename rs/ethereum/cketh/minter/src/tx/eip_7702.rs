@@ -249,6 +249,24 @@ impl SignedEip7702TransactionRequest {
             ));
         }
         let rlp = Rlp::new(payload);
+        let authorization_list: Vec<SignedAuthorization> = decode_list(&rlp, 9)?
+            .iter()
+            .map(|item| {
+                Ok(SignedAuthorization {
+                    chain_id: decode_val(item, 0)?,
+                    delegate: decode_address(item, 1)?,
+                    nonce: decode_amount(item, 2)?,
+                    y_parity: decode_val(item, 3)?,
+                    r: decode_u256(item, 4)?,
+                    s: decode_u256(item, 5)?,
+                })
+            })
+            .collect::<Result<_, String>>()?;
+        if authorization_list.is_empty() {
+            return Err(format!(
+                "an EIP-7702 transaction (type {SET_CODE_TX_ID}) must have a non-empty authorization list"
+            ));
+        }
         let transaction = Eip7702TransactionRequest {
             chain_id: decode_val(&rlp, 0)?,
             nonce: decode_amount(&rlp, 1)?,
@@ -272,19 +290,7 @@ impl SignedEip7702TransactionRequest {
                     })
                     .collect::<Result<_, String>>()?,
             ),
-            authorization_list: decode_list(&rlp, 9)?
-                .iter()
-                .map(|item| {
-                    Ok(SignedAuthorization {
-                        chain_id: decode_val(item, 0)?,
-                        delegate: decode_address(item, 1)?,
-                        nonce: decode_amount(item, 2)?,
-                        y_parity: decode_val(item, 3)?,
-                        r: decode_u256(item, 4)?,
-                        s: decode_u256(item, 5)?,
-                    })
-                })
-                .collect::<Result<_, String>>()?,
+            authorization_list,
         };
         let signature = TransactionSignature {
             signature_y_parity: decode_val(&rlp, 10)?,

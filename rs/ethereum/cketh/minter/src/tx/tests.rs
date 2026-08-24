@@ -427,6 +427,33 @@ mod eip7702 {
     }
 
     #[test]
+    fn should_refuse_to_decode_a_transaction_without_authorizations() {
+        use rlp::{Rlp, RlpStream};
+
+        const AUTHORIZATION_LIST_INDEX: usize = 9;
+        const FIELD_COUNT: usize = 13;
+
+        let raw_transaction = sample_signed_transaction().raw_transaction_bytes();
+        let (transaction_type, payload) = raw_transaction.split_first().unwrap();
+        let fields = Rlp::new(payload);
+        let mut stream = RlpStream::new_list(FIELD_COUNT);
+        for index in 0..FIELD_COUNT {
+            if index == AUTHORIZATION_LIST_INDEX {
+                stream.begin_list(0);
+            } else {
+                stream.append_raw(fields.at(index).unwrap().as_raw(), 1);
+            }
+        }
+        let mut without_authorizations = vec![*transaction_type];
+        without_authorizations.extend(stream.out());
+
+        assert_matches!(
+            SignedEip7702TransactionRequest::decode(&without_authorizations),
+            Err(e) if e.contains("non-empty authorization list")
+        );
+    }
+
+    #[test]
     fn should_refuse_to_decode_an_empty_transaction() {
         assert_matches!(
             SignedEip7702TransactionRequest::decode(&[]),
