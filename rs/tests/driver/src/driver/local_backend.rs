@@ -1264,11 +1264,16 @@ impl LocalBackend {
         let Ok(cmdline) = std::fs::read(format!("/proc/{pid}/cmdline")) else {
             return false;
         };
-        // `cmdline` is NUL-separated and `--pid-file=<path>` is passed as a single
-        // word, so searching the raw bytes cannot match across two arguments.
-        let mut needle = b"--pid-file=".to_vec();
-        needle.extend_from_slice(pid_path.as_os_str().as_bytes());
-        cmdline.windows(needle.len()).any(|word| word == needle)
+        // `cmdline` is NUL-separated, so split it and compare *whole* arguments.
+        // A substring search over the raw bytes would be weaker in a way that
+        // matters here, since a false positive gets something signalled: it would
+        // also accept our argument embedded in a longer one, or our path as the
+        // prefix of a longer path.
+        let mut expected = b"--pid-file=".to_vec();
+        expected.extend_from_slice(pid_path.as_os_str().as_bytes());
+        cmdline
+            .split(|byte| *byte == 0)
+            .any(|arg| arg == expected.as_slice())
     }
 
     /// Path of a VM's QEMU pid-file (written via `-pidfile` in [`start_vm`]).
