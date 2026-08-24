@@ -10,7 +10,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_utils::interfaces::ManagementCanister;
 use nix::sys::signal::Signal;
 use pocket_ic::common::rest::{InstanceConfig, SubnetConfigSet, SubnetKind};
-use pocket_ic::{PocketIc, PocketIcBuilder, PocketIcState, update_candid};
+use pocket_ic::{PocketIc, PocketIcBuilder, PocketIcState, Time, update_candid};
 use reqwest::StatusCode;
 use reqwest::blocking::Client;
 use slog::Level;
@@ -1125,7 +1125,12 @@ fn auto_progress() {
     assert!(!pic.auto_progress_enabled());
 
     // Starting auto progress on the IC => a corresponding log should be made and time should start incresing automatically now.
+    let wall_t0: Time = std::time::SystemTime::now().into();
     pic.auto_progress();
+
+    // `auto_progress` returns only once the instance time has been set to the current
+    // system time, so this holds deterministically (no polling).
+    assert!(pic.get_time() >= wall_t0);
 
     assert!(pic.auto_progress_enabled());
 
@@ -1160,4 +1165,24 @@ fn auto_progress() {
             break;
         }
     }
+}
+
+/// An ingress message submitted right after `auto_progress()` returns must get executed.
+///
+/// Enabling auto progress jumps the instance time (starting at the genesis time of
+/// 2021-05-06T19:17:10Z for a fresh instance) to the current system time. `auto_progress`
+/// must not return before that jump has been applied: otherwise, the ingress message below
+/// could race the jump and carry an expiry derived from the pre-jump instance time; the jump
+/// would then retroactively expire the message, making it unselectable forever, and the
+/// update call would fail with
+/// `BadIngressMessage("Failed to answer to ingress ... after 100 rounds.")`.
+#[test]
+fn ingress_after_auto_progress() {
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+    let canister_id = deploy_counter_canister_to_any_subnet(&pic);
+
+    pic.auto_progress();
+
+    pic.update_call(canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
 }

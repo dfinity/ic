@@ -68,7 +68,7 @@ use std::{
 use tokio::{
     sync::mpsc::Receiver,
     sync::mpsc::error::TryRecvError,
-    sync::{Mutex, RwLock, mpsc},
+    sync::{Mutex, RwLock, mpsc, oneshot},
     task::{JoinHandle, JoinSet, spawn, spawn_blocking},
     time::{self, sleep},
 };
@@ -985,6 +985,7 @@ impl ApiState {
         let mut instance = instances[instance_id].lock().await;
         if instance.progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
+            let (ready_tx, ready_rx) = oneshot::channel::<()>();
             let handle = spawn(async move {
                 let mut now = SystemTime::now();
                 let time = ic_types::Time::from_nanos_since_unix_epoch(
@@ -1004,6 +1005,14 @@ impl ApiState {
                 .is_some()
                 {
                     debug!("Starting auto progress for instance {}.", instance_id);
+                    // The initial `SetCertifiedTime` has been applied (or was rejected as
+                    // `SettingTimeIntoPast`, i.e., the instance time is already ahead of it):
+                    // let `auto_progress` return only now, so that an ingress message submitted
+                    // after `auto_progress` returns can no longer carry an expiry derived from
+                    // the instance time before the jump to the current time — such a message
+                    // would expire retroactively, never getting executed and thus timing out.
+                    // The receiver is dropped if `auto_progress` was cancelled; that is fine.
+                    let _ = ready_tx.send(());
                     loop {
                         let old = std::mem::replace(&mut now, SystemTime::now());
                         let op = AdvanceTimeAndTick(now.duration_since(old).unwrap_or_default());
@@ -1042,6 +1051,15 @@ impl ApiState {
                 }
             });
             instance.progress_thread = Some(ProgressThread { handle, sender: tx });
+            // Drop the locks before waiting: the progress thread's first operation acquires
+            // the same locks (otherwise we might end up with a deadlock).
+            drop(instance);
+            drop(instances);
+            // Wait until the progress thread has applied the initial `SetCertifiedTime`
+            // operation. An error means the progress thread was stopped (by a concurrent
+            // `stop_progress` or `delete_instance`) before applying that operation: auto
+            // progress mode was still enabled (and then stopped again), so return `Ok`.
+            let _ = ready_rx.await;
             Ok(())
         } else {
             Err("Auto progress mode has already been enabled.".to_string())
