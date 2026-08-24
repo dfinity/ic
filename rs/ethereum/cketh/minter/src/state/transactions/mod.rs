@@ -211,12 +211,6 @@ impl SweepId {
     }
 }
 
-impl fmt::Display for SweepId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 /// A sweep the minter issues **from its dedicated sweeper address**, on the sweeper's own nonce
 /// sequence — the request type of the sweeper [`TransactionPipeline`]. It carries no ckETH burn
 /// and is never reimbursed.
