@@ -28,6 +28,7 @@ rust_library(
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
         "@crate_index//:alloy-consensus",
+        "@crate_index//:alloy-eips",
         "@crate_index//:alloy-primitives",
         "@crate_index//:alloy-rpc-types-eth",
         "@crate_index//:assert_matches",

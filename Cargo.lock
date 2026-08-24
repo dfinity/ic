@@ -8057,6 +8057,9 @@ dependencies = [
 name = "ic-cketh-minter"
 version = "0.9.0"
 dependencies = [
+ "alloy-consensus",
+ "alloy-eips",
+ "alloy-primitives",
  "alloy-rpc-types-eth",
  "askama",
  "assert_matches",
@@ -8125,6 +8128,7 @@ name = "ic-cketh-test-utils"
 version = "0.9.0"
 dependencies = [
  "alloy-consensus",
+ "alloy-eips",
  "alloy-primitives",
  "alloy-rpc-types-eth",
  "assert_matches",

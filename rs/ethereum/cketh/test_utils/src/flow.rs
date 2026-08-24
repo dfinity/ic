@@ -1,8 +1,9 @@
 use crate::events::MinterEventAssert;
 use crate::mock::{JsonRpcMethod, MockJsonRpcProviders, MockJsonRpcProvidersBuilder};
 use crate::response::{
-    block_response, empty_logs, encode_transaction, fee_history, send_raw_transaction_response,
-    transaction_count_response, transaction_receipt,
+    block_response, decode_transaction, empty_logs, encode_transaction, fee_history,
+    hash_transaction, minter_address, send_raw_transaction_response, transaction_count_response,
+    transaction_receipt,
 };
 use crate::{
     CkEthSetup, DEFAULT_DEPOSIT_BLOCK_HASH, DEFAULT_DEPOSIT_BLOCK_NUMBER,
@@ -14,7 +15,7 @@ use crate::{
     format_ethereum_address_to_eip_55,
 };
 use candid::{Decode, Encode, Nat, Principal};
-use ethers_core::utils::{hex, rlp};
+use ethers_core::utils::hex;
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::ckerc20::RetrieveErc20Request;
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, EventSource};
@@ -35,7 +36,6 @@ use pocket_ic::PocketIc;
 use pocket_ic::common::rest::RawMessageId;
 use serde_json::json;
 use std::convert::identity;
-use std::str::FromStr;
 use std::time::Duration;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -664,12 +664,12 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
 
     pub fn process_withdrawal_with_resubmission_and_same_price(
         self,
-        tx: ethers_core::types::Eip1559TransactionRequest,
-        tx_sig: ethers_core::types::Signature,
+        tx: alloy_consensus::TxEip1559,
+        tx_sig: alloy_primitives::Signature,
     ) -> T {
         let sent_tx = encode_transaction(tx.clone(), tx_sig);
         let transaction = EthTransaction {
-            transaction_hash: format!("{:?}", crate::response::hash_transaction(tx, tx_sig)),
+            transaction_hash: format!("{:?}", hash_transaction(tx, tx_sig)),
         };
         self.start_processing_withdrawals()
             .retrieve_fee_history(identity)
@@ -715,11 +715,11 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
         F: FnMut(&mut alloy_rpc_types_eth::FeeHistory),
     >(
         self,
-        first_tx: ethers_core::types::Eip1559TransactionRequest,
-        first_tx_sig: ethers_core::types::Signature,
+        first_tx: alloy_consensus::TxEip1559,
+        first_tx_sig: alloy_primitives::Signature,
         change_fee_history: &mut F,
-        resubmitted_tx: ethers_core::types::Eip1559TransactionRequest,
-        resubmitted_tx_sig: ethers_core::types::Signature,
+        resubmitted_tx: alloy_consensus::TxEip1559,
+        resubmitted_tx_sig: alloy_primitives::Signature,
     ) -> T {
         let first_sent_tx = encode_transaction(first_tx.clone(), first_tx_sig);
         let first_tx_hash = hash_transaction(first_tx.clone(), first_tx_sig);
@@ -892,16 +892,17 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> SendRawTransactionProcessWithdr
     }
 
     pub fn send_raw_transaction_expecting(self, expected_sent_tx: &str) -> Self {
-        use ethers_core::types::transaction::eip2718::TypedTransaction;
+        let signed = decode_transaction(expected_sent_tx);
+        let signer = signed
+            .recover_signer()
+            .expect("BUG: cannot recover the signer of minter's ETH transaction");
+        assert_eq!(
+            signer,
+            minter_address(),
+            "BUG: minter's ETH transaction was not signed by the minter"
+        );
 
-        let (tx, sig) = decode_transaction(expected_sent_tx);
-        sig.verify(
-            TypedTransaction::Eip1559(tx.clone()).sighash(),
-            tx.from.unwrap(),
-        )
-        .expect("BUG: cannot verify signature of minter's ETH transaction");
-
-        let tx_hash = hash_transaction(tx, sig);
+        let tx_hash = *signed.hash();
         self.send_raw_transaction(|mock| {
             mock.with_request_params(json!([expected_sent_tx]))
                 .respond_with(JsonRpcProvider::Provider1, tx_hash)
@@ -1047,31 +1048,6 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> TransactionReceiptProcessWithdr
             .check_audit_logs_and_upgrade_as_ref(Default::default());
         self.setup
     }
-}
-
-fn decode_transaction(
-    tx: &str,
-) -> (
-    ethers_core::types::Eip1559TransactionRequest,
-    ethers_core::types::Signature,
-) {
-    use ethers_core::types::transaction::eip2718::TypedTransaction;
-
-    TypedTransaction::decode_signed(&rlp::Rlp::new(
-        &ethers_core::types::Bytes::from_str(tx).unwrap(),
-    ))
-    .map(|(tx, sig)| match tx {
-        TypedTransaction::Eip1559(eip1559_tx) => (eip1559_tx, sig),
-        _ => panic!("BUG: unexpected sent ETH transaction type {tx:?}"),
-    })
-    .expect("BUG: failed to deserialize sent ETH transaction")
-}
-
-fn hash_transaction(
-    tx: ethers_core::types::Eip1559TransactionRequest,
-    sig: ethers_core::types::Signature,
-) -> ethers_core::types::TxHash {
-    ethers_core::types::transaction::eip2718::TypedTransaction::Eip1559(tx).hash(&sig)
 }
 
 fn assert_contains_unique_event(events: &[Event], payload: EventPayload) {

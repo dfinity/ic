@@ -139,82 +139,72 @@ fn map_unsigned_transaction(tx: UnsignedTransaction) -> Eip1559TransactionReques
 fn decode_signed_transaction(
     raw_transaction: &str,
 ) -> (Eip1559TransactionRequest, TransactionSignature) {
-    use ethers_core::types::transaction::eip2718::TypedTransaction;
-    use ethnum::u256;
-    use ic_ethereum_types::Address;
-    use std::str::FromStr;
+    use alloy_consensus::TxEnvelope;
+    use alloy_eips::eip2718::Decodable2718;
 
-    fn map_ethers_u256(num: ethers_core::types::U256) -> u256 {
-        u256::from_be_bytes(ethers_u256_to_be_bytes(num))
-    }
-
-    fn ethers_u256_to_be_bytes(num: ethers_core::types::U256) -> [u8; 32] {
-        let mut bytes = [0_u8; 32];
-        num.to_big_endian(&mut bytes);
-        bytes
-    }
-
-    fn map_ethers_u256_to_checked_amount<T>(num: ethers_core::types::U256) -> CheckedAmountOf<T> {
-        CheckedAmountOf::from_be_bytes(ethers_u256_to_be_bytes(num))
-    }
-
-    fn map_ethers_address(address: ethers_core::types::Address) -> Address {
-        Address::new(address.as_bytes().to_vec().try_into().unwrap())
-    }
-
-    let (decoded_request, decoded_sig) = TypedTransaction::decode_signed(&rlp::Rlp::new(
-        &ethers_core::types::Bytes::from_str(raw_transaction).unwrap(),
-    ))
-    .map(|(tx, sig)| match tx {
-        TypedTransaction::Eip1559(eip1559_tx) => (eip1559_tx, sig),
-        _ => panic!("BUG: unexpected sent ETH transaction type {tx:?}"),
-    })
-    .expect("BUG: failed to deserialize sent ETH transaction");
-
-    let request = Eip1559TransactionRequest {
-        chain_id: decoded_request.chain_id.unwrap().as_u64(),
-        nonce: map_ethers_u256_to_checked_amount(decoded_request.nonce.unwrap()),
-        max_priority_fee_per_gas: map_ethers_u256_to_checked_amount(
-            decoded_request.max_priority_fee_per_gas.unwrap(),
+    let raw_bytes = hex::decode(raw_transaction.trim_start_matches("0x"))
+        .expect("BUG: sent ETH transaction is not hex-encoded");
+    match TxEnvelope::decode_2718(&mut raw_bytes.as_slice())
+        .expect("BUG: failed to deserialize sent ETH transaction")
+    {
+        TxEnvelope::Eip1559(signed) => (
+            map_eip_1559_transaction(signed.tx()),
+            map_signature(signed.signature()),
         ),
-        max_fee_per_gas: map_ethers_u256_to_checked_amount(
-            decoded_request.max_fee_per_gas.unwrap(),
+        transaction => panic!("BUG: unexpected sent ETH transaction type {transaction:?}"),
+    }
+}
+
+fn map_eip_1559_transaction(transaction: &alloy_consensus::TxEip1559) -> Eip1559TransactionRequest {
+    Eip1559TransactionRequest {
+        chain_id: transaction.chain_id,
+        nonce: transaction.nonce.into(),
+        max_priority_fee_per_gas: transaction.max_priority_fee_per_gas.into(),
+        max_fee_per_gas: transaction.max_fee_per_gas.into(),
+        gas_limit: transaction.gas_limit.into(),
+        destination: map_address(
+            transaction
+                .to
+                .to()
+                .expect("BUG: sent ETH transaction creates a contract"),
         ),
-        gas_limit: map_ethers_u256_to_checked_amount(decoded_request.gas.unwrap()),
-        destination: map_ethers_address(*decoded_request.to.unwrap().as_address().unwrap()),
-        amount: map_ethers_u256_to_checked_amount(decoded_request.value.unwrap()),
-        data: decoded_request.data.map(|d| d.to_vec()).unwrap_or_default(),
+        amount: CheckedAmountOf::from_be_bytes(transaction.value.to_be_bytes()),
+        data: transaction.input.to_vec(),
         access_list: AccessList(
-            decoded_request
+            transaction
                 .access_list
-                .0
-                .into_iter()
+                .iter()
                 .map(|item| AccessListItem {
-                    address: map_ethers_address(item.address),
+                    address: map_address(&item.address),
                     storage_keys: item
                         .storage_keys
-                        .into_iter()
-                        .map(|s| ic_cketh_minter::tx::StorageKey(s.0))
+                        .iter()
+                        .map(|key| ic_cketh_minter::tx::StorageKey(key.0))
                         .collect(),
                 })
                 .collect(),
         ),
-    };
-
-    let signature = ic_cketh_minter::tx::TransactionSignature {
-        signature_y_parity: decoded_sig.recovery_id().unwrap().is_y_odd(),
-        r: map_ethers_u256(decoded_sig.r),
-        s: map_ethers_u256(decoded_sig.s),
-    };
-
-    (request, signature)
+    }
 }
-fn map_signed_sweep_transaction(raw_transaction: &str) -> SignedSweepTransaction {
-    use std::str::FromStr;
 
+fn map_signature(signature: &alloy_primitives::Signature) -> TransactionSignature {
+    use ethnum::u256;
+
+    ic_cketh_minter::tx::TransactionSignature {
+        signature_y_parity: signature.v(),
+        r: u256::from_be_bytes(signature.r().to_be_bytes()),
+        s: u256::from_be_bytes(signature.s().to_be_bytes()),
+    }
+}
+
+fn map_address(address: &alloy_primitives::Address) -> ic_ethereum_types::Address {
+    ic_ethereum_types::Address::new(address.into_array())
+}
+
+fn map_signed_sweep_transaction(raw_transaction: &str) -> SignedSweepTransaction {
     const EIP_7702_TRANSACTION_TYPE: u8 = 4;
 
-    let raw_bytes = ethers_core::types::Bytes::from_str(raw_transaction)
+    let raw_bytes = hex::decode(raw_transaction.trim_start_matches("0x"))
         .expect("BUG: sent sweep transaction is not hex-encoded");
     if raw_bytes.first() == Some(&EIP_7702_TRANSACTION_TYPE) {
         let signed = SignedEip7702TransactionRequest::decode(&raw_bytes)

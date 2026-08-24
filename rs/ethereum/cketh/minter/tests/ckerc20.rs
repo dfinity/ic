@@ -1,3 +1,4 @@
+use alloy_consensus::TxEip1559;
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
@@ -1555,11 +1556,16 @@ mod withdraw_erc20 {
         let (first_tx, first_tx_sig) = default_erc20_signed_eip_1559_transaction();
         let first_tx_hash = hash_transaction(first_tx.clone(), first_tx_sig);
         let resubmitted_sent_tx = "0x02f8b0018084625900808507af2c9f6282fde894a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4880b844a9059cbb000000000000000000000000221e931fbfcb9bd54ddd26ce6f5e29e98add01c000000000000000000000000000000000000000000000000000000000001e8480c001a06e09ef9986f589954218ef3f4d8959beb931d28e837f7b26845612875bf2b6c0a02595a316273c3ec265988faf4a698f73d86fd8fb7050b1569e453cab743415a2";
-        let (resubmitted_tx, resubmitted_tx_sig) = decode_transaction(resubmitted_sent_tx);
-        let resubmitted_tx_hash = hash_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
+        let resubmitted = decode_transaction(resubmitted_sent_tx);
+        let (resubmitted_tx, resubmitted_tx_sig) =
+            (resubmitted.tx().clone(), *resubmitted.signature());
+        let resubmitted_tx_hash = *resubmitted.hash();
         assert_eq!(
             resubmitted_tx,
-            first_tx.clone().max_priority_fee_per_gas(1_650_000_000_u64)
+            TxEip1559 {
+                max_priority_fee_per_gas: 1_650_000_000,
+                ..first_tx.clone()
+            }
         );
         assert_ne!(first_tx_hash, resubmitted_tx_hash);
 
@@ -1603,7 +1609,7 @@ mod withdraw_erc20 {
                         chain_id: Nat::from(1_u8),
                         nonce: Nat::from(0_u8),
                         max_priority_fee_per_gas: Nat::from(1_650_000_000_u64),
-                        max_fee_per_gas: Nat::from(first_tx.max_fee_per_gas.unwrap().as_u64()),
+                        max_fee_per_gas: Nat::from(first_tx.max_fee_per_gas),
                         gas_limit: Nat::from(65_000_u64),
                         destination: ckusdc.erc20_contract_address,
                         value: 0_u8.into(),
