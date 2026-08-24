@@ -857,6 +857,50 @@ fn canister_state_ingress_induction_cycles_debit() {
     );
 }
 
+#[test]
+fn canister_state_ingress_induction_cycles_debit_exceeding_balance() {
+    let system_state = &mut CanisterStateFixture::new().canister_state.system_state;
+    let initial_balance = system_state.balance();
+    let ingress_induction_debit = Cycles::new(42);
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    system_state.add_postponed_charge_to_ingress_induction_cycles_debit(ingress_induction_debit);
+
+    // Mimic a cleanup callback burning the cycles balance below the pending debit.
+    let remaining_balance = Cycles::new(10);
+    system_state.remove_cycles(initial_balance - remaining_balance);
+    assert_eq!(remaining_balance, system_state.balance());
+    assert_eq!(Cycles::zero(), system_state.debited_balance());
+
+    system_state.apply_ingress_induction_cycles_debit(
+        system_state.canister_id(),
+        cost_schedule,
+        false, // strict
+        &no_op_logger(),
+        &mock_metrics(),
+    );
+
+    // The whole balance is charged and the rest of the debit is dropped.
+    assert_eq!(
+        Cycles::zero(),
+        system_state.ingress_induction_cycles_debit()
+    );
+    assert_eq!(Cycles::zero(), system_state.balance());
+    // Only the charged part of the debit is reported as consumed; the dropped part
+    // must not show up in the consumed cycles metrics.
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles().get(),
+        remaining_balance.get()
+    );
+    assert_eq!(
+        *system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::IngressInduction)
+            .unwrap(),
+        NominalCycles::new(remaining_balance.get()),
+    );
+}
+
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
 #[test]

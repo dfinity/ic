@@ -1042,8 +1042,13 @@ impl SystemState {
                 // some of the postponed charges free.
             }
         }
+        // Charge only the part of the debit that the balance can cover. The remaining
+        // debit is dropped, so it must not be reported as consumed either: passing the
+        // full debit to `consume_cycles()` would saturate the balance at zero but still
+        // record the full amount in the consumed cycles metrics.
+        let charged_debit = self.ingress_induction_cycles_debit - remaining_debit;
         self.consume_cycles(CompoundCycles::<IngressInduction>::new(
-            self.ingress_induction_cycles_debit,
+            charged_debit,
             cost_schedule,
         ));
         self.ingress_induction_cycles_debit = Cycles::zero();
