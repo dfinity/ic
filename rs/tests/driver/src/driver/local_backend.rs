@@ -99,6 +99,14 @@ const DNSMASQ_STOP_POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// nor `SSL_CERT_DIR` set — defers to `openssl_probe::probe()`, and this is the
 /// first candidate in its Linux list. `rs/tests/BUILD.bazel` builds a bundle at the
 /// same path for the colocated driver image, for the same reason.
+///
+/// Being *first* in that list is what makes hard-coding it safe rather than merely
+/// convenient: if this file exists, it is the one `probe()` returns, so the mount
+/// cannot end up on a bundle the verifier ignores. The remaining exposure is a
+/// platform that does not have it at all (RHEL keeps its bundle under
+/// `/etc/pki/...`), where this fails loudly on the read rather than silently — and
+/// `SSL_CERT_FILE` is the supported way out, since
+/// [`system_ca_bundle`](LocalBackend::system_ca_bundle) honours it.
 const DEFAULT_SYSTEM_CA_BUNDLE: &str = "/etc/ssl/certs/ca-certificates.crt";
 
 /// Environment variables holding the runfiles paths of the split OVMF (UEFI)
@@ -438,8 +446,9 @@ impl LocalBackend {
     }
 
     /// Path of the generated CA bundle
-    /// [`install_dev_root_ca`](Self::install_dev_root_ca) bind-mounts over
-    /// [`SYSTEM_CA_BUNDLE`]. Same placement, and for the same reasons, as
+    /// [`install_dev_root_ca`](Self::install_dev_root_ca) bind-mounts over the
+    /// system one ([`system_ca_bundle`](Self::system_ca_bundle)). Same placement,
+    /// and for the same reasons, as
     /// [`generated_resolv_conf_path`](Self::generated_resolv_conf_path).
     fn generated_ca_bundle_path() -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -483,7 +492,8 @@ impl LocalBackend {
     }
 
     /// Put the dev root CA in the driver's own trust store, by bind-mounting a copy
-    /// of [`SYSTEM_CA_BUNDLE`] with that CA appended over the original.
+    /// of the system CA bundle ([`system_ca_bundle`](Self::system_ca_bundle)) with
+    /// that CA appended over the original.
     ///
     /// This is what lets a driver-side client verify the local IC gateway's
     /// certificate without any code of its own: the CA is simply one of the roots
@@ -502,10 +512,17 @@ impl LocalBackend {
     /// namespace altogether: it isolates the mount *table*, not file contents.
     ///
     /// Shadowing the bundle rather than the whole directory is then the better of
-    /// what is left. It reaches OpenSSL's `CApath` consumers, which look up
-    /// `<subject hash>.0` symlinks and would miss a plainly named file (though
-    /// `rustls-native-certs` would have read one, since it loads every regular file
-    /// in the directory), and it avoids reproducing the directory's ~240 entries.
+    /// what is left: the bundle is what `rustls-native-certs` reads for the driver's
+    /// own clients, and what OpenSSL and `curl` read by default on Debian, whose
+    /// default `CAfile` is this same path. It also avoids reproducing the
+    /// directory's ~240 entries.
+    ///
+    /// The limitation that leaves, since it is easy to assume otherwise: a consumer
+    /// using `CApath` *alone* resolves `<subject hash>.0` symlinks and never scans
+    /// the bundle, so it does not see this CA. Nothing in the driver's process tree
+    /// works that way today — and a plainly named file in the directory would not
+    /// have helped it either, since only a hash-named symlink would, which is what
+    /// `update-ca-certificates` generates and what this cannot create.
     ///
     /// Appending, never replacing: the original bytes are copied verbatim first, so
     /// this can only widen the driver's trust, never narrow it. That matters,
@@ -531,8 +548,12 @@ impl LocalBackend {
     fn install_dev_root_ca() -> Result<()> {
         let bundle_path = Self::system_ca_bundle()?;
         let bundle_path_display = bundle_path.display();
-        let mut bundle = std::fs::read_to_string(&bundle_path)
-            .with_context(|| format!("reading the system CA bundle {bundle_path_display}"))?;
+        let mut bundle = std::fs::read_to_string(&bundle_path).with_context(|| {
+            format!(
+                "reading the system CA bundle {bundle_path_display} (a platform that keeps \
+                 its bundle elsewhere can point SSL_CERT_FILE at it)"
+            )
+        })?;
         let dev_root_ca_pem = dev_root_ca_cert_pem()?;
         // Guard the separator rather than trusting the bundle to end in a newline:
         // `-----END CERTIFICATE----------BEGIN CERTIFICATE-----` parses as neither,
