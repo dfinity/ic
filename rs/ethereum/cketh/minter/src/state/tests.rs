@@ -16,7 +16,7 @@ use crate::state::event::{Event, EventType};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
 };
-use crate::state::{Erc20Balances, State};
+use crate::state::{Erc20Balances, EthBalance, State};
 use crate::test_fixtures::{
     arb::{arb_address, arb_checked_amount_of, arb_hash, arb_ledger_subaccount},
     initial_state,
@@ -1477,6 +1477,15 @@ fn state_equivalence() {
         }),
         "changing essential fields should break equivalence",
     );
+}
+
+/// An [`EthBalance`] holding `eth_balance` of deposit-backed ETH, for tests that need the minter to
+/// have received something.
+pub fn eth_balance_of(eth_balance: Wei) -> EthBalance {
+    EthBalance {
+        eth_balance,
+        ..Default::default()
+    }
 }
 
 mod sweeper_funding {

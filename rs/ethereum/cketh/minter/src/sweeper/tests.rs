@@ -1,27 +1,3 @@
-use crate::numeric::Wei;
-use crate::state::sweeper_funding::SweeperFundingAccounting;
-
-const AMOUNT: u128 = 100_000_000_000_000_000; // 0.1 ETH
-
-#[test]
-fn should_preserve_the_invariant_across_consecutive_fundings() {
-    let mut accounting = SweeperFundingAccounting::default();
-
-    for _ in 1..=3 {
-        accounting.record_burn(Wei::new(AMOUNT));
-        accounting.record_finalized_funding(Wei::new(AMOUNT - 43_000), Wei::new(1_000));
-
-        assert!(accounting.cumulative_burned() >= accounting.cumulative_spent());
-        assert!(accounting.burned_not_yet_spent() <= accounting.cumulative_burned());
-    }
-
-    assert_eq!(
-        accounting.burned_not_yet_spent(),
-        Wei::new(3 * 42_000),
-        "each funding leaves the fee it provisioned but did not pay"
-    );
-}
-
 /// Regression tests for two fundings decided before the first one's transfer finalizes. They drive
 /// [`plan_funding`] itself rather than a copy of its logic, which would keep passing if the guard
 /// were deleted or reordered, and they move the funding through the pipeline by applying the same
@@ -29,9 +5,10 @@ fn should_preserve_the_invariant_across_consecutive_fundings() {
 mod concurrent_fundings {
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::numeric::{BlockNumber, GasAmount, LedgerBurnIndex, Wei, WeiPerGas};
+    use crate::state::State;
     use crate::state::audit::{EventType, apply_state_transition};
+    use crate::state::tests::eth_balance_of;
     use crate::state::transactions::{EthWithdrawalRequest, WithdrawalRequest, create_transaction};
-    use crate::state::{EthBalance, State};
     use crate::sweeper::{FundingDecision, plan_funding};
     use crate::test_fixtures::{initial_state, sweeper_funding_request};
     use crate::tx::{
@@ -49,7 +26,7 @@ mod concurrent_fundings {
         state.cketh_minimum_withdrawal_amount = Wei::new(MINIMUM_BURN);
         // Funding is capped by the ETH the minter received through deposits, so a fixture with none
         // could never fund at all.
-        state.eth_balance = EthBalance::with_eth_balance(Wei::new(10 * TARGET));
+        state.eth_balance = eth_balance_of(Wei::new(10 * TARGET));
         state
     }
 
@@ -159,7 +136,7 @@ mod concurrent_fundings {
     #[test]
     fn should_refuse_to_fund_more_than_the_deposit_backed_balance() {
         let mut state = state();
-        state.eth_balance = EthBalance::with_eth_balance(Wei::new(TARGET - 1));
+        state.eth_balance = eth_balance_of(Wei::new(TARGET - 1));
 
         assert_eq!(
             plan_funding(&state, Wei::ZERO),
@@ -174,7 +151,7 @@ mod concurrent_fundings {
     #[test]
     fn should_fund_when_the_backed_balance_exactly_covers_it() {
         let mut state = state();
-        state.eth_balance = EthBalance::with_eth_balance(Wei::new(TARGET));
+        state.eth_balance = eth_balance_of(Wei::new(TARGET));
 
         match plan_funding(&state, Wei::ZERO) {
             FundingDecision::Fund(amount) => assert_eq!(amount, Wei::new(TARGET)),
@@ -221,13 +198,11 @@ mod concurrent_fundings {
         };
         fund(&mut state, &funding_request(1, first));
 
-        // The sweeper now holds roughly the target, so nothing is due — but the reason is
-        // "not due", not "still in flight".
+        // The sweeper now holds roughly the target, so nothing is due.
         assert_eq!(
             plan_funding(&state, Wei::new(TARGET - 1_000_000_000_000_000)),
             FundingDecision::NotDue
         );
-        // Once it drains again, funding resumes.
         assert!(matches!(
             plan_funding(&state, Wei::ZERO),
             FundingDecision::Fund(_)

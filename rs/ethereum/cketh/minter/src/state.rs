@@ -37,7 +37,7 @@ pub mod sweeper_funding;
 pub mod transactions;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 thread_local! {
     pub static STATE: RefCell<Option<State>> = RefCell::default();
@@ -619,6 +619,19 @@ impl State {
         self.validate_config()
     }
 
+    /// The minter's dedicated sweeper address, or `None` while the master public key is still
+    /// unknown.
+    ///
+    /// Reads the cached key rather than fetching it: a second concurrent `ecdsa_public_key` call
+    /// traps the canister, so the first run is delayed until the install-time fetch has cached it.
+    pub fn sweeper_address(&self) -> Option<Address> {
+        let (master_public_key, chain_code) = self.public_key_and_chain_code()?;
+        Some(crate::deposit_address::sweeper_address(
+            &master_public_key,
+            &chain_code,
+        ))
+    }
+
     /// When to top the sweeper address up, and to what: derived from the minimum withdrawal
     /// amount, which [`Self::validate_config`] keeps small enough for the derivation to fit.
     pub fn sweeper_funding_config(&self) -> SweeperFundingConfig {
@@ -818,17 +831,6 @@ impl Default for EthBalance {
             eth_balance: Wei::ZERO,
             total_effective_tx_fees: Wei::ZERO,
             total_unspent_tx_fees: Wei::ZERO,
-        }
-    }
-}
-
-#[cfg(test)]
-impl EthBalance {
-    /// An `EthBalance` holding `eth_balance` of deposit-backed ETH.
-    pub fn with_eth_balance(eth_balance: Wei) -> Self {
-        Self {
-            eth_balance,
-            ..Default::default()
         }
     }
 }
