@@ -306,9 +306,7 @@ pub(crate) fn max_consensus_fee(
             // split across.
             consensus_fee(response_bytes, subnet_size).div_ceil(threshold) * n
         }
-        // Fire-and-forget: no response is ever delivered, so consensus never puts one in
-        // a block. `min_responses <= max_responses` makes it zero too, which also rules
-        // out a `TooManyRejects` — the one result that can outgrow `max_responses`.
+        // Fire-and-forget: no response is ever delivered, so consensus never puts one in a block.
         ReplicationKind::Flexible {
             max_responses: 0, ..
         } => Cycles::zero(),
