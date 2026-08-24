@@ -910,7 +910,7 @@ fn update_balance_and_consumed_cycles_correctly() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let prepaid_cycles =
         CompoundCycles::<Instructions>::new(initial_consumed_cycles, cost_schedule);
-    let _uncharged = system_state.consume_cycles(prepaid_cycles);
+    system_state.consume_cycles(prepaid_cycles, &no_op_logger(), &mock_metrics());
     assert_eq!(
         system_state.balance(),
         INITIAL_CYCLES - initial_consumed_cycles
@@ -938,7 +938,7 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     let cycles_to_consume = Cycles::from(1000_u128);
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let prepaid_cycles = CompoundCycles::<Instructions>::new(cycles_to_consume, cost_schedule);
-    let _uncharged = system_state.consume_cycles(prepaid_cycles);
+    system_state.consume_cycles(prepaid_cycles, &no_op_logger(), &mock_metrics());
 
     let refund = CompoundCycles::<Instructions>::new(Cycles::from(100_u128), cost_schedule);
     system_state.refund_cycles(prepaid_cycles, refund);
@@ -960,15 +960,20 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
 fn consume_cycles_exceeding_balance_reports_only_the_charged_amount() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let charging_from_balance_error = mock_metrics();
     // Request more cycles than the balance can cover.
-    let uncovered_cycles = Cycles::new(1000);
     let requested_cycles =
-        CompoundCycles::<Instructions>::new(INITIAL_CYCLES + uncovered_cycles, cost_schedule);
-    let uncharged_cycles = system_state.consume_cycles(requested_cycles);
+        CompoundCycles::<Instructions>::new(INITIAL_CYCLES + Cycles::new(1000), cost_schedule);
+    system_state.consume_cycles(
+        requested_cycles,
+        &no_op_logger(),
+        &charging_from_balance_error,
+    );
 
     // The balance is drained and only the drained amount is reported as consumed,
-    // i.e. the part of the request that the balance could not cover is not.
-    assert_eq!(uncovered_cycles, uncharged_cycles);
+    // i.e. the part of the request that the balance could not cover is not. That part
+    // is reported as a critical error instead.
+    assert_eq!(1, charging_from_balance_error.get());
     assert_eq!(Cycles::zero(), system_state.balance());
     assert_eq!(
         NominalCycles::new(INITIAL_CYCLES.get()),
@@ -988,17 +993,22 @@ fn consume_cycles_exceeding_balance_reports_only_the_charged_amount() {
 fn consume_cycles_exceeding_balance_and_reserved_balance_reports_only_the_charged_amount() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let charging_from_balance_error = mock_metrics();
     let reserved_cycles = Cycles::new(1000);
     system_state.reserve_cycles(reserved_cycles).unwrap();
 
     // Request more cycles than the reserved balance and the balance together can cover.
-    let uncovered_cycles = Cycles::new(500);
     let requested_cycles =
-        CompoundCycles::<MemoryUseCase>::new(INITIAL_CYCLES + uncovered_cycles, cost_schedule);
-    let uncharged_cycles = system_state.consume_cycles(requested_cycles);
+        CompoundCycles::<MemoryUseCase>::new(INITIAL_CYCLES + Cycles::new(500), cost_schedule);
+    system_state.consume_cycles(
+        requested_cycles,
+        &no_op_logger(),
+        &charging_from_balance_error,
+    );
 
-    // Both balances are drained and only the drained amount is reported as consumed.
-    assert_eq!(uncovered_cycles, uncharged_cycles);
+    // Both balances are drained, only the drained amount is reported as consumed and
+    // the part that they could not cover is reported as a critical error.
+    assert_eq!(1, charging_from_balance_error.get());
     assert_eq!(Cycles::zero(), system_state.balance());
     assert_eq!(Cycles::zero(), system_state.reserved_balance());
     assert_eq!(

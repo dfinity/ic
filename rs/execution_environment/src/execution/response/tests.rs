@@ -2,6 +2,7 @@ use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::MessageMemoryUsage;
+use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::canister_state::NextExecution;
@@ -22,6 +23,7 @@ use ic_types::{ComputeAllocation, MemoryAllocation};
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase};
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_lt};
+use prometheus::IntCounter;
 
 #[test]
 fn execute_response_when_stopping_status() {
@@ -2644,7 +2646,11 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
     // Change the cycles balance to force the response resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
-        .burn_remaining_balance_for_uninstall(CanisterCyclesCostSchedule::Normal);
+        .burn_remaining_balance_for_uninstall(
+            CanisterCyclesCostSchedule::Normal,
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
+        );
 
     test.execute_slice(a_id);
     assert_eq!(
@@ -2733,7 +2739,11 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
     // Change the cycles balance to force the cleanup resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
-        .burn_remaining_balance_for_uninstall(CanisterCyclesCostSchedule::Normal);
+        .burn_remaining_balance_for_uninstall(
+            CanisterCyclesCostSchedule::Normal,
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
+        );
 
     test.execute_slice(a_id);
     assert_eq!(

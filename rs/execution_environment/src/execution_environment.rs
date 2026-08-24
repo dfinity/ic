@@ -360,6 +360,8 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         round_limits: &mut RoundLimits,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         failed_charge: &IntCounter,
+        log: &ReplicaLogger,
+        charging_error: &IntCounter,
     ) {
         canister.scheduler_state.install_code_debit += self.install_code_debit;
         let memory_usage = canister.memory_usage();
@@ -371,6 +373,8 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
             self.consumed_cycles,
             subnet_cycles_config,
             true, /* we only log the error, but do not return it to the user => do reveal top up balance */
+            log,
+            charging_error,
         );
         if let Err(err) = res {
             failed_charge.inc();
@@ -535,6 +539,10 @@ impl ExecutionEnvironment {
         &self.metrics.state_changes_error
     }
 
+    pub fn charging_from_balance_error(&self) -> &IntCounter {
+        &self.metrics.charging_from_balance_error
+    }
+
     pub fn canister_not_found_error(&self) -> &IntCounter {
         &self.metrics.canister_not_found_error
     }
@@ -674,6 +682,8 @@ impl ExecutionEnvironment {
                             round_limits,
                             subnet_cycles_config,
                             &self.metrics.failed_subnet_message_charge,
+                            &self.log,
+                            &self.metrics.charging_from_balance_error,
                         );
                         self.process_canister_manager_result(Err(err), state, msg, current_round)
                     }
@@ -1067,6 +1077,8 @@ impl ExecutionEnvironment {
                                     induction_cost,
                                     subnet_cycles_config,
                                     false, // we ignore the error anyway => no need to reveal top up balance
+                                    &self.log,
+                                    &self.metrics.charging_from_balance_error,
                                 );
                             }
                         }

@@ -39,6 +39,8 @@ rust_test(
     deps = [
         # Keep sorted.
         "//rs/crypto/sha2",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
         "//rs/registry/subnet_features",
         "//rs/sys",
         "//rs/test_utilities/state",

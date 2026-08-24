@@ -35,6 +35,7 @@ use ic_types_cycles::{
     Instructions, RequestAndResponseTransmission,
 };
 use ic_wasm_types::WasmEngineError;
+use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -390,6 +391,7 @@ impl SystemStateModifications {
         is_composite_query: bool,
         metrics: &Metrics,
         logger: &ReplicaLogger,
+        charging_error: &IntCounter,
     ) -> HypervisorResult<RequestMetadataStats> {
         // Append delta logs.
         if !self.canister_log.is_empty() {
@@ -401,7 +403,7 @@ impl SystemStateModifications {
 
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
-        self.apply_balance_changes(system_state);
+        self.apply_balance_changes(system_state, logger, charging_error);
 
         // Verify we don't accept more cycles than are available from call
         // context and update the call context balance.
@@ -561,7 +563,12 @@ impl SystemStateModifications {
     }
 
     /// Applies the balance change to the given state.
-    pub fn apply_balance_changes(&self, state: &mut SystemState) {
+    pub fn apply_balance_changes(
+        &self,
+        state: &mut SystemState,
+        logger: &ReplicaLogger,
+        charging_error: &IntCounter,
+    ) {
         let initial_balance = state.balance();
 
         // `self.cycles_balance_change` consists of:
@@ -595,13 +602,13 @@ impl SystemStateModifications {
         } = self.consumed_cycles_by_use_case;
         // The cycle changes were validated above, so the balance covers them.
         if let Some(x) = burned {
-            let _uncharged = state.consume_cycles(x);
+            state.consume_cycles(x, logger, charging_error);
         }
         if let Some(x) = instructions {
-            let _uncharged = state.consume_cycles(x);
+            state.consume_cycles(x, logger, charging_error);
         }
         if let Some(x) = request_and_response_transmission {
-            let _uncharged = state.consume_cycles(x);
+            state.consume_cycles(x, logger, charging_error);
         }
 
         // Apply the reserved cycles. This must succeed because the cycle
@@ -1438,6 +1445,7 @@ mod tests {
     use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+    use ic_logger::replica_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{NetworkTopology, SystemState};
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
@@ -1451,6 +1459,7 @@ mod tests {
         BurnedCycles, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
         CyclesUseCaseKind, Instructions, RequestAndResponseTransmission,
     };
+    use prometheus::IntCounter;
 
     use super::{CanisterStatusView, SandboxSafeSystemState, SystemStateModifications};
     use crate::wasmtime_embedder::system_api::{
@@ -1483,7 +1492,11 @@ mod tests {
             },
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(
+            &mut system_state,
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
+        );
 
         assert_eq!(initial_cycles_balance - removed, system_state.balance());
 
@@ -1502,7 +1515,11 @@ mod tests {
             },
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(
+            &mut system_state,
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
+        );
 
         assert_eq!(initial_cycles_balance - removed, system_state.balance());
 
@@ -1521,7 +1538,11 @@ mod tests {
             },
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(
+            &mut system_state,
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
+        );
 
         assert_eq!(initial_cycles_balance + added, system_state.balance());
 
@@ -1540,7 +1561,11 @@ mod tests {
             },
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(
+            &mut system_state,
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
+        );
 
         assert_eq!(initial_cycles_balance + added, system_state.balance());
     }

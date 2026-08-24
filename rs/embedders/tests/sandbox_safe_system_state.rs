@@ -265,6 +265,7 @@ fn correct_charging_source_canister_for_a_request() {
             false,
             &NoOpMetrics {},
             &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
@@ -483,6 +484,7 @@ fn call_increases_cycles_consumed_metric() {
             false,
             &NoOpMetrics {},
             &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     assert!(system_state.canister_metrics().consumed_cycles().get() > 0);
@@ -575,6 +577,7 @@ fn test_inter_canister_call(
             false,
             &NoOpMetrics {},
             &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
 

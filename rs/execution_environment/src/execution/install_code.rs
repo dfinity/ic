@@ -712,6 +712,7 @@ impl InstallCodeHelper {
                 false, // Install cannot happen in composite_query.
                 round.hypervisor.metrics(),
                 round.log,
+                round.counters.charging_from_balance_error,
             );
 
         match output.wasm_result {

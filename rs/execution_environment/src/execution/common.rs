@@ -633,6 +633,7 @@ fn try_apply_canister_state_changes(
     is_composite_query: bool,
     metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
+    charging_error: &IntCounter,
 ) -> HypervisorResult<RequestMetadataStats> {
     subnet_available_memory
         .try_decrement(
@@ -650,6 +651,7 @@ fn try_apply_canister_state_changes(
         is_composite_query,
         metrics,
         log,
+        charging_error,
     )
 }
 
@@ -701,6 +703,9 @@ pub fn apply_canister_state_changes(
         is_composite_query,
         metrics,
         log,
+        // Applying the balance changes must not run into charges that the balance
+        // cannot cover: the cycle changes were validated before they are applied.
+        state_changes_error,
     ) {
         Ok(request_stats) => {
             if let Some(ExecutionStateChanges {

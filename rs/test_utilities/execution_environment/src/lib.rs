@@ -2387,6 +2387,8 @@ impl ExecutionTest {
                 CompoundCycles::<ic_types_cycles::Memory>::new(cycles, cost_schedule),
                 Cycles::zero(),
                 false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
             )
             .unwrap();
     }

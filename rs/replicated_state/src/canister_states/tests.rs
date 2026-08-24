@@ -9,7 +9,9 @@ use crate::{
     ExportedFunctions, InputQueueType, Memory, SchedulerState, SystemState,
 };
 use ic_base_types::NumSeconds;
+use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{CanisterChangeDetails, CanisterChangeOrigin};
+use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_test_utilities_types::messages::RequestBuilder;
@@ -864,12 +866,14 @@ fn total_consumed_cycles_combines_hot_and_cold() {
     };
 
     fn consume(canister: &mut Arc<CanisterState>, amount: u128) {
-        let _uncharged = Arc::make_mut(canister)
-            .system_state
-            .consume_cycles(CompoundCycles::<Instructions>::new(
+        Arc::make_mut(canister).system_state.consume_cycles(
+            CompoundCycles::<Instructions>::new(
                 Cycles::new(amount),
                 CanisterCyclesCostSchedule::Normal,
-            ));
+            ),
+            &no_op_logger(),
+            &MetricsRegistry::new().int_counter("error_counter", "Test error counter"),
+        );
     }
 
     // Consuming cycles does not create any work, so the canister stays cold.

@@ -60,6 +60,11 @@ pub use scheduler::{
 use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
+/// Critical error for charges by the canister manager that exceed the
+/// canister's cycles balance.
+const CRITICAL_ERROR_CANISTER_MANAGER_CHARGING_FROM_BALANCE: &str =
+    "canister_manager_charging_from_balance";
+
 /// When executing a wasm method of query type, this enum indicates if we are
 /// running in an replicated or non-replicated context. This information is
 /// needed for various purposes and in particular to support the CoW memory
@@ -385,6 +390,7 @@ fn setup_execution_helper(
     let canister_manager = Arc::new(CanisterManager::new(
         Arc::clone(&hypervisor),
         logger.clone(),
+        metrics_registry.error_counter(CRITICAL_ERROR_CANISTER_MANAGER_CHARGING_FROM_BALANCE),
         canister_manager_config,
         Arc::clone(&cycles_account_manager),
         Arc::clone(&fd_factory),

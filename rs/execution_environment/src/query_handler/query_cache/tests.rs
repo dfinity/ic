@@ -9,6 +9,7 @@ use ic_base_types::CanisterId;
 use ic_error_types::ErrorCode;
 use ic_heap_bytes::{DeterministicHeapBytes, HeapBytes, total_bytes};
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
+use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType, Payload,
 };
@@ -27,6 +28,7 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Memory};
 use ic_universal_canister::call_args;
+use prometheus::IntCounter;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 const MAX_EXPIRY_TIME: Duration = Duration::from_secs(10);
@@ -613,8 +615,10 @@ fn query_cache_ignores_balance_changes_when_query_does_not_read_balance() {
         assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
         // Change the canister balance.
-        let _uncharged = test.canister_state_mut(b_id).system_state.consume_cycles(
+        test.canister_state_mut(b_id).system_state.consume_cycles(
             CompoundCycles::<Memory>::new(1_u64.into(), CanisterCyclesCostSchedule::Normal),
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         );
 
         // Run the same query for the second time.
@@ -643,8 +647,10 @@ fn query_cache_ignores_balance_and_time_changes_when_query_is_static() {
         assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
         // Change the canister balance.
-        let _uncharged = test.canister_state_mut(b_id).system_state.consume_cycles(
+        test.canister_state_mut(b_id).system_state.consume_cycles(
             CompoundCycles::<Memory>::new(1_u64.into(), CanisterCyclesCostSchedule::Normal),
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         );
         // Change the time.
         test.state_mut().metadata.batch_time += Duration::from_secs(1);
@@ -796,8 +802,10 @@ fn query_cache_returns_different_results_for_different_canister_balances() {
         assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
         // Change the canister balance.
-        let _uncharged = test.canister_state_mut(b_id).system_state.consume_cycles(
+        test.canister_state_mut(b_id).system_state.consume_cycles(
             CompoundCycles::<Memory>::new(1_u64.into(), CanisterCyclesCostSchedule::Normal),
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         );
 
         let res_2 = test.non_replicated_query(a_id, method, q);
@@ -823,8 +831,10 @@ fn query_cache_returns_different_results_for_different_canister_balance128s() {
         assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
         // Change the canister balance.
-        let _uncharged = test.canister_state_mut(b_id).system_state.consume_cycles(
+        test.canister_state_mut(b_id).system_state.consume_cycles(
             CompoundCycles::<Memory>::new(1_u64.into(), CanisterCyclesCostSchedule::Normal),
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         );
 
         let res_2 = test.non_replicated_query(a_id, method, q);
@@ -861,8 +871,10 @@ fn query_cache_returns_different_results_on_combined_invalidation() {
         test.canister_state_mut(b_id)
             .system_state
             .bump_canister_version();
-        let _uncharged = test.canister_state_mut(b_id).system_state.consume_cycles(
+        test.canister_state_mut(b_id).system_state.consume_cycles(
             CompoundCycles::<Memory>::new(1_u64.into(), CanisterCyclesCostSchedule::Normal),
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         );
 
         let res_2 = test.non_replicated_query(a_id, method, q);
@@ -909,13 +921,14 @@ fn query_cache_frees_memory_after_invalidated_entries() {
     assert_gt!(heap_bytes, BIG_RESPONSE_SIZE);
 
     // Set the canister balance to 42, so the second reply will have just 42 bytes.
-    let _uncharged = test
-        .canister_state_mut(id)
-        .system_state
-        .consume_cycles(CompoundCycles::<Memory>::new(
+    test.canister_state_mut(id).system_state.consume_cycles(
+        CompoundCycles::<Memory>::new(
             ((BIG_RESPONSE_SIZE - SMALL_RESPONSE_SIZE) as u64).into(),
             CanisterCyclesCostSchedule::Normal,
-        ));
+        ),
+        &no_op_logger(),
+        &IntCounter::new("no_op", "no_op").unwrap(),
+    );
 
     // The new 42 reply must invalidate and replace the previous 1MB reply in the cache.
     let res = test
