@@ -30,7 +30,7 @@ impl RequestsGuardedByPrincipal for PendingWithdrawalRequests {
     }
 
     fn pending_requests_count(state: &State) -> usize {
-        state.eth_transactions.withdrawal_requests_len()
+        state.withdrawal_transactions.requests_len()
     }
 }
 

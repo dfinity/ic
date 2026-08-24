@@ -339,8 +339,8 @@ impl ResponseHelper {
     /// call context, and execution state because it is not possible to invoke
     /// the cleanup callback in such cases.
     ///
-    /// It returns an error if the cycles balance of the clean canister differs
-    /// from the cycles balances at the start of the DTS execution.
+    /// It returns an error if the cycles balance of the clean canister dropped
+    /// below the cycles balance at the start of the DTS execution.
     #[allow(clippy::result_large_err)]
     fn resume(
         paused: PausedResponseHelper,
@@ -387,9 +387,13 @@ impl ResponseHelper {
             .validate(&call_context, original, round, round_limits)
             .expect("Failed to resume DTS response: validation");
 
-        // The cycles balance of the clean canister must not change during the
-        // DTS execution.
-        if helper.initial_cycles_balance != paused.initial_cycles_balance {
+        // The cycles balance of the clean canister must not decrease during the
+        // DTS execution: the initial steps are replayed on the clean canister
+        // state and a lower balance might no longer be able to cover them.
+        // An increase is safe: all cycles changes of the DTS execution are
+        // applied relative to the balance of the clean canister state and hence
+        // the additional cycles are preserved.
+        if helper.initial_cycles_balance < paused.initial_cycles_balance {
             let msg = "Mismatch in cycles balance when resuming a response call".to_string();
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
             return Err((helper, err));

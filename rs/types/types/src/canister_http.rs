@@ -44,6 +44,7 @@
 use crate::{
     CanisterId, CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
+    consensus::get_faults_tolerated,
     crypto::{BasicSigOf, CryptoHashOf},
     messages::{CallbackId, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
@@ -94,6 +95,17 @@ pub const MAX_CANISTER_HTTP_RESPONSE_BYTES: u64 = 2_000_000;
 
 /// Maximum size of a canister http reject message.
 pub const MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
+
+/// The [`count_bytes`](CanisterHttpReject::count_bytes) of the largest
+/// [`CanisterHttpReject`] there is: a reject code plus a message of the maximum
+/// length.
+///
+/// Unlike a successful response, a reject is *not* bounded by the request's
+/// `max_response_bytes` (see
+/// [`CanisterHttpRequestContext::max_http_outcall_content_size`]), so this is the
+/// response size any outcall may end up delivering, whatever size it asked for.
+pub const MAX_CANISTER_HTTP_REJECT_BYTES: u64 =
+    CanisterHttpReject::count_bytes_from_parts(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES) as u64;
 
 /// Bytes reserved on top of a request's `max_response_bytes` for the Candid
 /// encoding of the response, since `max_response_bytes` is enforced on the
@@ -271,6 +283,13 @@ impl ReplicationKind {
             Self::Flexible { total_requests, .. } => (*total_requests as usize).max(1),
         }
     }
+}
+
+/// The number of agreeing replicas required to deliver a fully-replicated HTTP outcall
+/// response on a canister-http committee of `committee_size` nodes.
+pub fn canister_http_threshold(committee_size: usize) -> usize {
+    let committee_size = committee_size.max(1);
+    committee_size - get_faults_tolerated(committee_size)
 }
 
 impl From<&ReplicationCounts> for ReplicationKind {
@@ -1018,7 +1037,7 @@ impl From<&CanisterHttpReject> for RejectContext {
 
 impl CanisterHttpReject {
     /// Same calculation as `Self::count_bytes` but from decomposed parts.
-    pub fn count_bytes_from_parts(message_len: usize) -> usize {
+    pub const fn count_bytes_from_parts(message_len: usize) -> usize {
         size_of::<RejectCode>() + message_len
     }
 }
@@ -1232,14 +1251,22 @@ impl CanisterHttpRequestContext {
     /// [`CanisterHttpResponseContent`] it could legitimately have produced.
     pub fn max_http_outcall_content_size(&self, is_reject: bool) -> u64 {
         if is_reject {
-            CanisterHttpReject::count_bytes_from_parts(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES)
-                as u64
+            MAX_CANISTER_HTTP_REJECT_BYTES
         } else {
-            self.max_response_bytes
-                .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get())
-                + CANDID_OVERHEAD_RESERVE_BYTES
+            max_http_outcall_response_size(self.max_response_bytes)
         }
     }
+}
+
+/// The largest [`CanisterHttpResponseContent::Success`] an outcall with the given
+/// `max_response_bytes` may deliver.
+///
+/// A response is delivered Candid-encoded, so it may exceed `max_response_bytes` by
+/// [`CANDID_OVERHEAD_RESERVE_BYTES`].
+pub fn max_http_outcall_response_size(max_response_bytes: Option<NumBytes>) -> u64 {
+    max_response_bytes
+        .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get())
+        .saturating_add(CANDID_OVERHEAD_RESERVE_BYTES)
 }
 
 /// Metadata about some [`CanisterHttpResponseContent`].
@@ -1473,6 +1500,57 @@ mod tests {
         ];
         let encodings: BTreeSet<_> = amounts.iter().map(|spent| signed_bytes(*spent)).collect();
         assert_eq!(encodings.len(), amounts.len());
+    }
+
+    #[test]
+    fn canister_http_threshold_tolerates_a_third_of_the_committee() {
+        // The concrete quorums, including the subnet sizes the pricing tests use.
+        for (committee_size, expected) in [
+            (0, 1),
+            (1, 1),
+            (2, 2),
+            (3, 3),
+            (4, 3),
+            (7, 5),
+            (13, 9),
+            (28, 19),
+            (34, 23),
+            (40, 27),
+        ] {
+            assert_eq!(
+                canister_http_threshold(committee_size),
+                expected,
+                "committee of {committee_size}"
+            );
+        }
+        for committee_size in 0..=64 {
+            let threshold = canister_http_threshold(committee_size);
+            // Never zero, so that a fee can be split into that many shares ...
+            assert!(threshold >= 1, "committee of {committee_size}");
+            // ... never more than the committee that has to reach it ...
+            assert!(
+                threshold <= committee_size.max(1),
+                "committee of {committee_size}"
+            );
+            // ... and always a strict majority, so two disjoint sets cannot both reach it.
+            assert!(
+                2 * threshold > committee_size,
+                "committee of {committee_size}"
+            );
+        }
+    }
+
+    #[test]
+    fn max_canister_http_reject_bytes_is_the_size_of_the_largest_reject() {
+        // The pricing of an outcall floors every response size at this constant (see
+        // `ic_https_outcalls_pricing::fees::max_consensus_fee`), so it has to be the
+        // `content_size` of an actual maximally large reject rather than an
+        // approximation of it.
+        let largest = CanisterHttpResponseContent::Reject(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "x".repeat(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES),
+        });
+        assert_eq!(largest.count_bytes() as u64, MAX_CANISTER_HTTP_REJECT_BYTES);
     }
 
     #[test]

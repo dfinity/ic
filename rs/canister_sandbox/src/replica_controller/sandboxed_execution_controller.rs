@@ -10,8 +10,9 @@ use crate::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{
-    CanisterStateChanges, ExecutionStateChanges, PausedWasmExecution, SliceExecutionOutput,
-    WasmExecutionResult, WasmExecutor, get_wasm_reserved_pages, wasm_execution_error,
+    CanisterStateChanges, CreatedExecutionState, ExecutionStateChanges, PausedWasmExecution,
+    SliceExecutionOutput, WasmExecutionResult, WasmExecutor, get_wasm_reserved_pages,
+    wasm_execution_error,
 };
 use ic_embedders::{
     CompilationCache, CompilationResult, WasmExecutionInput, wasm_utils::WasmImportsDetails,
@@ -1069,7 +1070,7 @@ impl WasmExecutor for SandboxedExecutionController {
         canister_module: CanisterModule,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
-    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
+    ) -> HypervisorResult<CreatedExecutionState> {
         let _create_exe_state_timer = self
             .metrics
             .sandboxed_execution_replica_create_exe_state_duration
@@ -1262,11 +1263,12 @@ impl WasmExecutor for SandboxedExecutionController {
             wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64),
         };
 
-        Ok((
+        Ok(CreatedExecutionState {
             execution_state,
-            serialized_module.compilation_cost,
+            compilation_cost: serialized_module.compilation_cost,
             compilation_result,
-        ))
+            declares_wasm_memory: serialized_module.declares_wasm_memory,
+        })
     }
 }
 

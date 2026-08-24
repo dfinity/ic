@@ -2103,6 +2103,8 @@ fn wasm64_import_system_api_functions() {
         (func $ic0_subnet_self_size (result i64)))
       (import "ic0" "subnet_self_copy"
         (func $ic0_subnet_self_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "subnet_self_node_count"
+        (func $ic0_subnet_self_node_count (result i32)))
 
         (global $g1 (export "g1") (mut i64) (i64.const 0))
         (func $test (export "canister_update test")
@@ -2726,6 +2728,59 @@ fn wasm64_subnet_self_size() {
                 .unwrap()
                 .ic0_subnet_self_size()
                 .unwrap() as i64
+        )
+    );
+}
+
+#[test]
+fn wasm64_subnet_self_node_count() {
+    // `ic0.subnet_self_node_count` returns an `i32` irrespective of the main
+    // memory type, so a Wasm64 canister imports it with an `i32` result too.
+    let wat = r#"
+    (module
+      (import "ic0" "subnet_self_node_count"
+        (func $ic0_subnet_self_node_count (result i32)))
+
+      (global $g1 (export "g1") (mut i32) (i32.const 0))
+      (func $test (export "canister_update test")
+        (call $ic0_subnet_self_node_count)
+        global.set $g1
+      )
+
+      (memory (export "memory") i64 1)
+    )"#;
+
+    let caller = user_test_id(24).get();
+    let payload: Vec<u8> = vec![1, 3, 5, 7];
+    let api = ApiType::update(
+        UNIX_EPOCH,
+        payload.clone(),
+        Cycles::zero(),
+        caller,
+        call_context_test_id(13),
+        None,
+    );
+
+    let config = ic_config::embedders::Config::default();
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .build();
+
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    assert_eq!(
+        res.exported_globals[0],
+        Global::I32(
+            instance
+                .store_data()
+                .system_api()
+                .unwrap()
+                .ic0_subnet_self_node_count()
+                .unwrap() as i32
         )
     );
 }

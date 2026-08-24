@@ -3295,6 +3295,77 @@ fn ic0_subnet_self_copy_works() {
     );
 }
 
+const SUBNET_SELF_NODE_COUNT_WAT: &str = r#"
+        (module
+            (import "ic0" "subnet_self_node_count"
+                (func $subnet_self_node_count (result i32))
+            )
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+            (func (export "canister_update test")
+                ;; heap[0..4] = $subnet_self_node_count()
+                (i32.store (i32.const 0) (call $subnet_self_node_count))
+                ;; return heap[0..4]
+                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                (call $msg_reply)
+            )
+            (memory 1 1)
+        )"#;
+
+#[test]
+fn ic0_subnet_self_node_count_works() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.canister_from_wat(SUBNET_SELF_NODE_COUNT_WAT).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(
+        WasmResult::Reply((test.subnet_size() as u32).to_le_bytes().to_vec()),
+        result
+    );
+}
+
+#[test]
+fn ic0_subnet_self_node_count_reflects_subnet_size() {
+    // A size that differs from the default, so that the returned value cannot
+    // accidentally match a hard-coded default.
+    const SUBNET_SIZE: usize = 34;
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_size(SUBNET_SIZE)
+        .build();
+    assert_eq!(test.subnet_size(), SUBNET_SIZE);
+    let canister_id = test.canister_from_wat(SUBNET_SELF_NODE_COUNT_WAT).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(
+        WasmResult::Reply((SUBNET_SIZE as u32).to_le_bytes().to_vec()),
+        result
+    );
+}
+
+#[test]
+fn ic0_subnet_self_node_count_traps_in_start() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "subnet_self_node_count"
+                (func $subnet_self_node_count (result i32))
+            )
+            (func $start
+                (drop (call $subnet_self_node_count))
+            )
+            (start $start)
+            (func (export "canister_update test"))
+            (memory 1 1)
+        )"#;
+    let err = test.canister_from_wat(wat).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(
+        err.description()
+            .contains(r#""ic0.subnet_self_node_count" cannot be executed in start mode"#),
+        "unexpected error: {}",
+        err.description()
+    );
+}
+
 #[test]
 fn ic0_call_new_must_be_called_first() {
     let mut test = ExecutionTestBuilder::new().build();
