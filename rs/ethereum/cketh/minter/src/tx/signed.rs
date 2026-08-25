@@ -1,10 +1,11 @@
-use super::{TransactionPrice, compute_recovery_id, encode_u256, split_in_two};
+use super::{AccessList, TransactionPrice, compute_recovery_id, encode_u256, split_in_two};
 use crate::{
     eth_rpc::Hash,
-    numeric::{GasAmount, TransactionNonce, WeiPerGas},
+    numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas},
     state::read_state,
 };
 use ethnum::u256;
+use ic_ethereum_types::Address;
 use ic_management_canister_types_private::DerivationPath;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
@@ -36,6 +37,8 @@ pub trait SignableTransaction: rlp::Encodable {
     /// RLP-encode the transaction payload, i.e. without the type prefix nor the signature.
     fn rlp_inner(&self, rlp: &mut RlpStream);
 
+    fn chain_id(&self) -> u64;
+
     fn nonce(&self) -> TransactionNonce;
 
     fn gas_limit(&self) -> GasAmount;
@@ -43,6 +46,24 @@ pub trait SignableTransaction: rlp::Encodable {
     fn max_fee_per_gas(&self) -> WeiPerGas;
 
     fn max_priority_fee_per_gas(&self) -> WeiPerGas;
+
+    /// Address the transaction is sent to.
+    fn destination(&self) -> &Address;
+
+    /// ETH value moved by the transaction.
+    fn amount(&self) -> &Wei;
+
+    /// The transaction's call data.
+    fn data(&self) -> &[u8];
+
+    /// Addresses and storage keys the transaction pre-declares access to.
+    fn access_list(&self) -> &AccessList;
+
+    /// The same transaction at a different price and amount, e.g. to bump the fee of a
+    /// transaction that is not being mined.
+    fn with_price_and_amount(&self, price: TransactionPrice, amount: Wei) -> Self
+    where
+        Self: Sized;
 
     /// The signing digest `keccak256(transaction_type || rlp([..payload fields..]))`,
     /// i.e. the hash signed over to authorize the transaction, where `||` denotes string
@@ -177,6 +198,10 @@ impl<T: SignableTransaction> Signed<T> {
 
     pub fn transaction(&self) -> &T {
         &self.inner.transaction
+    }
+
+    pub fn signature(&self) -> &TransactionSignature {
+        &self.inner.signature
     }
 
     pub fn nonce(&self) -> TransactionNonce {

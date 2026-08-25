@@ -4,7 +4,7 @@ use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, CkErc20Token, Erc20Balance, MinterInfo, WithdrawalDetail,
+    AddCkErc20Token, CkErc20Token, Erc20Balance, Erc20MinimumDeposit, MinterInfo, WithdrawalDetail,
     WithdrawalSearchParameter,
 };
 use ic_cketh_minter::memo::MintMemo;
@@ -2055,6 +2055,15 @@ fn should_retrieve_minter_info() {
         })
         .collect();
 
+    const USD_STABLECOIN_MINIMUM_DEPOSIT: u64 = 10_000_000;
+    let minimum_deposit_amounts = supported_ckerc20_tokens
+        .iter()
+        .map(|token| Erc20MinimumDeposit {
+            erc20_contract_address: token.erc20_contract_address.clone(),
+            minimum_deposit_amount: Nat::from(USD_STABLECOIN_MINIMUM_DEPOSIT),
+        })
+        .collect();
+
     let info_at_start = ckerc20.cketh.get_minter_info();
     assert_eq!(
         info_at_start,
@@ -2079,6 +2088,7 @@ fn should_retrieve_minter_info() {
             eth_balance: Some(Nat::from(0_u8)),
             last_gas_fee_estimate: None,
             erc20_balances: Some(erc20_balances),
+            minimum_deposit_amounts: Some(minimum_deposit_amounts),
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_deposit_with_subaccount_scraped_block_number: Some(

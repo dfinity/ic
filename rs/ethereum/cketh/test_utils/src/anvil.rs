@@ -4,11 +4,13 @@
 //!
 //! Runs the `anvil` and `solc` binaries vendored via Bazel (`ANVIL_BIN`, `SOLC_BIN`).
 
+use candid::Principal;
 use ethers_core::abi::{ParamType, Token};
 use ethers_core::types::{Address as EthAddress, U256};
 use ethers_core::utils::keccak256;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
 use serde_json::Value;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -133,14 +135,6 @@ impl Anvil {
         );
     }
 
-    /// Credits `address` with `wei` of native ETH (foundry's `anvil_setBalance`).
-    pub(crate) fn set_balance(&self, address: &Address, wei: u128) {
-        self.rpc(
-            "anvil_setBalance",
-            serde_json::json!([to_hex(address.as_ref()), format!("0x{wei:x}")]),
-        );
-    }
-
     /// The native ETH balance of `address` at `block`, read straight from anvil, i.e. the ground
     /// truth a test checks the minter's own figures against — the minter never reads it itself.
     pub(crate) fn eth_balance(&self, address: &Address, block: &str) -> u128 {
@@ -201,57 +195,27 @@ impl Anvil {
     }
 
     fn send_transaction(&self, from: &Address, to: Option<&Address>, data: &[u8]) -> String {
+        self.send_transaction_with_value(from, to, data, 0)
+    }
+
+    fn send_transaction_with_value(
+        &self,
+        from: &Address,
+        to: Option<&Address>,
+        data: &[u8],
+        value: u128,
+    ) -> String {
         let mut tx = serde_json::json!({"from": to_hex(from.as_ref()), "input": to_hex(data)});
         if let Some(to) = to {
             tx["to"] = serde_json::json!(to_hex(to.as_ref()));
+        }
+        if value > 0 {
+            tx["value"] = serde_json::json!(format!("0x{value:x}"));
         }
         self.rpc("eth_sendTransaction", serde_json::json!([tx]))
             .as_str()
             .unwrap()
             .to_string()
-    }
-
-    /// Emits a `ReceivedEth(from, value, principal)` log from `helper`, the way the real ckETH helper
-    /// contract does, so the minter's log scraping credits a deposit against it.
-    ///
-    /// Places runtime code at `helper` that emits the log and stops, then calls it: a bare `eth_call`
-    /// would not produce a log in a block, and the minter only sees logs that were mined.
-    pub(crate) fn emit_received_eth(
-        &self,
-        helper: &Address,
-        from: &Address,
-        value: u128,
-        principal_topic: &[u8; 32],
-    ) {
-        // Keccak256("ReceivedEth(address,uint256,bytes32)")
-        let received_eth_topic = keccak256(b"ReceivedEth(address,uint256,bytes32)");
-        let mut from_topic = [0_u8; 32];
-        from_topic[12..].copy_from_slice(from.as_ref());
-
-        let mut code = Vec::new();
-        // mstore(0, value) — the log's data word.
-        code.push(0x7f);
-        code.extend_from_slice(&u256_be(value));
-        code.extend_from_slice(&[0x60, 0x00, 0x52]);
-        // LOG3 pops offset, size, topic1, topic2, topic3, so push them in reverse.
-        code.push(0x7f);
-        code.extend_from_slice(principal_topic);
-        code.push(0x7f);
-        code.extend_from_slice(&from_topic);
-        code.push(0x7f);
-        code.extend_from_slice(&received_eth_topic);
-        // PUSH1 32 (size), PUSH1 0 (offset), LOG3, STOP. LOG3 is 0xa3 — 0xa2 is LOG2, which would
-        // drop the principal topic and the minter would reject the event as having invalid topics.
-        code.extend_from_slice(&[0x60, 0x20, 0x60, 0x00, 0xa3, 0x00]);
-
-        self.set_code(helper, &code);
-        let hash = self.send_transaction(from, Some(helper), &[]);
-        assert!(
-            status_ok(&self.await_receipt(&hash)),
-            "emitting the deposit log reverted"
-        );
-        // The minter reads at `finalized`, which trails `latest`.
-        self.mine(3);
     }
 
     pub(crate) fn deploy(&self, from: &Address, code: &[u8]) -> Address {
@@ -308,6 +272,57 @@ pub fn deploy_mock_erc20(anvil: &Anvil, holder: &Address) -> Address {
         &[address_token(holder), uint_token(TOKEN_SUPPLY)],
     );
     anvil.deploy(holder, &code)
+}
+
+/// Deploys the production ckETH deposit helper (`DepositHelperWithSubaccount.sol`), which forwards
+/// what it receives to `minter` and emits the `ReceivedEthOrErc20` event the minter scrapes.
+pub fn deploy_deposit_helper(anvil: &Anvil, deployer: &Address, minter: &Address) -> Address {
+    let code = deploy_code(
+        &compile("CKDEPOSIT_SOL", "CkDeposit"),
+        &[address_token(minter)],
+    );
+    anvil.deploy(deployer, &code)
+}
+
+/// Deposits `value` wei through `helper` for `beneficiary`, exactly as a depositor does on mainnet:
+/// the ETH lands at the minter's address and the event is mined for the minter to scrape.
+pub fn deposit_eth(
+    anvil: &Anvil,
+    helper: &Address,
+    depositor: &Address,
+    beneficiary: Account,
+    value: u128,
+) {
+    let data = [
+        &keccak256(b"depositEth(bytes32,bytes32)")[..4],
+        &ethers_core::abi::encode(&[
+            bytes32_token(principal_to_bytes32(&beneficiary.owner)),
+            bytes32_token(beneficiary.subaccount.unwrap_or([0; 32])),
+        ]),
+    ]
+    .concat();
+    let hash = anvil.send_transaction_with_value(depositor, Some(helper), &data, value);
+    assert!(
+        status_ok(&anvil.await_receipt(&hash)),
+        "the deposit reverted"
+    );
+    // The minter reads at `finalized`, which trails `latest`.
+    anvil.mine(3);
+}
+
+/// A principal as the helper contract's 32-byte word: length-prefixed and zero-padded, which is how
+/// the minter parses it back out of the event.
+fn principal_to_bytes32(principal: &Principal) -> [u8; 32] {
+    let bytes = principal.as_slice();
+    assert!(bytes.len() <= 29, "principal too long for one word");
+    let mut word = [0_u8; 32];
+    word[0] = bytes.len() as u8;
+    word[1..1 + bytes.len()].copy_from_slice(bytes);
+    word
+}
+
+fn bytes32_token(value: [u8; 32]) -> Token {
+    Token::FixedBytes(value.to_vec())
 }
 
 /// The storage slot of `balanceOf[holder]` for a Solidity `mapping(address => uint256)` declared at
