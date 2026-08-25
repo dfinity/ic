@@ -34,6 +34,37 @@ MAINNET_BINARIES = [
 ]
 
 
+# The fields below end up interpolated into download URLs, into the names of
+# downloaded files and (for the binary names) verbatim into a generated BUILD file by
+# //bazel:mainnet-icos-{images,binaries,versions}.bzl. They are read from the public
+# dashboard API and from CDN-served SHA256SUMS files -- neither of which is
+# authenticated -- and the resulting PR is auto-approved and auto-merged, so a value
+# that is not exactly a commit id / sha256 / plain name must never be written to
+# mainnet-icos-revisions.json in the first place. The repository rules reject such
+# values as well (see bazel/mainnet-artifact-refs.bzl, which these patterns mirror);
+# failing here means a poisoned upstream value never reaches a PR.
+COMMIT_ID_PATTERN = re.compile(r"\A[0-9a-f]{40}\Z")
+SHA256_PATTERN = re.compile(r"\A[0-9a-f]{64}\Z")
+ARTIFACT_NAME_PATTERN = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+
+
+def check_commit_id(value, what: str):
+    if not isinstance(value, str) or not COMMIT_ID_PATTERN.match(value):
+        raise ValueError(f"{what} must be a 40-character lowercase hex git commit id, got {value!r}")
+
+
+def check_sha256(value, what: str):
+    # The empty string is not merely malformed: repository_ctx.download reads it as
+    # "do not verify this download".
+    if not isinstance(value, str) or not SHA256_PATTERN.match(value):
+        raise ValueError(f"{what} must be a 64-character lowercase hex sha256, got {value!r}")
+
+
+def check_artifact_name(value, what: str):
+    if not isinstance(value, str) or not ARTIFACT_NAME_PATTERN.match(value) or ".." in value:
+        raise ValueError(f"{what} must only contain [A-Za-z0-9._-] and no '..', got {value!r}")
+
+
 class Command(Enum):
     ICOS = 1
     CANISTERS = 2
@@ -55,6 +86,23 @@ class VersionInfo:
     # `binaries/x86_64-linux/`, read from that directory's SHA256SUMS. Consumed by
     # //bazel:mainnet-icos-binaries.bzl.
     binaries: dict
+
+    def __post_init__(self):
+        """Rejects values that must never reach mainnet-icos-revisions.json.
+
+        Every path that records a version constructs a VersionInfo, so this is the
+        single choke point between the unauthenticated upstreams and the JSON file.
+        `launch_measurements` is deliberately not checked here: it is arbitrary JSON
+        by design and is not interpolated into a URL or a file name.
+        """
+        check_commit_id(self.version, "version")
+        for field in ("hash", "dev_hash", "setupos_hash", "setupos_dev_hash"):
+            check_sha256(getattr(self, field), field)
+        if not isinstance(self.binaries, dict):
+            raise ValueError(f"binaries must be a dict, got {self.binaries!r}")
+        for name, digest in self.binaries.items():
+            check_artifact_name(name, "binaries key")
+            check_sha256(digest, f"binaries[{name!r}]")
 
 
 def sync_main_branch_and_checkout_branch(
