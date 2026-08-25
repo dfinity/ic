@@ -375,6 +375,7 @@ fn setup_execution_helper(
         config.embedders_config.wasm_max_size,
         scheduler_config.canister_snapshot_baseline_instructions,
         scheduler_config.canister_snapshot_data_baseline_instructions,
+        scheduler_config.canister_log_resize_instructions_per_byte,
         config.default_wasm_memory_limit,
         config.max_number_of_snapshots_per_canister,
         config.max_environment_variables,

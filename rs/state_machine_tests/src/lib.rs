@@ -2772,7 +2772,6 @@ impl StateMachine {
     pub fn mock_canister_http_response(
         &self,
         request_id: u64,
-        canister_id: CanisterId,
         contents: Vec<CanisterHttpResponseContent>,
     ) {
         assert_eq!(contents.len(), self.nodes.len());
@@ -2784,7 +2783,7 @@ impl StateMachine {
                 )
             })
             .collect();
-        self.mock_canister_http_response_for_nodes(request_id, canister_id, responses);
+        self.mock_canister_http_response_for_nodes(request_id, responses);
     }
 
     /// Injects one response share per entry of `responses`, signed by the node it
@@ -2797,7 +2796,6 @@ impl StateMachine {
     pub fn mock_canister_http_response_for_nodes(
         &self,
         request_id: u64,
-        canister_id: CanisterId,
         responses: BTreeMap<NodeId, (CanisterHttpResponseContent, CanisterHttpPaymentReceipt)>,
     ) {
         for node_id in responses.keys() {
@@ -2810,7 +2808,6 @@ impl StateMachine {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
-                canister_id,
                 content: content.clone(),
             };
             let receipt_share = CanisterHttpResponseReceipt {

@@ -3859,8 +3859,7 @@ impl Operation for ProcessCanisterHttpInternal {
                     }
                     Ok((response, payment_receipt)) => {
                         canister_http.pending.remove(&response.id);
-                        if let Some(context) = sm.canister_http_request_contexts().get(&response.id)
-                        {
+                        if let Some(context) = sm.canister_http_request_contexts().get(&response.id) {
                             // Only one real outcall is made, so every node that would have
                             // performed it reports the same response and the same spend.
                             let responses = outcall_nodes(&sm, context)
@@ -3869,11 +3868,7 @@ impl Operation for ProcessCanisterHttpInternal {
                                     (node_id, (response.content.clone(), payment_receipt.clone()))
                                 })
                                 .collect();
-                            sm.mock_canister_http_response_for_nodes(
-                                response.id.get(),
-                                context.request.sender,
-                                responses,
-                            );
+                            sm.mock_canister_http_response_for_nodes(response.id.get(), responses);
                         }
                     }
                 }
@@ -4130,7 +4125,6 @@ fn process_mock_canister_https_response(
         Ok(request) => request,
         Err(err) => return err,
     };
-    let canister_id = context.request.sender;
 
     // The number of responses is checked before any of them is converted, so that a
     // mismatch does not run the transform function of the calling canister.
@@ -4176,11 +4170,7 @@ fn process_mock_canister_https_response(
     let responses = std::iter::zip(subnet.nodes.iter(), contents)
         .map(|(node, content)| (node.node_id, content))
         .collect();
-    subnet.mock_canister_http_response_for_nodes(
-        mock_canister_http_response.request_id,
-        canister_id,
-        responses,
-    );
+    subnet.mock_canister_http_response_for_nodes(mock_canister_http_response.request_id, responses);
     OpOut::NoOutput
 }
 
@@ -4214,7 +4204,6 @@ fn process_mock_flexible_canister_https_response(
             committee.len(),
         )));
     }
-    let canister_id = context.request.sender;
 
     // The responses are assigned to the committee's nodes one each, in the
     // deterministic order in which the `BTreeSet` iterates them. The assigned
@@ -4238,7 +4227,6 @@ fn process_mock_flexible_canister_https_response(
     .collect();
     subnet.mock_canister_http_response_for_nodes(
         mock_flexible_canister_http_response.request_id,
-        canister_id,
         responses,
     );
     OpOut::NoOutput

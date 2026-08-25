@@ -15,7 +15,11 @@ fn main() -> Result<(), String> {
     // Echo notify messages to the local GuestOS console so they are visible
     // in cloud environments where the host console is not accessible.
     if let Command::Notify(NotifyData { ref message, .. }) = command {
-        write_to_guest_console(message);
+        for path in ["/dev/tty1", "/dev/ttyS0"] {
+            if let Ok(mut tty) = OpenOptions::new().write(true).open(path) {
+                let _ = writeln!(tty, "\n{message}");
+            }
+        }
     }
 
     let payload = LinuxVSockClient::with_port(port).send_command(command)?;
@@ -28,14 +32,6 @@ fn main() -> Result<(), String> {
     }
 
     Ok(())
-}
-
-fn write_to_guest_console(message: &str) {
-    for path in ["/dev/tty1", "/dev/ttyS0"] {
-        if let Ok(mut tty) = OpenOptions::new().write(true).open(path) {
-            let _ = writeln!(tty, "\n{message}");
-        }
-    }
 }
 
 #[derive(Debug, Parser)]

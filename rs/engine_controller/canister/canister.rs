@@ -211,6 +211,7 @@ fn ensure_only_allowed_fields_set(payload: &UpdateSubnetPayload) -> Result<(), S
         start_as_nns,
         subnet_type,
         halt_at_cup_height,
+        cooling_down,
         features,
         resource_limits,
         chain_key_config,
@@ -258,6 +259,7 @@ fn ensure_only_allowed_fields_set(payload: &UpdateSubnetPayload) -> Result<(), S
     check_none!(start_as_nns, "start_as_nns");
     check_none!(subnet_type, "subnet_type");
     check_none!(halt_at_cup_height, "halt_at_cup_height");
+    check_none!(cooling_down, "cooling_down");
     check_none!(features, "features");
     check_none!(resource_limits, "resource_limits");
     check_none!(chain_key_config, "chain_key_config");
