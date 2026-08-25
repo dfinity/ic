@@ -192,7 +192,7 @@ jobs:
         NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD: ${{ env.NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD }}
     timeout-minutes: 220
     steps:
-      - uses: namespacelabs/nscloud-setup@v0
+      - uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0
       - name: Set up Bazel Remote Execution
         run: |
           nsc bazel setup --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc
@@ -431,7 +431,7 @@ jobs:
         # namespace-actions/download-artifact or `nsc artifact`. No GPG encryption
         # is needed: the storage is private to the workspace and access-controlled.
         if: ${{ !cancelled() }}
-        uses: namespace-actions/upload-artifact@v1
+        uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
         with:
           name: bazel-bep-rbe
           path: |
@@ -447,7 +447,7 @@ jobs:
         # the job is cancelled. Retrieve with namespace-actions/download-artifact
         # or `nsc artifact`.
         if: ${{ !cancelled() }}
-        uses: namespace-actions/upload-artifact@v1
+        uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
         with:
           name: failed-test-logs
           path: |
