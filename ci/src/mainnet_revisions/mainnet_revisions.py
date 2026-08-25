@@ -88,7 +88,8 @@ class VersionInfo:
     binaries: dict
 
     def __post_init__(self):
-        """Rejects values that must never reach mainnet-icos-revisions.json.
+        """
+        Rejects values that must never reach mainnet-icos-revisions.json.
 
         Every path that records a version constructs a VersionInfo, so this is the
         single choke point between the unauthenticated upstreams and the JSON file.

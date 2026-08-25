@@ -1,4 +1,5 @@
-"""Tests for the validation of the values written to mainnet-icos-revisions.json.
+"""
+Tests for the validation of the values written to mainnet-icos-revisions.json.
 
 The version and the hashes come from the public dashboard API and from CDN-served
 SHA256SUMS files, and the PR that records them is auto-approved and auto-merged. They
