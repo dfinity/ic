@@ -353,8 +353,10 @@ with an `icrc1_balance_of` of `1_762_128_000_000_000_000` wei ≈ 1.76 ckETH as 
   tracks a lower bound on it from its own events — what finalized fundings
   delivered, less the gas submitted sweeps provisioned — and may reconcile that
   bound against the chain whenever it chooses. The bound errs low: ETH anyone else
-  sends to the address only pushes the true balance above it, so the bound can only
-  delay a funding or a sweep, never authorise one against gas that is not there.
+  sends to the address only pushes the true balance above it. That is the safe
+  direction for both readers, in opposite ways — a funding may be triggered earlier
+  than strictly needed, never skipped; a sweep may be held back, never authorised
+  against gas that is not there.
   Sweep gas draws it down; burned ckETH is
   **never re-minted**, so "cumulative burned ≥ cumulative spent" holds at every
   instant. Each funding round burns for its own transfer alone: the fee a previous

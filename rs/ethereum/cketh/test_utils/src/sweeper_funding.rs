@@ -87,6 +87,11 @@ const BLOCKS_PER_POLL: u64 = 2;
 /// `hyper::Error(IncompleteMessage)` on the next request.
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
+/// How long any wait here gives the minter before it fails with its logs. Sized well inside the
+/// 300-second budget `size = "medium"` grants the targets that run these tests, so that a hang
+/// reports what the minter was doing rather than being killed by Bazel with nothing to show.
+pub const AWAIT_DEADLINE: Duration = Duration::from_secs(60);
+
 fn controller() -> Principal {
     Principal::from_slice(&[0x0c; 10])
 }
@@ -176,7 +181,7 @@ impl SweeperFundingSetup {
         setup
             .anvil
             .set_balance(&setup.minter_address, MINTER_ETH_BALANCE);
-        setup.await_deposit_credited(Duration::from_secs(300));
+        setup.await_deposit_credited();
         // Funded here rather than at install: with an empty fee account the check that runs at
         // install cannot burn, whichever way it and the scrape interleave. Safe to do now because
         // the next scheduled check is a whole interval away, so nothing is watching until the
@@ -207,7 +212,7 @@ impl SweeperFundingSetup {
     }
 
     /// Waits until the minter has credited the harness' deposit, i.e. its ETH balance is non-zero.
-    pub fn await_deposit_credited(&self, deadline: Duration) {
+    pub fn await_deposit_credited(&self) {
         let start = Instant::now();
         loop {
             // Observed through the mint the deposit produces: crediting the minter's ETH balance
@@ -220,8 +225,8 @@ impl SweeperFundingSetup {
                 return;
             }
             assert!(
-                start.elapsed() <= deadline,
-                "the minter never credited the deposit within {deadline:?}; logs:\n{}",
+                start.elapsed() <= AWAIT_DEADLINE,
+                "the minter never credited the deposit within {AWAIT_DEADLINE:?}; logs:\n{}",
                 self.minter_logs().join("\n")
             );
             self.anvil.mine(1);
@@ -369,15 +374,16 @@ impl SweeperFundingSetup {
 
     /// Waits until the minter has derived its sweeper address, which happens once the master public
     /// key is cached — before the first funding check acts on it.
-    pub fn await_sweeper_address(&self, deadline: Duration) -> Address {
+    pub fn await_sweeper_address(&self) -> Address {
         let start = Instant::now();
         loop {
             if let Some(address) = self.sweeper_address() {
                 return address;
             }
             assert!(
-                start.elapsed() <= deadline,
-                "the minter did not derive a sweeper address within {deadline:?}; minter logs:\n{}",
+                start.elapsed() <= AWAIT_DEADLINE,
+                "the minter did not derive a sweeper address within {AWAIT_DEADLINE:?}; minter \
+                 logs:\n{}",
                 self.minter_logs().join("\n")
             );
             std::thread::sleep(Duration::from_secs(2));
@@ -385,7 +391,7 @@ impl SweeperFundingSetup {
     }
 
     /// Waits until the minter has logged a line containing `needle`, polling its log endpoint.
-    pub fn await_minter_log(&self, needle: &str, deadline: Duration) {
+    pub fn await_minter_log(&self, needle: &str) {
         let start = Instant::now();
         loop {
             let logs = self.minter_logs();
@@ -393,8 +399,8 @@ impl SweeperFundingSetup {
                 return;
             }
             assert!(
-                start.elapsed() <= deadline,
-                "the minter never logged {needle:?} within {deadline:?}; logs:\n{}",
+                start.elapsed() <= AWAIT_DEADLINE,
+                "the minter never logged {needle:?} within {AWAIT_DEADLINE:?}; logs:\n{}",
                 logs.join("\n")
             );
             std::thread::sleep(Duration::from_secs(2));

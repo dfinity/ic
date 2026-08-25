@@ -9,7 +9,9 @@
 //! No live fee-spike test: that ceiling is pinned exactly by the unit tests, and reproducing it here
 //! would mean driving anvil's base fee up and waiting out several ticks for little extra signal.
 
-use ic_cketh_test_utils::sweeper_funding::{FEE_ACCOUNT_BALANCE, SweeperFundingSetup};
+use ic_cketh_test_utils::sweeper_funding::{
+    AWAIT_DEADLINE, FEE_ACCOUNT_BALANCE, SweeperFundingSetup,
+};
 use std::time::Duration;
 
 /// Several withdrawal-timer ticks, so a transfer that was going to happen would have — and would
@@ -23,25 +25,17 @@ const FINALIZATION_TICKS: u32 = 8;
 /// path's: one tick sends it, the spares cover a tick landing before the burn and a tick lost to an
 /// outcall the jump timed out.
 const FUNDING_TICKS: u32 = 6;
-/// How long to wait for the minter to record a funding it has already burned for. Generous for an
-/// inter-canister hop, and under no time pressure: the row cannot clear again until a tick is
-/// bought, and nothing here buys one.
-const IN_FLIGHT_DEADLINE: Duration = Duration::from_secs(60);
-
 #[test]
 fn should_not_fund_when_the_fee_account_is_empty() {
     let setup = SweeperFundingSetup::new_live_with_empty_fee_account();
     assert_eq!(setup.cketh_balance_of(setup.fee_account()), 0);
 
-    let sweeper = setup.await_sweeper_address(Duration::from_secs(180));
+    let sweeper = setup.await_sweeper_address();
     // Asserted here rather than after the observation window: the minter's canister log is a ring
     // buffer, and every tick that window buys makes each of the minter's periodic timers due at
     // once, so the window ends with this line long since evicted. Read now it also says something
     // sharper — the check ran, decided a funding was due, and reported why it could not make one.
-    setup.await_minter_log(
-        "[fund_sweeper]: SKIPPING: failed to burn",
-        Duration::from_secs(180),
-    );
+    setup.await_minter_log("[fund_sweeper]: SKIPPING: failed to burn");
 
     let supply_before = setup.cketh_total_supply();
     let minter_eth_before = setup.anvil_eth_balance(&setup.minter_address());
@@ -69,7 +63,7 @@ fn should_not_fund_when_the_fee_account_is_empty() {
 #[test]
 fn should_not_fund_a_sweeper_above_the_low_water_mark() {
     let setup = SweeperFundingSetup::new_live();
-    let sweeper = setup.await_sweeper_address(Duration::from_secs(180));
+    let sweeper = setup.await_sweeper_address();
     let funded = setup.await_eth_received(&sweeper, FUNDING_TICKS);
     // Waits for the transfer to finalize, not merely to land: the minter credits the bound when it
     // records the finalized transaction, so before that the next check would still see zero.
@@ -88,7 +82,7 @@ fn should_not_fund_a_sweeper_above_the_low_water_mark() {
     // Without this the test passes for the wrong reason: a task that never ran also produces no
     // burn. Proving it ran and *declined* is the point. Read before the observation window for the
     // same ring-buffer reason as in the test above.
-    setup.await_minter_log("at or above the low-water mark", Duration::from_secs(180));
+    setup.await_minter_log("at or above the low-water mark");
 
     // Watched by letting withdrawal-timer ticks pass rather than the wall clock: there is nothing
     // here to poll for — only ticks to give the minter the chance to act, and the assertions below
@@ -132,11 +126,8 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
     // arranged before the minter derives its address, and a funded fee account would let the
     // funding it attempts right afterwards succeed while the sweeper is still a plain EOA.
     let setup = SweeperFundingSetup::new_live_with_empty_fee_account();
-    let sweeper = setup.await_sweeper_address(Duration::from_secs(180));
-    setup.await_minter_log(
-        "[fund_sweeper]: SKIPPING: failed to burn",
-        Duration::from_secs(180),
-    );
+    let sweeper = setup.await_sweeper_address();
+    setup.await_minter_log("[fund_sweeper]: SKIPPING: failed to burn");
 
     // PUSH1 0, PUSH1 0, REVERT — reverts on any call, with no return data.
     setup.set_code(&sweeper, &[0x60, 0x00, 0x60, 0x00, 0xfd]);
@@ -153,12 +144,12 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
     // funding proceeds, and the point is what happens when its transaction fails.
     setup.upgrade_minter();
 
-    let burned = await_burn(&setup, supply_before, Duration::from_secs(180));
+    let burned = await_burn(&setup, supply_before);
     assert!(burned > 0, "funding must burn ckETH up front");
     // Polled, not read once: the minter records the funding only after the ledger call it awaited
     // returns, so the supply `await_burn` watches drops before the dashboard shows the request.
     // Bounded well below the time to finalization, since the row clears again once that happens.
-    let burn_index = await_in_flight_burn_index(&setup, IN_FLIGHT_DEADLINE);
+    let burn_index = await_in_flight_burn_index(&setup);
 
     // Waits for the transaction to finalize rather than watching for a fixed window: without this
     // the assertions below all hold while it is merely still in flight, which proves nothing about
@@ -198,15 +189,15 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
 }
 
 /// The burn index of the funding the minter currently has in flight, waiting for it to appear.
-fn await_in_flight_burn_index(setup: &SweeperFundingSetup, deadline: Duration) -> u64 {
+fn await_in_flight_burn_index(setup: &SweeperFundingSetup) -> u64 {
     let start = std::time::Instant::now();
     loop {
         if let Some(index) = setup.in_flight_funding_burn_index() {
             return index;
         }
         assert!(
-            start.elapsed() <= deadline,
-            "the minter burned ckETH but recorded no in-flight funding within {deadline:?}; \
+            start.elapsed() <= AWAIT_DEADLINE,
+            "the minter burned ckETH but recorded no in-flight funding within {AWAIT_DEADLINE:?}; \
              minter logs:\n{}",
             setup.minter_logs().join("\n")
         );
@@ -214,7 +205,7 @@ fn await_in_flight_burn_index(setup: &SweeperFundingSetup, deadline: Duration) -
     }
 }
 
-fn await_burn(setup: &SweeperFundingSetup, supply_before: u128, deadline: Duration) -> u128 {
+fn await_burn(setup: &SweeperFundingSetup, supply_before: u128) -> u128 {
     let start = std::time::Instant::now();
     loop {
         let supply = setup.cketh_total_supply();
@@ -222,8 +213,8 @@ fn await_burn(setup: &SweeperFundingSetup, supply_before: u128, deadline: Durati
             return supply_before - supply;
         }
         assert!(
-            start.elapsed() <= deadline,
-            "no burn observed within {deadline:?}; minter logs:\n{}",
+            start.elapsed() <= AWAIT_DEADLINE,
+            "no burn observed within {AWAIT_DEADLINE:?}; minter logs:\n{}",
             setup.minter_logs().join("\n")
         );
         std::thread::sleep(Duration::from_secs(2));
