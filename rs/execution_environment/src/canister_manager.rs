@@ -46,7 +46,7 @@ use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     self, CHUNK_SIZE, ChunkValidationResult, WasmChunkHash, WasmChunkStore,
 };
 use ic_replicated_state::metadata_state::{
-    UnflushedCheckpointOp, subnet_call_context_manager::InstallCodeCallId,
+    UnflushedCheckpointOps, subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_replicated_state::page_map::{Buffer, PageAllocatorFileDescriptor};
 use ic_replicated_state::{
@@ -776,7 +776,7 @@ impl CanisterManager {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
             heap_delta_increase,
-            unflushed_checkpoint_op: None,
+            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
@@ -1042,7 +1042,7 @@ impl CanisterManager {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
-            unflushed_checkpoint_op: None,
+            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
             deleted_call_context_responses: rejects,
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
@@ -1087,7 +1087,7 @@ impl CanisterManager {
             canister_id: canister.canister_id(),
             reply,
             heap_delta_increase: NumBytes::new(0),
-            unflushed_checkpoint_op: None,
+            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove,
             stop_contexts_to_reject: vec![],
@@ -1121,7 +1121,7 @@ impl CanisterManager {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
-            unflushed_checkpoint_op: None,
+            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject,
@@ -1662,7 +1662,7 @@ impl CanisterManager {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
-            unflushed_checkpoint_op: None,
+            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
@@ -1694,7 +1694,7 @@ impl CanisterManager {
             canister_id,
             reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
-            unflushed_checkpoint_op: None,
+            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
@@ -1809,7 +1809,7 @@ impl CanisterManager {
                     canister_id: canister.canister_id(),
                     reply: Some(reply.encode()),
                     heap_delta_increase: NumBytes::new(0),
-                    unflushed_checkpoint_op: None,
+                    unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
                     deleted_call_context_responses: vec![],
                     stop_call_id_to_remove: None,
                     stop_contexts_to_reject: vec![],
@@ -1857,7 +1857,7 @@ impl CanisterManager {
             canister_id: canister.canister_id(),
             reply: Some(reply.encode()),
             heap_delta_increase: chunk_bytes,
-            unflushed_checkpoint_op: None,
+            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
@@ -1899,7 +1899,7 @@ impl CanisterManager {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
-            unflushed_checkpoint_op: None,
+            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
@@ -2117,9 +2117,13 @@ impl CanisterManager {
         let new_snapshot =
             CanisterSnapshot::from_canister(canister, time).map_err(CanisterManagerError::from)?;
 
-        // Delete old snapshot identified by `replace_snapshot`.
+        // Delete old snapshot identified by `replace_snapshot`, recording the deletion
+        // so that its directory is also deleted from the tip.
+        let mut unflushed_checkpoint_ops = UnflushedCheckpointOps::default();
         if let Some(replace_snapshot) = replace_snapshot {
-            canister.canister_snapshots.remove(replace_snapshot);
+            canister
+                .canister_snapshots
+                .remove(replace_snapshot, &mut unflushed_checkpoint_ops);
         }
 
         let heap_delta = new_snapshot.heap_delta();
@@ -2129,6 +2133,7 @@ impl CanisterManager {
         canister
             .canister_snapshots
             .push(snapshot_id, Arc::new(new_snapshot));
+        unflushed_checkpoint_ops.take_snapshot(canister_id, snapshot_id);
 
         // Optionally uninstall the canister's code atomically after taking the
         // snapshot, recording the corresponding `CanisterCodeUninstall` canister
@@ -2176,10 +2181,7 @@ impl CanisterManager {
             canister_id,
             reply: Some(reply.encode()),
             heap_delta_increase: heap_delta,
-            unflushed_checkpoint_op: Some(UnflushedCheckpointOp::TakeSnapshot(
-                canister_id,
-                snapshot_id,
-            )),
+            unflushed_checkpoint_ops,
             deleted_call_context_responses,
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
@@ -2553,14 +2555,17 @@ impl CanisterManager {
         let heap_delta = new_canister.heap_delta();
 
         *canister = new_canister;
+
+        // Record the load, so that the canister's files in the tip are replaced by the
+        // snapshot's.
+        let mut unflushed_checkpoint_ops = UnflushedCheckpointOps::default();
+        unflushed_checkpoint_ops.load_snapshot(canister_id, snapshot_id);
+
         Ok(CanisterManagerResponse {
             canister_id,
             reply: Some(EmptyBlob.encode()),
             heap_delta_increase: heap_delta,
-            unflushed_checkpoint_op: Some(UnflushedCheckpointOp::LoadSnapshot(
-                canister_id,
-                snapshot_id,
-            )),
+            unflushed_checkpoint_ops,
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
@@ -2627,13 +2632,18 @@ impl CanisterManager {
             resource_saturation,
         )?;
 
-        canister.canister_snapshots.remove(delete_snapshot_id);
+        // Delete the snapshot, recording the deletion so that its directory is also
+        // deleted from the tip.
+        let mut unflushed_checkpoint_ops = UnflushedCheckpointOps::default();
+        canister
+            .canister_snapshots
+            .remove(delete_snapshot_id, &mut unflushed_checkpoint_ops);
 
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
-            unflushed_checkpoint_op: None,
+            unflushed_checkpoint_ops,
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
@@ -2763,7 +2773,7 @@ impl CanisterManager {
             canister_id,
             reply: Some(reply.encode()),
             heap_delta_increase: NumBytes::new(0),
-            unflushed_checkpoint_op: None,
+            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
@@ -2853,9 +2863,13 @@ impl CanisterManager {
         )?;
         round_limits.instructions -= as_round_instructions(instructions);
 
-        // Delete old snapshot identified by `replace_snapshot`.
+        // Delete old snapshot identified by `replace_snapshot`, recording the deletion
+        // so that its directory is also deleted from the tip.
+        let mut unflushed_checkpoint_ops = UnflushedCheckpointOps::default();
         if let Some(replace_snapshot) = args.replace_snapshot() {
-            canister.canister_snapshots.remove(replace_snapshot);
+            canister
+                .canister_snapshots
+                .remove(replace_snapshot, &mut unflushed_checkpoint_ops);
         }
 
         // Create new snapshot.
@@ -2879,7 +2893,7 @@ impl CanisterManager {
             canister_id,
             reply: Some(reply.encode()),
             heap_delta_increase: heap_delta,
-            unflushed_checkpoint_op: None,
+            unflushed_checkpoint_ops,
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
@@ -3001,7 +3015,7 @@ impl CanisterManager {
                             canister_id: canister.canister_id(),
                             reply: Some(EmptyBlob.encode()),
                             heap_delta_increase: NumBytes::new(0),
-                            unflushed_checkpoint_op: None,
+                            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
                             deleted_call_context_responses: vec![],
                             stop_call_id_to_remove: None,
                             stop_contexts_to_reject: vec![],
@@ -3044,7 +3058,7 @@ impl CanisterManager {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(bytes_written),
-            unflushed_checkpoint_op: None,
+            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],

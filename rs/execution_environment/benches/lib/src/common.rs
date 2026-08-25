@@ -2,7 +2,6 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::{
     CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, SUBNET_CALLBACK_SOFT_LIMIT,
     SUBNET_MEMORY_RESERVATION,
@@ -81,19 +80,8 @@ lazy_static! {
 /// per Wasm page varies by platform (4 KiB pages on Linux, 16 KiB on
 /// arm64-darwin).
 pub fn deterministic_tracker_overhead(n_wasm_pages: u64) -> u64 {
-    use ic_config::flag_status::FlagStatus;
     const WASM_PAGE_SIZE: u64 = 65536;
-    if EmbeddersConfig::default()
-        .feature_flags
-        .deterministic_memory_tracker
-        == FlagStatus::Enabled
-    {
-        n_wasm_pages
-            * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64)
-            * DEFAULT_DIRTY_PAGE_OVERHEAD.get()
-    } else {
-        0
-    }
+    n_wasm_pages * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64) * DEFAULT_DIRTY_PAGE_OVERHEAD.get()
 }
 
 /// Returns the extra instruction overhead charged by the deterministic memory

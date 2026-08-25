@@ -196,8 +196,8 @@ fn scan_outcome(
 }
 
 /// Minimum balance for `token` to count as a scan candidate; a token absent from
-/// [`MIN_DEPOSITS`] never counts.
-fn min_deposit(token: &Address) -> Erc20Value {
+/// `MIN_DEPOSITS` never counts.
+pub fn min_deposit(token: &Address) -> Erc20Value {
     MIN_DEPOSITS
         .iter()
         .find(|(contract, _)| contract == token)

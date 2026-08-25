@@ -470,14 +470,7 @@ fn network_topology_roundtrip_encoding() {
         ..Default::default()
     };
 
-    let filtered_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            range(10, 19) => app_subnet_id,
-        })
-        .unwrap(),
-    );
-
-    let full_routing_table = Arc::new(
+    let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             range(10, 19) => app_subnet_id,
             range(20, 29) => engine_subnet_id,
@@ -503,16 +496,17 @@ fn network_topology_roundtrip_encoding() {
     let bitcoin_testnet_canister_id = Some(canister_test_id(100));
     let bitcoin_mainnet_canister_id = Some(canister_test_id(101));
 
-    // NetworkTopology without full_topology (non-NNS subnet).
     let network_topology = NetworkTopology::new(
-        btreemap! { app_subnet_id => app_subnet_topo.clone() },
-        filtered_routing_table.clone(),
-        canister_migrations.clone(),
+        btreemap! {
+            app_subnet_id => app_subnet_topo,
+            engine_subnet_id => engine_subnet_topo,
+        },
+        routing_table,
+        canister_migrations,
         nns_subnet_id,
-        chain_key_enabled_subnets.clone(),
+        chain_key_enabled_subnets,
         bitcoin_testnet_canister_id,
         bitcoin_mainnet_canister_id,
-        None,
         Some(app_subnet_id),
         Default::default(),
     );
@@ -520,30 +514,6 @@ fn network_topology_roundtrip_encoding() {
     let proto = pb::NetworkTopology::from(&network_topology);
     let round_trip = NetworkTopology::try_from(proto).unwrap();
     assert_eq!(network_topology, round_trip);
-
-    // NetworkTopology with full_topology (NNS subnet).
-    let network_topology_with_full = NetworkTopology::new(
-        btreemap! { app_subnet_id => app_subnet_topo.clone() },
-        filtered_routing_table,
-        canister_migrations,
-        nns_subnet_id,
-        chain_key_enabled_subnets,
-        bitcoin_testnet_canister_id,
-        bitcoin_mainnet_canister_id,
-        Some(FullTopology {
-            subnets: btreemap! {
-                app_subnet_id => app_subnet_topo,
-                engine_subnet_id => engine_subnet_topo,
-            },
-            routing_table: full_routing_table,
-        }),
-        Some(app_subnet_id),
-        Default::default(),
-    );
-
-    let proto = pb::NetworkTopology::from(&network_topology_with_full);
-    let round_trip = NetworkTopology::try_from(proto).unwrap();
-    assert_eq!(network_topology_with_full, round_trip);
 }
 
 #[test]
@@ -1619,11 +1589,11 @@ fn network_topology_ecdsa_subnets() {
 }
 
 #[test]
-fn network_topology_route_uses_filtered_topology() {
+fn network_topology_routing() {
     let subnet_a = subnet_test_id(1);
     let subnet_b = subnet_test_id(2);
 
-    // The filtered routing table only contains subnet_a's range.
+    // The routing table only contains subnet_a's range.
     let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
@@ -1631,8 +1601,7 @@ fn network_topology_route_uses_filtered_topology() {
         .unwrap(),
     );
 
-    // The filtered subnets map only contains subnet_a.
-    // subnet_b exists in the network but is not visible to this subnet.
+    // The subnets map only contains subnet_a.
     let network_topology = NetworkTopology {
         subnets: btreemap! {
             subnet_a => SubnetTopology::default(),
@@ -1645,101 +1614,20 @@ fn network_topology_route_uses_filtered_topology() {
 
     // --- Canister ID routing ---
 
-    // Canister on subnet_a: resolvable via the filtered routing table.
+    // Canister on subnet_a: resolvable via the routing table.
     assert_eq!(
         network_topology.route(canister_test_id(50).get()),
         Some(subnet_a),
     );
-    // Canister 150 is not in the filtered routing table at all.
+    // Canister 150 is not in the routing table at all.
     assert_eq!(network_topology.route(canister_test_id(150).get()), None);
 
     // --- Subnet ID routing ---
 
-    // subnet_a is in the filtered subnets map.
+    // subnet_a is in the subnets map.
     assert_eq!(network_topology.route(subnet_a.get()), Some(subnet_a));
-    // subnet_b is NOT in the filtered subnets map.
+    // subnet_b is NOT in the subnets map.
     assert_eq!(network_topology.route(subnet_b.get()), None);
-}
-
-#[test]
-fn subnets_for_certification_falls_back_to_filtered() {
-    let subnet_a = subnet_test_id(1);
-
-    let routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-        })
-        .unwrap(),
-    );
-
-    let network_topology = NetworkTopology {
-        subnets: btreemap! {
-            subnet_a => SubnetTopology::default(),
-        },
-        routing_table: routing_table.clone(),
-        ..Default::default()
-    };
-
-    // Without full_topology, subnets_for_certification returns the filtered map.
-    assert_eq!(
-        network_topology.subnets_for_certification(),
-        network_topology.subnets()
-    );
-    assert_eq!(network_topology.routing_table(), &routing_table);
-    assert_eq!(
-        network_topology.routing_table_for_certification(),
-        network_topology.routing_table()
-    );
-}
-
-#[test]
-fn subnets_for_certification_returns_full_topology_when_set() {
-    use crate::metadata_state::testing::NetworkTopologyTesting;
-
-    let subnet_a = subnet_test_id(1);
-    let subnet_b = subnet_test_id(2); // e.g., a cloud engine
-
-    let full_subnets = btreemap! {
-        subnet_a => SubnetTopology::default(),
-        subnet_b => SubnetTopology::default(),
-    };
-    let full_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-            CanisterIdRange { start: CanisterId::from(100_u64), end: CanisterId::from(199_u64) } => subnet_b,
-        })
-        .unwrap(),
-    );
-
-    let filtered_subnets = btreemap! {
-        subnet_a => SubnetTopology::default(),
-    };
-    let filtered_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-        })
-        .unwrap(),
-    );
-
-    let mut network_topology = NetworkTopology {
-        subnets: filtered_subnets.clone(),
-        routing_table: filtered_routing_table.clone(),
-        ..Default::default()
-    };
-    network_topology.set_full_topology(Some(FullTopology {
-        subnets: full_subnets.clone(),
-        routing_table: full_routing_table.clone(),
-    }));
-
-    // subnets() and routing_table() return the filtered view.
-    assert_eq!(network_topology.subnets(), &filtered_subnets);
-    assert_eq!(network_topology.routing_table(), &filtered_routing_table);
-    // subnets_for_certification() and routing_table_for_certification() return the full view.
-    assert_eq!(network_topology.subnets_for_certification(), &full_subnets);
-    assert_eq!(
-        network_topology.routing_table_for_certification(),
-        &full_routing_table
-    );
 }
 
 /// Test fixture that will produce an ingress status of type completed or failed,
@@ -1932,7 +1820,7 @@ fn ingress_history_respects_limits() {
     let run_test = |num_statuses, max_num_terminal| {
         let mut ingress_history = IngressHistoryState::default();
 
-        assert_eq!(ingress_history.memory_usage, 0);
+        assert_eq!(ingress_history.stats.memory_usage, 0);
 
         let terminal_size =
             NumBytes::from(max_num_terminal * test_status_terminal(0).payload_bytes() as u64);
@@ -2951,7 +2839,7 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
 }
 
 #[test]
-fn observe_use_case_migrates_outcalls_scalar_fields_into_use_cases() {
+fn migrate_outcalls_scalar_fields_into_use_cases() {
     let mut subnet_metrics = SubnetMetrics {
         // Simulate a state persisted before use-case tracking existed: the scalar
         // fields hold the full history while the use-case entries only cover a
@@ -2969,10 +2857,12 @@ fn observe_use_case_migrates_outcalls_scalar_fields_into_use_cases() {
         ..Default::default()
     };
 
-    // Observing an *unrelated* use case triggers the migration, i.e. it runs
-    // independently of whether the HTTP/ECDSA scalar fields are observed.
+    // An unrelated use case is observed, as would happen during a round.
     subnet_metrics
         .observe_consumed_cycles_with_use_case(CyclesUseCase::Instructions, NominalCycles::new(5));
+
+    // The migration runs unconditionally at the end of the round.
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
 
     let by_use_case = subnet_metrics.get_consumed_cycles_by_use_case();
 
@@ -3044,6 +2934,11 @@ fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
     subnet_metrics
         .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, NominalCycles::new(5));
 
+    // The migration runs unconditionally at the end of the round. Because both
+    // the scalar and the use-case entry grew by the same amount, reconciling
+    // after the increments yields the same result as reconciling before them.
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
+
     // The use-case entry caught up to the (superset) scalar and grew by 5, with
     // no double counting.
     assert_eq!(
@@ -3061,6 +2956,47 @@ fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
         subnet_metrics.get_consumed_cycles_by_use_case_as_counters()[&CyclesUseCase::HTTPOutcalls],
         NominalCycles::new(65)
     );
+}
+
+#[test]
+fn migrate_outcalls_scalar_fields_without_any_observation() {
+    // A subnet that consumed ECDSA outcall cycles before use-case tracking
+    // existed and has been idle (in subnet-level terms) ever since: no outcall,
+    // no canister deletion, no dropped message. Nothing observes a use case, so
+    // the counters map is empty.
+    let mut subnet_metrics = SubnetMetrics {
+        consumed_cycles_ecdsa_outcalls: NominalCycles::new(200),
+        consumed_cycles_by_use_case: BTreeMap::from([(
+            CyclesUseCase::ECDSAOutcalls,
+            NominalCycles::new(150),
+        )]),
+        ..Default::default()
+    };
+
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
+
+    // The stale entry was backfilled without any use case being observed.
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_by_use_case()[&CyclesUseCase::ECDSAOutcalls],
+        NominalCycles::new(200)
+    );
+    // A zero scalar does not insert a spurious entry.
+    assert!(
+        !subnet_metrics
+            .get_consumed_cycles_by_use_case()
+            .contains_key(&CyclesUseCase::HTTPOutcalls)
+    );
+    // The counters map is left untouched, i.e. still empty.
+    assert!(
+        subnet_metrics
+            .get_consumed_cycles_by_use_case_as_counters()
+            .is_empty()
+    );
+
+    // Idempotent: running it again changes nothing.
+    let before = subnet_metrics.get_consumed_cycles_by_use_case().clone();
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
+    assert_eq!(subnet_metrics.get_consumed_cycles_by_use_case(), &before);
 }
 
 impl From<(u64, u64)> for BlockmakerStats {
@@ -3157,7 +3093,7 @@ fn blockmaker_metrics_time_series_check_observe_works() {
             .is_none()
     );
 
-    // Check `observe()` does nothing with a batch time before the last obseration.
+    // Check `observe()` does nothing with a batch time before the last observation.
     let metrics_before = metrics.clone();
     metrics.observe(
         batch_time,
