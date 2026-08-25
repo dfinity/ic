@@ -687,11 +687,13 @@ async fn get_canister_status() -> ic_cdk_management_canister::CanisterStatusResu
 fn get_events(arg: GetEventsArg) -> GetEventsResult {
     use ic_cketh_minter::endpoints::events::{
         AccessListItem, ReimbursementIndex as CandidReimbursementIndex,
+        SignedAuthorization as CandidSignedAuthorization,
         TransactionReceipt as CandidTransactionReceipt,
-        TransactionStatus as CandidTransactionStatus, UnsignedTransaction,
+        TransactionStatus as CandidTransactionStatus, UnsignedSweeperTransaction,
+        UnsignedTransaction,
     };
     use ic_cketh_minter::eth_rpc_client::responses::TransactionReceipt;
-    use ic_cketh_minter::tx::Eip1559TransactionRequest;
+    use ic_cketh_minter::tx::{SignableTransaction, SignedAuthorization, SweepTransaction};
     use serde_bytes::ByteBuf;
 
     const MAX_EVENTS_PER_RESPONSE: u64 = 100;
@@ -725,18 +727,18 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
         }
     }
 
-    fn map_unsigned_transaction(tx: Eip1559TransactionRequest) -> UnsignedTransaction {
+    fn map_unsigned_transaction<T: SignableTransaction>(tx: &T) -> UnsignedTransaction {
         UnsignedTransaction {
-            chain_id: tx.chain_id.into(),
-            nonce: tx.nonce.into(),
-            max_priority_fee_per_gas: tx.max_priority_fee_per_gas.into(),
-            max_fee_per_gas: tx.max_fee_per_gas.into(),
-            gas_limit: tx.gas_limit.into(),
-            destination: tx.destination.to_string(),
-            value: tx.amount.into(),
-            data: ByteBuf::from(tx.data),
+            chain_id: tx.chain_id().into(),
+            nonce: tx.nonce().into(),
+            max_priority_fee_per_gas: tx.max_priority_fee_per_gas().into(),
+            max_fee_per_gas: tx.max_fee_per_gas().into(),
+            gas_limit: tx.gas_limit().into(),
+            destination: tx.destination().to_string(),
+            value: (*tx.amount()).into(),
+            data: ByteBuf::from(tx.data().to_vec()),
             access_list: tx
-                .access_list
+                .access_list()
                 .0
                 .iter()
                 .map(|item| AccessListItem {
@@ -749,6 +751,29 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 })
                 .collect(),
         }
+    }
+
+    fn map_unsigned_sweeper_transaction(tx: &SweepTransaction) -> UnsignedSweeperTransaction {
+        UnsignedSweeperTransaction {
+            transaction: map_unsigned_transaction(tx),
+            authorization_list: map_authorizations(tx.authorizations()),
+        }
+    }
+
+    fn map_authorizations(
+        authorizations: &[SignedAuthorization],
+    ) -> Vec<CandidSignedAuthorization> {
+        authorizations
+            .iter()
+            .map(|authorization| CandidSignedAuthorization {
+                chain_id: authorization.chain_id.into(),
+                delegate: authorization.delegate.to_string(),
+                nonce: authorization.nonce.into(),
+                y_parity: authorization.y_parity,
+                r: ByteBuf::from(authorization.r.to_be_bytes()),
+                s: ByteBuf::from(authorization.s.to_be_bytes()),
+            })
+            .collect()
     }
 
     fn map_transaction_receipt(receipt: TransactionReceipt) -> CandidTransactionReceipt {
@@ -897,7 +922,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     transaction,
                 } => EP::CreatedTransaction {
                     withdrawal_id: withdrawal_id.get().into(),
-                    transaction: map_unsigned_transaction(transaction),
+                    transaction: map_unsigned_transaction(&transaction),
                 },
                 EventType::SignedTransaction {
                     withdrawal_id,
@@ -911,7 +936,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     transaction,
                 } => EP::ReplacedTransaction {
                     withdrawal_id: withdrawal_id.get().into(),
-                    transaction: map_unsigned_transaction(transaction),
+                    transaction: map_unsigned_transaction(&transaction),
                 },
                 EventType::FinalizedTransaction {
                     withdrawal_id,
@@ -927,6 +952,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     data,
                     max_transaction_fee,
                     created_at,
+                    authorizations,
                 }) => EP::AcceptedSweepRequest {
                     sweep_id: id.0.into(),
                     destination: destination.to_string(),
@@ -934,13 +960,14 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     data: ByteBuf::from(data),
                     max_transaction_fee: max_transaction_fee.into(),
                     created_at,
+                    authorizations: map_authorizations(&authorizations),
                 },
                 EventType::CreatedSweeperTransaction {
                     sweep_id,
                     transaction,
                 } => EP::CreatedSweeperTransaction {
                     sweep_id: sweep_id.0.into(),
-                    transaction: map_unsigned_transaction(transaction),
+                    transaction: map_unsigned_sweeper_transaction(&transaction),
                 },
                 EventType::SignedSweeperTransaction {
                     sweep_id,
@@ -954,7 +981,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     transaction,
                 } => EP::ReplacedSweeperTransaction {
                     sweep_id: sweep_id.0.into(),
-                    transaction: map_unsigned_transaction(transaction),
+                    transaction: map_unsigned_sweeper_transaction(&transaction),
                 },
                 EventType::FinalizedSweeperTransaction {
                     sweep_id,
