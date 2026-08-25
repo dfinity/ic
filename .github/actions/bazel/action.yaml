@@ -120,7 +120,8 @@ runs:
         # https://github.com/dfinity/execlog2csv/releases/latest
         if [[ $(uname -m) == "x86_64" ]]; then
           arch="amd64"
-        elif [[ $(uname -m) == "aarch64" ]]; then
+        # Linux reports aarch64 here, Darwin (Apple Silicon) reports arm64.
+        elif [[ $(uname -m) == "aarch64" || $(uname -m) == "arm64" ]]; then
           arch="arm64"
         else
           echo "unexpected architecture: '$(uname -m)'"
@@ -132,7 +133,7 @@ runs:
         elif [[ $(uname) == "Darwin" ]]; then
           os="darwin"
         else
-          echo "unexpected os: '$(uname -m)'"
+          echo "unexpected os: '$(uname)'"
           exit 1
         fi
 
