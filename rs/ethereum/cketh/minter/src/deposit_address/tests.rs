@@ -141,3 +141,93 @@ fn master_private_key() -> (PrivateKey, [u8; 32]) {
 fn account(owner: Principal, subaccount: Option<Subaccount>) -> Account {
     Account { owner, subaccount }
 }
+
+mod derive_public_key {
+    use crate::deposit_address::{
+        DepositAddressSchema, deposit_address, derive_public_key, sweeper_derivation_path,
+    };
+    use crate::{MAIN_DERIVATION_PATH, address::ecdsa_public_key_to_address};
+    use candid::Principal;
+    use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+    use icrc_ledger_types::icrc1::account::Account;
+    use serde_bytes::ByteBuf;
+
+    const CHAIN_CODE: [u8; 32] = [7_u8; 32];
+
+    #[test]
+    fn should_derive_the_key_whose_address_is_the_deposit_address() {
+        let master = master_private_key().public_key();
+        let account = account();
+
+        for schema in [DepositAddressSchema::CkErc20, DepositAddressSchema::CkEth] {
+            let path = super::super::deposit_derivation_path(schema, &account);
+            let derived = derive_public_key(&master, &CHAIN_CODE, &path);
+
+            assert_eq!(
+                &ecdsa_public_key_to_address(&derived),
+                deposit_address(&master, &CHAIN_CODE, schema, &account).as_address()
+            );
+        }
+    }
+
+    #[test]
+    fn should_derive_the_master_key_for_the_main_address() {
+        let master = master_private_key().public_key();
+
+        assert_eq!(
+            derive_public_key(&master, &CHAIN_CODE, &MAIN_DERIVATION_PATH),
+            master
+        );
+    }
+
+    /// A signature made under a derivation path only recovers against the key derived along that
+    /// same path: recovering it against the master key finds no parity bit at all, which is why
+    /// `compute_recovery_id` derives before recovering.
+    #[test]
+    fn should_recover_a_derived_signature_only_against_the_derived_key() {
+        let master = master_private_key();
+        let digest = [0x42_u8; 32];
+
+        for path in [
+            super::super::deposit_derivation_path(DepositAddressSchema::CkErc20, &account()),
+            sweeper_derivation_path(),
+        ] {
+            let (signing_key, _chain_code) =
+                master.derive_subkey_with_chain_code(&to_derivation_path(&path), &CHAIN_CODE);
+            let signature = signing_key.sign_digest_with_ecdsa(&digest);
+
+            let derived_public_key = derive_public_key(&master.public_key(), &CHAIN_CODE, &path);
+            assert_eq!(derived_public_key, signing_key.public_key());
+            assert!(
+                derived_public_key
+                    .try_recovery_from_digest(&digest, &signature)
+                    .is_ok()
+            );
+            assert!(
+                master
+                    .public_key()
+                    .try_recovery_from_digest(&digest, &signature)
+                    .is_err()
+            );
+        }
+    }
+
+    fn master_private_key() -> PrivateKey {
+        PrivateKey::generate_from_seed(b"ck-deposit-address-derivation")
+    }
+
+    fn account() -> Account {
+        Account {
+            owner: Principal::from_slice(&[1, 2, 3, 4]),
+            subaccount: Some([9_u8; 32]),
+        }
+    }
+
+    fn to_derivation_path(path: &[ByteBuf]) -> DerivationPath {
+        DerivationPath::new(
+            path.iter()
+                .map(|index| DerivationIndex(index.to_vec()))
+                .collect(),
+        )
+    }
+}

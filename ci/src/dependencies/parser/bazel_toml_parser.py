@@ -1,11 +1,44 @@
-import os.path
+import errno
+import os
+import stat
+import typing
 
 import toml
 from integration.github.github_dependency_submission import GHSubDependency, GHSubManifest
 
 
+def _open_regular_file_nofollow(path: str) -> typing.TextIO:
+    """
+    Open path for reading, refusing to follow a symlink in the final path component.
+
+    The lock file parsed by this module can originate from an untrusted pull
+    request (see .github/workflows/security-checks.yml, which checks out the
+    fork's Cargo.Bazel.toml.lock into a pull_request_target job). A fork can
+    commit that path as a symlink to an arbitrary file on the CI runner, so
+    opening it naively would read whatever the link points at. O_NOFOLLOW makes
+    the open itself fail on a symlink, and the fstat check additionally rejects
+    anything that is not a regular file. Both happen before any content is read.
+    """
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as e:
+        # O_NOFOLLOW reports a symlinked final component as ELOOP (Linux, macOS)
+        # or EMLINK (some BSDs); turn that into an explicit refusal so the CI log
+        # says why the run failed instead of "too many levels of symbolic links".
+        if e.errno in (errno.ELOOP, errno.EMLINK):
+            raise RuntimeError(f"Refusing to parse '{path}' because it is a symbolic link") from e
+        raise
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise RuntimeError(f"Refusing to parse '{path}' because it is not a regular file")
+    except BaseException:
+        os.close(fd)
+        raise
+    return os.fdopen(fd, "r")
+
+
 def parse_bazel_toml_to_gh_manifest(basedir: str, filepath: str) -> GHSubManifest:
-    with open(os.path.join(basedir, filepath), "r") as f:
+    with _open_regular_file_nofollow(os.path.join(basedir, filepath)) as f:
         tree = toml.load(f)
 
         # direct dependencies in toml files might be either specified by '<name>' or '<name> <version>', e.g.,

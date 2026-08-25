@@ -490,6 +490,9 @@ name = "arrayvec"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "as-any"
@@ -1120,6 +1123,12 @@ name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
+name = "base64"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "base64ct"
@@ -2448,14 +2457,22 @@ name = "consensus-orchestrator-system-tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "candid",
  "canister-test",
+ "consensus-upgrade-system-tests",
+ "dfn_candid",
+ "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-canister-client",
+ "ic-engine-controller",
  "ic-interfaces-registry",
+ "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-protobuf",
+ "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-features",
@@ -6057,7 +6074,7 @@ dependencies = [
  "k256",
  "leb128",
  "p256",
- "pem",
+ "pem 3.0.6",
  "pkcs8",
  "rand 0.10.1",
  "rangemap",
@@ -6271,9 +6288,9 @@ dependencies = [
 
 [[package]]
 name = "ic-bn-lib"
-version = "0.5.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ea8fa20bc6bac82a9491e26a43b70b9e0f276da534957c6cf0d589cf1a689ac"
+checksum = "5195609bb6f45c53ad2e171ee5106b001e3a553fe6ce8f1f2662563430360003"
 dependencies = [
  "ahash",
  "anyhow",
@@ -6283,7 +6300,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-extra 0.12.6",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "candid",
  "chacha20poly1305",
@@ -6307,13 +6324,16 @@ dependencies = [
  "hyper-util",
  "ic-agent",
  "ic-custom-domains-canister-api",
+ "ic-transport-types",
  "indoc",
  "instant-acme",
+ "ipnet",
  "itertools 0.15.0",
+ "maxminddb",
  "moka",
  "nix 0.31.3",
  "parse-size",
- "pem",
+ "pem 4.0.0",
  "ppp",
  "prometheus",
  "prost",
@@ -6348,7 +6368,6 @@ dependencies = [
  "tower",
  "tower-http 0.7.0",
  "tower-service",
- "tower_governor",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -8849,7 +8868,7 @@ dependencies = [
  "hex",
  "ic-crypto-internal-types",
  "ic-types",
- "pem",
+ "pem 3.0.6",
  "simple_asn1",
  "tempfile",
  "thiserror 2.0.18",
@@ -9006,7 +9025,7 @@ dependencies = [
  "hex-literal 0.4.1",
  "hkdf",
  "ic_principal",
- "pem",
+ "pem 3.0.6",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "thiserror 2.0.18",
@@ -9025,7 +9044,7 @@ dependencies = [
  "hex-literal 0.4.1",
  "hkdf",
  "ic_principal",
- "pem",
+ "pem 3.0.6",
  "rand 0.8.6",
  "thiserror 2.0.18",
  "zeroize",
@@ -9279,7 +9298,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=3e015f17b8ad302a42fd1ac68b7b139867b71c5f#3e015f17b8ad302a42fd1ac68b7b139867b71c5f"
+source = "git+https://github.com/dfinity/ic-gateway?tag=v0.6.5#a16fb54f4c8d4407b8134d63b57f864d67520062"
 dependencies = [
  "ahash",
  "anyhow",
@@ -9704,6 +9723,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-consensus",
  "ic-test-utilities-logger",
+ "ic-test-utilities-metrics",
  "ic-test-utilities-registry",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
@@ -13368,7 +13388,7 @@ dependencies = [
  "ic_principal",
  "k256",
  "num-bigint 0.4.6",
- "pem",
+ "pem 3.0.6",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "secp256k1 0.29.1",
@@ -13387,7 +13407,7 @@ dependencies = [
  "hmac",
  "num-bigint 0.4.6",
  "p256",
- "pem",
+ "pem 3.0.6",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "sha2 0.10.9",
@@ -14477,6 +14497,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "macaddr",
+ "network",
  "nix 0.31.3",
  "num_cpus",
  "on_wire",
@@ -18613,7 +18634,7 @@ dependencies = [
  "ic_device",
  "ic_os_logging",
  "linux_kernel_command_line",
- "pem",
+ "pem 3.0.6",
  "rand 0.8.6",
  "serde_cbor",
  "sev",
@@ -18849,7 +18870,7 @@ dependencies = [
  "libc",
  "mockall",
  "nix 0.31.3",
- "pem",
+ "pem 3.0.6",
  "prometheus",
  "prost",
  "qrcode",
@@ -19108,6 +19129,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d30c53c26bc5b31a98cd02d20f25a7c8567146caf63ed593a9d87b2775291be"
 dependencies = [
  "base64 0.22.1",
+ "serde_core",
+]
+
+[[package]]
+name = "pem"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d354a98a3d1251555de99e8fdd8afda05573c31b82f59063a7b0a29b5527f120"
+dependencies = [
+ "base64 0.23.1",
  "serde_core",
 ]
 
@@ -20490,7 +20521,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75e669e5202259b5314d1ea5397316ad400819437857b90861765f24c4cf80a2"
 dependencies = [
  "aws-lc-rs",
- "pem",
+ "pem 3.0.6",
  "ring",
  "rustls-pki-types",
  "time",
@@ -20505,7 +20536,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10b99e0098aa4082912d4c649628623db6aba77335e4f4569ff5083a6448b32e"
 dependencies = [
  "aws-lc-rs",
- "pem",
+ "pem 3.0.6",
  "rustls-pki-types",
  "time",
  "x509-parser",
@@ -21408,7 +21439,7 @@ dependencies = [
  "futures-rustls",
  "http 1.4.0",
  "log",
- "pem",
+ "pem 3.0.6",
  "rcgen 0.13.2",
  "serde",
  "serde_json",
@@ -22199,7 +22230,7 @@ dependencies = [
  "config_types",
  "hkdf",
  "linux_kernel_command_line",
- "pem",
+ "pem 3.0.6",
  "rand 0.8.6",
  "sev",
  "sev_guest_firmware",
@@ -22231,7 +22262,7 @@ dependencies = [
  "anyhow",
  "der",
  "mockall",
- "pem",
+ "pem 3.0.6",
  "rcgen 0.13.2",
  "reqwest",
  "sev",
@@ -24539,25 +24570,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "vsock_guest"
-version = "1.0.0"
-dependencies = [
- "clap",
- "vsock_lib",
-]
-
-[[package]]
-name = "vsock_host"
-version = "1.0.0"
-dependencies = [
- "vsock_lib",
-]
-
-[[package]]
 name = "vsock_lib"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "clap",
  "ic-http-utils",
  "mockall",
  "procfs",
