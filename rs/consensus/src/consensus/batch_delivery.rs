@@ -331,10 +331,10 @@ fn generate_responses_to_subnet_calls(
                 "New DKG summary with config ids created: {:?}",
                 summary_payload.dkg.configs.keys().collect::<Vec<_>>()
             );
-            consensus_responses.append(&mut generate_responses_to_remote_dkgs(
-                &summary_payload.dkg.transcripts_for_remote_subnets,
-                log,
-            ));
+            if let Some(transcripts) = summary_payload.dkg.transcripts_for_remote_subnets.as_ref() {
+                consensus_responses
+                    .append(&mut generate_responses_to_remote_dkgs(transcripts, log));
+            }
             CanisterHttpSpent::default()
         }
         BlockPayload::Data(data_payload) => {
