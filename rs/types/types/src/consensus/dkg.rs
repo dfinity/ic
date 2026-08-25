@@ -267,7 +267,7 @@ pub struct DkgSummary {
     #[serde_as(as = "Vec<(_, _)>")]
     next_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
     /// Transcripts that are computed for remote subnets.
-    pub transcripts_for_remote_subnets: BackwardsCompatible<Vec<RemoteTranscriptResult>, true>,
+    pub transcripts_for_remote_subnets: BackwardsCompatible<Vec<RemoteTranscriptResult>, false>,
     /// The length of the current interval in rounds (following the start
     /// block).
     pub interval_length: Height,
@@ -300,7 +300,7 @@ impl DkgSummary {
                 .collect(),
             current_transcripts,
             next_transcripts,
-            transcripts_for_remote_subnets: BackwardsCompatible::new(vec![]),
+            transcripts_for_remote_subnets: BackwardsCompatible::empty(),
             registry_version,
             interval_length,
             next_interval_length,

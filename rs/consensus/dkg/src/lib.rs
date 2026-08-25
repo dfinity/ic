@@ -995,10 +995,7 @@ mod tests {
                 for dkg_id in summary.dkg.configs.keys() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                 }
-                assert_eq!(
-                    summary.dkg.transcripts_for_remote_subnets.as_ref(),
-                    Some(&vec![])
-                );
+                assert_eq!(summary.dkg.transcripts_for_remote_subnets.as_ref(), None);
                 // Verify that the remote_dkg_attempts are set to `Completed`.
                 assert_eq!(
                     summary.dkg.remote_dkg_attempts.get(&target_id),
