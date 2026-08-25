@@ -114,8 +114,9 @@ fn should_not_fund_a_sweeper_above_the_low_water_mark() {
     );
 }
 
-/// A funding transaction that fails on chain is never reimbursed. The ETH never leaves the main
-/// address and the ckETH stays burned, so the burn ends up as extra backing.
+/// A funding transaction that fails on chain is never reimbursed. No ETH reaches the sweeper — only
+/// the gas the failed transaction still pays leaves the main address — and the ckETH stays burned,
+/// so the burn minus that gas ends up as extra backing.
 ///
 /// Has to be arranged, because it is otherwise unreachable: the sweeper is a code-less EOA precisely
 /// so a bare transfer cannot fail. Placing code there leaves the 21'000 base gas with nothing to run
@@ -179,13 +180,40 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
         supply_before - burned,
         "a failed funding must NOT be reimbursed — the supply must stay reduced"
     );
-    let surplus = setup
-        .dashboard_row("sweeper-burned-not-yet-spent")
-        .expect("the dashboard must report the unspent burn");
-    assert_ne!(
-        surplus, "0 Wei",
-        "the unreimbursed burn must still show as burned but unspent, got {surplus}"
+    // Read as numbers rather than asserted non-zero: "some burn remains" would also hold if
+    // finalization had recorded no gas at all, which is the other half of what this test claims.
+    let spent = wei_row(&setup, "sweeper-eth-spent");
+    let surplus = wei_row(&setup, "sweeper-burned-not-yet-spent");
+    assert!(
+        spent > 0,
+        "a failed transaction still pays its gas, so spend must be recorded"
     );
+    assert_eq!(
+        surplus,
+        burned - spent,
+        "the burn minus that gas is what stays as backing"
+    );
+
+    // Reimbursement runs on its own timer, so "never reimbursed" is not established by looking once
+    // at finalization: a funding wrongly queued for reimbursement would mint on the next run of
+    // that timer. One tick is longer than its interval, so it has had its chance.
+    setup.advance_ticks(1);
+    assert_eq!(
+        setup.cketh_total_supply(),
+        supply_before - burned,
+        "the reimbursement timer must have found nothing to pay back"
+    );
+}
+
+/// A dashboard cell rendered as `1_000_000 Wei`, as a number.
+fn wei_row(setup: &SweeperFundingSetup, id: &str) -> u128 {
+    let cell = setup
+        .dashboard_row(id)
+        .unwrap_or_else(|| panic!("the dashboard must have a {id} row"));
+    cell.trim_end_matches(" Wei")
+        .replace('_', "")
+        .parse()
+        .unwrap_or_else(|e| panic!("unexpected {id} cell {cell:?}: {e}"))
 }
 
 /// The burn index of the funding the minter currently has in flight, waiting for it to appear.
