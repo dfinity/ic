@@ -110,8 +110,7 @@ impl SweeperFundingSetup {
         Self::new_live_with_fee_account_balance(FEE_ACCOUNT_BALANCE)
     }
 
-    /// As [`Self::new_live`], but leaves the fee account empty, so that the first check that could
-    /// fund finds nothing to burn.
+    /// As [`Self::new_live`], but leaves the fee account empty.
     pub fn new_live_with_empty_fee_account() -> Self {
         Self::new_live_with_fee_account_balance(0)
     }
