@@ -409,8 +409,8 @@ pub struct Summary {
     /// still maintain the field and versions that have dropped it derive the same hash from the same
     /// wire bytes, because both read this marker. `repeated` fields cannot express the difference
     /// between "absent" and "empty" on the wire, hence the separate marker.
-    #[prost(bool, optional, tag = "16")]
-    pub transcripts_for_remote_subnets_removed: ::core::option::Option<bool>,
+    #[prost(bool, tag = "16")]
+    pub transcripts_for_remote_subnets_removed: bool,
     #[prost(oneof = "summary::SubnetSplittingStatus", tags = "13, 14, 15")]
     pub subnet_splitting_status: ::core::option::Option<summary::SubnetSplittingStatus>,
 }

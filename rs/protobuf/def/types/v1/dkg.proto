@@ -63,7 +63,7 @@ message Summary {
   // still maintain the field and versions that have dropped it derive the same hash from the same
   // wire bytes, because both read this marker. `repeated` fields cannot express the difference
   // between "absent" and "empty" on the wire, hence the separate marker.
-  optional bool transcripts_for_remote_subnets_removed = 16;
+  bool transcripts_for_remote_subnets_removed = 16;
 }
 
 message CallbackIdedNiDkgTranscript {

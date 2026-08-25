@@ -467,8 +467,7 @@ impl From<&DkgSummary> for pb::Summary {
             transcripts_for_remote_subnets_removed: summary
                 .transcripts_for_remote_subnets
                 .as_ref()
-                .is_none()
-                .then_some(true),
+                .is_none(),
             remote_dkg_attempts: build_remote_dkg_attempts_vec(&summary.remote_dkg_attempts),
             subnet_splitting_status: summary
                 .subnet_splitting_status
@@ -633,10 +632,8 @@ impl TryFrom<pb::Summary> for DkgSummary {
                 // including for hashing. Without the marker the repeated field is authoritative,
                 // even when empty: an empty vector still contributes its length prefix to the hash
                 // preimage, exactly as it did before the field became `BackwardsCompatible`.
-                (!summary
-                    .transcripts_for_remote_subnets_removed
-                    .unwrap_or_default())
-                .then_some(summary.transcripts_for_remote_subnets),
+                (!summary.transcripts_for_remote_subnets_removed)
+                    .then_some(summary.transcripts_for_remote_subnets),
                 |t| build_transcripts_vec_from_pb(t).map_err(ProxyDecodeError::Other),
             )?,
             remote_dkg_attempts: build_remote_dkg_attempts_map(&summary.remote_dkg_attempts),
