@@ -9,7 +9,10 @@ use crate::state::transactions::{
     ReimbursementRequest, SweepId, SweepRequest,
 };
 use crate::timed_sized_map::Timestamp;
-use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
+use crate::tx::{
+    Eip1559TransactionRequest, SignedEip1559TransactionRequest, SignedSweepTransaction,
+    SweepTransaction,
+};
 use candid::Principal;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
@@ -195,7 +198,7 @@ pub enum EventType {
         #[n(0)]
         sweep_id: SweepId,
         #[n(1)]
-        transaction: Eip1559TransactionRequest,
+        transaction: SweepTransaction,
     },
     /// The minter signed a sweep transaction.
     #[n(30)]
@@ -203,7 +206,7 @@ pub enum EventType {
         #[n(0)]
         sweep_id: SweepId,
         #[n(1)]
-        transaction: SignedEip1559TransactionRequest,
+        transaction: SignedSweepTransaction,
     },
     /// The minter replaced a sweep transaction after a fee bump.
     #[n(31)]
@@ -211,7 +214,7 @@ pub enum EventType {
         #[n(0)]
         sweep_id: SweepId,
         #[n(1)]
-        transaction: Eip1559TransactionRequest,
+        transaction: SweepTransaction,
     },
     /// The minter observed a sweep transaction being included in a finalized Ethereum block.
     #[n(32)]
