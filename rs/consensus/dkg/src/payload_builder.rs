@@ -936,6 +936,32 @@ pub(crate) fn create_remote_dkg_config(
 }
 
 /// Creates a DKG summary for the summary block right after the subnet has been split.
+///
+/// The post-split summary (and thus the post-split CUP) is placed one whole DKG interval after
+/// the `Scheduled` summary block, at `last_summary.height + interval_length + 1` — the height at
+/// which the next summary block would have appeared anyway. For the split to be safe, this height
+/// must never be reachable by the pre-split chain, so that the post-split summary block created
+/// here is the only agreed-upon block at that height. This holds because of how the subnet halts:
+///
+/// Once the `Scheduled` summary block at height `h` is finalized, all blocks above `h` are empty
+/// and no batches above `h` are delivered, so the certified height stops at `h`. Block making
+/// stops entirely once the state at `h` is certified, and even if certification lags (e.g. due to
+/// slow checkpointing at `h`), the notary refuses to notarize heights more than
+/// `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP` above the certified height. The pre-split chain
+/// can therefore never grow past `h + ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP`, which lies
+/// strictly below the post-split height as long as the DKG interval length is at least
+/// `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP`.
+///
+/// # Limitation
+///
+/// Splitting a subnet whose DKG interval length is smaller than
+/// `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP` is *not* supported, and nothing guards against it.
+/// On such a subnet, the halting pre-split chain can reach the post-split height the usual way
+/// and notarize — or even finalize — a regular block there, including a regular summary block. The
+/// subnet would then have two conflicting agreed-upon blocks at the same height: the block on the
+/// pre-split chain and the post-split summary block referenced by the CUP shares, with no
+/// guarantee which of the two a node ends up following. Production subnets use DKG interval
+/// lengths well above this bound.
 pub fn get_post_split_dkg_summary(
     new_subnet_id: SubnetId,
     registry: &dyn RegistryClient,
@@ -963,7 +989,8 @@ pub fn get_post_split_dkg_summary(
         .value
         .ok_or_else(|| format!("Empty cup contents at registry version {registry_version}"))?;
 
-    // During subnet splitting we skip one DKG interval
+    // During subnet splitting we skip one DKG interval. The pre-split chain can never reach this
+    // height — see the function documentation for why, and for the limitation this implies.
     cup_contents.height = last_summary.get_next_start_height().get();
 
     get_dkg_summary_from_cup_contents_with_subnet_splitting(
