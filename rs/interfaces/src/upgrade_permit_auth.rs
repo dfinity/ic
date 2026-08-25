@@ -1,7 +1,7 @@
 //! Pool trait and change actions for the upgrade permit authorization pool.
 
 use ic_types::consensus::UpgradePermitAuthorizationShare;
-use ic_types::artifact::UpgradePermitAuthId;
+use ic_types::artifact::UpgradePermitAuthorizationShareId;
 
 /// Change actions that can be applied to the [`UpgradePermitAuthPool`].
 #[derive(Debug)]
@@ -13,11 +13,11 @@ pub enum UpgradePermitAuthChangeAction {
     MoveToValidated(UpgradePermitAuthorizationShare),
     /// Remove a validated share (e.g. after the request was authorized or
     /// timed out).
-    RemoveValidated(UpgradePermitAuthId),
+    RemoveValidated(UpgradePermitAuthorizationShareId),
     /// Remove an unvalidated share.
-    RemoveUnvalidated(UpgradePermitAuthId),
+    RemoveUnvalidated(UpgradePermitAuthorizationShareId),
     /// Handle an invalid share (bad signature, no matching request, etc.).
-    HandleInvalid(UpgradePermitAuthId, String),
+    HandleInvalid(UpgradePermitAuthorizationShareId, String),
 }
 
 pub type UpgradePermitAuthChangeSet = Vec<UpgradePermitAuthChangeAction>;

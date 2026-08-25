@@ -254,12 +254,12 @@ pub type CanisterHttpResponseId = CanisterHttpResponseShare;
 /// Upgrade permit authorization message identifier carries both a message hash
 /// and a height, used by the upgrade permit auth pool for lookup.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
-pub struct UpgradePermitAuthId {
+pub struct UpgradePermitAuthorizationShareId {
     pub hash: CryptoHashOf<UpgradePermitAuthorizationShare>,
     pub height: Height,
 }
 
-impl HasHeight for UpgradePermitAuthId {
+impl HasHeight for UpgradePermitAuthorizationShareId {
     fn height(&self) -> Height {
         self.height
     }
@@ -267,23 +267,23 @@ impl HasHeight for UpgradePermitAuthId {
 
 impl IdentifiableArtifact for UpgradePermitAuthorizationShare {
     const NAME: &'static str = "upgrade";
-    type Id = UpgradePermitAuthId;
+    type Id = UpgradePermitAuthorizationShareId;
     fn id(&self) -> Self::Id {
-        UpgradePermitAuthId {
+        UpgradePermitAuthorizationShareId {
             hash: crypto_hash(self),
             height: self.content.height(),
         }
     }
 }
 
-impl From<&UpgradePermitAuthorizationShare> for UpgradePermitAuthId {
+impl From<&UpgradePermitAuthorizationShare> for UpgradePermitAuthorizationShareId {
     fn from(share: &UpgradePermitAuthorizationShare) -> Self {
         share.id()
     }
 }
 
-impl From<UpgradePermitAuthId> for pb::UpgradePermitAuthMessageId {
-    fn from(id: UpgradePermitAuthId) -> Self {
+impl From<UpgradePermitAuthorizationShareId> for pb::UpgradePermitAuthMessageId {
+    fn from(id: UpgradePermitAuthorizationShareId) -> Self {
         Self {
             hash: id.hash.clone().get().0,
             height: id.height.get(),
@@ -291,7 +291,7 @@ impl From<UpgradePermitAuthId> for pb::UpgradePermitAuthMessageId {
     }
 }
 
-impl TryFrom<pb::UpgradePermitAuthMessageId> for UpgradePermitAuthId {
+impl TryFrom<pb::UpgradePermitAuthMessageId> for UpgradePermitAuthorizationShareId {
     type Error = ProxyDecodeError;
 
     fn try_from(id: pb::UpgradePermitAuthMessageId) -> Result<Self, Self::Error> {

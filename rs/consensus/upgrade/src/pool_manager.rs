@@ -248,10 +248,10 @@ impl<T: UpgradePermitAuthPool> PoolMutationsProducer<T> for UpgradePermitAuthPoo
 /// Bouncer that accepts all upgrade permit auth shares.
 pub struct UpgradePermitAuthBouncer;
 
-impl<Pool> BouncerFactory<ic_types::artifact::UpgradePermitAuthId, Pool>
+impl<Pool> BouncerFactory<ic_types::artifact::UpgradePermitAuthorizationShareId, Pool>
     for UpgradePermitAuthBouncer
 {
-    fn new_bouncer(&self, _pool: &Pool) -> Bouncer<ic_types::artifact::UpgradePermitAuthId> {
+    fn new_bouncer(&self, _pool: &Pool) -> Bouncer<ic_types::artifact::UpgradePermitAuthorizationShareId> {
         Box::new(|_id| BouncerValue::Wants)
     }
 

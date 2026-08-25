@@ -22,16 +22,16 @@ use ic_interfaces::{
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::{IdentifiableArtifact, UpgradePermitAuthId},
+    artifact::{IdentifiableArtifact, UpgradePermitAuthorizationShareId},
     consensus::UpgradePermitAuthorizationShare,
 };
 use prometheus::IntCounter;
 
 const POOL_NAME: &str = "upgrade_permit_auth";
 
-type ValidatedSection = PoolSection<UpgradePermitAuthId, UpgradePermitAuthorizationShare>;
+type ValidatedSection = PoolSection<UpgradePermitAuthorizationShareId, UpgradePermitAuthorizationShare>;
 type UnvalidatedSection =
-    PoolSection<UpgradePermitAuthId, UnvalidatedArtifact<UpgradePermitAuthorizationShare>>;
+    PoolSection<UpgradePermitAuthorizationShareId, UnvalidatedArtifact<UpgradePermitAuthorizationShare>>;
 
 pub struct UpgradePermitAuthPoolImpl {
     validated: ValidatedSection,
@@ -76,7 +76,7 @@ impl MutablePool<UpgradePermitAuthorizationShare> for UpgradePermitAuthPoolImpl 
         self.unvalidated.insert(id, artifact);
     }
 
-    fn remove(&mut self, id: &UpgradePermitAuthId) {
+    fn remove(&mut self, id: &UpgradePermitAuthorizationShareId) {
         self.unvalidated.remove(id);
     }
 
@@ -132,7 +132,7 @@ impl MutablePool<UpgradePermitAuthorizationShare> for UpgradePermitAuthPoolImpl 
 }
 
 impl ValidatedPoolReader<UpgradePermitAuthorizationShare> for UpgradePermitAuthPoolImpl {
-    fn get(&self, id: &UpgradePermitAuthId) -> Option<UpgradePermitAuthorizationShare> {
+    fn get(&self, id: &UpgradePermitAuthorizationShareId) -> Option<UpgradePermitAuthorizationShare> {
         self.validated.get(id).cloned()
     }
 
