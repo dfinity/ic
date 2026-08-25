@@ -141,8 +141,8 @@ impl Anvil {
         );
     }
 
-    /// The native ETH balance of `address` at `block`, read straight from anvil, i.e. the
-    /// ground truth an `eth_getBalance` routed through the EVM RPC canister must reproduce.
+    /// The native ETH balance of `address` at `block`, read straight from anvil, i.e. the ground
+    /// truth a test checks the minter's own figures against — the minter never reads it itself.
     pub(crate) fn eth_balance(&self, address: &Address, block: &str) -> u128 {
         let hex = self.rpc(
             "eth_getBalance",
