@@ -139,11 +139,6 @@ pub enum FundingDecision {
     NotDue,
 }
 
-/// Decides whether a funding is due at `sweeper_balance`, which callers supply as a *lower* bound on
-/// the sweeper address' real balance. Erring low can only make a funding look due when it is not,
-/// which over-provisions gas the minter has burned for; the reverse would spend ETH against gas that
-/// is not there.
-///
 /// Decides against the lower bound the minter tracks on the sweeper address' balance, read from the
 /// state rather than passed in, so the decision cannot be made against a balance the state
 /// contradicts. Erring low can only make a funding look due sooner than it is, never hide one that
