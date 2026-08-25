@@ -1088,12 +1088,8 @@ impl WithdrawalTransactions {
 
     /// The sweeper funding whose transaction has not finalized yet, if any.
     ///
-    /// Read off the three stages that precede finalization rather than tracked next to them, so it
-    /// cannot disagree with the pipeline it describes. Walked from the furthest along backwards —
-    /// sent, created, pending — so that if the one-at-a-time guard is ever bypassed, the funding
-    /// reported is the one accepted first, i.e. the one that would be stuck. The processed requests
-    /// are only looked up by index, never scanned: that map keeps every request the minter ever
-    /// processed.
+    /// Read off the pipeline rather than tracked next to it, so the two cannot disagree, and walked
+    /// from the furthest stage backwards, so that two outstanding fundings report the older one.
     pub fn outstanding_sweeper_funding(&self) -> Option<&EthWithdrawalRequest> {
         fn as_funding(request: &WithdrawalRequest) -> Option<&EthWithdrawalRequest> {
             match request {

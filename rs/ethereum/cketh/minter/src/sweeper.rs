@@ -140,10 +140,6 @@ pub enum FundingDecision {
 /// which over-provisions gas the minter has burned for; the reverse would spend ETH against gas that
 /// is not there.
 ///
-/// Asks whether anything is due before asking what stands in the way, so that the quiet case — the
-/// sweeper is topped up and the hourly check has nothing to do — is [`FundingDecision::NotDue`] and
-/// not a report about an in-flight funding that happens to also be pending.
-///
 /// Refuses while an earlier funding is still somewhere in the withdrawal pipeline, i.e. between its
 /// burn and its finalized transfer. That is prudence rather than a correctness requirement: each
 /// funding burns for its own transfer, so two in flight are still each covered by their own burn.
@@ -160,12 +156,9 @@ pub fn plan_funding(state: &State, sweeper_balance: Wei) -> FundingDecision {
             amount: outstanding.withdrawal_amount,
         };
     }
-    // Funding debits `eth_balance`, which counts only ETH received through deposits, so a funding
-    // above it would spend ETH the accounting knows nothing about. Solvency does not rest on this
-    // check — it rests on every debit being covered by its own burn, which is what keeps the
-    // counter from going negative even with user withdrawals in flight against the same balance.
-    // What the check does buy is the fresh deployment, where the minter may hold ETH it has not yet
-    // seen a deposit for: refusing keeps that ETH out of a funding, and waiting is free.
+    // For the fresh deployment, where `eth_balance` starts at zero while the minter may already
+    // hold ETH no deposit credited: funding that would reach past what deposits paid in underflows
+    // the debit at finalization, and traps in the withdrawal timer. Waiting is free.
     let available = state.eth_balance().eth_balance();
     if available < amount {
         return FundingDecision::InsufficientBalance {
