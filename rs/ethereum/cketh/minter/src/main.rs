@@ -38,6 +38,7 @@ use ic_cketh_minter::state::transactions::{
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
+use ic_cketh_minter::sweep::process_sweeper_transactions;
 use ic_cketh_minter::sweeper::fund_sweeper_address;
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
@@ -47,8 +48,8 @@ use ic_cketh_minter::withdraw::{
 };
 use ic_cketh_minter::{
     BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
-    REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, SCRAPING_ETH_LOGS_INTERVAL, SWEEPER_FUNDING_INTERVAL,
-    state, storage,
+    PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL,
+    SCRAPING_ETH_LOGS_INTERVAL, SWEEPER_FUNDING_INTERVAL, state, storage,
 };
 use ic_cketh_minter::{endpoints, erc20};
 use ic_ethereum_types::Address;
@@ -104,6 +105,9 @@ fn setup_timers() {
     });
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
         process_retrieve_eth_requests().await;
+    });
+    ic_cdk_timers::set_timer_interval(PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, async || {
+        process_sweeper_transactions().await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, async || {
         process_reimbursement().await;
