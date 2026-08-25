@@ -1181,8 +1181,6 @@ impl WasmtimeInstance {
         let access = self.page_accesses()?;
         self.set_instance_stats(&access);
 
-        // No need to charge for dirty wasm heap pages anymore: The DMT charges directly.
-
         match result {
             Ok(_) => Ok(InstanceRunResult {
                 exported_globals: self.get_exported_globals()?,

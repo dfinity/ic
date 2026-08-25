@@ -7,8 +7,12 @@
 //!
 //! - properly report errors in a backwards-compatible way
 //! - convert between integer types and check for overflows
-//! - track accesses and dirty pages
+//! - mark written pages in the bytemap and enforce the accessed/dirty page limits
 //! - charge for instructions
+//!
+//! The accessed/dirty page counters only enforce the per-message limits; the
+//! instructions for touching a page are charged by the deterministic memory
+//! tracker from the SIGSEGV handler.
 //!
 
 use crate::{
