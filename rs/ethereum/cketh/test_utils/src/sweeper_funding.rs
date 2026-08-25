@@ -3,10 +3,11 @@
 //! ckETH backing"), driving the *production* path end to end with nothing mocked:
 //!
 //! ```text
-//! funding task -> eth_getBalance via the EVM RPC canister -> anvil
-//!              -> burn ckETH from the minter's 0x…0fee subaccount on a real ledger
-//!              -> SweeperFundingRequest -> tECDSA signature -> eth_sendRawTransaction
-//!              -> anvil mines it -> receipt -> finalized
+//! funding task (no chain read: the balance bound comes from the minter's own events)
+//!   -> burn ckETH from the minter's 0x…0fee subaccount on a real ledger
+//!   -> withdrawal request -> tECDSA signature
+//!   -> eth_sendRawTransaction via the EVM RPC canister -> anvil mines it
+//!   -> receipt -> finalized, with anvil's own balance confirming the ETH arrived
 //! ```
 //!
 //! Runs on a PocketIC instance in live mode, so the canister's HTTPS outcalls genuinely reach anvil.
@@ -38,7 +39,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use pocket_ic::{CanisterSettings, PocketIc, PocketIcBuilder};
 use std::str::FromStr;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::anvil::{Anvil, DEV_ACCOUNT, address_from_hex};
 use crate::{
@@ -51,7 +52,7 @@ const ECDSA_KEY_NAME: &str = "key_1";
 const CKETH_TRANSFER_FEE: u64 = 2_000_000_000_000;
 
 /// Credited to the minter as a deposit, so funding has deposit-backed ETH to spend. Comfortably
-/// above the default 0.1 ETH funding target.
+/// above the 0.3 ETH funding target that [`CKETH_MINIMUM_WITHDRAWAL_AMOUNT`] implies.
 const DEPOSIT_AMOUNT: u128 = 5_000_000_000_000_000_000; // 5 ETH
 const MINTER_ETH_BALANCE: u128 = 100_000_000_000_000_000_000; // 100 ETH
 
@@ -101,16 +102,11 @@ pub struct SweeperFundingSetup {
 
 impl SweeperFundingSetup {
     /// The fee account is funded once the deposit has been credited and before the timers are
-    /// re-armed, which is the one window in which no funding check can be running: leaving it empty
-    /// until then means the install-time check has nothing to burn however the timers interleave, so
-    /// the post-upgrade run is deterministically the first that can fund.
+    /// re-armed: with nothing in it, the check that runs at install cannot burn whether it beats the
+    /// deposit scrape or trails it, so the post-upgrade run is deterministically the first that can
+    /// fund.
     pub fn new_live() -> Self {
         Self::new_live_with_fee_account_balance(FEE_ACCOUNT_BALANCE)
-    }
-
-    /// As [`Self::new_live`], but leaves the fee account empty.
-    pub fn new_live_with_empty_fee_account() -> Self {
-        Self::new_live_with_fee_account_balance(0)
     }
 
     fn new_live_with_fee_account_balance(fee_account_balance: u128) -> Self {
@@ -138,6 +134,14 @@ impl SweeperFundingSetup {
         install_ledger(&env, ledger_id, minter_id);
         install_evm_rpc(&env, evm_rpc_id, anvil.url());
 
+        // Jump the clock synchronously first, so that `make_live`'s auto-progress task, whose own
+        // initial time-set is asynchronous, only takes a millisecond-sized step afterwards. Without
+        // this, the ingress messages below can be stamped with a genesis-derived expiry and then be
+        // retroactively expired by the ~5-year jump they raced, and never answered (#11299 hit
+        // exactly this). Certified time, matching what auto-progress sets — `advance_time` moves
+        // only the uncertified clock. Nothing to drain first, unlike #11299: no canister installed
+        // so far issues outcalls of its own.
+        env.set_certified_time(SystemTime::now().into());
         // Live before installing the minter: its install-time timers issue outcalls immediately.
         let _gateway = env.make_live(None);
 
@@ -171,10 +175,10 @@ impl SweeperFundingSetup {
             .anvil
             .set_balance(&setup.minter_address, MINTER_ETH_BALANCE);
         setup.await_deposit_credited(Duration::from_secs(300));
-        // Funded here rather than at install: with an empty fee account the install-time check
-        // cannot burn, whichever way it and the scrape interleave. Safe to do now because the next
-        // scheduled check is a whole interval away, so nothing is watching until the upgrade below
-        // re-arms the timers — which makes that run the first one able to fund.
+        // Funded here rather than at install: with an empty fee account the check that runs at
+        // install cannot burn, whichever way it and the scrape interleave. Safe to do now because
+        // the next scheduled check is a whole interval away, so nothing is watching until the
+        // upgrade below re-arms the timers — which makes that run the first one able to fund.
         if fee_account_balance > 0 {
             setup.mint_cketh(setup.fee_account(), fee_account_balance);
         }

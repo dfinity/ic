@@ -1088,10 +1088,12 @@ impl WithdrawalTransactions {
 
     /// The sweeper funding whose transaction has not finalized yet, if any.
     ///
-    /// Read off the three stages that precede finalization — pending, created, sent — rather than
-    /// tracked next to them, so it cannot disagree with the pipeline it describes. The processed
-    /// requests are only looked up by index, never scanned: that map keeps every request the minter
-    /// ever processed, and this is read on the metrics path.
+    /// Read off the three stages that precede finalization rather than tracked next to them, so it
+    /// cannot disagree with the pipeline it describes. Walked from the furthest along backwards —
+    /// sent, created, pending — so that if the one-at-a-time guard is ever bypassed, the funding
+    /// reported is the one accepted first, i.e. the one that would be stuck. The processed requests
+    /// are only looked up by index, never scanned: that map keeps every request the minter ever
+    /// processed.
     pub fn outstanding_sweeper_funding(&self) -> Option<&EthWithdrawalRequest> {
         fn as_funding(request: &WithdrawalRequest) -> Option<&EthWithdrawalRequest> {
             match request {
@@ -1101,15 +1103,11 @@ impl WithdrawalTransactions {
         }
 
         self.pipeline
-            .pending_requests
-            .iter()
-            .chain(
-                self.pipeline
-                    .created_tx
-                    .alt_keys()
-                    .chain(self.pipeline.sent_tx.alt_keys())
-                    .filter_map(|id| self.pipeline.processed_requests.get(id)),
-            )
+            .sent_tx
+            .alt_keys()
+            .chain(self.pipeline.created_tx.alt_keys())
+            .filter_map(|id| self.pipeline.processed_requests.get(id))
+            .chain(self.pipeline.pending_requests.iter())
             .find_map(as_funding)
     }
 

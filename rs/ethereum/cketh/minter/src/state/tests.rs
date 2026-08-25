@@ -1486,7 +1486,7 @@ fn state_equivalence() {
 
 /// An [`EthBalance`] holding `eth_balance` of deposit-backed ETH, for tests that need the minter to
 /// have received something.
-pub fn eth_balance_of(eth_balance: Wei) -> EthBalance {
+pub(crate) fn eth_balance_of(eth_balance: Wei) -> EthBalance {
     EthBalance {
         eth_balance,
         ..Default::default()

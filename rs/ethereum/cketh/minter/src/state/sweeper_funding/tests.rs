@@ -128,7 +128,7 @@ mod accounting {
     #[test]
     fn should_accumulate_across_fundings() {
         let mut accounting = SweeperFundingAccounting::default();
-        for _ in 1..=3 {
+        for _ in 0..3 {
             accounting.record_burn(Wei::new(BURN));
             accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
         }

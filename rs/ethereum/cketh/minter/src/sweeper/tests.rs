@@ -144,7 +144,8 @@ mod concurrent_fundings {
                 available: Wei::new(TARGET - 1),
                 required: Wei::new(TARGET),
             },
-            "funding beyond the backed balance would underflow the debit at finalization and trap"
+            "a fresh deployment may hold ETH it has credited no deposit for, and funding must not \
+             reach for it"
         );
     }
 
@@ -247,6 +248,12 @@ mod concurrent_fundings {
 
         let first_tx = create(&mut state, &first);
         let first_signed = sign(&mut state, &first, first_tx);
+        assert_refuses_while(
+            &state,
+            &first,
+            "the one furthest along the pipeline, reported ahead of the newer one still pending",
+        );
+
         let second_tx = create(&mut state, &second);
         let second_signed = sign(&mut state, &second, second_tx);
 
