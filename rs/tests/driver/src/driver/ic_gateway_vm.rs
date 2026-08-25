@@ -45,13 +45,6 @@ const IC_GATEWAY_A_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_a_records_crea
 const READY_TIMEOUT: Duration = Duration::from_secs(360);
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
-/// Runfiles paths of the dev root CA, provided to the local backend's variant of
-/// every system test by `_local_only_deps` in `rs/tests/system_tests.bzl`. Reading
-/// either of these on the Farm backend would panic, and must not happen: Farm uses
-/// a playnet certificate.
-const DEV_ROOT_CA_CERT_ENV: &str = "ENV_DEPS__DEV_ROOT_CA_CERT_PATH";
-const DEV_ROOT_CA_KEY_ENV: &str = "ENV_DEPS__DEV_ROOT_CA_KEY_PATH";
-
 /// The dev root CA: the certificate authority that every *dev* IC-OS image
 /// already trusts, loaded ready to sign with.
 ///
@@ -62,6 +55,11 @@ const DEV_ROOT_CA_KEY_ENV: &str = "ENV_DEPS__DEV_ROOT_CA_KEY_PATH";
 /// private key is checked in beside it, which is how a test can serve HTTPS that
 /// a node accepts without any node-side configuration; `canister_http` and
 /// `ckbtc` already rely on this, and its `README.md` documents the use.
+///
+/// The certificate and the key reach us as runfiles, provided to the local
+/// backend's variant of every system test by `_local_only_deps` in
+/// `rs/tests/system_tests.bzl`. Reading either on the Farm backend would panic,
+/// and must not happen: Farm uses a playnet certificate.
 struct DevRootCa {
     /// PEM of the checked-in CA certificate, exactly as it sits in the images'
     /// trust store. This is what the gateway serves as its chain and what a
@@ -74,7 +72,7 @@ struct DevRootCa {
 
 /// The PEM of the dev root CA certificate. See [`DevRootCa`].
 fn dev_root_ca_cert_pem() -> Result<String> {
-    let path = get_dependency_path_from_env(DEV_ROOT_CA_CERT_ENV);
+    let path = get_dependency_path_from_env("ENV_DEPS__DEV_ROOT_CA_CERT_PATH");
     fs::read_to_string(&path).with_context(|| {
         format!(
             "reading the dev root CA certificate from {}",
@@ -86,7 +84,7 @@ fn dev_root_ca_cert_pem() -> Result<String> {
 /// Loads the dev root CA so `rcgen` can issue certificates from it.
 fn dev_root_ca() -> Result<DevRootCa> {
     let cert_pem = dev_root_ca_cert_pem()?;
-    let key_path = get_dependency_path_from_env(DEV_ROOT_CA_KEY_ENV);
+    let key_path = get_dependency_path_from_env("ENV_DEPS__DEV_ROOT_CA_KEY_PATH");
     let key_pkcs1_pem = fs::read_to_string(&key_path)
         .with_context(|| format!("reading the dev root CA key from {}", key_path.display()))?;
 
