@@ -136,8 +136,9 @@ impl<T: CyclesUseCaseKind> CompoundCycles<T> {
     /// not be reported in the consumed cycles metrics either.
     ///
     /// Both parts are reduced by `uncharged`, saturating at zero: they coincide
-    /// under the normal cost schedule, while under the free cost schedule the
-    /// real part is zero, so nothing can be left uncharged and this is a no-op.
+    /// under the normal cost schedule. Under the free cost schedule the real part
+    /// is zero for use cases made free, so this is a no-op; use cases charged
+    /// regardless of schedule still have coincident real and nominal parts.
     pub fn minus_uncharged(self, uncharged: Cycles) -> Self {
         debug_assert!(
             uncharged <= self.real,
