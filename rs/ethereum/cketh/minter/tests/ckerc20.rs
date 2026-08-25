@@ -150,8 +150,9 @@ mod deposit_erc20 {
     use ic_cketh_minter::endpoints::events::EventPayload;
     use ic_cketh_minter::endpoints::{DepositErc20Error, DepositStatus};
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
-    use ic_cketh_test_utils::ckerc20::CkErc20Setup;
+    use ic_cketh_test_utils::ckerc20::{CKWBTC_CONTRACT_ADDRESS, CkErc20Setup, ckwbtc};
     use ic_cketh_test_utils::{DEFAULT_USER_SUBACCOUNT, format_ethereum_address_to_eip_55};
+    use std::collections::BTreeMap;
 
     /// Number of `AutomaticDepositReceived` events currently in the minter's audit log.
     fn count_automatic_deposits_received(ckerc20: &CkErc20Setup) -> usize {
@@ -333,32 +334,58 @@ mod deposit_erc20 {
 
     #[test]
     fn should_report_the_minimum_deposit_amount_of_the_requested_token() {
-        // The first supported token is ckUSDC, whose minimum is $10 worth, i.e. 10 USDC.
-        const CKUSDC_MINIMUM_DEPOSIT: u64 = 10_000_000;
+        // The default supported tokens, ckUSDC and ckUSDT, are both $10 worth of a 6-decimal
+        // stablecoin. ckWBTC is added so the set holds a token whose minimum differs, which is what
+        // makes the per-token lookup below observable at all.
+        const STABLECOIN_MINIMUM_DEPOSIT: u64 = 10_000_000;
+        const CKWBTC_MINIMUM_DEPOSIT: u64 = 15_000;
 
-        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let ckerc20 = CkErc20Setup::default()
+            .add_supported_erc20_tokens()
+            .add_supported_erc20_token(ckwbtc());
         let caller = ckerc20.caller();
-        let token = a_supported_token(&ckerc20);
-        let minimum_from_minter_info = ckerc20
+        let minimums_from_minter_info: BTreeMap<_, _> = ckerc20
             .cketh
             .get_minter_info()
             .minimum_deposit_amounts
             .expect("BUG: the ckERC20 feature is active")
             .into_iter()
-            .find(|minimum| minimum.erc20_contract_address == token)
-            .expect("BUG: a supported token must have a minimum deposit amount")
-            .minimum_deposit_amount;
+            .map(|minimum| {
+                (
+                    minimum.erc20_contract_address,
+                    minimum.minimum_deposit_amount,
+                )
+            })
+            .collect();
+        let tokens: Vec<String> = ckerc20
+            .supported_erc20_tokens
+            .iter()
+            .map(|token| format_ethereum_address_to_eip_55(&token.contract.address))
+            .collect();
+        assert_eq!(tokens.len(), 3, "BUG: expected ckUSDC, ckUSDT and ckWBTC");
 
-        let (_ckerc20, response) = ckerc20
-            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token)
-            .expect_deposit_response();
+        let mut ckerc20 = ckerc20;
+        for token in tokens {
+            let expected = match token.as_str() {
+                CKWBTC_CONTRACT_ADDRESS => Nat::from(CKWBTC_MINIMUM_DEPOSIT),
+                _ => Nat::from(STABLECOIN_MINIMUM_DEPOSIT),
+            };
+            let (setup, response) = ckerc20
+                .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
+                .expect_deposit_response();
+            ckerc20 = setup;
 
-        assert_eq!(
-            response.minimum_deposit_amount,
-            Nat::from(CKUSDC_MINIMUM_DEPOSIT)
-        );
-        // Both endpoints must quote the same threshold as the one the balance scan enforces.
-        assert_eq!(response.minimum_deposit_amount, minimum_from_minter_info);
+            assert_eq!(
+                response.minimum_deposit_amount, expected,
+                "wrong minimum reported for {token}"
+            );
+            // Both endpoints must quote the same threshold as the one the balance scan enforces.
+            assert_eq!(
+                Some(&response.minimum_deposit_amount),
+                minimums_from_minter_info.get(&token),
+                "deposit_erc20 and get_minter_info disagree for {token}"
+            );
+        }
     }
 
     #[test]
