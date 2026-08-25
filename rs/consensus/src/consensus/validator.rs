@@ -5243,109 +5243,32 @@ pub mod test {
         RandomBeacon,
         RegistryVersion,
         Height,
-        Signer(NodeId),
+        Signer,
     }
+
+    /// The subnet to which the node will belong after the subnet split.
+    fn post_split_subnet_id(node_id: NodeId) -> SubnetId {
+        if node_id == NODE_1 || node_id == NODE_2 {
+            SOURCE_SUBNET_ID
+        } else {
+            DESTINATION_SUBNET_ID
+        }
+    }
+
     #[rstest]
-    // NODE_1 and NODE_2 are on the source subnet, NODE_3 and NODE_4 are on the destination subnet
-    #[case::good_subnet(NODE_1, NODE_1, None, Ok(()))]
-    #[case::good_subnet(NODE_1, NODE_2, None, Ok(()))]
-    #[case::good_subnet_on_destination(NODE_3, NODE_3, None, Ok(()))]
-    #[case::good_subnet_on_destination(NODE_3, NODE_4, None, Ok(()))]
-    #[case::wrong_subnet(
-        NODE_1,
-        NODE_3,
-        None,
-        Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare)
-    )]
-    #[case::wrong_subnet(
-        NODE_1,
-        NODE_4,
-        None,
-        Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare)
-    )]
-    #[case::wrong_subnet_on_destination(
-        NODE_3,
-        NODE_1,
-        None,
-        Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare)
-    )]
-    #[case::wrong_subnet_on_destination(
-        NODE_3,
-        NODE_2,
-        None,
-        Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare)
-    )]
-    #[case::wrong_state_hash(
-        NODE_1,
-        NODE_1,
-        Some(MalformShare::StateHash),
-        Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare)
-    )]
-    #[case::wrong_state_hash_on_destination(
-        NODE_3,
-        NODE_3,
-        Some(MalformShare::StateHash),
-        Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare)
-    )]
-    #[case::wrong_random_beacon(
-        NODE_1,
-        NODE_1,
-        Some(MalformShare::RandomBeacon),
-        Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare)
-    )]
-    #[case::wrong_random_beacon_on_destination(
-        NODE_3,
-        NODE_3,
-        Some(MalformShare::RandomBeacon),
-        Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare)
-    )]
-    #[case::wrong_registry_version(
-        NODE_1,
-        NODE_1,
-        Some(MalformShare::RegistryVersion),
-        Err(InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare)
-    )]
-    #[case::wrong_registry_version_on_destination(
-        NODE_3,
-        NODE_3,
-        Some(MalformShare::RegistryVersion),
-        Err(InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare)
-    )]
-    #[case::wrong_height(
-        NODE_1,
-        NODE_1,
-        Some(MalformShare::Height),
-        Err(InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare { expected: Height::from(20), received: Height::from(10) })
-    )]
-    #[case::wrong_height_on_destination(
-        NODE_3,
-        NODE_3,
-        Some(MalformShare::Height),
-        Err(InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare { expected: Height::from(20), received: Height::from(10) })
-    )]
-    // The signer must be a member of the high-threshold committee of the transcript in the
-    // *post-split* summary block, not of the committee at the share's height on the pre-split
-    // chain. NODE_3 is in the latter but not in the former, so a share with otherwise valid
-    // (post-split) content signed by NODE_3 must be rejected.
-    #[case::signer_not_in_post_split_committee(
-        NODE_1,
-        NODE_1,
-        Some(MalformShare::Signer(NODE_3)),
-        Err(InvalidArtifactReason::SignerNotInThresholdCommittee(NODE_3))
-    )]
-    // The mirror image on the destination subnet: NODE_1 stays on the source subnet, so it is not
-    // in the destination subnet's post-split committee.
-    #[case::signer_not_in_post_split_committee_on_destination(
-        NODE_3,
-        NODE_3,
-        Some(MalformShare::Signer(NODE_1)),
-        Err(InvalidArtifactReason::SignerNotInThresholdCommittee(NODE_1))
-    )]
+    #[case::well_formed(None)]
+    #[case::wrong_state_hash(Some(MalformShare::StateHash))]
+    #[case::wrong_random_beacon(Some(MalformShare::RandomBeacon))]
+    #[case::wrong_registry_version(Some(MalformShare::RegistryVersion))]
+    #[case::wrong_height(Some(MalformShare::Height))]
+    #[case::wrong_signer(Some(MalformShare::Signer))]
     fn validate_post_split_cup_share_test(
-        #[case] validator_node_id: NodeId,
-        #[case] cup_share_node_id: NodeId,
         #[case] malform_share: Option<MalformShare>,
-        #[case] expected_validation_result: Result<(), InvalidArtifactReason>,
+        // One validator which stays on the source subnet after the split, and one which moves to
+        // the destination subnet. NODE_2 and NODE_4 behave identically to NODE_1 and NODE_3
+        // respectively, so they are left out to keep the test matrix small.
+        #[values(NODE_1, NODE_3)] validator_node_id: NodeId,
+        #[values(NODE_1, NODE_2, NODE_3, NODE_4)] cup_share_node_id: NodeId,
     ) {
         with_test_replica_logger(|log| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -5450,7 +5373,15 @@ pub mod test {
                     .consider_block(&PoolReader::new(&pool), proposal.content.as_ref().clone())
                     .expect("Should succeed with valid inputs");
 
-                match malform_share {
+                // A node which is not in the validator's post-split high-threshold committee.
+                let invalid_signer = if post_split_subnet_id(validator_node_id) == SOURCE_SUBNET_ID
+                {
+                    NODE_3
+                } else {
+                    NODE_1
+                };
+
+                match &malform_share {
                     Some(MalformShare::StateHash) => {
                         share.content.state_hash =
                             CryptoHashOfState::from(CryptoHash(vec![3, 1, 4]));
@@ -5476,8 +5407,8 @@ pub mod test {
                         share.content.random_beacon =
                             HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon);
                     }
-                    Some(MalformShare::Signer(signer)) => {
-                        share.signature.signer = signer;
+                    Some(MalformShare::Signer) => {
+                        share.signature.signer = invalid_signer;
                     }
                     None => {}
                 }
@@ -5486,6 +5417,42 @@ pub mod test {
 
                 let pool_reader = PoolReader::new(&pool);
                 let change_set = validator.validate_catch_up_package_shares(&pool_reader);
+
+                let is_same_post_split_subnet = post_split_subnet_id(validator_node_id)
+                    == post_split_subnet_id(cup_share_node_id);
+                let expected_validation_result = match (&malform_share, is_same_post_split_subnet) {
+                    // The share's height is checked before its content is compared against the
+                    // validator's reconstructed post-split summary block, so a wrong height is
+                    // reported no matter which subnet the share was created for.
+                    (Some(MalformShare::Height), _) => Err(
+                        InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare {
+                            expected: Height::from(20),
+                            received: Height::from(10),
+                        },
+                    ),
+                    // A share created by a node which moves to the other subnet after the split
+                    // references that subnet's post-split summary block, which doesn't match the
+                    // one the validator reconstructs for its own subnet.
+                    (_, false) => Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare),
+                    (None, true) => Ok(()),
+                    (Some(MalformShare::StateHash), true) => {
+                        Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare)
+                    }
+                    (Some(MalformShare::RandomBeacon), true) => {
+                        Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare)
+                    }
+                    (Some(MalformShare::RegistryVersion), true) => Err(
+                        InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare,
+                    ),
+                    // The signer must be a member of the high-threshold committee of the
+                    // transcript in the *post-split* summary block, not of the committee at the
+                    // share's height on the pre-split chain. `invalid_signer` is in the latter
+                    // but not in the former, so a share with otherwise valid (post-split) content
+                    // signed by it must be rejected.
+                    (Some(MalformShare::Signer), true) => Err(
+                        InvalidArtifactReason::SignerNotInThresholdCommittee(invalid_signer),
+                    ),
+                };
 
                 let expected_change_action = match expected_validation_result {
                     Ok(()) => {
