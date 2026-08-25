@@ -484,6 +484,7 @@ pub struct SubnetMetrics {
     ///
     /// Transactions here refer to all messages processed in replicated mode.
     pub update_transactions_total: u64,
+
     /// The total cycles consumed by the canisters that currently exist on this
     /// subnet, i.e. the sum of `CanisterMetrics::consumed_cycles()` over all of
     /// them.
