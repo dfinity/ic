@@ -489,13 +489,9 @@ pub struct SubnetMetrics {
     /// subnet, i.e. the sum of `CanisterMetrics::consumed_cycles()` over all of
     /// them.
     ///
-    /// A *derived* aggregate over `ReplicatedState::canister_states`, refreshed by
-    /// `ReplicatedState::refresh_consumed_cycles_by_canisters` as part of committing
-    /// a state, just before it is hashed. Computing it is `O(|hot canisters|)`; see
-    /// [`crate::CanisterStates::total_consumed_cycles`].
-    ///
-    /// Transient: not persisted, and re-derived from the canisters by
-    /// `ReplicatedState::new_from_checkpoint` on checkpoint load.
+    /// Derived, not persisted: refreshed by
+    /// `ReplicatedState::refresh_consumed_cycles_by_canisters` when a state is
+    /// committed, and re-derived by `ReplicatedState::new_from_checkpoint` on load.
     #[validate_eq(Ignore)]
     pub consumed_cycles_by_canisters: NominalCycles,
 }
@@ -698,15 +694,12 @@ impl SubnetMetrics {
 
     /// All cycles removed from circulation on the subnet, by both deleted and
     /// still-existing canisters: the subnet-level aggregate
-    /// ([`Self::consumed_cycles_total`]) plus [`Self::consumed_cycles_by_canisters`],
-    /// the fold over the canisters that currently exist.
+    /// ([`Self::consumed_cycles_total`]) plus [`Self::consumed_cycles_by_canisters`].
     ///
-    /// **This is the single definition of the quantity, deliberately.** Every
-    /// consumer must agree on it bit for bit: the certified state tree at
-    /// `/subnet/<subnet_id>/metrics` (from certification version `V29`) and the
-    /// `replicated_state_consumed_cycles_since_replica_started` gauge observed by
-    /// `ReplicatedStateMetrics::observe`. Both terms are plain stored fields, so
-    /// this is `O(1)`.
+    /// Both the certified state tree at `/subnet/<subnet_id>/metrics` (from
+    /// certification version `V29`) and the
+    /// `replicated_state_consumed_cycles_since_replica_started` gauge report this
+    /// same definition, so the two cannot drift apart.
     pub fn consumed_cycles_total_including_canisters(&self) -> NominalCycles {
         self.consumed_cycles_total() + self.consumed_cycles_by_canisters
     }

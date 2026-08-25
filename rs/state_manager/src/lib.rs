@@ -3563,8 +3563,10 @@ impl StateManager for StateManagerImpl {
             .observe(state.canister_states().hot_len() as f64);
         state.repartition_canister_states();
 
-        // Like the repartitioning above, this must stay unconditional; see
-        // `ReplicatedState::refresh_consumed_cycles_by_canisters`.
+        // Like the repartitioning above, this must stay unconditional: the aggregate
+        // is derived from the canisters at checkpoint load, so refreshing it here,
+        // right before the state is hashed, is what makes a replica that restarts
+        // from the checkpoint agree with one that keeps running.
         state.refresh_consumed_cycles_by_canisters();
 
         let assert_tip_is_none = |states: &SharedState| {

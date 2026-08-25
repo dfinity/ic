@@ -570,14 +570,9 @@ impl ReplicatedStateMetrics {
                 .get_consumed_cycles_by_use_case(),
         );
 
-        // The total is not re-folded here: `consumed_cycles_total_including_canisters()`
-        // is the single definition of the quantity, shared with the certified state
-        // tree, so the gauge cannot drift from it. It reads
-        // `SubnetMetrics::consumed_cycles_by_canisters`, which is refreshed in
-        // `StateManagerImpl::commit_and_certify` right before the state observed here
-        // is handed off, so the canisters' half is up to date. Only the per-use-case
-        // breakdowns below still fold over the canisters, because no aggregate holds
-        // them.
+        // Read from the shared definition rather than re-folding, so the gauge cannot
+        // drift from the certified state tree. The per-use-case breakdowns below do
+        // still fold over the canisters, as no aggregate holds them.
         self.consumed_cycles.set(
             state
                 .metadata

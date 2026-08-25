@@ -693,18 +693,8 @@ impl ReplicatedState {
     }
 
     /// Refreshes [`crate::metadata_state::SubnetMetrics::consumed_cycles_by_canisters`]
-    /// from the current canister states.
-    ///
-    /// **The caller in `commit_and_certify` must not be made conditional.** The
-    /// field is derived, not persisted, so `Self::new_from_checkpoint` re-derives it
-    /// from the canisters in the checkpoint. Refreshing immediately before the state
-    /// is hashed — with nothing able to mutate a canister in between — is what makes
-    /// the committed value equal the one derived at load, and hence makes a replica
-    /// that keeps running agree with one that restarts from the checkpoint.
-    ///
-    /// Order relative to [`Self::repartition_canister_states`] does not matter:
-    /// repartitioning moves a canister's contribution between the hot fold and the
-    /// cold aggregate, leaving the total unchanged.
+    /// from the current canister states. The field is derived, not persisted;
+    /// [`Self::new_from_checkpoint`] derives it the same way.
     ///
     /// `O(|hot canisters|)`.
     pub fn refresh_consumed_cycles_by_canisters(&mut self) {
