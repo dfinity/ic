@@ -1,5 +1,5 @@
 use crate::address::ecdsa_public_key_to_address;
-use crate::deposit_address::{DepositAddressSchema, deposit_address};
+use crate::deposit_address::{DepositAddressSchema, deposit_address, sweeper_address};
 use crate::endpoints::{CandidBlockTag, DepositErc20Error};
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
@@ -27,7 +27,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet, btree_map};
 use std::fmt::{Display, Formatter};
 use strum_macros::EnumIter;
-use transactions::WithdrawalTransactions;
+use transactions::{SweepId, SweeperTransactionPipeline, WithdrawalTransactions};
 
 pub mod audit;
 pub mod automatic_deposits;
@@ -76,6 +76,11 @@ pub struct State {
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
     pub withdrawal_transactions: WithdrawalTransactions,
+    /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
+    /// its own nonce sequence, independent of the main-address withdrawal pipeline.
+    pub sweeper_transactions: SweeperTransactionPipeline,
+    /// Monotonic counter minting the next [`SweepId`] for the sweeper pipeline.
+    pub next_sweep_id: SweepId,
     pub skipped_blocks: BTreeMap<Address, BTreeSet<BlockNumber>>,
 
     /// Current balance of ETH held by the minter.
@@ -244,6 +249,16 @@ impl State {
         Some(ecdsa_public_key_to_address(&pubkey))
     }
 
+    /// The minter's dedicated sweeper address, or `None` while the master public key is still
+    /// unknown.
+    ///
+    /// Reads the cached key rather than fetching it: a second concurrent `ecdsa_public_key` call
+    /// traps the canister, so the first run is delayed until the install-time fetch has cached it.
+    pub fn sweeper_address(&self) -> Option<Address> {
+        let (master_public_key, chain_code) = self.public_key_and_chain_code()?;
+        Some(sweeper_address(&master_public_key, &chain_code))
+    }
+
     pub fn is_ckerc20_feature_active(&self) -> bool {
         self.ledger_suite_orchestrator_id.is_some()
     }
@@ -377,8 +392,7 @@ impl State {
             "BUG: unsupported ERC-20 token {}",
             request.erc20_contract_address
         );
-        self.withdrawal_transactions
-            .record_withdrawal_request(request);
+        self.withdrawal_transactions.record_request(request);
     }
 
     pub fn record_finalized_transaction(
@@ -420,7 +434,7 @@ impl State {
             .expect("BUG: missing finalized transaction");
         let withdrawal_request = self
             .withdrawal_transactions
-            .get_processed_withdrawal_request(withdrawal_id)
+            .get_processed_request(withdrawal_id)
             .expect("BUG: missing withdrawal request");
         let charged_tx_fee = match withdrawal_request {
             WithdrawalRequest::CkEth(req) | WithdrawalRequest::SweeperFunding(req) => req
@@ -544,11 +558,18 @@ impl State {
             deposit_with_subaccount_helper_contract_address,
             last_deposit_with_subaccount_scraped_block_number,
             ethereum_sweeper_contract_address,
+            next_sweeper_transaction_nonce,
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
                 .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {e}")))?;
             self.withdrawal_transactions
+                .update_next_transaction_nonce(nonce);
+        }
+        if let Some(nonce) = next_sweeper_transaction_nonce {
+            let nonce = TransactionNonce::try_from(nonce)
+                .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {e}")))?;
+            self.sweeper_transactions
                 .update_next_transaction_nonce(nonce);
         }
         if let Some(amount) = minimum_withdrawal_amount {
@@ -622,19 +643,6 @@ impl State {
         self.validate_config()
     }
 
-    /// The minter's dedicated sweeper address, or `None` while the master public key is still
-    /// unknown.
-    ///
-    /// Reads the cached key rather than fetching it: a second concurrent `ecdsa_public_key` call
-    /// traps the canister, so the first run is delayed until the install-time fetch has cached it.
-    pub fn sweeper_address(&self) -> Option<Address> {
-        let (master_public_key, chain_code) = self.public_key_and_chain_code()?;
-        Some(crate::deposit_address::sweeper_address(
-            &master_public_key,
-            &chain_code,
-        ))
-    }
-
     /// When to top the sweeper address up, and to what: derived from the minimum withdrawal
     /// amount, which [`Self::validate_config`] keeps small enough for the derivation to fit.
     pub fn sweeper_funding_config(&self) -> SweeperFundingConfig {
@@ -680,7 +688,10 @@ impl State {
             other.sweeper_contract_address
         );
         ensure_eq!(self.sweeper_funding, other.sweeper_funding);
+        ensure_eq!(self.next_sweep_id, other.next_sweep_id);
 
+        self.sweeper_transactions
+            .is_equivalent_to(&other.sweeper_transactions)?;
         self.withdrawal_transactions
             .is_equivalent_to(&other.withdrawal_transactions)
     }

@@ -114,6 +114,11 @@ type InitArg = record {
 
     // Address of the sweeper smart contract.
     ethereum_sweeper_contract_address : opt text;
+
+    // Nonce of the next transaction to be sent from the dedicated sweeper address (its own nonce
+    // sequence, kept separate from the main address' so a stuck sweep cannot delay a withdrawal).
+    // Defaults to 0, which is correct for a sweeper address that has never sent a transaction.
+    next_sweeper_transaction_nonce : opt nat;
 };
 
 type UpgradeArg = record {
@@ -151,6 +156,11 @@ type UpgradeArg = record {
 
     // Change the sweeper smart contract address.
     ethereum_sweeper_contract_address : opt text;
+
+    // Change the nonce of the next transaction sent from the dedicated sweeper address (its own
+    // nonce sequence, kept separate from the main address' so a stuck sweep cannot delay a
+    // withdrawal).
+    next_sweeper_transaction_nonce : opt nat;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
@@ -196,6 +206,10 @@ type CkErc20Token = record {
 type MinterInfo = record {
     // Ethereum address controlled by the minter via threshold ECDSA.
     minter_address: opt text;
+
+    // Dedicated Ethereum address controlled by the minter via threshold ECDSA, whose ETH
+    // balance is the prepaid gas available for sweeping funded deposit addresses.
+    sweeper_address: opt text;
 
     // (Deprecated) Address of the ETH helper smart contract.
     // Use `eth_helper_contract_address`.
@@ -611,6 +625,31 @@ type Event = record {
         };
         FinalizedTransaction : record {
             withdrawal_id : nat;
+            transaction_receipt : TransactionReceipt;
+        };
+        AcceptedSweepRequest : record {
+            sweep_id : nat;
+            destination : text;
+            amount : nat;
+            // Transaction call data (the delegate sweep call).
+            data : blob;
+            max_transaction_fee : nat;
+            created_at : nat64;
+        };
+        CreatedSweeperTransaction : record {
+            sweep_id : nat;
+            transaction : UnsignedTransaction;
+        };
+        SignedSweeperTransaction : record {
+            sweep_id : nat;
+            raw_transaction : text;
+        };
+        ReplacedSweeperTransaction : record {
+            sweep_id : nat;
+            transaction : UnsignedTransaction;
+        };
+        FinalizedSweeperTransaction : record {
+            sweep_id : nat;
             transaction_receipt : TransactionReceipt;
         };
         ReimbursedEthWithdrawal : record {

@@ -256,9 +256,12 @@ sh_binary(
 )
 
 # the STABLE_VERSION, suffixed with `-test`. Used in testing.
+# See also test_version_txt in ic-os/defs.bzl.
 genrule(
     name = "version-test",
     srcs = ["//bazel:version.txt"],
     outs = ["version-test.txt"],
-    cmd = "sed < $< 's/$$/-test/' > $@",
+    # To generate the output file, appends "-test" to the end of each
+    # line of the input file. The input file has just one line though.
+    cmd = "sed 's/$$/-test/' < $< > $@",
 )

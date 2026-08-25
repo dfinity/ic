@@ -66,6 +66,7 @@ pub struct Erc20Balance {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct MinterInfo {
     pub minter_address: Option<String>,
+    pub sweeper_address: Option<String>,
     #[deprecated(note = "use eth_helper_contract_address instead")]
     pub smart_contract_address: Option<String>,
     pub eth_helper_contract_address: Option<String>,
@@ -519,6 +520,31 @@ pub mod events {
         },
         FinalizedTransaction {
             withdrawal_id: Nat,
+            transaction_receipt: TransactionReceipt,
+        },
+        AcceptedSweepRequest {
+            sweep_id: Nat,
+            destination: String,
+            amount: Nat,
+            /// Transaction call data (the delegate sweep call).
+            data: ByteBuf,
+            max_transaction_fee: Nat,
+            created_at: u64,
+        },
+        CreatedSweeperTransaction {
+            sweep_id: Nat,
+            transaction: UnsignedTransaction,
+        },
+        SignedSweeperTransaction {
+            sweep_id: Nat,
+            raw_transaction: String,
+        },
+        ReplacedSweeperTransaction {
+            sweep_id: Nat,
+            transaction: UnsignedTransaction,
+        },
+        FinalizedSweeperTransaction {
+            sweep_id: Nat,
             transaction_receipt: TransactionReceipt,
         },
         ReimbursedEthWithdrawal {

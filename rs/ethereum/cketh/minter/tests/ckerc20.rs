@@ -27,7 +27,8 @@ use ic_cketh_test_utils::{
     DEFAULT_ERC20_DEPOSIT_LOG_INDEX, DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH,
     DEFAULT_USER_SUBACCOUNT, DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, EFFECTIVE_GAS_PRICE,
     ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS, GAS_USED,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, format_ethereum_address_to_eip_55,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, SWEEPER_ADDRESS,
+    format_ethereum_address_to_eip_55,
 };
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::pocket_ic::flow::call_ledger_icrc1_total_supply;
@@ -2059,6 +2060,7 @@ fn should_retrieve_minter_info() {
         info_at_start,
         MinterInfo {
             minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            sweeper_address: Some(format_ethereum_address_to_eip_55(SWEEPER_ADDRESS)),
             smart_contract_address: Some(format_ethereum_address_to_eip_55(
                 ETH_HELPER_CONTRACT_ADDRESS
             )),
