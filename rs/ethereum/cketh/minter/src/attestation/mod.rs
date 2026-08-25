@@ -24,19 +24,45 @@ const DOMAIN_SEPARATOR: &[u8] = b"ck-deposit-owner";
 
 /// What a deposit address attests to: the account its funds are credited to, bound to one chain and
 /// one deposit-helper deployment.
+///
+/// The fields are private and must come from one configuration: a chain id, helper or schema that
+/// does not match what the minter runs against yields a well-formed signature the delegate's
+/// `ecrecover` rejects, and nothing notices until the sweep reverts on chain.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct AttestationRequest {
     /// Prevents replaying the attestation onto another chain.
-    pub chain_id: u64,
+    chain_id: u64,
     /// The **deposit helper** contract, the one whose deposit events name the account an address
     /// credits — not the sweeper delegate, whose own address is `address(this)` in the delegate
-    /// call and is deliberately absent from the preimage. Attesting under the wrong one produces a
-    /// signature the delegate's `ecrecover` rejects, which shows up only on chain.
-    pub deposit_helper: Address,
-    pub account: Account,
+    /// call and is deliberately absent from the preimage.
+    deposit_helper: Address,
+    account: Account,
+    /// Which deposit-address scheme derives the key that signs, so the signing path cannot
+    /// disagree with the digest.
+    schema: DepositAddressSchema,
 }
 
 impl AttestationRequest {
+    /// Prefer [`crate::state::State::attestation_request`], which takes the chain and the helper
+    /// from the configuration the minter actually runs against.
+    pub(crate) fn new(
+        chain_id: u64,
+        deposit_helper: Address,
+        schema: DepositAddressSchema,
+        account: Account,
+    ) -> Self {
+        Self {
+            chain_id,
+            deposit_helper,
+            account,
+            schema,
+        }
+    }
+
+    pub fn account(&self) -> &Account {
+        &self.account
+    }
+
     /// `"ck-deposit-owner" || chain_id || deposit_helper || principal || subaccount`, exactly what
     /// `abi.encodePacked` produces in `CkSweeperAttested._attestationDigest`. Every field is
     /// fixed-length, so no two requests share a preimage.
@@ -67,11 +93,10 @@ impl AttestationRequest {
 /// * a description of why the threshold-ECDSA signature could not be produced.
 pub async fn sign_attestation(
     request: &AttestationRequest,
-    schema: DepositAddressSchema,
 ) -> Result<TransactionSignature, String> {
     sign_digest(
         &request.digest(),
-        &deposit_derivation_path(schema, &request.account),
+        &deposit_derivation_path(request.schema, &request.account),
     )
     .await
 }

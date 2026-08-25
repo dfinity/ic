@@ -1,4 +1,5 @@
 use crate::attestation::AttestationRequest;
+use crate::deposit_address::DepositAddressSchema;
 use crate::eth_logs::{LedgerSubaccount, encode_principal};
 use crate::test_fixtures::arb::{arb_address, arb_ledger_subaccount, arb_principal};
 use candid::Principal;
@@ -88,25 +89,27 @@ proptest! {
         owner in arb_principal(),
         subaccount in arb_ledger_subaccount(),
     ) {
-        let request = AttestationRequest {
+        let request = AttestationRequest::new(
             chain_id,
             deposit_helper,
-            account: Account {
+            DepositAddressSchema::CkErc20,
+            Account {
                 owner,
                 subaccount: subaccount.map(LedgerSubaccount::to_bytes),
             },
-        };
+        );
 
         assert_eq!(request.preimage().len(), 16 + 32 + 20 + 32 + 32);
     }
 }
 
 fn request(chain_id: u64, deposit_helper: Address, account: Account) -> AttestationRequest {
-    AttestationRequest {
+    AttestationRequest::new(
         chain_id,
         deposit_helper,
+        DepositAddressSchema::CkErc20,
         account,
-    }
+    )
 }
 
 fn helper() -> Address {
