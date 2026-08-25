@@ -1,7 +1,7 @@
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::{Config as ExecutionConfig, TEST_DEFAULT_LOG_MEMORY_USAGE};
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::subnet_config::{DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE, SubnetConfig};
 use ic_execution_environment::units::{KIB, MIB};
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
@@ -2292,8 +2292,7 @@ fn test_canister_log_resize_deducts_cycles() {
 
     // The resize cost is proportional to bytes_used. With a full 2 MiB buffer,
     // expect at least 1.5 MiB * cost_per_byte (allowing slack for partial fill).
-    // Must match LOG_RESIZE_COST_PER_BYTE in canister_manager.rs.
-    let log_resize_cost_per_byte: u64 = 32;
+    let log_resize_cost_per_byte = DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE.get();
     let cycles_deducted = balance_before - balance_after;
     let min_expected = 3 * MIB / 2 * log_resize_cost_per_byte;
     assert_gt!(

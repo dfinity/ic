@@ -2147,12 +2147,10 @@ impl ExecutionEnvironment {
                         .heap_delta_debit
                         .saturating_add(&response.heap_delta_increase);
                 }
-                if let Some(unflushed_checkpoint_op) = response.unflushed_checkpoint_op {
-                    state
-                        .metadata
-                        .unflushed_checkpoint_ops
-                        .push(unflushed_checkpoint_op);
-                }
+                state
+                    .metadata
+                    .unflushed_checkpoint_ops
+                    .extend(response.unflushed_checkpoint_ops);
                 if let Some(snapshot_id) = response.snapshot_to_make_immutable
                     && let Some(canister) =
                         state.canister_state_make_mut(&snapshot_id.get_canister_id())
@@ -3939,7 +3937,7 @@ impl ExecutionEnvironment {
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = state.metadata.network_topology.route(request.sender.get());
         let nns_subnet_id = state.metadata.network_topology.nns_subnet_id;
-        if source_subnet != Some(nns_subnet_id) {
+        let signature_fee = if source_subnet != Some(nns_subnet_id) {
             let signature_fee =
                 self.calculate_signature_fee(&args, state.get_own_subnet_cycles_config());
             let real_signature_fee = signature_fee.real();
@@ -3951,27 +3949,11 @@ impl ExecutionEnvironment {
                         request.method_name, request.payment, real_signature_fee
                     ),
                 ));
-            } else {
-                // Charge for the request.
-                request.payment -= real_signature_fee;
-                let nominal_fee = signature_fee.nominal();
-                let use_case = match args {
-                    ThresholdArguments::Ecdsa(_) => {
-                        state
-                            .metadata
-                            .subnet_metrics
-                            .observe_consumed_cycles_ecdsa_outcalls(nominal_fee);
-                        CyclesUseCase::ECDSAOutcalls
-                    }
-                    ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
-                    ThresholdArguments::VetKd(_) => CyclesUseCase::VetKd,
-                };
-                state
-                    .metadata
-                    .subnet_metrics
-                    .observe_consumed_cycles_with_use_case(use_case, nominal_fee);
             }
-        }
+            Some(signature_fee)
+        } else {
+            None
+        };
 
         let threshold_key = args.key_id();
 
@@ -4011,6 +3993,26 @@ impl ExecutionEnvironment {
                     request.method_name, threshold_key
                 ),
             ));
+        }
+
+        if let Some(signature_fee) = signature_fee {
+            request.payment -= signature_fee.real();
+            let nominal_fee = signature_fee.nominal();
+            let use_case = match args {
+                ThresholdArguments::Ecdsa(_) => {
+                    state
+                        .metadata
+                        .subnet_metrics
+                        .observe_consumed_cycles_ecdsa_outcalls(nominal_fee);
+                    CyclesUseCase::ECDSAOutcalls
+                }
+                ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
+                ThresholdArguments::VetKd(_) => CyclesUseCase::VetKd,
+            };
+            state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(use_case, nominal_fee);
         }
 
         state.metadata.subnet_call_context_manager.push_context(

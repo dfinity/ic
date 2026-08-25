@@ -578,8 +578,6 @@ pub struct CanisterHttpRequest {
 pub struct CanisterHttpResponse {
     #[prost(uint64, tag = "1")]
     pub id: u64,
-    #[prost(message, optional, tag = "4")]
-    pub canister_id: ::core::option::Option<CanisterId>,
     #[prost(message, optional, tag = "3")]
     pub content: ::core::option::Option<CanisterHttpResponseContent>,
 }
