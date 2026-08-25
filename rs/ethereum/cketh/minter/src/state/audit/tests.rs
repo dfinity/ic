@@ -15,7 +15,7 @@ use crate::state::transactions::{
 };
 use crate::timed_sized_map::Timestamp;
 use crate::tx::{
-    AccessList, AccessListItem, Eip1559TransactionRequest, SignedAuthorization,
+    AccessList, AccessListItem, DelegatingSweep, Eip1559TransactionRequest, SignedAuthorization,
     SignedEip1559TransactionRequest, SignedEip7702TransactionRequest, SignedSweepTransaction,
     StorageKey, SweepTransaction, TransactionSignature,
 };
@@ -269,7 +269,10 @@ impl GetEventsFile {
                 let signed = SignedEip7702TransactionRequest::decode(&raw_bytes)
                     .expect("BUG: failed to deserialize sent EIP-7702 sweep transaction");
                 return SignedSweepTransaction::from((
-                    SweepTransaction::Eip7702(signed.transaction().clone()),
+                    SweepTransaction::Eip7702(
+                        DelegatingSweep::new(signed.transaction().clone())
+                            .expect("BUG: sent EIP-7702 sweep installs no delegation"),
+                    ),
                     signed.signature().clone(),
                 ));
             }

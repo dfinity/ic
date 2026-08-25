@@ -2912,8 +2912,8 @@ mod sweep_lane {
         SweepRequest, TransactionPipeline,
     };
     use crate::tx::{
-        Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate, SignableTransaction,
-        SignedAuthorization, SweepTransaction,
+        DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate,
+        SignableTransaction, SignedAuthorization, SweepTransaction,
     };
     use assert_matches::assert_matches;
     use ethnum::u256;
@@ -3158,10 +3158,13 @@ mod sweep_lane {
 
         pipeline.record_created_transaction(
             SweepId(0),
-            SweepTransaction::Eip7702(Eip7702TransactionRequest {
-                authorization_list: vec![authorization(3)],
-                ..tx
-            }),
+            SweepTransaction::Eip7702(
+                DelegatingSweep::new(Eip7702TransactionRequest {
+                    authorization_list: vec![authorization(3)],
+                    ..tx.transaction().clone()
+                })
+                .unwrap(),
+            ),
         );
     }
 

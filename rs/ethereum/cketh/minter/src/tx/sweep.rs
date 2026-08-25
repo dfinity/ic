@@ -27,7 +27,44 @@ pub enum SweepTransaction {
     #[n(0)]
     Eip1559(#[n(0)] Eip1559TransactionRequest),
     #[n(1)]
-    Eip7702(#[n(0)] Eip7702TransactionRequest),
+    Eip7702(#[n(0)] DelegatingSweep),
+}
+
+/// An EIP-7702 sweep, i.e. one whose authorization list installs at least one delegation. A
+/// type-`0x04` transaction with an empty list is invalid, and encoding one traps, so the
+/// transaction is private and reachable only through [`DelegatingSweep::new`] — including when it
+/// comes back from the event log, where a trap would be an unupgradeable canister rather than a
+/// failed operation.
+#[derive(Clone, Eq, PartialEq, Debug, Encode)]
+#[cbor(transparent)]
+pub struct DelegatingSweep(#[n(0)] Eip7702TransactionRequest);
+
+impl DelegatingSweep {
+    /// The sweep `transaction`, or [`None`] if it installs no delegation.
+    pub fn new(transaction: Eip7702TransactionRequest) -> Option<Self> {
+        if transaction.authorization_list.is_empty() {
+            return None;
+        }
+        Some(Self(transaction))
+    }
+
+    pub fn transaction(&self) -> &Eip7702TransactionRequest {
+        &self.0
+    }
+
+    /// The same sweep at a different price: a fee bump leaves the authorization list alone, so what
+    /// it installs is unchanged.
+    fn with_price_and_amount(&self, price: TransactionPrice, amount: Wei) -> Self {
+        Self(self.0.with_price_and_amount(price, amount))
+    }
+}
+
+impl<'b, C> minicbor::Decode<'b, C> for DelegatingSweep {
+    fn decode(d: &mut minicbor::Decoder<'b>, ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
+        Self::new(d.decode_with(ctx)?).ok_or_else(|| {
+            minicbor::decode::Error::message("EIP-7702 sweep with an empty authorization list")
+        })
+    }
 }
 
 impl SweepTransaction {
@@ -40,7 +77,7 @@ impl SweepTransaction {
         if authorizations.is_empty() {
             return Self::Eip1559(transaction);
         }
-        Self::Eip7702(Eip7702TransactionRequest {
+        let delegating = Eip7702TransactionRequest {
             chain_id: transaction.chain_id,
             nonce: transaction.nonce,
             max_priority_fee_per_gas: transaction.max_priority_fee_per_gas,
@@ -51,14 +88,17 @@ impl SweepTransaction {
             data: transaction.data,
             access_list: transaction.access_list,
             authorization_list: authorizations,
-        })
+        };
+        Self::Eip7702(
+            DelegatingSweep::new(delegating).expect("BUG: the authorization list is not empty"),
+        )
     }
 
     /// The delegations this transaction installs, empty for a plain EIP-1559 sweep.
     pub fn authorizations(&self) -> &[SignedAuthorization] {
         match self {
             Self::Eip1559(_) => &[],
-            Self::Eip7702(transaction) => &transaction.authorization_list,
+            Self::Eip7702(sweep) => &sweep.transaction().authorization_list,
         }
     }
 
@@ -66,7 +106,7 @@ impl SweepTransaction {
     fn as_signable(&self) -> &dyn SignableTransaction {
         match self {
             Self::Eip1559(transaction) => transaction,
-            Self::Eip7702(transaction) => transaction,
+            Self::Eip7702(sweep) => sweep.transaction(),
         }
     }
 }
@@ -127,9 +167,7 @@ impl SignableTransaction for SweepTransaction {
             Self::Eip1559(transaction) => {
                 Self::Eip1559(transaction.with_price_and_amount(price, amount))
             }
-            Self::Eip7702(transaction) => {
-                Self::Eip7702(transaction.with_price_and_amount(price, amount))
-            }
+            Self::Eip7702(sweep) => Self::Eip7702(sweep.with_price_and_amount(price, amount)),
         }
     }
 }

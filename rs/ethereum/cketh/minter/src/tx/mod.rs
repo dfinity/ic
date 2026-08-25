@@ -16,7 +16,7 @@ pub use eip_7702::{
 };
 pub use finalized::Finalized;
 pub use signed::{SignableTransaction, Signed, TransactionSignature, sign};
-pub use sweep::{SignedSweepTransaction, SweepTransaction};
+pub use sweep::{DelegatingSweep, SignedSweepTransaction, SweepTransaction};
 
 use crate::{
     eth_rpc::Hash,

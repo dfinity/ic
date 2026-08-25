@@ -571,10 +571,12 @@ mod eip7702 {
 mod sweep {
     use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
     use crate::tx::{
-        AccessList, Eip1559TransactionRequest, SignableTransaction, SignedAuthorization,
-        SignedEip1559TransactionRequest, SignedEip7702TransactionRequest, SignedSweepTransaction,
-        SweepTransaction, TransactionSignature,
+        AccessList, DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest,
+        SignableTransaction, SignedAuthorization, SignedEip1559TransactionRequest,
+        SignedEip7702TransactionRequest, SignedSweepTransaction, SweepTransaction,
+        TransactionSignature,
     };
+    use assert_matches::assert_matches;
     use ethnum::u256;
     use ic_ethereum_types::Address;
     use std::str::FromStr;
@@ -606,6 +608,7 @@ mod sweep {
 
         assert_eq!(sweep.transaction_type(), SET_CODE_TX_ID);
         assert_eq!(sweep.authorizations(), &[authorization()]);
+        let transaction = transaction.transaction().clone();
         assert_eq!(sweep.hash(), transaction.hash());
         assert_eq!(
             SignedSweepTransaction::from((sweep, signature())).raw_transaction_hex_string(),
@@ -649,6 +652,47 @@ mod sweep {
             let decoded: SweepTransaction = minicbor::decode(&encoded).unwrap();
             assert_eq!(decoded, sweep);
         }
+    }
+
+    #[test]
+    fn should_refuse_a_delegating_sweep_that_installs_nothing() {
+        let SweepTransaction::Eip7702(sweep) =
+            SweepTransaction::new(sweep_transaction(), vec![authorization()])
+        else {
+            panic!("BUG: a sweep with an authorization must be a type-0x04 transaction");
+        };
+
+        assert_eq!(
+            DelegatingSweep::new(Eip7702TransactionRequest {
+                authorization_list: vec![],
+                ..sweep.transaction().clone()
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn should_refuse_to_decode_a_delegating_sweep_that_installs_nothing() {
+        let SweepTransaction::Eip7702(sweep) =
+            SweepTransaction::new(sweep_transaction(), vec![authorization()])
+        else {
+            panic!("BUG: a sweep with an authorization must be a type-0x04 transaction");
+        };
+        let empty = Eip7702TransactionRequest {
+            authorization_list: vec![],
+            ..sweep.transaction().clone()
+        };
+        let encoded = minicbor::to_vec(&empty).unwrap();
+
+        assert_matches!(
+            minicbor::decode::<DelegatingSweep>(&encoded),
+            Err(e) if e.to_string().contains("empty authorization list")
+        );
+        assert_eq!(
+            minicbor::decode::<DelegatingSweep>(&minicbor::to_vec(sweep.transaction()).unwrap())
+                .unwrap(),
+            sweep
+        );
     }
 
     fn sweep_transaction() -> Eip1559TransactionRequest {
