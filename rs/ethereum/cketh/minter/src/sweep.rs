@@ -318,15 +318,31 @@ pub async fn enqueue_batched_sweep() {
             );
             return;
         };
-        let attestation = match sign_attestation(&request).await {
-            Ok(attestation) => attestation,
-            Err(e) => {
-                log!(
-                    INFO,
-                    "[enqueue_batched_sweep]: failed attesting {account:?}, skipping the whole sweep: {e}"
-                );
-                return;
-            }
+        // An attestation is signed once per address and reused by every later sweep: it names the
+        // account and the helper, neither of which this sweep changes.
+        let attestation = match read_state(|s| s.attestation(account).cloned()) {
+            Some(attestation) => attestation,
+            None => match sign_attestation(&request).await {
+                Ok(attestation) => {
+                    mutate_state(|s| {
+                        process_event(
+                            s,
+                            EventType::AttestedDepositAddress {
+                                request: request.clone(),
+                                signature: attestation.clone(),
+                            },
+                        )
+                    });
+                    attestation
+                }
+                Err(e) => {
+                    log!(
+                        INFO,
+                        "[enqueue_batched_sweep]: failed attesting {account:?}, skipping the whole sweep: {e}"
+                    );
+                    return;
+                }
+            },
         };
         let delegating = !read_state(|s| s.automatic_deposits.is_delegated(&target.address()));
         if delegating {
