@@ -1940,7 +1940,7 @@ impl UpgradePath {
             .or_default()
             .entry(from)
         {
-            Entry::Occupied(occupied) => {
+            Entry::Occupied(mut occupied) => {
                 println!(
                     "Special Entry for {}  from {:?} to {:?} is being overwritten with new value {:?}",
                     sns_governance_canister_id,
@@ -1948,6 +1948,7 @@ impl UpgradePath {
                     occupied.get(),
                     to
                 );
+                occupied.insert(to);
             }
             Entry::Vacant(vacant) => {
                 vacant.insert(to);
@@ -5645,5 +5646,46 @@ mod test {
                 }
             );
         }
+    }
+
+    #[test]
+    fn test_insert_sns_specific_upgrade_path_entry_overwrites_existing_entry() {
+        let sns_governance_canister_id = CanisterId::from_u64(1000);
+        let from_version = SnsVersion {
+            governance_wasm_hash: vec![1],
+            ..Default::default()
+        };
+        let first_to_version = SnsVersion {
+            governance_wasm_hash: vec![2],
+            ..Default::default()
+        };
+        let second_to_version = SnsVersion {
+            governance_wasm_hash: vec![3],
+            ..Default::default()
+        };
+
+        let mut upgrade_path = UpgradePath::default();
+        upgrade_path.insert_sns_specific_upgrade_path_entry(
+            from_version.clone(),
+            first_to_version.clone(),
+            sns_governance_canister_id,
+        );
+        assert_eq!(
+            upgrade_path.get_next_version(from_version.clone(), sns_governance_canister_id.get()),
+            Some(first_to_version)
+        );
+
+        // Run code under test: reconfigure the same `from_version` entry with a new target.
+        upgrade_path.insert_sns_specific_upgrade_path_entry(
+            from_version.clone(),
+            second_to_version.clone(),
+            sns_governance_canister_id,
+        );
+
+        // The entry must reflect the new target, not the stale first one.
+        assert_eq!(
+            upgrade_path.get_next_version(from_version, sns_governance_canister_id.get()),
+            Some(second_to_version)
+        );
     }
 }

@@ -4,7 +4,6 @@ package types.v1;
 
 import "state/queues/v1/queues.proto";
 import "types/v1/errors.proto";
-import "types/v1/types.proto";
 
 message CanisterHttpPaymentReceipt {
   state.queues.v1.Cycles spent = 1;
@@ -22,9 +21,8 @@ message CanisterHttpRequest {
 }
 
 message CanisterHttpResponse {
+  reserved 2, 4;
   uint64 id = 1;
-  reserved 2;
-  types.v1.CanisterId canister_id = 4;
   CanisterHttpResponseContent content = 3;
 }
 

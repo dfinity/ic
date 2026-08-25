@@ -14,8 +14,8 @@ use ic_cketh_minter::numeric::{
 use ic_cketh_minter::state::audit::{EventType, apply_state_transition};
 use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
 use ic_cketh_minter::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex, WithdrawalRequest,
-    create_transaction,
+    Erc20WithdrawalRequest, EthWithdrawalRequest, PipelineRequest, ReimbursementIndex,
+    WithdrawalRequest,
 };
 use ic_cketh_minter::state::{MintedEvent, State};
 use ic_cketh_minter::tx::{
@@ -588,10 +588,7 @@ fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_in
                 TransactionStatus::Success,
             ),
         ] {
-            apply_state_transition(
-                &mut state,
-                &req.clone().into_accepted_withdrawal_request_event(),
-            );
+            apply_state_transition(&mut state, &accepted_withdrawal_request_event(req.clone()));
             apply_state_transition(
                 &mut state,
                 &EventType::CreatedTransaction {
@@ -615,7 +612,7 @@ fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_in
             ),
         ] {
             let withdrawal_id = req.cketh_ledger_burn_index();
-            apply_state_transition(&mut state, &req.into_accepted_withdrawal_request_event());
+            apply_state_transition(&mut state, &accepted_withdrawal_request_event(req));
             apply_state_transition(
                 &mut state,
                 &EventType::CreatedTransaction {
@@ -729,7 +726,7 @@ fn should_display_finalized_transactions_sorted_by_decreasing_cketh_ledger_burn_
             ),
         ] {
             let id = req.cketh_ledger_burn_index();
-            apply_state_transition(&mut state, &req.into_accepted_withdrawal_request_event());
+            apply_state_transition(&mut state, &accepted_withdrawal_request_event(req));
             apply_state_transition(
                 &mut state,
                 &EventType::CreatedTransaction {
@@ -895,10 +892,7 @@ fn should_display_reimbursed_requests() {
             ),
         ] {
             let id = req.cketh_ledger_burn_index();
-            apply_state_transition(
-                &mut state,
-                &req.clone().into_accepted_withdrawal_request_event(),
-            );
+            apply_state_transition(&mut state, &accepted_withdrawal_request_event(req.clone()));
             apply_state_transition(
                 &mut state,
                 &EventType::CreatedTransaction {
@@ -1216,6 +1210,7 @@ fn initial_state() -> State {
         last_scraped_block_number: candid::Nat::from(INITIAL_LAST_SCRAPED_BLOCK_NUMBER),
         evm_rpc_id: None,
         ethereum_sweeper_contract_address: None,
+        next_sweeper_transaction_nonce: None,
     })
     .expect("valid init args")
 }
@@ -1278,7 +1273,7 @@ fn add_finalized_transactions(state: &mut State, num_transactions: u64) {
             TransactionStatus::Success,
         );
         let id = req.cketh_ledger_burn_index();
-        apply_state_transition(state, &req.into_accepted_withdrawal_request_event());
+        apply_state_transition(state, &accepted_withdrawal_request_event(req));
         apply_state_transition(
             state,
             &EventType::CreatedTransaction {
@@ -1329,7 +1324,7 @@ fn add_reimbursed_transactions(state: &mut State, num_transactions: u64) {
             TransactionStatus::Failure,
         );
         let id = req.cketh_ledger_burn_index();
-        apply_state_transition(state, &req.into_accepted_withdrawal_request_event());
+        apply_state_transition(state, &accepted_withdrawal_request_event(req));
         apply_state_transition(
             state,
             &EventType::CreatedTransaction {
@@ -1421,6 +1416,16 @@ pub fn ckusdt() -> CkErc20Token {
             .unwrap(),
         ckerc20_token_symbol: "ckUSDT".parse().unwrap(),
         ckerc20_ledger_id: "sa4so-piaaa-aaaar-qacnq-cai".parse().unwrap(),
+    }
+}
+
+fn accepted_withdrawal_request_event(request: WithdrawalRequest) -> EventType {
+    match request {
+        WithdrawalRequest::CkEth(request) => EventType::AcceptedEthWithdrawalRequest(request),
+        WithdrawalRequest::CkErc20(request) => EventType::AcceptedErc20WithdrawalRequest(request),
+        WithdrawalRequest::SweeperFunding(request) => {
+            EventType::AcceptedSweeperFundingRequest(request)
+        }
     }
 }
 
@@ -1538,14 +1543,15 @@ fn ckerc20_withdrawal_flow(
         base_fee_per_gas: WeiPerGas::from(250_000_000_u64),
         max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
     };
-    let transaction = create_transaction(
-        &withdrawal_request.clone().into(),
-        nonce,
-        gas_fee,
-        GasAmount::from(65_000_u32),
-        EthereumNetwork::Sepolia,
-    )
-    .unwrap();
+    let pipeline_request: WithdrawalRequest = withdrawal_request.clone().into();
+    let transaction = pipeline_request
+        .create_transaction(
+            nonce,
+            gas_fee,
+            GasAmount::from(65_000_u32),
+            EthereumNetwork::Sepolia,
+        )
+        .unwrap();
     let dummy_signature = TransactionSignature {
         signature_y_parity: false,
         r: Default::default(),

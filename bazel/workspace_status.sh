@@ -22,7 +22,7 @@ else
 fi
 
 # Used as farm metadata
-FARM_METADATA="USER=${USER:-${HOSTUSER:-$(whoami)}}"
+FARM_METADATA="USER=${HOSTUSER:-$(whoami)}"
 if [ -n "${CI_JOB_NAME:-}" ]; then
     FARM_METADATA="$FARM_METADATA;JOB_NAME=$CI_JOB_NAME"
 fi

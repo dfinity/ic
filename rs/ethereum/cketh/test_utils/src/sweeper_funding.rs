@@ -510,6 +510,8 @@ fn install_minter(
         ethereum_block_height: CandidBlockTag::Finalized,
         minimum_withdrawal_amount: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT),
         next_transaction_nonce: Nat::from(0_u8),
+        // The sweeper's own nonce lane starts fresh, as on a new deployment.
+        next_sweeper_transaction_nonce: None,
         last_scraped_block_number: Nat::from(0_u8),
         evm_rpc_id: Some(evm_rpc_id),
         // Sweeping through the contract is out of scope here: funding is what these tests drive.

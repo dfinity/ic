@@ -8,7 +8,7 @@ mod concurrent_fundings {
     use crate::state::State;
     use crate::state::audit::{EventType, apply_state_transition};
     use crate::state::tests::eth_balance_of;
-    use crate::state::transactions::{EthWithdrawalRequest, WithdrawalRequest, create_transaction};
+    use crate::state::transactions::{EthWithdrawalRequest, PipelineRequest, WithdrawalRequest};
     use crate::sweeper::{FundingDecision, plan_funding};
     use crate::test_fixtures::{initial_state, sweeper_funding_request};
     use crate::tx::{
@@ -46,17 +46,17 @@ mod concurrent_fundings {
     }
 
     fn create(state: &mut State, request: &EthWithdrawalRequest) -> Eip1559TransactionRequest {
-        let transaction = create_transaction(
-            &WithdrawalRequest::SweeperFunding(request.clone()),
-            state.withdrawal_transactions.next_transaction_nonce(),
-            GasFeeEstimate {
-                base_fee_per_gas: WeiPerGas::ONE,
-                max_priority_fee_per_gas: WeiPerGas::ONE,
-            },
-            GasAmount::from(21_000_u32),
-            state.ethereum_network,
-        )
-        .expect("test setup: the funding must cover its transaction fee");
+        let transaction = WithdrawalRequest::SweeperFunding(request.clone())
+            .create_transaction(
+                state.withdrawal_transactions.next_transaction_nonce(),
+                GasFeeEstimate {
+                    base_fee_per_gas: WeiPerGas::ONE,
+                    max_priority_fee_per_gas: WeiPerGas::ONE,
+                },
+                GasAmount::from(21_000_u32),
+                state.ethereum_network,
+            )
+            .expect("test setup: the funding must cover its transaction fee");
         apply_state_transition(
             state,
             &EventType::CreatedTransaction {

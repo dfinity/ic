@@ -3817,11 +3817,12 @@ impl Operation for ProcessCanisterHttpInternal {
                     }
                     Ok((response, _payment_receipt)) => {
                         canister_http.pending.remove(&response.id);
-                        if let Some(context) = sm.canister_http_request_contexts().get(&response.id)
+                        if sm
+                            .canister_http_request_contexts()
+                            .contains_key(&response.id)
                         {
                             sm.mock_canister_http_response(
                                 response.id.get(),
-                                context.request.sender,
                                 vec![response.content; sm.nodes.len()],
                             );
                         }
@@ -3932,8 +3933,6 @@ fn process_mock_canister_https_response(
             canister_http_request_id,
         )));
     };
-    let canister_id = context.request.sender;
-
     let response_to_content = |response: &CanisterHttpResponse| match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
             let response = HttpsOutcallResponse {
@@ -4016,11 +4015,7 @@ fn process_mock_canister_https_response(
             subnet.nodes.len(),
         )));
     }
-    subnet.mock_canister_http_response(
-        mock_canister_http_response.request_id,
-        canister_id,
-        contents,
-    );
+    subnet.mock_canister_http_response(mock_canister_http_response.request_id, contents);
     OpOut::NoOutput
 }
 
