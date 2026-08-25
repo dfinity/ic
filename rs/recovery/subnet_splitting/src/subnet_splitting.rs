@@ -345,6 +345,10 @@ impl SubnetSplitting {
                 require_confirmation: !self.recovery_args.skip_prompts,
                 key_file: self.recovery.admin_key_file.clone(),
                 check_ic_replay_height: false,
+                // The `ProposeCupFor*Subnet` steps publish the CUP to the registry before this
+                // step, so waiting for it here would be possible, but the splitting flow is not
+                // covered by the recovery system tests, so we leave its behavior unchanged.
+                install_recovery_cup: None,
             }),
             None => Err(RecoveryError::StepSkipped),
         }

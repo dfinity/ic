@@ -18,6 +18,7 @@ rust_library(
         # Keep sorted.
         "//rs/artifact_pool",
         "//rs/config",
+        "//rs/consensus/cup_utils",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/cup_explorer",
         "//rs/http_utils",

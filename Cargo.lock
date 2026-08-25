@@ -12520,6 +12520,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-sandbox-backend-lib",
  "ic-config",
+ "ic-consensus-cup-utils",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cup-explorer",

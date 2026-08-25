@@ -39,8 +39,19 @@ pub struct ReplayToolArgs {
     pub data_root: Option<PathBuf>,
 
     #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
+    /// The replay will stop at this height and make a checkpoint, unless `verify_only` is set.
     pub replay_until_height: Option<u64>,
+
+    #[clap(long)]
+    /// Only verify the replayed states against the certification (shares) found in the
+    /// certification pool, without making a checkpoint at the target height.
+    ///
+    /// Making a checkpoint at the target height turns that round into a checkpoint round, which
+    /// does not execute the way the subnet's own ordinary round at that height did, so the
+    /// resulting state cannot be compared against the subnet's certification shares. A recovery
+    /// therefore replays twice: once with this flag to detect a state divergence, and once without
+    /// it to produce the checkpoint the recovery CUP refers to.
+    pub verify_only: bool,
 
     #[clap(long)]
     /// Whether or not to skip prompts for user input.

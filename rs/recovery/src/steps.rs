@@ -1,11 +1,11 @@
 use crate::{
     CHECKPOINTS, DataLocation, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_CONSENSUS_POOL_PATH,
-    IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, OLD_IC_STATE,
-    Recovery,
+    IC_CUP_PATH, IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE,
+    OLD_IC_STATE, RECOVERY_CUP_FILE_NAME, RECOVERY_CUP_STAGING_DIR, Recovery,
     admin_helper::IcAdmin,
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_includes},
+    file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_includes, write_bytes},
     get_available_nodes_heights_from_metrics, get_member_node_ids_and_ips,
     registry_helper::RegistryHelper,
     replay_helper,
@@ -16,12 +16,25 @@ use core::convert::From;
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
 use ic_base_types::{CanisterId, NodeId, PrincipalId};
 use ic_config::artifact_pool::ArtifactPoolConfig;
+use ic_consensus_cup_utils::make_registry_cup_from_cup_contents;
 use ic_interfaces::certification::CertificationPool;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::{registry::subnet::v1::CatchUpPackageContents, types::v1 as pb};
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
-use ic_types::{Height, SubnetId, consensus::certification::CertificationMessage};
+use ic_types::{
+    Height, RegistryVersion, SubnetId,
+    consensus::{HasHeight, certification::CertificationMessage},
+};
+use prost::Message;
 use slog::{Logger, debug, info, warn};
-use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
+use std::{
+    collections::HashMap,
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::Command,
+    thread, time,
+    time::Duration,
+};
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -453,7 +466,14 @@ impl Step for ReplayStep {
     fn exec(&self) -> RecoveryResult<()> {
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
 
-        let checkpoint_height = if checkpoint_path.exists() {
+        // Note that the directory existing does not imply that it holds a checkpoint: the
+        // verification pass of [`VerifyReplayStep`] creates the state layout without creating a
+        // checkpoint, and the subnet may have stalled in its first DKG interval, before ever
+        // producing one.
+        let has_checkpoint = checkpoint_path.exists()
+            && !Recovery::get_checkpoint_names(&checkpoint_path)?.is_empty();
+
+        let checkpoint_height = if has_checkpoint {
             Recovery::remove_all_but_highest_checkpoints(&checkpoint_path, &self.logger)?
         } else {
             // If there is no checkpoint, we assume the replay starts from genesis
@@ -472,6 +492,7 @@ impl Step for ReplayStep {
             self.work_dir.join("data"),
             self.subcmd.as_ref().map(|c| c.cmd.clone()),
             self.replay_until_height,
+            /*verify_only=*/ false,
             self.result.clone(),
             self.skip_prompts,
         ))?;
@@ -492,6 +513,61 @@ impl Step for ReplayStep {
 
         info!(self.logger, "Deleting old checkpoints");
         Recovery::remove_all_but_highest_checkpoints(&checkpoint_path, &self.logger)?;
+
+        Ok(())
+    }
+}
+
+/// Replays the same heights as [`ReplayStep`], but *without* creating a checkpoint at the target
+/// height, and compares the resulting states against the certifications and certification shares
+/// collected by [`MergeCertificationPoolsStep`], in order to detect a state divergence.
+///
+/// This has to be a pass of its own over the same heights: creating the checkpoint that the recovery
+/// CUP will refer to turns the round at the target height into a checkpoint round, which charges
+/// canisters for their resource allocation and usage and aborts paused executions. Both change the
+/// cycles balances of the affected canisters, which since certification version `V29` are part of
+/// the certified state, so the state hash of that round no longer matches the one the subnet's own
+/// certification shares attest to.
+pub(crate) struct VerifyReplayStep {
+    pub logger: Logger,
+    pub subnet_id: SubnetId,
+    pub work_dir: PathBuf,
+    pub config: PathBuf,
+    pub replay_until_height: Option<u64>,
+    pub result: PathBuf,
+    pub skip_prompts: bool,
+}
+
+impl Step for VerifyReplayStep {
+    fn descr(&self) -> String {
+        format!(
+            "Replay the finalized blocks without creating a checkpoint and compare the resulting \
+            states against the certifications and certification shares of the subnet, in order to \
+            detect a state divergence. The result is written to {}. Execute:\nic-replay {} \
+            --subnet-id {:?}{} --verify-only",
+            self.result.display(),
+            self.config.display(),
+            self.subnet_id,
+            self.replay_until_height
+                .map(|h| format!(" --replay-until-height {h}"))
+                .unwrap_or_default(),
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        block_on(replay_helper::replay(
+            self.subnet_id,
+            self.config.clone(),
+            /*canister_caller_id=*/ None,
+            self.work_dir.join("data"),
+            /*subcmd=*/ None,
+            self.replay_until_height,
+            /*verify_only=*/ true,
+            self.result.clone(),
+            self.skip_prompts,
+        ))?;
+
+        info!(self.logger, "No state divergence detected.");
 
         Ok(())
     }
@@ -564,6 +640,10 @@ pub struct UploadStateAndRestartStep {
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
     pub check_ic_replay_height: bool,
+    /// When set, wait for the recovery CUP of this subnet to appear in the registry, then build it
+    /// and place it on the node before restarting it, see [`Self::wait_for_registry_cup`] and
+    /// [`Self::build_registry_cup`].
+    pub install_recovery_cup: Option<(RegistryHelper, SubnetId)>,
 }
 
 impl UploadStateAndRestartStep {
@@ -572,6 +652,164 @@ impl UploadStateAndRestartStep {
         sudo systemctl restart setup-permissions;\
         sudo systemctl start ic-replica;\
         sudo systemctl status ic-replica;";
+
+    /// Command deleting the node's certification pool.
+    ///
+    /// The state we upload was produced by `ic-replay`, whose last replayed round is a checkpoint
+    /// round: canisters are charged for their resource allocation and usage and paused executions
+    /// are aborted, neither of which happened in the ordinary round the subnet itself executed at
+    /// that height. Since certification version `V29` the resulting cycles balances are part of the
+    /// certified state, so the certification this node already holds for that height attests to a
+    /// different hash than the state we are handing it. Delivering it panics the state manager
+    /// ("delivered certification has invalid hash").
+    ///
+    /// The replica restarts before the orchestrator has installed the recovery CUP, so at that
+    /// point the certifier still sees the pre-recovery, signed CUP and cannot yet tell that these
+    /// heights belong to a recovery (see `CertifierImpl::certification_skip_height`, which suppresses
+    /// the same certifications once they arrive from peers). Dropping the node's own certifications
+    /// together with the state they attest to closes that window.
+    ///
+    /// We delete the whole pool rather than only the heights at or above the replayed one, which is
+    /// equivalent here: `ic_state` is replaced wholesale, so the node retains no state below the
+    /// uploaded checkpoint for the lower certifications to apply to. The replica recreates an empty
+    /// pool on startup (see `PersistentHeightIndexedPool::new_certification_pool`), and the
+    /// recovery has already collected every node's certifications into its own working directory.
+    /// Waits until the recovery CUP at `recovery_height` is present in the registry.
+    ///
+    /// The node we hand the recovered state to restarts right after, and it is the orchestrator
+    /// (which `ic-replica.service` actually runs) that then starts the replica. The orchestrator
+    /// picks the CUP with the highest height among its local, its peers' and the registry's ones,
+    /// so as long as the recovery CUP has not reached the registry it starts the replica on the
+    /// pre-recovery CUP. The replica then holds the recovered state while consensus still believes
+    /// the subnet is where it was before the recovery, and a certification for the replayed height
+    /// arriving from a peer in that window panics the state manager, as the state it attests to is
+    /// not the one we replayed (see `CertifierImpl::certification_skip_height`, which cannot
+    /// suppress it while the node's CUP is the signed, pre-recovery one).
+    ///
+    /// Waiting here does not close that window -- the orchestrator polls the registry in a task of
+    /// its own, which races the first iteration of its upgrade loop -- but it does keep the node
+    /// from restarting into a subnet whose recovery CUP does not exist yet, which is by far the
+    /// longer part of it.
+    fn wait_for_registry_cup(
+        logger: &Logger,
+        registry_helper: &RegistryHelper,
+        subnet_id: SubnetId,
+        recovery_height: Height,
+    ) -> RecoveryResult<(RegistryVersion, CatchUpPackageContents)> {
+        const RETRIES: usize = 30;
+        const RETRY_DELAY: Duration = Duration::from_secs(10);
+
+        for i in 1..=RETRIES {
+            // The recovery CUP is proposed while we are running, so we have to poll explicitly:
+            // the polling strategy of the recovery may well be `OnlyOnInit`, in which case reading
+            // the registry would keep returning the version we started with.
+            if let Err(err) = registry_helper.poll() {
+                warn!(logger, "[{i}/{RETRIES}] Failed to poll the registry: {err}");
+            }
+
+            match registry_helper.get_cup_contents(subnet_id) {
+                Ok((registry_version, Some(cup_contents)))
+                    if cup_contents.height >= recovery_height.get() =>
+                {
+                    info!(
+                        logger,
+                        "Found the recovery CUP at height {}, set at registry version {}.",
+                        cup_contents.height,
+                        registry_version,
+                    );
+
+                    return Ok((registry_version, cup_contents));
+                }
+                Ok((registry_version, maybe_cup_contents)) => info!(
+                    logger,
+                    "[{i}/{RETRIES}] The registry does not have the recovery CUP at height {} yet \
+                    (found height {:?}, set at registry version {}), retrying in {:?}...",
+                    recovery_height,
+                    maybe_cup_contents.map(|cup_contents| cup_contents.height),
+                    registry_version,
+                    RETRY_DELAY,
+                ),
+                Err(err) => warn!(
+                    logger,
+                    "[{i}/{RETRIES}] Failed to read the CUP contents from the registry: {err}, \
+                    retrying in {RETRY_DELAY:?}...",
+                ),
+            }
+
+            thread::sleep(RETRY_DELAY);
+        }
+
+        Err(RecoveryError::invalid_output_error(format!(
+            "The recovery CUP at height {recovery_height} did not appear in the registry"
+        )))
+    }
+
+    /// Builds the recovery CUP from the given registry contents and returns it in its serialized,
+    /// protobuf form.
+    ///
+    /// We deliberately derive it from the contents found in the registry, using the very same
+    /// function the orchestrator uses, rather than letting `ic-replay` synthesize the contents (as
+    /// `get-recovery-cup` does for the NNS, whose CUP is never published to the registry): the
+    /// contents fix the CUP's time and hence its block, so contents of our own would yield a
+    /// different CUP than the one all other nodes derive from the registry, and this node would
+    /// then be building on a chain of its own.
+    fn build_registry_cup(
+        logger: &Logger,
+        registry_helper: &RegistryHelper,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+        cup_contents: CatchUpPackageContents,
+    ) -> RecoveryResult<Vec<u8>> {
+        let cup = make_registry_cup_from_cup_contents(
+            registry_helper.registry_client().as_ref(),
+            subnet_id,
+            cup_contents,
+            registry_version,
+            &logger.clone().into(),
+        )
+        .ok_or_else(|| {
+            RecoveryError::invalid_output_error(format!(
+                "Failed to build the recovery CUP of subnet {subnet_id} from the contents in the \
+                registry at version {registry_version}"
+            ))
+        })?;
+
+        info!(
+            logger,
+            "Built the recovery CUP at height {}, time {}, state hash {:?}",
+            cup.height(),
+            cup.content.block.as_ref().context.time,
+            cup.content.state_hash,
+        );
+
+        Ok(pb::CatchUpPackage::from(cup).encode_to_vec())
+    }
+
+    /// Command copying the recovery CUP at `source` into place, preserving the permissions of the
+    /// CUP it replaces, the way `guestos-recovery-engine` does.
+    ///
+    /// The ownership is taken care of by the `setup-permissions` service, which
+    /// [`Self::CMD_RESTART_REPLICA`] restarts before starting the replica.
+    fn cmd_install_cup(source: &Path) -> String {
+        let cup_path = PathBuf::from(IC_DATA_PATH).join(IC_CUP_PATH);
+
+        format!(
+            "cup_perms=\"$(sudo stat -c '%a' {cup_path})\"; \
+            sudo cp {source} {cup_path}; \
+            sudo chmod \"$cup_perms\" {cup_path};",
+            cup_path = cup_path.display(),
+            source = source.display(),
+        )
+    }
+
+    fn cmd_remove_certification_pool() -> String {
+        format!(
+            "sudo rm -rf {};",
+            PathBuf::from(IC_DATA_PATH)
+                .join(IC_CERTIFICATIONS_PATH)
+                .display()
+        )
+    }
 }
 impl Step for UploadStateAndRestartStep {
     fn descr(&self) -> String {
@@ -580,8 +818,13 @@ impl Step for UploadStateAndRestartStep {
             DataLocation::Local => "local replica",
         };
         format!(
-            "Stopping {replica}, uploading and replacing state from {}, set access \
-            rights, restart replica.",
+            "{}Stopping {replica}, uploading and replacing state from {}, deleting the \
+            certification pool, set access rights, restart replica.",
+            if self.install_recovery_cup.is_some() {
+                "Waiting for the recovery CUP to be present in the registry. "
+            } else {
+                ""
+            },
             self.data_src.display()
         )
     }
@@ -607,6 +850,41 @@ impl Step for UploadStateAndRestartStep {
                 )));
             }
         }
+
+        // The CUP we place on the node below, if any.
+        let maybe_cup_proto = match &self.install_recovery_cup {
+            Some((registry_helper, subnet_id)) => {
+                let replay_height = replay_helper::read_output(
+                    self.work_dir.join(replay_helper::OUTPUT_FILE_NAME),
+                )?
+                .height;
+
+                let (registry_version, cup_contents) = Self::wait_for_registry_cup(
+                    &self.logger,
+                    registry_helper,
+                    *subnet_id,
+                    Recovery::get_recovery_height(replay_height),
+                )?;
+
+                Some(Self::build_registry_cup(
+                    &self.logger,
+                    registry_helper,
+                    *subnet_id,
+                    registry_version,
+                    cup_contents,
+                )?)
+            }
+            None => None,
+        };
+
+        let maybe_local_cup_file = maybe_cup_proto
+            .map(|cup_proto| {
+                let local_cup_file = self.work_dir.join(RECOVERY_CUP_FILE_NAME);
+                write_bytes(&local_cup_file, cup_proto)?;
+
+                Ok::<_, RecoveryError>(local_cup_file)
+            })
+            .transpose()?;
 
         let ic_state_path = PathBuf::from(IC_DATA_PATH).join(IC_STATE);
 
@@ -669,6 +947,30 @@ impl Step for UploadStateAndRestartStep {
             info!(self.logger, "Restarting replica...");
             ssh_helper.ssh(Self::CMD_STOP_REPLICA.to_string())?;
             ssh_helper.ssh(cmd_replace_state)?;
+            ssh_helper.ssh(Self::cmd_remove_certification_pool())?;
+
+            if let Some(local_cup_file) = &maybe_local_cup_file {
+                info!(self.logger, "Placing the recovery CUP on the node...");
+                // `IC_DATA_PATH` is not writable by the user we upload as, so we stage the CUP in a
+                // directory we create and hand to that user first, just like the state above.
+                let staging_dir = PathBuf::from(IC_DATA_PATH).join(RECOVERY_CUP_STAGING_DIR);
+                let staged_cup = staging_dir.join(RECOVERY_CUP_FILE_NAME);
+                ssh_helper.ssh(format!(
+                    "sudo mkdir -p {staging_dir}; sudo chown -R {ssh_user} {staging_dir};",
+                    staging_dir = staging_dir.display(),
+                    ssh_user = self.ssh_user,
+                ))?;
+                ssh_helper.rsync(
+                    local_cup_file.display().to_string(),
+                    ssh_helper.remote_path(&staged_cup),
+                )?;
+                ssh_helper.ssh(Self::cmd_install_cup(&staged_cup))?;
+                ssh_helper.ssh(format!(
+                    "sudo rm -rf {staging_dir};",
+                    staging_dir = staging_dir.display()
+                ))?;
+            }
+
             ssh_helper.ssh(Self::CMD_RESTART_REPLICA.to_string())?;
         } else {
             let log = self.require_confirmation.then_some(&self.logger);
@@ -699,6 +1001,24 @@ impl Step for UploadStateAndRestartStep {
             mv_to_target.arg(&self.data_src);
             mv_to_target.arg(ic_state_path);
             confirm_exec_cmd(&mut mv_to_target, log)?;
+
+            info!(self.logger, "Deleting the certification pool...");
+            confirm_exec_cmd(
+                Command::new("bash")
+                    .arg("-c")
+                    .arg(Self::cmd_remove_certification_pool()),
+                log,
+            )?;
+
+            if let Some(local_cup_file) = &maybe_local_cup_file {
+                info!(self.logger, "Placing the recovery CUP on the node...");
+                confirm_exec_cmd(
+                    Command::new("bash")
+                        .arg("-c")
+                        .arg(Self::cmd_install_cup(local_cup_file)),
+                    log,
+                )?;
+            }
 
             info!(self.logger, "Restarting replica...");
             confirm_exec_cmd(
@@ -802,6 +1122,7 @@ impl Step for UpdateLocalStoreStep {
             self.work_dir.join("data"),
             Some(SubCommand::UpdateRegistryLocalStore),
             None,
+            /*verify_only=*/ false,
             self.work_dir.join("update_local_store.txt"),
             self.skip_prompts,
         ))?;
@@ -843,6 +1164,7 @@ impl Step for GetRecoveryCUPStep {
                 output_file: self.work_dir.join("cup.proto"),
             })),
             None,
+            /*verify_only=*/ false,
             self.result.clone(),
             self.skip_prompts,
         ))?;

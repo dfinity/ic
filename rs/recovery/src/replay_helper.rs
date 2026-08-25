@@ -12,9 +12,11 @@ use ic_replay::{
 use std::{path::PathBuf, str::FromStr};
 
 pub const OUTPUT_FILE_NAME: &str = "replay_result.txt";
+pub const VERIFY_OUTPUT_FILE_NAME: &str = "verify_replay_result.txt";
 
 /// Basic blocking call of `ic-replay` for the given subnet id and config.
 /// Output is stored in the given file in JSON format
+#[allow(clippy::too_many_arguments)]
 pub async fn replay(
     subnet_id: SubnetId,
     config: PathBuf,
@@ -22,6 +24,7 @@ pub async fn replay(
     data_root: PathBuf,
     subcmd: Option<SubCommand>,
     replay_until_height: Option<u64>,
+    verify_only: bool,
     output: PathBuf,
     skip_prompts: bool,
 ) -> RecoveryResult<StateParams> {
@@ -30,6 +33,7 @@ pub async fn replay(
         config: Some(config),
         canister_caller_id,
         replay_until_height,
+        verify_only,
         subcmd,
         data_root: Some(data_root),
         skip_prompts,

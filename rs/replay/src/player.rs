@@ -11,7 +11,7 @@ use ic_artifact_pool::{
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
 use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
-use ic_consensus::consensus::batch_delivery::deliver_batches;
+use ic_consensus::consensus::batch_delivery::{ReplayTarget, deliver_batches};
 use ic_consensus_certification::VerifierImpl;
 use ic_consensus_utils::{lookup_replica_version, membership::Membership, pool_reader::PoolReader};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
@@ -138,6 +138,11 @@ pub(crate) struct Player {
     // The target height until which the state will be replayed.
     // None means finalized height.
     replay_target_height: Option<u64>,
+    // Whether to only verify the replayed states against the certification (shares) found in the
+    // certification pool, without persisting a checkpoint of the state at the target height.
+    //
+    // See `Player::with_verify_only` for the rationale.
+    verify_only: bool,
     runtime: Runtime,
 }
 
@@ -381,6 +386,7 @@ impl Player {
             _async_log_guard,
             tmp_dir: None,
             replay_target_height: None,
+            verify_only: false,
             runtime,
         }
     }
@@ -388,6 +394,27 @@ impl Player {
     /// Set the replay target height
     pub fn with_replay_target_height(mut self, replay_target_height: Option<u64>) -> Self {
         self.replay_target_height = replay_target_height;
+        self
+    }
+
+    /// Only verify the replayed states against the certification (shares) found in the
+    /// certification pool, instead of persisting a checkpoint of the state at the target height.
+    ///
+    /// Persisting a checkpoint at the target height turns that round into a checkpoint round, which
+    /// does not execute the way the ordinary round the subnet itself has executed at that height
+    /// did: canisters are charged for their resource allocation and usage, and paused executions
+    /// are aborted. Both change the cycles balances of the affected canisters, which since
+    /// certification version `V29` are reflected in the certified state, so the resulting state
+    /// hash differs from the one the subnet's own certification shares attest to. Comparing the two
+    /// would therefore always report a state divergence.
+    ///
+    /// A recovery hence replays twice: a first pass with `verify_only` set, which executes the
+    /// round at the target height exactly like the subnet did and can thus meaningfully compare the
+    /// result against the certification shares, and a second pass without it, which produces the
+    /// checkpoint the recovery CUP refers to. The second pass skips the comparison against the
+    /// certification shares, as the first pass has already performed it.
+    pub fn with_verify_only(mut self, verify_only: bool) -> Self {
+        self.verify_only = verify_only;
         self
     }
 
@@ -499,18 +526,29 @@ impl Player {
             self.message_routing.as_ref(),
             pool_reader,
             membership,
-            Some(target_height),
+            Some(ReplayTarget {
+                height: target_height,
+                persist_batch: !self.verify_only,
+            }),
         );
         self.wait_for_state(last_batch_height);
 
         // Redeliver certifications to state manager. It will panic if there is any
         // mismatch.
         let manual_inspection_required =
-            self.redeliver_certifications(certification_pool, validator);
+            self.redeliver_certifications(certification_pool, validator, last_batch_height);
 
         println!("All blocks successfully replayed.");
-        // We only want to persist the checkpoint after the latest batch.
-        self.state_manager.remove_states_below(last_batch_height);
+        if self.verify_only {
+            println!(
+                "Not removing the states below height {last_batch_height}: no checkpoint was \
+                created at that height, and the checkpoint we started from is the one the replay \
+                pass creating the checkpoint will start from."
+            );
+        } else {
+            // We only want to persist the checkpoint after the latest batch.
+            self.state_manager.remove_states_below(last_batch_height);
+        }
 
         Ok((manual_inspection_required, invalid_artifacts))
     }
@@ -521,10 +559,17 @@ impl Player {
     // For all locally computed state heights for which we can't find full a certification, compare the state's
     // hash to the certification shares found at that height. See `is_manual_share_investigation_required` for details.
     // Returns whether manual inspection is required or not.
+    //
+    // Unless this is a verification pass (see `Player::with_verify_only`), the state at
+    // `target_height` is excluded from both comparisons: the round at that height was executed as a
+    // checkpoint round, so it does not execute the way the subnet's own ordinary round at that
+    // height did and its state can therefore not be compared against what the subnet attested to.
+    // Comparing it is the job of the verification pass.
     fn redeliver_certifications(
         &self,
         certification_pool: &CertificationPoolImpl,
         validator: &ReplayValidator,
+        target_height: Height,
     ) -> bool {
         print!("Redelivering certifications:");
         let mut cert_heights = Vec::from_iter(certification_pool.certified_heights());
@@ -550,11 +595,28 @@ impl Player {
                     )
                 })
                 .ok();
+            if !self.verify_only && h == target_height {
+                println!(
+                    "\nNot delivering the certification at the target height {h}: \
+                    the round at that height was executed as a checkpoint round."
+                );
+                continue;
+            }
             self.state_manager
                 .deliver_state_certification(certification);
             print!(" {h}");
         }
         println!();
+
+        if !self.verify_only {
+            println!(
+                "Skipping the comparison of uncertified state hashes to certification shares: \
+                the round at the target height was executed as a checkpoint round, which does not \
+                execute the way the subnet's own ordinary round at that height did. Run ic-replay \
+                with `--verify-only` to perform the comparison."
+            );
+            return false;
+        }
 
         println!("Comparing uncertified state hashes to certification shares:");
         self.registry.poll_once().ok();
@@ -700,7 +762,7 @@ impl Player {
         message_routing: &dyn MessageRouting,
         pool: &PoolReader<'_>,
         membership: &Membership,
-        replay_target_height: Option<Height>,
+        replay_target: Option<ReplayTarget>,
     ) -> Height {
         let expected_batch_height = message_routing.expected_batch_height();
         let last_batch_height = loop {
@@ -711,7 +773,7 @@ impl Player {
                 &*self.registry,
                 self.subnet_id,
                 &self.log,
-                replay_target_height,
+                replay_target,
             ) {
                 Ok(h) => break h,
                 Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),
@@ -1010,7 +1072,10 @@ impl Player {
                 self.message_routing.as_ref(),
                 &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
                 self.membership.as_ref().unwrap(),
-                replay_target_height,
+                replay_target_height.map(|height| ReplayTarget {
+                    height,
+                    persist_batch: true,
+                }),
             );
             self.wait_for_state(last_batch_height);
             if let Some(height) = target_height

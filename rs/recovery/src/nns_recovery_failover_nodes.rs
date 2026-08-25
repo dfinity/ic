@@ -39,6 +39,19 @@ pub enum StepType {
     MergeCertificationPools,
     DownloadConsensusPool,
     DownloadState,
+    /// Replay the finalized consensus artifacts on the downloaded state *without* creating a
+    /// checkpoint and without adding any registry content, and compare the resulting states against
+    /// the certifications and certification shares merged above, in order to find out whether the
+    /// subnet nodes had diverged. The state produced by this step is thrown away; only
+    /// `ICReplayWithRegistryContent` produces the state we will recover the subnet with.
+    ///
+    /// The two cannot be done in one pass: creating the checkpoint the recovery CUP will refer to
+    /// turns the round at the target height into a checkpoint round, which does not execute the way
+    /// the subnet's own ordinary round at that height did. Canisters are charged for their resource
+    /// allocation and usage and paused executions are aborted, both of which change cycles balances,
+    /// so the state hash of that round would never match what the subnet's certification shares
+    /// attest to.
+    VerifyReplay,
     ProposeToCreateSubnet,
     DownloadParentNNSStore,
     ICReplayWithRegistryContent,
@@ -236,7 +249,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             }
 
             #[allow(clippy::collapsible_match)]
-            StepType::ICReplayWithRegistryContent => {
+            StepType::VerifyReplay | StepType::ICReplayWithRegistryContent => {
                 if self.params.replay_until_height.is_none() {
                     self.params.replay_until_height =
                         read_optional(&self.logger, "Replay until height: ");
@@ -352,6 +365,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 }
             }
 
+            StepType::VerifyReplay => Ok(Box::new(self.recovery.get_verify_replay_step(
+                self.params.subnet_id,
+                self.params.replay_until_height,
+                !self.interactive(),
+            ))),
+
             StepType::ICReplayWithRegistryContent => Ok(Box::new(
                 self.recovery.get_replay_with_registry_content_step(
                     self.params.subnet_id,
@@ -455,6 +474,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                         SshUser::Admin,
                         method,
                         self.recovery.admin_key_file.clone(),
+                        // `WaitForCUP` already confirmed the recovery CUP before this step.
+                        /*install_recovery_cup=*/
+                        None,
                     )))
                 } else {
                     Err(RecoveryError::StepSkipped)

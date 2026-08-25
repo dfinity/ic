@@ -157,6 +157,9 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             }
         };
 
+        let skip_below = self.certification_skip_height();
+        let should_skip = |height: Height| skip_below.is_some_and(|skip_below| height < skip_below);
+
         // First, we iterate over requested heights and deliver certifications to the
         // state manager, if they're available or return those hashes which do not have
         // certifications and for which we did not issue a share yet.
@@ -164,6 +167,7 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             .state_manager
             .list_state_hashes_to_certify()
             .into_iter()
+            .filter(|state_hash_metadata| !should_skip(state_hash_metadata.height))
             .filter(|state_hash_metadata| !deliver_state_certification(state_hash_metadata.height))
             .collect();
         trace!(
@@ -176,6 +180,7 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             .state_manager
             .list_state_heights_to_certify()
             .into_iter()
+            .filter(|height| !should_skip(*height))
             .filter(|height| !deliver_state_certification(*height))
             .collect();
 
@@ -462,6 +467,38 @@ impl CertifierImpl {
                 )
             })
             .collect()
+    }
+
+    /// Returns the height below which no certification work should be done, if any.
+    ///
+    /// This is the height of the latest CUP if that CUP is unsigned, i.e. a genesis or a recovery
+    /// CUP, and `None` otherwise.
+    ///
+    /// After a subnet recovery the states we hold below the recovery CUP height are the ones the
+    /// recovery introduced rather than the ones the subnet executed: the recovered state is
+    /// re-introduced under the CUP height (see `StateManagerImpl::fetch_state`), leaving the
+    /// original, lower-height checkpoint it was copied from behind. The certifications and shares
+    /// our peers still hold for those heights attest to the states the subnet executed before the
+    /// recovery, which differ from the recovered ones whenever the recovery charged canisters for
+    /// their resource allocation and usage or aborted their paused executions -- both of which
+    /// `ic-replay` does in the checkpoint round it ends on, and both of which change cycles
+    /// balances, which are part of the certified state since certification version `V29`.
+    /// Delivering such a certification to the state manager is indistinguishable from a genuine
+    /// state divergence and panics the replica.
+    ///
+    /// Nothing is lost by skipping those heights: the node only needs the states at and above the
+    /// recovery CUP height, and the artifacts below it are purged shortly after anyway, see
+    /// [`Self::get_purge_height`]. Note also that this does not affect a node which is merely
+    /// lagging behind the rest of the subnet, as its latest CUP is a signed one.
+    ///
+    /// This only covers the certifications our peers hold: the node the recovery uploads the state
+    /// to restarts before the orchestrator has installed the recovery CUP, so it would deliver its
+    /// *own* certification for the replaced height while still running on the pre-recovery, signed
+    /// CUP. `ic-recovery` therefore drops that node's certification pool together with the state it
+    /// replaces, see `UploadStateAndRestartStep::cmd_remove_certification_pool`.
+    fn certification_skip_height(&self) -> Option<Height> {
+        let cup = self.consensus_pool_cache.catch_up_package();
+        (!cup.is_signed()).then(|| cup.height())
     }
 
     // Returns the purge height, if artifacts below this height can be purged.

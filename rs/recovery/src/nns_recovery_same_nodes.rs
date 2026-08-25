@@ -55,6 +55,19 @@ pub enum StepType {
     /// admin access because a readonly key cannot be deployed, like we do in application subnet
     /// recoveries.
     DownloadState,
+    /// In this step we replay the finalized consensus artifacts on the state downloaded in the
+    /// previous step *without* creating a checkpoint and without adding any ingress message, and
+    /// compare the resulting states against the certifications and certification shares we merged
+    /// above, in order to find out whether the subnet nodes had diverged. The state produced by this
+    /// step is thrown away; only the next step produces the state we will recover the subnet with.
+    ///
+    /// The two cannot be done in one pass: creating the checkpoint the recovery CUP will refer to
+    /// turns the round at the target height into a checkpoint round, which does not execute the way
+    /// the subnet's own ordinary round at that height did. Canisters are charged for their resource
+    /// allocation and usage and paused executions are aborted, both of which change cycles balances,
+    /// so the state hash of that round would never match what the subnet's certification shares
+    /// attest to.
+    VerifyReplay,
     /// In this step we will take the latest persisted subnet state downloaded in the previous step
     /// and apply the finalized consensus artifacts on it via the deterministic state machine part
     /// of the replica to hopefully obtain the exact state which existed in the memory of all subnet
@@ -293,6 +306,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
+            StepType::VerifyReplay => {
+                if self.params.replay_until_height.is_none() {
+                    self.params.replay_until_height =
+                        read_optional(&self.logger, "Replay until height: ");
+                }
+            }
+
             StepType::ICReplay => {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version = read_optional(&self.logger, "Upgrade version: ");
@@ -406,6 +426,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 None => Err(RecoveryError::StepSkipped),
             },
 
+            StepType::VerifyReplay => Ok(Box::new(self.recovery.get_verify_replay_step(
+                self.params.subnet_id,
+                self.params.replay_until_height,
+                !self.interactive(),
+            ))),
+
             StepType::ICReplay => {
                 if let Some(upgrade_version) = &self.params.upgrade_version {
                     let params = self.params.clone();
@@ -483,6 +509,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         SshUser::Admin,
                         method,
                         self.recovery.admin_key_file.clone(),
+                        // The recovery CUP of the NNS is not published to the registry but uploaded
+                        // to the nodes directly, in `UploadCUPAndRegistry`.
+                        /*install_recovery_cup=*/
+                        None,
                     )))
                 } else {
                     Err(RecoveryError::StepSkipped)

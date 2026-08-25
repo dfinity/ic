@@ -8,7 +8,7 @@ use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key_from_pem_file, p
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
-    subnet::v1::{SubnetListRecord, SubnetRecord},
+    subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_client_helpers::{routing_table::RoutingTableRegistry, subnet::SubnetRegistry};
 use ic_registry_keys::{make_crypto_threshold_signing_pubkey_key, make_subnet_list_record_key};
@@ -102,6 +102,30 @@ impl RegistryHelper {
         })
     }
 
+    /// Returns the [CatchUpPackageContents] of the given subnet, i.e. the material its nodes use
+    /// to construct a genesis or recovery CUP, together with the registry version at which that
+    /// record was last *modified*.
+    ///
+    /// Note that this version is not the latest registry version: it is the one
+    /// [`ic_consensus_cup_utils::make_registry_cup`] feeds into the CUP, and hence the one every
+    /// node derives the very same CUP from, no matter how far its own registry has advanced. Do
+    /// not substitute the latest version for it, or the CUP built here will differ from the CUP
+    /// the other nodes of the subnet build.
+    pub fn get_cup_contents(
+        &self,
+        subnet_id: SubnetId,
+    ) -> VersionedRecoveryResult<CatchUpPackageContents> {
+        let registry_version = self.latest_registry_version()?;
+        let versioned_record = self
+            .registry_client()
+            .get_cup_contents(subnet_id, registry_version)
+            .map_err(|err| {
+                RecoveryError::RegistryError(format!("Failed to get the CUP contents: {err}"))
+            })?;
+
+        Ok((versioned_record.version, versioned_record.value))
+    }
+
     /// Returns the [SubnetRecord] of the given subnet.
     pub fn get_subnet_record(&self, subnet_id: SubnetId) -> VersionedRecoveryResult<SubnetRecord> {
         self.get(|registry_version, registry_client| {
@@ -123,17 +147,22 @@ impl RegistryHelper {
         })
     }
 
+    /// Polls the [RegistryReplicator] for the most recent version of the registry, regardless of
+    /// the [RegistryPollingStrategy].
+    ///
+    /// Needed to observe registry changes which happen while the recovery is running, which the
+    /// [RegistryPollingStrategy::OnlyOnInit] strategy would otherwise never pick up.
+    pub fn poll(&self) -> RecoveryResult<()> {
+        block_on(self.registry_replicator.poll()).map_err(|err| {
+            RecoveryError::RegistryError(format!("Failed to poll the newest registry: {err}"))
+        })
+    }
+
     /// Polls the [RegistryReplicator] for the most recent version of the registry and then
     /// gets the latest registry version.
     pub fn latest_registry_version(&self) -> RecoveryResult<RegistryVersion> {
         match self.polling_strategy {
-            RegistryPollingStrategy::WithEveryRead => {
-                block_on(self.registry_replicator.poll()).map_err(|err| {
-                    RecoveryError::RegistryError(format!(
-                        "Failed to poll the newest registry: {err}",
-                    ))
-                })?;
-            }
+            RegistryPollingStrategy::WithEveryRead => self.poll()?,
             RegistryPollingStrategy::OnlyOnInit => {}
         }
 

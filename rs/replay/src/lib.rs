@@ -52,6 +52,7 @@ mod validator;
 ///     config: Some(PathBuf::from("/path/to/ic.json5")),
 ///     canister_caller_id: None,
 ///     replay_until_height: None,
+///     verify_only: false,
 ///     data_root: None,
 ///     subcmd: Some(SubCommand::RestoreFromBackup(RestoreFromBackupCmd {
 ///         registry_local_store_path: PathBuf::from("/path/to/ic_registry_local_store"),
@@ -99,7 +100,14 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             .0;
 
         let target_height = args.replay_until_height;
-        if let Some(h) = target_height {
+        let verify_only = args.verify_only;
+        if verify_only && subcmd.is_some() {
+            println!("`--verify-only` cannot be combined with a subcommand!");
+            std::process::exit(1);
+        }
+        if let Some(h) = target_height
+            && !verify_only
+        {
             let question = format!("The checkpoint created at height {h} ")
                 + "cannot be used for deterministic state computation if it is not a CUP height.\n"
                 + "Continue?";
@@ -127,7 +135,9 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
 
         {
             let _enter_guard = rt.enter();
-            let player = Player::new(cfg, subnet_id).with_replay_target_height(target_height);
+            let player = Player::new(cfg, subnet_id)
+                .with_replay_target_height(target_height)
+                .with_verify_only(verify_only);
 
             if let Some(SubCommand::GetRecoveryCup(cmd)) = subcmd {
                 cmd_get_recovery_cup(&player, cmd).unwrap();

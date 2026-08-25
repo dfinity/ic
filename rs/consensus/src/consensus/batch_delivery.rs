@@ -43,6 +43,26 @@ use ic_types::{
 };
 use std::collections::BTreeMap;
 
+/// Instructs [`deliver_batches`] up to which height batches should be delivered and whether the
+/// batch at that height should trigger the creation of a checkpoint.
+///
+/// This should only be used by the `ic-replay` tool.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReplayTarget {
+    /// Batches are delivered up to `min(height, finalized_height)`.
+    pub height: Height,
+    /// Whether the batch at `height` requires a full state hash, i.e. triggers the creation of a
+    /// checkpoint.
+    ///
+    /// Note that this also turns the round at `height` into an `ExecutionRoundType::CheckpointRound`,
+    /// which does not execute the way the ordinary round the subnet itself has executed at that
+    /// height did: canisters are charged for their resource allocation and usage, and paused
+    /// executions are aborted. The resulting state therefore generally differs from the one the
+    /// subnet had at `height`, which is why `ic-replay` only sets this flag once it is done
+    /// comparing the replayed states against the certification (shares) of the subnet.
+    pub persist_batch: bool,
+}
+
 /// Deliver all finalized blocks from
 /// `message_routing.expected_batch_height` to `finalized_height` via
 /// `MessageRouting` and return the last delivered batch height.
@@ -54,9 +74,9 @@ pub fn deliver_batches(
     subnet_id: SubnetId,
     log: &ReplicaLogger,
     // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
-    // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
-    // deliver all bathes up to the height `min(h, finalized_height)`.
-    max_batch_height_to_deliver: Option<Height>,
+    // deliver all batches until the finalized height. If it is set to `Some(target)`, we will
+    // deliver all bathes up to the height `min(target.height, finalized_height)`.
+    replay_target: Option<ReplayTarget>,
 ) -> Result<Height, MessageRoutingError> {
     deliver_batches_with_result_processor(
         message_routing,
@@ -65,7 +85,7 @@ pub fn deliver_batches(
         registry_client,
         subnet_id,
         log,
-        max_batch_height_to_deliver,
+        replay_target,
         /*result_processor=*/ None,
     )
 }
@@ -82,16 +102,16 @@ pub(crate) fn deliver_batches_with_result_processor(
     subnet_id: SubnetId,
     log: &ReplicaLogger,
     // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
-    // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
-    // deliver all bathes up to the height `min(h, finalized_height)`.
-    max_batch_height_to_deliver: Option<Height>,
+    // deliver all batches until the finalized height. If it is set to `Some(target)`, we will
+    // deliver all bathes up to the height `min(target.height, finalized_height)`.
+    replay_target: Option<ReplayTarget>,
     result_processor: Option<&dyn Fn(&Result<(), MessageRoutingError>, BlockStats, BatchStats)>,
 ) -> Result<Height, MessageRoutingError> {
     let finalized_height = pool.get_finalized_height();
-    // If `max_batch_height_to_deliver` is specified and smaller than
-    // `finalized_height`, we use it, otherwise we use `finalized_height`.
-    let target_height = max_batch_height_to_deliver
-        .unwrap_or(finalized_height)
+    // If a replay target height is specified and smaller than `finalized_height`, we use it,
+    // otherwise we use `finalized_height`.
+    let target_height = replay_target
+        .map_or(finalized_height, |target| target.height)
         .min(finalized_height);
 
     let mut height = message_routing.expected_batch_height();
@@ -219,9 +239,11 @@ pub(crate) fn deliver_batches_with_result_processor(
         };
         let (consensus_responses, canister_http_spent) =
             generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
-        // This flag can only be true, if we've called deliver_batches with a height
-        // limit.  In this case we also want to have a checkpoint for that last height.
-        let persist_batch = Some(height) == max_batch_height_to_deliver;
+        // This flag can only be true, if we've called deliver_batches with a height limit and
+        // asked for the batch at that height to be persisted. In this case we also want to have a
+        // checkpoint for that last height.
+        let persist_batch =
+            replay_target.is_some_and(|target| target.persist_batch && target.height == height);
         let requires_full_state_hash = block.payload.is_summary() || persist_batch;
         let batch_content = match block.payload.as_ref() {
             BlockPayload::Summary(_summary_payload) => BatchContent::Data {

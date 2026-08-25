@@ -70,6 +70,13 @@ pub const CUPS_DIR: &str = "cups";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
 pub const IC_CONSENSUS_POOL_PATH: &str = "ic_consensus_pool";
 pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
+/// Path of the CUP the orchestrator persists locally, relative to [`IC_DATA_PATH`].
+pub const IC_CUP_PATH: &str = "cups/cup.types.v1.CatchUpPackage.pb";
+/// Name of the file holding the recovery CUP we build and place on the upload node.
+pub const RECOVERY_CUP_FILE_NAME: &str = "recovery_cup.types.v1.CatchUpPackage.pb";
+/// Directory the recovery CUP is uploaded into before being moved into place, relative to
+/// [`IC_DATA_PATH`]. [`IC_DATA_PATH`] itself is not writable by the user we upload as.
+pub const RECOVERY_CUP_STAGING_DIR: &str = "recovery_cup";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
@@ -526,6 +533,28 @@ impl Recovery {
         })
     }
 
+    /// Return a [VerifyReplayStep] replaying the downloaded state of the given subnet without
+    /// creating a checkpoint, in order to detect a state divergence.
+    ///
+    /// This is the first of the two replay passes; see [VerifyReplayStep] for why the verification
+    /// cannot be done by the pass which creates the checkpoint.
+    pub fn get_verify_replay_step(
+        &self,
+        subnet_id: SubnetId,
+        replay_until_height: Option<u64>,
+        skip_prompts: bool,
+    ) -> impl Step + use<> {
+        VerifyReplayStep {
+            logger: self.logger.clone(),
+            subnet_id,
+            work_dir: self.work_dir.clone(),
+            config: self.work_dir.join("ic.json5"),
+            replay_until_height,
+            result: self.work_dir.join(replay_helper::VERIFY_OUTPUT_FILE_NAME),
+            skip_prompts,
+        }
+    }
+
     /// Return a [ReplayStep] to replay the downloaded state of the given
     /// subnet.
     pub fn get_replay_step(
@@ -678,11 +707,21 @@ impl Recovery {
 
     /// Return an [UploadStateAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
+    ///
+    /// Pass the recovered subnet as `install_recovery_cup` if its recovery CUP is published to the
+    /// registry (as opposed to being uploaded to the nodes directly) before this step, so that the
+    /// node is restarted with the recovery CUP already in place rather than with the pre-recovery
+    /// one.
+    ///
+    /// Only pass it when uploading to a node which already runs in the recovered subnet: a node
+    /// which is only joining it has no CUP of its own, so there is nothing to keep it from
+    /// restarting on, and none to copy the permissions of the new one from.
     pub fn get_upload_state_and_restart_step(
         &self,
         ssh_user: SshUser,
         upload_method: DataLocation,
         key_file: Option<PathBuf>,
+        install_recovery_cup: Option<SubnetId>,
     ) -> impl Step + use<> {
         UploadStateAndRestartStep {
             logger: self.logger.clone(),
@@ -693,6 +732,8 @@ impl Recovery {
             require_confirmation: self.ssh_confirmation,
             key_file,
             check_ic_replay_height: true,
+            install_recovery_cup: install_recovery_cup
+                .map(|subnet_id| (self.registry_helper.clone(), subnet_id)),
         }
     }
 

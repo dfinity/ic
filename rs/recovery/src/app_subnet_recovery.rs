@@ -54,6 +54,19 @@ pub enum StepType {
     /// transferring the state over the network, it is recommended to perform the recovery directly
     /// on one of the nodes of the subnet and input "local" at this step.
     DownloadState,
+    /// In this step we replay the finalized consensus artifacts on the state downloaded in the
+    /// previous step *without* creating a checkpoint, and compare the resulting states against the
+    /// certifications and certification shares we merged above, in order to find out whether the
+    /// subnet nodes had diverged. The state produced by this step is thrown away; only the next step
+    /// produces the state we will recover the subnet with.
+    ///
+    /// The two cannot be done in one pass: creating the checkpoint the recovery CUP will refer to
+    /// turns the round at the target height into a checkpoint round, which does not execute the way
+    /// the subnet's own ordinary round at that height did. Canisters are charged for their resource
+    /// allocation and usage and paused executions are aborted, both of which change cycles balances,
+    /// so the state hash of that round would never match what the subnet's certification shares
+    /// attest to.
+    VerifyReplay,
     /// In this step we will take the latest persisted subnet state downloaded in the previous step
     /// and apply the finalized consensus artifacts on it via the deterministic state machine part
     /// of the replica to hopefully obtain the exact state which existed in the memory of all subnet
@@ -356,7 +369,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             #[allow(clippy::collapsible_match)]
-            StepType::ICReplay => {
+            StepType::VerifyReplay | StepType::ICReplay => {
                 if self.params.replay_until_height.is_none() {
                     self.params.replay_until_height =
                         read_optional(&self.logger, "Replay until height: ");
@@ -513,6 +526,20 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 None => Err(RecoveryError::StepSkipped),
             },
 
+            StepType::VerifyReplay => {
+                if self.params.readonly_pub_key.is_some() {
+                    Ok(Box::new(self.recovery.get_verify_replay_step(
+                        self.params.subnet_id,
+                        self.params.replay_until_height,
+                        !self.interactive(),
+                    )))
+                } else {
+                    // Without a read-only key we could not download any certification pool, so
+                    // there is nothing to compare the replayed states against.
+                    Err(RecoveryError::StepSkipped)
+                }
+            }
+
             StepType::ICReplay => Ok(Box::new(self.recovery.get_replay_step(
                 self.params.subnet_id,
                 None,
@@ -534,8 +561,23 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         (SshUser::Admin, self.recovery.admin_key_file.clone())
                     };
 
+                    // Installing the recovery CUP is only needed when recovering on the same
+                    // nodes: the node we upload to then already runs in the subnet and would
+                    // otherwise restart on its pre-recovery CUP. A replacement node has no CUP of
+                    // its own to restart on, and its orchestrator picks the recovery CUP up from
+                    // the registry once the CUP proposal has assigned it to the subnet.
+                    let recovering_on_same_nodes = self
+                        .params
+                        .replacement_nodes
+                        .as_ref()
+                        .is_none_or(|nodes| nodes.is_empty());
+
                     Ok(Box::new(self.recovery.get_upload_state_and_restart_step(
-                        ssh_user, method, key_file,
+                        ssh_user,
+                        method,
+                        key_file,
+                        // `ProposeCup` published the recovery CUP to the registry before this step.
+                        recovering_on_same_nodes.then_some(self.params.subnet_id),
                     )))
                 } else {
                     Err(RecoveryError::StepSkipped)
