@@ -1,12 +1,10 @@
-use super::{AccessList, TransactionPrice, compute_recovery_id, encode_u256, split_in_two};
+use super::{AccessList, TransactionPrice, encode_u256};
 use crate::{
     eth_rpc::Hash,
     numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas},
-    state::read_state,
 };
 use ethnum::u256;
 use ic_ethereum_types::Address;
-use ic_management_canister_types_private::DerivationPath;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
 use serde_bytes::ByteBuf;
@@ -217,23 +215,6 @@ pub async fn sign<T: SignableTransaction>(
     derivation_path: Vec<ByteBuf>,
 ) -> Result<Signed<T>, String> {
     let hash = transaction.hash();
-    let key_name = read_state(|s| s.ecdsa_key_name.clone());
-    let signature = crate::management::sign_with_ecdsa(
-        key_name,
-        DerivationPath::new(derivation_path.clone()),
-        hash.0,
-    )
-    .await
-    .map_err(|e| format!("failed to sign tx: {e}"))?;
-    let recid = compute_recovery_id(&hash, &signature, &derivation_path).await;
-    if recid.is_x_reduced() {
-        return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
-    }
-    let (r_bytes, s_bytes) = split_in_two(signature);
-    let signature = TransactionSignature {
-        signature_y_parity: recid.is_y_odd(),
-        r: u256::from_be_bytes(r_bytes),
-        s: u256::from_be_bytes(s_bytes),
-    };
+    let signature = super::sign_digest(&hash, &derivation_path).await?;
     Ok(Signed::new(transaction, signature))
 }
