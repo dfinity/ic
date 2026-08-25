@@ -241,8 +241,8 @@ impl ShareAggregator {
             shares,
         );
 
-        for cup in &cups {
-            if let CatchUpPackageType::PostSplit { new_subnet_id } = cup_type {
+        if let CatchUpPackageType::PostSplit { new_subnet_id } = cup_type {
+            for cup in &cups {
                 info!(
                     self.log,
                     "Aggregated a Post-Split CUP for subnet {new_subnet_id} at height {}",
