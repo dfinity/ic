@@ -964,8 +964,12 @@ tuple single-use (its application consumes the pinned nonce) and revocable
 (consuming the nonce any other way invalidates an outstanding signed tuple). The
 signature is not a transaction — nothing on chain changes.
 
-**Transaction 2 — first sweep (type `0x04`, sent and paid by `SweeperAddress`).**
-`to = Deposit`, `data = sweepErc20([Token], principal, subaccount, attestation)`,
+**Transaction 2 — first sweep (type `0x04`, sent and paid by `SweeperAddress`,
+`to = SweeperContract`).** This is the transaction the minter actually sends:
+the sweep is *never* addressed to the deposit EOA — every sweep, including a
+single-deposit one, enters through the deployed instance's batch entry point:
+`to = SweeperContract`,
+`data = sweepErc20Batch([(Deposit, principal, subaccount, attestation)], [Token])`,
 `authorization_list = [tuple]`. Three phases:
 
 1. *Upfront gas*, charged to `SweeperAddress`: 21'000 base + calldata + 25'000
@@ -974,53 +978,60 @@ signature is not a transaction — nothing on chain changes.
 2. *Tuple processing, before any code runs*: recover signer = `Deposit`, check
    code empty, check nonce 0 — then write `0xef0100‖SweeperContract` as
    `Deposit`'s code and bump `Deposit`'s nonce to 1. `Deposit` springs into
-   existence in the state trie without ever having sent a transaction.
-3. *Execution*: `SweeperAddress`' call to `Deposit` finds the designator, loads
-   `SweeperContract`'s bytecode and runs it **in `Deposit`'s context**:
-   `address(this) = Deposit`, `msg.sender = SweeperAddress`, storage and balance
-   are `Deposit`'s. The delegate verifies the attestation, reads
-   `Token.balanceOf(address(this))` = `Deposit`'s 250 USDT, approves `Helper`
-   for exactly that amount and calls
-   `Helper.depositErc20(Token, 250e6, principal, subaccount)`, which
-   `transferFrom`s the balance to `MainAddress` (`R6`) and emits
-   `ReceivedEthOrErc20` — the token contract sees both the approval and the spend
-   coming from `Deposit`, and the unchanged deposit pipeline mints from the
-   event. `SweeperAddress` paid the gas, but the funds land at — and only ever
-   at — `MainAddress`.
+   existence in the state trie without ever having sent a transaction. Note
+   that the authorization list and the call destination are independent:
+   tuples install code on whichever EOAs signed them, regardless of the
+   transaction's `to` — which is why pointing the transaction at
+   `SweeperContract` still delegates `Deposit`.
+3. *Execution*, where `SweeperContract` wears **two hats** in the same
+   transaction:
+   * *As a plain contract* (the outer call): execution starts at the deployed
+     instance — `address(this) = SweeperContract`,
+     `msg.sender = SweeperAddress` — and the batch function just loops
+     `CkSweeperAttested(Deposit).sweepErc20([Token], principal, subaccount, attestation)`.
+   * *As a delegate* (the inner call): the call to `Deposit` finds the
+     designator installed in phase 2, loads `SweeperContract`'s bytecode and
+     runs it **in `Deposit`'s context**: `address(this) = Deposit`,
+     **`msg.sender = SweeperContract`**, storage and balance are `Deposit`'s.
+     The delegate verifies the attestation, reads
+     `Token.balanceOf(address(this))` = `Deposit`'s 250 USDT, approves `Helper`
+     for exactly that amount and calls
+     `Helper.depositErc20(Token, 250e6, principal, subaccount)`, which
+     `transferFrom`s the balance to `MainAddress` (`R6`) and emits
+     `ReceivedEthOrErc20` — the token contract sees both the approval and the
+     spend coming from `Deposit`, and the unchanged deposit pipeline mints from
+     the event. `SweeperAddress` paid the gas, but the funds land at — and only
+     ever at — `MainAddress`.
 
-Measured: 82'207 gas before the ≈ 3k attestation check, all paid by
-`SweeperAddress`; `Deposit` still holds 0 ETH. An invalid tuple would be
-*skipped silently* by the protocol (the transaction itself stays valid); a plain
-ETH transfer to the now-delegated `Deposit` reverts at the sender, since
-`SweeperContract` has no `receive()` (`R12`).
+The dual role is safe only because the contract keeps its configuration in
+**immutables, never storage**: immutables are baked into the bytecode and travel
+with the delegate, whereas storage reads at `Deposit` would hit `Deposit`'s
+(empty) storage — a `HELPER` kept in storage would resolve to `address(0)`.
+
+`Deposit` still holds 0 ETH afterwards. The demo measures 82'207 gas (before
+the ≈ 3k attestation check) for the bare mechanism — the inner sweep sent
+directly to the EOA, without the batch wrapper; the wrapper's outer call and
+struct calldata are overhead that Transaction 4 shows amortizing across a
+batch. A plain ETH transfer to the now-delegated `Deposit` reverts at the
+sender, since `SweeperContract` has no `receive()` (`R12`).
 
 **Transaction 3 — later sweeps need no authorization (type `0x02`).** The
-designator persists, so subsequent deposits are swept by an ordinary EIP-1559
-transaction
-`to = Deposit, data = sweepErc20([Token], principal, subaccount, attestation)` —
-cheaper (no tuple cost). Anyone may send it, only donating gas: the attested
-account fixes where the deposit is credited and funds only move through `Helper`
-to `MainAddress` (`R6`).
+designator persists, so a subsequent deposit is swept by an ordinary EIP-1559
+transaction — same `to = SweeperContract`, same `sweepErc20Batch` data, just no
+authorization list — cheaper (no tuple cost). And since sweeping is
+permissionless, *anyone* may sweep a delegated EOA (through the batch entry
+point or by calling `sweepErc20` on `Deposit` directly), only donating gas: the
+attested account fixes where the deposit is credited and funds only move
+through `Helper` to `MainAddress` (`R6`).
 
-**Transaction 4 — batched sweep (type `0x04`, `to = SweeperContract`).** For
-fresh `Deposit₁ Deposit₂ Deposit₃`, each bound to its own IC account `(pᵢ, sᵢ)`
-with attestation `attᵢ`:
+**Transaction 4 — the batch at scale (type `0x04`, `to = SweeperContract`).**
+For fresh `Deposit₁ Deposit₂ Deposit₃`, each bound to its own IC account
+`(pᵢ, sᵢ)` with attestation `attᵢ`:
 `data = sweepErc20Batch([(Deposit₁,p₁,s₁,att₁), (Deposit₂,p₂,s₂,att₂), (Deposit₃,p₃,s₃,att₃)], [Token])`
-with three tuples in the authorization list. This is the entry point the
-production sweep task always uses — even for a single deposit, and never mixing
-tokens in one batch (step 5). All designators are installed in phase 2, then
-`SweeperContract` executes wearing **two hats** in the same transaction:
-
-* *As a plain contract* (the outer call): `address(this) = SweeperContract`,
-  `msg.sender = SweeperAddress`; the batch function just loops
-  `CkSweeperAttested(Depositᵢ).sweepErc20([Token], pᵢ, sᵢ, attᵢ)`.
-* *As a delegate* (each inner call): `address(this) = Depositᵢ`,
-  **`msg.sender = SweeperContract`**, storage and balance are `Depositᵢ`'s.
-
-This dual role is safe only because the contract keeps its configuration in
-**immutables, never storage**: immutables are baked into the bytecode and travel
-with the delegate, whereas storage reads at `Depositᵢ` would hit `Depositᵢ`'s
-(empty) storage — a `HELPER` kept in storage would resolve to `address(0)`.
+with three tuples in the authorization list — Transaction 2 with more items:
+all three designators are installed in phase 2, then the batch loop runs each
+inner sweep in its own `Depositᵢ` context. One batch never mixes tokens
+(step 5).
 
 Measured: 164'746 gas for a batch re-delegating three deposit EOAs and sweeping
 two of them through the helper; the minter's per-token batches land at
