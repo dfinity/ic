@@ -1,4 +1,5 @@
 use crate::deposit_address::DepositAddress;
+use crate::eth_logs::encode_principal;
 use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch};
 use crate::tx::TransactionSignature;
 use candid::Principal;
@@ -6,25 +7,54 @@ use ethnum::u256;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 
-// Encoded independently of this crate, from the ABI specification, for the two items and two tokens
-// `sweep()` builds below: selector, then the two head offsets (0x40 and 0x1e0), the inline
-// `SweepItem[]` and the `address[]`.
-const GOLDEN: &str = "3a7ce054\
-000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000001e0\
-0000000000000000000000000000000000000000000000000000000000000002\
-000000000000000000000000111111111111111111111111111111111111111104010203040000000000000000000000000000000000000000000000000000002a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb000000000000000000000000000000000000000000000000000000000000001b\
-000000000000000000000000222222222222222222222222222222222222222203050607000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd000000000000000000000000000000000000000000000000000000000000001c\
-0000000000000000000000000000000000000000000000000000000000000002\
-00000000000000000000000033333333333333333333333333333333333333330000000000000000000000004444444444444444444444444444444444444444";
+const SIGNATURE: &str =
+    "sweepErc20Batch((address,bytes32,bytes32,bytes32,bytes32,uint8)[],address[])";
+
+#[test]
+fn should_call_the_function_the_delegate_exposes() {
+    let (items, tokens) = sweep();
+
+    let data = encode_sweep_erc20_batch(&items, &tokens);
+
+    assert_eq!(
+        &data[..4],
+        &ic_sha3::Keccak256::hash(SIGNATURE.as_bytes())[..4]
+    );
+}
 
 #[test]
 fn should_encode_a_batch_sweep() {
+    use ethers_core::abi::{Token, encode};
+
     let (items, tokens) = sweep();
 
-    assert_eq!(
-        hex::encode(encode_sweep_erc20_batch(&items, &tokens)),
-        GOLDEN
-    );
+    let data = encode_sweep_erc20_batch(&items, &tokens);
+
+    let expected_arguments = encode(&[
+        Token::Array(
+            items
+                .iter()
+                .map(|item| {
+                    Token::Tuple(vec![
+                        Token::Address(item.deposit.as_address().into_bytes().into()),
+                        Token::FixedBytes(encode_principal(&item.account.owner).to_vec()),
+                        Token::FixedBytes(item.account.effective_subaccount().to_vec()),
+                        Token::FixedBytes(item.attestation.r.to_be_bytes().to_vec()),
+                        Token::FixedBytes(item.attestation.s.to_be_bytes().to_vec()),
+                        Token::Uint((27 + u8::from(item.attestation.signature_y_parity)).into()),
+                    ])
+                })
+                .collect(),
+        ),
+        Token::Array(
+            tokens
+                .iter()
+                .map(|token| Token::Address(token.into_bytes().into()))
+                .collect(),
+        ),
+    ]);
+
+    assert_eq!(&data[4..], expected_arguments.as_slice());
 }
 
 #[test]
