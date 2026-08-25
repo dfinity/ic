@@ -18,6 +18,7 @@ use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConf
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::GasFeeEstimate;
+use crate::tx::TransactionSignature;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk_management_canister::EcdsaPublicKeyResult;
@@ -61,6 +62,11 @@ impl MintedEvent {
 #[derive(Clone, PartialEq, Debug)]
 pub struct State {
     pub ethereum_network: EthereumNetwork,
+    /// Attestations the minter has signed, keyed by the deposit helper each one names and then by
+    /// the account it credits. An attestation binds an account to one helper deployment and never
+    /// expires, so a later sweep of the same address reuses it instead of paying for another
+    /// threshold-ECDSA signature; a new helper deployment simply misses.
+    pub attestations: BTreeMap<Address, BTreeMap<Account, TransactionSignature>>,
     pub ecdsa_key_name: String,
     pub cketh_ledger_id: Principal,
     pub log_scrapings: LogScrapings,
@@ -272,6 +278,27 @@ impl State {
             DepositAddressSchema::CkErc20,
             account,
         ))
+    }
+
+    /// The attestation `account` has already signed for the helper this minter runs against, if
+    /// any: signing another would cost a threshold-ECDSA signature for the same digest.
+    pub fn attestation(&self, account: &Account) -> Option<&TransactionSignature> {
+        let deposit_helper = self
+            .log_scrapings
+            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)?;
+        self.attestations.get(deposit_helper)?.get(account)
+    }
+
+    fn record_attestation(
+        &mut self,
+        deposit_helper: Address,
+        account: Account,
+        signature: TransactionSignature,
+    ) {
+        self.attestations
+            .entry(deposit_helper)
+            .or_default()
+            .insert(account, signature);
     }
 
     pub fn is_ckerc20_feature_active(&self) -> bool {

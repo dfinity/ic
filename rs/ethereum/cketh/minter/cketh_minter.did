@@ -661,6 +661,21 @@ type Event = record {
             withdrawal_id : nat;
             transaction_receipt : TransactionReceipt;
         };
+        // A deposit address attested to the account it credits. Recorded on its
+        // own because signing costs a threshold-ECDSA signature: the attestation
+        // outlives the sweep that needed it and every later one reuses it.
+        AttestedDepositAddress : record {
+            chain_id : nat;
+            // The deposit helper the attestation names; it is only valid against
+            // this deployment.
+            deposit_helper : text;
+            owner : principal;
+            subaccount : opt blob;
+            y_parity : bool;
+            // 32-byte signature components.
+            r : blob;
+            s : blob;
+        };
         AcceptedSweepRequest : record {
             sweep_id : nat;
             destination : text;

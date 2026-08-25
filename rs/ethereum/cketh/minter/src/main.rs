@@ -958,6 +958,21 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id: withdrawal_id.get().into(),
                     transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
+                EventType::AttestedDepositAddress {
+                    chain_id,
+                    deposit_helper,
+                    owner,
+                    subaccount,
+                    signature,
+                } => EP::AttestedDepositAddress {
+                    chain_id: chain_id.into(),
+                    deposit_helper: deposit_helper.to_string(),
+                    owner,
+                    subaccount: subaccount.map(ByteBuf::from),
+                    y_parity: signature.signature_y_parity,
+                    r: ByteBuf::from(signature.r.to_be_bytes()),
+                    s: ByteBuf::from(signature.s.to_be_bytes()),
+                },
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,

@@ -122,3 +122,82 @@ fn account() -> Account {
         subaccount: Some([42_u8; 32]),
     }
 }
+
+mod recorded {
+    use crate::state::State;
+    use crate::state::audit::apply_state_transition;
+    use crate::state::eth_logs_scraping::LogScrapingId;
+    use crate::state::event::EventType;
+    use crate::test_fixtures::initial_state;
+    use crate::tx::TransactionSignature;
+    use candid::Principal;
+    use ethnum::u256;
+    use ic_ethereum_types::Address;
+    use icrc_ledger_types::icrc1::account::Account;
+
+    #[test]
+    fn should_replay_an_attestation_under_the_helper_it_names() {
+        let mut state = configured_state(helper());
+
+        apply_state_transition(&mut state, &attested(helper(), account()));
+
+        assert_eq!(state.attestation(&account()), Some(&signature()));
+    }
+
+    #[test]
+    fn should_not_reuse_an_attestation_signed_for_another_helper() {
+        let mut state = configured_state(helper());
+        apply_state_transition(&mut state, &attested(Address::new([0xab; 20]), account()));
+
+        assert_eq!(state.attestation(&account()), None);
+    }
+
+    #[test]
+    fn should_keep_an_attestation_per_account() {
+        let other = Account {
+            owner: Principal::from_slice(&[9, 9, 9]),
+            subaccount: None,
+        };
+        let mut state = configured_state(helper());
+
+        apply_state_transition(&mut state, &attested(helper(), account()));
+
+        assert_eq!(state.attestation(&account()), Some(&signature()));
+        assert_eq!(state.attestation(&other), None);
+    }
+
+    fn configured_state(deposit_helper: Address) -> State {
+        let mut state = initial_state();
+        state.log_scrapings.set_contract_address(
+            LogScrapingId::EthOrErc20DepositWithSubaccount,
+            deposit_helper,
+        );
+        state
+    }
+
+    fn attested(deposit_helper: Address, account: Account) -> EventType {
+        EventType::AttestedDepositAddress {
+            chain_id: 1,
+            deposit_helper,
+            owner: account.owner,
+            subaccount: account.subaccount,
+            signature: signature(),
+        }
+    }
+
+    fn signature() -> TransactionSignature {
+        TransactionSignature {
+            signature_y_parity: true,
+            r: u256::from_be_bytes([0xaa; 32]),
+            s: u256::from_be_bytes([0xbb; 32]),
+        }
+    }
+
+    fn helper() -> Address {
+        super::helper()
+    }
+
+    fn account() -> Account {
+        super::account()
+    }
+}
