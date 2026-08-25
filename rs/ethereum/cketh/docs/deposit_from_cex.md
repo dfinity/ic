@@ -896,89 +896,98 @@ offline for free, and *anyone* can embed it in a transaction and pay the gas —
 protocol-level gas sponsorship, which the sweep exploits. Applying
 a tuple writes the 23-byte *delegation designator* `0xef0100 || delegate_address`
 as the authority's code (the `0xef` prefix cannot collide with deployable code per
-EIP-3541) and increments the authority's nonce. The walkthrough below uses the
-minter `M`, a deposit EOA `D` (tECDSA-derived, so `M` holds its key), the deployed
-delegate instance `S` (`CkSweeperAttested`, see
-[Sweeper delegate contract](#sweeper-delegate-contract)), the existing helper
-contract `H` and a USDT-like token `T`; gas numbers are measured by the
-runnable demo. `M` is the minter's sending EOA — in production the dedicated
-sweeper address of `R17` (funded per step 0); the demo uses a single funded EOA.
+EIP-3541) and increments the authority's nonce. The walkthrough below uses five
+named actors: `Minter` (the minter's sending EOA), `Deposit` (a deposit EOA,
+tECDSA-derived, so the minter holds its key), `Sweeper` (the deployed delegate
+contract instance, `CkSweeperAttested`, see
+[Sweeper delegate contract](#sweeper-delegate-contract)), `Helper` (the existing
+helper contract) and `Token` (a USDT-like ERC-20 contract); gas numbers are
+measured by the runnable demo. Note that `Minter` is an *address*, not the
+canister: in production it is the dedicated sweeper address of `R17` (funded per
+step 0) — distinct from the `Sweeper` *contract* — while the demo uses a single
+funded EOA.
 
-**State 0.** `D` is computed by pure key derivation and does not exist on chain: no
-nonce, no balance, no code, no state-trie entry (`R13`).
+**State 0.** `Deposit` is computed by pure key derivation and does not exist on
+chain: no nonce, no balance, no code, no state-trie entry (`R13`).
 
 **Transaction 1 — the CEX withdrawal (type `0x02`, sent by the exchange).**
-`to = T`, `data = transfer(D, 250e6)`. Execution flips two slots inside `T`'s
-storage and emits `Transfer(hot_wallet, D, 250e6)`. `D` itself is untouched as an
-account — its "250 USDT" is a storage slot inside `T`. This is why `D` cannot move
-the tokens itself: that requires a transaction *from* `D`, and `D` has no ETH for
-gas.
+`to = Token`, `data = transfer(Deposit, 250e6)`. Execution flips two slots inside
+`Token`'s storage and emits `Transfer(hot_wallet, Deposit, 250e6)`. `Deposit`
+itself is untouched as an account — its "250 USDT" is a storage slot inside
+`Token`. This is why `Deposit` cannot move the tokens itself: that requires a
+transaction *from* `Deposit`, and `Deposit` has no ETH for gas.
 
 **Between transactions — one signature, zero on-chain effect.** The minter signs
-(`sign_with_ecdsa`, `D`'s derivation path) the authorization tuple
-`(chain_id, S, nonce = 0)`. The nonce is `D`'s *account* nonce: authorizations and
-transactions share the same nonce sequence, which makes a tuple single-use (its
-application consumes the pinned nonce) and revocable (consuming the nonce any other
-way invalidates an outstanding signed tuple). The signature is not a transaction —
-nothing on chain changes.
+(`sign_with_ecdsa`, `Deposit`'s derivation path) the authorization tuple
+`(chain_id, Sweeper, nonce = 0)`. The nonce is `Deposit`'s *account* nonce:
+authorizations and transactions share the same nonce sequence, which makes a
+tuple single-use (its application consumes the pinned nonce) and revocable
+(consuming the nonce any other way invalidates an outstanding signed tuple). The
+signature is not a transaction — nothing on chain changes.
 
-**Transaction 2 — first sweep (type `0x04`, sent and paid by `M`).**
-`to = D`, `data = sweepErc20([T], principal, subaccount, attestation)`,
+**Transaction 2 — first sweep (type `0x04`, sent and paid by `Minter`).**
+`to = Deposit`, `data = sweepErc20([Token], principal, subaccount, attestation)`,
 `authorization_list = [tuple]`. Three phases:
 
-1. *Upfront gas*, charged to `M`: 21'000 base + calldata + 25'000 per tuple
-   (`PER_EMPTY_ACCOUNT_COST`; the 12'500 refund does not apply since `D`, holding
-   only token balances, is not in the state trie).
-2. *Tuple processing, before any code runs*: recover signer = `D`, check code
-   empty, check nonce 0 — then write `0xef0100‖S` as `D`'s code and bump `D`'s
-   nonce to 1. `D` springs into existence in the state trie without ever having
-   sent a transaction.
-3. *Execution*: `M`'s call to `D` finds the designator, loads `S`'s bytecode and
-   runs it **in `D`'s context**: `address(this) = D`, `msg.sender = M`, storage
-   and balance are `D`'s. The delegate verifies the attestation, reads
-   `T.balanceOf(address(this))` = `D`'s 250 USDT, approves `H` for exactly that
-   amount and calls `H.depositErc20(T, 250e6, principal, subaccount)`, which
+1. *Upfront gas*, charged to `Minter`: 21'000 base + calldata + 25'000 per tuple
+   (`PER_EMPTY_ACCOUNT_COST`; the 12'500 refund does not apply since `Deposit`,
+   holding only token balances, is not in the state trie).
+2. *Tuple processing, before any code runs*: recover signer = `Deposit`, check
+   code empty, check nonce 0 — then write `0xef0100‖Sweeper` as `Deposit`'s code
+   and bump `Deposit`'s nonce to 1. `Deposit` springs into existence in the
+   state trie without ever having sent a transaction.
+3. *Execution*: `Minter`'s call to `Deposit` finds the designator, loads
+   `Sweeper`'s bytecode and runs it **in `Deposit`'s context**:
+   `address(this) = Deposit`, `msg.sender = Minter`, storage and balance are
+   `Deposit`'s. The delegate verifies the attestation, reads
+   `Token.balanceOf(address(this))` = `Deposit`'s 250 USDT, approves `Helper`
+   for exactly that amount and calls
+   `Helper.depositErc20(Token, 250e6, principal, subaccount)`, which
    `transferFrom`s the balance to the minter's main address (`R6`) and emits
    `ReceivedEthOrErc20` — the token contract sees both the approval and the spend
-   coming from `D`, and the unchanged deposit pipeline mints from the event.
+   coming from `Deposit`, and the unchanged deposit pipeline mints from the event.
 
-Measured: 82'207 gas before the ≈ 3k attestation check, all paid by `M`; `D`
-still holds 0 ETH. An invalid tuple would be *skipped silently* by the protocol (the
-transaction itself stays valid); a plain ETH transfer to the now-delegated `D`
-reverts at the sender, since `S` has no `receive()` (`R12`).
+Measured: 82'207 gas before the ≈ 3k attestation check, all paid by `Minter`;
+`Deposit` still holds 0 ETH. An invalid tuple would be *skipped silently* by the
+protocol (the transaction itself stays valid); a plain ETH transfer to the
+now-delegated `Deposit` reverts at the sender, since `Sweeper` has no
+`receive()` (`R12`).
 
 **Transaction 3 — later sweeps need no authorization (type `0x02`).** The
 designator persists, so subsequent deposits are swept by an ordinary EIP-1559
-transaction `to = D, data = sweepErc20([T], principal, subaccount, attestation)` —
+transaction
+`to = Deposit, data = sweepErc20([Token], principal, subaccount, attestation)` —
 cheaper (no tuple cost). Anyone may send it, only donating gas: the attested
-account fixes where the deposit is credited and funds only move through `H` to
-the minter (`R6`).
+account fixes where the deposit is credited and funds only move through `Helper`
+to the minter (`R6`).
 
-**Transaction 4 — batched sweep (type `0x04`, `to = S`).** For fresh `D₁ D₂ D₃`,
-each bound to its own IC account `(pᵢ, sᵢ)` with attestation `attᵢ`:
-`data = sweepErc20Batch([(D₁,p₁,s₁,att₁), (D₂,p₂,s₂,att₂), (D₃,p₃,s₃,att₃)], [T])`
+**Transaction 4 — batched sweep (type `0x04`, `to = Sweeper`).** For fresh
+`Deposit₁ Deposit₂ Deposit₃`, each bound to its own IC account `(pᵢ, sᵢ)` with
+attestation `attᵢ`:
+`data = sweepErc20Batch([(Deposit₁,p₁,s₁,att₁), (Deposit₂,p₂,s₂,att₂), (Deposit₃,p₃,s₃,att₃)], [Token])`
 with three tuples in the authorization list. This is the entry point the
 production sweep task always uses — even for a single deposit, and never mixing
 tokens in one batch (step 5). All designators are installed in phase 2, then
-`S` executes wearing **two hats** in the same transaction:
+`Sweeper` executes wearing **two hats** in the same transaction:
 
-* *As a plain contract* (the outer call): `address(this) = S`, `msg.sender = M`;
-  the batch function just loops `CkSweeperAttested(Dᵢ).sweepErc20([T], pᵢ, sᵢ, attᵢ)`.
-* *As a delegate* (each inner call): `address(this) = Dᵢ`, **`msg.sender = S`**,
-  storage and balance are `Dᵢ`'s.
+* *As a plain contract* (the outer call): `address(this) = Sweeper`,
+  `msg.sender = Minter`; the batch function just loops
+  `CkSweeperAttested(Depositᵢ).sweepErc20([Token], pᵢ, sᵢ, attᵢ)`.
+* *As a delegate* (each inner call): `address(this) = Depositᵢ`,
+  **`msg.sender = Sweeper`**, storage and balance are `Depositᵢ`'s.
 
 This dual role is safe only because the contract keeps its configuration in
 **immutables, never storage**: immutables are baked into the bytecode and travel
-with the delegate, whereas storage reads at `Dᵢ` would hit `Dᵢ`'s (empty) storage —
-a `HELPER` kept in storage would resolve to `address(0)`.
+with the delegate, whereas storage reads at `Depositᵢ` would hit `Depositᵢ`'s
+(empty) storage — a `HELPER` kept in storage would resolve to `address(0)`.
 
 Measured: 164'746 gas for a batch re-delegating three deposit EOAs and sweeping
 two of them through the helper; the minter's per-token batches land at
 ≈ 62'350 gas per first-sweep deposit (10 deposits of one token measured at
-623'360 gas). Batching pays once for the 21'000 base, the cold accesses to `T`
-and the first (zero→nonzero) write to the minter's token balance slot, while
-each extra address adds only its 25'000 authorization, a warm inner call and a
-transfer that earns the slot-clearing refund. Operational notes: a
+623'360 gas). Batching pays once for the 21'000 base, the cold accesses to
+`Token` and the first (zero→nonzero) write to the minter's token balance slot,
+while each extra address adds only its 25'000 authorization, a warm inner call
+and a transfer that earns the slot-clearing refund. Operational notes: a
 tuple skipped by the protocol (e.g. stale nonce) makes the corresponding inner
 call hit a code-less address, which reverts the *whole* batch (atomic, funds
 safe, gas wasted — retry); mixed batches are fine (tuples only for
@@ -989,8 +998,8 @@ Delegation cannot be scoped to a single transaction: the original EIP-7702 draft
 was ephemeral but the final spec is persistent, tuples are all applied *before*
 the call phase (so set-and-clear cannot be interleaved within one transaction),
 and the delegate cannot remove its own designator (only a new authorization can).
-A later authorization with `D`'s then-current nonce can re-delegate (as the demo
-does when re-delegating an already delegated deposit EOA) or
+A later authorization with `Deposit`'s then-current nonce can re-delegate (as the
+demo does when re-delegating an already delegated deposit EOA) or
 clear the code by delegating to `address(0)` — the key always retains full
 control, which is the recovery story of step 1.
 
