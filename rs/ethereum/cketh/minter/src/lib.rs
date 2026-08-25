@@ -38,7 +38,10 @@ pub const MAIN_DERIVATION_PATH: Vec<ByteBuf> = vec![];
 pub const SCRAPING_ETH_LOGS_INTERVAL: Duration = Duration::from_secs(3 * 60);
 pub const REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL: Duration = Duration::from_secs(30);
 pub const BALANCE_SCAN_INTERVAL: Duration = Duration::from_secs(30);
-pub const SWEEPER_FUNDING_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+/// Deliberately short for a task that funds at most once a day in practice: a check costs a
+/// heap read unless a funding is actually due, and checking often is what bounds the gap after
+/// the run at install finds no deposits credited yet.
+pub const SWEEPER_FUNDING_INTERVAL: Duration = Duration::from_secs(60 * 60);
 pub const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs(6 * 60);
 pub const PROCESS_REIMBURSEMENT: Duration = Duration::from_secs(3 * 60);
 pub const PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL: Duration = Duration::from_secs(3 * 60);

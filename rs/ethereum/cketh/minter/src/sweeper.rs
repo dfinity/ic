@@ -8,6 +8,7 @@
 mod tests;
 
 use crate::CKETH_FEE_SUBACCOUNT;
+use crate::eth_logs::LedgerSubaccount;
 use crate::guard::TimerGuard;
 use crate::ledger_client::LedgerClient;
 use crate::logs::{DEBUG, INFO};
@@ -17,6 +18,7 @@ use crate::state::audit::{EventType, process_event};
 use crate::state::transactions::EthWithdrawalRequest;
 use crate::state::{State, TaskType, mutate_state, read_state};
 use ic_canister_log::log;
+use ic_cdk::api::{canister_self, time};
 
 /// Tops the sweeper address up when the balance the minter can vouch for has fallen below the
 /// configured low-water mark. Reads state, decides, burns, records — no chain read, because the
@@ -106,9 +108,9 @@ pub async fn fund_sweeper_address() {
         withdrawal_amount: amount,
         destination: sweeper,
         ledger_burn_index,
-        from: ic_cdk::api::canister_self(),
-        from_subaccount: crate::eth_logs::LedgerSubaccount::from_bytes(CKETH_FEE_SUBACCOUNT),
-        created_at: Some(ic_cdk::api::time()),
+        from: canister_self(),
+        from_subaccount: LedgerSubaccount::from_bytes(CKETH_FEE_SUBACCOUNT),
+        created_at: Some(time()),
     };
     mutate_state(|s| {
         process_event(s, EventType::AcceptedSweeperFundingRequest(request));
@@ -138,6 +140,10 @@ pub enum FundingDecision {
 /// which over-provisions gas the minter has burned for; the reverse would spend ETH against gas that
 /// is not there.
 ///
+/// Asks whether anything is due before asking what stands in the way, so that the quiet case — the
+/// sweeper is topped up and the hourly check has nothing to do — is [`FundingDecision::NotDue`] and
+/// not a report about an in-flight funding that happens to also be pending.
+///
 /// Refuses while an earlier funding is still somewhere in the withdrawal pipeline, i.e. between its
 /// burn and its finalized transfer. That is prudence rather than a correctness requirement: each
 /// funding burns for its own transfer, so two in flight are still each covered by their own burn.
@@ -145,32 +151,31 @@ pub enum FundingDecision {
 /// follow. A stuck funding therefore blocks later ones, which is the safe direction but needs its
 /// own metric to be visible.
 pub fn plan_funding(state: &State, sweeper_balance: Wei) -> FundingDecision {
+    let Some(amount) = state.sweeper_funding_config().amount_due(sweeper_balance) else {
+        return FundingDecision::NotDue;
+    };
     if let Some(outstanding) = state.withdrawal_transactions.outstanding_sweeper_funding() {
         return FundingDecision::AlreadyInFlight {
             ledger_burn_index: outstanding.ledger_burn_index,
             amount: outstanding.withdrawal_amount,
         };
     }
-    match state.sweeper_funding_config().amount_due(sweeper_balance) {
-        None => FundingDecision::NotDue,
-        Some(amount) => {
-            // Funding debits `eth_balance`, which counts only ETH received through deposits, so
-            // moving more than that would spend ETH the accounting knows nothing about — and the
-            // debit at finalization would underflow and trap the withdrawal timer, head-of-line
-            // blocking every user withdrawal behind it. Waiting is the safe direction.
-            let available = state.eth_balance().eth_balance();
-            if available < amount {
-                return FundingDecision::InsufficientBalance {
-                    available,
-                    required: amount,
-                };
-            }
-            // The burn is the amount: a funding carves its fee out of what it burns, exactly
-            // like a user withdrawal. It always clears the ledger's minimum, since `amount_due` is
-            // at least the configured headroom and `validate` keeps that at or above the minimum
-            // withdrawal amount — and a real burn is what gives a funding the ledger index its
-            // withdrawal pipeline is keyed by.
-            FundingDecision::Fund(amount)
-        }
+    // Funding debits `eth_balance`, which counts only ETH received through deposits, so a funding
+    // above it would spend ETH the accounting knows nothing about. Solvency does not rest on this
+    // check — it rests on every debit being covered by its own burn, which is what keeps the
+    // counter from going negative even with user withdrawals in flight against the same balance.
+    // What the check does buy is the fresh deployment, where the minter may hold ETH it has not yet
+    // seen a deposit for: refusing keeps that ETH out of a funding, and waiting is free.
+    let available = state.eth_balance().eth_balance();
+    if available < amount {
+        return FundingDecision::InsufficientBalance {
+            available,
+            required: amount,
+        };
     }
+    // The burn is the amount: a funding carves its fee out of what it burns, exactly like a user
+    // withdrawal. It always clears the ledger's minimum, since `amount_due` is at least the
+    // configured headroom and `validate` keeps that at or above the minimum withdrawal amount — and
+    // a real burn is what gives a funding the ledger index its withdrawal pipeline is keyed by.
+    FundingDecision::Fund(amount)
 }
