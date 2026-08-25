@@ -37,11 +37,16 @@ pub async fn fund_sweeper_address() {
         return;
     };
 
-    // What the minter's own records say reached the sweeper address, rather than a chain read.
-    // Erring low can only make a funding look due sooner than it is, never hide one that is.
-    let sweeper_balance = read_state(|s| s.sweeper_funding.sweeper_balance_lower_bound());
+    // One snapshot for both: the decision reads the balance bound itself, and the log lines below
+    // report the same figure it decided on.
+    let (decision, sweeper_balance) = read_state(|s| {
+        (
+            plan_funding(s),
+            s.sweeper_funding.sweeper_balance_lower_bound(),
+        )
+    });
 
-    let amount = match read_state(|s| plan_funding(s, sweeper_balance)) {
+    let amount = match decision {
         FundingDecision::Fund(amount) => amount,
         FundingDecision::NotDue => {
             log!(
@@ -139,13 +144,19 @@ pub enum FundingDecision {
 /// which over-provisions gas the minter has burned for; the reverse would spend ETH against gas that
 /// is not there.
 ///
+/// Decides against the lower bound the minter tracks on the sweeper address' balance, read from the
+/// state rather than passed in, so the decision cannot be made against a balance the state
+/// contradicts. Erring low can only make a funding look due sooner than it is, never hide one that
+/// is due.
+///
 /// Refuses while an earlier funding is still somewhere in the withdrawal pipeline, i.e. between its
 /// burn and its finalized transfer. That is prudence rather than a correctness requirement: each
 /// funding burns for its own transfer, so two in flight are still each covered by their own burn.
 /// One at a time keeps a single funding on the withdrawal nonce lane and the accounting easy to
 /// follow. A stuck funding therefore blocks later ones, which is the safe direction but needs its
 /// own metric to be visible.
-pub fn plan_funding(state: &State, sweeper_balance: Wei) -> FundingDecision {
+pub fn plan_funding(state: &State) -> FundingDecision {
+    let sweeper_balance = state.sweeper_funding.sweeper_balance_lower_bound();
     let Some(amount) = state.sweeper_funding_config().amount_due(sweeper_balance) else {
         return FundingDecision::NotDue;
     };

@@ -20,6 +20,9 @@ mod concurrent_fundings {
     /// The bounds the fixture's minimum implies, rather than a pair of its own: the target is ten
     /// times the minimum withdrawal amount, and refilling starts at half of that.
     const TARGET: u128 = 10 * MINIMUM_BURN;
+    /// A funding that lands the sweeper below the low-water mark rather than at the target, so that
+    /// a test can tell a lifted guard from a sweeper that simply needs nothing.
+    const PARTIAL_FUNDING: u128 = TARGET / 4;
 
     fn state() -> State {
         let mut state = initial_state();
@@ -124,7 +127,7 @@ mod concurrent_fundings {
 
     fn assert_refuses_while(state: &State, request: &EthWithdrawalRequest, stage: &str) {
         assert_eq!(
-            plan_funding(state, Wei::ZERO),
+            plan_funding(state),
             FundingDecision::AlreadyInFlight {
                 ledger_burn_index: request.ledger_burn_index,
                 amount: request.withdrawal_amount,
@@ -139,7 +142,7 @@ mod concurrent_fundings {
         state.eth_balance = eth_balance_of(Wei::new(TARGET - 1));
 
         assert_eq!(
-            plan_funding(&state, Wei::ZERO),
+            plan_funding(&state),
             FundingDecision::InsufficientBalance {
                 available: Wei::new(TARGET - 1),
                 required: Wei::new(TARGET),
@@ -154,7 +157,7 @@ mod concurrent_fundings {
         let mut state = state();
         state.eth_balance = eth_balance_of(Wei::new(TARGET));
 
-        match plan_funding(&state, Wei::ZERO) {
+        match plan_funding(&state) {
             FundingDecision::Fund(amount) => assert_eq!(amount, Wei::new(TARGET)),
             other => panic!("a fully covered funding must be due, got {other:?}"),
         }
@@ -166,12 +169,9 @@ mod concurrent_fundings {
     fn should_refuse_a_second_funding_at_every_stage_before_finalization() {
         let mut state = state();
 
-        let first = match plan_funding(&state, Wei::ZERO) {
-            FundingDecision::Fund(amount) => amount,
-            other => panic!("the first funding must be due, got {other:?}"),
-        };
-        assert_eq!(first, Wei::new(TARGET));
-        let request = funding_request(1, first);
+        // Deliberately less than the target: with the bound read from the state, a funding that
+        // topped the sweeper up would make the last assertion below hold for the wrong reason.
+        let request = funding_request(1, Wei::new(PARTIAL_FUNDING));
 
         accept(&mut state, &request);
         assert_refuses_while(&state, &request, "still queued");
@@ -184,30 +184,42 @@ mod concurrent_fundings {
 
         finalize(&mut state, &request, &signed);
         assert!(
-            matches!(plan_funding(&state, Wei::ZERO), FundingDecision::Fund(_)),
+            matches!(plan_funding(&state), FundingDecision::Fund(_)),
             "the guard must lift once the transfer has finalized"
         );
     }
 
-    /// The guard must not deadlock funding: once the first transfer settles, planning resumes.
+    /// The guard must not deadlock funding: once the first transfer settles, planning resumes — and
+    /// asks for the shortfall the first one left, since the bound now carries what it delivered.
     #[test]
     fn should_resume_funding_once_the_first_has_settled() {
         let mut state = state();
-        let first = match plan_funding(&state, Wei::ZERO) {
-            FundingDecision::Fund(amount) => amount,
-            other => panic!("unexpected {other:?}"),
-        };
-        fund(&mut state, &funding_request(1, first));
+        fund(&mut state, &funding_request(1, Wei::new(PARTIAL_FUNDING)));
 
-        // The sweeper now holds roughly the target, so nothing is due.
-        assert_eq!(
-            plan_funding(&state, Wei::new(TARGET - 1_000_000_000_000_000)),
-            FundingDecision::NotDue
+        let bound = state.sweeper_funding.sweeper_balance_lower_bound();
+        assert!(
+            bound > Wei::ZERO && bound < Wei::new(TARGET / 2),
+            "test setup: the first funding must leave the sweeper below the low-water mark, got \
+             {bound}"
         );
-        assert!(matches!(
-            plan_funding(&state, Wei::ZERO),
-            FundingDecision::Fund(_)
-        ));
+        match plan_funding(&state) {
+            FundingDecision::Fund(second) => assert_eq!(
+                second.checked_add(bound),
+                Some(Wei::new(TARGET)),
+                "the second funding must ask for exactly what the first left short"
+            ),
+            other => panic!("funding must resume once the first has settled, got {other:?}"),
+        }
+    }
+
+    /// The other side of the same coin: a funding that reached the target leaves nothing to do, and
+    /// the state says so on its own — nothing tells the planner what the balance is.
+    #[test]
+    fn should_not_fund_a_sweeper_the_last_funding_topped_up() {
+        let mut state = state();
+        fund(&mut state, &funding_request(1, Wei::new(TARGET)));
+
+        assert_eq!(plan_funding(&state), FundingDecision::NotDue);
     }
 
     /// Whatever sequence the guard permits, the invariant must survive it. This is the assertion the
@@ -217,12 +229,10 @@ mod concurrent_fundings {
         let mut state = state();
 
         for index in 1..=5_u64 {
-            let amount = match plan_funding(&state, Wei::ZERO) {
-                FundingDecision::Fund(amount) => amount,
-                other => panic!("funding {index} should be due, got {other:?}"),
-            };
+            // Arranged rather than planned: nothing draws the bound down until sweeping spends the
+            // gas, so the planner would decline every funding after the first.
             // Reaching here without a trap is the assertion: spend never exceeds burn.
-            fund(&mut state, &funding_request(index, amount));
+            fund(&mut state, &funding_request(index, Wei::new(TARGET)));
             assert!(
                 state.sweeper_funding.cumulative_burned()
                     >= state.sweeper_funding.cumulative_spent()
@@ -235,8 +245,10 @@ mod concurrent_fundings {
     #[test]
     fn should_survive_a_second_funding_accepted_anyway() {
         let mut state = state();
-        let first = funding_request(1, Wei::new(TARGET));
-        let second = funding_request(2, Wei::new(TARGET));
+        // Partial fundings, so that finalizing the first leaves the sweeper short and the guard is
+        // still the reason the second is refused.
+        let first = funding_request(1, Wei::new(PARTIAL_FUNDING));
+        let second = funding_request(2, Wei::new(PARTIAL_FUNDING));
 
         accept(&mut state, &first);
         accept(&mut state, &second);
@@ -265,8 +277,11 @@ mod concurrent_fundings {
             state.sweeper_funding.cumulative_burned() >= state.sweeper_funding.cumulative_spent()
         );
         assert!(
-            matches!(plan_funding(&state, Wei::ZERO), FundingDecision::Fund(_)),
-            "with both settled, funding resumes"
+            state
+                .withdrawal_transactions
+                .outstanding_sweeper_funding()
+                .is_none(),
+            "with both settled, nothing is outstanding and the guard holds nothing back"
         );
     }
 }
