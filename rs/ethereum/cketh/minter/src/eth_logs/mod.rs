@@ -244,18 +244,6 @@ pub enum EventSourceError {
     InvalidEvent(String),
 }
 
-/// Decode a candid::Principal from a slice of at most 32 bytes
-/// encoded as follows
-/// - the first byte is the number of bytes in the principal
-/// - the next N bytes are the principal
-/// - the remaining bytes are zero
-///
-/// Any other encoding will return an error.
-/// Some specific valid [`Principal`]s are also not allowed
-/// since the decoded principal will be used to receive ckETH:
-/// * the management canister principal
-/// * the anonymous principal
-///
 /// Encode a principal the way the deposit helper contract carries one: the number of principal
 /// bytes, then those bytes, then zero padding to 32 bytes. The inverse of
 /// [`parse_principal_from_slice`], which is what the minter reads back out of a helper event.
@@ -272,6 +260,18 @@ pub fn encode_principal(principal: &Principal) -> [u8; 32] {
     encoded
 }
 
+/// Decode a candid::Principal from a slice of at most 32 bytes
+/// encoded as follows
+/// - the first byte is the number of bytes in the principal
+/// - the next N bytes are the principal
+/// - the remaining bytes are zero
+///
+/// Any other encoding will return an error.
+/// Some specific valid [`Principal`]s are also not allowed
+/// since the decoded principal will be used to receive ckETH:
+/// * the management canister principal
+/// * the anonymous principal
+///
 /// This method MUST never panic (decode bytes from untrusted sources).
 fn parse_principal_from_slice(slice: &[u8]) -> Result<Principal, String> {
     const ANONYMOUS_PRINCIPAL_BYTES: [u8; 1] = [4];
