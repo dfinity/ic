@@ -141,13 +141,9 @@ impl SweeperFundingSetup {
         install_ledger(&env, ledger_id, minter_id);
         install_evm_rpc(&env, evm_rpc_id, anvil.url());
 
-        // Jump the clock synchronously first, so that `make_live`'s auto-progress task, whose own
-        // initial time-set is asynchronous, only takes a millisecond-sized step afterwards. Without
-        // this, the ingress messages below can be stamped with a genesis-derived expiry and then be
-        // retroactively expired by the ~5-year jump they raced, and never answered (#11299 hit
-        // exactly this). Certified time, matching what auto-progress sets — `advance_time` moves
-        // only the uncertified clock. Nothing to drain first, unlike #11299: no canister installed
-        // so far issues outcalls of its own.
+        // Before `make_live`, whose auto-progress task sets the time asynchronously: an ingress
+        // message submitted below would otherwise race that five-year jump, be retroactively
+        // expired and never answered. Same fix as #11299, which explains it at length.
         env.set_certified_time(SystemTime::now().into());
         // Live before installing the minter: its install-time timers issue outcalls immediately.
         let _gateway = env.make_live(None);
