@@ -1932,7 +1932,7 @@ fn ingress_history_respects_limits() {
     let run_test = |num_statuses, max_num_terminal| {
         let mut ingress_history = IngressHistoryState::default();
 
-        assert_eq!(ingress_history.memory_usage, 0);
+        assert_eq!(ingress_history.stats.memory_usage, 0);
 
         let terminal_size =
             NumBytes::from(max_num_terminal * test_status_terminal(0).payload_bytes() as u64);
@@ -2951,7 +2951,7 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
 }
 
 #[test]
-fn observe_use_case_migrates_outcalls_scalar_fields_into_use_cases() {
+fn migrate_outcalls_scalar_fields_into_use_cases() {
     let mut subnet_metrics = SubnetMetrics {
         // Simulate a state persisted before use-case tracking existed: the scalar
         // fields hold the full history while the use-case entries only cover a
@@ -2969,10 +2969,12 @@ fn observe_use_case_migrates_outcalls_scalar_fields_into_use_cases() {
         ..Default::default()
     };
 
-    // Observing an *unrelated* use case triggers the migration, i.e. it runs
-    // independently of whether the HTTP/ECDSA scalar fields are observed.
+    // An unrelated use case is observed, as would happen during a round.
     subnet_metrics
         .observe_consumed_cycles_with_use_case(CyclesUseCase::Instructions, NominalCycles::new(5));
+
+    // The migration runs unconditionally at the end of the round.
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
 
     let by_use_case = subnet_metrics.get_consumed_cycles_by_use_case();
 
@@ -3044,6 +3046,11 @@ fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
     subnet_metrics
         .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, NominalCycles::new(5));
 
+    // The migration runs unconditionally at the end of the round. Because both
+    // the scalar and the use-case entry grew by the same amount, reconciling
+    // after the increments yields the same result as reconciling before them.
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
+
     // The use-case entry caught up to the (superset) scalar and grew by 5, with
     // no double counting.
     assert_eq!(
@@ -3061,6 +3068,47 @@ fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
         subnet_metrics.get_consumed_cycles_by_use_case_as_counters()[&CyclesUseCase::HTTPOutcalls],
         NominalCycles::new(65)
     );
+}
+
+#[test]
+fn migrate_outcalls_scalar_fields_without_any_observation() {
+    // A subnet that consumed ECDSA outcall cycles before use-case tracking
+    // existed and has been idle (in subnet-level terms) ever since: no outcall,
+    // no canister deletion, no dropped message. Nothing observes a use case, so
+    // the counters map is empty.
+    let mut subnet_metrics = SubnetMetrics {
+        consumed_cycles_ecdsa_outcalls: NominalCycles::new(200),
+        consumed_cycles_by_use_case: BTreeMap::from([(
+            CyclesUseCase::ECDSAOutcalls,
+            NominalCycles::new(150),
+        )]),
+        ..Default::default()
+    };
+
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
+
+    // The stale entry was backfilled without any use case being observed.
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_by_use_case()[&CyclesUseCase::ECDSAOutcalls],
+        NominalCycles::new(200)
+    );
+    // A zero scalar does not insert a spurious entry.
+    assert!(
+        !subnet_metrics
+            .get_consumed_cycles_by_use_case()
+            .contains_key(&CyclesUseCase::HTTPOutcalls)
+    );
+    // The counters map is left untouched, i.e. still empty.
+    assert!(
+        subnet_metrics
+            .get_consumed_cycles_by_use_case_as_counters()
+            .is_empty()
+    );
+
+    // Idempotent: running it again changes nothing.
+    let before = subnet_metrics.get_consumed_cycles_by_use_case().clone();
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
+    assert_eq!(subnet_metrics.get_consumed_cycles_by_use_case(), &before);
 }
 
 impl From<(u64, u64)> for BlockmakerStats {

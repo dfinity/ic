@@ -1059,6 +1059,91 @@ fn delete_canister_snapshot_succeeds() {
     );
 }
 
+/// Tests that every way of deleting a snapshot records an
+/// `UnflushedCheckpointOp::DeleteSnapshot`, so that the snapshot's directory is deleted
+/// from the tip.
+#[test]
+fn snapshot_deletions_record_unflushed_checkpoint_ops() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Installing a canister does not require any checkpoint ops.
+    assert!(test.state().metadata.unflushed_checkpoint_ops.is_empty());
+
+    // Taking a snapshot requires copying the canister's files to the snapshot's
+    // directory in the tip.
+    let (snapshot_id, _) = helper_take_snapshot(&mut test, canister_id);
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![UnflushedCheckpointOp::TakeSnapshot(
+            canister_id,
+            snapshot_id
+        )]
+    );
+
+    // Replacing the snapshot requires deleting the replaced snapshot's directory before
+    // creating the new one.
+    let args = TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id), None, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let new_snapshot_id = response.snapshot_id();
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![
+            UnflushedCheckpointOp::DeleteSnapshot(snapshot_id),
+            UnflushedCheckpointOp::TakeSnapshot(canister_id, new_snapshot_id),
+        ]
+    );
+
+    // And so does explicitly deleting a snapshot.
+    let args = DeleteCanisterSnapshotArgs::new(canister_id, new_snapshot_id);
+    test.subnet_message("delete_canister_snapshot", args.encode())
+        .unwrap();
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![UnflushedCheckpointOp::DeleteSnapshot(new_snapshot_id)]
+    );
+}
+
+/// Tests that deleting a canister also records an
+/// `UnflushedCheckpointOp::DeleteSnapshot` for each of its snapshots, so that their
+/// directories are deleted from the tip along with the canister's.
+#[test]
+fn delete_canister_records_unflushed_checkpoint_ops_for_its_snapshots() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    let (snapshot_id, _) = helper_take_snapshot(&mut test, canister_id);
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![UnflushedCheckpointOp::TakeSnapshot(
+            canister_id,
+            snapshot_id
+        )]
+    );
+
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    test.delete_canister(canister_id).unwrap();
+
+    // Both the snapshot's and the canister's directories must be deleted from the tip.
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![
+            UnflushedCheckpointOp::DeleteSnapshot(snapshot_id),
+            UnflushedCheckpointOp::DeleteCanister(canister_id),
+        ]
+    );
+}
+
 #[test]
 fn list_canister_snapshot_fails_canister_not_found() {
     let own_subnet = subnet_test_id(1);

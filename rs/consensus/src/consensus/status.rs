@@ -170,7 +170,6 @@ mod tests {
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         ReplicaVersion,
-        backwards_compatibility::BackwardsCompatible,
         consensus::{BlockPayload, Payload, dkg::SplittingArgs},
         crypto::crypto_hash,
     };
@@ -327,11 +326,12 @@ mod tests {
                 );
                 let mut last_summary_block =
                     PoolReader::new(&pool).get_highest_finalized_summary_block();
-                let mut payload = last_summary_block.payload.as_ref().as_summary().clone();
-                payload.dkg.subnet_splitting_status =
-                    BackwardsCompatible::new_for_test_only(test_case.subnet_splitting_status);
-                last_summary_block.payload =
-                    Payload::new(crypto_hash, BlockPayload::Summary(payload));
+                if let Some(subnet_splitting_status) = test_case.subnet_splitting_status {
+                    let mut payload = last_summary_block.payload.as_ref().as_summary().clone();
+                    payload.dkg.subnet_splitting_status = subnet_splitting_status;
+                    last_summary_block.payload =
+                        Payload::new(crypto_hash, BlockPayload::Summary(payload));
+                }
 
                 let status = get_status(
                     test_case.current_height,

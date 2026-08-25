@@ -681,7 +681,7 @@ impl ReplicatedStateMetrics {
 
         self.ingress_history_length
             .set(state.metadata.ingress_history.len() as i64);
-        for (ingress_state, count) in state.metadata.ingress_history.state_counts().iter() {
+        for (ingress_state, count) in state.metadata.ingress_history.state_counts() {
             self.ingress_history_length_by_state
                 .with_label_values(&[ingress_state])
                 .set(count as i64);

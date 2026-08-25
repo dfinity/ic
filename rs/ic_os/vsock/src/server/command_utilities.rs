@@ -7,6 +7,7 @@ pub fn handle_command_output(command_output: Result<Output, Error>) -> Response 
         .map_err(|err| {
             let error_string = format!("Unable to read command output: {err}");
             println!("Error: {error_string}");
+
             error_string
         })
         .and_then(|output| {
@@ -26,6 +27,7 @@ fn handle_output_string(
         .map_err(|err| {
             let error_string = format!("Unable to read command {label}: {err}");
             println!("Error: {error_string}");
+
             error_string
         })
         .and_then(|output| {
