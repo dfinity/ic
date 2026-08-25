@@ -4,7 +4,7 @@ use dashboard::DashboardTemplate;
 use ic_canister_log::log;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{AddressValidationError, validate_address_as_destination};
-use ic_cketh_minter::balance_scan::balance_scan;
+use ic_cketh_minter::balance_scan::{balance_scan, min_deposit};
 use ic_cketh_minter::deposit::{refresh_latest_block_height, scrape_logs};
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
@@ -15,8 +15,9 @@ use ic_cketh_minter::endpoints::events::{
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Arg,
     DepositErc20Error, DepositErc20Response, DepositMode, Eip1559TransactionPrice,
-    Eip1559TransactionPriceArg, Erc20Balance, GasFeeEstimate, MinterInfo, RetrieveEthRequest,
-    RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
+    Eip1559TransactionPriceArg, Erc20Balance, Erc20MinimumDeposit, GasFeeEstimate, MinterInfo,
+    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
+    WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
@@ -32,7 +33,7 @@ use ic_cketh_minter::state::audit::{Event, EventType, process_event};
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest,
+    ReimbursementRequest, SweepRequest,
 };
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
@@ -284,26 +285,34 @@ async fn eip_1559_transaction_price(
 #[query]
 async fn get_minter_info() -> MinterInfo {
     read_state(|s| {
-        let (erc20_balances, supported_ckerc20_tokens) = if s.is_ckerc20_feature_active() {
-            let (balances, tokens) = s
-                .supported_ck_erc20_tokens()
-                .map(|token| {
-                    (
-                        Erc20Balance {
-                            erc20_contract_address: token.erc20_contract_address.to_string(),
-                            balance: s
-                                .erc20_balances
-                                .balance_of(&token.erc20_contract_address)
-                                .into(),
-                        },
-                        endpoints::CkErc20Token::from(token),
-                    )
-                })
-                .unzip();
-            (Some(balances), Some(tokens))
-        } else {
-            (None, None)
-        };
+        let (erc20_balances, supported_ckerc20_tokens, minimum_deposit_amounts) =
+            if s.is_ckerc20_feature_active() {
+                let (balances, tokens) = s
+                    .supported_ck_erc20_tokens()
+                    .map(|token| {
+                        (
+                            Erc20Balance {
+                                erc20_contract_address: token.erc20_contract_address.to_string(),
+                                balance: s
+                                    .erc20_balances
+                                    .balance_of(&token.erc20_contract_address)
+                                    .into(),
+                            },
+                            endpoints::CkErc20Token::from(token),
+                        )
+                    })
+                    .unzip();
+                let minimum_deposit_amounts = s
+                    .supported_ck_erc20_tokens()
+                    .map(|token| Erc20MinimumDeposit {
+                        erc20_contract_address: token.erc20_contract_address.to_string(),
+                        minimum_deposit_amount: min_deposit(&token.erc20_contract_address).into(),
+                    })
+                    .collect();
+                (Some(balances), Some(tokens), Some(minimum_deposit_amounts))
+            } else {
+                (None, None, None)
+            };
 
         let LogScrapingInfo {
             eth_helper_contract_address,
@@ -316,6 +325,7 @@ async fn get_minter_info() -> MinterInfo {
 
         MinterInfo {
             minter_address: s.minter_address().map(|a| a.to_string()),
+            sweeper_address: s.sweeper_address().map(|a| a.to_string()),
             smart_contract_address: eth_helper_contract_address.clone(),
             eth_helper_contract_address,
             erc20_helper_contract_address,
@@ -334,6 +344,7 @@ async fn get_minter_info() -> MinterInfo {
                 },
             ),
             erc20_balances,
+            minimum_deposit_amounts,
             last_eth_scraped_block_number,
             last_erc20_scraped_block_number,
             last_deposit_with_subaccount_scraped_block_number,
@@ -909,6 +920,49 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id: withdrawal_id.get().into(),
                     transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
+                EventType::AcceptedSweepRequest(SweepRequest {
+                    id,
+                    destination,
+                    amount,
+                    data,
+                    max_transaction_fee,
+                    created_at,
+                }) => EP::AcceptedSweepRequest {
+                    sweep_id: id.0.into(),
+                    destination: destination.to_string(),
+                    amount: amount.into(),
+                    data: ByteBuf::from(data),
+                    max_transaction_fee: max_transaction_fee.into(),
+                    created_at,
+                },
+                EventType::CreatedSweeperTransaction {
+                    sweep_id,
+                    transaction,
+                } => EP::CreatedSweeperTransaction {
+                    sweep_id: sweep_id.0.into(),
+                    transaction: map_unsigned_transaction(transaction),
+                },
+                EventType::SignedSweeperTransaction {
+                    sweep_id,
+                    transaction,
+                } => EP::SignedSweeperTransaction {
+                    sweep_id: sweep_id.0.into(),
+                    raw_transaction: transaction.raw_transaction_hex_string(),
+                },
+                EventType::ReplacedSweeperTransaction {
+                    sweep_id,
+                    transaction,
+                } => EP::ReplacedSweeperTransaction {
+                    sweep_id: sweep_id.0.into(),
+                    transaction: map_unsigned_transaction(transaction),
+                },
+                EventType::FinalizedSweeperTransaction {
+                    sweep_id,
+                    transaction_receipt,
+                } => EP::FinalizedSweeperTransaction {
+                    sweep_id: sweep_id.0.into(),
+                    transaction_receipt: map_transaction_receipt(transaction_receipt),
+                },
                 EventType::ReimbursedEthWithdrawal(Reimbursed {
                     burn_in_block: withdrawal_id,
                     reimbursed_in_block,
@@ -1136,7 +1190,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 let now_nanos = ic_cdk::api::time();
                 let age_nanos = now_nanos.saturating_sub(
                     s.withdrawal_transactions
-                        .oldest_incomplete_withdrawal_timestamp()
+                        .oldest_incomplete_request_timestamp()
                         .unwrap_or(now_nanos),
                 );
                 w.encode_gauge(

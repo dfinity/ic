@@ -1054,13 +1054,12 @@ mod crypto_hash_stability {
     fn canister_http_response_stability() {
         let data = CanisterHttpResponse {
             id: CanisterHttpRequestId::from(42),
-            canister_id: ic_base_types::CanisterId::from_u64(42),
             content: CanisterHttpResponseContent::Success(vec![0x42; 16]),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "70d5cfb76e22ec392145fe3caae1458a7c2f395cde80c6090cfddc9174ced772",
+            "4553e1dd6e41fd9c7619ebdfc6dd307adb8539e4c379f8465b54bd8eab3941f5",
             "Hash of CanisterHttpResponse changed"
         );
     }

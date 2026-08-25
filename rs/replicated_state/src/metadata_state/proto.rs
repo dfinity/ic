@@ -776,12 +776,8 @@ impl From<&IngressHistoryState> for pb_ingress::IngressHistoryState {
             .collect();
 
         debug_assert_eq!(
-            IngressHistoryState::compute_memory_usage(&item.statuses),
-            item.memory_usage
-        );
-        debug_assert_eq!(
-            IngressHistoryState::compute_state_counts(&item.statuses),
-            item.state_counts
+            IngressHistoryState::compute_stats(&item.statuses),
+            item.stats
         );
 
         pb_ingress::IngressHistoryState {
@@ -816,15 +812,13 @@ impl TryFrom<pb_ingress::IngressHistoryState> for IngressHistoryState {
             pruning_times.insert(time, messages);
         }
 
-        let memory_usage = IngressHistoryState::compute_memory_usage(&statuses);
-        let state_counts = IngressHistoryState::compute_state_counts(&statuses);
+        let stats = IngressHistoryState::compute_stats(&statuses);
 
         Ok(IngressHistoryState {
             statuses: Arc::new(statuses),
             pruning_times: Arc::new(pruning_times),
             next_terminal_time: Time::from_nanos_since_unix_epoch(item.next_terminal_time),
-            memory_usage,
-            state_counts,
+            stats,
         })
     }
 }
