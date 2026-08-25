@@ -77,6 +77,16 @@ impl SweepTransaction {
         if authorizations.is_empty() {
             return Self::Eip1559(transaction);
         }
+        // EIP-7702 skips an authorization whose chain id is neither zero nor the chain the
+        // transaction runs on, without failing the transaction: the sweep would pay for the
+        // delegation, not install it, and then call an address with no code.
+        assert!(
+            authorizations
+                .iter()
+                .all(|a| a.chain_id == 0 || a.chain_id == transaction.chain_id),
+            "BUG: authorization for another chain than {}",
+            transaction.chain_id
+        );
         let delegating = Eip7702TransactionRequest {
             chain_id: transaction.chain_id,
             nonce: transaction.nonce,

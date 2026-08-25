@@ -695,6 +695,30 @@ mod sweep {
         );
     }
 
+    #[test]
+    #[should_panic(expected = "BUG: authorization for another chain")]
+    fn should_trap_on_an_authorization_for_another_chain() {
+        let other_chain = SignedAuthorization {
+            chain_id: sweep_transaction().chain_id + 1,
+            ..authorization()
+        };
+
+        let _ = SweepTransaction::new(sweep_transaction(), vec![other_chain]);
+    }
+
+    #[test]
+    fn should_accept_an_authorization_valid_on_every_chain() {
+        let any_chain = SignedAuthorization {
+            chain_id: 0,
+            ..authorization()
+        };
+
+        let sweep = SweepTransaction::new(sweep_transaction(), vec![any_chain.clone()]);
+
+        assert_eq!(sweep.transaction_type(), SET_CODE_TX_ID);
+        assert_eq!(sweep.authorizations(), &[any_chain]);
+    }
+
     fn sweep_transaction() -> Eip1559TransactionRequest {
         Eip1559TransactionRequest {
             chain_id: 11155111,
