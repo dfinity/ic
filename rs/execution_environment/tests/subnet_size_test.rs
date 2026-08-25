@@ -43,18 +43,9 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 /// instructions per OS page per Wasm page.  The OS page size varies by
 /// platform (4 KiB on Linux, 16 KiB on arm64-darwin).
 fn deterministic_tracker_write_overhead(n_wasm_pages: u64) -> u64 {
-    use ic_config::flag_status::FlagStatus;
     use ic_sys::PAGE_SIZE;
     const WASM_PAGE_SIZE: u64 = 65536;
-    if EmbeddersConfig::default()
-        .feature_flags
-        .deterministic_memory_tracker
-        == FlagStatus::Enabled
-    {
-        n_wasm_pages * 2 * (WASM_PAGE_SIZE / PAGE_SIZE as u64)
-    } else {
-        0
-    }
+    n_wasm_pages * 2 * (WASM_PAGE_SIZE / PAGE_SIZE as u64)
 }
 
 // instruction cost of executing inc method on the test canister
