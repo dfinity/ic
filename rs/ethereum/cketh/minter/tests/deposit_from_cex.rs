@@ -15,10 +15,10 @@
 //!
 //! Two further tests drive whole features end to end through a live PocketIC
 //! and the real EVM RPC canister: the balance scan (see
-//! [`ic_cketh_test_utils::live_scan`]) and sweeper fee funding, which deposits
+//! [`ic_cketh_test_utils::live`]) and sweeper fee funding, which deposits
 //! through the production helper contract and then watches the minter burn
 //! ckETH from its fee subaccount to pay for sweep gas (see
-//! [`ic_cketh_test_utils::sweeper_funding`]).
+//! [`ic_cketh_test_utils::live`]).
 //!
 //! The anvil node client and its ABI/solc helpers live in
 //! [`ic_cketh_test_utils::anvil`]; `anvil` and `solc` are vendored via Bazel
@@ -32,8 +32,7 @@ use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
-use ic_cketh_test_utils::live_scan::{Holding, LiveBalanceScanSetup};
-use ic_cketh_test_utils::sweeper_funding::SweeperFundingSetup;
+use ic_cketh_test_utils::live::{Holding, LiveSetup};
 use ic_ethereum_types::Address;
 use std::time::Duration;
 
@@ -201,7 +200,7 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
     const USDC_ABOVE_MINIMUM: u128 = 15_000_000;
     const USDT_BELOW_MINIMUM: u128 = 1_000_000;
 
-    let setup = LiveBalanceScanSetup::new_live();
+    let setup = LiveSetup::new_balance_scan();
     // `supported_erc20_tokens()` registers ckUSDC then ckUSDT, in that order.
     let [usdc, usdt] = setup.supported_erc20_tokens() else {
         panic!("expected exactly 2 supported tokens")
@@ -251,16 +250,17 @@ const FUNDING_TICKS: u32 = 6;
 
 #[test]
 fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
-    let setup = SweeperFundingSetup::new_live();
+    let setup = LiveSetup::new_funding();
 
-    // Only the fee account is funded: sweep gas must come from there and nowhere else. The ledger
-    // baselines come from the harness, which took them before the minter could burn — the decision
-    // reads nothing off the chain, so its first run lands too fast to snapshot from here.
-    let supply_before = setup.supply_before_funding();
-    let fee_account_before = setup.fee_account_before_funding();
+    // Only the fee account is funded: sweep gas must come from there and nowhere else. Read before
+    // the minter is armed, since the funding decision reads nothing off the chain and so its first
+    // run burns within milliseconds of the upgrade below — far too fast to snapshot after it.
+    let supply_before = setup.cketh_total_supply();
+    let fee_account_before = setup.cketh_balance_of(setup.fee_account());
     let minter_eth_before = setup.anvil_eth_balance(&setup.minter_address());
 
-    let sweeper = setup.await_funding_decision();
+    setup.upgrade_minter();
+    let sweeper = setup.await_sweeper_address();
     assert_eq!(
         setup.anvil_eth_balance(&sweeper),
         0,
