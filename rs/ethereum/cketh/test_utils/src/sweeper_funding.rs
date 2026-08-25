@@ -110,6 +110,12 @@ impl SweeperFundingSetup {
         Self::new_live_with_fee_account_balance(FEE_ACCOUNT_BALANCE)
     }
 
+    /// As [`Self::new_live`], but leaves the fee account empty, so that the first check that could
+    /// fund finds nothing to burn.
+    pub fn new_live_with_empty_fee_account() -> Self {
+        Self::new_live_with_fee_account_balance(0)
+    }
+
     fn new_live_with_fee_account_balance(fee_account_balance: u128) -> Self {
         let anvil = Anvil::start_mainnet_like();
 
