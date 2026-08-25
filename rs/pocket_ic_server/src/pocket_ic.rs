@@ -3859,7 +3859,8 @@ impl Operation for ProcessCanisterHttpInternal {
                     }
                     Ok((response, payment_receipt)) => {
                         canister_http.pending.remove(&response.id);
-                        if let Some(context) = sm.canister_http_request_contexts().get(&response.id) {
+                        if let Some(context) = sm.canister_http_request_contexts().get(&response.id)
+                        {
                             // Only one real outcall is made, so every node that would have
                             // performed it reports the same response and the same spend.
                             let responses = outcall_nodes(&sm, context)
