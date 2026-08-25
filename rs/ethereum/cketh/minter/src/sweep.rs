@@ -71,10 +71,15 @@ pub async fn process_sweeper_transactions() {
     let gas_fee_estimate = match lazy_refresh_gas_fee_estimate().await {
         Some(gas_fee_estimate) => gas_fee_estimate,
         None => {
+            // The withdrawal task refreshes the same estimate under a shared guard and runs first
+            // on an equal cadence, so losing that race is expected rather than exceptional. Retry
+            // instead of waiting a whole interval: by then the refresh it was holding has cached an
+            // estimate this task can reuse.
             log!(
                 INFO,
-                "[process_sweeper_transactions]: failed retrieving gas fee estimate",
+                "[process_sweeper_transactions]: failed retrieving gas fee estimate, retrying",
             );
+            schedule_retry();
             return;
         }
     };
