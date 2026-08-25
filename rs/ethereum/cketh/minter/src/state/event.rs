@@ -6,10 +6,13 @@ use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
 use crate::numeric::{BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest,
+    ReimbursementRequest, SweepId, SweepRequest,
 };
 use crate::timed_sized_map::Timestamp;
-use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
+use crate::tx::{
+    Eip1559TransactionRequest, SignedEip1559TransactionRequest, SignedSweepTransaction,
+    SweepTransaction,
+};
 use candid::Principal;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
@@ -186,6 +189,41 @@ pub enum EventType {
     /// The minter burned ckETH from its fee subaccount to top up the sweeper address with gas.
     #[n(27)]
     AcceptedSweeperFundingRequest(#[n(0)] EthWithdrawalRequest),
+    /// The minter enqueued a sweep to be sent from its dedicated sweeper address.
+    #[n(28)]
+    AcceptedSweepRequest(#[n(0)] SweepRequest),
+    /// The minter created a sweep transaction.
+    #[n(29)]
+    CreatedSweeperTransaction {
+        #[n(0)]
+        sweep_id: SweepId,
+        #[n(1)]
+        transaction: SweepTransaction,
+    },
+    /// The minter signed a sweep transaction.
+    #[n(30)]
+    SignedSweeperTransaction {
+        #[n(0)]
+        sweep_id: SweepId,
+        #[n(1)]
+        transaction: SignedSweepTransaction,
+    },
+    /// The minter replaced a sweep transaction after a fee bump.
+    #[n(31)]
+    ReplacedSweeperTransaction {
+        #[n(0)]
+        sweep_id: SweepId,
+        #[n(1)]
+        transaction: SweepTransaction,
+    },
+    /// The minter observed a sweep transaction being included in a finalized Ethereum block.
+    #[n(32)]
+    FinalizedSweeperTransaction {
+        #[n(0)]
+        sweep_id: SweepId,
+        #[n(1)]
+        transaction_receipt: TransactionReceipt,
+    },
 }
 
 /// Full snapshot of the ckERC20 deposit address registry. Carries the limits in

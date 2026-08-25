@@ -3,7 +3,9 @@ mod tests;
 
 mod eip_1559;
 mod eip_7702;
+mod finalized;
 mod signed;
+mod sweep;
 
 pub use eip_1559::{
     Eip1559TransactionRequest, FinalizedEip1559Transaction, SignedEip1559TransactionRequest,
@@ -12,9 +14,12 @@ pub use eip_1559::{
 pub use eip_7702::{
     Authorization, Eip7702TransactionRequest, SignedAuthorization, SignedEip7702TransactionRequest,
 };
+pub use finalized::Finalized;
 pub use signed::{SignableTransaction, Signed, TransactionSignature, sign};
+pub use sweep::{DelegatingSweep, SignedSweepTransaction, SweepTransaction};
 
 use crate::{
+    deposit_address::derive_public_key,
     eth_rpc::Hash,
     eth_rpc_client::{
         MIN_ATTACHED_CYCLES, MultiCallError, StrictMajorityByKey, ToReducedWithStrategy, rpc_client,
@@ -22,7 +27,7 @@ use crate::{
     guard::TimerGuard,
     logs::{DEBUG, INFO},
     numeric::{GasAmount, Wei, WeiPerGas},
-    state::{TaskType, lazy_call_ecdsa_public_key, mutate_state, read_state},
+    state::{TaskType, lazy_call_ecdsa_public_key_with_chain_code, mutate_state, read_state},
 };
 use candid::Nat;
 use ethnum::u256;
@@ -32,6 +37,7 @@ use ic_ethereum_types::Address;
 use ic_secp256k1::RecoveryId;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
+use serde_bytes::ByteBuf;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Decode, Encode)]
 #[cbor(transparent)]
@@ -97,6 +103,45 @@ impl<T> Resubmittable<T> {
     }
 }
 
+impl<T: SignableTransaction> Resubmittable<Signed<T>> {
+    /// The same transaction at the price needed to resubmit it under `new_gas_fee`, or `None` if
+    /// its current price is still enough.
+    ///
+    /// # Errors
+    /// * [`ResubmitTransactionError::InsufficientTransactionFee`] if the new price exceeds the
+    ///   transaction fee the resubmission strategy allows.
+    pub fn resubmit(
+        &self,
+        new_gas_fee: GasFeeEstimate,
+    ) -> Result<Option<T>, ResubmitTransactionError> {
+        let transaction = self.transaction.transaction();
+        let last_tx_price = transaction.transaction_price();
+        let new_tx_price = last_tx_price
+            .clone()
+            .resubmit_transaction_price(new_gas_fee);
+        if new_tx_price == last_tx_price {
+            return Ok(None);
+        }
+
+        if new_tx_price.max_transaction_fee() > self.resubmission.allowed_max_transaction_fee() {
+            return Err(ResubmitTransactionError::InsufficientTransactionFee {
+                allowed_max_transaction_fee: self.resubmission.allowed_max_transaction_fee(),
+                actual_max_transaction_fee: new_tx_price.max_transaction_fee(),
+            });
+        }
+        let new_amount = match self.resubmission {
+            ResubmissionStrategy::ReduceEthAmount { withdrawal_amount } => {
+                withdrawal_amount.checked_sub(new_tx_price.max_transaction_fee())
+                    .expect("BUG: withdrawal_amount covers new transaction fee because it was checked before")
+            }
+            ResubmissionStrategy::GuaranteeEthAmount { .. } => *transaction.amount(),
+        };
+        Ok(Some(
+            transaction.with_price_and_amount(new_tx_price, new_amount),
+        ))
+    }
+}
+
 impl<T> AsRef<T> for Resubmittable<T> {
     fn as_ref(&self) -> &T {
         &self.transaction
@@ -134,8 +179,43 @@ pub fn encode_u256<T: Into<u256>>(stream: &mut RlpStream, value: T) {
     stream.append(&value.to_be_bytes()[leading_empty_bytes..].as_ref());
 }
 
-async fn compute_recovery_id(digest: &Hash, signature: &[u8]) -> RecoveryId {
-    let ecdsa_public_key = lazy_call_ecdsa_public_key().await;
+/// Sign `digest` with the minter's ECDSA key under `derivation_path`, resolving the signature's
+/// parity bit against the key that made it.
+pub(crate) async fn sign_digest(
+    digest: &Hash,
+    derivation_path: &[ByteBuf],
+) -> Result<TransactionSignature, String> {
+    let key_name = read_state(|s| s.ecdsa_key_name.clone());
+    let signature = crate::management::sign_with_ecdsa(
+        key_name,
+        ic_management_canister_types_private::DerivationPath::new(derivation_path.to_vec()),
+        digest.0,
+    )
+    .await
+    .map_err(|e| format!("failed to sign digest: {e}"))?;
+    let recid = compute_recovery_id(digest, &signature, derivation_path).await;
+    if recid.is_x_reduced() {
+        return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
+    }
+    let (r_bytes, s_bytes) = split_in_two(signature);
+    Ok(TransactionSignature {
+        signature_y_parity: recid.is_y_odd(),
+        r: u256::from_be_bytes(r_bytes),
+        s: u256::from_be_bytes(s_bytes),
+    })
+}
+
+/// The parity bit of a signature made under `derivation_path`.
+///
+/// Recovery only succeeds against the public key that produced the signature, so the master key is
+/// derived along the same path first.
+async fn compute_recovery_id(
+    digest: &Hash,
+    signature: &[u8],
+    derivation_path: &[ByteBuf],
+) -> RecoveryId {
+    let (master_public_key, chain_code) = lazy_call_ecdsa_public_key_with_chain_code().await;
+    let ecdsa_public_key = derive_public_key(&master_public_key, &chain_code, derivation_path);
     debug_assert!(
         ecdsa_public_key.verify_signature_prehashed(&digest.0, signature),
         "failed to verify signature prehashed, digest: {:?}, signature: {:?}, public_key: {:?}",
