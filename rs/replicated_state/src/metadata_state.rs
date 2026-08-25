@@ -701,9 +701,11 @@ impl SubnetMetrics {
     /// the fold over the canisters that currently exist.
     ///
     /// **This is the single definition of the quantity, deliberately.** Every
-    /// consumer must agree on it bit for bit, starting with the certified state
-    /// tree at `/subnet/<subnet_id>/metrics` (from certification version `V29`).
-    /// Both terms are plain stored fields, so this is `O(1)`.
+    /// consumer must agree on it bit for bit: the certified state tree at
+    /// `/subnet/<subnet_id>/metrics` (from certification version `V29`) and the
+    /// `replicated_state_consumed_cycles_since_replica_started` gauge observed by
+    /// `ReplicatedStateMetrics::observe`. Both terms are plain stored fields, so
+    /// this is `O(1)`.
     pub fn consumed_cycles_total_including_canisters(&self) -> NominalCycles {
         self.consumed_cycles_total() + self.consumed_cycles_by_canisters
     }
