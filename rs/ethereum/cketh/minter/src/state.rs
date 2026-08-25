@@ -957,4 +957,5 @@ pub enum TaskType {
     RefreshLatestBlockHeight,
     BalanceScan,
     SweeperFunding,
+    SweeperSend,
 }
