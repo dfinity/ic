@@ -209,6 +209,7 @@ fn canister_init() {
     #[cfg(feature = "test")]
     {
         use registry_canister::flags::temporary_overrides::{
+            test_set_blank_replica_version_id_for_cloud_engines_enabled,
             test_set_swapping_enabled_subnets, test_set_swapping_status,
             test_set_swapping_whitelisted_callers,
         };
@@ -234,6 +235,15 @@ fn canister_init() {
         );
         test_set_swapping_enabled_subnets(
             init_payload.swapping_enabled_subnets.unwrap_or_default(),
+        );
+        println!(
+            "{LOG_PREFIX}canister_init: Blank replica_version_id for Cloud Engines enabled: {:?}",
+            init_payload.is_blank_replica_version_id_for_cloud_engines_enabled
+        );
+        test_set_blank_replica_version_id_for_cloud_engines_enabled(
+            init_payload
+                .is_blank_replica_version_id_for_cloud_engines_enabled
+                .unwrap_or_default(),
         );
     }
 }

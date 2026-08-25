@@ -734,6 +734,7 @@ mod test {
             subnet_type: subnet_type as i32,
             is_halted: false,
             halt_at_cup_height: false,
+            cooling_down: false,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],

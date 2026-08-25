@@ -1,5 +1,4 @@
 use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
-use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::wasm_utils;
 use ic_embedders::{
@@ -288,20 +287,10 @@ fn instr_used(instance: &mut WasmtimeInstance) -> u64 {
 ///   Each triggers `mark_wasm_page_accessed` + `mark_wasm_page_dirty`:
 ///   2 × (WASM_PAGE_SIZE / OS_PAGE_SIZE) = 2 × 16 = 32 instructions.
 /// - `n_stable_wasm_pages`: same as for heap: 32 instructions per page.
-///
-/// Returns 0 when the deterministic memory tracker is disabled.
 fn deterministic_tracker_overhead(n_heap_wasm_pages: u64, n_stable_wasm_pages: u64) -> u64 {
-    if EmbeddersConfig::default()
-        .feature_flags
-        .deterministic_memory_tracker
-        == FlagStatus::Enabled
-    {
-        let os_pages_per_wasm_page = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64;
-        n_heap_wasm_pages * 2 * os_pages_per_wasm_page
-            + n_stable_wasm_pages * 2 * os_pages_per_wasm_page
-    } else {
-        0
-    }
+    let os_pages_per_wasm_page = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64;
+    n_heap_wasm_pages * 2 * os_pages_per_wasm_page
+        + n_stable_wasm_pages * 2 * os_pages_per_wasm_page
 }
 
 #[allow(clippy::field_reassign_with_default)]

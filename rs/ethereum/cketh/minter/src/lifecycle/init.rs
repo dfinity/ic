@@ -3,7 +3,7 @@ use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
-use crate::state::transactions::WithdrawalTransactions;
+use crate::state::transactions::{SweepId, TransactionPipeline, WithdrawalTransactions};
 use crate::state::{InvalidStateError, State};
 use crate::{EVM_RPC_ID_PRODUCTION, EVM_RPC_ID_STAGING};
 use candid::types::number::Nat;
@@ -34,6 +34,8 @@ pub struct InitArg {
     pub evm_rpc_id: Option<Principal>,
     #[n(10)]
     pub ethereum_sweeper_contract_address: Option<String>,
+    #[cbor(n(11), with = "icrc_cbor::nat::option")]
+    pub next_sweeper_transaction_nonce: Option<Nat>,
 }
 
 impl TryFrom<InitArg> for State {
@@ -50,12 +52,18 @@ impl TryFrom<InitArg> for State {
             last_scraped_block_number,
             evm_rpc_id,
             ethereum_sweeper_contract_address,
+            next_sweeper_transaction_nonce,
         }: InitArg,
     ) -> Result<Self, Self::Error> {
         use std::str::FromStr;
 
         let initial_nonce = TransactionNonce::try_from(next_transaction_nonce)
             .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {e}")))?;
+        let initial_sweeper_nonce = next_sweeper_transaction_nonce
+            .map(TransactionNonce::try_from)
+            .transpose()
+            .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {e}")))?
+            .unwrap_or(TransactionNonce::ZERO);
         let minimum_withdrawal_amount = Wei::try_from(minimum_withdrawal_amount).map_err(|e| {
             InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {e}"))
         })?;
@@ -98,6 +106,8 @@ impl TryFrom<InitArg> for State {
             pending_withdrawal_principals: Default::default(),
             pending_deposit_principals: Default::default(),
             withdrawal_transactions: WithdrawalTransactions::new(initial_nonce),
+            sweeper_transactions: TransactionPipeline::new(initial_sweeper_nonce),
+            next_sweep_id: SweepId(0),
             cketh_ledger_id: ledger_id,
             cketh_minimum_withdrawal_amount: minimum_withdrawal_amount,
             ethereum_block_height,

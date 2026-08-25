@@ -2768,7 +2768,6 @@ impl StateMachine {
     pub fn mock_canister_http_response(
         &self,
         request_id: u64,
-        canister_id: CanisterId,
         contents: Vec<CanisterHttpResponseContent>,
     ) {
         assert_eq!(contents.len(), self.nodes.len());
@@ -2776,7 +2775,6 @@ impl StateMachine {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
-                canister_id,
                 content: content.clone(),
             };
             let receipt_share = CanisterHttpResponseReceipt {

@@ -25,4 +25,4 @@ sev_guest = { path = "../../sev/guest" }
 sev_guest_testing = { path = "../../sev/guest/testing" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-vsock_lib = { path = "../../vsock/vsock_lib" }
+vsock_lib = { path = "../../vsock" }

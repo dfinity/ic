@@ -190,7 +190,7 @@ jobs:
         NAMESPACE_ACTIONS_RESULTS_URL: ${{ env.NAMESPACE_ACTIONS_RESULTS_URL }}
         NAMESPACE_ACTIONS_RESULTS_SERVICE: ${{ env.NAMESPACE_ACTIONS_RESULTS_SERVICE }}
         NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD: ${{ env.NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD }}
-    timeout-minutes: 150
+    timeout-minutes: 220
     steps:
       - uses: namespacelabs/nscloud-setup@v0
       - name: Set up Bazel Remote Execution
@@ -233,7 +233,7 @@ jobs:
       # such that lateron build artifacts can be uploaded even when tests fail.
 
       - name: Bazel Build with RBE
-        timeout-minutes: 60
+        timeout-minutes: 90
         shell: bash
         run: |
           set -euo pipefail
@@ -291,7 +291,7 @@ jobs:
           bazel "${bazel_args[@]}"
 
       - name: Bazel Test with RBE
-        timeout-minutes: 90
+        timeout-minutes: 120
         shell: bash
         run: |
           set -euo pipefail

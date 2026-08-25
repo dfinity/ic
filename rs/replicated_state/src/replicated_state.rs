@@ -592,8 +592,9 @@ impl ReplicatedState {
     }
 
     /// Permanently removes the canister and its scheduling priority from the subnet
-    /// schedule; and records the removal as an unflushed checkpoint operation, so that
-    /// the canister's directory is also deleted from the tip.
+    /// schedule; and records the removal of the canister and of all its snapshots as
+    /// unflushed checkpoint operations, so that their directories are also deleted from
+    /// the tip.
     ///
     /// Use `take_canister_state()` instead if the canister is only temporarily removed
     /// from the state (e.g. to work around borrow checker limitations).
@@ -602,7 +603,7 @@ impl ReplicatedState {
         let canister_state = self.canister_states.remove(canister_id)?;
         self.metadata
             .unflushed_checkpoint_ops
-            .delete_canister(*canister_id);
+            .delete_canister(&canister_state);
         Some(canister_state)
     }
 
@@ -1471,8 +1472,9 @@ impl ReplicatedState {
         assert!(consensus_queue.is_empty());
 
         // Retain only canisters hosted by `subnet_id`; and record the removal of the
-        // others, so that their directories are deleted from tip by the flush of these
-        // operations, making `TipRequest::FilterTipCanisters` a pure safety net.
+        // others (and of their snapshots), so that their directories are deleted from
+        // tip by the flush of these operations, making `TipRequest::FilterTipCanisters`
+        // a pure safety net.
         //
         // TODO: Validate that canisters are split across no more than 2 subnets.
         let is_local_canister = |canister_id: &CanisterId| {
@@ -1486,11 +1488,11 @@ impl ReplicatedState {
             .filter(|canister_id| !is_local_canister(canister_id))
             .cloned()
             .collect();
-        canister_states.retain(|canister_id, _| is_local_canister(canister_id));
         for canister_id in dropped_canister_ids {
+            let canister_state = canister_states.remove(&canister_id).unwrap();
             metadata
                 .unflushed_checkpoint_ops
-                .delete_canister(canister_id);
+                .delete_canister(&canister_state);
         }
 
         // All subnet messages (ingress and canister) only remain on subnet A' because:
@@ -1602,7 +1604,8 @@ impl ReplicatedState {
     ///
     ///  * Retaining only the canisters that are to be hosted by `subnet_id`, as
     ///    determined by the routing table (*hosted canisters*); and recording the
-    ///    removal of the rest as `UnflushedCheckpointOp::DeleteCanister`, so that
+    ///    removal of the rest as `UnflushedCheckpointOp::DeleteCanister` (plus an
+    ///    `UnflushedCheckpointOp::DeleteSnapshot` per snapshot of theirs), so that
     ///    their directories are explicitly deleted from tip, in order relative to the
     ///    other checkpoint operations.
     ///  * Retaining only the snapshots of *hosted canisters*.
@@ -1657,24 +1660,25 @@ impl ReplicatedState {
         });
 
         // Retain only canisters hosted by this subnet; and record the removal of the
-        // others, so that their directories are deleted from tip by the flush of these
-        // operations, in order relative to the other checkpoint operations.
+        // others (and of their snapshots), so that their directories are deleted from
+        // tip by the flush of these operations, in order relative to the other
+        // checkpoint operations.
         //
         // A splitting batch always requires a full state hash, so the split round is
         // always a checkpoint round and `FilterTipCanisters` would remove the very same
         // directories later in the same round. Recording the removals makes every
-        // canister directory mutation in tip an explicit, ordered operation, leaving
-        // `FilterTipCanisters` as a pure safety net.
+        // canister and snapshot directory mutation in tip an explicit, ordered
+        // operation, leaving `FilterTipCanisters` as a pure safety net.
         let dropped_canister_ids: Vec<CanisterId> = canister_states
             .all_keys()
             .filter(|canister_id| lookup_subnet(canister_id) != Some(subnet_id))
             .cloned()
             .collect();
-        canister_states.retain(|canister_id, _| lookup_subnet(canister_id) == Some(subnet_id));
         for canister_id in dropped_canister_ids {
+            let canister_state = canister_states.remove(&canister_id).unwrap();
             metadata
                 .unflushed_checkpoint_ops
-                .delete_canister(canister_id);
+                .delete_canister(&canister_state);
         }
 
         // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which

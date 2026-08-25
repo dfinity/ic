@@ -37,7 +37,8 @@ use ic_types::messages::{
 };
 use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Instructions, NominalCycles, NominalCyclesTesting,
+    CanisterCyclesCostSchedule, CompoundCycles, CyclesUseCase, Instructions, NominalCycles,
+    NominalCyclesTesting,
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
@@ -1297,6 +1298,47 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             metric_vec(&[(&[("use_case", "HTTPOutcalls")], fee.nominal().get() as f64),]),
         );
     }
+}
+
+#[test]
+fn outcalls_cycles_are_migrated_into_use_cases_on_an_idle_subnet() {
+    let mut test = SchedulerTestBuilder::new().build();
+
+    // Simulate a subnet that consumed HTTP and ECDSA outcall cycles before
+    // use-case tracking existed: only the legacy scalar fields carry the history,
+    // the by-use-case map has no corresponding entries.
+    let subnet_metrics = &mut test.state_mut().metadata.subnet_metrics;
+    subnet_metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(100));
+    subnet_metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(200));
+    assert!(subnet_metrics.get_consumed_cycles_by_use_case().is_empty());
+
+    // A round in which the subnet observes no use case whatsoever: no outcall, no
+    // canister deletion, no dropped message.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // The entries were nevertheless backfilled from the scalar fields.
+    let by_use_case = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .get_consumed_cycles_by_use_case();
+    assert_eq!(
+        by_use_case[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(100)
+    );
+    assert_eq!(
+        by_use_case[&CyclesUseCase::ECDSAOutcalls],
+        NominalCycles::new(200)
+    );
+
+    // The monotonic counters map is left untouched, so no spurious counter jump.
+    assert!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_by_use_case_as_counters()
+            .is_empty()
+    );
 }
 
 #[test]

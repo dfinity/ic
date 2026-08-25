@@ -574,6 +574,7 @@ impl From<CreateSubnetPayload> for SubnetRecord {
 
             is_halted: val.is_halted,
             halt_at_cup_height: false,
+            cooling_down: false,
 
             features: Some(SubnetFeatures::from(val.features).into()),
             max_number_of_canisters: val.max_number_of_canisters,

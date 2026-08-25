@@ -1220,6 +1220,70 @@ fn can_add_and_delete_canister_snapshots(
     }
 }
 
+/// Tests that deleting a snapshot's directory is idempotent, i.e. that deleting a
+/// snapshot that has no directory is a no-op rather than a `NotFound` I/O error.
+///
+/// This is relied upon by the flush of `UnflushedCheckpointOp::DeleteSnapshot`: a
+/// snapshot created from uploaded metadata has no directory in tip until its `PageMap`s
+/// are first flushed, so deleting it before then would otherwise fail.
+#[test]
+fn delete_snapshot_dir_is_idempotent() {
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout: CheckpointLayout<WriteOnly> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
+
+    let canister_id = canister_test_id(100);
+    let snapshot_id = SnapshotId::from((canister_id, 0));
+    let other_snapshot_id = SnapshotId::from((canister_id, 1));
+
+    let snapshot_ids = || {
+        let mut snapshot_ids = checkpoint_layout.snapshot_ids().unwrap();
+        snapshot_ids.sort();
+        snapshot_ids
+    };
+    let num_canister_dirs = || {
+        std::fs::read_dir(checkpoint_layout.raw_path().join(SNAPSHOTS_DIR))
+            .unwrap()
+            .count()
+    };
+
+    // Deleting a snapshot that never had a directory is a no-op.
+    checkpoint_layout.delete_snapshot_dir(&snapshot_id).unwrap();
+    assert!(snapshot_ids().is_empty());
+
+    // Create the directories of two snapshots of the same canister.
+    checkpoint_layout.snapshot(&snapshot_id).unwrap();
+    checkpoint_layout.snapshot(&other_snapshot_id).unwrap();
+    let mut expected_snapshot_ids = vec![snapshot_id, other_snapshot_id];
+    expected_snapshot_ids.sort();
+    assert_eq!(snapshot_ids(), expected_snapshot_ids);
+    assert_eq!(num_canister_dirs(), 1);
+
+    // Deleting one of them retains the other, as well as the canister's directory.
+    checkpoint_layout.delete_snapshot_dir(&snapshot_id).unwrap();
+    assert_eq!(snapshot_ids(), vec![other_snapshot_id]);
+    assert_eq!(num_canister_dirs(), 1);
+
+    // And deleting it again is a no-op.
+    checkpoint_layout.delete_snapshot_dir(&snapshot_id).unwrap();
+    assert_eq!(snapshot_ids(), vec![other_snapshot_id]);
+    assert_eq!(num_canister_dirs(), 1);
+
+    // Deleting the canister's last snapshot also removes the canister's directory.
+    checkpoint_layout
+        .delete_snapshot_dir(&other_snapshot_id)
+        .unwrap();
+    assert!(snapshot_ids().is_empty());
+    assert_eq!(num_canister_dirs(), 0);
+
+    // As is deleting it again.
+    checkpoint_layout
+        .delete_snapshot_dir(&other_snapshot_id)
+        .unwrap();
+    assert!(snapshot_ids().is_empty());
+    assert_eq!(num_canister_dirs(), 0);
+}
+
 #[test]
 fn test_encode_decode_empty_task_queue() {
     let task_queue = TaskQueue::default();
