@@ -6,7 +6,6 @@
 //! pushing the instance's clock forward rather than waiting it out.
 
 use ic_cketh_test_utils::sweeper_funding::SweeperFundingSetup;
-use std::time::Duration;
 
 /// A budget, not a cost: driving stops the moment the transfer lands, so this only has to be more
 /// ticks than the run needs. One sends the transfer; the spares cover a tick landing before the
@@ -24,7 +23,7 @@ fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
     let fee_account_before = setup.fee_account_before_funding();
     let minter_eth_before = setup.anvil_eth_balance(&setup.minter_address());
 
-    let sweeper = setup.await_funding_decision(Duration::from_secs(120));
+    let sweeper = setup.await_funding_decision();
     assert_eq!(
         setup.anvil_eth_balance(&sweeper),
         0,
