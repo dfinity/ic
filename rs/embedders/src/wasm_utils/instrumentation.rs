@@ -795,7 +795,12 @@ fn inject_helper_functions(
 /// Indices for injected counters and functions to update them.
 pub(super) struct InjectedCounters {
     pub instructions_counter: u32,
+    /// Remaining budget of dirty stable memory pages, traps when exhausted.
+    /// Enforces the per-message limit only; the instructions for touching a
+    /// page are charged by the deterministic memory tracker.
     pub dirty_pages_counter: u32,
+    /// Remaining budget of accessed stable memory pages. Limit only, see
+    /// `dirty_pages_counter`.
     pub accessed_pages_counter: u32,
     /// Function to decrement the instruction counter.
     pub decr_instruction_counter_fn: u32,

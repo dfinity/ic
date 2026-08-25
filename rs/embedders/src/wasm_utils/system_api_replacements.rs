@@ -7,8 +7,12 @@
 //!
 //! - properly report errors in a backwards-compatible way
 //! - convert between integer types and check for overflows
-//! - track accesses and dirty pages
+//! - mark written pages in the bytemap and enforce the accessed/dirty page limits
 //! - charge for instructions
+//!
+//! The accessed/dirty page counters only enforce the per-message limits; the
+//! instructions for touching a page are charged by the deterministic memory
+//! tracker from the SIGSEGV handler.
 //!
 
 use crate::{
@@ -57,6 +61,8 @@ pub(super) fn replacement_functions(
     max_wasm_memory_size: NumBytes,
 ) -> Vec<(SystemApiFunc, ReplacementFunction)> {
     let count_clean_pages_fn_index = injected_counters.count_clean_pages_fn;
+    // Limit enforcement only: these counters are budgets that trap when
+    // exhausted, they must not be turned back into an instruction charge.
     let dirty_pages_counter_index = injected_counters.dirty_pages_counter;
     let accessed_pages_counter_index = injected_counters.accessed_pages_counter;
     let decr_instruction_counter_fn = injected_counters.decr_instruction_counter_fn;
