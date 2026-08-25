@@ -5,10 +5,12 @@ mod driver;
 mod execution;
 pub mod malicious;
 mod runner;
+mod test_runner;
 mod types;
 
 use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
 pub use runner::ConsensusRunner;
+pub use test_runner::{RegistryMutations, TestRunner};
 pub use types::{
     ComponentModifier, ConsensusDependencies, ConsensusDriver, ConsensusInstance,
     ConsensusRunnerConfig, StopPredicate,
@@ -48,6 +50,9 @@ use std::{
 /// with required records, including subnet record, node record, node public keys,
 /// catch-up package (with proper NiDKG transcripts).
 ///
+/// The subnet is configured with the given `chain_key_ids`, which may be empty for tests that
+/// don't exercise chain keys.
+///
 /// Return the registry data provider, registry client, catch-up package, and a list of crypto
 /// components, one for each node.
 #[allow(clippy::type_complexity)]
@@ -55,6 +60,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     subnet_id: SubnetId,
     node_ids: &[NodeId],
     dkg_interval_length: u64,
+    chain_key_ids: &[MasterPublicKeyId],
     rng: &mut R,
 ) -> (
     Arc<ProtoRegistryDataProvider>,
@@ -70,7 +76,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     let subnet_record = SubnetRecordBuilder::from(node_ids)
         .with_dkg_interval_length(dkg_interval_length)
         .with_chain_key_config(ChainKeyConfig {
-            key_configs: test_master_public_key_ids()
+            key_configs: chain_key_ids
                 .iter()
                 .map(|key_id| KeyConfig {
                     key_id: key_id.clone(),
@@ -189,10 +195,10 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
         .expect("Could not add node record.");
 
     // Add chain-key enabled subnet to registry
-    for key_id in test_master_public_key_ids() {
+    for key_id in chain_key_ids {
         data_provider
             .add(
-                &ic_registry_keys::make_chain_key_enabled_subnet_list_key(&key_id),
+                &ic_registry_keys::make_chain_key_enabled_subnet_list_key(key_id),
                 registry_version,
                 Some(
                     ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList {

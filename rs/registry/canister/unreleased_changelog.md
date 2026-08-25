@@ -9,17 +9,16 @@ on the process that this file is part of, see
 
 ## Added
 
-Add a `replica_version_id` to `ReplicaVersionRecord`s, and backfill with a data migration.
+* `cooling_down` field in `SubnetRecord`, settable via `UpdateSubnetRecord` proposals. See
+  `ic_replicated_state::SubnetTopology::cooling_down` for the exact semantics. The field must not
+  be set on mainnet before the replica version rejecting ingress messages to cooling down subnets
+  has been rolled out to all subnets.
 
 ## Changed
-
-* Guest launch measurements are now required (when electing a new GuestOS version).
 
 ## Deprecated
 
 ## Removed
-
-The `blessed_replica_versions` record has been removed.
 
 ## Fixed
 

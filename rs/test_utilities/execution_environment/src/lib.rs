@@ -2915,18 +2915,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .deterministic_memory_tracker = if enabled {
-            FlagStatus::Enabled
-        } else {
-            FlagStatus::Disabled
-        };
-        self
-    }
-
     pub fn with_network_topology(mut self, network_topology: NetworkTopology) -> Self {
         self.network_topology = Some(network_topology);
         self
@@ -2934,6 +2922,15 @@ impl ExecutionTestBuilder {
 
     pub fn with_subnet_admins(mut self, subnet_admins: Vec<PrincipalId>) -> Self {
         self.subnet_admins = subnet_admins.into_iter().collect();
+        self
+    }
+
+    /// Sets the number of nodes on the own subnet. This is reflected both in the
+    /// registry settings and in the nodes of the own subnet's network topology.
+    pub fn with_subnet_size(mut self, subnet_size: usize) -> Self {
+        self.registry_settings.subnet_size = subnet_size;
+        self.registry_settings.node_ids =
+            (0..subnet_size).map(|i| node_test_id(i as u64)).collect();
         self
     }
 

@@ -103,6 +103,12 @@ pub fn algo_id_and_public_key_bytes_from_der(
 /// DER-encoded key.
 pub const MAX_DER_NESTING_DEPTH: usize = 4;
 
+const SEQUENCE_TAG_NUMBER: u8 = 0x10;
+const SET_TAG_NUMBER: u8 = 0x11;
+
+const INCOMPLETE_ELEMENT: &str = "DER ends in the middle of an element";
+const LENGTH_TOO_LARGE: &str = "DER element length is too large";
+
 /// Parser for DER-encoded keys.
 struct KeyDerParser {
     key_der: Vec<u8>,
@@ -235,13 +241,12 @@ impl KeyDerParser {
         }
     }
 
-    /// Returns an error if `der` nests constructed ASN.1 elements more than
-    /// [`MAX_DER_NESTING_DEPTH`] levels deep. The scan only walks the
-    /// tag-length headers and leaves the actual decoding (and any other
-    /// structural error) to `simple_asn1`.
+    /// Returns an error if `der` nests ASN.1 elements more than
+    /// [`MAX_DER_NESTING_DEPTH`] levels deep, or if its tag-length headers
+    /// cannot be walked from start to end.
     fn check_der_nesting_depth(der: &[u8]) -> Result<(), KeyDerParsingError> {
-        // Exclusive end offsets of the constructed elements that are currently
-        // open; their number is the current nesting depth.
+        // Exclusive end offsets of the elements that are currently open; their
+        // number is the current nesting depth.
         let mut open_elements_end: Vec<usize> = Vec::new();
         let mut index = 0;
         while index < der.len() {
@@ -255,31 +260,49 @@ impl KeyDerParser {
 
             // Identifier octets: skip the high-tag-number form if present.
             let first_identifier_octet = der[index];
+            let universal_class = first_identifier_octet & 0xc0 == 0;
             let constructed = first_identifier_octet & 0x20 != 0;
+            let tag_number = first_identifier_octet & 0x1f;
+            let high_tag_number_form = tag_number == 0x1f;
             index += 1;
-            if first_identifier_octet & 0x1f == 0x1f {
-                while index < der.len() && der[index] & 0x80 != 0 {
+            if high_tag_number_form {
+                while let Some(octet) = der.get(index)
+                    && octet & 0x80 != 0
+                {
                     index += 1;
                 }
                 index += 1;
             }
 
+            // SEQUENCEs and SETs hold other elements whatever their
+            // constructed bit says; elements of the other classes hold other
+            // elements when it is set. The high-tag-number form can encode the
+            // SEQUENCE and SET tag numbers, so it is counted as well.
+            let container = if high_tag_number_form {
+                true
+            } else if universal_class {
+                tag_number == SEQUENCE_TAG_NUMBER || tag_number == SET_TAG_NUMBER
+            } else {
+                constructed
+            };
+
             // Length octets: short form, or long form giving the octet count.
+            // A first octet of 0x80 gives a length of zero.
             let Some(&first_length_octet) = der.get(index) else {
-                return Ok(());
+                return Err(Self::parsing_error(INCOMPLETE_ELEMENT));
             };
             index += 1;
             let content_length = if first_length_octet & 0x80 == 0 {
                 first_length_octet as usize
             } else {
                 let num_length_octets = (first_length_octet & 0x7f) as usize;
-                if num_length_octets == 0 || num_length_octets > core::mem::size_of::<usize>() {
-                    return Ok(());
+                if num_length_octets > core::mem::size_of::<usize>() {
+                    return Err(Self::parsing_error(LENGTH_TOO_LARGE));
                 }
                 let mut length = 0;
                 for _ in 0..num_length_octets {
                     let Some(&octet) = der.get(index) else {
-                        return Ok(());
+                        return Err(Self::parsing_error(INCOMPLETE_ELEMENT));
                     };
                     length = (length << 8) | octet as usize;
                     index += 1;
@@ -288,12 +311,12 @@ impl KeyDerParser {
             };
 
             let Some(content_end) = index.checked_add(content_length) else {
-                return Ok(());
+                return Err(Self::parsing_error(LENGTH_TOO_LARGE));
             };
             if content_end > der.len() {
-                return Ok(());
+                return Err(Self::parsing_error(INCOMPLETE_ELEMENT));
             }
-            if constructed {
+            if container {
                 if open_elements_end.len() + 1 > MAX_DER_NESTING_DEPTH {
                     return Err(Self::parsing_error(&format!(
                         "DER nesting depth exceeds the maximum of {MAX_DER_NESTING_DEPTH}"

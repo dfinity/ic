@@ -1129,6 +1129,7 @@ impl EcdsaSubnetConfig {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: false,
+                cooling_down: false,
                 features: None,
                 max_number_of_canisters: 0,
                 ssh_readonly_access: vec![],

@@ -71,6 +71,7 @@ pub struct ReplicatedStateMetrics {
     canisters_with_old_open_call_contexts: IntGaugeVec,
     subnet_call_contexts: IntGaugeVec,
     pending_refunds: IntGauge,
+    pending_refunds_cycles: Gauge,
     total_canister_balance: Gauge,
     total_canister_reserved_balance: Gauge,
     canister_paused_execution: Histogram,
@@ -236,6 +237,10 @@ impl ReplicatedStateMetrics {
             pending_refunds: metrics_registry.int_gauge(
                 "replicated_state_pending_refunds",
                 "Number of pending anonymous refunds, i.e. refunds accumulated at the subnet level, not yet routed into streams.",
+            ),
+            pending_refunds_cycles: metrics_registry.gauge(
+                "replicated_state_pending_refunds_cycles",
+                "Total value in Cycles of pending anonymous refunds, i.e. refunds accumulated at the subnet level, not yet routed into streams.",
             ),
             total_canister_balance: metrics_registry.gauge(
                 "scheduler_canister_balance_cycles_total",
@@ -676,7 +681,7 @@ impl ReplicatedStateMetrics {
 
         self.ingress_history_length
             .set(state.metadata.ingress_history.len() as i64);
-        for (ingress_state, count) in state.metadata.ingress_history.state_counts().iter() {
+        for (ingress_state, count) in state.metadata.ingress_history.state_counts() {
             self.ingress_history_length_by_state
                 .with_label_values(&[ingress_state])
                 .set(count as i64);
@@ -689,6 +694,8 @@ impl ReplicatedStateMetrics {
         }
 
         self.pending_refunds.set(state.refunds().len() as i64);
+        self.pending_refunds_cycles
+            .set(state.refunds().total().get() as f64);
 
         self.canisters_not_in_routing_table
             .set(canisters_not_in_routing_table);
