@@ -37,9 +37,8 @@ pub async fn fund_sweeper_address() {
         return;
     };
 
-    // What the minter's own records say reached the sweeper address, rather than a chain read: the
-    // bound errs low, so it can only delay a funding, never authorise one against gas that is not
-    // there.
+    // What the minter's own records say reached the sweeper address, rather than a chain read.
+    // Erring low can only make a funding look due sooner than it is, never hide one that is.
     let sweeper_balance = read_state(|s| s.sweeper_funding.sweeper_balance_lower_bound());
 
     let amount = match read_state(|s| plan_funding(s, sweeper_balance)) {
