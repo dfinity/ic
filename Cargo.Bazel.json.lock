@@ -1,5 +1,5 @@
 {
-  "checksum": "ecab59e54cd3dfcb3d049bf925c4d1c1e1ab338ef237c40f066ef568f79e0321",
+  "checksum": "9cb8107bbffe0c12d79395ab33e0d176425c3e09b084c8c79e8cf0ebf9bcf237",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -2698,7 +2698,17 @@
         "crate_features": {
           "common": [
             "default",
+            "serde",
             "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            }
           ],
           "selects": {}
         },
@@ -6045,6 +6055,54 @@
         },
         "edition": "2018",
         "version": "0.22.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "base64 0.23.1": {
+      "name": "base64",
+      "version": "0.23.1",
+      "package_url": "https://github.com/marshallpierce/rust-base64",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/base64/0.23.1/download",
+          "sha256": "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "base64",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "base64",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "simd-unsafe",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.23.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -19752,7 +19810,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-bn-lib 0.5.0",
+              "id": "ic-bn-lib 0.7.0",
               "target": "ic_bn_lib"
             },
             {
@@ -32152,14 +32210,14 @@
       ],
       "license_file": null
     },
-    "ic-bn-lib 0.5.0": {
+    "ic-bn-lib 0.7.0": {
       "name": "ic-bn-lib",
-      "version": "0.5.0",
+      "version": "0.7.0",
       "package_url": "https://github.com/dfinity/ic-bn-lib",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-bn-lib/0.5.0/download",
-          "sha256": "1ea8fa20bc6bac82a9491e26a43b70b9e0f276da534957c6cf0d589cf1a689ac"
+          "url": "https://static.crates.io/crates/ic-bn-lib/0.7.0/download",
+          "sha256": "5195609bb6f45c53ad2e171ee5106b001e3a553fe6ce8f1f2662563430360003"
         }
       },
       "targets": [
@@ -32227,7 +32285,7 @@
               "target": "axum_extra"
             },
             {
-              "id": "base64 0.22.1",
+              "id": "base64 0.23.1",
               "target": "base64"
             },
             {
@@ -32319,12 +32377,24 @@
               "target": "ic_custom_domains_canister_api"
             },
             {
+              "id": "ic-transport-types 0.49.1",
+              "target": "ic_transport_types"
+            },
+            {
               "id": "instant-acme 0.8.5",
               "target": "instant_acme"
             },
             {
+              "id": "ipnet 2.10.1",
+              "target": "ipnet"
+            },
+            {
               "id": "itertools 0.15.0",
               "target": "itertools"
+            },
+            {
+              "id": "maxminddb 0.29.0",
+              "target": "maxminddb"
             },
             {
               "id": "moka 0.12.15",
@@ -32339,7 +32409,7 @@
               "target": "parse_size"
             },
             {
-              "id": "pem 3.0.6",
+              "id": "pem 4.0.0",
               "target": "pem"
             },
             {
@@ -32475,10 +32545,6 @@
               "target": "tower_service"
             },
             {
-              "id": "tower_governor 0.8.0",
-              "target": "tower_governor"
-            },
-            {
               "id": "tracing 0.1.44",
               "target": "tracing"
             },
@@ -32539,7 +32605,7 @@
           ],
           "selects": {}
         },
-        "version": "0.5.0"
+        "version": "0.7.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -33810,7 +33876,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "3e015f17b8ad302a42fd1ac68b7b139867b71c5f"
+            "Rev": "a16fb54f4c8d4407b8134d63b57f864d67520062"
           }
         }
       },
@@ -33845,6 +33911,13 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "acme",
+            "default"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -33912,7 +33985,7 @@
               "target": "humantime"
             },
             {
-              "id": "ic-bn-lib 0.5.0",
+              "id": "ic-bn-lib 0.7.0",
               "target": "ic_bn_lib"
             },
             {
@@ -51878,6 +51951,60 @@
         },
         "edition": "2021",
         "version": "3.0.6"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.md"
+    },
+    "pem 4.0.0": {
+      "name": "pem",
+      "version": "4.0.0",
+      "package_url": "https://github.com/jcreekmore/pem-rs.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/pem/4.0.0/download",
+          "sha256": "d354a98a3d1251555de99e8fdd8afda05573c31b82f59063a7b0a29b5527f120"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pem",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "pem",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "base64 0.23.1",
+              "target": "base64"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "4.0.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -91458,7 +91585,7 @@
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.20",
     "ic-agent 0.49.1",
-    "ic-bn-lib 0.5.0",
+    "ic-bn-lib 0.7.0",
     "ic-btc-interface 0.4.0",
     "ic-canister-log 0.2.0",
     "ic-canister-runtime 0.2.3",

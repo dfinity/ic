@@ -195,26 +195,7 @@ pub struct SystemMetadata {
     pub subnet_ids_at_last_reject_generation: Option<Vec<SubnetId>>,
 }
 
-/// Unfiltered topology, including all subnets and the full routing table.
-///
-/// Only populated on the NNS subnet, where the certified state tree must
-/// contain entries for every subnet in the network (including cloud engines).
-/// On all other subnets this is `None` and the state tree falls back to the
-/// (filtered) data in [`NetworkTopology`].
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-pub struct FullTopology {
-    pub subnets: BTreeMap<SubnetId, SubnetTopology>,
-    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-    pub routing_table: Arc<RoutingTable>,
-}
-
-/// Full description of the IC network toplogy.
-///
-/// The `subnets` and `routing_table` fields contain the **filtered** view:
-/// only the subnets this subnet may interact with. For the NNS subnet an
-/// optional [`FullTopology`] stores the unfiltered data so that the certified
-/// state tree can cover every subnet.
+/// Full description of the IC network topology.
 ///
 /// Contains [`Arc`] references, so it is only safe to serialize for read-only
 /// use.
@@ -238,10 +219,6 @@ pub struct NetworkTopology {
 
     /// The ID of the canister to forward bitcoin mainnet requests to.
     pub bitcoin_mainnet_canister_id: Option<CanisterId>,
-
-    /// Unfiltered topology for the certified state tree.
-    /// Only set on the NNS subnet; `None` everywhere else.
-    full_topology: Option<FullTopology>,
 
     /// Subnet to which `SetupInitialDKG` management canister calls are routed
     /// by default, i.e., when no subnet ID is specified explicitly in the
@@ -277,7 +254,6 @@ impl Default for NetworkTopology {
             chain_key_enabled_subnets: Default::default(),
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
-            full_topology: None,
             default_initial_dkg_subnet_id: None,
             api_boundary_nodes: Default::default(),
         }
@@ -294,7 +270,6 @@ impl NetworkTopology {
         chain_key_enabled_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
         bitcoin_testnet_canister_id: Option<CanisterId>,
         bitcoin_mainnet_canister_id: Option<CanisterId>,
-        full_topology: Option<FullTopology>,
         default_initial_dkg_subnet_id: Option<SubnetId>,
         api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
     ) -> Self {
@@ -306,7 +281,6 @@ impl NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
-            full_topology,
             default_initial_dkg_subnet_id,
             api_boundary_nodes,
         }
@@ -368,29 +342,6 @@ impl NetworkTopology {
         })
     }
 
-    /// Returns the subnets map used for the certified state tree.
-    ///
-    /// On the NNS subnet this returns the full, unfiltered map (including cloud
-    /// engines); on every other subnet it falls back to `subnets()`.
-    pub fn subnets_for_certification(&self) -> &BTreeMap<SubnetId, SubnetTopology> {
-        self.full_topology
-            .as_ref()
-            .map(|ft| &ft.subnets)
-            .unwrap_or(&self.subnets)
-    }
-
-    /// Returns the routing table used for the certified state tree.
-    ///
-    /// On the NNS subnet this returns the full, unfiltered table (including
-    /// cloud engine ranges); on every other subnet it falls back to
-    /// `routing_table()`.
-    pub fn routing_table_for_certification(&self) -> &Arc<RoutingTable> {
-        self.full_topology
-            .as_ref()
-            .map(|ft| &ft.routing_table)
-            .unwrap_or(&self.routing_table)
-    }
-
     /// Find the subnet for `principal_id`. The input can either be a canister ID, or a subnet ID.
     pub fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
         let as_subnet_id = SubnetId::from(principal_id);
@@ -439,7 +390,11 @@ pub struct SubnetTopology {
     ///    cooling down subnet can be emptied;
     ///  * it routes no messages from its canisters' output queues into streams
     ///    -- including its own loopback stream -- but retains them in output
-    ///    queues, so streams from the cooling down subnet can be emptied.
+    ///    queues, so streams from the cooling down subnet can be emptied;
+    ///  * (on all subnets) no refunds are routed to or from a cooling down
+    ///    subnet -- including into the cooling down subnet's own loopback
+    ///    stream -- but retained in the refund pool, so that their cycles are
+    ///    not lost.
     pub cooling_down: bool,
 }
 
@@ -2482,8 +2437,6 @@ pub mod testing {
         fn routing_table_mut(&mut self) -> &mut RoutingTable;
         /// Sets the routing table.
         fn set_routing_table(&mut self, routing_table: RoutingTable);
-        /// Sets the full (unfiltered) topology for the state tree.
-        fn set_full_topology(&mut self, full_topology: Option<FullTopology>);
     }
 
     impl NetworkTopologyTesting for NetworkTopology {
@@ -2498,9 +2451,6 @@ pub mod testing {
         }
         fn set_routing_table(&mut self, routing_table: RoutingTable) {
             self.routing_table = Arc::new(routing_table);
-        }
-        fn set_full_topology(&mut self, full_topology: Option<FullTopology>) {
-            self.full_topology = full_topology;
         }
     }
 
