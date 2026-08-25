@@ -105,6 +105,7 @@ impl TryFrom<InitArg> for State {
             ecdsa_key_name,
             pending_withdrawal_principals: Default::default(),
             pending_deposit_principals: Default::default(),
+            attestations: Default::default(),
             withdrawal_transactions: WithdrawalTransactions::new(initial_nonce),
             sweeper_transactions: TransactionPipeline::new(initial_sweeper_nonce),
             next_sweep_id: SweepId(0),

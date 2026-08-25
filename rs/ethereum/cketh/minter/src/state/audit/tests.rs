@@ -428,6 +428,27 @@ impl GetEventsFile {
                     withdrawal_id: map_nat(withdrawal_id),
                     transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
+                EventPayload::AttestedDepositAddress {
+                    chain_id,
+                    deposit_helper,
+                    owner,
+                    subaccount,
+                    y_parity,
+                    r,
+                    s,
+                } => ET::AttestedDepositAddress {
+                    chain_id: chain_id.0.to_u64().unwrap(),
+                    deposit_helper: deposit_helper.parse().unwrap(),
+                    owner,
+                    subaccount: subaccount.map(|subaccount| {
+                        <[u8; 32]>::try_from(subaccount.into_vec().as_slice()).unwrap()
+                    }),
+                    signature: TransactionSignature {
+                        signature_y_parity: y_parity,
+                        r: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(r.as_slice()).unwrap()),
+                        s: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(s.as_slice()).unwrap()),
+                    },
+                },
                 EventPayload::AcceptedSweepRequest {
                     sweep_id,
                     destination,
