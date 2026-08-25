@@ -269,7 +269,7 @@ mod tests {
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
-        CanisterId, ReplicaVersion,
+        ReplicaVersion,
         artifact::IdentifiableArtifact,
         canister_http::{
             CanisterHttpPaymentReceipt, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
@@ -316,7 +316,6 @@ mod tests {
     fn fake_response(id: u64) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(id),
-            canister_id: CanisterId::from_u64(id),
             content: CanisterHttpResponseContent::Success(Vec::new()),
         }
     }

@@ -2180,8 +2180,10 @@ impl SystemState {
             ConsumingCycles::Refund => {}
         }
 
-        // Skip if the consumed cycles are zero and no metric updates are needed.
-        if prepayment - refund == NominalCycles::zero() {
+        // Skip only if there is nothing to record at all. Note that a refund equal to
+        // its prepayment still has to lower the gauge by the refunded amount, even
+        // though it contributes nothing to the monotonic counter.
+        if prepayment == NominalCycles::zero() && refund == NominalCycles::zero() {
             return;
         }
 

@@ -19,6 +19,9 @@ on the process that this file is part of, see
   (super admin) into the `subnet_admins` list. The supplied list is now
   forwarded to the registry as-is.
 
+* `update_subnet` rejects the new `UpdateSubnetPayload.cooling_down` field:
+  only `subnet_admins` and `is_halted` remain in the engine controller's scope.
+
 ## Deprecated
 
 ## Removed

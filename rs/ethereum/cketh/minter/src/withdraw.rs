@@ -13,8 +13,8 @@ use crate::{
         audit::{EventType, process_event},
         minter_address, mutate_state, read_state,
         transactions::{
-            CreateTransactionError, Reimbursed, ReimbursementIndex, ReimbursementRequest,
-            WithdrawalRequest, create_transaction,
+            CreateTransactionError, PipelineRequest, Reimbursed, ReimbursementIndex,
+            ReimbursementRequest, WithdrawalRequest,
         },
     },
     tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate},
@@ -251,14 +251,13 @@ async fn resubmit_transactions_batch(
 fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
     for request in read_state(|s| {
         s.withdrawal_transactions
-            .withdrawal_requests_batch(WITHDRAWAL_REQUESTS_BATCH_SIZE)
+            .requests_batch(WITHDRAWAL_REQUESTS_BATCH_SIZE)
     }) {
         log!(DEBUG, "[create_transactions_batch]: processing {request:?}",);
         let ethereum_network = read_state(State::ethereum_network);
         let nonce = read_state(|s| s.withdrawal_transactions.next_transaction_nonce());
         let gas_limit = estimate_gas_limit(&request);
-        match create_transaction(
-            &request,
+        match request.create_transaction(
             nonce,
             gas_fee_estimate.clone(),
             gas_limit,
@@ -291,7 +290,7 @@ fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
                 );
                 mutate_state(|s| {
                     s.withdrawal_transactions
-                        .reschedule_withdrawal_request(request)
+                        .reschedule_request(ledger_burn_index)
                 });
             }
         };
