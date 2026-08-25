@@ -1,8 +1,10 @@
 use crate::attestation::AttestationRequest;
-use crate::eth_logs::encode_principal;
+use crate::eth_logs::{LedgerSubaccount, encode_principal};
+use crate::test_fixtures::arb::{arb_address, arb_ledger_subaccount, arb_principal};
 use candid::Principal;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
+use proptest::prelude::{any, proptest};
 use std::collections::BTreeSet;
 
 const CHAIN_ID: u64 = 1;
@@ -73,6 +75,29 @@ fn should_encode_a_principal_the_way_the_helper_carries_one() {
         assert_eq!(encoded[0] as usize, bytes.len());
         assert_eq!(&encoded[1..=bytes.len()], bytes);
         assert!(encoded[1 + bytes.len()..].iter().all(|byte| *byte == 0));
+    }
+}
+
+proptest! {
+    /// The delegate reads the preimage as fixed-length fields, so its length must not depend on
+    /// what is in them — a principal shorter than 29 bytes is padded, not truncated.
+    #[test]
+    fn should_always_produce_a_132_byte_preimage(
+        chain_id in any::<u64>(),
+        deposit_helper in arb_address(),
+        owner in arb_principal(),
+        subaccount in arb_ledger_subaccount(),
+    ) {
+        let request = AttestationRequest {
+            chain_id,
+            deposit_helper,
+            account: Account {
+                owner,
+                subaccount: subaccount.map(LedgerSubaccount::to_bytes),
+            },
+        };
+
+        assert_eq!(request.preimage().len(), 16 + 32 + 20 + 32 + 32);
     }
 }
 
