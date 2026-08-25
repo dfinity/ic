@@ -239,6 +239,11 @@ mod concurrent_fundings {
                     >= state.sweeper_funding.cumulative_spent()
             );
         }
+        assert_eq!(
+            state.sweeper_funding.failed_fundings(),
+            0,
+            "fundings that delivered must not count as failures"
+        );
     }
 
     /// The failure branch of finalization, which the accounting test cannot reach on its own: the
