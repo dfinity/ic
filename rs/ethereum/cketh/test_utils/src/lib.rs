@@ -738,11 +738,6 @@ impl CkEthSetup {
     }
 }
 
-/// Builds the PocketIC instance for [`CkEthSetup::new`]: the fiduciary subnet every ckETH fixture
-/// needs for the secp256k1 `key_1` used by the minter. Always a non-live (manual-round) instance,
-/// even for [`EthereumBackend::Anvil`]: [`crate::live`] builds its whole fixture here first and
-/// only switches to live outcalls once construction is complete, so `await_call` ticks
-/// deterministically for every setup call in between.
 /// Switches a fixture built against [`EthereumBackend::Anvil`] to live outcalls, so that from here
 /// on the EVM RPC canister's requests reach anvil for real. Both steps are load-bearing and both
 /// have bitten this crate; [`crate::live`]'s module documentation explains them at length.
@@ -758,6 +753,11 @@ pub(crate) fn switch_to_live(cketh: &CkEthSetup) {
     cketh.env.auto_progress();
 }
 
+/// Builds the PocketIC instance for [`CkEthSetup::new`]: the fiduciary subnet every ckETH fixture
+/// needs for the secp256k1 `key_1` used by the minter. Always a non-live (manual-round) instance,
+/// even for [`EthereumBackend::Anvil`]: [`crate::live`] builds its whole fixture here first and
+/// only switches to live outcalls once construction is complete, so `await_call` ticks
+/// deterministically for every setup call in between.
 fn new_env() -> PocketIc {
     PocketIcBuilder::new()
         .with_fiduciary_subnet()
