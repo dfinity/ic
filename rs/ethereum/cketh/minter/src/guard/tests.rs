@@ -70,7 +70,7 @@ mod retrieve_eth_guard {
         fn record_withdrawal_request(ledger_burn_index: LedgerBurnIndex) {
             mutate_state(|s| {
                 s.withdrawal_transactions
-                    .record_withdrawal_request(EthWithdrawalRequest {
+                    .record_request(EthWithdrawalRequest {
                         withdrawal_amount: Wei::ONE,
                         destination: Address::ZERO,
                         ledger_burn_index,
