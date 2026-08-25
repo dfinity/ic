@@ -2,7 +2,7 @@
 
 The values that mainnet-canister-revisions.json and mainnet-icos-revisions.json
 contribute to a download URL are not reviewed by a human before they reach master, so
-the repository rules validate them (F-051). These tests pin down what is accepted and
+the repository rules validate them. These tests pin down what is accepted and
 what is rejected, including the fields of poisoned copies of the real JSON records.
 
 The rejecting path of the URL builders themselves cannot be asserted -- `fail()` is
