@@ -49,13 +49,13 @@ use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use crate::anvil::{
     Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20, erc20_balance_slot, u256_be,
 };
 use crate::ckerc20::{CkErc20Setup, Erc20Token};
-use crate::{CkEthSetup, EthereumBackend};
+use crate::{CkEthSetup, EthereumBackend, switch_to_live};
 
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
 /// address, so the scan reads a real balance for that (address, token) pair.
@@ -91,20 +91,11 @@ impl LiveBalanceScanSetup {
     /// current time before enabling auto-progress, making the transition deterministic (see the
     /// module documentation).
     pub fn new_live() -> Self {
-        let anvil = Arc::new(Anvil::start());
+        let anvil = Arc::new(Anvil::start_mainnet_like());
         let cketh = CkEthSetup::new(EthereumBackend::Anvil(Arc::clone(&anvil)));
         let ckerc20 = CkErc20Setup::with_cketh(cketh).add_supported_erc20_tokens();
 
-        // Answer the HTTPS outcalls still in flight from construction while their request time
-        // is still current; the clock jump below would time them all out (see the module doc).
-        ckerc20.cketh.stop_ongoing_https_outcalls();
-        // Jump the clock synchronously, so `auto_progress`'s own (asynchronous) initial time-set
-        // becomes a millisecond-sized step: an ingress message submitted once `auto_progress`
-        // returns can no longer be stamped with a genesis-derived expiry and then be
-        // retroactively expired by a >5-year jump it raced (see the module doc). Certified time,
-        // matching what `auto_progress` sets — `advance_time` would move the uncertified clock.
-        ckerc20.env.set_certified_time(SystemTime::now().into());
-        ckerc20.env.auto_progress();
+        switch_to_live(&ckerc20.cketh);
 
         Self { ckerc20, anvil }
     }
