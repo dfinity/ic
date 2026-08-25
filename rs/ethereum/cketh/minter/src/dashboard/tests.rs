@@ -39,7 +39,8 @@ fn should_display_sweeper_funding() {
     DashboardAssert::assert_that(dashboard)
         .has_sweeper_cketh_burned("1_000_000 Wei")
         .has_sweeper_eth_spent("950_000 Wei")
-        // 1_000_000 burned - 950_000 spent: the credit that offsets the next funding.
+        // 1_000_000 burned - 950_000 spent, which stays as backing rather than discounting a
+        // later funding.
         .has_sweeper_burned_not_yet_spent("50_000 Wei")
         // What the funding delivered, which is the bound the next funding decision reads.
         .has_sweeper_prepaid_gas("900_000 Wei");
