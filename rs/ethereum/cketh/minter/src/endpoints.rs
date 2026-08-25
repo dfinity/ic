@@ -63,9 +63,16 @@ pub struct Erc20Balance {
     pub balance: Nat,
 }
 
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
+pub struct Erc20MinimumDeposit {
+    pub erc20_contract_address: String,
+    pub minimum_deposit_amount: Nat,
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct MinterInfo {
     pub minter_address: Option<String>,
+    pub sweeper_address: Option<String>,
     #[deprecated(note = "use eth_helper_contract_address instead")]
     pub smart_contract_address: Option<String>,
     pub eth_helper_contract_address: Option<String>,
@@ -79,6 +86,7 @@ pub struct MinterInfo {
     pub eth_balance: Option<Nat>,
     pub last_gas_fee_estimate: Option<GasFeeEstimate>,
     pub erc20_balances: Option<Vec<Erc20Balance>>,
+    pub minimum_deposit_amounts: Option<Vec<Erc20MinimumDeposit>>,
     pub last_eth_scraped_block_number: Option<Nat>,
     pub last_erc20_scraped_block_number: Option<Nat>,
     pub last_deposit_with_subaccount_scraped_block_number: Option<Nat>,
@@ -497,6 +505,14 @@ pub mod events {
             from_subaccount: Option<[u8; 32]>,
             created_at: Option<u64>,
         },
+        AcceptedSweeperFundingRequest {
+            withdrawal_amount: Nat,
+            destination: String,
+            ledger_burn_index: Nat,
+            from: Principal,
+            from_subaccount: Option<[u8; 32]>,
+            created_at: Option<u64>,
+        },
         CreatedTransaction {
             withdrawal_id: Nat,
             transaction: UnsignedTransaction,
@@ -511,6 +527,31 @@ pub mod events {
         },
         FinalizedTransaction {
             withdrawal_id: Nat,
+            transaction_receipt: TransactionReceipt,
+        },
+        AcceptedSweepRequest {
+            sweep_id: Nat,
+            destination: String,
+            amount: Nat,
+            /// Transaction call data (the delegate sweep call).
+            data: ByteBuf,
+            max_transaction_fee: Nat,
+            created_at: u64,
+        },
+        CreatedSweeperTransaction {
+            sweep_id: Nat,
+            transaction: UnsignedTransaction,
+        },
+        SignedSweeperTransaction {
+            sweep_id: Nat,
+            raw_transaction: String,
+        },
+        ReplacedSweeperTransaction {
+            sweep_id: Nat,
+            transaction: UnsignedTransaction,
+        },
+        FinalizedSweeperTransaction {
+            sweep_id: Nat,
             transaction_receipt: TransactionReceipt,
         },
         ReimbursedEthWithdrawal {

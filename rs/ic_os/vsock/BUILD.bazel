@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -42,5 +42,32 @@ rust_test(
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
         "@crate_index//:vsock",
+    ],
+)
+
+rust_binary(
+    name = "vsock_guest",
+    srcs = ["src/bin/guest.rs"],
+    crate_name = "vsock_guest",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = [
+        # Keep sorted.
+        ":vsock_lib",
+        "@crate_index//:clap",
+    ],
+)
+
+rust_binary(
+    name = "vsock_host",
+    srcs = ["src/bin/host.rs"],
+    crate_name = "vsock_host",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = [
+        # Keep sorted.
+        ":vsock_lib",
     ],
 )

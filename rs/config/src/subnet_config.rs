@@ -170,6 +170,16 @@ pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
 pub const DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS: NumInstructions =
     NumInstructions::new(5_000_000);
 
+/// Instructions charged per byte of stored log data when resizing the canister
+/// log memory.
+///
+/// When the log memory limit changes, all existing records must be read from
+/// the old ring buffer into heap memory, re-encoded, and written into a newly
+/// allocated ring buffer. The cost is proportional to the bytes currently
+/// stored (not the allocated capacity).
+pub const DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE: NumInstructions =
+    NumInstructions::new(32);
+
 /// The cycle cost overhead of executing canister instructions when running in Wasm64 mode.
 /// This overhead is a multiplier over the cost of executing the same instructions
 /// in Wasm32 mode. The overhead comes from the bound checks performed in Wasm64 mode
@@ -280,6 +290,10 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when uploading or downloading binary snapshot data.
     pub canister_snapshot_data_baseline_instructions: NumInstructions,
+
+    /// Number of instructions to count per byte of stored log data when resizing
+    /// the canister log memory.
+    pub canister_log_resize_instructions_per_byte: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -311,6 +325,8 @@ impl SchedulerConfig {
                 DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
             canister_snapshot_data_baseline_instructions:
                 DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS,
+            canister_log_resize_instructions_per_byte:
+                DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE,
         }
     }
 
@@ -355,6 +371,7 @@ impl SchedulerConfig {
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
             canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
+            canister_log_resize_instructions_per_byte: NumInstructions::from(0),
         }
     }
 

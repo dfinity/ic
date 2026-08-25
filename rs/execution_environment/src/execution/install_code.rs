@@ -23,9 +23,7 @@ use ic_replicated_state::canister_state::system_state::{
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
 use ic_sys::PAGE_SIZE;
-use ic_types::{
-    CanisterLog, CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall,
-};
+use ic_types::{CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall};
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 use ic_wasm_types::WasmHash;
@@ -259,14 +257,7 @@ impl InstallCodeHelper {
         paused: PausedInstallCodeHelper,
         original: &OriginalContext,
         round: &RoundContext,
-    ) -> Result<
-        Self,
-        (
-            CanisterManagerError,
-            NumInstructions,
-            (CanisterLog, LogMemoryStore),
-        ),
-    > {
+    ) -> Result<Self, (CanisterManagerError, NumInstructions, LogMemoryStore)> {
         let mut helper = Self::new(clean_canister, original);
         let paused_instructions_left = paused.instructions_left;
         let executed_wasm_instructions = paused.executed_wasm_instructions;
@@ -291,13 +282,23 @@ impl InstallCodeHelper {
             let msg = "Mismatch in cycles balance when resuming an install code".to_string();
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
             let err = (clean_canister.canister_id(), err).into();
-            return Err((err, instructions_left_on_error, helper.take_canister_log()));
+            return Err((
+                err,
+                instructions_left_on_error,
+                helper.clone_log_memory_store(),
+            ));
         }
 
         for state_change in paused.steps.into_iter() {
             helper
                 .replay_step(state_change, original, round)
-                .map_err(|err| (err, instructions_left_on_error, helper.take_canister_log()))?;
+                .map_err(|err| {
+                    (
+                        err,
+                        instructions_left_on_error,
+                        helper.clone_log_memory_store(),
+                    )
+                })?;
         }
         debug_assert_eq!(paused_instructions_left, helper.instructions_left());
         // Replaying the steps of a Wasm execution that has already finished resets
@@ -389,7 +390,7 @@ impl InstallCodeHelper {
                     original,
                     round,
                     CanisterManagerError::Hypervisor(self.canister.canister_id(), err),
-                    self.take_canister_log(),
+                    self.clone_log_memory_store(),
                 );
             }
         }
@@ -433,7 +434,7 @@ impl InstallCodeHelper {
                         original,
                         round,
                         err,
-                        self.take_canister_log(),
+                        self.clone_log_memory_store(),
                     );
                 }
             }
@@ -462,7 +463,7 @@ impl InstallCodeHelper {
                     original,
                     round,
                     err,
-                    self.take_canister_log(),
+                    self.clone_log_memory_store(),
                 );
             }
         }
@@ -506,7 +507,7 @@ impl InstallCodeHelper {
                         original,
                         round,
                         err,
-                        self.take_canister_log(),
+                        self.clone_log_memory_store(),
                     );
                 }
             }
@@ -646,13 +647,12 @@ impl InstallCodeHelper {
         }
     }
 
-    /// Takes the canister log.
-    pub(crate) fn take_canister_log(&mut self) -> (CanisterLog, LogMemoryStore) {
-        // TODO(DSM-105): Remove duplication when the migration is fully done.
-        (
-            self.canister.system_state.canister_log.take(),
-            self.canister.system_state.log_memory_store.clone(),
-        )
+    /// Returns a clone of the canister's log memory store.
+    ///
+    /// Cloning is cheap as the log memory store is backed by a persistent
+    /// `PageMap` whose clone creates an independent snapshot cheaply.
+    pub(crate) fn clone_log_memory_store(&self) -> LogMemoryStore {
+        self.canister.system_state.log_memory_store.clone()
     }
 
     /// Checks the result of Wasm execution and applies the state changes.
@@ -890,11 +890,11 @@ pub(crate) fn finish_err(
     original: OriginalContext,
     round: RoundContext,
     err: CanisterManagerError,
-    new_canister_log: (CanisterLog, LogMemoryStore),
+    new_log_memory_store: LogMemoryStore,
 ) -> DtsInstallCodeResult {
     let mut new_canister = clean_canister;
 
-    new_canister.set_log(new_canister_log);
+    new_canister.set_log(new_log_memory_store);
     new_canister
         .system_state
         .apply_ingress_induction_cycles_debit(
