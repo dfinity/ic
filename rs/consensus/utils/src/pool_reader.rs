@@ -559,6 +559,7 @@ impl<'a> PoolReader<'a> {
             .get_next_start_height()
     }
 
+    /// Returns the height of the next summary according to the highest finalized summary.
     pub fn get_next_summary_height(&self) -> Height {
         self.get_highest_finalized_summary_block()
             .payload
