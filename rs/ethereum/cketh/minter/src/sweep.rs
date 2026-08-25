@@ -87,11 +87,14 @@ pub async fn process_sweeper_transactions() {
     finalize_transactions_batch(sender).await;
 
     if read_state(|s| s.sweeper_transactions.has_pending_requests()) {
-        ic_cdk_timers::set_timer(
-            crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
-            async { process_sweeper_transactions().await },
-        );
+        schedule_retry();
     }
+}
+
+fn schedule_retry() {
+    ic_cdk_timers::set_timer(crate::PROCESS_SWEEPER_TRANSACTIONS_RETRY_INTERVAL, async {
+        process_sweeper_transactions().await
+    });
 }
 
 async fn resubmit_transactions_batch(

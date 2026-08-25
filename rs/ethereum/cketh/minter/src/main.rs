@@ -47,7 +47,8 @@ use ic_cketh_minter::withdraw::{
 };
 use ic_cketh_minter::{
     BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
-    REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, SCRAPING_ETH_LOGS_INTERVAL, state, storage,
+    PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL,
+    SCRAPING_ETH_LOGS_INTERVAL, state, storage,
 };
 use ic_cketh_minter::{endpoints, erc20};
 use ic_ethereum_types::Address;
@@ -100,9 +101,7 @@ fn setup_timers() {
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
         process_retrieve_eth_requests().await;
     });
-    // Drains the sweeper send-pipeline on the same cadence as withdrawals; early-returns cheaply while
-    // no sweep is enqueued (nothing enqueues one in production yet — see `crate::sweep`).
-    ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
+    ic_cdk_timers::set_timer_interval(PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, async || {
         process_sweeper_transactions().await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, async || {
