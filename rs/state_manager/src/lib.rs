@@ -3564,9 +3564,7 @@ impl StateManager for StateManagerImpl {
         state.repartition_canister_states();
 
         // Like the repartitioning above, this must stay unconditional; see
-        // `ReplicatedState::refresh_consumed_cycles_by_canisters`. Pinned by
-        // `consumed_cycles_by_canisters_is_rederived_at_restart` in
-        // `tests/state_manager.rs`.
+        // `ReplicatedState::refresh_consumed_cycles_by_canisters`.
         state.refresh_consumed_cycles_by_canisters();
 
         let assert_tip_is_none = |states: &SharedState| {
