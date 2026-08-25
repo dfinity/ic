@@ -33,7 +33,9 @@ fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
 
     let received = setup.await_eth_received(&sweeper, FUNDING_TICKS);
 
-    let burned = supply_before - setup.cketh_total_supply();
+    let burned = supply_before
+        .checked_sub(setup.cketh_total_supply())
+        .expect("the funding must have burned ckETH, not minted it");
     assert!(burned > 0, "funding must burn ckETH");
     assert_eq!(
         fee_account_before - setup.cketh_balance_of(setup.fee_account()),
