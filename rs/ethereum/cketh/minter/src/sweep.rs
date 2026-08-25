@@ -2,17 +2,12 @@
 //! sequence, so a stuck sweep can never head-of-line-block a withdrawal on the main address'
 //! pipeline.
 //!
-//! This is the preparatory send-pipeline: it drives the sweeper [`TransactionPipeline`] through the same
+//! It drives the sweeper [`TransactionPipeline`] through the same
 //! create → sign → send → resubmit → finalize state machine as user withdrawals
 //! ([`crate::withdraw`]), reusing that module's sender-agnostic RPC helpers
 //! (`latest_transaction_count`, `finalized_transaction_count`, `send_signed_transactions`,
 //! `fetch_finalized_receipts`), but signing with the sweeper derivation path (`[3]`) and reading
 //! the sweeper address' own transaction count.
-//!
-//! Deliberately out of scope here (follow-ups): EIP-7702 (`0x04`) first-time delegation, building
-//! the delegate sweep call data from the balance-sweep queue, and gating the pipeline on prepaid sweep
-//! gas. Nothing enqueues a [`SweepRequest`] in production yet, so this task early-returns on an
-//! empty pipeline.
 
 use crate::{
     deposit_address::sweeper_derivation_path,

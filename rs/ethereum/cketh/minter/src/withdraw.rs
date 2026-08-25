@@ -195,7 +195,7 @@ pub async fn process_retrieve_eth_requests() {
 }
 
 /// The latest (unconfirmed) transaction count of `sender` on chain, used to gate resubmission and
-/// sending. Reused by both the main-address pipeline and the sweeper-address pipeline (`sender` differs).
+/// sending.
 pub(crate) async fn latest_transaction_count(sender: Address) -> Option<TransactionCount> {
     match read_state(rpc_client)
         .get_transaction_count((sender.into_bytes(), BlockTag::Latest))
