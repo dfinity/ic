@@ -282,11 +282,12 @@ sudo networkctl reconfigure enp2s0
     /// Loads existing configuration or, on the Local backend, issues a
     /// certificate for a deterministic in-group domain from the dev root CA.
     ///
-    /// The Local backend has no playnet TLS service. Signing with the CA that
-    /// every dev IC-OS image already trusts (see [`DevRootCa`]), rather than
+    /// The Local backend has no playnet TLS service. Signing with the CA that every
+    /// dev IC-OS image already trusts (see
+    /// [`DevRootCa`](crate::driver::dev_root_ca::DevRootCa)), rather than
     /// self-signing, means a *node* can reach the gateway over HTTPS with no
-    /// node-side configuration — which is what lets a nested node register
-    /// through the gateway exactly as it does on Farm.
+    /// node-side configuration — which is what lets a nested node register through
+    /// the gateway exactly as it does on Farm.
     ///
     /// The certificate covers the apex domain and both the `*.<domain>` and
     /// `*.raw.<domain>` wildcards, matching the records the Farm path creates, so

@@ -526,9 +526,9 @@ impl LocalBackend {
     ///
     /// Appending, never replacing: the original bytes are copied verbatim first, so
     /// this can only widen the driver's trust, never narrow it. That matters,
-    /// because the driver has clients that need the public roots ([`Farm::new`] and
-    /// the log-upload client in `group.rs`), and because `dfx` and every other child
-    /// inherits this mount too.
+    /// because the driver has clients that need the public roots
+    /// ([`Farm::new`](crate::driver::farm::Farm::new) and the log-upload client in
+    /// `group.rs`), and because `dfx` and every other child inherits this mount too.
     ///
     /// What is being trusted deserves saying plainly: a CA whose private key is
     /// checked into a public repository, valid until 2122, becomes trusted by every
