@@ -75,10 +75,8 @@ impl LedgerClient {
         self.burn_from_with_spender(from, None, amount, memo).await
     }
 
-    /// Burns from one of the minter's own subaccounts, which goes through ICRC-2 `transfer_from`
-    /// with the minter as both owner and spender. Passing `subaccount` as the spender subaccount
-    /// too is what makes that work without an approval: the spender account then equals `from`, and
-    /// the ledger skips the allowance check for a transfer whose spender is the account itself.
+    /// Needs no approval: passing `subaccount` as the spender subaccount too makes the spender
+    /// account equal `from`, and the ledger skips the allowance check for such a transfer.
     pub async fn burn_from_own_subaccount<A: Into<Nat>>(
         &self,
         subaccount: [u8; 32],
