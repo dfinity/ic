@@ -217,12 +217,13 @@ impl ShareAggregator {
         let threshold = transcript.threshold.get().get() as usize;
         let dkg_id = transcript.dkg_id.clone();
 
+        let block_hash = ic_types::crypto::crypto_hash(&block);
         let shares = pool
             .get_catch_up_package_shares(block.height())
             .filter_map(|share| {
                 // The validator should already perform this check if implemented correctly, so this
                 // is just a sanity check
-                if ic_types::crypto::crypto_hash(&block) != share.content.block {
+                if block_hash != share.content.block {
                     return None;
                 }
 
