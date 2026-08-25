@@ -757,10 +757,10 @@ crate.spec(
     version = "^0.3.0",
 )
 crate.spec(
+    features = ["acme"],
     git = "https://github.com/dfinity/ic-gateway",
     package = "ic-gateway",
     tag = "v0.6.5",
-    features = ["acme"],
 )
 crate.spec(
     package = "ic-http-certification",
