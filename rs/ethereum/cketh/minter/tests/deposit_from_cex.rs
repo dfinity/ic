@@ -15,10 +15,10 @@
 //!
 //! Two further tests drive whole features end to end through a live PocketIC
 //! and the real EVM RPC canister: the balance scan (see
-//! [`ic_cketh_test_utils::live_scan`]) and sweeper fee funding, which deposits
+//! [`ic_cketh_test_utils::live`]) and sweeper fee funding, which deposits
 //! through the production helper contract and then watches the minter burn
 //! ckETH from its fee subaccount to pay for sweep gas (see
-//! [`ic_cketh_test_utils::sweeper_funding`]).
+//! [`ic_cketh_test_utils::live`]).
 //!
 //! Three further tests drive funding adversarially: each one takes a distinct
 //! way it can go wrong through that same live pipeline and asserts the minter
@@ -40,11 +40,9 @@ use ic_cketh_minter::balance_scan::batcher::{
 use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::numeric::Erc20Value;
+use ic_cketh_test_utils::CkEthSetup;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
-use ic_cketh_test_utils::live_scan::{Holding, LiveBalanceScanSetup};
-use ic_cketh_test_utils::sweeper_funding::{
-    AWAIT_DEADLINE, FEE_ACCOUNT_BALANCE, SweeperFundingSetup,
-};
+use ic_cketh_test_utils::live::{AWAIT_DEADLINE, FEE_ACCOUNT_BALANCE, Holding, LiveSetup};
 use ic_ethereum_types::Address;
 use std::time::Duration;
 
@@ -212,7 +210,7 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
     const USDC_ABOVE_MINIMUM: u128 = 15_000_000;
     const USDT_BELOW_MINIMUM: u128 = 1_000_000;
 
-    let setup = LiveBalanceScanSetup::new_live();
+    let setup = LiveSetup::new_balance_scan();
     // `supported_erc20_tokens()` registers ckUSDC then ckUSDT, in that order.
     let [usdc, usdt] = setup.supported_erc20_tokens() else {
         panic!("expected exactly 2 supported tokens")
@@ -262,15 +260,16 @@ const FUNDING_TICKS: u32 = 6;
 
 #[test]
 fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
-    let setup = SweeperFundingSetup::new_live();
+    let setup = LiveSetup::new_funding();
 
-    // Only the fee account is funded: sweep gas must come from there and nowhere else. The ledger
-    // baselines come from the harness, which took them before the minter could burn — the decision
-    // reads nothing off the chain, so its first run lands too fast to snapshot from here.
-    let supply_before = setup.supply_before_funding();
-    let fee_account_before = setup.fee_account_before_funding();
+    // Only the fee account is funded: sweep gas must come from there and nowhere else. Read before
+    // the minter is armed, since the funding decision reads nothing off the chain and so its first
+    // run burns within milliseconds of the upgrade below — far too fast to snapshot after it.
+    let supply_before = setup.cketh_total_supply();
+    let fee_account_before = setup.cketh_balance_of(setup.fee_account());
     let minter_eth_before = setup.anvil_eth_balance(&setup.minter_address());
 
+    setup.upgrade_minter();
     let sweeper = setup.await_sweeper_address();
     assert_eq!(
         setup.anvil_eth_balance(&sweeper),
@@ -312,9 +311,12 @@ const OBSERVATION_TICKS: u32 = 3;
 const FINALIZATION_TICKS: u32 = 8;
 #[test]
 fn should_not_fund_when_the_fee_account_is_empty() {
-    let setup = SweeperFundingSetup::new_live_with_empty_fee_account();
+    let setup = LiveSetup::new_funding_with_empty_fee_account();
     assert_eq!(setup.cketh_balance_of(setup.fee_account()), 0);
 
+    // Armed only now: before this the check refuses for a different reason — no deposit has been
+    // credited yet — and this test is about the burn failing, not the balance guard.
+    setup.upgrade_minter();
     let sweeper = setup.await_sweeper_address();
     // Asserted here rather than after the observation window: the minter's canister log is a ring
     // buffer, and every tick that window buys makes each of the minter's periodic timers due at
@@ -347,7 +349,8 @@ fn should_not_fund_when_the_fee_account_is_empty() {
 /// point of the bound.
 #[test]
 fn should_not_fund_a_sweeper_above_the_low_water_mark() {
-    let setup = SweeperFundingSetup::new_live();
+    let setup = LiveSetup::new_funding();
+    setup.upgrade_minter();
     let sweeper = setup.await_sweeper_address();
     let funded = setup.await_eth_received(&sweeper, FUNDING_TICKS);
     // Waits for the transfer to finalize, not merely to land: the minter credits the bound when it
@@ -411,7 +414,8 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
     // Starts with an empty fee account for the same reason as the test above: the sweeper cannot be
     // arranged before the minter derives its address, and a funded fee account would let the
     // funding it attempts right afterwards succeed while the sweeper is still a plain EOA.
-    let setup = SweeperFundingSetup::new_live_with_empty_fee_account();
+    let setup = LiveSetup::new_funding_with_empty_fee_account();
+    setup.upgrade_minter();
     let sweeper = setup.await_sweeper_address();
     setup.await_minter_log("[fund_sweeper]: SKIPPING: failed to burn");
 
@@ -494,7 +498,7 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
 }
 
 /// A dashboard cell rendered as `1_000_000 Wei`, as a number.
-fn wei_row(setup: &SweeperFundingSetup, id: &str) -> u128 {
+fn wei_row(setup: &LiveSetup<CkEthSetup>, id: &str) -> u128 {
     let cell = setup
         .dashboard_row(id)
         .unwrap_or_else(|| panic!("the dashboard must have a {id} row"));
@@ -505,7 +509,7 @@ fn wei_row(setup: &SweeperFundingSetup, id: &str) -> u128 {
 }
 
 /// The burn index of the funding the minter currently has in flight, waiting for it to appear.
-fn await_in_flight_burn_index(setup: &SweeperFundingSetup) -> u64 {
+fn await_in_flight_burn_index(setup: &LiveSetup<CkEthSetup>) -> u64 {
     let start = std::time::Instant::now();
     loop {
         if let Some(index) = setup.in_flight_funding_burn_index() {
@@ -521,7 +525,7 @@ fn await_in_flight_burn_index(setup: &SweeperFundingSetup) -> u64 {
     }
 }
 
-fn await_burn(setup: &SweeperFundingSetup, supply_before: u128) -> u128 {
+fn await_burn(setup: &LiveSetup<CkEthSetup>, supply_before: u128) -> u128 {
     let start = std::time::Instant::now();
     loop {
         let supply = setup.cketh_total_supply();

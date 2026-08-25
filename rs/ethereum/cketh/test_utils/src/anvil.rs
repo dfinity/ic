@@ -1,6 +1,6 @@
 //! A local [`Anvil`] node (foundry) with a small JSON-RPC client and the ABI/solc helpers used to
 //! drive it. Backs both the standalone batcher tests in `deposit_from_cex.rs` (which run against
-//! anvil with no IC) and the live balance-scan harness in [`crate::live_scan`].
+//! anvil with no IC) and the live balance-scan harness in [`crate::live`].
 //!
 //! Runs the `anvil` and `solc` binaries vendored via Bazel (`ANVIL_BIN`, `SOLC_BIN`).
 
