@@ -122,6 +122,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             );
             break;
         };
+        let replica_version = block.version();
         let mut block_stats = BlockStats::from(&block);
         debug!(
             every_n_seconds => 5,
@@ -130,7 +131,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             consensus => ConsensusLogEntry {
                 height: Some(height.get()),
                 hash: Some(block_stats.block_hash.clone()),
-                replica_version: Some(block.version().to_string())
+                replica_version: Some(replica_version.to_string())
             }
         );
 
@@ -162,7 +163,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                 registry_client,
                 subnet_id,
                 pool,
-                block.version(),
+                replica_version,
                 log,
             ) {
                 Some(Status::Halting | Status::Halted) => {
@@ -296,7 +297,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             registry_version: block.context.registry_version,
             time: block.context.time,
             blockmaker_metrics,
-            replica_version: block.version().clone(),
+            replica_version: replica_version.clone(),
         };
 
         let result = message_routing.deliver_batch(batch);
