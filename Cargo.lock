@@ -8068,7 +8068,6 @@ dependencies = [
  "canbench-rs",
  "candid",
  "candid_parser",
- "ethers-core",
  "ethnum",
  "evm_rpc_client",
  "evm_rpc_types",
