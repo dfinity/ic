@@ -183,7 +183,7 @@ pub async fn process_retrieve_eth_requests() {
     resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate).await;
     create_transactions_batch(gas_fee_estimate);
     sign_transactions_batch().await;
-    send_transactions_batch(latest_transaction_count).await;
+    send_transactions_batch(sender, latest_transaction_count).await;
     finalize_transactions_batch(sender).await;
 
     if read_state(|s| s.withdrawal_transactions.has_pending_requests()) {
@@ -207,7 +207,10 @@ pub(crate) async fn latest_transaction_count(sender: Address) -> Option<Transact
     {
         Ok(transaction_count) => Some(transaction_count),
         Err(e) => {
-            log!(INFO, "Failed to get the latest transaction count: {e:?}");
+            log!(
+                INFO,
+                "Failed to get the latest transaction count of {sender}: {e:?}"
+            );
             None
         }
     }
@@ -353,7 +356,10 @@ async fn sign_transactions_batch() {
         log!(INFO, "Errors encountered during signing: {errors:?}");
     }
 }
-async fn send_transactions_batch(latest_transaction_count: Option<TransactionCount>) {
+async fn send_transactions_batch(
+    sender: Address,
+    latest_transaction_count: Option<TransactionCount>,
+) {
     let latest_transaction_count = match latest_transaction_count {
         Some(latest_transaction_count) => latest_transaction_count,
         None => {
@@ -364,13 +370,14 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
         s.withdrawal_transactions
             .transactions_to_send_batch(latest_transaction_count, TRANSACTIONS_TO_SEND_BATCH_SIZE)
     });
-    send_signed_transactions(&transactions_to_send).await;
+    send_signed_transactions(sender, &transactions_to_send).await;
 }
 
 /// Broadcast already-signed transactions via the EVM RPC canister. Sender- and
 /// transaction-type-agnostic, so both the main-address withdrawal pipeline (type `0x02`) and the
 /// sweeper-address pipeline (type `0x02` or `0x04`) reuse it.
 pub(crate) async fn send_signed_transactions<T: SignableTransaction + std::fmt::Debug>(
+    sender: Address,
     transactions_to_send: &[Signed<T>],
 ) {
     let rpc_client = read_state(rpc_client);
@@ -385,7 +392,10 @@ pub(crate) async fn send_signed_transactions<T: SignableTransaction + std::fmt::
     .await;
 
     for (signed_tx, result) in zip(transactions_to_send, results) {
-        log!(DEBUG, "Sent transaction {signed_tx:?}: {result:?}");
+        log!(
+            DEBUG,
+            "Sent transaction from {sender} {signed_tx:?}: {result:?}"
+        );
         match result {
             Ok(SendRawTransactionStatus::Ok(_)) | Ok(SendRawTransactionStatus::NonceTooLow) => {
                 // In case of resubmission we may hit the case of SendRawTransactionStatus::NonceTooLow
@@ -395,12 +405,12 @@ pub(crate) async fn send_signed_transactions<T: SignableTransaction + std::fmt::
             Ok(SendRawTransactionStatus::InsufficientFunds)
             | Ok(SendRawTransactionStatus::NonceTooHigh) => log!(
                 INFO,
-                "Failed to send transaction {signed_tx:?}: {result:?}. Will retry later.",
+                "Failed to send transaction from {sender} {signed_tx:?}: {result:?}. Will retry later.",
             ),
             Err(e) => {
                 log!(
                     INFO,
-                    "Failed to send transaction {signed_tx:?}: {e:?}. Will retry later."
+                    "Failed to send transaction from {sender} {signed_tx:?}: {e:?}. Will retry later."
                 )
             }
         };

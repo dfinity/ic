@@ -31,8 +31,8 @@ use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_management_canister_types_private::DerivationPath;
 
-/// Gas limit of a sweep transaction. A fixed, conservative bound for the preparatory type-`0x02`
-/// pipeline; a per-request estimate arrives with the real delegate sweep call.
+/// Gas limit of a sweep transaction. A fixed, conservative bound; a per-request estimate arrives
+/// with the real delegate sweep call.
 pub(crate) const SWEEP_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
 
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
@@ -83,7 +83,7 @@ pub async fn process_sweeper_transactions() {
     resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate).await;
     create_transactions_batch(&gas_fee_estimate);
     sign_transactions_batch().await;
-    send_transactions_batch(latest_transaction_count).await;
+    send_transactions_batch(sender, latest_transaction_count).await;
     finalize_transactions_batch(sender).await;
 
     if read_state(|s| s.sweeper_transactions.has_pending_requests()) {
@@ -213,7 +213,10 @@ async fn sign_transactions_batch() {
     }
 }
 
-async fn send_transactions_batch(latest_transaction_count: Option<TransactionCount>) {
+async fn send_transactions_batch(
+    sender: Address,
+    latest_transaction_count: Option<TransactionCount>,
+) {
     let Some(latest_transaction_count) = latest_transaction_count else {
         return;
     };
@@ -223,7 +226,7 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
             SWEEP_TRANSACTIONS_TO_SEND_BATCH_SIZE,
         )
     });
-    send_signed_transactions(&transactions_to_send).await;
+    send_signed_transactions(sender, &transactions_to_send).await;
 }
 
 async fn finalize_transactions_batch(sender: Address) {
