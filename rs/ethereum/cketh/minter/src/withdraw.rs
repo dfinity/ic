@@ -443,9 +443,7 @@ async fn finalize_transactions_batch(sender: Address) {
 /// the batch should be retried later (a receipt fetch failed, or the same hash came back with two
 /// different receipts). On success the map is keyed by pipeline id, and its keys are asserted to be
 /// exactly the ids expected to finalize. Sender/id-agnostic, so both pipelines reuse it.
-pub(crate) async fn fetch_finalized_receipts<
-    Id: Copy + Ord + std::fmt::Debug + std::fmt::Display,
->(
+pub(crate) async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
     txs_to_finalize: BTreeMap<Hash, Id>,
 ) -> Option<BTreeMap<Id, EvmTransactionReceipt>> {
     let expected_finalized_ids: BTreeSet<Id> = txs_to_finalize.values().copied().collect();
@@ -465,14 +463,14 @@ pub(crate) async fn fetch_finalized_receipts<
             Ok(Some(receipt)) => {
                 log!(
                     DEBUG,
-                    "Received transaction receipt {receipt:?} for transaction {hash} and id {id}"
+                    "Received transaction receipt {receipt:?} for transaction {hash} and id {id:?}"
                 );
                 match receipts.get(&id) {
                     // by construction we never query twice the same transaction hash, which is a field in TransactionReceipt.
                     Some(existing_receipt) => {
                         log!(
                             INFO,
-                            "ERROR: received different receipts for transaction {hash} with id {id}: {existing_receipt:?} and {receipt:?}. Will retry later"
+                            "ERROR: received different receipts for transaction {hash} with id {id:?}: {existing_receipt:?} and {receipt:?}. Will retry later"
                         );
                         return None;
                     }
@@ -484,13 +482,13 @@ pub(crate) async fn fetch_finalized_receipts<
             Ok(None) => {
                 log!(
                     DEBUG,
-                    "Transaction {hash} for id {id} was not mined, it's probably a resubmitted transaction",
+                    "Transaction {hash} for id {id:?} was not mined, it's probably a resubmitted transaction",
                 )
             }
             Err(e) => {
                 log!(
                     INFO,
-                    "Failed to get transaction receipt for {hash} and id {id}: {e:?}. Will retry later",
+                    "Failed to get transaction receipt for {hash} and id {id:?}: {e:?}. Will retry later",
                 );
                 return None;
             }

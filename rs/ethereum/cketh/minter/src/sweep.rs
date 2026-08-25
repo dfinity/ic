@@ -170,7 +170,7 @@ fn create_transactions_batch(gas_fee_estimate: &GasFeeEstimate) {
             }) => {
                 log!(
                     INFO,
-                    "[process_sweeper_transactions]: Sweep {sweep_id} has prepaid gas {allowed_max_transaction_fee:?}, below the current transaction fee {actual_max_transaction_fee:?}. Sweep moved back to end of queue."
+                    "[process_sweeper_transactions]: Sweep {sweep_id:?} has prepaid gas {allowed_max_transaction_fee:?}, below the current transaction fee {actual_max_transaction_fee:?}. Sweep moved back to end of queue."
                 );
                 mutate_state(|s| s.sweeper_transactions.reschedule_request(sweep_id));
             }
@@ -207,7 +207,7 @@ async fn sign_transactions_batch() {
             }),
             Err(e) => log!(
                 INFO,
-                "[process_sweeper_transactions]: error signing sweep {sweep_id}: {e:?}"
+                "[process_sweeper_transactions]: error signing sweep {sweep_id:?}: {e:?}"
             ),
         }
     }
