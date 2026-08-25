@@ -37,7 +37,7 @@ use network::systemd::IPV6_NAME_SERVERS;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
 use std::collections::HashMap;
-use std::ffi::CString;
+use std::ffi::{CString, OsString};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{IpAddr, Ipv6Addr};
 use std::os::unix::ffi::OsStrExt;
@@ -252,6 +252,12 @@ impl LocalBackend {
     /// Run a short shell `script` via `/bin/sh -c` to completion, returning an
     /// error if it cannot be spawned or exits non-zero (`what` describes the
     /// operation, for error context).
+    ///
+    /// Only for scripts whose every word is a literal or backend-derived
+    /// (interface and bridge names, addresses of the group's own prefixes). Any
+    /// command taking a value a *test* supplies — a VM name, a domain — belongs
+    /// in [`run_command`](Self::run_command) instead, which never lets a shell
+    /// see it.
     fn run_shell(script: &str, what: &str) -> Result<()> {
         let output = Command::new("/bin/sh")
             .arg("-c")
@@ -269,6 +275,41 @@ impl LocalBackend {
             );
         }
         Ok(())
+    }
+
+    /// Run `command` to completion, returning an error if it cannot be spawned or
+    /// exits non-zero (`what` describes the operation, for error context).
+    ///
+    /// The argv-passing counterpart of [`run_shell`](Self::run_shell), and the one
+    /// to prefer: the arguments reach the kernel as a vector, so no word-splitting,
+    /// globbing or metacharacter interpretation stands between what the caller
+    /// wrote and what the program receives, and paths need no quoting.
+    fn run_command(command: &mut Command, what: &str) -> Result<()> {
+        let output = command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .output()
+            .with_context(|| format!("spawning the command for {what}"))?;
+        if !output.status.success() {
+            bail!(
+                "operation '{what}' failed with status {}: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        Ok(())
+    }
+
+    /// The single argument `<option><path>`, e.g. `--pid-file=/run/x.pid`.
+    ///
+    /// Built as an [`OsString`] rather than through `Path::display`, which is
+    /// lossy: a path that is not valid UTF-8 reaches the program unchanged instead
+    /// of with U+FFFD substituted into it.
+    fn path_arg(option: &str, path: &Path) -> OsString {
+        let mut arg = OsString::from(option);
+        arg.push(path);
+        arg
     }
 
     /// Put the driver into a network namespace it fully owns and arrange for its
@@ -1144,11 +1185,7 @@ impl LocalBackend {
         // these are *command-line* options, which is why registering one has to
         // restart `dnsmasq`; see `add_wildcard_dns_record`. Empty on the first
         // start, since `create_group` truncates the file it reads.
-        let wildcard_args: String = self
-            .dnsmasq_wildcard_args(bridge)?
-            .into_iter()
-            .map(|arg| format!(" {arg}"))
-            .collect();
+        let wildcard_args = self.dnsmasq_wildcard_args(bridge)?;
 
         info!(
             self.logger,
@@ -1196,32 +1233,74 @@ impl LocalBackend {
         // gated on `getuid() == 0` and would otherwise `setgroups(2)` — denied in
         // the driver's user namespace — and drop to a user/group id that is
         // unmapped there.
+        //
+        // `dnsmasq` is spawned directly rather than through a shell, so every
+        // argument reaches it as one argv entry. That matters for the `--address`
+        // options above all: their names originate in a test-supplied VM name
+        // (`IcGatewayVm::new`), and a shell would word-split and metacharacter-expand
+        // them on the way. It also drops the quoting question for the paths, which
+        // the working directory could otherwise raise by containing a space.
         let dnsmasq_path = get_dependency_path_from_env("ENV_DEPS__DNSMASQ_PATH");
-        let dnsmasq_script = format!(
-            "exec {dnsmasq_path:?} \
-                 --conf-file=/dev/null \
-                 --pid-file={pid} \
-                 --dhcp-leasefile={lease} \
-                 --log-facility={log} \
-                 --bind-interfaces \
-                 --interface={bridge} \
-                 --except-interface=lo \
-                 --enable-ra \
-                 --dhcp-range={prefix},ra-only \
-                 --dhcp-range={ipv4_prefix}.2,{ipv4_prefix}.254,255.255.255.0,1h \
-                 --ra-param={bridge},10,1800 \
-                 --no-resolv \
-                 --no-hosts \
-                 --addn-hosts={hosts} \
-                 --synth-domain={NIP_IO_DOMAIN},{prefix}/64\
-                 {wildcard_args}",
-            pid = pid_path.display(),
-            lease = lease_path.display(),
-            log = log_path.display(),
-            hosts = hosts_path.display(),
-        );
-        Self::run_shell(&dnsmasq_script, "start dnsmasq")?;
+        let mut dnsmasq = Command::new(&dnsmasq_path);
+        dnsmasq
+            .arg("--conf-file=/dev/null")
+            .arg(Self::path_arg("--pid-file=", &pid_path))
+            .arg(Self::path_arg("--dhcp-leasefile=", &lease_path))
+            .arg(Self::path_arg("--log-facility=", &log_path))
+            .arg("--bind-interfaces")
+            .arg(format!("--interface={bridge}"))
+            .arg("--except-interface=lo")
+            .arg("--enable-ra")
+            .arg(format!("--dhcp-range={prefix},ra-only"))
+            .arg(format!(
+                "--dhcp-range={ipv4_prefix}.2,{ipv4_prefix}.254,255.255.255.0,1h"
+            ))
+            .arg(format!("--ra-param={bridge},10,1800"))
+            .arg("--no-resolv")
+            .arg("--no-hosts")
+            .arg(Self::path_arg("--addn-hosts=", &hosts_path))
+            .arg(format!("--synth-domain={NIP_IO_DOMAIN},{prefix}/64"))
+            .args(&wildcard_args);
+        Self::run_command(&mut dnsmasq, "start dnsmasq")?;
 
+        Ok(())
+    }
+
+    /// Reject a `name` that cannot be stored as a DNS record, before
+    /// [`add_dns_record`](Self::add_dns_record) or
+    /// [`add_wildcard_dns_record`](Self::add_wildcard_dns_record) persists it.
+    ///
+    /// Both record files are line-based — one `<address> <name>` pair per line —
+    /// and [`dnsmasq_wildcard_args`](Self::dnsmasq_wildcard_args) splits a line
+    /// back apart on whitespace. So a name containing a space would not fail to
+    /// register, it would register a *different* record, and one containing a
+    /// newline would register a second record nobody asked for. Names reach here
+    /// from test-supplied VM names (`IcGatewayVm::new`) and API BN domains, which
+    /// nothing upstream validates; failing here is the difference between a clear
+    /// error at registration and an unresolvable name six minutes into a test.
+    ///
+    /// Accepted is a plain ASCII hostname: dot-separated non-empty labels of
+    /// letters, digits, `-` and `_`, no label starting or ending with `-`, no
+    /// label over 63 bytes and no name over 253 (RFC 1035 §2.3.4's limits, with
+    /// the leading-digit relaxation of RFC 1123 §2.1 and the `_` that service
+    /// labels use in practice).
+    fn validate_dns_name(name: &str) -> Result<()> {
+        let is_valid_label = |label: &str| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        };
+        if name.is_empty() || name.len() > 253 || !name.split('.').all(is_valid_label) {
+            bail!(
+                "refusing to register {name:?} as a DNS record: expected dot-separated \
+                 ASCII labels of letters, digits, '-' and '_' (none starting or ending \
+                 with '-'), each at most 63 bytes and at most 253 bytes in total"
+            );
+        }
         Ok(())
     }
 
@@ -1237,7 +1316,11 @@ impl LocalBackend {
     /// [`add_wildcard_dns_record`](Self::add_wildcard_dns_record) when the
     /// subdomains of `name` have to resolve as well; a hosts file has no
     /// wildcards.
+    ///
+    /// `name` must be a plain ASCII hostname, per
+    /// [`validate_dns_name`](Self::validate_dns_name).
     pub fn add_dns_record(&self, group_name: &str, name: &str, addr: IpAddr) -> Result<()> {
+        Self::validate_dns_name(name)?;
         let bridge = Self::bridge_name(group_name);
         let hosts_path = self.dnsmasq_hosts_path(&bridge);
 
@@ -1293,12 +1376,17 @@ impl LocalBackend {
     /// the hosts-shaped files and `--servers-file`, and a servers-file admits
     /// nothing but `server` and `rev-server`. Prefer `add_dns_record` when an exact
     /// name is enough.
+    ///
+    /// `name` must be a plain ASCII hostname, per
+    /// [`validate_dns_name`](Self::validate_dns_name); it is what ends up in an
+    /// `--address` option on `dnsmasq`'s command line.
     pub fn add_wildcard_dns_record(
         &self,
         group_name: &str,
         name: &str,
         addrs: &[IpAddr],
     ) -> Result<()> {
+        Self::validate_dns_name(name)?;
         if addrs.is_empty() {
             return Ok(());
         }
@@ -2462,6 +2550,61 @@ fn has_gpt_header(path: &Path) -> Result<bool> {
         Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
         Err(err) => {
             Err(err).with_context(|| format!("reading the GPT signature of {}", path.display()))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LocalBackend;
+
+    #[test]
+    fn accepts_the_names_the_backend_registers() {
+        for name in [
+            // `IcGatewayVm::load_or_create_local_playnet`.
+            "ic-gateway.ic.net",
+            "ic-gateway-3.ic.net",
+            // `InternetComputer::setup_api_bn_local_playnet`.
+            "apibn-0.ic.net",
+            // Leading digits and `_` labels are legal in practice.
+            "0.example.com",
+            "_acme-challenge.example.com",
+            &format!("{}.example.com", "a".repeat(63)),
+        ] {
+            assert!(
+                LocalBackend::validate_dns_name(name).is_ok(),
+                "expected {name:?} to be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_names_that_would_corrupt_a_record_file_or_a_command_line() {
+        for name in [
+            // Splits the `<address> <name>` line the wrong way when read back.
+            "ic gateway.ic.net",
+            "ic\tgateway.ic.net",
+            // Appends a record nobody asked for.
+            "ic-gateway.ic.net\n2001:db8::1 evil.ic.net",
+            // Shell metacharacters. No shell sees these any more, now that
+            // `start_dnsmasq` passes argv directly — but they are not DNS names
+            // either, so they have no business in a record file.
+            "ic-gateway.ic.net; touch /tmp/pwned",
+            "$(id).ic.net",
+            "`id`.ic.net",
+            // Malformed as a name.
+            "",
+            ".",
+            "ic-gateway..ic.net",
+            "-gateway.ic.net",
+            "gateway-.ic.net",
+            &format!("{}.example.com", "a".repeat(64)),
+            &format!("{}.example.com", vec!["a"; 127].join(".")),
+        ] {
+            assert!(
+                LocalBackend::validate_dns_name(name).is_err(),
+                "expected {name:?} to be rejected"
+            );
         }
     }
 }
