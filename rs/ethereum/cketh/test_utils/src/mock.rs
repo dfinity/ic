@@ -27,9 +27,6 @@ pub enum JsonRpcMethod {
     #[strum(serialize = "eth_call")]
     EthCall,
 
-    #[strum(serialize = "eth_getBalance")]
-    EthGetBalance,
-
     #[strum(serialize = "eth_getBlockByNumber")]
     EthGetBlockByNumber,
 
