@@ -379,18 +379,54 @@ with an `icrc1_balance_of` of `1_762_128_000_000_000_000` wei ≈ 1.76 ckETH as 
    the optional fee arguments (step 1) transfers the caller-specified ckETH amount
    into the fee account (`icrc2_transfer_from`, see the variants below) — plus
    treasury top-ups and converted `deposit_fee` revenue (see Non-goals).
-1. **Daily funding task**: compare the sweeper address' prepaid gas against its
-   low-water mark. The minter needs no chain read for this: it tracks a *lower
-   bound* on that balance from its own recorded events, and if the bound is below
-   the low-water mark it **withdraws ckETH from the fee account to the sweeper
-   address** — an ordinary ckETH withdrawal through the existing pipeline (burn
-   from the fee account, then send the ETH on the main address' nonce sequence).
-   `R14` holds by construction, with no new burn path to audit; this pipeline is
-   the *only* way ETH is spent on sweeps. Unlike sweeps (`R17`), this funding
-   transaction rides the main address' nonce sequence — the withdrawal lane — so a
-   stuck funding transaction can head-of-line-block withdrawals; acceptable because
-   funding is infrequent (batched to cover many sweeps) and uses the same
-   resubmission machinery as withdrawals.
+1. **Daily funding task**: once a day (and once at install, right after the
+   ECDSA key is cached), decide from the minter's **own records** whether the
+   sweeper address needs a top-up. No chain read: the balance used is a *lower
+   bound* — what finalized fundings delivered, less what accepted sweeps have
+   provisioned, plus what finalized sweeps handed back — so erring low can
+   only over-provision gas, never spend against gas that is not there. If the
+   bound is below the **low-water mark**
+   (half the target; the target is 10 × the ckETH minimum withdrawal amount,
+   ≈ 0.3 ETH against mainnet's 0.03, provisional until calibrated on Sepolia),
+   **withdraw ckETH from the fee account to the sweeper address**, topping the
+   bound up to the target — an ordinary ckETH withdrawal through the existing
+   pipeline (burn from the fee account first, then send the ETH on the main
+   address' nonce sequence). One funding at a time: none is started while a
+   previous one is still in flight, or when the minter's deposit-backed ETH
+   does not cover the amount. `R14` holds by construction, with no new burn
+   path to audit; this pipeline is the *only* way ETH is spent on sweeps.
+   Unlike sweeps (`R17`), the funding transaction rides the main address'
+   nonce sequence — the withdrawal lane — so a stuck funding transaction can
+   head-of-line-block withdrawals (and, one at a time, later fundings);
+   acceptable because funding is infrequent (batched to cover many sweeps) and
+   uses the same resubmission machinery as withdrawals.
+
+The funding flow end-to-end — note that the decision reads nothing but the
+minter's own accounting, and that the burn strictly precedes any ETH movement:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Minter as Minter canister
+    participant Ledger as ckETH ledger
+    box Minter-key EOAs
+        participant Main as main address — path []
+        participant Sw as sweeper address — path [3]
+    end
+
+    Note over Minter: daily timer, plus once at install.<br/>No chain read: the sweeper balance used is the minter's own lower bound —<br/>what finalized fundings delivered, less what accepted sweeps have provisioned,<br/>plus what finalized sweeps handed back
+    Minter->>Minter: plan_funding: bound below the low-water mark (target/2)?<br/>no funding still in flight? deposit-backed ETH covers it?
+    alt not due, or one already in flight, or insufficient backing
+        Note over Minter: skip — nothing burned, nothing moves
+    else funding due: amount = target − bound
+        Minter->>Ledger: burn amount of ckETH from the minter fee account 0x…fee<br/>(memo: convert to the sweeper address)
+        Note over Minter,Ledger: burn FIRST (R14): a failed burn (e.g. empty fee account)<br/>means no ETH moves. From here on,<br/>cumulative burned ≥ cumulative spent
+        Minter->>Main: enqueue an ordinary withdrawal request,<br/>destination = sweeper address, keyed by the ledger burn index
+        Main->>Sw: EIP-1559 transfer of amount − fee, on the MAIN address'<br/>nonce lane — the withdrawal lane, unlike sweeps (R17)
+        Note over Minter,Sw: the receipt finalizes the funding: transferred + fee are recorded.<br/>A failed transfer is NOT reimbursed —<br/>the burn minus its gas stays as backing
+        Note over Minter,Sw: sweeper-balance lower bound += transferred:<br/>the prepaid gas future sweeps are priced against
+    end
+```
 
 * The sweeper address' balance is the `prepaid_sweep_gas` counter, and the minter
   tracks a lower bound on it from its own events — what finalized fundings
