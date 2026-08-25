@@ -36,6 +36,10 @@ pub struct SweepItem {
 /// sweeps every `token` balance held by every `item`'s deposit address to the minter's main address
 /// through the deposit helper.
 ///
+/// The tokens apply to every item, so a batch mixing addresses that hold different tokens pays a
+/// `balanceOf` call per pair that holds nothing.
+/// TODO(DEFI-2980): group a batch by token so every pair in it holds a balance.
+///
 /// See the [Contract ABI Specification](https://docs.soliditylang.org/en/develop/abi-spec.html#contract-abi-specification):
 /// both arguments are dynamic, so the head holds one offset each and the two blocks follow.
 pub fn encode_sweep_erc20_batch(items: &[SweepItem], tokens: &[Address]) -> Vec<u8> {
