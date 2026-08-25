@@ -1,66 +1,66 @@
-//! A live harness for the sweeper fee-funding task
+//! Sweeper fee funding on the shared live fixture: the ckETH ledger, minter and EVM RPC canister
+//! [`CkEthSetup`] installs, pointed at an anvil node this harness owns, driving the *production*
+//! path end to end with nothing mocked
 //! (`rs/ethereum/cketh/docs/deposit_from_cex.md`, "Fund the transaction fees without touching the
-//! ckETH backing"), driving the *production* path end to end with nothing mocked:
+//! ckETH backing"):
 //!
 //! ```text
-//! funding task (no chain read: the balance bound comes from the minter's own events)
+//! deposit through the real helper contract -> minter scrapes it -> ckETH minted
+//!   -> funding task (no chain read: the balance bound comes from the minter's own events)
 //!   -> burn ckETH from the minter's 0x…0fee subaccount on a real ledger
 //!   -> withdrawal request -> tECDSA signature
 //!   -> eth_sendRawTransaction via the EVM RPC canister -> anvil mines it
 //!   -> receipt -> finalized, with anvil's own balance confirming the ETH arrived
 //! ```
 //!
-//! Runs on a PocketIC instance in live mode, so the canister's HTTPS outcalls genuinely reach anvil.
-//! Wiring that is easy to get wrong:
+//! The fixture is built on an ordinary PocketIC instance and only then switched to live outcalls, by
+//! [`switch_to_live`], for the reasons [`crate::live_scan`] documents. What this harness adds on top
+//! is the anvil-side arranging these tests need and one thing the balance scan never needs: minter
+//! *time*.
 //!
-//! * anvil runs with **chain id 1** ([`Anvil::start_mainnet_like`]): the minter signs for
-//!   `EthereumNetwork::Mainnet`, and a chain-id mismatch makes anvil reject the transaction.
-//! * The same flag gives one slot per epoch, so `finalized` trails `latest` by 2 blocks instead of
-//!   64 and the minter can keep its production `BlockTag::Finalized`.
+//! The transfer is only sent by the withdrawal timer, six minutes after the funding task queued the
+//! request. Rather than wait that out, these tests *buy* the tick: live mode keeps adding wall-clock
+//! deltas to whatever the instance's time already is, so pushing it forward with
+//! [`PocketIc::advance_time`] is additive and never undone — the instance simply runs that far ahead
+//! of the host from then on, and every timer that has come due fires on the next round. That makes
+//! two rules, both explained on [`SweeperFundingSetup::settle`]: ticks are bought one at a time, and
+//! each one is paid for in real seconds rather than instance time.
+//!
+//! Two further pieces of wiring are easy to get wrong:
+//!
+//! * anvil runs with **chain id 1** ([`Anvil::start_mainnet_like`]): the fixture's minter signs for
+//!   `EthereumNetwork::Mainnet`, and a chain-id mismatch makes anvil reject the transaction. The
+//!   same flag gives one slot per epoch, so `finalized` trails `latest` by 2 blocks instead of 64.
 //! * Any loop waiting on a minter timer **must poll a canister while it waits**. The PocketIC server
 //!   shuts an idle instance down, which stops the minter's timers and looks exactly like a minter
 //!   bug.
-//! * The transfer is only sent by the withdrawal timer, six minutes after the funding task queued
-//!   the request. Rather than wait that out, these tests *buy* the tick: live mode keeps adding
-//!   wall-clock deltas to whatever the instance's time already is, so pushing it forward with
-//!   [`PocketIc::advance_time`] is additive and never undone — the instance simply runs that far
-//!   ahead of the host from then on, and every timer that has come due fires on the next round.
-//!   That makes two rules, both explained on `SweeperFundingSetup::settle`: ticks are bought one at
-//!   a time, and each one is paid for in real seconds rather than instance time.
 
 use candid::{Decode, Encode, Nat, Principal};
-use evm_rpc_types::{InstallArgs, OverrideProvider, RegexSubstitution};
 use ic_cketh_minter::PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL;
-use ic_cketh_minter::endpoints::CandidBlockTag;
+use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
-use ic_cketh_minter::lifecycle::{EthereumNetwork, MinterArg, init::InitArg as MinterInitArgs};
 use ic_ethereum_types::Address;
-use ic_icrc1_ledger::{FeatureFlags, LedgerArgument};
 use icrc_ledger_types::icrc1::account::Account;
-use pocket_ic::{CanisterSettings, PocketIc, PocketIcBuilder};
 use std::str::FromStr;
-use std::time::{Duration, Instant, SystemTime};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_deposit_helper, deposit_eth};
-use crate::{CKETH_MINIMUM_WITHDRAWAL_AMOUNT, evm_rpc_wasm, ledger_wasm, minter_wasm};
+use crate::{CkEthSetup, EthereumBackend, minter_wasm, switch_to_live};
 
-const ECDSA_KEY_NAME: &str = "key_1";
-
-const CKETH_TRANSFER_FEE: u64 = 2_000_000_000_000;
-
-/// Credited to the minter as a deposit, so funding has deposit-backed ETH to spend. Comfortably
-/// above the 0.3 ETH funding target that [`CKETH_MINIMUM_WITHDRAWAL_AMOUNT`] implies.
+/// Deposited for a test principal, so funding has deposit-backed ETH to spend. Comfortably above the
+/// 0.3 ETH funding target that the fixture's minimum withdrawal amount implies.
 const DEPOSIT_AMOUNT: u128 = 5_000_000_000_000_000_000; // 5 ETH
 
 pub const FEE_ACCOUNT_BALANCE: u128 = 1_000_000_000_000_000_000; // 1 ckETH
 
-/// One withdrawal-timer interval, plus slack so the timer is unambiguously due. The unit these
-/// tests buy minter time in: however far a single jump goes, each timer that has come due fires
-/// *once*, so two ticks cost two jumps and not one large one.
 /// Ticks granted for the minter's log scrape to find the harness' deposits. One suffices, since a
 /// tick is longer than the scraping interval; the spares cover a scrape that lands mid-tick.
 const DEPOSIT_SCRAPE_TICKS: u32 = 3;
 
+/// One withdrawal-timer interval, plus slack so the timer is unambiguously due. The unit these tests
+/// buy minter time in: however far a single jump goes, each timer that has come due fires *once*, so
+/// two ticks cost two jumps and not one large one.
 const WITHDRAWAL_TICK: Duration =
     Duration::from_secs(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL.as_secs() + 30);
 
@@ -87,19 +87,18 @@ const BLOCKS_PER_POLL: u64 = 2;
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
 /// How long any wait here gives the minter before it fails with its logs. Sized well inside the
-/// 300-second budget `size = "medium"` grants the targets that run these tests, so that a hang
+/// 300-second budget `size = "medium"` grants the target that runs these tests, so that a hang
 /// reports what the minter was doing rather than being killed by Bazel with nothing to show.
-const AWAIT_DEADLINE: Duration = Duration::from_secs(60);
+pub const AWAIT_DEADLINE: Duration = Duration::from_secs(60);
 
-fn controller() -> Principal {
-    Principal::from_slice(&[0x0c; 10])
-}
-
+/// The shared ckETH fixture against an owned anvil node, with the sweeper-funding tests' own
+/// arranging on top.
+///
+/// `cketh` is declared first so it drops first: the PocketIC instance goes away, and only then does
+/// the node its canisters were calling out to.
 pub struct SweeperFundingSetup {
-    env: PocketIc,
-    anvil: Anvil,
-    minter_id: Principal,
-    ledger_id: Principal,
+    cketh: CkEthSetup,
+    anvil: Arc<Anvil>,
     minter_address: Address,
     deposit_helper: Address,
     supply_before_funding: u128,
@@ -107,81 +106,45 @@ pub struct SweeperFundingSetup {
 }
 
 impl SweeperFundingSetup {
-    /// The fee account is funded once the deposit has been credited and before the timers are
-    /// re-armed: with nothing in it, the check that runs at install cannot burn whether it beats the
-    /// deposit scrape or trails it, so the post-upgrade run is deterministically the first that can
-    /// fund.
+    /// The fee account is credited once the deposits are in and before the timers are re-armed: with
+    /// nothing in it, the check that runs at install cannot burn whether it beats the deposit scrape
+    /// or trails it, so the post-upgrade run is deterministically the first that can fund.
     pub fn new_live() -> Self {
         Self::new_live_with_fee_account_balance(FEE_ACCOUNT_BALANCE)
     }
 
     fn new_live_with_fee_account_balance(fee_account_balance: u128) -> Self {
-        let anvil = Anvil::start_mainnet_like();
+        let anvil = Arc::new(Anvil::start_mainnet_like());
+        let cketh = CkEthSetup::new(EthereumBackend::Anvil(Arc::clone(&anvil)));
+        switch_to_live(&cketh);
 
-        let mut env = PocketIcBuilder::new()
-            .with_nns_subnet() // make_live requires an NNS subnet.
-            .with_fiduciary_subnet() // holds the secp256k1 `key_1` the minter signs with.
-            .build();
-
-        let settings = CanisterSettings {
-            controllers: Some(vec![controller()]),
-            ..Default::default()
-        };
-
-        let ledger_id =
-            env.create_canister_with_settings(Some(controller()), Some(settings.clone()));
-        let evm_rpc_id =
-            env.create_canister_with_settings(Some(controller()), Some(settings.clone()));
-        let minter_id = env.create_canister_with_settings(Some(controller()), Some(settings));
-        for canister in [ledger_id, evm_rpc_id, minter_id] {
-            env.add_cycles(canister, u128::from(u64::MAX));
-        }
-
-        install_ledger(&env, ledger_id, minter_id);
-        install_evm_rpc(&env, evm_rpc_id, anvil.url());
-
-        // Before `make_live`, whose auto-progress task sets the time asynchronously: an ingress
-        // message submitted below would otherwise race that five-year jump, be retroactively
-        // expired and never answered. Same fix as #11299, which explains it at length.
-        env.set_certified_time(SystemTime::now().into());
-        // Live before installing the minter: its install-time timers issue outcalls immediately.
-        let _gateway = env.make_live(None);
-
-        install_minter(&env, minter_id, ledger_id, evm_rpc_id);
-
-        let mut setup = Self {
-            env,
-            anvil,
-            minter_id,
-            ledger_id,
-            minter_address: Address::new([0; 20]),
-            deposit_helper: Address::new([0; 20]),
-            supply_before_funding: 0,
-            fee_account_before_funding: 0,
-        };
-        setup.minter_address = setup.fetch_minter_address();
+        let minter_address = fetch_minter_address(&cketh);
         // The production helper contract, deployed against the address the minter just derived, so
         // deposits reach the minter the way they do on mainnet — the ETH really arrives at the
         // minter's address and the event the minter scrapes is the one the contract emits. The
         // minter learns about it by upgrade, which is also how mainnet gained the contract.
-        setup.deposit_helper = deploy_deposit_helper(
-            &setup.anvil,
-            &address_from_hex(DEV_ACCOUNT),
-            &setup.minter_address,
-        );
+        let deposit_helper =
+            deploy_deposit_helper(&anvil, &address_from_hex(DEV_ACCOUNT), &minter_address);
+
+        let mut setup = Self {
+            cketh,
+            anvil,
+            minter_address,
+            deposit_helper,
+            supply_before_funding: 0,
+            fee_account_before_funding: 0,
+        };
         setup.upgrade_minter_with(UpgradeArg {
             deposit_with_subaccount_helper_contract_address: Some(setup.deposit_helper.to_string()),
             ..Default::default()
         });
 
         // Funding may only spend ETH the minter received through deposits, so it needs a real one.
-        setup.deposit(
-            Account {
-                owner: controller(),
-                subaccount: None,
-            },
-            DEPOSIT_AMOUNT,
-        );
+        let depositor = Account {
+            owner: setup.cketh.caller.into(),
+            subaccount: None,
+        };
+        setup.deposit(depositor, DEPOSIT_AMOUNT);
         // The fee account earns its ckETH the way it does in production — the ckETH ledger collects
         // its fees there — but at 2e12 wei a transfer it would take 150'000 transfers to reach the
         // funding target, so the test deposits to that account directly instead. Deposited rather
@@ -189,18 +152,16 @@ impl SweeperFundingSetup {
         if fee_account_balance > 0 {
             setup.deposit(setup.fee_account(), fee_account_balance);
         }
-        let mut credited = vec![Account {
-            owner: controller(),
-            subaccount: None,
-        }];
+        let mut credited = vec![depositor];
         if fee_account_balance > 0 {
             credited.push(setup.fee_account());
         }
         setup.await_deposits_credited(&credited);
-        // Taken here, in that same window, and not left to the test: the funding decision reads
-        // nothing off the chain, so the first post-upgrade check burns within milliseconds of the
-        // minter restarting — well before a test that queried the ledger afterwards could see the
-        // pre-burn numbers. Compared against an already-debited baseline, a burn assertion would
+
+        // Taken here, before the timers are re-armed, and not left to the test: the funding decision
+        // reads nothing off the chain, so the first post-upgrade check burns within milliseconds of
+        // the minter restarting — well before a test that queried the ledger afterwards could see
+        // the pre-burn numbers. Compared against an already-debited baseline, a burn assertion would
         // report zero burned and fail.
         setup.supply_before_funding = setup.cketh_total_supply();
         setup.fee_account_before_funding = setup.cketh_balance_of(setup.fee_account());
@@ -217,6 +178,17 @@ impl SweeperFundingSetup {
     /// The fee account's ckETH balance at that same point, for measuring what the burn debited.
     pub fn fee_account_before_funding(&self) -> u128 {
         self.fee_account_before_funding
+    }
+
+    /// Deposits `value` wei for `beneficiary` through the helper contract, as a depositor does.
+    pub fn deposit(&self, beneficiary: Account, value: u128) {
+        deposit_eth(
+            &self.anvil,
+            &self.deposit_helper,
+            &address_from_hex(DEV_ACCOUNT),
+            beneficiary,
+            value,
+        );
     }
 
     /// Waits until the minter has credited the deposits, buying the ticks its log scrape needs: they
@@ -237,42 +209,46 @@ impl SweeperFundingSetup {
         );
     }
 
+    /// Waits until a deposit made to the fee account has been credited, for a test that arranges the
+    /// account after construction.
+    pub fn await_fee_account_credited(&self) {
+        self.await_deposits_credited(&[self.fee_account()]);
+    }
+
     /// Re-arms the minter's periodic timers by upgrading it, so a funding check runs again inside the
     /// test rather than at the next 24-hour tick.
-    ///
-    /// Stopped first, as any upgrade must be: upgrading a running canister leaves its in-flight
-    /// HTTPS outcalls to resolve into fresh Wasm, which traps it with
-    /// "CallFutureState for in-flight calls" and corrupts its heap.
-    /// Deposits `value` wei for `beneficiary` through the helper contract, as a depositor does.
-    pub fn deposit(&self, beneficiary: Account, value: u128) {
-        deposit_eth(
-            &self.anvil,
-            &self.deposit_helper,
-            &address_from_hex(DEV_ACCOUNT),
-            beneficiary,
-            value,
-        );
-    }
-
     pub fn upgrade_minter(&self) {
-        self.upgrade_minter_arg(Encode!(&None::<MinterArg>).unwrap());
+        self.upgrade_minter_with(UpgradeArg::default());
     }
 
-    /// Upgrades the minter with a configuration change, which — like any upgrade — also re-arms its
-    /// periodic timers.
+    /// As [`Self::upgrade_minter`], carrying a configuration change.
+    ///
+    /// The minter is stopped first, as any upgrade must be: upgrading a running canister leaves its
+    /// in-flight HTTPS outcalls to resolve into fresh Wasm, which traps it with "CallFutureState for
+    /// in-flight calls" and corrupts its heap.
+    ///
+    /// Stopped through the client rather than through `CkEthSetup::stop_minter`, which drives the
+    /// instance with explicit `tick`s and answers outcalls with mocks: on an auto-progressing
+    /// instance the rounds arrive on their own, and an ingress awaited tick-by-tick alongside them
+    /// runs out its round budget unanswered.
     pub fn upgrade_minter_with(&self, arg: UpgradeArg) {
-        self.upgrade_minter_arg(Encode!(&Some(MinterArg::UpgradeArg(arg))).unwrap());
-    }
-
-    fn upgrade_minter_arg(&self, arg: Vec<u8>) {
-        self.env
-            .stop_canister(self.minter_id, Some(controller()))
+        let minter_id = self.cketh.minter_id;
+        self.cketh
+            .env
+            .stop_canister(minter_id, None)
             .expect("stopping the minter must succeed");
-        self.env
-            .upgrade_canister(self.minter_id, minter_wasm(), arg, Some(controller()))
+        self.cketh
+            .env
+            .upgrade_canister(
+                minter_id,
+                minter_wasm(),
+                Encode!(&MinterArg::UpgradeArg(arg)).unwrap(),
+                None,
+            )
             .expect("upgrading the minter must succeed");
-        self.env
-            .start_canister(self.minter_id, Some(controller()))
+        self.cketh
+            .env
+            .start_canister(minter_id, None)
             .expect("starting the minter must succeed");
     }
 
@@ -326,13 +302,13 @@ impl SweeperFundingSetup {
                 self.minter_logs().join("\n")
             );
             spent += 1;
-            self.env.advance_time(WITHDRAWAL_TICK);
+            self.cketh.env.advance_time(WITHDRAWAL_TICK);
         }
     }
 
     pub fn fee_account(&self) -> Account {
         Account {
-            owner: self.minter_id,
+            owner: self.cketh.minter_id,
             subaccount: Some(ic_cketh_minter::CKETH_FEE_SUBACCOUNT),
         }
     }
@@ -363,46 +339,20 @@ impl SweeperFundingSetup {
         }
     }
 
-    fn fetch_minter_address(&self) -> Address {
-        let message_id = self
-            .env
-            .submit_call(
-                self.minter_id,
-                Principal::anonymous(),
-                "minter_address",
-                Encode!().unwrap(),
-            )
-            .expect("minter_address submission rejected");
-        let reply = self
-            .env
-            .await_call_no_ticks(message_id)
-            .expect("minter_address rejected");
-        let address = Decode!(&reply, String).unwrap();
-        Address::from_str(&address).expect("the minter returned an invalid address")
-    }
-
     pub fn minter_address(&self) -> Address {
         self.minter_address
     }
 
     pub fn cketh_balance_of(&self, account: Account) -> u128 {
-        let reply = self
-            .env
-            .query_call(
-                self.ledger_id,
-                Principal::anonymous(),
-                "icrc1_balance_of",
-                Encode!(&account).unwrap(),
-            )
-            .expect("icrc1_balance_of rejected");
-        nat_to_u128(Decode!(&reply, Nat).unwrap())
+        nat_to_u128(self.cketh.balance_of(account))
     }
 
     pub fn cketh_total_supply(&self) -> u128 {
         let reply = self
+            .cketh
             .env
             .query_call(
-                self.ledger_id,
+                self.cketh.ledger_id,
                 Principal::anonymous(),
                 "icrc1_total_supply",
                 Encode!().unwrap(),
@@ -437,89 +387,38 @@ impl SweeperFundingSetup {
     }
 
     pub fn minter_logs(&self) -> Vec<String> {
-        self.env
-            .fetch_canister_logs(self.minter_id, controller())
-            .expect("fetching the minter's canister logs failed")
+        self.cketh
+            .minter_canister_logs()
             .into_iter()
-            .map(|record| String::from_utf8_lossy(&record.content).to_string())
+            .map(|record| record.content)
             .collect()
     }
+}
+
+/// The minter's Ethereum address, awaited without ticking.
+///
+/// Not [`CkEthSetup::minter_address`]: that awaits its update call by driving the instance with
+/// explicit `tick`s, and on an auto-progressing instance the rounds arrive on their own — the
+/// tick-driven await runs out its round budget and reports the ingress as unanswerable.
+fn fetch_minter_address(cketh: &CkEthSetup) -> Address {
+    let message_id = cketh
+        .env
+        .submit_call(
+            cketh.minter_id,
+            Principal::anonymous(),
+            "minter_address",
+            Encode!().unwrap(),
+        )
+        .expect("minter_address submission rejected");
+    let reply = cketh
+        .env
+        .await_call_no_ticks(message_id)
+        .expect("minter_address rejected");
+    Address::from_str(&Decode!(&reply, String).unwrap())
+        .expect("the minter returned an invalid address")
 }
 
 fn nat_to_u128(nat: Nat) -> u128 {
     use num_traits::ToPrimitive;
     nat.0.to_u128().expect("balance does not fit into u128")
-}
-
-/// Installs the ckETH ledger with every balance empty. The fee account is credited afterwards, by
-/// [`SweeperFundingSetup::new_live`], for the reason given there.
-fn install_ledger(env: &PocketIc, ledger_id: Principal, minter_id: Principal) {
-    use ic_icrc1_ledger::InitArgsBuilder as LedgerInitArgsBuilder;
-
-    let builder = LedgerInitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
-        .with_minting_account(minter_id)
-        .with_transfer_fee(CKETH_TRANSFER_FEE)
-        .with_max_memo_length(80)
-        .with_decimals(18)
-        .with_feature_flags(FeatureFlags {
-            icrc2: true,
-            icrc152: false,
-        });
-    let args = LedgerArgument::Init(builder.build());
-    env.install_canister(
-        ledger_id,
-        ledger_wasm(),
-        Encode!(&args).unwrap(),
-        Some(controller()),
-    );
-}
-
-fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal, anvil_url: &str) {
-    let args = InstallArgs {
-        override_provider: Some(OverrideProvider {
-            override_url: Some(RegexSubstitution {
-                pattern: ".*".into(),
-                replacement: anvil_url.to_string(),
-            }),
-        }),
-        ..Default::default()
-    };
-    env.install_canister(
-        evm_rpc_id,
-        evm_rpc_wasm(),
-        Encode!(&args).unwrap(),
-        Some(controller()),
-    );
-}
-
-fn install_minter(
-    env: &PocketIc,
-    minter_id: Principal,
-    ledger_id: Principal,
-    evm_rpc_id: Principal,
-) {
-    let args = MinterInitArgs {
-        ethereum_network: EthereumNetwork::Mainnet,
-        ecdsa_key_name: ECDSA_KEY_NAME.to_string(),
-        // No helper contract yet: the real one forwards deposits to the minter's address, which is
-        // not known until the minter exists, so `new_live` deploys it and adds it by upgrade.
-        ethereum_contract_address: None,
-        ledger_id,
-        // The production block tag: usable because anvil runs with one slot per epoch.
-        ethereum_block_height: CandidBlockTag::Finalized,
-        minimum_withdrawal_amount: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT),
-        next_transaction_nonce: Nat::from(0_u8),
-        // The sweeper's own nonce lane starts fresh, as on a new deployment.
-        next_sweeper_transaction_nonce: None,
-        last_scraped_block_number: Nat::from(0_u8),
-        evm_rpc_id: Some(evm_rpc_id),
-        // Sweeping through the contract is out of scope here: funding is what these tests drive.
-        ethereum_sweeper_contract_address: None,
-    };
-    env.install_canister(
-        minter_id,
-        minter_wasm(),
-        Encode!(&MinterArg::InitArg(args)).unwrap(),
-        Some(controller()),
-    );
 }

@@ -13,9 +13,12 @@
 //! non-contract "token" reverts the whole call rather than reporting a zero
 //! balance.
 //!
-//! A final test drives the whole balance scan end to end through a live
-//! PocketIC and the real EVM RPC canister (see
-//! [`ic_cketh_test_utils::live_scan`]).
+//! Two further tests drive whole features end to end through a live PocketIC
+//! and the real EVM RPC canister: the balance scan (see
+//! [`ic_cketh_test_utils::live_scan`]) and sweeper fee funding, which deposits
+//! through the production helper contract and then watches the minter burn
+//! ckETH from its fee subaccount to pay for sweep gas (see
+//! [`ic_cketh_test_utils::sweeper_funding`]).
 //!
 //! The anvil node client and its ABI/solc helpers live in
 //! [`ic_cketh_test_utils::anvil`]; `anvil` and `solc` are vendored via Bazel
@@ -30,6 +33,7 @@ use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
 use ic_cketh_test_utils::live_scan::{Holding, LiveBalanceScanSetup};
+use ic_cketh_test_utils::sweeper_funding::SweeperFundingSetup;
 use ic_ethereum_types::Address;
 use std::time::Duration;
 
@@ -237,6 +241,54 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
         setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, usdt, deadline).status,
         DepositStatus::Scanning { scan_count, last_scanned_block, .. }
             if scan_count >= 1 && last_scanned_block.is_some()
+    );
+}
+
+/// A budget, not a cost: driving stops the moment the transfer lands, so this only has to be more
+/// ticks than the run needs. One sends the transfer; the spares cover a tick landing before the
+/// funding task has burned, and a tick lost to an outcall the jump timed out.
+const FUNDING_TICKS: u32 = 6;
+
+#[test]
+fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
+    let setup = SweeperFundingSetup::new_live();
+
+    // Only the fee account is funded: sweep gas must come from there and nowhere else. The ledger
+    // baselines come from the harness, which took them before the minter could burn — the decision
+    // reads nothing off the chain, so its first run lands too fast to snapshot from here.
+    let supply_before = setup.supply_before_funding();
+    let fee_account_before = setup.fee_account_before_funding();
+    let minter_eth_before = setup.anvil_eth_balance(&setup.minter_address());
+
+    let sweeper = setup.await_funding_decision();
+    assert_eq!(
+        setup.anvil_eth_balance(&sweeper),
+        0,
+        "the sweeper address must start empty, so any balance proves the funding landed"
+    );
+
+    let received = setup.await_eth_received(&sweeper, FUNDING_TICKS);
+
+    let burned = supply_before
+        .checked_sub(setup.cketh_total_supply())
+        .expect("the funding must have burned ckETH, not minted it");
+    assert!(burned > 0, "funding must burn ckETH");
+    assert_eq!(
+        fee_account_before - setup.cketh_balance_of(setup.fee_account()),
+        burned,
+        "the burn must be debited from the fee account"
+    );
+
+    // The ETH moved, and never more than was burned — the backing invariant, observed end to end.
+    let spent = minter_eth_before - setup.anvil_eth_balance(&setup.minter_address());
+    assert!(
+        received > 0 && received < burned,
+        "the sweeper receives the burned amount minus the fee, got received={received} burned={burned}"
+    );
+    assert!(
+        spent <= burned,
+        "the ETH debited from the main address ({spent}) must never exceed the ckETH \
+         burned for it ({burned})"
     );
 }
 
