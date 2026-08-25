@@ -1276,7 +1276,6 @@ mod tests {
                 })
                 .expect("no metrics leaf in traversal");
 
-            // The tree encodes the `SubnetMetrics` as-is.
             let expected_blob =
                 encode_subnet_metrics(&state.metadata.subnet_metrics, certification_version);
             assert_eq!(

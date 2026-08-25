@@ -698,7 +698,7 @@ impl SubnetMetrics {
     /// All cycles removed from circulation on the subnet, by both deleted and
     /// still-existing canisters: the subnet-level aggregate
     /// ([`Self::consumed_cycles_total`]) plus [`Self::consumed_cycles_by_canisters`],
-    /// the end-of-round fold over the canisters that currently exist.
+    /// the fold over the canisters that currently exist.
     ///
     /// **This is the single definition of the quantity, deliberately.** Every
     /// consumer must agree on it bit for bit, starting with the certified state
