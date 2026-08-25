@@ -372,16 +372,31 @@ pub async fn enqueue_batched_sweep() {
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
-    let request = SweepRequest {
+    let mut request = SweepRequest {
         id: read_state(|s| s.next_sweep_id),
         destination: sweeper_contract,
         amount: Wei::ZERO,
         data: encode_sweep_erc20_batch(&items, &tokens),
-        max_transaction_fee: Wei::MAX,
+        max_transaction_fee: Wei::ZERO,
         created_at: ic_cdk::api::time(),
         authorizations,
         deposits,
     };
+    // What this sweep may spend on gas, and the ceiling its transaction is priced at. Taken from
+    // the estimate now rather than left open: an unbounded allowance would price the transaction
+    // above anything the sweeper address could pay, and the pipeline refuses to send a sweep whose
+    // allowance the fee has outgrown, so it waits for a cheaper block instead.
+    // TODO(DEFI-2933): gate this on the gas the sweeper address has actually been prepaid.
+    let Some(gas_fee_estimate) = lazy_refresh_gas_fee_estimate().await else {
+        log!(
+            INFO,
+            "[enqueue_batched_sweep]: SKIPPING: failed retrieving gas fee estimate"
+        );
+        return;
+    };
+    request.max_transaction_fee = gas_fee_estimate
+        .to_price(request.gas_limit())
+        .max_transaction_fee();
     log!(
         INFO,
         "[enqueue_batched_sweep]: sweeping {} deposits, {} of them delegating, via {sweeper_contract}",
