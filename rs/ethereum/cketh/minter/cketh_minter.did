@@ -436,6 +436,11 @@ type DepositErc20Response = record {
     // balance scan to detect it. The scan reads the address' whole balance for the token, so
     // several smaller transfers count together; the funds stay undetected only while their
     // total is below this.
+    //
+    // A supported token with no configured minimum reports 2^256 - 1, which no real balance can
+    // reach: a deposit of that token would never be detected. Frontends should treat such a value
+    // as "deposits unavailable for this token" and warn the user, rather than display it as an
+    // amount to send.
     minimum_deposit_amount : nat;
     // Where the deposit stands in the detect-and-sweep pipeline.
     status : DepositStatus;

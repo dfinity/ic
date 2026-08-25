@@ -253,6 +253,10 @@ pub struct DepositErc20Response {
     /// balance scan to detect it. The scan reads the address' whole balance for the token, so
     /// several smaller transfers count together; the funds stay undetected only while their
     /// total is below this.
+    ///
+    /// A supported token with no configured minimum reports `2^256 - 1`, which no real balance
+    /// can reach: a deposit of that token would never be detected. Treat such a value as
+    /// "deposits unavailable for this token" rather than as an amount to display.
     pub minimum_deposit_amount: Nat,
     /// Where the deposit stands in the detect-and-sweep pipeline.
     pub status: DepositStatus,
