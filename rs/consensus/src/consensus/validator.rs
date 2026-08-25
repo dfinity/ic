@@ -5243,40 +5243,83 @@ pub mod test {
         RandomBeacon,
         RegistryVersion,
         Height,
-        Signer,
+        Signer(NodeId),
     }
     #[rstest]
-    #[case(NODE_1, None, Ok(()))]
-    #[case(NODE_2, None, Ok(()))]
-    // after the split, nodes NODE_3 and NODE_4 will be on a different subnet than the validator
-    // (NODE_1)
+    // NODE_1 and NODE_2 are on the source subnet, NODE_3 and NODE_4 are on the destination subnet
+    #[case::good_subnet(NODE_1, NODE_1, None, Ok(()))]
+    #[case::good_subnet(NODE_1, NODE_2, None, Ok(()))]
+    #[case::good_subnet_on_destination(NODE_3, NODE_3, None, Ok(()))]
+    #[case::good_subnet_on_destination(NODE_3, NODE_4, None, Ok(()))]
     #[case::wrong_subnet(
+        NODE_1,
         NODE_3,
         None,
         Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare)
     )]
     #[case::wrong_subnet(
+        NODE_1,
         NODE_4,
+        None,
+        Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare)
+    )]
+    #[case::wrong_subnet_on_destination(
+        NODE_3,
+        NODE_1,
+        None,
+        Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare)
+    )]
+    #[case::wrong_subnet_on_destination(
+        NODE_3,
+        NODE_2,
         None,
         Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare)
     )]
     #[case::wrong_state_hash(
         NODE_1,
+        NODE_1,
+        Some(MalformShare::StateHash),
+        Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare)
+    )]
+    #[case::wrong_state_hash_on_destination(
+        NODE_3,
+        NODE_3,
         Some(MalformShare::StateHash),
         Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare)
     )]
     #[case::wrong_random_beacon(
         NODE_1,
+        NODE_1,
+        Some(MalformShare::RandomBeacon),
+        Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare)
+    )]
+    #[case::wrong_random_beacon_on_destination(
+        NODE_3,
+        NODE_3,
         Some(MalformShare::RandomBeacon),
         Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare)
     )]
     #[case::wrong_registry_version(
         NODE_1,
+        NODE_1,
+        Some(MalformShare::RegistryVersion),
+        Err(InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare)
+    )]
+    #[case::wrong_registry_version_on_destination(
+        NODE_3,
+        NODE_3,
         Some(MalformShare::RegistryVersion),
         Err(InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare)
     )]
     #[case::wrong_height(
         NODE_1,
+        NODE_1,
+        Some(MalformShare::Height),
+        Err(InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare { expected: Height::from(20), received: Height::from(10) })
+    )]
+    #[case::wrong_height_on_destination(
+        NODE_3,
+        NODE_3,
         Some(MalformShare::Height),
         Err(InvalidArtifactReason::InvalidHeightInSplittingCatchUpPackageShare { expected: Height::from(20), received: Height::from(10) })
     )]
@@ -5286,10 +5329,20 @@ pub mod test {
     // (post-split) content signed by NODE_3 must be rejected.
     #[case::signer_not_in_post_split_committee(
         NODE_1,
-        Some(MalformShare::Signer),
+        NODE_1,
+        Some(MalformShare::Signer(NODE_3)),
         Err(InvalidArtifactReason::SignerNotInThresholdCommittee(NODE_3))
     )]
+    // The mirror image on the destination subnet: NODE_1 stays on the source subnet, so it is not
+    // in the destination subnet's post-split committee.
+    #[case::signer_not_in_post_split_committee_on_destination(
+        NODE_3,
+        NODE_3,
+        Some(MalformShare::Signer(NODE_1)),
+        Err(InvalidArtifactReason::SignerNotInThresholdCommittee(NODE_1))
+    )]
     fn validate_post_split_cup_share_test(
+        #[case] validator_node_id: NodeId,
         #[case] cup_share_node_id: NodeId,
         #[case] malform_share: Option<MalformShare>,
         #[case] expected_validation_result: Result<(), InvalidArtifactReason>,
@@ -5332,7 +5385,7 @@ pub mod test {
                     ],
                 )
                 .with_replica_config(ReplicaConfig {
-                    node_id: NODE_1,
+                    node_id: validator_node_id,
                     subnet_id: SOURCE_SUBNET_ID,
                 })
                 .build();
@@ -5423,8 +5476,8 @@ pub mod test {
                         share.content.random_beacon =
                             HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon);
                     }
-                    Some(MalformShare::Signer) => {
-                        share.signature.signer = NODE_3;
+                    Some(MalformShare::Signer(signer)) => {
+                        share.signature.signer = signer;
                     }
                     None => {}
                 }
