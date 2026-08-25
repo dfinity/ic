@@ -371,14 +371,18 @@ rust_test(
     size = "medium",
     srcs = ["tests/sweeper_funding.rs"],
     data = [
+        "DepositHelperWithSubaccount.sol",
         ":cketh_minter_debug.wasm.gz",
         "//:anvil",
+        "//:solc",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
         "//rs/pocket_ic_server:pocket-ic-server",
         "@evm_rpc.wasm.gz//file",
     ],
     env = {
         "ANVIL_BIN": "$(rootpath //:anvil)",
+        "CKDEPOSIT_SOL": "$(rootpath DepositHelperWithSubaccount.sol)",
+        "SOLC_BIN": "$(rootpath //:solc)",
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
         "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm.gz)",
         "EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)",

@@ -32,21 +32,18 @@ use candid::{Decode, Encode, Nat, Principal};
 use evm_rpc_types::{InstallArgs, OverrideProvider, RegexSubstitution};
 use ic_cketh_minter::PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL;
 use ic_cketh_minter::endpoints::{CandidBlockTag, RetrieveEthStatus};
+use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::lifecycle::{EthereumNetwork, MinterArg, init::InitArg as MinterInitArgs};
 use ic_ethereum_types::Address;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{FeatureFlags, LedgerArgument};
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use pocket_ic::{CanisterSettings, PocketIc, PocketIcBuilder};
 use std::str::FromStr;
 use std::time::{Duration, Instant, SystemTime};
 
-use crate::anvil::{Anvil, DEV_ACCOUNT, address_from_hex};
-use crate::{
-    CKETH_MINIMUM_WITHDRAWAL_AMOUNT, ETH_HELPER_CONTRACT_ADDRESS, evm_rpc_wasm, ledger_wasm,
-    minter_wasm,
-};
+use crate::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_deposit_helper, deposit_eth};
+use crate::{CKETH_MINIMUM_WITHDRAWAL_AMOUNT, evm_rpc_wasm, ledger_wasm, minter_wasm};
 
 const ECDSA_KEY_NAME: &str = "key_1";
 
@@ -55,13 +52,16 @@ const CKETH_TRANSFER_FEE: u64 = 2_000_000_000_000;
 /// Credited to the minter as a deposit, so funding has deposit-backed ETH to spend. Comfortably
 /// above the 0.3 ETH funding target that [`CKETH_MINIMUM_WITHDRAWAL_AMOUNT`] implies.
 const DEPOSIT_AMOUNT: u128 = 5_000_000_000_000_000_000; // 5 ETH
-const MINTER_ETH_BALANCE: u128 = 100_000_000_000_000_000_000; // 100 ETH
 
 pub const FEE_ACCOUNT_BALANCE: u128 = 1_000_000_000_000_000_000; // 1 ckETH
 
 /// One withdrawal-timer interval, plus slack so the timer is unambiguously due. The unit these
 /// tests buy minter time in: however far a single jump goes, each timer that has come due fires
 /// *once*, so two ticks cost two jumps and not one large one.
+/// Ticks granted for the minter's log scrape to find the harness' deposits. One suffices, since a
+/// tick is longer than the scraping interval; the spares cover a scrape that lands mid-tick.
+const DEPOSIT_SCRAPE_TICKS: u32 = 3;
+
 const WITHDRAWAL_TICK: Duration =
     Duration::from_secs(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL.as_secs() + 30);
 
@@ -102,6 +102,7 @@ pub struct SweeperFundingSetup {
     minter_id: Principal,
     ledger_id: Principal,
     minter_address: Address,
+    deposit_helper: Address,
     supply_before_funding: u128,
     fee_account_before_funding: u128,
 }
@@ -152,20 +153,6 @@ impl SweeperFundingSetup {
         // Live before installing the minter: its install-time timers issue outcalls immediately.
         let _gateway = env.make_live(None);
 
-        // Emitted before the minter exists, so its install-time log scrape credits the deposit.
-        // Funding may only spend ETH the minter received through deposits, so without this every
-        // funding is refused: setting a balance on anvil credits the accounting nothing.
-        let mut principal_topic = [0_u8; 32];
-        let principal_bytes = controller().as_slice().to_vec();
-        principal_topic[0] = principal_bytes.len() as u8;
-        principal_topic[1..1 + principal_bytes.len()].copy_from_slice(&principal_bytes);
-        anvil.emit_received_eth(
-            &address_from_hex(ETH_HELPER_CONTRACT_ADDRESS),
-            &address_from_hex(DEV_ACCOUNT),
-            DEPOSIT_AMOUNT,
-            &principal_topic,
-        );
-
         install_minter(&env, minter_id, ledger_id, evm_rpc_id);
 
         let mut setup = Self {
@@ -174,21 +161,48 @@ impl SweeperFundingSetup {
             minter_id,
             ledger_id,
             minter_address: Address::new([0; 20]),
+            deposit_helper: Address::new([0; 20]),
             supply_before_funding: 0,
             fee_account_before_funding: 0,
         };
         setup.minter_address = setup.fetch_minter_address();
-        setup
-            .anvil
-            .set_balance(&setup.minter_address, MINTER_ETH_BALANCE);
-        setup.await_deposit_credited();
-        // Funded here rather than at install: with an empty fee account the check that runs at
-        // install cannot burn, whichever way it and the scrape interleave. Safe to do now because
-        // the next scheduled check is a whole interval away, so nothing is watching until the
-        // upgrade below re-arms the timers — which makes that run the first one able to fund.
+        // The production helper contract, deployed against the address the minter just derived, so
+        // deposits reach the minter the way they do on mainnet — the ETH really arrives at the
+        // minter's address and the event the minter scrapes is the one the contract emits. The
+        // minter learns about it by upgrade, which is also how mainnet gained the contract.
+        setup.deposit_helper = deploy_deposit_helper(
+            &setup.anvil,
+            &address_from_hex(DEV_ACCOUNT),
+            &setup.minter_address,
+        );
+        setup.upgrade_minter_with(UpgradeArg {
+            deposit_with_subaccount_helper_contract_address: Some(setup.deposit_helper.to_string()),
+            ..Default::default()
+        });
+
+        // Funding may only spend ETH the minter received through deposits, so it needs a real one.
+        setup.deposit(
+            Account {
+                owner: controller(),
+                subaccount: None,
+            },
+            DEPOSIT_AMOUNT,
+        );
+        // The fee account earns its ckETH the way it does in production — the ckETH ledger collects
+        // its fees there — but at 2e12 wei a transfer it would take 150'000 transfers to reach the
+        // funding target, so the test deposits to that account directly instead. Deposited rather
+        // than minted so nothing here mints ckETH the minter did not back with ETH.
         if fee_account_balance > 0 {
-            setup.mint_cketh(setup.fee_account(), fee_account_balance);
+            setup.deposit(setup.fee_account(), fee_account_balance);
         }
+        let mut credited = vec![Account {
+            owner: controller(),
+            subaccount: None,
+        }];
+        if fee_account_balance > 0 {
+            credited.push(setup.fee_account());
+        }
+        setup.await_deposits_credited(&credited);
         // Taken here, in that same window, and not left to the test: the funding decision reads
         // nothing off the chain, so the first post-upgrade check burns within milliseconds of the
         // minter restarting — well before a test that queried the ledger afterwards could see the
@@ -211,27 +225,28 @@ impl SweeperFundingSetup {
         self.fee_account_before_funding
     }
 
-    /// Waits until the minter has credited the harness' deposit, i.e. its ETH balance is non-zero.
-    pub fn await_deposit_credited(&self) {
-        let start = Instant::now();
-        loop {
-            // Observed through the mint the deposit produces: crediting the minter's ETH balance
-            // and minting ckETH to the beneficiary are the same state transition.
-            if self.cketh_balance_of(Account {
-                owner: controller(),
-                subaccount: None,
-            }) > 0
-            {
-                return;
-            }
-            assert!(
-                start.elapsed() <= AWAIT_DEADLINE,
-                "the minter never credited the deposit within {AWAIT_DEADLINE:?}; logs:\n{}",
-                self.minter_logs().join("\n")
-            );
-            self.anvil.mine(1);
-            std::thread::sleep(Duration::from_secs(2));
-        }
+    /// Waits until the minter has credited the deposits, buying the ticks its log scrape needs: they
+    /// were mined after the scrape that runs at install, so the next scheduled one is what finds
+    /// them.
+    ///
+    /// Observed through the mint a deposit produces: crediting the minter's ETH balance and minting
+    /// ckETH to the beneficiary are the same state transition.
+    fn await_deposits_credited(&self, accounts: &[Account]) {
+        self.drive_until(
+            DEPOSIT_SCRAPE_TICKS,
+            |_| "the minter never credited the deposits".to_string(),
+            |setup| {
+                accounts
+                    .iter()
+                    .all(|account| setup.cketh_balance_of(*account) > 0)
+            },
+        );
+    }
+
+    /// Waits until a deposit made to the fee account has been credited, for a test that arranges the
+    /// account after construction.
+    pub fn await_fee_account_credited(&self) {
+        self.await_deposits_credited(&[self.fee_account()]);
     }
 
     /// Re-arms the minter's periodic timers by upgrading it, so a funding check runs again inside the
@@ -240,17 +255,33 @@ impl SweeperFundingSetup {
     /// Stopped first, as any upgrade must be: upgrading a running canister leaves its in-flight
     /// HTTPS outcalls to resolve into fresh Wasm, which traps it with
     /// "CallFutureState for in-flight calls" and corrupts its heap.
+    /// Deposits `value` wei for `beneficiary` through the helper contract, as a depositor does.
+    pub fn deposit(&self, beneficiary: Account, value: u128) {
+        deposit_eth(
+            &self.anvil,
+            &self.deposit_helper,
+            &address_from_hex(DEV_ACCOUNT),
+            beneficiary,
+            value,
+        );
+    }
+
     pub fn upgrade_minter(&self) {
+        self.upgrade_minter_arg(Encode!(&None::<MinterArg>).unwrap());
+    }
+
+    /// Upgrades the minter with a configuration change, which — like any upgrade — also re-arms its
+    /// periodic timers.
+    pub fn upgrade_minter_with(&self, arg: UpgradeArg) {
+        self.upgrade_minter_arg(Encode!(&Some(MinterArg::UpgradeArg(arg))).unwrap());
+    }
+
+    fn upgrade_minter_arg(&self, arg: Vec<u8>) {
         self.env
             .stop_canister(self.minter_id, Some(controller()))
             .expect("stopping the minter must succeed");
         self.env
-            .upgrade_canister(
-                self.minter_id,
-                minter_wasm(),
-                Encode!(&None::<MinterArg>).unwrap(),
-                Some(controller()),
-            )
+            .upgrade_canister(self.minter_id, minter_wasm(), arg, Some(controller()))
             .expect("upgrading the minter must succeed");
         self.env
             .start_canister(self.minter_id, Some(controller()))
@@ -513,33 +544,6 @@ impl SweeperFundingSetup {
         self.minter_address
     }
 
-    pub fn mint_cketh(&self, to: Account, amount: u128) {
-        let args = TransferArg {
-            from_subaccount: None,
-            to,
-            fee: None,
-            created_at_time: None,
-            memo: None,
-            amount: Nat::from(amount),
-        };
-        let message_id = self
-            .env
-            .submit_call(
-                self.ledger_id,
-                self.minter_id,
-                "icrc1_transfer",
-                Encode!(&args).unwrap(),
-            )
-            .expect("icrc1_transfer submission rejected");
-        let reply = self
-            .env
-            .await_call_no_ticks(message_id)
-            .expect("icrc1_transfer rejected");
-        Decode!(&reply, Result<Nat, TransferError>)
-            .unwrap()
-            .expect("minting ckETH must succeed");
-    }
-
     pub fn cketh_balance_of(&self, account: Account) -> u128 {
         let reply = self
             .env
@@ -656,7 +660,9 @@ fn install_minter(
     let args = MinterInitArgs {
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: ECDSA_KEY_NAME.to_string(),
-        ethereum_contract_address: Some(ETH_HELPER_CONTRACT_ADDRESS.to_string()),
+        // No helper contract yet: the real one forwards deposits to the minter's address, which is
+        // not known until the minter exists, so `new_live` deploys it and adds it by upgrade.
+        ethereum_contract_address: None,
         ledger_id,
         // The production block tag: usable because anvil runs with one slot per epoch.
         ethereum_block_height: CandidBlockTag::Finalized,

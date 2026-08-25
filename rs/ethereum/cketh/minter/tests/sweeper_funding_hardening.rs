@@ -139,7 +139,10 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
         "the reverting code must be at {sweeper}"
     );
 
-    setup.mint_cketh(setup.fee_account(), FEE_ACCOUNT_BALANCE);
+    // Deposited, not minted: the fee account is credited the way production credits it, which means
+    // waiting for the scrape that finds the deposit before the baseline below is taken.
+    setup.deposit(setup.fee_account(), FEE_ACCOUNT_BALANCE);
+    setup.await_fee_account_credited();
     let supply_before = setup.cketh_total_supply();
     // The next scheduled check is a whole interval away, so re-arm the timers: from here the
     // funding proceeds, and the point is what happens when its transaction fails.

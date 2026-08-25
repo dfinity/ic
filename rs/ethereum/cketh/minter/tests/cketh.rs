@@ -1220,6 +1220,7 @@ fn should_retrieve_minter_info() {
             eth_balance: Some(Nat::from(0_u8)),
             last_gas_fee_estimate: None,
             erc20_balances: None,
+            minimum_deposit_amounts: None,
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_deposit_with_subaccount_scraped_block_number: Some(
