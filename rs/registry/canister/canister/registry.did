@@ -276,6 +276,7 @@ type SubnetRecord = record {
   ssh_readonly_access : vec text;
   ssh_backup_access : vec text;
   halt_at_cup_height : bool;
+  cooling_down : bool;
   chain_key_config : opt ChainKeyConfig;
   canister_cycles_cost_schedule : CanisterCyclesCostSchedule;
   subnet_admins : vec principal;
@@ -510,6 +511,7 @@ type UpdateSubnetPayload = record {
   max_block_payload_size : opt nat64;
   start_as_nns : opt bool;
   is_halted : opt bool;
+  cooling_down : opt bool;
   max_ingress_messages_per_block : opt nat64;
   max_ingress_bytes_per_block: opt nat64;
   max_number_of_canisters : opt nat64;

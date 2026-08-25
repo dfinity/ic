@@ -13,12 +13,27 @@
 //! every setup call race a round deadline it did not control, which reproducibly failed under CPU
 //! contention.
 //!
-//! Nothing gets lost in the switch: the minter's startup timers already schedule outcalls during
-//! that non-live phase, but PocketIC's auto-progress dispatch (`ProcessCanisterHttpInternal`)
-//! re-scans every canister's current `canister_http_request_contexts()` each round and sends
-//! whichever of them it has not already handed to the adapter, so outcalls created before
-//! [`auto_progress`](pocket_ic::PocketIc::auto_progress) starts are simply picked up and answered
-//! for real on its first round rather than dropped.
+//! The switch to live mode is made deterministic in two steps. First, every HTTPS outcall still in
+//! flight from the construction phase is answered (with an HTTP 500, exactly as during
+//! construction): those outcalls carry the genesis-era request time, so once the clock jumps >5
+//! years past their 60-second timeout, consensus rejects them all in the first round — before
+//! [`auto_progress`](pocket_ic::PocketIc::auto_progress)'s dispatch could hand them to the adapter,
+//! and past the point where any response (mocked or real) can still be delivered. Worse, the
+//! rejects only reach the minter *after* the same round has already fired its >5-years-overdue
+//! timers, whose tasks then find their `TimerGuard`s still held by the cycles awaiting those
+//! outcalls and are dropped as `AlreadyProcessing` — losing a full timer interval (30s–3min) of
+//! real wall-clock time on the live instance. Draining first delivers the failures while their
+//! request time is still current, so the cycles resume, release their guards, and the first
+//! post-jump timer firing actually runs.
+//!
+//! Second, the instance's certified time is set to the current system time *before* enabling
+//! auto-progress. `auto_progress` returns as soon as its background task is spawned — before that
+//! task applies its own initial time jump — so an ingress message submitted right after
+//! `auto_progress` returns can race the jump and get stamped with an expiry derived from the
+//! genesis clock; the jump then moves past that expiry, leaving the message pooled but permanently
+//! unselectable, and the call fails with
+//! `BadIngressMessage("Failed to answer to ingress … after 100 rounds.")`. With the clock already
+//! current, the task's own time-set is a millisecond-sized step and the race is harmless.
 //!
 //! The EVM RPC canister is installed with an `overrideProvider` that rewrites every provider URL to
 //! the harness' anvil node (reached over HTTP, mirroring the `evm_rpc_local` configuration of the
@@ -34,7 +49,7 @@ use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::anvil::{
     Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20, erc20_balance_slot, u256_be,
@@ -72,12 +87,23 @@ impl LiveBalanceScanSetup {
     /// EVM RPC canister, orchestrator, and the ckUSDC/ckUSDT ledger and index canisters it spawns —
     /// on an ordinary (non-live) PocketIC instance, then switches that instance to live outcalls
     /// now that construction is complete, so the EVM RPC canister's outcalls reach anvil for real
-    /// from this point on.
+    /// from this point on. The switch drains the in-flight outcalls and moves the clock to the
+    /// current time before enabling auto-progress, making the transition deterministic (see the
+    /// module documentation).
     pub fn new_live() -> Self {
         let anvil = Arc::new(Anvil::start());
         let cketh = CkEthSetup::new(EthereumBackend::Anvil(Arc::clone(&anvil)));
         let ckerc20 = CkErc20Setup::with_cketh(cketh).add_supported_erc20_tokens();
 
+        // Answer the HTTPS outcalls still in flight from construction while their request time
+        // is still current; the clock jump below would time them all out (see the module doc).
+        ckerc20.cketh.stop_ongoing_https_outcalls();
+        // Jump the clock synchronously, so `auto_progress`'s own (asynchronous) initial time-set
+        // becomes a millisecond-sized step: an ingress message submitted once `auto_progress`
+        // returns can no longer be stamped with a genesis-derived expiry and then be
+        // retroactively expired by a >5-year jump it raced (see the module doc). Certified time,
+        // matching what `auto_progress` sets — `advance_time` would move the uncertified clock.
+        ckerc20.env.set_certified_time(SystemTime::now().into());
         ckerc20.env.auto_progress();
 
         Self { ckerc20, anvil }
