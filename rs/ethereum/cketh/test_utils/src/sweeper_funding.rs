@@ -246,12 +246,6 @@ impl SweeperFundingSetup {
             .expect("starting the minter must succeed");
     }
 
-    /// Mines `blocks` on the owned anvil node, so a change made with `set_eth_balance` or `set_code`
-    /// becomes visible at `finalized`, which trails `latest` by two blocks.
-    pub fn mine(&self, blocks: u64) {
-        self.anvil.mine(blocks);
-    }
-
     /// Gives the minter [`TICK_SETTLE`] of *real* time to carry out whatever the last tick started,
     /// mining meanwhile so `finalized` keeps advancing, and returns as soon as `observe` reports
     /// what it watches for has happened.
