@@ -161,9 +161,13 @@ pub fn plan_funding(state: &State) -> FundingDecision {
             amount: outstanding.withdrawal_amount,
         };
     }
-    // For the fresh deployment, where `eth_balance` starts at zero while the minter may already
-    // hold ETH no deposit credited: funding that would reach past what deposits paid in underflows
-    // the debit at finalization, and traps in the withdrawal timer. Waiting is free.
+    // A tripwire rather than a live constraint. In any state the accounting can reach, the ETH
+    // counter is at least the ckETH supply — every debit is covered by its own burn, and every mint
+    // by a deposit that credited the counter — and a funding burns ckETH out of that same supply, so
+    // `amount` is covered whenever the burn can succeed. What this catches is ckETH that exists
+    // without ETH behind it: the funding would then debit ETH the minter never received, and
+    // underflow at finalization inside the withdrawal timer, which head-of-line blocks every user
+    // withdrawal behind it. Refusing costs a delay.
     let available = state.eth_balance().eth_balance();
     if available < amount {
         return FundingDecision::InsufficientBalance {
