@@ -6369,6 +6369,11 @@ fn subnet_metrics_canister_call_succeeds() {
     let uni_canister = test
         .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
         .unwrap();
+    // The handler reads the stored `consumed_cycles_by_canisters`, which
+    // production refreshes on every `commit_and_certify`
+    // (`rs/state_manager/src/lib.rs`). `ExecutionTest` has no commit step, so
+    // refresh it here to get the non-zero total the assertion below expects.
+    test.state_mut().refresh_consumed_cycles_by_canisters();
     let payload = SubnetMetricsArgs {
         subnet_id: own_subnet_id.get(),
     }
@@ -6387,8 +6392,8 @@ fn subnet_metrics_canister_call_succeeds() {
     };
     let response = Decode!(&bytes, SubnetMetricsResponse).unwrap();
     // All five fields decode. `ExecutionTest` starts at round 1 and does not run
-    // message routing, so only `block_height` and the live cycles fold have
-    // non-default values here; the other fields are covered by
+    // message routing, so only `block_height` and the refreshed cycles total
+    // have non-default values here; the other fields are covered by
     // `subnet_metrics_reflects_subnet_metrics_state`.
     assert_eq!(response.block_height, candid::Nat::from(1_u64));
     assert_eq!(
@@ -6551,6 +6556,13 @@ fn subnet_metrics_reflects_subnet_metrics_state() {
         metrics.update_transactions_total = 99;
         metrics.observe_consumed_cycles_by_deleted_canisters(deleted_cycles);
     }
+    // The handler reads the stored `consumed_cycles_by_canisters` rather than
+    // folding over the canisters itself, and `ExecutionTest` never commits a
+    // state, so stand in for the refresh that `commit_and_certify` performs in
+    // production (`rs/state_manager/src/lib.rs`). Nothing charges a local
+    // canister between here and the call below -- the caller is on a remote
+    // subnet -- so the fold computed next stays the right expectation.
+    test.state_mut().refresh_consumed_cycles_by_canisters();
     // Computed independently of the handler: the sum over all canisters plus the
     // subnet-level aggregate.
     let expected_consumed_cycles = test.state().metadata.subnet_metrics.consumed_cycles_total()
@@ -6594,10 +6606,18 @@ fn subnet_metrics_is_partition_independent() {
             cost_schedule,
         ));
 
+    // Refresh around the repartitioning, not just once up front: the quantity
+    // whose partition-independence is at stake is the fold inside
+    // `refresh_consumed_cycles_by_canisters`, so it has to run on both sides of
+    // the split for the assertion to say anything. Refreshing only once would
+    // compare a stored field against itself.
+    test.state_mut().refresh_consumed_cycles_by_canisters();
     let before = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
     test.state_mut().repartition_canister_states();
+    test.state_mut().refresh_consumed_cycles_by_canisters();
     let after = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
 
+    assert!(before.consumed_cycles_total > 0_u64);
     assert_eq!(before.consumed_cycles_total, after.consumed_cycles_total);
 }
 
