@@ -2969,20 +2969,23 @@ pub mod arbitrary {
 
 mod sweep_lane {
     use super::{gas_fee_estimate, sign_transaction, transaction_receipt};
+    use crate::deposit_address::DepositAddress;
     use crate::eth_rpc_client::responses::TransactionStatus;
     use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{GasAmount, TransactionCount, TransactionNonce, Wei, WeiPerGas};
     use crate::state::transactions::{
-        CreateSweepTransactionError, PipelineRequest, ResubmitTransactionError,
-        SWEEP_GAS_PER_AUTHORIZATION, SweepId, SweepRequest, SweptDeposit, TransactionPipeline,
+        CreateSweepTransactionError, PipelineRequest, ResubmitTransactionError, SweepId,
+        SweepRequest, SweptDeposit, TransactionPipeline,
     };
     use crate::tx::{
         DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate,
         SignableTransaction, SignedAuthorization, SweepTransaction,
     };
     use assert_matches::assert_matches;
+    use candid::Principal;
     use ethnum::u256;
     use ic_ethereum_types::Address;
+    use icrc_ledger_types::icrc1::account::Account;
     use std::collections::BTreeSet;
 
     const EIP1559_TX_ID: u8 = 2;
@@ -3358,114 +3361,72 @@ mod sweep_lane {
 
     #[test]
     fn should_scale_the_gas_limit_with_the_work_the_delegate_does() {
-        struct Case {
-            scenario: &'static str,
-            deposits: Vec<(u8, u8)>,
-            expected_gas_limit: u64,
-        }
+        const BASE: u64 = 60_000;
+        const PER_PAIR: u64 = 15_000 + 110_000;
+        const PER_ADDRESS: u64 = 40_000;
+        let (alice, bob) = (deposit_address(1), deposit_address(2));
+        let (usdc, usdt) = (erc20(1), erc20(2));
 
-        for case in [
-            Case {
-                scenario: "nothing to sweep",
-                deposits: vec![],
-                expected_gas_limit: 60_000,
-            },
-            Case {
-                scenario: "one address holding one token",
-                deposits: vec![(1, 1)],
-                expected_gas_limit: 60_000 + 15_000 + 110_000 + 40_000,
-            },
-            Case {
-                scenario: "one address holding two tokens: two pairs, one authorization",
-                deposits: vec![(1, 1), (1, 2)],
-                expected_gas_limit: 60_000 + 2 * 15_000 + 2 * 110_000 + 40_000,
-            },
-            Case {
-                scenario: "two addresses holding the same token",
-                deposits: vec![(1, 1), (2, 1)],
-                expected_gas_limit: 60_000 + 2 * 15_000 + 2 * 110_000 + 2 * 40_000,
-            },
-            Case {
-                scenario: "two addresses holding a token each: every pair is checked and may move",
-                deposits: vec![(1, 1), (2, 2)],
-                expected_gas_limit: 60_000 + 4 * 15_000 + 4 * 110_000 + 2 * 40_000,
-            },
+        for (deposits, pairs, addresses) in [
+            (vec![], 0, 0),
+            (vec![(alice, usdc)], 1, 1),
+            (vec![(alice, usdc), (alice, usdt)], 2, 1),
+            (vec![(alice, usdc), (bob, usdc)], 2, 2),
+            (vec![(alice, usdc), (bob, usdt)], 4, 2),
         ] {
             assert_eq!(
-                with_deposits(&case.deposits).gas_limit(),
-                GasAmount::from(case.expected_gas_limit),
-                "{}",
-                case.scenario
+                sweep_of(&deposits).gas_limit(),
+                GasAmount::from(BASE + pairs * PER_PAIR + addresses * PER_ADDRESS),
+                "{deposits:?}"
             );
         }
     }
 
     #[test]
-    fn should_budget_one_authorization_per_address() {
-        // Two batches of two pairs each, differing only in how the pairs are spread: one address
-        // holding two tokens carries a single tuple, two addresses holding one token each carry two.
-        let one_address = with_deposits(&[(1, 1), (1, 2)]);
-        let two_addresses = with_deposits(&[(1, 1), (2, 1)]);
-
-        assert_eq!(
-            two_addresses
-                .gas_limit()
-                .checked_sub(one_address.gas_limit()),
-            Some(SWEEP_GAS_PER_AUTHORIZATION)
-        );
-    }
-
-    #[test]
     fn should_budget_more_for_more_pairs_than_for_more_deposits() {
-        // The delegate transfers any balance it finds at a pair, not only the pairs the sweep queue
-        // named, so what the limit must follow is the pairs. Three addresses funded in three
-        // different tokens are nine pairs from three deposits; six addresses sharing one token are
-        // six pairs from twice the deposits.
-        let mixed = with_deposits(&[(1, 1), (2, 2), (3, 3)]);
-        let one_token = with_deposits(&[(1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1)]);
+        let three_addresses_in_three_tokens: Vec<_> = (1..=3)
+            .map(|seed| (deposit_address(seed), erc20(seed)))
+            .collect();
+        let six_addresses_in_one_token: Vec<_> = (1..=6)
+            .map(|seed| (deposit_address(seed), erc20(1)))
+            .collect();
 
-        assert!(mixed.deposits.len() < one_token.deposits.len());
+        assert!(three_addresses_in_three_tokens.len() < six_addresses_in_one_token.len());
         assert!(
-            mixed.gas_limit() > one_token.gas_limit(),
-            "a limit that follows the deposits cannot tell the two batches apart"
+            sweep_of(&three_addresses_in_three_tokens).gas_limit()
+                > sweep_of(&six_addresses_in_one_token).gas_limit(),
+            "nine pairs from three deposits must cost more than six pairs from six deposits"
         );
     }
 
-    #[test]
-    fn should_charge_a_mixed_token_batch_more_than_a_single_token_one() {
-        // The delegate hands the whole token array to every address, so a batch of four addresses
-        // funded in four different tokens makes sixteen balance checks for four transfers. A limit
-        // linear in the number of deposits cannot tell the two batches apart.
-        let mixed: Vec<_> = (1..=4).map(|seed| (seed, seed)).collect();
-        let one_token: Vec<_> = (1..=4).map(|seed| (seed, 1)).collect();
-
-        assert!(
-            with_deposits(&mixed).gas_limit() > with_deposits(&one_token).gas_limit(),
-            "the balance checks of a mixed batch must not be priced as a single-token one"
-        );
-    }
-
-    /// A sweep of one deposit per `(address seed, token seed)` pair, authorizing each of its
-    /// distinct addresses.
-    fn with_deposits(deposits: &[(u8, u8)]) -> SweepRequest {
-        let addresses: BTreeSet<u8> = deposits.iter().map(|(address, _)| *address).collect();
+    fn sweep_of(deposits: &[(DepositAddress, Address)]) -> SweepRequest {
+        let addresses: BTreeSet<_> = deposits.iter().map(|(address, _)| *address).collect();
         SweepRequest {
             deposits: deposits
                 .iter()
                 .map(|(address, token)| SweptDeposit {
-                    account: icrc_ledger_types::icrc1::account::Account {
-                        owner: candid::Principal::management_canister(),
+                    account: Account {
+                        owner: Principal::management_canister(),
                         subaccount: None,
                     },
-                    erc20_contract_address: Address::new([*token; 20]),
-                    address: crate::deposit_address::DepositAddress::new(Address::new(
-                        [*address; 20],
-                    )),
+                    erc20_contract_address: *token,
+                    address: *address,
                 })
                 .collect(),
-            authorizations: addresses.into_iter().map(authorization).collect(),
+            authorizations: addresses
+                .iter()
+                .map(|address| authorization(address.as_address().into_bytes()[0]))
+                .collect(),
             ..sweep_request(0)
         }
+    }
+
+    fn deposit_address(seed: u8) -> DepositAddress {
+        DepositAddress::new(Address::new([seed; 20]))
+    }
+
+    fn erc20(seed: u8) -> Address {
+        Address::new([0xe0 | seed; 20])
     }
 
     #[test]
