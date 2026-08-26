@@ -130,7 +130,12 @@ runs:
             echo "ERROR: invalid cdn-relative-path: $rel" >&2
             exit 1
           fi
-          if ! [[ "$local_name" =~ ^[A-Za-z0-9._-]+$ ]] || [ "$local_name" = "SHA256SUMS" ] || [[ "$local_name" == .* ]]; then
+          # Same shape as ARTIFACT_NAME_PATTERN in
+          # ci/src/mainnet_revisions/mainnet_revisions.py: leading
+          # alphanumeric (no '-' that could read as an option, no '.'),
+          # at most 128 characters. SHA256SUMS is reserved for the emitted
+          # checksum file.
+          if ! [[ "$local_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || [ "$local_name" = "SHA256SUMS" ]; then
             echo "ERROR: invalid local-name: $local_name" >&2
             exit 1
           fi
