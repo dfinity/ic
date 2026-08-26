@@ -1276,6 +1276,14 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Number of deposit address attestations the minter has signed and stored.",
                 )?;
 
+                let sweep_queue = s.automatic_deposits.sweep_queue_depth();
+                w.gauge_vec(
+                    "cketh_minter_sweep_queue_deposits",
+                    "Queued ckERC20 deposits by where they stand in sweeping",
+                )?
+                .value(&[("state", "in_flight")], sweep_queue.in_flight as f64)?
+                .value(&[("state", "sweepable")], sweep_queue.sweepable as f64)?;
+
                 w.encode_gauge(
                     "cketh_minter_last_max_fee_per_gas",
                     s.last_transaction_price_estimate

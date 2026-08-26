@@ -4,10 +4,13 @@ mod tests;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
+use crate::logs::INFO;
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
+use crate::state::transactions::{SweepId, SweptDeposit};
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
 use crate::tx::TransactionSignature;
+use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
@@ -103,6 +106,9 @@ impl AutomaticDeposits {
         address: DepositAddress,
     ) -> Result<Entry<ScanProgress>, DepositErc20Error> {
         let request = DepositRequest::new(account, token);
+        // Unreachable from `deposit_erc20`, which returns a pair's status whenever it has one and a
+        // queued pair always does, so a caller sees `AwaitingSweep` instead of arriving here. Its
+        // last such check is followed by no await, so no scan can queue the pair in between.
         assert!(
             !self.sweep.contains_key(&request),
             "BUG: cannot arm {request:?}, it already has funds queued for sweeping"
@@ -268,6 +274,7 @@ impl AutomaticDeposits {
                 last_scanned_block: deposit.last_scanned_block,
                 scan_count: deposit.scan_count,
                 scanned_balance: deposit.scanned_balance,
+                swept_by: None,
             },
         );
         assert!(
@@ -303,6 +310,123 @@ impl AutomaticDeposits {
         }
     }
 
+    /// The queued deposits waiting for a sweep to take them.
+    ///
+    /// Yielded in `(account, token)` key order: by principal, then by subaccount, then by token
+    /// address, which says nothing about when each was queued — nothing here records that. A sweep
+    /// takes a bounded prefix of this iterator, so the same order decides which deposits get into
+    /// the next batch.
+    pub fn sweep_targets_iter(&self) -> impl Iterator<Item = SweepTarget> + '_ {
+        self.sweep
+            .iter()
+            .filter(|(_request, entry)| entry.swept_by.is_none())
+            .map(|(request, entry)| SweepTarget {
+                request: *request,
+                address: entry.address,
+                scanned_balance: entry.scanned_balance,
+            })
+    }
+
+    /// Record that `sweep_id` took these deposits: each leaves the pool of sweepable entries until
+    /// the sweep is done with it.
+    ///
+    /// # Panics
+    ///
+    /// If a deposit is not queued, or another sweep already took it. Sweeping the same funds twice
+    /// would move a balance the minter has already accounted for.
+    pub fn record_sweep_scheduled(&mut self, sweep_id: SweepId, deposits: &[SweptDeposit]) {
+        for deposit in deposits {
+            let request = DepositRequest::new(deposit.account, deposit.erc20_contract_address);
+            let entry = self
+                .sweep
+                .get_mut(&request)
+                .unwrap_or_else(|| panic!("BUG: {request:?} is not queued for sweeping"));
+            assert_eq!(
+                entry.swept_by, None,
+                "BUG: {request:?} was already taken by another sweep"
+            );
+            entry.swept_by = Some(sweep_id);
+        }
+    }
+
+    /// Drop the deposits `sweep_id` took, its transaction having failed, logging each one.
+    ///
+    /// The minter does not retry them. The funds are not lost — a reverted sweep moved nothing, so
+    /// the balance the scan found is still at the deposit address — but nothing here remembers them
+    /// any more, and getting them moving again means arming the pair afresh.
+    ///
+    /// Dropping rather than retrying is deliberate, and interim: a sweep's call data is rebuilt from
+    /// the queue in the same key order, so a batch that reverted for a reason of its own reverts
+    /// again on the next tick, and every attempt burns the sweeper address' gas. What to retry, how
+    /// often, and how to isolate the deposit actually at fault is DEFI-2981.
+    ///
+    /// # Panics
+    ///
+    /// If a deposit is not queued, or is held by another sweep. Either means the queue no longer
+    /// describes which sweep owns which funds.
+    pub fn record_sweep_failed(&mut self, sweep_id: SweepId, deposits: &[SweptDeposit]) {
+        for deposit in deposits {
+            let request = DepositRequest::new(deposit.account, deposit.erc20_contract_address);
+            let entry = self
+                .sweep
+                .remove(&request)
+                .unwrap_or_else(|| panic!("BUG: {request:?} is not queued for sweeping"));
+            assert_eq!(
+                entry.swept_by,
+                Some(sweep_id),
+                "BUG: {request:?} is not held by sweep {sweep_id:?}"
+            );
+            log!(
+                INFO,
+                "[record_sweep_failed]: DROPPING {request:?} from the sweep queue: {sweep_id:?} \
+                 failed and the minter does not retry. Its {:?} stays at {}, and reaching it again \
+                 needs the pair armed afresh.",
+                entry.scanned_balance,
+                entry.address
+            );
+        }
+    }
+
+    /// Drop the deposits `sweep_id` moved: the balance the scan found is no longer at the deposit
+    /// address, so there is nothing left to sweep and nothing to keep an entry for. The pair leaves
+    /// the queue exactly as it entered it, which is what lets it be armed again for the next
+    /// deposit to the same address.
+    ///
+    /// # Panics
+    ///
+    /// If a deposit is not queued, or is held by another sweep. Either means the queue no longer
+    /// describes which sweep owns which funds.
+    pub fn record_sweep_succeeded(&mut self, sweep_id: SweepId, deposits: &[SweptDeposit]) {
+        for deposit in deposits {
+            let request = DepositRequest::new(deposit.account, deposit.erc20_contract_address);
+            let entry = self
+                .sweep
+                .remove(&request)
+                .unwrap_or_else(|| panic!("BUG: {request:?} is not queued for sweeping"));
+            assert_eq!(
+                entry.swept_by,
+                Some(sweep_id),
+                "BUG: {request:?} is not held by sweep {sweep_id:?}"
+            );
+        }
+    }
+
+    /// Where the sweep queue's entries stand, counted in one pass: the metrics endpoint asks for
+    /// both numbers together, and only the two together say whether sweeping is making progress.
+    ///
+    /// One pass over the queue per call. The queue holds only deposits a sweep has yet to finish
+    /// with, so it is bounded by what is in flight rather than by every deposit ever swept.
+    pub fn sweep_queue_depth(&self) -> SweepQueueDepth {
+        let mut depth = SweepQueueDepth::default();
+        for entry in self.sweep.values() {
+            match entry.swept_by {
+                Some(_) => depth.in_flight += 1,
+                None => depth.sweepable += 1,
+            }
+        }
+        depth
+    }
+
     pub fn watchlist_len(&self) -> usize {
         self.watchlist.len()
     }
@@ -317,7 +441,7 @@ impl AutomaticDeposits {
 
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
     /// funds queued for sweeping (so it must be registered). Reports
-    /// [`DepositStatus::AwaitingSweep`] once funds have been detected and queued, otherwise
+    /// [`DepositStatus::AwaitingSweep`] once funds have been detected and queued, and otherwise
     /// [`DepositStatus::Scanning`] while the address is armed and being scanned as of `now`.
     /// `minimum_deposit_amount` is the balance the address must hold for the scan to detect it,
     /// reported back to the caller alongside the status.
@@ -328,14 +452,15 @@ impl AutomaticDeposits {
         minimum_deposit_amount: Erc20Value,
     ) -> Option<DepositErc20Response> {
         if let Some(entry) = self.sweep.get(request) {
+            let detected = DetectedDeposit {
+                erc20_contract_address: request.token().to_string(),
+                scanned_balance: entry.scanned_balance.into(),
+                detected_at_block: entry.last_scanned_block.into(),
+            };
             return Some(DepositErc20Response {
                 address: entry.address.to_string(),
                 minimum_deposit_amount: minimum_deposit_amount.into(),
-                status: DepositStatus::AwaitingSweep(DetectedDeposit {
-                    erc20_contract_address: request.token().to_string(),
-                    scanned_balance: entry.scanned_balance.into(),
-                    detected_at_block: entry.last_scanned_block.into(),
-                }),
+                status: DepositStatus::AwaitingSweep(detected),
             });
         }
         self.get_entry(now, request)
@@ -420,6 +545,15 @@ impl ScanTarget {
     }
 }
 
+/// How many queued deposits are in each of the two states the sweep queue holds them in.
+#[derive(Clone, Copy, Default, Eq, PartialEq, Debug)]
+pub struct SweepQueueDepth {
+    /// Held by a sweep that has not been finalized yet.
+    pub in_flight: usize,
+    /// Waiting for a sweep to take them.
+    pub sweepable: usize,
+}
+
 /// A funded token awaiting sweeping at a [`DepositRequest`]'s deposit address.
 #[derive(Clone, PartialEq, Debug)]
 struct SweepEntry {
@@ -431,6 +565,36 @@ struct SweepEntry {
     scan_count: u32,
     /// The balance read for the token at `last_scanned_block`.
     scanned_balance: Erc20Value,
+    /// The sweep that took this entry, once one has been enqueued for it. Set so a later scan tick
+    /// does not enqueue the same funds twice; the entry stays until the sweep is finalized.
+    swept_by: Option<SweepId>,
+}
+
+/// A queued deposit a sweep can move: the `(account, token)` pair, the address its funds sit at,
+/// and the balance the scan found there.
+#[derive(Clone, Copy, Debug)]
+pub struct SweepTarget {
+    request: DepositRequest,
+    address: DepositAddress,
+    scanned_balance: Erc20Value,
+}
+
+impl SweepTarget {
+    pub fn account(&self) -> Account {
+        self.request.account
+    }
+
+    pub fn token(&self) -> Address {
+        self.request.token
+    }
+
+    pub fn address(&self) -> DepositAddress {
+        self.address
+    }
+
+    pub fn scanned_balance(&self) -> Erc20Value {
+        self.scanned_balance
+    }
 }
 
 /// The watchlist value held against one [`DepositRequest`]: the deposit address derived for its

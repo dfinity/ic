@@ -1536,6 +1536,226 @@ mod sweeper_funding {
     }
 }
 
+mod sweeps {
+    use crate::deposit_address::DepositAddress;
+    use crate::eth_rpc::Hash;
+    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+    use crate::numeric::{BlockNumber, Erc20Value, TransactionNonce, Wei, WeiPerGas};
+    use crate::state::State;
+    use crate::state::audit::{EventType, apply_state_transition};
+    use crate::state::event::AutomaticDeposit;
+    use crate::state::transactions::{PipelineRequest, SweepId, SweepRequest, SweptDeposit};
+    use crate::test_fixtures::initial_state;
+    use crate::test_fixtures::transaction_signature;
+    use crate::tx::{GasFeeEstimate, SignableTransaction, Signed, SignedAuthorization};
+    use ic_ethereum_types::Address;
+    use icrc_ledger_types::icrc1::account::Account;
+
+    #[test]
+    fn should_release_the_deposits_of_a_sweep_whose_transaction_was_finalized() {
+        for status in [TransactionStatus::Failure, TransactionStatus::Success] {
+            let mut state = state_with_queued_deposits(&[usdc()]);
+            apply_state_transition(
+                &mut state,
+                &EventType::AcceptedSweepRequest(delegating_sweep_request(&[usdc()])),
+            );
+            create_sweep_transaction(&mut state, SweepId(0));
+            assert_eq!(sweepable_tokens(&state), Vec::<Address>::new());
+
+            finalize_sweep_transaction(&mut state, SweepId(0), status);
+
+            // A finalized sweep leaves nothing behind either way: it moved the funds, or it did
+            // not and the minter does not retry.
+            assert_eq!(
+                sweepable_tokens(&state),
+                Vec::<Address>::new(),
+                "{status:?}"
+            );
+            assert_eq!(state.automatic_deposits.sweep_len(), 0, "{status:?}");
+        }
+    }
+
+    fn sweepable_tokens(state: &State) -> Vec<Address> {
+        state
+            .automatic_deposits
+            .sweep_targets_iter()
+            .map(|target| target.token())
+            .collect()
+    }
+
+    fn finalize_sweep_transaction(state: &mut State, sweep_id: SweepId, status: TransactionStatus) {
+        let (_sweep_id, transaction) = state
+            .sweeper_transactions
+            .transactions_to_sign_batch(1)
+            .pop()
+            .expect("BUG: the sweep has no transaction to sign");
+        let transaction = Signed::from((transaction, transaction_signature()));
+        apply_state_transition(
+            state,
+            &EventType::SignedSweeperTransaction {
+                sweep_id,
+                transaction: transaction.clone(),
+            },
+        );
+        apply_state_transition(
+            state,
+            &EventType::FinalizedSweeperTransaction {
+                sweep_id,
+                transaction_receipt: TransactionReceipt {
+                    block_hash: Hash([0x33; 32]),
+                    block_number: BlockNumber::new(4_190_269),
+                    effective_gas_price: transaction.transaction().max_fee_per_gas(),
+                    gas_used: transaction.transaction().gas_limit(),
+                    status,
+                    transaction_hash: transaction.hash(),
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn should_give_a_sweep_created_later_a_higher_nonce() {
+        let mut state = state_with_queued_deposits(&[usdc(), usdt()]);
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedSweepRequest(delegating_sweep_request(&[usdc()])),
+        );
+        let later = SweepRequest {
+            id: SweepId(1),
+            ..delegating_sweep_request(&[usdt()])
+        };
+        apply_state_transition(&mut state, &EventType::AcceptedSweepRequest(later));
+
+        // Every sweep is sent from the one sweeper address and the nonce is assigned at creation,
+        // so creation order is the order in which the chain executes them.
+        create_sweep_transaction(&mut state, SweepId(0));
+        create_sweep_transaction(&mut state, SweepId(1));
+
+        assert_eq!(
+            nonce_of(&state, SweepId(0)).checked_increment(),
+            Some(nonce_of(&state, SweepId(1)))
+        );
+    }
+
+    fn nonce_of(state: &State, sweep_id: SweepId) -> TransactionNonce {
+        state
+            .sweeper_transactions
+            .transactions_to_sign_batch(2)
+            .into_iter()
+            .find(|(id, _transaction)| id == &sweep_id)
+            .map(|(_id, transaction)| transaction.nonce())
+            .expect("BUG: the sweep has no created transaction")
+    }
+
+    /// A state whose sweep queue holds one funded pair per token, all at the same deposit address.
+    fn state_with_queued_deposits(tokens: &[Address]) -> State {
+        let mut state = initial_state();
+        for token in tokens {
+            apply_state_transition(
+                &mut state,
+                &EventType::AutomaticDepositReceived(AutomaticDeposit {
+                    owner: account().owner,
+                    subaccount: account().subaccount,
+                    address: deposit_address(),
+                    erc20_contract_address: *token,
+                    last_scanned_block: BlockNumber::new(900),
+                    scan_count: 1,
+                    scanned_balance: Erc20Value::new(1_000),
+                }),
+            );
+        }
+        state
+    }
+
+    /// A sweep of every given token at [`deposit_address`], carrying the authorization that
+    /// delegates that address to the sweeper contract.
+    fn delegating_sweep_request(tokens: &[Address]) -> SweepRequest {
+        SweepRequest {
+            id: SweepId(0),
+            destination: sweeper_contract(),
+            amount: Wei::ZERO,
+            data: vec![0xaa, 0xbb, 0xcc],
+            max_transaction_fee: Wei::new(1_000_000_000_000_000_000),
+            created_at: 1_620_328_630_000_000_000,
+            authorizations: vec![authorization()],
+            deposits: tokens.iter().copied().map(swept_deposit).collect(),
+        }
+    }
+
+    fn swept_deposit(token: Address) -> SweptDeposit {
+        SweptDeposit {
+            account: account(),
+            erc20_contract_address: token,
+            address: deposit_address(),
+        }
+    }
+
+    fn create_sweep_transaction(state: &mut State, sweep_id: SweepId) {
+        let request = state
+            .sweeper_transactions
+            .requests_iter()
+            .find(|request| request.id == sweep_id)
+            .expect("BUG: the sweep is not pending")
+            .clone();
+        let transaction = request
+            .create_transaction(
+                state.sweeper_transactions.next_transaction_nonce(),
+                gas_fee_estimate(),
+                request.gas_limit(),
+                state.ethereum_network(),
+            )
+            .expect("BUG: the fixture allowance covers the fixture fee");
+        apply_state_transition(
+            state,
+            &EventType::CreatedSweeperTransaction {
+                sweep_id,
+                transaction,
+            },
+        );
+    }
+
+    fn authorization() -> SignedAuthorization {
+        SignedAuthorization {
+            chain_id: 11155111,
+            delegate: sweeper_contract(),
+            nonce: TransactionNonce::ZERO,
+            y_parity: false,
+            r: ethnum::u256::ONE,
+            s: ethnum::u256::ONE,
+        }
+    }
+
+    fn gas_fee_estimate() -> GasFeeEstimate {
+        GasFeeEstimate {
+            base_fee_per_gas: WeiPerGas::from(25_u8),
+            max_priority_fee_per_gas: WeiPerGas::new(0x59682f00),
+        }
+    }
+
+    fn account() -> Account {
+        Account {
+            owner: candid::Principal::from_slice(&[1, 2, 3, 4]),
+            subaccount: Some([42_u8; 32]),
+        }
+    }
+
+    fn deposit_address() -> DepositAddress {
+        DepositAddress::new(Address::new([0x11; 20]))
+    }
+
+    fn sweeper_contract() -> Address {
+        Address::new([0xde; 20])
+    }
+
+    fn usdc() -> Address {
+        Address::new([0xaa; 20])
+    }
+
+    fn usdt() -> Address {
+        Address::new([0xbb; 20])
+    }
+}
+
 mod eth_balance {
     use super::*;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};

@@ -4,6 +4,7 @@ mod tests;
 use super::State;
 pub use super::event::{Event, EventType};
 use crate::erc20::CkTokenSymbol;
+use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
 use crate::state::transactions::{Reimbursed, ReimbursementIndex, WithdrawalRequest};
@@ -117,6 +118,9 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         }
         EventType::AcceptedSweepRequest(request) => {
             state.next_sweep_id = request.id.next();
+            state
+                .automatic_deposits
+                .record_sweep_scheduled(request.id, &request.deposits);
             state.sweeper_transactions.record_request(request.clone());
         }
         EventType::CreatedSweeperTransaction {
@@ -152,6 +156,10 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             let _ = state
                 .sweeper_transactions
                 .record_finalized_transaction(*sweep_id, transaction_receipt);
+            match transaction_receipt.status {
+                TransactionStatus::Failure => state.record_failed_sweep(*sweep_id),
+                TransactionStatus::Success => state.record_successful_sweep(*sweep_id),
+            }
         }
         EventType::ReimbursedEthWithdrawal(Reimbursed {
             burn_in_block: withdrawal_id,

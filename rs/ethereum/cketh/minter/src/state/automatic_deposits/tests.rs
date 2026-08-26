@@ -720,6 +720,7 @@ fn sweep_entry(
         last_scanned_block,
         scan_count,
         scanned_balance: Erc20Value::new(scanned_balance),
+        swept_by: None,
     }
 }
 
@@ -748,6 +749,277 @@ fn entry(account: &Account, expires_at: Timestamp) -> Entry<ScanProgress> {
     Entry {
         value: ScanProgress::from(deposit_address(account)),
         expires_at,
+    }
+}
+
+mod record_sweep_scheduled {
+    use super::{account, automatic_deposit, deposit_address, usdc, usdt};
+    use crate::numeric::BlockNumber;
+    use crate::state::automatic_deposits::AutomaticDeposits;
+    use crate::state::transactions::{SweepId, SweptDeposit};
+    use crate::test_fixtures::expect_panic_with_message;
+    use ic_ethereum_types::Address;
+    use icrc_ledger_types::icrc1::account::Account;
+
+    #[test]
+    fn should_offer_a_queued_deposit_until_a_sweep_takes_it() {
+        let mut deposits = queued();
+
+        assert_eq!(targets(&deposits), vec![usdc(), usdt()]);
+
+        deposits.record_sweep_scheduled(SweepId(7), &[swept(account(0), usdc())]);
+
+        assert_eq!(targets(&deposits), vec![usdt()]);
+        // The entry stays queued, it is only no longer sweepable.
+        assert_eq!(deposits.sweep_len(), 2);
+    }
+
+    #[test]
+    fn should_carry_the_scanned_balance_to_the_sweeper() {
+        let deposits = queued();
+
+        let target = deposits.sweep_targets_iter().next().unwrap();
+
+        assert_eq!(target.account(), account(0));
+        assert_eq!(target.token(), usdc());
+        assert_eq!(target.address(), deposit_address(&account(0)));
+        assert_eq!(target.scanned_balance(), 10_u8.into());
+    }
+
+    #[test]
+    fn should_trap_when_two_sweeps_take_the_same_deposit() {
+        let mut deposits = queued();
+        deposits.record_sweep_scheduled(SweepId(0), &[swept(account(0), usdc())]);
+
+        expect_panic_with_message(
+            || {
+                deposits.record_sweep_scheduled(SweepId(1), &[swept(account(0), usdc())]);
+            },
+            "was already taken by another sweep",
+        );
+    }
+
+    #[test]
+    fn should_trap_when_a_sweep_takes_a_deposit_that_is_not_queued() {
+        let mut deposits = queued();
+
+        expect_panic_with_message(
+            || {
+                deposits.record_sweep_scheduled(SweepId(0), &[swept(account(1), usdc())]);
+            },
+            "is not queued for sweeping",
+        );
+    }
+
+    /// One account with two funded tokens at the same deposit address, both awaiting a sweep.
+    fn queued() -> AutomaticDeposits {
+        let mut deposits = AutomaticDeposits::default();
+        for token in [usdc(), usdt()] {
+            deposits.record_automatic_deposit_received(&automatic_deposit(
+                account(0),
+                token,
+                10,
+                BlockNumber::new(900),
+                3,
+            ));
+        }
+        deposits
+    }
+
+    fn targets(deposits: &AutomaticDeposits) -> Vec<Address> {
+        deposits
+            .sweep_targets_iter()
+            .map(|target| target.token())
+            .collect()
+    }
+
+    fn swept(account: Account, token: Address) -> SweptDeposit {
+        SweptDeposit {
+            account,
+            erc20_contract_address: token,
+            address: deposit_address(&account),
+        }
+    }
+}
+
+mod record_sweep_failed {
+    use crate::endpoints::DepositStatus;
+    use crate::numeric::BlockNumber;
+    use crate::numeric::Erc20Value;
+    use crate::state::automatic_deposits::tests::{
+        account, automatic_deposit, deposit_address, ts, usdc, usdt,
+    };
+    use crate::state::automatic_deposits::{AutomaticDeposits, DepositRequest, SweepQueueDepth};
+    use crate::state::transactions::{SweepId, SweptDeposit};
+    use crate::test_fixtures::expect_panic_with_message;
+    use assert_matches::assert_matches;
+    use ic_ethereum_types::Address;
+
+    #[test]
+    fn should_drop_the_deposits_of_a_sweep_that_failed() {
+        let mut deposits = queued();
+        deposits.record_sweep_scheduled(SweepId(0), &[swept(usdc())]);
+        assert_eq!(sweepable(&deposits), vec![usdt()]);
+
+        deposits.record_sweep_failed(SweepId(0), &[swept(usdc())]);
+
+        assert_eq!(sweepable(&deposits), vec![usdt()]);
+        assert_eq!(deposits.sweep_len(), 1);
+        assert_eq!(
+            deposits.sweep_queue_depth(),
+            SweepQueueDepth {
+                in_flight: 0,
+                sweepable: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn should_report_a_dropped_deposit_as_unknown_rather_than_awaiting_a_sweep() {
+        let mut deposits = queued();
+        assert_matches!(status(&deposits), Some(DepositStatus::AwaitingSweep(_)));
+        deposits.record_sweep_scheduled(SweepId(0), &[swept(usdc())]);
+
+        deposits.record_sweep_failed(SweepId(0), &[swept(usdc())]);
+
+        assert_eq!(status(&deposits), None);
+    }
+
+    #[test]
+    fn should_let_a_pair_whose_sweep_failed_be_armed_again() {
+        let mut deposits = queued();
+        deposits.record_sweep_scheduled(SweepId(0), &[swept(usdc())]);
+        deposits.record_sweep_failed(SweepId(0), &[swept(usdc())]);
+
+        let armed = deposits.watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)));
+
+        assert_matches!(armed, Ok(_));
+    }
+
+    fn status(deposits: &AutomaticDeposits) -> Option<DepositStatus> {
+        deposits
+            .deposit_status(
+                ts(0),
+                &DepositRequest::new(account(0), usdc()),
+                Erc20Value::ONE,
+            )
+            .map(|response| response.status)
+    }
+
+    #[test]
+    fn should_trap_when_a_sweep_that_does_not_hold_a_deposit_fails() {
+        let mut deposits = queued();
+        deposits.record_sweep_scheduled(SweepId(0), &[swept(usdc())]);
+
+        expect_panic_with_message(
+            || deposits.record_sweep_failed(SweepId(1), &[swept(usdc())]),
+            "is not held by sweep",
+        );
+    }
+
+    /// One account with two funded tokens at the same deposit address, both awaiting a sweep.
+    fn queued() -> AutomaticDeposits {
+        let mut deposits = AutomaticDeposits::default();
+        for token in [usdc(), usdt()] {
+            deposits.record_automatic_deposit_received(&automatic_deposit(
+                account(0),
+                token,
+                10,
+                BlockNumber::new(900),
+                3,
+            ));
+        }
+        deposits
+    }
+
+    fn sweepable(deposits: &AutomaticDeposits) -> Vec<Address> {
+        deposits
+            .sweep_targets_iter()
+            .map(|target| target.token())
+            .collect()
+    }
+
+    fn swept(token: Address) -> SweptDeposit {
+        SweptDeposit {
+            account: account(0),
+            erc20_contract_address: token,
+            address: deposit_address(&account(0)),
+        }
+    }
+}
+
+mod record_sweep_succeeded {
+    use crate::numeric::BlockNumber;
+    use crate::state::automatic_deposits::AutomaticDeposits;
+    use crate::state::automatic_deposits::tests::{
+        account, automatic_deposit, deposit_address, ts, usdc,
+    };
+    use crate::state::transactions::{SweepId, SweptDeposit};
+    use crate::test_fixtures::expect_panic_with_message;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn should_drop_a_deposit_a_sweep_moved() {
+        let mut deposits = queued();
+        deposits.record_sweep_scheduled(SweepId(0), &[swept()]);
+
+        deposits.record_sweep_succeeded(SweepId(0), &[swept()]);
+
+        assert_eq!(deposits.sweep_len(), 0);
+    }
+
+    #[test]
+    fn should_let_a_pair_whose_sweep_succeeded_be_armed_again() {
+        let mut deposits = queued();
+        deposits.record_sweep_scheduled(SweepId(0), &[swept()]);
+        deposits.record_sweep_succeeded(SweepId(0), &[swept()]);
+
+        let armed = deposits.watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)));
+
+        assert_matches!(armed, Ok(_));
+    }
+
+    #[test]
+    fn should_trap_when_a_sweep_that_does_not_hold_a_deposit_succeeds() {
+        let mut deposits = queued();
+        deposits.record_sweep_scheduled(SweepId(0), &[swept()]);
+
+        expect_panic_with_message(
+            || deposits.record_sweep_succeeded(SweepId(1), &[swept()]),
+            "is not held by sweep",
+        );
+    }
+
+    #[test]
+    fn should_trap_when_a_sweep_succeeds_with_a_deposit_that_was_dropped() {
+        let mut deposits = queued();
+        deposits.record_sweep_scheduled(SweepId(0), &[swept()]);
+        deposits.record_sweep_failed(SweepId(0), &[swept()]);
+
+        expect_panic_with_message(
+            || deposits.record_sweep_succeeded(SweepId(0), &[swept()]),
+            "is not queued for sweeping",
+        );
+    }
+
+    fn queued() -> AutomaticDeposits {
+        let mut deposits = AutomaticDeposits::default();
+        deposits.record_automatic_deposit_received(&automatic_deposit(
+            account(0),
+            usdc(),
+            10,
+            BlockNumber::new(900),
+            3,
+        ));
+        deposits
+    }
+
+    fn swept() -> SweptDeposit {
+        SweptDeposit {
+            account: account(0),
+            erc20_contract_address: usdc(),
+            address: deposit_address(&account(0)),
+        }
     }
 }
 

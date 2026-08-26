@@ -29,7 +29,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet, btree_map};
 use std::fmt::{Display, Formatter};
 use strum_macros::EnumIter;
-use transactions::{SweepId, SweeperTransactionPipeline, WithdrawalTransactions};
+use transactions::{SweepId, SweeperTransactionPipeline, SweptDeposit, WithdrawalTransactions};
 
 pub mod audit;
 pub mod automatic_deposits;
@@ -435,6 +435,39 @@ impl State {
         self.withdrawal_transactions
             .record_finalized_transaction(*withdrawal_id, receipt.clone());
         self.update_balance_upon_withdrawal(withdrawal_id, receipt);
+    }
+
+    /// Drop a failed sweep's deposits from the sweep queue. A reverted sweep moved nothing, so the
+    /// funds stay at their deposit addresses; the minter just stops trying (see
+    /// [`crate::state::automatic_deposits::AutomaticDeposits::record_sweep_failed`]).
+    ///
+    /// # Panics
+    ///
+    /// If the sweep has no processed request, which recording its transaction established.
+    pub fn record_failed_sweep(&mut self, sweep_id: SweepId) {
+        let deposits = self.swept_deposits(sweep_id);
+        self.automatic_deposits
+            .record_sweep_failed(sweep_id, &deposits);
+    }
+
+    /// Release a successful sweep's deposits: the funds moved, so each pair leaves the queue as it
+    /// entered it and can be armed again for the next deposit.
+    ///
+    /// # Panics
+    ///
+    /// If the sweep has no processed request, which recording its transaction established.
+    pub fn record_successful_sweep(&mut self, sweep_id: SweepId) {
+        let deposits = self.swept_deposits(sweep_id);
+        self.automatic_deposits
+            .record_sweep_succeeded(sweep_id, &deposits);
+    }
+
+    fn swept_deposits(&self, sweep_id: SweepId) -> Vec<SweptDeposit> {
+        self.sweeper_transactions
+            .get_processed_request(&sweep_id)
+            .expect("BUG: missing sweep request")
+            .deposits
+            .clone()
     }
 
     pub fn next_request_id(&mut self) -> u64 {
