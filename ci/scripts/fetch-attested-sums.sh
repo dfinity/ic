@@ -6,7 +6,7 @@
 #
 # The CDN (download.dfinity.systems, S3 + Cloudflare R2) is not a trust
 # anchor: whoever can write to the buckets can replace artifacts and their
-# SHA256SUMS alike (security finding 3618194). The attestation is stored by
+# SHA256SUMS alike. The attestation is stored by
 # GitHub, signed via Sigstore with the workflow's OIDC identity, and covers
 # the SHA256SUMS file's digest, so a substituted or tampered SHA256SUMS fails
 # verification here. `--source-digest` pins the attestation to the exact
