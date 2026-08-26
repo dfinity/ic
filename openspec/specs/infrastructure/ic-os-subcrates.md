@@ -190,6 +190,42 @@ The `partition_tools` crate provides a `Partition` trait and implementations for
 
 ---
 
+### Requirement: Alternative GuestOS Proposal Verification (alternative_guestos)
+
+The `alternative_guestos` crate (`rs/ic_os/alternative_guestos/`) is a shared library that verifies NNS-signed `BlessAlternativeGuestOsVersion` proposals for "alternative GuestOS" images (e.g. the SEV recovery image). It is used both at build time by `alternative_guestos_tool` and in production by `open_rootfs` on the GuestOS before switching to the alternative root partition.
+
+#### Scenario: Verified proposal certificate is required
+- **WHEN** `read_and_verify_signed_bless_alternative_guest_os_version_proposal` is called with a path to a CBOR-encoded certificate
+- **THEN** the certificate is deserialized and verified against the NNS root public key (or an override) and the governance canister ID
+- **AND** verification failure returns an error rather than the parsed proposal
+
+#### Scenario: Certificate must contain a single replied request
+- **WHEN** the certificate's `request_status` subtree is inspected
+- **THEN** exactly one request ID must be present and its `status` leaf must equal `replied`
+- **AND** any other count or status returns an error
+
+#### Scenario: Reply must decode to an executed BlessAlternativeGuestOsVersion proposal
+- **WHEN** the `reply` leaf is decoded as a `ProposalInfo`
+- **THEN** the proposal's status must be `Executed` and its action must be `BlessAlternativeGuestOsVersion`
+- **AND** any other status or action type returns an error
+
+### Requirement: Alternative GuestOS Build Tool (alternative_guestos_tool)
+
+The `alternative_guestos_tool` crate (`rs/ic_os/build_tools/alternative_guestos/`) is a CLI used when building alternative GuestOS images (e.g. the SEV recovery image), so that a proposal whose launch measurements do not match the image being built fails the build early.
+
+#### Scenario: Download and verify a signed proposal
+- **WHEN** `download-signed-proposal --proposal-id <id> --nns-url <url> --output <path>` is run
+- **THEN** it calls `get_proposal_info` on the NNS governance canister via an `ic-agent` update call, awaits the certified reply, and writes the CBOR-encoded certificate to `output`
+- **AND** the written certificate is re-read and verified via `alternative_guestos::proposal`, failing the command if verification does not pass
+
+#### Scenario: Validate launch measurements against a proposal
+- **WHEN** `validate-measurements --proposal-path <path> --local-measurements-path <path>` is run
+- **THEN** the proposal at `proposal-path` is read and verified
+- **AND** the set of locally computed measurement bytes and the set of measurement bytes blessed in the proposal are compared
+- **AND** the command succeeds if the two sets share at least one measurement, and fails if they share none
+
+---
+
 ## Configuration
 
 ### Requirement: IC-OS Configuration Type Definitions (config_types)
