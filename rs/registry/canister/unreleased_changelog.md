@@ -9,6 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
+* `cooling_down` field in `SubnetRecord`, settable via `UpdateSubnetRecord` proposals. See
+  `ic_replicated_state::SubnetTopology::cooling_down` for the exact semantics. The field must not
+  be set on mainnet before the replica version rejecting ingress messages to cooling down subnets
+  has been rolled out to all subnets.
+
 ## Changed
 
 ## Deprecated

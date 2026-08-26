@@ -14,7 +14,7 @@ use ic_types::messages::{
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload,
     RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
-use ic_types::{CanisterId, CountBytes, SubnetId};
+use ic_types::{CountBytes, SubnetId};
 use ic_types_cycles::{CompoundCycles, Cycles};
 #[cfg(test)]
 use mockall::automock;
@@ -42,9 +42,12 @@ struct StreamBuilderMetrics {
     pub routed_payload_sizes: Histogram,
     /// Misrouted messages currently in streams, by remote subnet.
     pub stream_misrouted_messages: IntGaugeVec,
-    /// Canister output queues skipped because their destination subnet was
+    /// Output queues skipped because this subnet or their destination subnet was
     /// cooling down.
     pub cooling_down_skipped_queues: IntCounter,
+    /// Refunds skipped because this subnet or their destination subnet was cooling
+    /// down.
+    pub cooling_down_skipped_refunds: IntCounter,
     /// Critical error for payloads above the maximum supported size.
     pub critical_error_payload_too_large: IntCounter,
     /// Critical error for responses dropped due to destination not found.
@@ -67,6 +70,7 @@ const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 const METRIC_STREAM_MISROUTED_MESSAGES: &str = "mr_stream_misrouted_messages";
 const METRIC_COOLING_DOWN_SKIPPED_QUEUES: &str = "mr_cooling_down_skipped_queues";
+const METRIC_COOLING_DOWN_SKIPPED_REFUNDS: &str = "mr_cooling_down_skipped_refunds";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
@@ -132,9 +136,15 @@ impl StreamBuilderMetrics {
         );
         let cooling_down_skipped_queues = metrics_registry.int_counter(
             METRIC_COOLING_DOWN_SKIPPED_QUEUES,
-            "Canister output queues skipped because their destination subnet was cooling down. \
-            Counted once per queue per round, so the same queue is counted repeatedly for as \
-            long as the destination subnet keeps cooling down.",
+            "Output queues skipped because this subnet or their destination subnet was \
+            cooling down. Counted once per queue per round, so the same queue is counted \
+            repeatedly for as long as either subnet keeps cooling down.",
+        );
+        let cooling_down_skipped_refunds = metrics_registry.int_counter(
+            METRIC_COOLING_DOWN_SKIPPED_REFUNDS,
+            "Refunds skipped because this subnet or their destination subnet was cooling \
+            down. Counted once per refund per round, so the same refund is counted \
+            repeatedly for as long as either subnet keeps cooling down.",
         );
         let critical_error_payload_too_large =
             metrics_registry.error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE);
@@ -178,6 +188,7 @@ impl StreamBuilderMetrics {
             routed_payload_sizes,
             stream_misrouted_messages,
             cooling_down_skipped_queues,
+            cooling_down_skipped_refunds,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
             critical_error_induct_response_failed,
@@ -412,7 +423,7 @@ impl StreamBuilderImpl {
         // Tests whether a stream is over the message count limit, byte limit or (if
         // directed at a system subnet) over `2 * system_subnet_stream_msg_limit`.
         let is_at_limit = |stream: &btree_map::Entry<SubnetId, Stream>,
-                           destination_subnet_type: SubnetType|
+                           destination_subnet_type: Option<SubnetType>|
          -> bool {
             let stream = match stream {
                 btree_map::Entry::Occupied(occupied_entry) => occupied_entry.get(),
@@ -431,7 +442,7 @@ impl StreamBuilderImpl {
             // At limit if system subnet limit is hit. This is only enforced for non-local
             // streams to system subnets (i.e., excluding the loopback stream on system
             // subnets). And only applies to canister messages, not refunds.
-            destination_subnet_type == SubnetType::System
+            destination_subnet_type == Some(SubnetType::System)
                 && stream_messages_len - stream.refund_count()
                     >= 2 * self.system_subnet_stream_msg_limit
         };
@@ -453,9 +464,7 @@ impl StreamBuilderImpl {
         let refund_limit = self.max_stream_messages / 2;
         self.route_refunds(&mut state, refund_limit, &network_topology, &mut streams);
 
-        // No canister can have the subnet's own principal as its canister ID, so this
-        // identifies the messages taken from the subnet's own output queues.
-        let own_subnet_as_canister_id = CanisterId::from(self.subnet_id);
+        let own_subnet_is_cooling_down = network_topology.is_cooling_down(&self.subnet_id);
 
         let mut requests_to_reject = Vec::new();
         let mut oversized_requests = Vec::new();
@@ -473,33 +482,45 @@ impl StreamBuilderImpl {
             // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
             let msg = msg.clone();
 
-            let is_from_subnet_queues = msg.sender() == own_subnet_as_canister_id;
+            // No canister can have the subnet's own principal as its canister ID, so this
+            // identifies the messages taken from the subnet's own output queues. Those are
+            // only ever responses, as the management canister makes no calls of its own.
+            let is_subnet_output_response = msg.sender().get() == self.subnet_id.get();
 
             match network_topology.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
                     let is_loopback_stream = self.subnet_id == dst_subnet_id;
+                    let dst_subnet_topology = network_topology.subnets().get(&dst_subnet_id);
+                    let dst_subnet_type = dst_subnet_topology.map(|topology| topology.subnet_type);
 
-                    // A cooling down destination subnet must not be sent any messages
-                    // from canister output queues. Retain the message (along with
-                    // everything behind it in the same queue) until the destination stops
-                    // cooling down, rather than rejecting or dropping it.
-                    if !is_from_subnet_queues && network_topology.is_cooling_down(&dst_subnet_id) {
+                    let dst_subnet_is_cooling_down =
+                        dst_subnet_topology.is_some_and(|topology| topology.cooling_down);
+
+                    // No messages from canister output queues are routed while either this
+                    // subnet (the source) or the destination subnet is cooling down; not
+                    // even into the loopback stream.
+                    //
+                    // Subnet output queues of cooling down subnets (only holding responses) are
+                    // exempt, so they can deliver responses (before the subnet is deleted) to all
+                    // the calls they have already accepted.
+                    //
+                    // Retain the message (along with everything behind it in the same queue)
+                    // until the subnet that holds it back stops cooling down, rather than
+                    // rejecting or dropping it.
+                    let skip_while_cooling_down = if is_subnet_output_response {
+                        !own_subnet_is_cooling_down && dst_subnet_is_cooling_down
+                    } else {
+                        own_subnet_is_cooling_down || dst_subnet_is_cooling_down
+                    };
+                    if skip_while_cooling_down {
                         self.metrics.cooling_down_skipped_queues.inc();
                         output_iter.exclude_queue();
                         continue;
                     }
 
                     let dst_stream_entry = streams.entry(dst_subnet_id);
-                    if !is_loopback_stream
-                        && is_at_limit(
-                            &dst_stream_entry,
-                            network_topology
-                                .subnets()
-                                .get(&dst_subnet_id)
-                                .map_or(SubnetType::Application, |topology| topology.subnet_type),
-                        )
-                    {
+                    if !is_loopback_stream && is_at_limit(&dst_stream_entry, dst_subnet_type) {
                         // Stream full, skip all other messages to this destination.
                         output_iter.exclude_queue();
                         continue;
@@ -508,11 +529,8 @@ impl StreamBuilderImpl {
                     // We will route (or reject) the message, pop it.
                     let mut msg = validated_next(&mut output_iter, &msg);
 
-                    let is_engine_dst = !is_loopback_stream
-                        && network_topology
-                            .subnets()
-                            .get(&dst_subnet_id)
-                            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
+                    let is_engine_dst =
+                        !is_loopback_stream && dst_subnet_type == Some(SubnetType::CloudEngine);
                     let is_engine_src =
                         !is_loopback_stream && own_subnet_type == SubnetType::CloudEngine;
 
@@ -799,8 +817,9 @@ impl StreamBuilderImpl {
 
     /// Routes up to `refund_limit` refunds per stream from `state` into `streams`.
     ///
-    /// Refunds that could not be routed due to reaching the per stream limit are
-    /// retained in `state`.
+    /// Refunds that could not be routed due to reaching the per stream limit, or
+    /// because this subnet or their destination subnet is cooling down, are retained
+    /// in `state`.
     fn route_refunds(
         &self,
         state: &mut ReplicatedState,
@@ -811,15 +830,27 @@ impl StreamBuilderImpl {
         let mut cycles_lost = Cycles::zero();
         let own_cost_schedule = state.get_own_cost_schedule();
         let own_is_engine = state.metadata.own_subnet_type == SubnetType::CloudEngine;
+        let own_subnet_is_cooling_down = network_topology.is_cooling_down(&self.subnet_id);
         state.take_refunds(|refund| {
             match network_topology.route(refund.recipient().get()) {
                 Some(dst_subnet_id) => {
                     let is_loopback_stream = dst_subnet_id == self.subnet_id;
-                    let is_engine_dst = !is_loopback_stream
-                        && network_topology
-                            .subnets()
-                            .get(&dst_subnet_id)
-                            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
+                    let dst_subnet_topology = network_topology.subnets().get(&dst_subnet_id);
+                    let dst_subnet_type = dst_subnet_topology.map(|topology| topology.subnet_type);
+
+                    // No refunds are routed while either this subnet (the source) or the
+                    // destination subnet is cooling down; not even into the loopback stream.
+                    // Retain them in the refund pool until neither subnet is cooling down
+                    // anymore, rather than dropping them (which would lose their cycles).
+                    let dst_subnet_is_cooling_down =
+                        dst_subnet_topology.is_some_and(|topology| topology.cooling_down);
+                    if own_subnet_is_cooling_down || dst_subnet_is_cooling_down {
+                        self.metrics.cooling_down_skipped_refunds.inc();
+                        return false;
+                    }
+
+                    let is_engine_dst =
+                        !is_loopback_stream && dst_subnet_type == Some(SubnetType::CloudEngine);
                     let is_engine_src = !is_loopback_stream && own_is_engine;
                     if is_engine_dst || is_engine_src {
                         // A refund destined to cross the engine boundary should not exist: a

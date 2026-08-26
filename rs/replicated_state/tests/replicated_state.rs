@@ -19,6 +19,7 @@ use ic_replicated_state::{
         execution_state::{CustomSection, CustomSectionType, WasmMetadata},
     },
     metadata_state::{
+        UnflushedCheckpointOp,
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, InstallCodeCallId,
             StopCanisterCall, SubnetCallContext,
@@ -1181,8 +1182,15 @@ fn split() {
 
     // Start off with the original state.
     let mut expected = fixture.state.clone();
-    // Only `CANISTER_1` should be left.
+    // Only `CANISTER_1` should be left; with the removal of `CANISTER_2` recorded as a
+    // checkpoint operation, so that its directory is deleted from tip. (Its scheduling
+    // priority is only pruned in phase 2, by `after_split()` below, so this cannot use
+    // `remove_canister()`, which would drop it here.)
     expected.take_canister_state(&CANISTER_2);
+    expected
+        .metadata
+        .unflushed_checkpoint_ops
+        .push(UnflushedCheckpointOp::DeleteCanister(CANISTER_2));
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
     // Otherwise, the state should be the same.
@@ -1222,6 +1230,12 @@ fn split() {
     // Only `CANISTER_2` should be left, with no scheduling priority.
     expected.put_canister_state(fixture.state.canister_state(&CANISTER_2).unwrap().clone());
     expected.metadata.subnet_schedule.remove(&CANISTER_2);
+    // The removal of `CANISTER_1` should have been recorded as a checkpoint operation,
+    // so that its directory is deleted from tip.
+    expected
+        .metadata
+        .unflushed_checkpoint_ops
+        .push(UnflushedCheckpointOp::DeleteCanister(CANISTER_1));
     // The full ingress history should be preserved.
     expected.metadata.ingress_history = fixture.state.metadata.ingress_history.clone();
     // And the split marker should be set.
@@ -1253,13 +1267,6 @@ fn split() {
     expected.metadata.subnet_schedule.get_mut(CANISTER_2);
     // Everything else should be the same as in phase 1.
     assert_eq!(expected, state_b);
-}
-
-/// Drops a canister from the state the same way `online_split()` does, i.e. without
-/// recording an `UnflushedCheckpointOp::DeleteCanister`.
-fn drop_canister(state: &mut ReplicatedState, canister_id: &CanisterId) {
-    state.take_canister_state(canister_id).unwrap();
-    state.metadata.subnet_schedule.remove(canister_id);
 }
 
 #[test]
@@ -1346,8 +1353,8 @@ fn online_split() {
             .push(snapshot_id, snapshot.into());
         snapshot_id
     };
-    let canister_1_snapshot_id = take_shapshot(CANISTER_1);
-    let canister_2_snapshot_id = take_shapshot(CANISTER_2);
+    take_shapshot(CANISTER_1);
+    take_shapshot(CANISTER_2);
 
     // Add aborted `install_code` tasks to both canisters.
     let mut add_aborted_install_code_task = |canister_id| {
@@ -1380,18 +1387,16 @@ fn online_split() {
 
     // Start off with the original state (plus new routing table).
     let mut expected = fixture.state.clone();
-    // Only `CANISTER_1` should be left.
-    drop_canister(&mut expected, &CANISTER_2);
+    // Only `CANISTER_1` should be left; with the removal of `CANISTER_2` and of its
+    // snapshot recorded as checkpoint operations, so that their directories are deleted
+    // from tip.
+    expected.remove_canister(&CANISTER_2);
     // The input schedules of `CANISTER_1` should have been repartitioned.
     let mut canister_state_arc = expected.take_canister_state(&CANISTER_1).unwrap();
     let canister_state = Arc::make_mut(&mut canister_state_arc);
     canister_state
         .system_state
         .split_input_schedules(&CANISTER_1, expected.canister_states());
-    // The snapshot of `CANISTER_2` should have been deleted.
-    canister_state
-        .canister_snapshots
-        .remove(canister_2_snapshot_id);
     expected.put_canister_state(canister_state_arc);
 
     // And the split marker should be set.
@@ -1413,8 +1418,10 @@ fn online_split() {
     let mut expected = fixture.state.clone();
     // New subnet ID.
     expected.metadata.own_subnet_id = SUBNET_B;
-    // Only `CANISTER_2` should be hosted.
-    drop_canister(&mut expected, &CANISTER_1);
+    // Only `CANISTER_2` should be hosted; with the removal of `CANISTER_1` and of its
+    // snapshot recorded as checkpoint operations, so that their directories are deleted
+    // from tip.
+    expected.remove_canister(&CANISTER_1);
     // The input schedules of `CANISTER_2` should have been repartitioned.
     let mut canister_state_arc = expected.take_canister_state(&CANISTER_2).unwrap();
     let canister_state = Arc::make_mut(&mut canister_state_arc);
@@ -1423,10 +1430,6 @@ fn online_split() {
         .split_input_schedules(&CANISTER_2, expected.canister_states());
     // The in-progress `install_code` task should have been silently dropped.
     canister_state.system_state.task_queue = Default::default();
-    // The snapshot of `CANISTER_1` should have been deleted.
-    canister_state
-        .canister_snapshots
-        .remove(canister_1_snapshot_id);
     expected.put_canister_state(canister_state_arc);
 
     // Streams, subnet queues and refunds should be empty.
