@@ -189,27 +189,6 @@ pub enum EventType {
     /// The minter burned ckETH from its fee subaccount to top up the sweeper address with gas.
     #[n(27)]
     AcceptedSweeperFundingRequest(#[n(0)] EthWithdrawalRequest),
-    /// A deposit address attested to the account it credits. Signing costs a threshold-ECDSA
-    /// signature and can fail, so it is recorded on its own rather than with the sweep that
-    /// needed it: the attestation outlives that sweep and every later one reuses it.
-    #[n(33)]
-    AttestedDepositAddress {
-        /// The chain the attestation is bound to, for a log that reads on its own — the minter
-        /// runs against one chain, so it is the helper below that decides whether an attestation
-        /// is still usable.
-        #[n(0)]
-        chain_id: u64,
-        /// The deposit helper the attestation names. An attestation is only valid against this
-        /// deployment, which is why replay keys them by it.
-        #[n(1)]
-        deposit_helper: Address,
-        #[cbor(n(2), with = "icrc_cbor::principal")]
-        owner: Principal,
-        #[cbor(n(3), with = "minicbor::bytes")]
-        subaccount: Option<[u8; 32]>,
-        #[n(4)]
-        signature: TransactionSignature,
-    },
     /// The minter enqueued a sweep to be sent from its dedicated sweeper address.
     #[n(28)]
     AcceptedSweepRequest(#[n(0)] SweepRequest),
@@ -244,6 +223,27 @@ pub enum EventType {
         sweep_id: SweepId,
         #[n(1)]
         transaction_receipt: TransactionReceipt,
+    },
+    /// A deposit address attested to the account it credits. Signing costs a threshold-ECDSA
+    /// signature and can fail, so it is recorded on its own rather than with the sweep that
+    /// needed it: the attestation outlives that sweep and every later one reuses it.
+    #[n(33)]
+    AttestedDepositAddress {
+        /// The chain the attestation is bound to, for a log that reads on its own — the minter
+        /// runs against one chain, so it is the helper below that decides whether an attestation
+        /// is still usable.
+        #[n(0)]
+        chain_id: u64,
+        /// The deposit helper the attestation names. An attestation is only valid against this
+        /// deployment, which is why replay keys them by it.
+        #[n(1)]
+        deposit_helper: Address,
+        #[cbor(n(2), with = "icrc_cbor::principal")]
+        owner: Principal,
+        #[cbor(n(3), with = "minicbor::bytes")]
+        subaccount: Option<[u8; 32]>,
+        #[n(4)]
+        signature: TransactionSignature,
     },
 }
 
