@@ -2,7 +2,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 
 use vsock_lib::protocol::{Command as ProtocolCommand, NotifyData, Payload, UpgradeData};
-use vsock_lib::client::{LinuxVSockClient, VSockClient};
+use vsock_lib::client::{LinuxVsockClient, VsockClient};
 
 use clap::{Parser, Subcommand};
 
@@ -73,7 +73,7 @@ fn main() -> Result<(), String> {
         }
     }
 
-    let payload = LinuxVSockClient::with_port(cli.port).send_command(command)?;
+    let payload = LinuxVsockClient::with_port(cli.port).send_command(command)?;
 
     // Output the values directly
     match payload {

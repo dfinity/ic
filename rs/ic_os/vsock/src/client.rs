@@ -3,7 +3,7 @@ use crate::protocol::{Command, Response};
 use mockall::automock;
 
 #[automock]
-pub trait VSockClient {
+pub trait VsockClient {
     fn send_command(&self, command: Command) -> Response;
 }
 
@@ -20,11 +20,11 @@ mod linux {
 
     use vsock::{VMADDR_CID_HOST, VsockStream};
 
-    pub struct LinuxVSockClient {
+    pub struct LinuxVsockClient {
         port: u32,
     }
 
-    impl LinuxVSockClient {
+    impl LinuxVsockClient {
         pub const DEFAULT_PORT: u32 = 19090;
 
         pub fn with_port(port: u32) -> Self {
@@ -32,13 +32,13 @@ mod linux {
         }
     }
 
-    impl Default for LinuxVSockClient {
+    impl Default for LinuxVsockClient {
         fn default() -> Self {
             Self::with_port(Self::DEFAULT_PORT)
         }
     }
 
-    impl VSockClient for LinuxVSockClient {
+    impl VsockClient for LinuxVsockClient {
         fn send_command(&self, command: Command) -> Response {
             let guest_cid = vsock::get_local_cid().map_err(|e| e.to_string())?;
 
