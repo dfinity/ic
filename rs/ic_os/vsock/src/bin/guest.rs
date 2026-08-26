@@ -1,10 +1,8 @@
-#![cfg(target_os = "linux")]
-
 use std::fs::OpenOptions;
 use std::io::Write;
 
 use vsock_lib::protocol::{Command as ProtocolCommand, NotifyData, Payload, UpgradeData};
-use vsock_lib::{LinuxVSockClient, VSockClient};
+use vsock_lib::client::{LinuxVSockClient, VSockClient};
 
 use clap::{Parser, Subcommand};
 
