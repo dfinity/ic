@@ -3,7 +3,9 @@ pub mod batcher;
 #[cfg(test)]
 mod tests;
 
-use crate::eth_rpc_client::{AnyOf, MIN_ATTACHED_CYCLES, ToReducedWithStrategy, rpc_client};
+use crate::eth_rpc_client::{
+    MIN_ATTACHED_CYCLES, NoReduction, ToReducedWithStrategy, balance_scan_rpc_client,
+};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value};
@@ -38,9 +40,7 @@ const MAX_CALLS_PER_BATCH: usize = 1_000;
 
 pub async fn balance_scan() {
     let now = Timestamp::from_nanos(ic_cdk::api::time());
-    // TODO DEFI-2923: use a lower threshold rpc client, e.g. 2-out-of-3 since we use latest block height
-    // and only to notify the sweeper (no minting)
-    let client = read_state(rpc_client);
+    let client = read_state(balance_scan_rpc_client);
     scan(now, client).await;
 }
 
@@ -115,7 +115,9 @@ enum ScanOutcome {
 /// into one [`ScanOutcome`].
 ///
 /// Pairs whose chunk failed yield no outcome at all, so a failed chunk is retried next tick rather
-/// than silently advanced until its next scheduled slot.
+/// than silently advanced until its next scheduled slot. A batch the providers disagree on is such
+/// a failure: [`NoReduction`] never falls back to a single provider's answer, so one provider
+/// claiming an empty balance cannot hide a funded address.
 async fn scan_balances<R: Runtime>(
     due: &[ScanTarget],
     latest_block: BlockNumber,
@@ -141,7 +143,7 @@ async fn scan_balances<R: Runtime>(
             .with_cycles(MIN_ATTACHED_CYCLES)
             .try_send()
             .await
-            .reduce_with_strategy(AnyOf)
+            .reduce_with_strategy(NoReduction)
         {
             Ok(hex) => match batcher::decode_balance_batch(hex.as_ref(), calls.len()) {
                 Ok(balances) => {

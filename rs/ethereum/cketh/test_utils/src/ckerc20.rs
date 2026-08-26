@@ -1,4 +1,5 @@
 use crate::events::MinterEventAssert;
+use crate::evm_rpc_provider::JsonRpcProvider;
 use crate::flow::{
     DepositCkEthParams, DepositParams, DepositTransactionData, LedgerTransactionAssert,
     ProcessWithdrawal, encode_principal,
@@ -26,6 +27,7 @@ use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{
     CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode, MinterInfo,
 };
+use ic_cketh_minter::eth_rpc_client::Threshold;
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
 use ic_cketh_minter::{
     BALANCE_SCAN_INTERVAL, REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, SCRAPING_ETH_LOGS_INTERVAL,
@@ -47,6 +49,7 @@ use std::iter::{once, zip};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use strum::IntoEnumIterator;
 
 pub const DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
@@ -198,8 +201,14 @@ impl CkErc20Setup {
     /// schedule is advanced before returning.
     pub fn run_balance_scan(&self, balances: &[u128]) {
         self.env.advance_time(BALANCE_SCAN_INTERVAL);
+        // The balance scan queries fewer providers than the minter's other calls, so only the first
+        // `Threshold::BALANCE_SCAN.total` of them answer — stubbing all of them would leave a stub
+        // unconsumed.
         MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
-            .respond_for_all_with(balance_scan_response(balances))
+            .respond_for_providers_with(
+                JsonRpcProvider::iter().take(usize::from(Threshold::BALANCE_SCAN.total)),
+                balance_scan_response(balances),
+            )
             .build()
             .expect_rpc_calls(self);
         for _ in 0..MAX_TICKS {

@@ -2,12 +2,16 @@ use super::*;
 use crate::deposit_address::DepositAddress;
 use crate::state::automatic_deposits::{DepositRequest, ScanProgress};
 use crate::test_fixtures;
-use evm_rpc_types::{ConsensusStrategy, Hex, MultiRpcResult, RpcServices};
+use evm_rpc_types::{
+    ConsensusStrategy, EthMainnetService, Hex, MultiRpcResult, RpcService, RpcServices,
+};
 use ic_canister_runtime::{IcError, StubRuntime};
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
 
 const TOKEN_A: Address = Address::new([0x22; 20]);
+const BLOCK_PI: RpcService = RpcService::EthMainnet(EthMainnetService::BlockPi);
+const PUBLIC_NODE: RpcService = RpcService::EthMainnet(EthMainnetService::PublicNode);
 
 fn account(owner: u64) -> Account {
     Account {
@@ -279,6 +283,34 @@ async fn should_yield_no_outcome_for_a_pair_whose_chunk_failed() {
     assert!(outcomes.is_empty(), "a failed chunk must yield no outcome");
 }
 
+#[tokio::test]
+async fn should_yield_no_outcome_when_providers_disagree_on_a_balance() {
+    let now = ts();
+    let latest = BlockNumber::new(1_000);
+    let (token, min) = MIN_DEPOSITS[0];
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
+    seed_state(Some(latest), token, &[holder], now);
+
+    // One provider reports the funded balance, another a well-formed zero: without two providers
+    // agreeing there is no answer to act on, so the chunk fails and is retried rather than the
+    // funded address being written off as empty.
+    let targets = due_targets(now, latest);
+    let outcomes = scan_balances(
+        &targets,
+        latest,
+        stub_client(vec![Ok(MultiRpcResult::Inconsistent(vec![
+            (BLOCK_PI, Ok(encoded_balances(&[Erc20Value::ZERO]))),
+            (PUBLIC_NODE, Ok(encoded_balances(&[min]))),
+        ]))]),
+    )
+    .await;
+
+    assert!(
+        outcomes.is_empty(),
+        "a batch without provider agreement must yield no outcome"
+    );
+}
+
 fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<ScanTarget> {
     read_state(|s| {
         s.automatic_deposits
@@ -321,16 +353,24 @@ fn stub_client(
     EvmRpcClient::builder(runtime, candid::Principal::anonymous())
         .with_rpc_sources(RpcServices::EthMainnet(None))
         .with_consensus_strategy(ConsensusStrategy::Threshold {
-            total: Some(4),
-            min: 3,
+            total: Some(3),
+            min: 2,
         })
         .with_retry_strategy(DoubleCycles::with_max_num_retries(10))
         .build()
 }
 
 fn ok_balances(balances: &[Erc20Value]) -> Result<MultiRpcResult<Hex>, IcError> {
-    let blob: Vec<u8> = balances.iter().flat_map(|b| b.to_be_bytes()).collect();
-    Ok(MultiRpcResult::Consistent(Ok(Hex::from(blob))))
+    Ok(MultiRpcResult::Consistent(Ok(encoded_balances(balances))))
+}
+
+fn encoded_balances(balances: &[Erc20Value]) -> Hex {
+    Hex::from(
+        balances
+            .iter()
+            .flat_map(|b| b.to_be_bytes())
+            .collect::<Vec<u8>>(),
+    )
 }
 
 fn live_entry(now: Timestamp, account: &Account, token: Address) -> ScanProgress {
