@@ -62,11 +62,6 @@ impl MintedEvent {
 #[derive(Clone, PartialEq, Debug)]
 pub struct State {
     pub ethereum_network: EthereumNetwork,
-    /// Attestations the minter has signed, keyed by exactly what each one signed. An attestation
-    /// binds an account to one chain and one helper deployment and never expires, so a later sweep
-    /// of the same address reuses it instead of paying for another threshold-ECDSA signature; a
-    /// new helper deployment yields a different key and simply misses.
-    pub attestations: BTreeMap<AttestationRequest, TransactionSignature>,
     pub ecdsa_key_name: String,
     pub cketh_ledger_id: Principal,
     pub log_scrapings: LogScrapings,
@@ -283,11 +278,13 @@ impl State {
     /// The attestation `account` has already signed for the configuration this minter runs
     /// against, if any: signing another would cost a threshold-ECDSA signature for the same digest.
     pub fn attestation(&self, account: Account) -> Option<&TransactionSignature> {
-        self.attestations.get(&self.attestation_request(account)?)
+        self.automatic_deposits
+            .attestation(&self.attestation_request(account)?)
     }
 
     fn record_attestation(&mut self, request: AttestationRequest, signature: TransactionSignature) {
-        self.attestations.insert(request, signature);
+        self.automatic_deposits
+            .record_attestation(request, signature);
     }
 
     pub fn is_ckerc20_feature_active(&self) -> bool {

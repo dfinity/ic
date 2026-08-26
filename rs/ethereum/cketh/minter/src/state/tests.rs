@@ -1169,7 +1169,6 @@ fn state_equivalence() {
         deposits
     };
     let state = State {
-        attestations: Default::default(),
         sweeper_funding: Default::default(),
         sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
         next_sweep_id: SweepId(0),
