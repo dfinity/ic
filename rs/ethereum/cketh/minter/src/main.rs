@@ -1252,6 +1252,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
 
                 w.encode_gauge(
+                    "cketh_minter_stored_attestations",
+                    s.automatic_deposits.attestations_len() as f64,
+                    "Number of deposit address attestations the minter has signed and stored.",
+                )?;
+
+                w.encode_gauge(
                     "cketh_minter_last_max_fee_per_gas",
                     s.last_transaction_price_estimate
                         .clone()

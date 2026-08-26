@@ -61,6 +61,10 @@ pub struct AutomaticDeposits {
     /// binds an account to one chain and one helper deployment and never expires, so a later sweep
     /// of the same address reuses it instead of paying for another threshold-ECDSA signature; a new
     /// helper deployment yields a different key and simply misses.
+    ///
+    /// Nothing prunes this map: it grows with the number of accounts that have ever been swept, and
+    /// entries naming a retired helper stay behind forever. [`Self::attestations_len`] is exported
+    /// as a metric so that growth is visible before it needs bounding.
     attestations: BTreeMap<AttestationRequest, TransactionSignature>,
 }
 
@@ -305,6 +309,10 @@ impl AutomaticDeposits {
 
     pub fn sweep_len(&self) -> usize {
         self.sweep.len()
+    }
+
+    pub fn attestations_len(&self) -> usize {
+        self.attestations.len()
     }
 
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
