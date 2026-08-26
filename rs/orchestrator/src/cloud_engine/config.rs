@@ -1,8 +1,10 @@
 //! The `ic-gateway` configuration an engine's operator canister hands out.
 
 use super::operator::{AcmeCredentials, HttpGatewayConfig};
+use crate::error::{OrchestratorError, OrchestratorResult};
 use idna::domain_to_ascii_strict;
-use std::fmt;
+use serde::Serialize;
+use std::{fmt, path::Path};
 use url::Url;
 
 /// A complete, validated engine configuration.
@@ -20,7 +22,7 @@ pub(crate) struct GatewayConfig {
 
 /// An `instant_acme::AccountCredentials`. `key_pkcs8` is the account private key
 /// as PKCS#8 DER, base64url without padding.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct AcmeAccount {
     pub id: String,
     pub key_pkcs8: String,
@@ -91,6 +93,60 @@ impl TryFrom<(HttpGatewayConfig, AcmeCredentials)> for GatewayConfig {
             dns_api_key,
             acme_account,
         })
+    }
+}
+
+impl GatewayConfig {
+    /// The environment that overrides the shipped `ic-gateway.env`, which only
+    /// carries policy (which challenge, which DNS backend, which ports).
+    ///
+    /// The two credentials go into the environment rather than the argument
+    /// list: arguments are logged by the process runner and are world-readable
+    /// through `/proc/<pid>/cmdline`, the environment is neither.
+    pub(crate) fn env_overlay(
+        &self,
+        acme_cache_dir: &Path,
+    ) -> OrchestratorResult<Vec<(String, String)>> {
+        let account_credentials = serde_json::to_string(&self.acme_account).map_err(|err| {
+            OrchestratorError::cloud_engine_error(format!(
+                "could not encode the ACME account: {err}"
+            ))
+        })?;
+
+        Ok(vec![
+            (
+                "ACME_CACHE_PATH".to_string(),
+                acme_cache_dir.display().to_string(),
+            ),
+            ("DOMAIN".to_string(), self.base_domains.join(",")),
+            (
+                "ACME_DNS_IC_DNS_LB_URLS".to_string(),
+                self.dns_api_url.to_string(),
+            ),
+            (
+                "ACME_DNS_IC_DNS_LB_TOKEN".to_string(),
+                self.dns_api_key.clone(),
+            ),
+            ("ACME_ACCOUNT_CREDS".to_string(), account_credentials),
+        ])
+    }
+}
+
+#[cfg(test)]
+impl GatewayConfig {
+    /// A complete config serving `base_domain`, for tests that only care about
+    /// whether a config is present or has changed.
+    pub(crate) fn for_test(base_domain: &str) -> Self {
+        Self {
+            base_domains: vec![base_domain.to_string()],
+            dns_api_url: Url::parse("https://dns.example.com/").unwrap(),
+            dns_api_key: "dns-key".to_string(),
+            acme_account: AcmeAccount {
+                id: "account-id".to_string(),
+                key_pkcs8: "a2V5".to_string(),
+                directory: "https://acme.example.com/dir".to_string(),
+            },
+        }
     }
 }
 

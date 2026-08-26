@@ -15,14 +15,20 @@ use crate::{
     error::OrchestratorError, metrics::OrchestratorMetrics, registration::NodeRegistrationCrypto,
     registry_helper::RegistryHelper,
 };
-use config::{ConfigError, GatewayConfig};
+use config::ConfigError;
+pub(crate) use config::GatewayConfig;
 use discovery::Discovery;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_logger::{ReplicaLogger, info, warn};
-use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_types::{CanisterId, RegistryVersion};
 use operator::{OperatorClient, OperatorError};
-use std::{net::SocketAddr, path::Path, str::FromStr, sync::Arc, time::SystemTime};
+use std::{
+    net::SocketAddr,
+    path::Path,
+    str::FromStr,
+    sync::{Arc, RwLock},
+    time::SystemTime,
+};
 use url::Url;
 
 /// Value of the `outcome` label of `cloud_engine_config_fetches`.
@@ -35,10 +41,10 @@ pub(crate) struct CloudEngineManager {
     registry: Arc<RegistryHelper>,
     agent_factory: agent::AgentFactory,
     discovery: Discovery,
-    /// The last config that passed validation. Only ever replaced by another
-    /// valid one, never cleared: a failed fetch must not take a running
-    /// `ic-gateway` down.
-    current_config: Option<GatewayConfig>,
+    /// The last config that passed validation, shared with the process manager
+    /// that runs `ic-gateway`. Only ever replaced by another valid one, never
+    /// cleared: a failed fetch must not take a running `ic-gateway` down.
+    current_config: Arc<RwLock<Option<GatewayConfig>>>,
     metrics: Arc<OrchestratorMetrics>,
     logger: ReplicaLogger,
 }
@@ -54,6 +60,7 @@ impl CloudEngineManager {
         engine_management_canister_id: Option<&str>,
         replica_listen_addr: SocketAddr,
         data_directory: &Path,
+        current_config: Arc<RwLock<Option<GatewayConfig>>>,
         metrics: Arc<OrchestratorMetrics>,
         logger: ReplicaLogger,
     ) -> Option<Self> {
@@ -103,7 +110,7 @@ impl CloudEngineManager {
             registry,
             agent_factory,
             discovery,
-            current_config: None,
+            current_config,
             metrics,
             logger,
         })
@@ -117,9 +124,12 @@ impl CloudEngineManager {
             // Unassigned nodes are not part of an engine.
             Err(_) => return,
         };
-        match self.registry.get_subnet_type(subnet_id, version) {
-            Ok(Some(SubnetType::CloudEngine)) => {}
-            _ => return,
+        // Only all-in-one nodes have an engine operator to ask.
+        if !matches!(
+            self.registry.is_cloud_engine_subnet(subnet_id, version),
+            Ok(true)
+        ) {
+            return;
         }
 
         match self.fetch(version).await {
@@ -132,9 +142,10 @@ impl CloudEngineManager {
                     .cloud_engine_config_last_success
                     .set(unix_timestamp());
 
-                if self.current_config.as_ref() != Some(&config) {
+                let mut current_config = self.current_config.write().unwrap();
+                if current_config.as_ref() != Some(&config) {
                     info!(self.logger, "New engine configuration: {:?}", config);
-                    self.current_config = Some(config);
+                    *current_config = Some(config);
                 }
             }
             Err(FetchError::Incomplete(err)) => {
