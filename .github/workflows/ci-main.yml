@@ -397,6 +397,9 @@ jobs:
       - name: Record artifact checksums
         id: sums
         if: ${{ needs.config.outputs.release-build == 'true' }}
+        # Explicit bash: without `shell:` the runner may resolve the default
+        # to plain sh, which cannot parse this script.
+        shell: bash
         env:
           OS: ${{ matrix.os }}
         run: |
@@ -528,6 +531,9 @@ jobs:
           path: ~/.cache/pocket-ic-server-x86_64-darwin
 
       - name: Verify downloaded artifacts
+        # Explicit bash: in this container job the default shell resolves to
+        # plain sh, which cannot parse the process substitutions below.
+        shell: bash
         env:
           ARM64_LINUX_SUMS: ${{ needs.bazel-test-arm64.outputs.arm64-linux-sums }}
           ARM64_DARWIN_SUMS: ${{ needs.bazel-test-arm64.outputs.arm64-darwin-sums }}
