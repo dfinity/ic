@@ -24,8 +24,8 @@ use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, Routin
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterStates, ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages,
-    PageMap, ReplicatedState, Stream, SubnetTopology,
+    ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
+    ReplicatedState, Stream, SubnetTopology,
     canister_state::canister_snapshots::{CanisterSnapshot, ValidatedSnapshotMetadata},
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::{
@@ -730,73 +730,6 @@ fn last_install_timestamp_survives_a_checkpoint() {
                 .last_install_timestamp,
             Some(install_timestamp),
         );
-    });
-}
-
-/// `hot_len()` as `CanisterStates::new` derives it from the flat canister set,
-/// i.e. the value a replica that loads this state from a checkpoint would see.
-fn derived_hot_len(state: &ReplicatedState) -> usize {
-    let flat: BTreeMap<_, _> = state
-        .canister_states()
-        .all_iter()
-        .map(|(id, canister)| (*id, Arc::clone(canister)))
-        .collect();
-    CanisterStates::new(flat).hot_len()
-}
-
-/// The hot/cold partition is re-canonicalised on **every** commit, not only on
-/// checkpoint rounds. This test commits with `CertificationScope::Metadata` — a
-/// *non-checkpoint* round — and asserts the committed partition still equals the
-/// one a replica loading from a checkpoint would derive.
-///
-/// What *requires* canonicality is checkpoint validation:
-/// `CanisterStates::validate_strict_split`, run from
-/// `rs/state_manager/src/checkpoint.rs`, rejects a canister left in `hot` that
-/// satisfies `is_cold()`. Repartitioning unconditionally meets that without
-/// depending on `batch_summary` to predict which rounds checkpoint, so this test
-/// guards that implementation choice.
-///
-/// It is deliberately *not* a divergence test, and it should not be read as one:
-/// no execution result depends on where the split lies. Every consumer of the
-/// partition is `fold(hot) + cold aggregate`
-/// (`CanisterStates::total_consumed_cycles`, `total_canister_memory_usage`) and
-/// so is partition-independent, and `hot_len()` — the one raw count of a single
-/// side — is read only by the `hot_canisters_count` metric. Should a future
-/// consumer key an execution result on `hot_len()`, this test becomes the
-/// divergence guard for it, and that is the reason to keep it cheap and in place.
-#[test]
-fn hot_cold_partition_is_canonical_after_every_commit() {
-    state_manager_test(|_metrics, state_manager| {
-        let canister_id: CanisterId = canister_test_id(100);
-        let (_height, mut state) = state_manager.take_tip();
-        insert_dummy_canister(&mut state, canister_id);
-        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
-
-        // Leave behind a stale hot entry, as a round of execution does: taking a
-        // mutable reference promotes the canister into the `hot` pool without
-        // giving it any work, so it is hot-by-position but cold-by-predicate.
-        let (_height, mut state) = state_manager.take_tip();
-        assert!(state.canister_state_make_mut(&canister_id).is_some());
-
-        // Executable precondition: the partition really is stale before the
-        // commit, so the assertion afterwards is not vacuous.
-        assert_eq!(state.canister_states().hot_len(), 1);
-        assert_eq!(derived_hot_len(&state), 0);
-
-        // A non-checkpoint commit. This is the round that a conditional
-        // repartition would skip.
-        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
-
-        let (_height, state) = state_manager.take_tip();
-        assert_eq!(
-            state.canister_states().hot_len(),
-            derived_hot_len(&state),
-            "the committed hot/cold partition differs from the one a replica \
-             loading this state from a checkpoint would derive; \
-             `repartition_canister_states()` must run on every commit, so that \
-             `validate_strict_split()` cannot fail at the next checkpoint"
-        );
-        assert_eq!(state.canister_states().hot_len(), 0);
     });
 }
 

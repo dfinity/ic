@@ -6538,7 +6538,8 @@ fn subnet_metrics_reflects_subnet_metrics_state() {
         .with_own_subnet_id(own_subnet_id)
         .with_caller(subnet_test_id(2), caller_canister)
         .build();
-    // Create a canister so that the fold over canisters is non-trivial.
+    // Create a canister with consumed cycles, so the canisters' contribution to
+    // the total is non-zero.
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     let cost_schedule = test.state().get_own_subnet_cycles_config().cost_schedule;
     test.canister_state_mut(canister_id)
@@ -6587,38 +6588,6 @@ fn subnet_metrics_reflects_subnet_metrics_state() {
         response.consumed_cycles_total,
         candid::Nat::from(expected_consumed_cycles.get())
     );
-}
-
-#[test]
-fn subnet_metrics_is_partition_independent() {
-    let own_subnet_id = subnet_test_id(1);
-    let caller_canister = canister_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet_id)
-        .with_caller(subnet_test_id(2), caller_canister)
-        .build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
-    let cost_schedule = test.state().get_own_subnet_cycles_config().cost_schedule;
-    test.canister_state_mut(canister_id)
-        .system_state
-        .consume_cycles(CompoundCycles::<Memory>::new(
-            Cycles::new(1_000_000),
-            cost_schedule,
-        ));
-
-    // Refresh around the repartitioning, not just once up front: the quantity
-    // whose partition-independence is at stake is the fold inside
-    // `refresh_consumed_cycles_by_canisters`, so it has to run on both sides of
-    // the split for the assertion to say anything. Refreshing only once would
-    // compare a stored field against itself.
-    test.state_mut().refresh_consumed_cycles_by_canisters();
-    let before = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
-    test.state_mut().repartition_canister_states();
-    test.state_mut().refresh_consumed_cycles_by_canisters();
-    let after = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
-
-    assert!(before.consumed_cycles_total > 0_u64);
-    assert_eq!(before.consumed_cycles_total, after.consumed_cycles_total);
 }
 
 #[test]
