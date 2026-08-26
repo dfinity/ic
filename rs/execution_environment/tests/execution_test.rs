@@ -2995,12 +2995,12 @@ fn subnet_metrics_reports_the_subnets_metrics() {
     // prepaid for a maximum-size response, and the prepayment counts as consumed
     // until the unused part is refunded, so the reported total is in fact *above*
     // the total once the call has completed.
-    let consumed_before = metrics_before.consumed_cycles_total_including_canisters();
+    let consumed_before = metrics_before.consumed_cycles_total_including_canisters;
     let consumed_now = env
         .get_latest_state()
         .metadata
         .subnet_metrics
-        .consumed_cycles_total_including_canisters();
+        .consumed_cycles_total_including_canisters;
     assert_gt!(consumed_before.get(), 0);
     assert_gt!(consumed_now.get(), consumed_before.get());
     assert_gt!(
@@ -3020,6 +3020,124 @@ fn subnet_metrics_reports_the_subnets_metrics() {
         read_subnet_metrics(&env, caller).num_canisters,
         candid::Nat::from(1_u64)
     );
+}
+
+/// Regression test: the `consumed_cycles_total` the endpoint reports is the
+/// aggregate of the last *committed* state, read from
+/// `SubnetMetrics::consumed_cycles_total_including_canisters`, and not recomputed
+/// from the fields as they stand mid-round.
+///
+/// `delete_canister` adds the deleted canister's consumed cycles to
+/// `consumed_cycles_by_deleted_canisters` straight away, while the canisters' part
+/// of the stored aggregate -- which still counts that canister -- is only refreshed
+/// when the next state is committed. Recomputing the total in between therefore
+/// counts the deleted canister twice.
+///
+/// The test forces exactly that window: a single update issues `delete_canister`
+/// and then `subnet_metrics`, so both requests sit in the caller's output queue to
+/// `ic00` in that order and `drain_subnet_queues` executes them in the same round,
+/// the deletion first.
+#[test]
+fn subnet_metrics_consumed_cycles_total_is_the_committed_aggregate() {
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let caller = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    // A stopped canister that `caller` controls, and can therefore delete. The
+    // anonymous principal is a controller too, so that `stop_canister` is allowed.
+    let victim = env.create_canister_with_cycles(
+        None,
+        INITIAL_CYCLES_BALANCE,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![PrincipalId::new_anonymous(), caller.get()])
+                .build(),
+        ),
+    );
+    env.stop_canister(victim).unwrap();
+
+    let call = wasm()
+        // Whatever the deletion answers is irrelevant: the update replies with the
+        // `subnet_metrics` response below.
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::DeleteCanister,
+            call_args()
+                .other_side(CanisterIdRecord::from(victim).encode())
+                .on_reply(wasm().noop())
+                .on_reject(wasm().noop()),
+        )
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::SubnetMetrics,
+            call_args()
+                .other_side(
+                    SubnetMetricsArgs {
+                        subnet_id: env.get_subnet_id().get(),
+                    }
+                    .encode(),
+                )
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    // The aggregate as of the last committed state, and the victim's consumption --
+    // which a recomputation after the deletion would count a second time.
+    let (pre_total, victim_consumed) = {
+        let state = env.get_latest_state();
+        (
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters,
+            state
+                .canister_state(&victim)
+                .expect("the victim must still exist at this point")
+                .system_state
+                .canister_metrics()
+                .consumed_cycles(),
+        )
+    };
+
+    let reply = get_reply(env.execute_ingress(caller, "update", call));
+    let response = SubnetMetricsResponse::decode(&reply).unwrap();
+
+    // The deletion did happen.
+    assert!(env.get_latest_state().canister_state(&victim).is_none());
+    let post_total = env
+        .get_latest_state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_total_including_canisters;
+
+    // The reported total is a committed snapshot, so it cannot predate the state
+    // the call started from.
+    assert_ge!(
+        response.consumed_cycles_total,
+        candid::Nat::from(pre_total.get())
+    );
+    // And this is what pins the fix. Deleting the victim burns its remaining
+    // balance into `consumed_cycles_by_deleted_canisters`, so `post_total` is far
+    // above every snapshot taken before the deletion committed -- and the handler
+    // reported one of those. Recomputing the total when the handler ran instead,
+    // i.e. after the deletion but before the refresh that drops the victim from the
+    // stored aggregate, would have counted the victim twice and
+    // returned at least `post_total + victim_consumed`; either way, at least
+    // `post_total`. Hence the strict `<`.
+    assert_lt!(
+        response.consumed_cycles_total,
+        candid::Nat::from(post_total.get())
+    );
+    assert_gt!(victim_consumed.get(), 0);
 }
 
 #[test]

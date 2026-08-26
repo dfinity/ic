@@ -1249,15 +1249,23 @@ mod tests {
 
         // The tree reads the stored aggregate, which is zero until refreshed.
         assert_eq!(
-            state.metadata.subnet_metrics.consumed_cycles_by_canisters,
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters,
             NominalCycles::zero()
         );
 
-        // The refresh publishes the fold into `SubnetMetrics`.
-        state.refresh_consumed_cycles_by_canisters();
+        // The refresh publishes the fold into `SubnetMetrics`. This subnet has no
+        // subnet-level consumption, so the canisters' part is the whole total.
+        let subnet_level = state.metadata.subnet_metrics.consumed_cycles_total();
+        state.refresh_consumed_cycles();
         assert_eq!(
-            state.metadata.subnet_metrics.consumed_cycles_by_canisters,
-            consumed_by_canisters
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters,
+            subnet_level + consumed_by_canisters
         );
 
         for certification_version in all_supported_versions() {
@@ -1285,7 +1293,8 @@ mod tests {
 
             // The canister's consumed cycles are included only starting with V29.
             let mut metrics_without_canisters = state.metadata.subnet_metrics.clone();
-            metrics_without_canisters.consumed_cycles_by_canisters = NominalCycles::zero();
+            metrics_without_canisters.consumed_cycles_total_including_canisters =
+                NominalCycles::zero();
             let without_canisters =
                 encode_subnet_metrics(&metrics_without_canisters, certification_version);
             if certification_version >= CertificationVersion::V29 {
