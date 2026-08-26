@@ -440,15 +440,25 @@ pub struct SubnetMetrics {
     /// Transactions here refer to all messages processed in replicated mode.
     pub update_transactions_total: u64,
 
-    /// The total cycles consumed by the canisters that currently exist on this
-    /// subnet, i.e. the sum of `CanisterMetrics::consumed_cycles()` over all of
-    /// them.
+    /// All cycles removed from circulation on this subnet, by both deleted and
+    /// still-existing canisters: [`Self::consumed_cycles_total`] plus the sum of
+    /// `CanisterMetrics::consumed_cycles()` over the canisters that currently
+    /// exist, as of the end of the last committed round.
     ///
     /// Derived, not persisted: refreshed by
-    /// `ReplicatedState::refresh_consumed_cycles_by_canisters` when a state is
-    /// committed, and re-derived by `ReplicatedState::new_from_checkpoint` on load.
+    /// `ReplicatedState::refresh_consumed_cycles` when a state is committed, and
+    /// re-derived by `ReplicatedState::new_from_checkpoint` on load.
+    ///
+    /// Every consumer of the full total reads this one field -- the certified state
+    /// tree at `/subnet/<subnet_id>/metrics` (from certification version `V29`) and
+    /// the `replicated_state_consumed_cycles_since_replica_started` gauge -- so they
+    /// cannot drift apart. It also gives a consumer executing *during* a round a
+    /// self-consistent total: recomputing one would count a canister deleted earlier
+    /// in the same round twice, since its consumption lands in
+    /// `consumed_cycles_by_deleted_canisters` at once while the canisters' part is
+    /// only refreshed at the next commit.
     #[validate_eq(Ignore)]
-    pub consumed_cycles_by_canisters: NominalCycles,
+    pub consumed_cycles_total_including_canisters: NominalCycles,
 }
 
 impl SubnetMetrics {
@@ -645,18 +655,6 @@ impl SubnetMetrics {
         }
 
         total
-    }
-
-    /// All cycles removed from circulation on the subnet, by both deleted and
-    /// still-existing canisters: the subnet-level aggregate
-    /// ([`Self::consumed_cycles_total`]) plus [`Self::consumed_cycles_by_canisters`].
-    ///
-    /// Both the certified state tree at `/subnet/<subnet_id>/metrics` (from
-    /// certification version `V29`) and the
-    /// `replicated_state_consumed_cycles_since_replica_started` gauge report this
-    /// same definition, so the two cannot drift apart.
-    pub fn consumed_cycles_total_including_canisters(&self) -> NominalCycles {
-        self.consumed_cycles_total() + self.consumed_cycles_by_canisters
     }
 
     /// Legacy computation of the total consumed cycles, used by the canonical

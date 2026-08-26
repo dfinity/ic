@@ -1145,9 +1145,10 @@ fn subnets_as_tree<'a>(
                         "metrics",
                         // Starting with `V29`, the reported total also includes
                         // the cycles consumed by all non-deleted canisters, read
-                        // from `SubnetMetrics::consumed_cycles_by_canisters`
+                        // from the stored
+                        // `SubnetMetrics::consumed_cycles_total_including_canisters`
                         // (refreshed by
-                        // `ReplicatedState::refresh_consumed_cycles_by_canisters`).
+                        // `ReplicatedState::refresh_consumed_cycles`).
                         blob(move || encode_subnet_metrics(metrics, certification_version)),
                     )
                     .with_tree_if(

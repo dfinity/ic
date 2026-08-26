@@ -893,6 +893,9 @@ fn threshold_signature_agreements_metric_is_updated() {
         ])
         .build();
 
+    // The gauge reads the stored aggregate, which production refreshes on every
+    // `commit_and_certify`; this harness never commits a state.
+    test.state_mut().refresh_consumed_cycles();
     test.state_metrics().observe(
         test.state().metadata.own_subnet_id,
         test.state(),
@@ -1057,6 +1060,9 @@ fn threshold_signature_agreements_metric_is_updated() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    // The gauge reads the stored aggregate, which production refreshes on every
+    // `commit_and_certify`; this harness never commits a state.
+    test.state_mut().refresh_consumed_cycles();
     test.state_metrics().observe(
         test.state().metadata.own_subnet_id,
         test.state(),
@@ -1117,6 +1123,9 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
 
         let canister_id = test.create_canister();
 
+        // The gauge reads the stored aggregate, which production refreshes on every
+        // `commit_and_certify`; this harness never commits a state.
+        test.state_mut().refresh_consumed_cycles();
         test.state_metrics().observe(
             test.state().metadata.own_subnet_id,
             test.state(),
@@ -1154,6 +1163,9 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
             .sign_with_ecdsa_contexts();
         assert_eq!(sign_with_ecdsa_contexts.len(), 1);
 
+        // The gauge reads the stored aggregate, which production refreshes on every
+        // `commit_and_certify`; this harness never commits a state.
+        test.state_mut().refresh_consumed_cycles();
         test.state_metrics().observe(
             test.state().metadata.own_subnet_id,
             test.state(),
@@ -1198,6 +1210,9 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             .subnet_features
             .http_requests = true;
 
+        // The gauge reads the stored aggregate, which production refreshes on every
+        // `commit_and_certify`; this harness never commits a state.
+        test.state_mut().refresh_consumed_cycles();
         test.state_metrics().observe(
             test.state().metadata.own_subnet_id,
             test.state(),
@@ -1264,6 +1279,9 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             Some(NumBytes::from(response_size_limit)),
         );
 
+        // The gauge reads the stored aggregate, which production refreshes on every
+        // `commit_and_certify`; this harness never commits a state.
+        test.state_mut().refresh_consumed_cycles();
         test.state_metrics().observe(
             test.state().metadata.own_subnet_id,
             test.state(),
@@ -1435,6 +1453,9 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
             .system_state
             .consume_cycles(removed_cycles);
 
+        // The gauge reads the stored aggregate, which production refreshes on every
+        // `commit_and_certify`; this harness never commits a state.
+        test.state_mut().refresh_consumed_cycles();
         test.state_metrics().observe(
             test.state().metadata.own_subnet_id,
             test.state(),
@@ -1481,6 +1502,9 @@ fn consumed_cycles_for_resource_allocations_are_updated_from_valid_canisters() {
         test.advance_time(duration);
         test.charge_for_resource_allocations();
 
+        // The gauge reads the stored aggregate, which production refreshes on every
+        // `commit_and_certify`; this harness never commits a state.
+        test.state_mut().refresh_consumed_cycles();
         test.state_metrics().observe(
             test.state().metadata.own_subnet_id,
             test.state(),
@@ -1559,6 +1583,9 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         );
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+        // The gauge reads the stored aggregate, which production refreshes on every
+        // `commit_and_certify`; this harness never commits a state.
+        test.state_mut().refresh_consumed_cycles();
         test.state_metrics().observe(
             test.state().metadata.own_subnet_id,
             test.state(),
