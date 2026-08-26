@@ -32,12 +32,24 @@
 #
 # Requires the `gh` CLI (>= 2.61 for --source-digest) authenticated with any
 # token able to read the public dfinity/ic attestations (in GitHub Actions,
-# export GH_TOKEN="${{ github.token }}").
+# export GH_TOKEN="${{ github.token }}"), and `jq`.
+#
+# Beyond `gh attestation verify` (which proves "SOME file of this build has
+# this digest"), the script also requires the verified attestation to record
+# the file's digest under the subject name "ic/<commit>/<cdn-subdir>/SHA256SUMS".
+# One attestation covers every file a build uploaded, so without this
+# subject-name binding a CDN writer could serve one directory's (legitimately
+# attested) SHA256SUMS at another directory's path — e.g. the prod update-img
+# sums at the update-img-dev path — and have consumers record a valid build
+# hash for the wrong artifact. The subject names are trustworthy because the
+# pinned --signer-workflow's attest-uploads job generates them from its own
+# upload manifest.
 #
 # Negative tests (documented per the house style for download verification):
-# flipping one hex char in the downloaded SHA256SUMS, or passing the commit of
-# a different build, makes `gh attestation verify` exit non-zero and this
-# script abort before the file is used.
+# flipping one hex char in the downloaded SHA256SUMS, passing the commit of a
+# different build, or serving another directory's SHA256SUMS at this
+# directory's URL (cross-directory substitution) each make this script exit
+# non-zero before the file is used.
 
 set -euo pipefail
 
@@ -75,15 +87,36 @@ if ! [[ "$signer_workflow" =~ ^[A-Za-z0-9._/-]+$ ]]; then
 fi
 
 url="https://download.dfinity.systems/ic/${commit}/${subdir}/SHA256SUMS"
+expected_subject="ic/${commit}/${subdir}/SHA256SUMS"
 
 # Download to the target file, then verify BEFORE anything reads it. --fail
 # ensures an HTTP error page fails here rather than as a verification error.
 echo "Fetching $url" >&2
 curl -fsSL --retry 3 "$url" -o "$out_file"
 
-echo "Verifying attestation of $subdir/SHA256SUMS for commit $commit" >&2
+echo "Verifying attestation of $expected_subject" >&2
+verify_output="$(mktemp)"
+trap 'rm -f "$verify_output"' EXIT
 gh attestation verify "$out_file" \
     --repo "$repo" \
     --signer-workflow "$signer_workflow" \
     --source-digest "$commit" \
-    >&2
+    --format json \
+    >"$verify_output"
+
+# Bind the digest to THIS directory's path: at least one verified attestation
+# must list the file's digest under the expected subject name.
+digest="$(sha256sum "$out_file" | cut -d' ' -f1)"
+jq -e \
+    --arg name "$expected_subject" \
+    --arg digest "$digest" \
+    '[.[].verificationResult.statement.subject[]?
+      | select(.name == $name and .digest.sha256 == $digest)]
+     | length > 0' \
+    "$verify_output" >/dev/null || {
+    echo "ERROR: the verified attestation does not record digest $digest under subject '$expected_subject'." >&2
+    echo "The file served at $url is attested, but not as this directory's SHA256SUMS (cross-directory substitution?)." >&2
+    exit 1
+}
+
+echo "Verified $expected_subject ($digest)" >&2
