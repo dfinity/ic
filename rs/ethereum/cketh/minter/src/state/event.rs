@@ -1,3 +1,4 @@
+use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::erc20::CkErc20Token;
 use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
@@ -11,7 +12,7 @@ use crate::state::transactions::{
 use crate::timed_sized_map::Timestamp;
 use crate::tx::{
     Eip1559TransactionRequest, SignedEip1559TransactionRequest, SignedSweepTransaction,
-    SweepTransaction,
+    SweepTransaction, TransactionSignature,
 };
 use candid::Principal;
 use ic_ethereum_types::Address;
@@ -223,6 +224,18 @@ pub enum EventType {
         sweep_id: SweepId,
         #[n(1)]
         transaction_receipt: TransactionReceipt,
+    },
+    /// A deposit address attested to the account it credits. Signing costs a threshold-ECDSA
+    /// signature and can fail, so it is recorded on its own rather than with the sweep that
+    /// needed it: the attestation outlives that sweep and every later one reuses it.
+    #[n(33)]
+    AttestedDepositAddress {
+        /// What was signed, which is also what replay keys the attestation by: a signature is only
+        /// usable for the chain, the deposit helper and the account named here.
+        #[n(0)]
+        request: AttestationRequest,
+        #[n(1)]
+        signature: TransactionSignature,
     },
 }
 

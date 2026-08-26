@@ -49,6 +49,21 @@ use std::time::{Duration, Instant};
 /// Farm backend the real service resolves the same names to the same addresses.
 const NIP_IO_DOMAIN: &str = "ipv6.nip.io";
 
+/// The domain suffix under which the group's `dnsmasq` answers for names the
+/// driver registers explicitly with [`LocalBackend::add_dns_record`], as opposed
+/// to the addresses it synthesises under [`NIP_IO_DOMAIN`].
+///
+/// Resolvable only from inside a test group. Used for the API boundary nodes
+/// (`apibn-{idx}.ic.net`, see `InternetComputer::setup_api_bn_local_playnet`) and
+/// for the IC gateway (`<vm name>.ic.net`, see
+/// `IcGatewayVm::load_or_create_local_playnet`). On Farm those names are handed
+/// out without DNS records, or replaced by a playnet FQDN.
+///
+/// It must not be a `.local` name: both GuestOS and HostOS resolve through
+/// `systemd-resolved`, which routes `*.local` to mDNS and never to the unicast
+/// `DNS=` servers the group's `dnsmasq` answers on.
+pub const IN_GROUP_DOMAIN_SUFFIX: &str = "ic.net";
+
 /// Environment variables holding the runfiles paths of the split OVMF (UEFI)
 /// firmware images, provided by the `@ovmf` Bazel repo (extracted from the
 /// Ubuntu `ovmf-generic-hwe` package; see `bazel/ovmf.bzl`). The code image is

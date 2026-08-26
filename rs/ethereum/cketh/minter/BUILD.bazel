@@ -261,14 +261,14 @@ rust_test(
         "//:solc",
         # Contract sources compiled at test time by the vendored solc.
         "DepositHelperWithSubaccount.sol",
-        "tests/deposit_from_cex_demo/CkSweeperAttested.sol",
+        "CkSweeperAttested.sol",
         "tests/deposit_from_cex_demo/CkSweeperViaHelper.sol",
         "tests/deposit_from_cex_demo/MockUSDT.sol",
     ],
     env = {
         "ANVIL_BIN": "$(rootpath //:anvil)",
         "CKDEPOSIT_SOL": "$(rootpath DepositHelperWithSubaccount.sol)",
-        "CKSWEEPER_ATTESTED_SOL": "$(rootpath tests/deposit_from_cex_demo/CkSweeperAttested.sol)",
+        "CKSWEEPER_ATTESTED_SOL": "$(rootpath CkSweeperAttested.sol)",
         "CKSWEEPER_VIA_HELPER_SOL": "$(rootpath tests/deposit_from_cex_demo/CkSweeperViaHelper.sol)",
         "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
         "SOLC_BIN": "$(rootpath //:solc)",
@@ -338,6 +338,7 @@ rust_binary(
         # Keep sorted.
         ":minter",
         "//packages/ic-ethereum-types",
+        "//packages/icrc-ledger-types",
         "//rs/phantom_newtype",
         "@crate_index//:candid",
         "@crate_index//:ethers-core",

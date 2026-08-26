@@ -2,6 +2,7 @@ use candid::Decode;
 use flate2::Compression;
 use flate2::bufread::GzEncoder;
 use flate2::read::GzDecoder;
+use ic_cketh_minter::attestation::AttestationRequest;
 use ic_cketh_minter::checked_amount::CheckedAmountOf;
 use ic_cketh_minter::endpoints::events::{
     AccessListItem as CandidAccessListItem, Event as CandidEvent, EventSource as CandidEventSource,
@@ -31,6 +32,7 @@ use ic_cketh_minter::tx::{
 use ic_stable_structures::Memory;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use ic_stable_structures::{DefaultMemoryImpl, log::Log as StableLog};
+use icrc_ledger_types::icrc1::account::Account;
 use num_traits::ToPrimitive;
 use phantom_newtype::Id;
 use std::io::{BufReader, BufWriter, Read, Write};
@@ -373,6 +375,31 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
             } => ET::FinalizedTransaction {
                 withdrawal_id: map_nat(withdrawal_id),
                 transaction_receipt: map_transaction_receipt(transaction_receipt),
+            },
+            EventPayload::AttestedDepositAddress {
+                chain_id,
+                deposit_helper,
+                owner,
+                subaccount,
+                y_parity,
+                r,
+                s,
+            } => ET::AttestedDepositAddress {
+                request: AttestationRequest::new(
+                    chain_id.0.to_u64().unwrap(),
+                    deposit_helper.parse().unwrap(),
+                    Account {
+                        owner,
+                        subaccount: subaccount.map(|subaccount| {
+                            <[u8; 32]>::try_from(subaccount.into_vec().as_slice()).unwrap()
+                        }),
+                    },
+                ),
+                signature: TransactionSignature {
+                    signature_y_parity: y_parity,
+                    r: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(r.as_slice()).unwrap()),
+                    s: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(s.as_slice()).unwrap()),
+                },
             },
             EventPayload::AcceptedSweepRequest {
                 sweep_id,
