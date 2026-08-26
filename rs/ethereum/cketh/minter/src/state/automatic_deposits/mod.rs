@@ -1,11 +1,13 @@
 #[cfg(test)]
 mod tests;
 
+use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
+use crate::tx::TransactionSignature;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
@@ -55,9 +57,32 @@ pub struct AutomaticDeposits {
     /// Funded `(account, token)` pairs moved out of the watchlist, awaiting sweeping,
     /// keyed by the funded [`DepositRequest`]; each holds one [`SweepEntry`].
     sweep: BTreeMap<DepositRequest, SweepEntry>,
+    /// Attestations the minter has signed, keyed by exactly what each one signed. An attestation
+    /// binds an account to one chain and one helper deployment and never expires, so a later sweep
+    /// of the same address reuses it instead of paying for another threshold-ECDSA signature; a new
+    /// helper deployment yields a different key and simply misses.
+    ///
+    /// Nothing prunes this map: it grows with the number of accounts that have ever been swept, and
+    /// entries naming a retired helper stay behind forever. [`Self::attestations_len`] is exported
+    /// as a metric so that growth is visible before it needs bounding.
+    attestations: BTreeMap<AttestationRequest, TransactionSignature>,
 }
 
 impl AutomaticDeposits {
+    /// The signature already stored for `request`, if any: signing another would cost a
+    /// threshold-ECDSA signature for the same digest.
+    pub fn attestation(&self, request: &AttestationRequest) -> Option<&TransactionSignature> {
+        self.attestations.get(request)
+    }
+
+    pub fn record_attestation(
+        &mut self,
+        request: AttestationRequest,
+        signature: TransactionSignature,
+    ) {
+        self.attestations.insert(request, signature);
+    }
+
     /// Arm the `(account, token)` pair, whose deposit `address` is derived for `account`.
     ///
     /// Returns the watched pair together with the timestamp until which a deposit to it is
@@ -286,6 +311,10 @@ impl AutomaticDeposits {
         self.sweep.len()
     }
 
+    pub fn attestations_len(&self) -> usize {
+        self.attestations.len()
+    }
+
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
     /// funds queued for sweeping (so it must be registered). Reports
     /// [`DepositStatus::AwaitingSweep`] once funds have been detected and queued, otherwise
@@ -327,6 +356,7 @@ impl Default for AutomaticDeposits {
         Self {
             watchlist: TimedSizedMap::new(DEPOSIT_ADDRESS_SCAN_WINDOW, MAX_ACTIVE_DEPOSITS),
             sweep: BTreeMap::new(),
+            attestations: BTreeMap::new(),
         }
     }
 }
