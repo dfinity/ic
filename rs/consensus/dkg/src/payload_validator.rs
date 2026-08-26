@@ -806,6 +806,11 @@ mod tests {
                         .build(),
                 )],
             )
+            .with_replica_config(ReplicaConfig {
+                node_id,
+                subnet_id,
+                replica_version: test_replica_version(),
+            })
             .build();
             state_manager
                 .get_mut()
