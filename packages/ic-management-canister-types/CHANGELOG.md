@@ -7,12 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Types for `subnet_metrics`:
+  - Added the types `SubnetMetricsArgs` and `SubnetMetricsResult`.
+
 ## [0.9.0] - 2026-08-13
 
 ### Added
 
 - Added the `PATCH` variant to the `HttpMethod` enum used by canister HTTPS outcalls (`http_request`). The variant is plumbed through the type but not yet enabled on replicated subnets.
-- Types for `subnet_metrics`: added the types `SubnetMetricsArgs` and `SubnetMetricsResult`.
 - Added `minimum_incoming_canister_call_cycles` field to `CanisterSettings` and `DefiniteCanisterSettings`.
 - Added `status_visibility` field to `CanisterSettings` and `DefiniteCanisterSettings`.
   - Added the type `StatusVisibility`.
