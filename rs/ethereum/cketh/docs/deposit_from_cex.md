@@ -976,14 +976,14 @@ sequenceDiagram
 
     Note over Sw,D: Transaction 2 — first sweep, type 0x04,<br/>authorization_list = [tuple signed by Deposit's key]
     Note over D: tuple processing, before any code runs:<br/>Deposit's code := 0xef0100‖SweeperContract, nonce 0 → 1
-    Sw->>S: sweepErc20Batch([(Deposit, p, s, attestation)], [Token])
+    Sw->>S: sweepErc20Batch([(Deposit, principal, subaccount, attestation)], [Token])
     Note right of S: plain-contract hat: address(this) = SweeperContract,<br/>msg.sender = SweeperAddress
-    S->>D: sweepErc20([Token], p, s, attestation)
+    S->>D: sweepErc20([Token], principal, subaccount, attestation)
     Note right of D: delegate hat: the designator loads SweeperContract's code,<br/>which runs AS Deposit — address(this) = Deposit,<br/>msg.sender = SweeperContract.<br/>Attestation verified, then approve + Helper.depositErc20:<br/>the whole Token balance lands at MainAddress (R6)
 
     Note over Sw,D: Transaction 3 — any later sweep, plain type 0x02 (EIP-1559):<br/>no authorization list
-    Sw->>S: sweepErc20Batch([(Deposit, p, s, attestation)], [Token])
-    S->>D: sweepErc20([Token], p, s, attestation)
+    Sw->>S: sweepErc20Batch([(Deposit, principal, subaccount, attestation)], [Token])
+    S->>D: sweepErc20([Token], principal, subaccount, attestation)
     Note right of D: same delegated execution — the designator persists,<br/>and Deposit's nonce is unchanged since<br/>(only its own authorizations advance it)
 ```
 
