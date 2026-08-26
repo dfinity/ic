@@ -342,6 +342,16 @@ jobs:
     timeout-minutes: 120
     needs: [config]
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
+    # sha256sum lines for the files inside each uploaded Actions artifact
+    # ('' unless release-build), recorded by the "Record artifact checksums"
+    # step. Each matrix leg sets only its own keys; the runner drops empty
+    # outputs when merging matrix legs, so the legs do not overwrite each
+    # other. upload-external-artifacts re-checks its downloads against these
+    # before re-uploading anything to the CDN.
+    outputs:
+      arm64-linux-sums: ${{ steps.sums.outputs.arm64-linux-sums }}
+      arm64-darwin-sums: ${{ steps.sums.outputs.arm64-darwin-sums }}
+      x86_64-darwin-sums: ${{ steps.sums.outputs.x86_64-darwin-sums }}
     steps:
       - name: Set up Bazel cache
         run: |
@@ -383,6 +393,53 @@ jobs:
           cp \
             ./bazel-bin/publish/binaries/pocket-ic.gz \
             ./build/pocket-ic-server-x86_64-darwin.gz
+
+      - name: Record artifact checksums
+        id: sums
+        if: ${{ needs.config.outputs.release-build == 'true' }}
+        env:
+          OS: ${{ matrix.os }}
+        run: |
+          set -euo pipefail
+          cd build
+
+          # macOS runners may only have perl's shasum, not GNU coreutils
+          # (same fallback as in .github/actions/bazel).
+          if command -v sha256sum >/dev/null; then
+            sha256() { sha256sum "$@"; }
+          else
+            sha256() { shasum -a 256 "$@"; }
+          fi
+
+          # Record the sha256sum lines of every file uploaded as an Actions
+          # artifact below in this job's outputs. The
+          # upload-external-artifacts job re-checks the downloaded artifacts
+          # against them before re-uploading anything to the CDN: an Actions
+          # artifact can be replaced mid-run by anything holding an
+          # `actions: write` token, but job outputs cannot be tampered with
+          # by other jobs. Recording happens right after the builds so the
+          # whole-codebase build and test steps below stay outside this
+          # trust chain: should any of them overwrite these files, the
+          # uploaded artifact no longer matches its recorded sums and
+          # verification fails loudly.
+          sha256 \
+            "pocket-ic-server-arm64-$OS.gz" \
+            "ic-admin-arm64-$OS.gz" \
+            "sns-arm64-$OS.gz" \
+            | LC_ALL=C sort -k2 >"$RUNNER_TEMP/arm64-sums"
+          {
+            echo "arm64-$OS-sums<<SUMS"
+            cat "$RUNNER_TEMP/arm64-sums"
+            echo "SUMS"
+          } >>"$GITHUB_OUTPUT"
+
+          if [[ "$OS" == darwin ]]; then
+            {
+              echo "x86_64-darwin-sums<<SUMS"
+              sha256 pocket-ic-server-x86_64-darwin.gz
+              echo "SUMS"
+            } >>"$GITHUB_OUTPUT"
+          fi
 
       # Ensures that local development works on arm64-darwin.
       - name: Build the entire codebase on darwin
@@ -469,6 +526,32 @@ jobs:
           name: pocket-ic-server-x86_64-darwin.gz
           # avoid downloading to workspace to avoid version being marked as dirty
           path: ~/.cache/pocket-ic-server-x86_64-darwin
+
+      - name: Verify downloaded artifacts
+        env:
+          ARM64_LINUX_SUMS: ${{ needs.bazel-test-arm64.outputs.arm64-linux-sums }}
+          ARM64_DARWIN_SUMS: ${{ needs.bazel-test-arm64.outputs.arm64-darwin-sums }}
+          X86_64_DARWIN_SUMS: ${{ needs.bazel-test-arm64.outputs.x86_64-darwin-sums }}
+        run: |
+          set -euo pipefail
+
+          # Re-check every file downloaded above against the sha256sum lines
+          # the producing bazel-test-arm64 legs recorded in their job
+          # outputs, before anything is bundled and re-uploaded to the CDN:
+          # an Actions artifact can be replaced mid-run by anything holding
+          # an `actions: write` token, but job outputs cannot be tampered
+          # with by other jobs. A missing or empty output also fails here:
+          # sha256sum rejects input without valid checksum lines.
+          check() { # <download-dir> <recorded sha256sum lines>
+            echo "$2" | (cd "$1" && sha256sum --check --strict)
+            # Also reject artifacts carrying files beyond the recorded ones,
+            # so a future edit that globs from these directories cannot pick
+            # up unrecorded extras that the check above never covered.
+            diff <(echo "$2" | awk '{print $2}' | LC_ALL=C sort) <(ls "$1" | LC_ALL=C sort)
+          }
+          check ~/.cache/arm64-binaries-linux "$ARM64_LINUX_SUMS"
+          check ~/.cache/arm64-binaries-darwin "$ARM64_DARWIN_SUMS"
+          check ~/.cache/pocket-ic-server-x86_64-darwin "$X86_64_DARWIN_SUMS"
 
       - name: Prepare bundle
         id: prepare-bundle
