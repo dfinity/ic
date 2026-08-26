@@ -8,8 +8,8 @@ not exactly a commit id / sha256 / plain name must be rejected here, before it c
 reach a PR (F-051).
 
 Also tests VersionArtifactSums, the choke point that verifies CDN-served SHA256SUMS
-against the build's provenance attestation before any hash is recorded (finding
-3618194): attested for public commits (hard requirement), CDN fallback with a loud
+against the build's provenance attestation before any hash is recorded:
+attested for public commits (hard requirement), CDN fallback with a loud
 warning only for versions whose commit is not public yet.
 """
 
