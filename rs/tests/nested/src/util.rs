@@ -54,14 +54,13 @@ pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast
     if let Some(dkg_interval) = dkg_interval {
         subnet = subnet.with_dkg_interval_length(Height::from(dkg_interval));
     }
-    let mut ic = InternetComputer::new()
+    InternetComputer::new()
         .add_subnet(subnet)
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)
-        .without_unassigned_config();
-
-    ic.setup_and_start(env)
+        .without_unassigned_config()
+        .setup_and_start(env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
