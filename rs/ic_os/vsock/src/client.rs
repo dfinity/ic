@@ -1,4 +1,5 @@
 use crate::protocol::{Command, Response};
+
 use mockall::automock;
 
 #[automock]
@@ -12,8 +13,11 @@ pub use linux::*;
 #[cfg(target_os = "linux")]
 mod linux {
     use super::*;
-    use crate::protocol::{Request, Response};
+
     use std::io::{Read, Write};
+
+    use crate::protocol::{Request, Response};
+
     use vsock::{VMADDR_CID_HOST, VsockStream};
 
     pub struct LinuxVSockClient {
