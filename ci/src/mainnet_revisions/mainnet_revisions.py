@@ -26,6 +26,10 @@ CDN_BASE_URL = "https://download.dfinity.systems"
 # uploaded to the CDN. fetch-attested-sums.sh verifies a CDN SHA256SUMS file against
 # that attestation, pinned to this signer and to the exact commit.
 ATTESTATION_SIGNER_WORKFLOW = "dfinity/ic/.github/workflows/release-testing.yml"
+# The signer pin fixes which workflow signed, not from which ref it ran
+# (release-testing.yml can be dispatched on arbitrary branches): only accept
+# attestations minted from release-qualification branches.
+ATTESTATION_SOURCE_REF_REGEX = r"refs/heads/(rc--|hotfix-|public-hotfix-).+"
 FETCH_ATTESTED_SUMS_SCRIPT = pathlib.Path(__file__).resolve().parents[2] / "scripts" / "fetch-attested-sums.sh"
 
 # Release binaries (published on the CDN under `.../binaries/x86_64-linux/` as
@@ -526,7 +530,14 @@ def fetch_attested_sha256sums(version: str, subdir: str) -> dict:
     """
     with tempfile.NamedTemporaryFile() as tmp_file:
         subprocess.run(
-            [str(FETCH_ATTESTED_SUMS_SCRIPT), version, subdir, ATTESTATION_SIGNER_WORKFLOW, tmp_file.name],
+            [
+                str(FETCH_ATTESTED_SUMS_SCRIPT),
+                version,
+                subdir,
+                ATTESTATION_SIGNER_WORKFLOW,
+                ATTESTATION_SOURCE_REF_REGEX,
+                tmp_file.name,
+            ],
             check=True,
         )
         with open(tmp_file.name, "r", encoding="utf-8") as f:
