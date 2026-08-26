@@ -102,6 +102,10 @@ for fullrelpath in $(find -L "$BUNDLE" -type f); do
 
     upload "$fullrelpath" "$bucket_path"
 
+    # One sha256sum-format line ("<hex>  <bucket path>") per uploaded file on
+    # stdout, hashed from the local copy of the file — never from anything
+    # served back by the CDN. The upload-artifacts action persists this
+    # output as the upload manifest that gets attested.
     artifact_checksum="$(sha256sum "$fullrelpath" | cut -d' ' -f1)"
-    echo "$artifact_checksum,https://download.dfinity.systems/$bucket_path"
+    echo "$artifact_checksum  $bucket_path"
 done

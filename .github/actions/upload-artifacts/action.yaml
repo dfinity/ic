@@ -10,10 +10,9 @@ inputs:
     required: false
     default: ''
     description: |
-      When set, the "<sha256>,<url>" lines emitted by the upload command are
-      converted to sha256sum format and uploaded as a GitHub Actions artifact
-      with this name, and the manifest's own sha256 is exposed as the
-      `manifest-sha256` output. The manifest is the build-time integrity
+      When set, the sha256sum-format manifest the upload command emits on
+      stdout is uploaded as a GitHub Actions artifact with this name, and the
+      manifest's own sha256 is exposed as the `manifest-sha256` output. The manifest is the build-time integrity
       record that ci-main's merge-upload-manifests job merges into the single
       upload-manifest artifact, which the `attest-uploads` jobs (see
       ci-kickoff.yml and release-testing.yml) attest, so that release
@@ -50,14 +49,13 @@ runs:
             echo '</details>';
           } >>"$GITHUB_STEP_SUMMARY"
 
-          # Persist the upload manifest in sha256sum format ("<hex>  <path>",
-          # path relative to https://download.dfinity.systems/). The uploader
-          # computes each hash from its local copy of the file — never from
-          # anything served back by the CDN — so this is a build-time record
-          # of what was published, not a restatement of what the CDN serves.
-          # The steps below (gated on `manifest-name`) upload it for the
-          # attest-uploads jobs.
-          sed 's|,https://download.dfinity.systems/|  |' "$upload_output" >"$RUNNER_TEMP/upload-manifest.sha256sums"
+          # Persist the upload manifest the uploader printed to stdout:
+          # sha256sum lines ("<hex>  <path>", path relative to
+          # https://download.dfinity.systems/), hashed by the uploader from
+          # its local copy of each file — never from anything served back by
+          # the CDN (see ci/src/artifacts/upload.sh). The steps below (gated
+          # on `manifest-name`) upload it for the attest-uploads jobs.
+          cp "$upload_output" "$RUNNER_TEMP/upload-manifest.sha256sums"
 
           rm "$upload_output"
 
