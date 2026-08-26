@@ -31,7 +31,14 @@ runs:
       with:
         run: |
           echo uploading artifacts to remote storage
-          upload_output=$(mktemp) # used in summary
+
+          # The upload manifest the uploader prints to stdout: sha256sum
+          # lines ("<hex>  <path>", path relative to
+          # https://download.dfinity.systems/), hashed by the uploader from
+          # its local copy of each file — never from anything served back by
+          # the CDN (see ci/src/artifacts/upload.sh). The steps below (gated
+          # on `manifest-name`) upload it for the attest-uploads jobs.
+          upload_output="$RUNNER_TEMP/upload-manifest.sha256sums"
 
           ${{ inputs.upload-command }} >"$upload_output"
 
@@ -48,16 +55,6 @@ runs:
             echo
             echo '</details>';
           } >>"$GITHUB_STEP_SUMMARY"
-
-          # Persist the upload manifest the uploader printed to stdout:
-          # sha256sum lines ("<hex>  <path>", path relative to
-          # https://download.dfinity.systems/), hashed by the uploader from
-          # its local copy of each file — never from anything served back by
-          # the CDN (see ci/src/artifacts/upload.sh). The steps below (gated
-          # on `manifest-name`) upload it for the attest-uploads jobs.
-          cp "$upload_output" "$RUNNER_TEMP/upload-manifest.sha256sums"
-
-          rm "$upload_output"
 
     - name: Check manifest
       id: manifest
