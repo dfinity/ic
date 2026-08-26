@@ -1,0 +1,28 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPS = [
+    # Keep sorted.
+    "//rs/types/management_canister_types",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:serde",
+]
+
+rust_canister(
+    name = "https_outcalls_test_canister",
+    srcs = ["src/main.rs"],
+    # Also `include_str!`d, to serve from `__get_candid_interface_tmp_hack`.
+    compile_data = [":https_outcalls_test_canister.did"],
+    service_file = ":https_outcalls_test_canister.did",
+    deps = DEPS,
+)
+
+rust_test(
+    name = "https_outcalls_test_canister_test",
+    compile_data = [":https_outcalls_test_canister.did"],
+    crate = ":_wasm_https_outcalls_test_canister",
+    deps = DEPS + ["@crate_index//:candid_parser"],
+)

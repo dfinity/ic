@@ -356,6 +356,19 @@ http_file(
     url = "https://snapshot.debian.org/archive/debian/20260403T143651Z/pool/main/e/edk2/ovmf-amdsev_2025.11-5_all.deb",
 )
 
+# The Candid UI canister, used by //rs/tests/testnets:https_outcalls to give the
+# testnet a browser UI for driving canisters by hand. It has to be installed on
+# the testnet itself: the UI is a frontend canister that talks to whichever IC
+# serves it, so the one on mainnet cannot reach a testnet. `dfx` bundles the same
+# wasm, but a system test cannot reach into a dfx cache, hence vendoring it.
+# Built from https://github.com/dfinity/candid/tree/master/tools/ui.
+http_file(
+    name = "candid_ui",
+    downloaded_file_path = "candid_ui.wasm",
+    sha256 = "1c684eaff51b17ca3e89514b3fe0f40032a543b29439ee98f26015a3405a0ac9",
+    url = "https://github.com/dfinity/candid/releases/download/2025-12-18/candid_ui.wasm",
+)
+
 # TLA+ tools
 bazel_dep(name = "rules_java", version = "9.3.0")
 
