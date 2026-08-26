@@ -982,7 +982,7 @@ fn subnet_call_contexts_metric() {
             state
                 .metadata
                 .subnet_call_context_manager
-                .retrieve_context(callback_id, &no_op_logger())
+                .retrieve_context(callback_id, UNIX_EPOCH, &no_op_logger())
                 .is_some()
         );
         assert_eq!(
@@ -1274,19 +1274,24 @@ fn canister_http_request_context(
 }
 
 /// Retrieving the response for a pay-as-you-go priced HTTP outcall retains the
-/// context for refund accounting; a legacy priced one is not retained.
+/// context for refund accounting; a legacy priced one is not retained. The
+/// retained copy is stamped with the delivery time, while the returned context
+/// keeps the time the request was made.
 #[test]
 fn retrieve_canister_http_context_retains_pay_as_you_go_contexts() {
+    const REQUEST_TIME: Time = UNIX_EPOCH;
+    let delivery_time = REQUEST_TIME + Duration::from_secs(7);
+
     for (pricing_version, retained) in [
         (PricingVersion::PayAsYouGo, true),
         (PricingVersion::Legacy, false),
     ] {
         let mut manager = SubnetCallContextManager::default();
-        let context = canister_http_request_context(pricing_version, UNIX_EPOCH);
+        let context = canister_http_request_context(pricing_version, REQUEST_TIME);
         let callback_id =
             manager.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
 
-        match manager.retrieve_context(callback_id, &no_op_logger()) {
+        match manager.retrieve_context(callback_id, delivery_time, &no_op_logger()) {
             Some(SubnetCallContext::CanisterHttpRequest(retrieved)) => {
                 assert_eq!(context, retrieved)
             }
@@ -1297,7 +1302,13 @@ fn retrieve_canister_http_context_retains_pay_as_you_go_contexts() {
 
         let delivered = manager.delivered_canister_http_request_contexts;
         if retained {
-            assert_eq!(btreemap! { callback_id => context }, delivered);
+            // Identical to the original context, except for the `time`, which is
+            // restamped with the delivery time.
+            let expected = CanisterHttpRequestContext {
+                time: delivery_time,
+                ..context
+            };
+            assert_eq!(btreemap! { callback_id => expected }, delivered);
         } else {
             assert!(delivered.is_empty());
         }
@@ -1305,23 +1316,29 @@ fn retrieve_canister_http_context_retains_pay_as_you_go_contexts() {
 }
 
 /// Delivered contexts are timed out (and returned along with their callback IDs)
-/// once `DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT` has elapsed since the
-/// request was made, and retained until then.
+/// once `DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT` has elapsed since their
+/// response was delivered, and retained until then.
 #[test]
 fn time_out_delivered_canister_http_request_contexts() {
     let mut manager = SubnetCallContextManager::default();
-    // Two contexts, made 1 second apart.
+    // Two contexts, both made at `UNIX_EPOCH` but delivered 1 second apart. The
+    // retention timeout runs from the delivery time, so the delivered contexts
+    // carry that time rather than the request time.
     let contexts: Vec<_> = [0, 1]
         .iter()
         .map(|i| {
-            let context = canister_http_request_context(
-                PricingVersion::PayAsYouGo,
-                UNIX_EPOCH + Duration::from_secs(*i),
-            );
+            let delivery_time = UNIX_EPOCH + Duration::from_secs(*i);
+            let context = canister_http_request_context(PricingVersion::PayAsYouGo, UNIX_EPOCH);
             let callback_id =
                 manager.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
-            manager.retrieve_context(callback_id, &no_op_logger());
-            (callback_id, context)
+            manager.retrieve_context(callback_id, delivery_time, &no_op_logger());
+            (
+                callback_id,
+                CanisterHttpRequestContext {
+                    time: delivery_time,
+                    ..context
+                },
+            )
         })
         .collect();
     assert_eq!(2, manager.delivered_canister_http_request_contexts.len());

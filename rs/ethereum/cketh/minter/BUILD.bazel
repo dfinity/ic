@@ -207,6 +207,7 @@ rust_ic_test_suite(
             # Run against a local foundry anvil node, not the IC test suite.
             "tests/deposit_from_cex_demo.rs",
             "tests/deposit_from_cex.rs",
+            "tests/sweeper_funding.rs",
         ],
     ),
     data = [
@@ -298,8 +299,9 @@ rust_test(
         "//:anvil",
         "//:solc",
         # Reuses the mock ERC-20 source compiled at test time by the vendored solc.
+        "DepositHelperWithSubaccount.sol",
         "tests/deposit_from_cex_demo/MockUSDT.sol",
-        # End-to-end balance scan on a live PocketIC + local anvil node.
+        # End-to-end balance scan and sweeper funding on a live PocketIC + local anvil node.
         ":cketh_minter_debug.wasm.gz",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
         "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
@@ -310,6 +312,11 @@ rust_test(
     ],
     env = {
         "ANVIL_BIN": "$(rootpath //:anvil)",
+        "CKDEPOSIT_SOL": "$(rootpath DepositHelperWithSubaccount.sol)",
+        # One test at a time: two live PocketIC instances and their anvil nodes running
+        # concurrently starve each other of CPU, and an ingress message that loses that race is
+        # stamped with an expiry the auto-progressing clock then moves past, never to be answered.
+        "RUST_TEST_THREADS": "1",
         "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
         "SOLC_BIN": "$(rootpath //:solc)",
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",

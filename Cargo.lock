@@ -6285,6 +6285,7 @@ dependencies = [
  "ic-registry-local-store",
  "ic-registry-replicator",
  "ic-test-utilities-tmpdir",
+ "ic-test-utilities-types",
  "ic-types",
  "rand 0.8.6",
  "reqwest",
@@ -6496,6 +6497,7 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
+ "ic-test-utilities-types",
  "ic-types",
  "indoc",
  "ipnet",
@@ -9213,6 +9215,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-subnet-type",
  "ic-registry-transport",
+ "ic-test-utilities-types",
  "ic-types",
  "pocket-ic",
  "prost",
@@ -9823,6 +9826,7 @@ dependencies = [
  "ic-metrics",
  "ic-types",
  "ic-types-cycles",
+ "ic-types-test-utils",
  "prometheus",
  "slog",
 ]
@@ -12105,6 +12109,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-test-utilities-metrics",
+ "ic-test-utilities-types",
  "ic-types",
  "ic-types-cycles",
  "ic-types-test-utils",
@@ -12430,6 +12435,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-state-manager",
+ "ic-test-utilities-types",
  "ic-types",
  "json5",
  "maplit",
@@ -12940,6 +12946,7 @@ dependencies = [
  "ic-registry-routing-table",
  "ic-registry-transport",
  "ic-test-utilities-logger",
+ "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
  "pocket-ic",
@@ -14890,6 +14897,7 @@ dependencies = [
  "ic-registry-resource-limits",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
+ "ic-test-utilities-types",
  "ic-types",
  "ic-types-cycles",
  "tempfile",
@@ -15172,7 +15180,6 @@ dependencies = [
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rstest",
- "rusty-fork",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -19554,6 +19561,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-sns-wasm",
+ "ic-test-utilities-types",
  "ic-transport-types",
  "ic-types",
  "ic-universal-canister",
@@ -21863,21 +21871,6 @@ dependencies = [
  "pbkdf2",
  "salsa20",
  "sha2 0.10.9",
-]
-
-[[package]]
-name = "sdk-system-tests"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "backon",
- "candid",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic_consensus_system_test_utils",
- "reqwest",
- "serde_json",
- "slog",
 ]
 
 [[package]]
