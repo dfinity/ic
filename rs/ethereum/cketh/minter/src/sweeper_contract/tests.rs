@@ -59,9 +59,9 @@ fn should_encode_a_batch_sweep() {
 
 #[test]
 fn should_place_the_tokens_right_after_the_items() {
-    for count in 0..4_usize {
-        let (items, tokens) = sweep();
-        let items = &items[..count.min(items.len())];
+    let (items, tokens) = sweep();
+    for count in 0..=items.len() {
+        let items = &items[..count];
 
         let data = encode_sweep_erc20_batch(items, &tokens);
 
