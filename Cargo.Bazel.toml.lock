@@ -3588,6 +3588,7 @@ dependencies = [
  "tokio-test",
  "tokio-tungstenite 0.29.0",
  "tokio-util",
+ "tokio-vsock",
  "toml 0.5.11",
  "tonic",
  "tonic-build",
@@ -3612,7 +3613,7 @@ dependencies = [
  "url",
  "uuid",
  "virt",
- "vsock",
+ "vsock 0.4.0",
  "walkdir",
  "walrus",
  "warp",
@@ -12653,6 +12654,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-vsock"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b319ef9394889dab2e1b4f0085b45ba11d0c79dc9d1a9d1afc057d009d0f1c7"
+dependencies = [
+ "bytes",
+ "futures",
+ "libc",
+ "tokio",
+ "vsock 0.5.4",
+]
+
+[[package]]
 name = "toml"
 version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13504,6 +13518,16 @@ checksum = "2dfb6e7a74830912f1f4a7655227c9ded1ea4e9136676311fedf54bedb412f35"
 dependencies = [
  "libc",
  "nix 0.27.1",
+]
+
+[[package]]
+name = "vsock"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ba782755fc073877e567c2253c0be48e4aa9a254c232d36d3985dfae0bd5205"
+dependencies = [
+ "libc",
+ "nix 0.31.3",
 ]
 
 [[package]]

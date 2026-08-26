@@ -1,4 +1,5 @@
-use std::io::{self, Read, Write};
+use std::io;
+use std::time::Duration;
 
 mod command_utilities;
 mod hsm;
@@ -10,12 +11,21 @@ use hsm::{attach_hsm, detach_hsm};
 use misc::{get_hostos_version, get_hostos_vsock_version, notify};
 use upgrade::{start_upgrade_guest_vm, upgrade_hostos};
 
-use vsock::{VMADDR_CID_ANY, VsockAddr, VsockListener, VsockStream};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    select,
+    time::{sleep, timeout},
+};
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio_vsock::{VMADDR_CID_ANY, VsockAddr, VsockListener, VsockStream};
 
 // The first CID available for guests to use. This is used later to enforce
 // that only the first guest is able to connect over VSOCK, for now.
 const VIR_VSOCK_GUEST_CID_MIN: u32 = 3;
 const DEFAULT_PORT: u32 = 19090;
+
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 
 const VSOCK_VERSION: HostOSVsockVersion = HostOSVsockVersion {
     major: 1,
@@ -24,29 +34,95 @@ const VSOCK_VERSION: HostOSVsockVersion = HostOSVsockVersion {
 };
 
 /// Runs the vsock server and awaits incoming vsock connections.
-pub fn run_server() -> io::Result<()> {
-    // Only listen for the first GuestOS VM. Only type4.* nodes will have more
-    // than one VM that uses VSOCK. We treat the first GuestOS as the leader in
-    // charge of HostOS.
+pub async fn run_server() -> io::Result<()> {
     let addr = VsockAddr::new(VMADDR_CID_ANY, DEFAULT_PORT);
-    let vsock_listener = VsockListener::bind(&addr)?;
+    let vsock_listener = VsockListener::bind(addr)?;
 
     println!("Listening for vsock connection.\n");
 
-    for stream in vsock_listener.incoming() {
-        let mut stream: VsockStream = stream?;
-        stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
-        stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
+    let cancellation_token = CancellationToken::new();
+    let mut join_handle = tokio::spawn(listen(vsock_listener, cancellation_token.clone()));
 
-        std::thread::spawn(move || -> io::Result<()> { process_connection(&mut stream) });
+    let result = select! {
+        () = shutdown_signal() => {
+            println!("Shutting down VSOCK server...");
+            cancellation_token.cancel();
+            join_handle.await
+        },
+        result = &mut join_handle => result,
+    };
+
+    match result {
+        Err(ref err) if err.is_panic() => {
+            println!("VSOCK server panicked: '{err}'")
+        }
+        _ => {
+            println!("VSOCK server shutdown gracefully")
+        }
     }
 
-    Ok(())
+    Ok(result?)
 }
 
-fn process_connection(stream: &mut VsockStream) -> io::Result<()> {
+async fn listen(listener: VsockListener, cancellation_token: CancellationToken) {
+    let tracker = TaskTracker::new();
+
+    while let Some(res) = cancellation_token
+        .run_until_cancelled(listener.accept())
+        .await
+    {
+        let (stream, peer) = match res {
+            Ok(v) => v,
+            Err(e) => {
+                println!("unable to accept connection: {e:#}");
+                // Throttle a bit to avoid busy loop when accept() fails
+                sleep(Duration::from_millis(10)).await;
+                continue;
+            }
+        };
+
+        tracker.spawn(async move {
+            match timeout(REQUEST_TIMEOUT, process_connection(stream)).await {
+                Err(e) => println!("{peer}: timed out"),
+                Ok(Err(e)) => println!("{peer}: failed"),
+                Ok(Ok(())) => {}
+            }
+        });
+    }
+
+    drop(listener);
+    tracker.close();
+
+    select! {
+        biased;
+        () = tracker.wait() => {},
+        // Allow remaining connections to close
+        () = sleep(REQUEST_TIMEOUT + Duration::from_secs(5)) => {
+            println!("Some connections didn't close, shutting down anyway");
+        }
+    }
+}
+
+pub async fn shutdown_signal() {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut sig_int =
+        signal(SignalKind::interrupt()).expect("failed to install SIGINT signal handler");
+    let mut sig_term =
+        signal(SignalKind::terminate()).expect("failed to install SIGTERM signal handler");
+
+    tokio::select! {
+        _ = sig_int.recv() => {
+            println!("Caught SIGINT");
+        }
+        _ = sig_term.recv() => {
+            println!("Caught SIGTERM");
+        }
+    }
+}
+
+async fn process_connection(mut stream: VsockStream) -> io::Result<()> {
     let mut buffer = [0; 4096];
-    let bytes_read = stream.read(&mut buffer)?;
+    let bytes_read = timeout(CONNECTION_TIMEOUT, stream.read(&mut buffer)).await??;
     let json_request: String = match std::str::from_utf8(&buffer[..bytes_read]) {
         Ok(json_str_request) => json_str_request.to_string(),
         Err(error) => {
@@ -60,24 +136,40 @@ fn process_connection(stream: &mut VsockStream) -> io::Result<()> {
     {
         Ok(request) => request,
         Err(err) => {
-            stream
-                .write_all(serde_json::to_string::<Response>(&Err(err.to_string()))?.as_bytes())?;
+            timeout(
+                CONNECTION_TIMEOUT,
+                stream.write_all(
+                    serde_json::to_string::<Response>(&Err(err.to_string()))?.as_bytes(),
+                ),
+            )
+            .await??;
             return Err(err);
         }
     };
     println!("Received vsock request: {request}");
 
+    // Only listen for the first GuestOS VM. Only type4.* nodes will have more
+    // than one VM that uses VSOCK. We treat the first GuestOS as the leader in
+    // charge of HostOS.
     if request.guest_cid != VIR_VSOCK_GUEST_CID_MIN {
         let err = io::Error::new(
             io::ErrorKind::ConnectionRefused,
             "A type4 host only accepts VSOCK connections from the first VM.",
         );
-        stream.write_all(serde_json::to_string::<Response>(&Err(err.to_string()))?.as_bytes())?;
+        timeout(
+            CONNECTION_TIMEOUT,
+            stream.write_all(serde_json::to_string::<Response>(&Err(err.to_string()))?.as_bytes()),
+        )
+        .await??;
         return Err(err);
     };
 
-    if let Err(err) = verify_sender_cid(stream, request.guest_cid) {
-        stream.write_all(serde_json::to_string::<Response>(&Err(err.to_string()))?.as_bytes())?;
+    if let Err(err) = verify_sender_cid(&mut stream, request.guest_cid) {
+        timeout(
+            CONNECTION_TIMEOUT,
+            stream.write_all(serde_json::to_string::<Response>(&Err(err.to_string()))?.as_bytes()),
+        )
+        .await??;
         return Err(err);
     };
 
@@ -91,7 +183,11 @@ fn process_connection(stream: &mut VsockStream) -> io::Result<()> {
         Command::StartUpgradeGuestVM => start_upgrade_guest_vm(),
     };
 
-    stream.write_all(serde_json::to_string::<Response>(&response)?.as_bytes())
+    timeout(
+        CONNECTION_TIMEOUT,
+        stream.write_all(serde_json::to_string::<Response>(&response)?.as_bytes()),
+    )
+    .await?
 }
 
 // As a sanity check, we request that the sender adds its own CID to the message, and that CID must match the CID in the stream peer address.

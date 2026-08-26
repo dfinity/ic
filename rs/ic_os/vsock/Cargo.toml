@@ -18,9 +18,11 @@ procfs = { workspace = true }
 # libudev probe; see the libusb1-sys annotation in bazel/rust.MODULE.bazel).
 rusb = { version = "0.9", features = ["vendored"] }
 tempfile = { workspace = true }
-vsock = "0.4"
+vsock = "0.5.4"
 ic-http-utils = { path = "../../http_utils" }
-tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "sync"] }
+tokio-util = { workspace = true }
+tokio-vsock = "0.7.2"
 
 [[bin]]
 name = "guest"

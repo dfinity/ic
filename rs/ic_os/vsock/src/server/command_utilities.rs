@@ -1,6 +1,7 @@
-use crate::protocol::{Payload, Response};
 use std::io::Error;
 use std::process::Output;
+
+use crate::protocol::{Payload, Response};
 
 pub fn handle_command_output(command_output: Result<Output, Error>) -> Response {
     command_output
