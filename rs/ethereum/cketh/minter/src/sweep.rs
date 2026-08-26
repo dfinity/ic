@@ -398,10 +398,6 @@ pub async fn enqueue_batched_sweep() {
         authorizations,
         deposits,
     };
-    // What this sweep may spend on gas, and the ceiling its transaction is priced at. Taken from
-    // the estimate now rather than left open: an unbounded allowance would price the transaction
-    // above anything the sweeper address could pay, and the pipeline refuses to send a sweep whose
-    // allowance the fee has outgrown, so it waits for a cheaper block instead.
     // TODO(DEFI-2933): gate this on the gas the sweeper address has actually been prepaid.
     let Some(gas_fee_estimate) = lazy_refresh_gas_fee_estimate().await else {
         log!(
