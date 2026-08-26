@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-#[cfg(target_os = "linux")]
 use config_types::GuestOSConfig;
 use fs_extra;
 use std::fs::{self, File};
