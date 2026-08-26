@@ -964,6 +964,29 @@ tuple single-use (its application consumes the pinned nonce) and revocable
 (consuming the nonce any other way invalidates an outstanding signed tuple). The
 signature is not a transaction — nothing on chain changes.
 
+The two sweep transactions that follow, side by side — the only difference
+between an EOA's first sweep (Transaction 2) and every later one
+(Transaction 3) is the authorization list:
+
+```mermaid
+sequenceDiagram
+    participant Sw as SweeperAddress
+    participant S as SweeperContract (deployed instance)
+    participant D as Deposit (EOA)
+
+    Note over Sw,D: Transaction 2 — first sweep, type 0x04,<br/>authorization_list = [tuple signed by Deposit's key]
+    Note over D: tuple processing, before any code runs:<br/>Deposit's code := 0xef0100‖SweeperContract, nonce 0 → 1
+    Sw->>S: sweepErc20Batch([(Deposit, p, s, attestation)], [Token])
+    Note right of S: plain-contract hat: address(this) = SweeperContract,<br/>msg.sender = SweeperAddress
+    S->>D: sweepErc20([Token], p, s, attestation)
+    Note right of D: delegate hat: the designator loads SweeperContract's code,<br/>which runs AS Deposit — address(this) = Deposit,<br/>msg.sender = SweeperContract.<br/>Attestation verified, then approve + Helper.depositErc20:<br/>the whole Token balance lands at MainAddress (R6)
+
+    Note over Sw,D: Transaction 3 — any later sweep, plain type 0x02 (EIP-1559):<br/>no authorization list
+    Sw->>S: sweepErc20Batch([(Deposit, p, s, attestation)], [Token])
+    S->>D: sweepErc20([Token], p, s, attestation)
+    Note right of D: same delegated execution — the designator persists,<br/>and Deposit's nonce is unchanged since<br/>(only its own authorizations advance it)
+```
+
 **Transaction 2 — first sweep (type `0x04`, sent and paid by `SweeperAddress`,
 `to = SweeperContract`).** This is the transaction the minter actually sends:
 the sweep is *never* addressed to the deposit EOA — every sweep, including a
