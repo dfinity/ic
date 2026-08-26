@@ -66,8 +66,7 @@ jobs:
           ref: ${{ github.sha }}
       - uses: ./.github/actions/attest-uploads
         with:
-          manifest-sha256-main: ${{ needs.ci-main.outputs.manifest-sha256-main }}
-          manifest-sha256-external: ${{ needs.ci-main.outputs.manifest-sha256-external }}
+          manifest-sha256: ${{ needs.ci-main.outputs.manifest-sha256 }}
 
   ci-pr-only:
     name: CI PR Only

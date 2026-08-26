@@ -16,17 +16,15 @@ on:
       release-build:
         description: Whether this run was a release build, i.e. uploaded artifacts to the CDN.
         value: ${{ jobs.config.outputs.release-build }}
-      # sha256s of the upload-manifest-{main,external} Actions artifacts
-      # ('' on non-release builds). Callers pass them to the attest-uploads
-      # action, which re-checks the downloaded artifacts against them: job
+      # sha256 of the upload-manifest Actions artifact ('' on non-release
+      # builds), which lists every file this run uploaded to the CDN (see the
+      # merge-upload-manifests job). Callers pass it to the attest-uploads
+      # action, which re-checks the downloaded artifact against it: job
       # outputs, unlike the artifacts themselves, cannot be tampered with by
       # other jobs holding an `actions: write` token.
-      manifest-sha256-main:
-        description: sha256 of the upload-manifest-main artifact.
-        value: ${{ jobs.bazel-test-all.outputs.manifest-sha256 }}
-      manifest-sha256-external:
-        description: sha256 of the upload-manifest-external artifact.
-        value: ${{ jobs.upload-external-artifacts.outputs.manifest-sha256 }}
+      manifest-sha256:
+        description: sha256 of the upload-manifest artifact.
+        value: ${{ jobs.merge-upload-manifests.outputs.manifest-sha256 }}
 
 permissions:
   actions: write # needed for uploading artifacts to github
@@ -519,6 +517,75 @@ jobs:
           name: arm64 artifacts
           manifest-name: upload-manifest-external
           upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
+
+  # Merge the per-job upload manifests into the single upload-manifest
+  # artifact exposed through this workflow's `manifest-sha256` output. That
+  # the CDN uploads happen in two jobs (bazel-test-all and
+  # upload-external-artifacts) is an implementation detail of this workflow:
+  # callers and the attest-uploads action only ever see one manifest, so a
+  # change to the set of upload jobs stays confined to this file.
+  #
+  # This job is part of the attestation trust chain (see the attest-uploads
+  # action): it verifies each downloaded manifest against the producing job's
+  # output before merging, and anchors the merged artifact in its own job
+  # output. It must never execute build or test code.
+  merge-upload-manifests:
+    name: Merge upload manifests
+    needs: [config, bazel-test-all, upload-external-artifacts]
+    if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
+    runs-on: ubuntu-latest
+    # Reduced from the workflow-level grants: same-run artifact transfer uses
+    # the runner's runtime token, so this job needs neither `actions: write`
+    # nor `id-token: write`; `contents: read` is kept as the read-only floor.
+    permissions:
+      contents: read
+    outputs:
+      manifest-sha256: ${{ steps.merge.outputs.sha256 }}
+    steps:
+      - name: Download main upload manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: upload-manifest-main
+          path: ${{ runner.temp }}/upload-manifests/main
+
+      - name: Download external upload manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: upload-manifest-external
+          path: ${{ runner.temp }}/upload-manifests/external
+
+      - name: Verify and merge manifests
+        id: merge
+        shell: bash
+        env:
+          MANIFEST_SHA256_MAIN: ${{ needs.bazel-test-all.outputs.manifest-sha256 }}
+          MANIFEST_SHA256_EXTERNAL: ${{ needs.upload-external-artifacts.outputs.manifest-sha256 }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/upload-manifests"
+
+          # Verify the downloaded artifacts against the hashes recorded in
+          # the producing jobs' outputs before merging anything: an Actions
+          # artifact can be replaced mid-run by anything holding an
+          # `actions: write` token, but job outputs cannot be tampered with
+          # by other jobs. A missing or empty output also fails here:
+          # sha256sum rejects the malformed line.
+          echo "$MANIFEST_SHA256_MAIN  main/upload-manifest.sha256sums" | sha256sum --check
+          echo "$MANIFEST_SHA256_EXTERNAL  external/upload-manifest.sha256sums" | sha256sum --check
+
+          LC_ALL=C sort -k2 \
+            main/upload-manifest.sha256sums \
+            external/upload-manifest.sha256sums \
+            >upload-manifest.sha256sums
+
+          echo "sha256=$(sha256sum upload-manifest.sha256sums | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
+
+      - name: Upload merged manifest
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: upload-manifest
+          path: ${{ runner.temp }}/upload-manifests/upload-manifest.sha256sums
+          if-no-files-found: error
 
   python-ci-tests:
     name: Python CI Tests

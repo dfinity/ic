@@ -14,9 +14,11 @@ inputs:
       converted to sha256sum format and uploaded as a GitHub Actions artifact
       with this name, and the manifest's own sha256 is exposed as the
       `manifest-sha256` output. The manifest is the build-time integrity
-      record that the `attest-uploads` jobs (see ci-kickoff.yml and
-      release-testing.yml) attest, so that release workflows can verify CDN
-      downloads against an anchor independent of the CDN itself.
+      record that ci-main's merge-upload-manifests job merges into the single
+      upload-manifest artifact, which the `attest-uploads` jobs (see
+      ci-kickoff.yml and release-testing.yml) attest, so that release
+      workflows can verify CDN downloads against an anchor independent of the
+      CDN itself.
 outputs:
   manifest-sha256:
     description: sha256 of the uploaded manifest ('' when manifest-name is unset)

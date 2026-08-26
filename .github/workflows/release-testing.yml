@@ -69,10 +69,10 @@ jobs:
   # Attest what ci-main uploaded to the CDN so that tag-release.yml and the
   # mainnet-revisions updater can verify their CDN downloads against an anchor
   # independent of the CDN (security finding 3618194). Job-level permissions
-  # only: this job must stay isolated — it consumes nothing but 64-hex job
-  # outputs and run-local manifest artifacts, never data derived from external
-  # dashboards, and no other job in this workflow may hold
-  # `attestations: write`.
+  # only: this job must stay isolated — it consumes nothing but ci-main's
+  # 64-hex manifest-sha256 output and the run-local upload-manifest artifact,
+  # never data derived from external dashboards, and no other job in this
+  # workflow may hold `attestations: write`.
   attest-uploads:
     name: Attest Uploaded Artifacts
     runs-on: ubuntu-latest
@@ -91,8 +91,7 @@ jobs:
           ref: ${{ github.sha }}
       - uses: ./.github/actions/attest-uploads
         with:
-          manifest-sha256-main: ${{ needs.ci-main.outputs.manifest-sha256-main }}
-          manifest-sha256-external: ${{ needs.ci-main.outputs.manifest-sha256-external }}
+          manifest-sha256: ${{ needs.ci-main.outputs.manifest-sha256 }}
 
   setup-guest-os-qualification:
     name: Setting up guest os qualification pipeline

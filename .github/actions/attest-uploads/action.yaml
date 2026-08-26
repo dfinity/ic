@@ -1,8 +1,8 @@
 name: Attest Uploaded Artifacts
 description: |
   Generate a build-provenance attestation covering every file that this run's
-  ci-main.yml uploaded to the CDN (see the upload-artifacts action, which
-  produces the upload manifests consumed here).
+  ci-main.yml uploaded to the CDN (see ci-main's merge-upload-manifests job,
+  which produces the upload manifest consumed here).
 
   The attestation is the integrity anchor that lets release workflows and the
   mainnet-revisions updater verify CDN downloads against something independent
@@ -12,60 +12,46 @@ description: |
   --source-digest <commit>` and then verify each artifact against the now
   trusted sums.
 
-  The manifest artifacts are re-checked against the sha256s carried by
-  ci-main's job outputs: an Actions artifact can be replaced mid-run by
+  The manifest artifact is re-checked against the sha256 carried by ci-main's
+  `manifest-sha256` output: an Actions artifact can be replaced mid-run by
   anything holding an `actions: write` token, but job outputs cannot be
-  tampered with by other jobs.
+  tampered with by other jobs. The same check anchors the merge that produced
+  the artifact: ci-main's merge-upload-manifests job verified each upload
+  job's manifest against that job's output before merging.
 
   The calling job needs `attestations: write` and `id-token: write` and must
-  therefore never execute build or test code — it may consume only these
-  manifests and 64-hex job outputs.
+  therefore never execute build or test code — it may consume only this
+  manifest and 64-hex job outputs.
 inputs:
-  manifest-sha256-main:
+  manifest-sha256:
     required: true
-    description: sha256 of the upload-manifest-main artifact, from ci-main's outputs.
-  manifest-sha256-external:
-    required: true
-    description: sha256 of the upload-manifest-external artifact, from ci-main's outputs.
+    description: sha256 of the upload-manifest artifact, from ci-main's outputs.
 
 runs:
   using: "composite"
   steps:
-    - name: Download main upload manifest
+    - name: Download upload manifest
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
-        name: upload-manifest-main
-        path: ${{ runner.temp }}/upload-manifests/main
+        name: upload-manifest
+        path: ${{ runner.temp }}/upload-manifest
 
-    - name: Download external upload manifest
-      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      with:
-        name: upload-manifest-external
-        path: ${{ runner.temp }}/upload-manifests/external
-
-    - name: Verify and merge manifests
+    - name: Verify manifest
       shell: bash
       env:
-        MANIFEST_SHA256_MAIN: ${{ inputs.manifest-sha256-main }}
-        MANIFEST_SHA256_EXTERNAL: ${{ inputs.manifest-sha256-external }}
+        MANIFEST_SHA256: ${{ inputs.manifest-sha256 }}
       run: |
         set -euo pipefail
-        cd "$RUNNER_TEMP/upload-manifests"
+        cd "$RUNNER_TEMP/upload-manifest"
 
-        # Verify the downloaded artifacts against the hashes recorded in the
-        # producing jobs' outputs before attesting anything. A missing or
+        # Verify the downloaded artifact against the hash recorded in
+        # ci-main's job outputs before attesting anything. A missing or
         # empty output also fails here: sha256sum rejects the malformed line.
-        echo "$MANIFEST_SHA256_MAIN  main/upload-manifest.sha256sums" | sha256sum --check
-        echo "$MANIFEST_SHA256_EXTERNAL  external/upload-manifest.sha256sums" | sha256sum --check
-
-        LC_ALL=C sort -k2 \
-          main/upload-manifest.sha256sums \
-          external/upload-manifest.sha256sums \
-          >merged.sha256sums
+        echo "$MANIFEST_SHA256  upload-manifest.sha256sums" | sha256sum --check
 
     # No continue-on-error: an unattested release upload is exactly the gap
     # this anchor exists to close, so a failure here must fail the run.
     - name: Attest
       uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
       with:
-        subject-checksums: ${{ runner.temp }}/upload-manifests/merged.sha256sums
+        subject-checksums: ${{ runner.temp }}/upload-manifest/upload-manifest.sha256sums
