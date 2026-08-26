@@ -1896,21 +1896,6 @@ mod tests {
     }
 
     #[test]
-    fn PROBE_max_responses_zero() {
-        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
-        let args = dummy_flexible_args(Some(ReplicationCounts {
-            total_requests: 3,
-            min_responses: 0,
-            max_responses: 0,
-        }));
-        let ctx = generate_flexible_context(&node_ids, args).expect("ACCEPTED");
-        eprintln!(
-            "PROBE: context accepted, kind = {:?}",
-            ctx.replication.kind()
-        );
-    }
-
-    #[test]
     fn flexible_rejects_total_requests_zero() {
         let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
         let args = dummy_flexible_args(Some(ReplicationCounts {
