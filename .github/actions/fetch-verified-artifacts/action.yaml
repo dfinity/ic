@@ -112,7 +112,11 @@ runs:
         # download for a verified one.
         ensure_verified_sums_for_dir() { # <cdn-subdir>; sets $sums
           local dir="$1"
-          sums="$sums_cache/${dir//\//_}.SHA256SUMS"
+          # Key the cache by a hash of the exact directory string: flattening
+          # the separator (s|/|_|) is not injective — "foo/bar_baz" and
+          # "foo_bar/baz" would share a key, letting one directory silently
+          # reuse another's verified sums.
+          sums="$sums_cache/$(printf '%s' "$dir" | sha256sum | cut -d' ' -f1).SHA256SUMS"
           if ! [ -f "$sums" ]; then
             "$GITHUB_WORKSPACE/ci/scripts/fetch-attested-sums.sh" \
               "$COMMIT" "$dir" "$SIGNER_WORKFLOW" "$sums.unverified"
