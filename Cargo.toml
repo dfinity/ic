@@ -868,7 +868,7 @@ rand_distr = "^0.4"
 rand_pcg = "^0.3.1"
 ratatui = "0.29"
 rayon = "1.10.0"
-rcgen = { version = "0.13.1", features = ["zeroize"] }
+rcgen = { version = "0.13.1", features = ["x509-parser", "zeroize"] }
 regex = "1.11.0"
 regex-lite = "0.1.8"
 rexpect = "0.6"
