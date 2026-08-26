@@ -52,7 +52,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     methods::WasmMethod,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -9564,6 +9564,45 @@ fn invoke_cost_http_request_v2_flexible_without_counts_uses_the_defaults() {
         Some(CostHttpRequestOutcallType::Flexible(None)),
         ReplicationKind::default_flexible(NumberOfNodes::from(subnet_size as u32)),
     );
+}
+
+#[test]
+fn cost_http_request_v2_is_free_on_system_subnet() {
+    cost_http_request_v2_is_free_on(
+        ExecutionTestBuilder::new()
+            .with_subnet_type(SubnetType::System)
+            .build(),
+    );
+}
+
+#[test]
+fn cost_http_request_v2_is_free_on_free_cost_schedule() {
+    cost_http_request_v2_is_free_on(
+        ExecutionTestBuilder::new()
+            .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+            .build(),
+    );
+}
+
+fn cost_http_request_v2_is_free_on(mut test: ExecutionTest) {
+    let canister_id = test.universal_canister().unwrap();
+    let params_blob = Encode!(&CostHttpRequestV2Params {
+        request_bytes: 1000,
+        http_roundtrip_time_ms: 2_000,
+        raw_response_bytes: 500_000,
+        transformed_response_bytes: 1_000,
+        transform_instructions: 1_000_000,
+        outcall_type: None,
+    })
+    .unwrap();
+
+    let payload = wasm()
+        .cost_http_request_v2(&params_blob)
+        .reply_data_append()
+        .reply()
+        .build();
+    let bytes = get_reply(test.ingress(canister_id, "update", payload));
+    assert_eq!(Cycles::try_from(&bytes).unwrap(), Cycles::zero());
 }
 
 #[test]
