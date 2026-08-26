@@ -21874,21 +21874,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sdk-system-tests"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "backon",
- "candid",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic_consensus_system_test_utils",
- "reqwest",
- "serde_json",
- "slog",
-]
-
-[[package]]
 name = "sec1"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
