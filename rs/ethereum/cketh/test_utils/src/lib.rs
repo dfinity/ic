@@ -481,13 +481,6 @@ impl CkEthSetup {
         .unwrap()
     }
 
-    /// Upgrades the minter without changing any configuration, so a test can observe what an
-    /// upgrade on its own does to state that is deliberately not carried across one.
-    pub fn upgrade_minter_without_changes(self) -> Self {
-        self.upgrade_minter(UpgradeArg::default());
-        self
-    }
-
     fn upgrade_minter(&self, upgrade_arg: UpgradeArg) {
         self.stop_minter();
         self.env

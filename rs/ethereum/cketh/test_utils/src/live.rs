@@ -53,7 +53,6 @@ use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
-use ic_http_types::{HttpRequest, HttpResponse};
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::PocketIc;
 use std::str::FromStr;
@@ -71,7 +70,7 @@ use crate::{CkEthSetup, EthereumBackend, minter_wasm, switch_to_live};
 /// 0.3 ETH funding target that the fixture's minimum withdrawal amount implies.
 const DEPOSIT_AMOUNT: u128 = 5_000_000_000_000_000_000; // 5 ETH
 
-pub const FEE_ACCOUNT_BALANCE: u128 = 1_000_000_000_000_000_000; // 1 ckETH
+const FEE_ACCOUNT_BALANCE: u128 = 1_000_000_000_000_000_000; // 1 ckETH
 
 /// Ticks granted for the minter's log scrape to find the harness' deposits. One suffices, since a
 /// tick is longer than the scraping interval; the spares cover a scrape that lands mid-tick.
@@ -108,7 +107,11 @@ const POLL_INTERVAL: Duration = Duration::from_secs(1);
 /// How long any wait here gives the minter before it fails with its logs. Sized well inside the
 /// budget Bazel grants the target that runs these tests, so that a hang reports what the minter was
 /// doing rather than being killed with nothing to show.
-pub const AWAIT_DEADLINE: Duration = Duration::from_secs(60);
+const AWAIT_DEADLINE: Duration = Duration::from_secs(60);
+
+/// The balance scan waits on a periodic scan of its own rather than on a minter timer, and that scan
+/// is slower to come round, so it gets its own budget.
+const SCAN_DEADLINE: Duration = Duration::from_secs(180);
 
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
 /// address, so the scan reads a real balance for that (address, token) pair.
@@ -247,24 +250,19 @@ impl LiveSetup<CkErc20Setup> {
         caller: Principal,
         subaccount: [u8; 32],
         token: &Erc20Token,
-        deadline: Duration,
     ) -> DepositErc20Response {
-        let start = Instant::now();
-        loop {
-            let progress = self.deposit_erc20(caller, subaccount, token);
-            let scanned = match &progress.status {
-                DepositStatus::Scanning { scan_count, .. } => *scan_count >= 1,
-                DepositStatus::AwaitingSweep(_) => true,
-            };
-            if scanned {
-                return progress;
-            }
-            assert!(
-                start.elapsed() <= deadline,
-                "the deposit address was not scanned within {deadline:?}"
-            );
-            std::thread::sleep(Duration::from_secs(2));
-        }
+        self.poll_until(
+            SCAN_DEADLINE,
+            |_| "the deposit address was not scanned".to_string(),
+            |setup| {
+                let progress = setup.deposit_erc20(caller, subaccount, token);
+                let scanned = match &progress.status {
+                    DepositStatus::Scanning { scan_count, .. } => *scan_count >= 1,
+                    DepositStatus::AwaitingSweep(_) => true,
+                };
+                scanned.then_some(progress)
+            },
+        )
     }
 }
 
@@ -277,15 +275,6 @@ impl LiveSetup<CkEthSetup> {
     /// minter to act. Arming here instead would let the first check burn within milliseconds, before
     /// a test could read the pre-burn numbers.
     pub fn new_funding() -> Self {
-        Self::new_funding_with_fee_account_balance(FEE_ACCOUNT_BALANCE)
-    }
-
-    /// As [`Self::new_funding`], but leaves the fee account empty.
-    pub fn new_funding_with_empty_fee_account() -> Self {
-        Self::new_funding_with_fee_account_balance(0)
-    }
-
-    fn new_funding_with_fee_account_balance(fee_account_balance: u128) -> Self {
         let anvil = Arc::new(Anvil::start_mainnet_like());
         let cketh = CkEthSetup::new(EthereumBackend::Anvil(Arc::clone(&anvil)));
         let setup = Self::go_live(cketh, anvil).with_deposit_helper();
@@ -300,34 +289,9 @@ impl LiveSetup<CkEthSetup> {
         // its fees there — but at 2e12 wei a transfer it would take 150'000 transfers to reach the
         // funding target, so the harness deposits to that account directly instead. Deposited rather
         // than minted so nothing here mints ckETH the minter did not back with ETH.
-        let mut credited = vec![depositor];
-        if fee_account_balance > 0 {
-            setup.deposit(setup.fee_account(), fee_account_balance);
-            credited.push(setup.fee_account());
-        }
-        setup.await_deposits_credited(&credited);
+        setup.deposit(setup.fee_account(), FEE_ACCOUNT_BALANCE);
+        setup.await_deposits_credited(&[depositor, setup.fee_account()]);
         setup
-    }
-
-    /// Waits until a deposit made to the fee account has been credited, for a test that arranges the
-    /// account after construction.
-    pub fn await_fee_account_credited(&self) {
-        self.await_deposits_credited(&[self.fee_account()]);
-    }
-}
-
-impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
-    /// Switches `fixture` to live outcalls and reads the address the minter derived, which needs the
-    /// instance to be making progress.
-    fn go_live(fixture: S, anvil: Arc<Anvil>) -> Self {
-        switch_to_live(fixture.as_ref());
-        let minter_address = fetch_minter_address(fixture.as_ref());
-        Self {
-            fixture,
-            anvil,
-            minter_address,
-            deposit_helper: None,
-        }
     }
 
     /// Deploys the production deposit helper (`DepositHelperWithSubaccount.sol`) against the address
@@ -348,6 +312,65 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         self
     }
 
+    /// Deposits `value` wei for `beneficiary` through the helper contract, as a depositor does.
+    fn deposit(&self, beneficiary: Account, value: u128) {
+        let helper = self
+            .deposit_helper
+            .expect("BUG: the funding fixture always deploys a deposit helper");
+        deposit_eth(
+            &self.anvil,
+            &helper,
+            &address_from_hex(DEV_ACCOUNT),
+            beneficiary,
+            value,
+        );
+    }
+}
+
+impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
+    /// Switches `fixture` to live outcalls and reads the address the minter derived, which needs the
+    /// instance to be making progress.
+    fn go_live(fixture: S, anvil: Arc<Anvil>) -> Self {
+        switch_to_live(fixture.as_ref());
+        let minter_address = fetch_minter_address(fixture.as_ref());
+        Self {
+            fixture,
+            anvil,
+            minter_address,
+            deposit_helper: None,
+        }
+    }
+
+    /// Polls until `observe` produces a value, or fails with what the minter was doing. The shape
+    /// every wait here had spelled out for itself; the sleep is [`POLL_INTERVAL`], as for the ticks.
+    fn poll_until<T>(
+        &self,
+        deadline: Duration,
+        what: impl Fn(&Self) -> String,
+        mut observe: impl FnMut(&Self) -> Option<T>,
+    ) -> T {
+        let start = Instant::now();
+        loop {
+            if let Some(value) = observe(self) {
+                return value;
+            }
+            assert!(
+                start.elapsed() <= deadline,
+                "{} within {deadline:?}; minter logs:\n{}",
+                what(self),
+                self.minter_logs().join("\n")
+            );
+            std::thread::sleep(POLL_INTERVAL);
+        }
+    }
+
+    /// The instance is shut down by the PocketIC server when nothing talks to it, which stops the
+    /// minter's timers and looks exactly like a minter bug. Any loop that only talks to anvil has to
+    /// send this.
+    fn keep_instance_awake(&self) {
+        let _ = self.cketh_total_supply();
+    }
+
     fn cketh(&self) -> &CkEthSetup {
         self.fixture.as_ref()
     }
@@ -358,20 +381,6 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
 
     fn minter_id(&self) -> Principal {
         self.cketh().minter_id
-    }
-
-    /// Deposits `value` wei for `beneficiary` through the helper contract, as a depositor does.
-    pub fn deposit(&self, beneficiary: Account, value: u128) {
-        let helper = self
-            .deposit_helper
-            .expect("this fixture was built without a deposit helper");
-        deposit_eth(
-            &self.anvil,
-            &helper,
-            &address_from_hex(DEV_ACCOUNT),
-            beneficiary,
-            value,
-        );
     }
 
     /// Waits until the minter has credited the deposits, buying the ticks its log scrape needs: they
@@ -405,7 +414,7 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
     /// in-flight calls" and corrupts its heap. Stopped through the client rather than through
     /// `CkEthSetup::stop_minter`, which drives the instance with explicit `tick`s (see the module
     /// documentation).
-    pub fn upgrade_minter_with(&self, arg: UpgradeArg) {
+    fn upgrade_minter_with(&self, arg: UpgradeArg) {
         let minter_id = self.minter_id();
         self.env()
             .stop_canister(minter_id, None)
@@ -440,10 +449,7 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
             if observe(self) {
                 return true;
             }
-            // Required, not diagnostics: the PocketIC server shuts down an instance with no HTTP
-            // traffic, which stops the minter's timers and looks exactly like a minter bug. A loop
-            // that only talks to anvil sends none.
-            let _ = self.cketh_total_supply();
+            self.keep_instance_awake();
             if start.elapsed() >= TICK_SETTLE {
                 return false;
             }
@@ -477,17 +483,6 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         }
     }
 
-    /// Lets `ticks` withdrawal-timer ticks pass, giving the minter real time to act on each. The
-    /// window a bounded negative assertion watches, for a test whose "must not happen" is not a
-    /// balance the harness can poll for.
-    pub fn advance_ticks(&self, ticks: u32) {
-        self.settle(&mut |_| false);
-        for _ in 0..ticks {
-            self.env().advance_time(WITHDRAWAL_TICK);
-            self.settle(&mut |_| false);
-        }
-    }
-
     pub fn fee_account(&self) -> Account {
         Account {
             owner: self.minter_id(),
@@ -497,7 +492,7 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
 
     /// The sweeper address the minter derived, scraped from its log line: there is no getter for it
     /// yet, and it cannot be derived test-side without the master public key.
-    pub fn sweeper_address(&self) -> Option<Address> {
+    fn sweeper_address(&self) -> Option<Address> {
         self.minter_logs().iter().find_map(|line| {
             let rest = line.split("[fund_sweeper]: ").nth(1)?;
             let hex = rest.split_whitespace().next()?;
@@ -508,65 +503,11 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
     /// Waits until the minter has derived its sweeper address, which happens once the master public
     /// key is cached — before the first funding check acts on it.
     pub fn await_sweeper_address(&self) -> Address {
-        let start = Instant::now();
-        loop {
-            if let Some(address) = self.sweeper_address() {
-                return address;
-            }
-            assert!(
-                start.elapsed() <= AWAIT_DEADLINE,
-                "the minter did not derive a sweeper address within {AWAIT_DEADLINE:?}; minter \
-                 logs:\n{}",
-                self.minter_logs().join("\n")
-            );
-            std::thread::sleep(Duration::from_secs(2));
-        }
-    }
-
-    /// Waits until the minter has logged a line containing `needle`, polling its log endpoint.
-    pub fn await_minter_log(&self, needle: &str) {
-        let start = Instant::now();
-        loop {
-            let logs = self.minter_logs();
-            if logs.iter().any(|line| line.contains(needle)) {
-                return;
-            }
-            assert!(
-                start.elapsed() <= AWAIT_DEADLINE,
-                "the minter never logged {needle:?} within {AWAIT_DEADLINE:?}; logs:\n{}",
-                logs.join("\n")
-            );
-            std::thread::sleep(Duration::from_secs(2));
-        }
-    }
-
-    /// The minter's rendered dashboard.
-    pub fn dashboard_html(&self) -> String {
-        let request = HttpRequest {
-            method: "GET".to_string(),
-            url: "/dashboard".to_string(),
-            headers: vec![],
-            body: serde_bytes::ByteBuf::new(),
-        };
-        let reply = self
-            .env()
-            .query_call(
-                self.minter_id(),
-                Principal::anonymous(),
-                "http_request",
-                Encode!(&request).unwrap(),
-            )
-            .expect("the dashboard query was rejected");
-        let response = Decode!(&reply, HttpResponse).unwrap();
-        String::from_utf8_lossy(&response.body).to_string()
-    }
-
-    /// The value rendered in a dashboard row, e.g. `sweeper-cketh-burned`.
-    pub fn dashboard_row(&self, id: &str) -> Option<String> {
-        let dashboard = self.dashboard_html();
-        let row = dashboard.split(&format!(r#"id="{id}""#)).nth(1)?;
-        let cell = row.split("<td>").nth(1)?.split("</td>").next()?;
-        Some(cell.trim().to_string())
+        self.poll_until(
+            AWAIT_DEADLINE,
+            |_| "the minter did not derive a sweeper address".to_string(),
+            |setup| setup.sweeper_address(),
+        )
     }
 
     pub fn minter_address(&self) -> Address {
@@ -615,7 +556,7 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         self.anvil.eth_balance(address, "latest")
     }
 
-    pub fn minter_logs(&self) -> Vec<String> {
+    fn minter_logs(&self) -> Vec<String> {
         self.cketh()
             .minter_canister_logs()
             .into_iter()

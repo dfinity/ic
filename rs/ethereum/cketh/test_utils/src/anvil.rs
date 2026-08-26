@@ -276,7 +276,11 @@ pub fn deploy_mock_erc20(anvil: &Anvil, holder: &Address) -> Address {
 
 /// Deploys the production ckETH deposit helper (`DepositHelperWithSubaccount.sol`), which forwards
 /// what it receives to `minter` and emits the `ReceivedEthOrErc20` event the minter scrapes.
-pub fn deploy_deposit_helper(anvil: &Anvil, deployer: &Address, minter: &Address) -> Address {
+pub(crate) fn deploy_deposit_helper(
+    anvil: &Anvil,
+    deployer: &Address,
+    minter: &Address,
+) -> Address {
     let code = deploy_code(
         &compile("CKDEPOSIT_SOL", "CkDeposit"),
         &[address_token(minter)],
@@ -286,7 +290,7 @@ pub fn deploy_deposit_helper(anvil: &Anvil, deployer: &Address, minter: &Address
 
 /// Deposits `value` wei through `helper` for `beneficiary`, exactly as a depositor does on mainnet:
 /// the ETH lands at the minter's address and the event is mined for the minter to scrape.
-pub fn deposit_eth(
+pub(crate) fn deposit_eth(
     anvil: &Anvil,
     helper: &Address,
     depositor: &Address,
