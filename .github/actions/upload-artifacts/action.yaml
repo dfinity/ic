@@ -6,6 +6,21 @@ inputs:
     required: true
   name:
     required: true
+  manifest-name:
+    required: false
+    default: ''
+    description: |
+      When set, the "<sha256>,<url>" lines emitted by the upload command are
+      converted to sha256sum format and uploaded as a GitHub Actions artifact
+      with this name, and the manifest's own sha256 is exposed as the
+      `manifest-sha256` output. The manifest is the build-time integrity
+      record that the `attest-uploads` jobs (see ci-kickoff.yml and
+      release-testing.yml) attest, so that release workflows can verify CDN
+      downloads against an anchor independent of the CDN itself.
+outputs:
+  manifest-sha256:
+    description: sha256 of the uploaded manifest ('' when manifest-name is unset)
+    value: ${{ steps.manifest.outputs.sha256 }}
 
 runs:
   using: "composite"
@@ -33,4 +48,43 @@ runs:
             echo '</details>';
           } >>"$GITHUB_STEP_SUMMARY"
 
+          # Persist the upload manifest in sha256sum format ("<hex>  <path>",
+          # path relative to https://download.dfinity.systems/). The hashes
+          # were computed by the uploader from the local files before upload,
+          # so this is a build-time record of what was published, not a
+          # restatement of what the CDN serves. The steps below (gated on
+          # `manifest-name`) upload it for the attest-uploads jobs.
+          sed 's|,https://download.dfinity.systems/|  |' "$upload_output" >"$RUNNER_TEMP/upload-manifest.sha256sums"
+
           rm "$upload_output"
+
+    - name: Check manifest
+      id: manifest
+      if: inputs.manifest-name != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        manifest="$RUNNER_TEMP/upload-manifest.sha256sums"
+
+        # Fail closed rather than attest garbage: the manifest must be
+        # non-empty and every line must be "<64-hex>  ic/<path>". A new
+        # artifact whose name falls outside this character set should extend
+        # the pattern here deliberately, not slip through.
+        if ! [ -s "$manifest" ]; then
+          echo "upload manifest is missing or empty: $manifest" >&2
+          exit 1
+        fi
+        if grep -Ev '^[0-9a-f]{64}  ic/[A-Za-z0-9._/-]+$' "$manifest"; then
+          echo "upload manifest contains malformed lines (printed above)" >&2
+          exit 1
+        fi
+
+        echo "sha256=$(sha256sum "$manifest" | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
+
+    - name: Upload manifest
+      if: inputs.manifest-name != ''
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      with:
+        name: ${{ inputs.manifest-name }}
+        path: ${{ runner.temp }}/upload-manifest.sha256sums
+        if-no-files-found: error
