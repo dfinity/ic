@@ -1043,10 +1043,7 @@ impl SystemState {
             }
         }
         // Charge only the part of the debit that the balance can cover. The remaining
-        // debit is dropped, so it must not be reported as consumed either. This is the
-        // one caller that legitimately charges less than it requests, so it caps the
-        // amount here instead of leaving that to the defense in depth in
-        // `consume_cycles()`.
+        // debit is dropped, so it must not be reported as consumed either.
         let charged_debit = self.ingress_induction_cycles_debit - remaining_debit;
         self.consume_cycles(CompoundCycles::<IngressInduction>::new(
             charged_debit,
