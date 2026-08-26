@@ -308,11 +308,13 @@ pub struct SweptDeposit {
 
 impl SweepRequest {
     /// Gas limit for this sweep's transaction, scaled to the work its delegate does rather than to
-    /// the number of deposits: the delegate hands the whole token array to every address it sweeps,
-    /// so both the balance checks and the transfers grow as distinct addresses × distinct tokens. It
-    /// checks every pair, and moves any pair it finds a balance at — not only the pairs `deposits`
-    /// names. Every address pays an authorization on top, since the sweep carries a tuple for each
-    /// of them.
+    /// the deposits the sweep names: the call data holds a single token array, the union of the
+    /// tokens over all of them, and `sweepErc20Batch` hands that one array to every address it
+    /// sweeps. A sweep of one address in USDC and a second in USDC and USDT therefore checks the
+    /// first address' USDT as well, and moves it if it finds a balance there — a deposit address
+    /// accumulates residue the queue never named. Both the balance checks and the transfers grow as
+    /// distinct addresses × distinct tokens, and every address pays an authorization on top, since
+    /// the sweep carries a tuple for each of them.
     ///
     /// The enqueuing side sends one token per sweep, so the product is the addresses in practice;
     /// the general form is what keeps the limit safe for any request that reaches here.
