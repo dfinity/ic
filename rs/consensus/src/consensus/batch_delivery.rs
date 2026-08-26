@@ -624,7 +624,6 @@ mod tests {
     use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
     use ic_types::{
         PrincipalId, RegistryVersion, SubnetId,
-        backwards_compatibility::BackwardsCompatible,
         batch::{BatchPayload, ValidationContext},
         consensus::{
             DataPayload, HashedBlock, Payload as ConsensusPayload, Rank,
@@ -888,12 +887,10 @@ mod tests {
             let block = proposal.content.as_mut();
             block.context.registry_version = SPLITTING_REGISTRY_VERSION;
             let mut payload = block.payload.as_ref().as_summary().clone();
-            payload.dkg.subnet_splitting_status = BackwardsCompatible::new_for_test_only(Some(
-                SubnetSplittingStatus::Scheduled(SplittingArgs {
-                    source_subnet_id: SOURCE_SUBNET_ID,
-                    destination_subnet_id: DESTINATION_SUBNET_ID,
-                }),
-            ));
+            payload.dkg.subnet_splitting_status = SubnetSplittingStatus::Scheduled(SplittingArgs {
+                source_subnet_id: SOURCE_SUBNET_ID,
+                destination_subnet_id: DESTINATION_SUBNET_ID,
+            });
             block.payload = ConsensusPayload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(payload),
