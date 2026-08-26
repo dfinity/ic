@@ -3558,24 +3558,6 @@ impl StateManager for StateManagerImpl {
         // during the round may have left canisters that are now cold in `hot`. The
         // partition must be canonical at checkpoint time so that a replica continuing
         // through a checkpoint and one (re)starting from it agree on the partition.
-        //
-        // The hard requirement is at checkpoint time: `checkpoint.rs` runs
-        // `CanisterStates::validate_strict_split()` on the loaded state, which
-        // fails on a canister left in `hot` that satisfies `is_cold()`. This call
-        // sits outside the `CertificationScope::Metadata` branch above so that
-        // requirement is met without depending on `batch_summary` to predict which
-        // rounds checkpoint.
-        //
-        // No *execution* result depends on where the split lies: every consumer of
-        // the partition is `fold(hot) + cold aggregate`
-        // (`CanisterStates::total_consumed_cycles`,
-        // `total_canister_memory_usage`), so it yields the same value whatever the
-        // partition. `hot_len()` is the one raw count of a single side, and it is
-        // read only by the `hot_canisters_count` metric below. So a round that
-        // skipped the repartition could not diverge state — it would only leave a
-        // stale partition for the next checkpoint to reject.
-        // `hot_cold_partition_is_canonical_after_every_commit` in
-        // `tests/state_manager.rs` pins the every-commit behaviour.
         self.metrics
             .hot_canisters_count
             .observe(state.canister_states().hot_len() as f64);

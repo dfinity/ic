@@ -682,10 +682,6 @@ impl ExecutionTest {
         self.time += duration;
     }
 
-    pub fn current_round(&self) -> ExecutionRound {
-        self.current_round
-    }
-
     /// Sets the round number passed to `execute_subnet_message` and friends,
     /// i.e. the block height as seen by the execution environment.
     pub fn set_current_round(&mut self, round: u64) {
@@ -1732,8 +1728,7 @@ impl ExecutionTest {
         };
         let maybe_canister_id = get_effective_canister_id(message.clone());
         let is_install_code = check_is_install_code(message.clone());
-        let consumes_round_instructions_without_effective_canister_id =
-            check_consumes_round_instructions_without_effective_canister_id(message.clone());
+        let is_list_canisters = check_is_list_canisters(message.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1830,7 +1825,7 @@ impl ExecutionTest {
                         .insert(canister_id, paused_subnet_message);
                 }
             }
-        } else if !consumes_round_instructions_without_effective_canister_id {
+        } else if !is_list_canisters {
             // `list_canisters` has no effective canister ID but still consumes
             // round instructions, so it is exempt from this assertion.
             assert_eq!(slice_instructions_used.get(), 0);
@@ -3346,18 +3341,7 @@ fn check_is_install_code(message: SubnetMessage) -> bool {
     message.method_name() == "install_code" || message.method_name() == "install_chunked_code"
 }
 
-/// Whether the message is one of the management methods that consume round
-/// instructions even though they have no effective canister ID. Their
-/// `Ic00MethodPermissions::counts_toward_round_limit` flag is never consulted —
-/// `Scheduler::can_execute_subnet_msg` returns before reaching
-/// `can_be_executed` — so it cannot be used to identify them, whatever its
-/// value. Keep in sync with the special case in
-/// `Scheduler::can_execute_subnet_msg`.
-///
-/// Note that `subnet_metrics` is *not* one of them: it also has no effective
-/// canister ID, but charges no round instructions, so it is subject to the
-/// `slice_instructions_used == 0` assertion like any other such method.
-fn check_consumes_round_instructions_without_effective_canister_id(message: SubnetMessage) -> bool {
+fn check_is_list_canisters(message: SubnetMessage) -> bool {
     let message = match message {
         SubnetMessage::Response(_) => return false,
         SubnetMessage::Request(request) => CanisterCall::Request(request),

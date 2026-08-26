@@ -704,19 +704,6 @@ impl ReplicatedState {
 
     /// Re-establishes strict hot / cold partitioning of canister states (see
     /// [`CanisterStates::try_cool_all`]).
-    ///
-    /// The caller in `commit_and_certify` runs this on every commit, not only on
-    /// checkpoint rounds. What *requires* a canonical partition is checkpoint
-    /// validation: `CanisterStates::validate_strict_split` rejects a canister left
-    /// in `hot` that satisfies `is_cold()`. Repartitioning unconditionally makes
-    /// the committed partition equal the one [`CanisterStates::new`] derives at
-    /// load, so a replica that keeps running agrees with one that restarts from a
-    /// checkpoint, without having to predict which rounds checkpoint.
-    ///
-    /// Note that no execution result depends on *where* the split lies: every
-    /// consumer is `fold(hot) + cold aggregate` and so is partition-independent.
-    /// `hot_cold_partition_is_canonical_after_every_commit` in
-    /// `rs/state_manager/tests/state_manager.rs` pins the every-commit behaviour.
     pub fn repartition_canister_states(&mut self) {
         self.canister_states.try_cool_all();
     }
