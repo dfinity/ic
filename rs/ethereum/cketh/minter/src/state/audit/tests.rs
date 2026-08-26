@@ -1,10 +1,8 @@
 use crate::attestation::AttestationRequest;
 use crate::checked_amount::CheckedAmountOf;
-use crate::deposit_address::DepositAddressSchema;
 use crate::endpoints::events::{
-    DepositAddressSchema as CandidDepositAddressSchema, Event as CandidEvent, EventPayload,
-    SignedAuthorization as CandidSignedAuthorization, UnsignedSweeperTransaction,
-    UnsignedTransaction,
+    Event as CandidEvent, EventPayload, SignedAuthorization as CandidSignedAuthorization,
+    UnsignedSweeperTransaction, UnsignedTransaction,
 };
 use crate::erc20::CkErc20Token;
 use crate::eth_logs::{LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent};
@@ -437,7 +435,6 @@ impl GetEventsFile {
                     deposit_helper,
                     owner,
                     subaccount,
-                    schema,
                     y_parity,
                     r,
                     s,
@@ -445,10 +442,6 @@ impl GetEventsFile {
                     request: AttestationRequest::new(
                         chain_id.0.to_u64().unwrap(),
                         deposit_helper.parse().unwrap(),
-                        match schema {
-                            CandidDepositAddressSchema::CkErc20 => DepositAddressSchema::CkErc20,
-                            CandidDepositAddressSchema::CkEth => DepositAddressSchema::CkEth,
-                        },
                         Account {
                             owner,
                             subaccount: subaccount.map(|subaccount| {

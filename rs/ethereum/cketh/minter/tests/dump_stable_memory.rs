@@ -4,11 +4,9 @@ use flate2::bufread::GzEncoder;
 use flate2::read::GzDecoder;
 use ic_cketh_minter::attestation::AttestationRequest;
 use ic_cketh_minter::checked_amount::CheckedAmountOf;
-use ic_cketh_minter::deposit_address::DepositAddressSchema;
 use ic_cketh_minter::endpoints::events::{
-    AccessListItem as CandidAccessListItem, DepositAddressSchema as CandidDepositAddressSchema,
-    Event as CandidEvent, EventSource as CandidEventSource, GetEventsResult,
-    ReimbursementIndex as CandidReimbursementIndex,
+    AccessListItem as CandidAccessListItem, Event as CandidEvent, EventSource as CandidEventSource,
+    GetEventsResult, ReimbursementIndex as CandidReimbursementIndex,
     SignedAuthorization as CandidSignedAuthorization,
     TransactionReceipt as CandidTransactionReceipt, TransactionStatus as CandidTransactionStatus,
     UnsignedSweeperTransaction, UnsignedTransaction,
@@ -383,7 +381,6 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 deposit_helper,
                 owner,
                 subaccount,
-                schema,
                 y_parity,
                 r,
                 s,
@@ -391,10 +388,6 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 request: AttestationRequest::new(
                     chain_id.0.to_u64().unwrap(),
                     deposit_helper.parse().unwrap(),
-                    match schema {
-                        CandidDepositAddressSchema::CkErc20 => DepositAddressSchema::CkErc20,
-                        CandidDepositAddressSchema::CkEth => DepositAddressSchema::CkEth,
-                    },
                     Account {
                         owner,
                         subaccount: subaccount.map(|subaccount| {

@@ -51,11 +51,9 @@ const SWEEPER_SCHEMA_TAG: u8 = 3;
 
 /// Schema tag distinguishing the families of per-account deposit addresses
 /// derived by the minter.
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum DepositAddressSchema {
-    #[n(0)]
     CkErc20,
-    #[n(1)]
     CkEth,
 }
 

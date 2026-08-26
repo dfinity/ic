@@ -698,10 +698,8 @@ async fn get_canister_status() -> ic_cdk_management_canister::CanisterStatusResu
 
 #[query]
 fn get_events(arg: GetEventsArg) -> GetEventsResult {
-    use ic_cketh_minter::deposit_address::DepositAddressSchema;
     use ic_cketh_minter::endpoints::events::{
-        AccessListItem, DepositAddressSchema as CandidDepositAddressSchema,
-        ReimbursementIndex as CandidReimbursementIndex,
+        AccessListItem, ReimbursementIndex as CandidReimbursementIndex,
         SignedAuthorization as CandidSignedAuthorization,
         TransactionReceipt as CandidTransactionReceipt,
         TransactionStatus as CandidTransactionStatus, UnsignedSweeperTransaction,
@@ -803,13 +801,6 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 TransactionStatus::Failure => CandidTransactionStatus::Failure,
             },
             transaction_hash: receipt.transaction_hash.to_string(),
-        }
-    }
-
-    fn map_deposit_address_schema(schema: DepositAddressSchema) -> CandidDepositAddressSchema {
-        match schema {
-            DepositAddressSchema::CkErc20 => CandidDepositAddressSchema::CkErc20,
-            DepositAddressSchema::CkEth => CandidDepositAddressSchema::CkEth,
         }
     }
 
@@ -974,7 +965,6 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                         deposit_helper: request.deposit_helper().to_string(),
                         owner: account.owner,
                         subaccount: account.subaccount.map(ByteBuf::from),
-                        schema: map_deposit_address_schema(request.schema()),
                         y_parity: signature.signature_y_parity,
                         r: ByteBuf::from(signature.r.to_be_bytes()),
                         s: ByteBuf::from(signature.s.to_be_bytes()),

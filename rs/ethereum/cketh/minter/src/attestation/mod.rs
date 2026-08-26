@@ -23,11 +23,11 @@ use minicbor::{Decode, Encode};
 /// authorizations `0x05`, EIP-191/712 `0x19` and legacy-transaction RLP `>= 0xc0`.
 const DOMAIN_SEPARATOR: &[u8] = b"ck-deposit-owner";
 
-/// What a deposit address attests to: the account its funds are credited to, bound to one chain and
-/// one deposit-helper deployment.
+/// What a ckERC20 deposit address attests to: the account its funds are credited to, bound to one
+/// chain and one deposit-helper deployment.
 ///
-/// The fields are private and must come from one configuration: a chain id, helper or schema that
-/// does not match what the minter runs against yields a well-formed signature the delegate's
+/// The fields are private and must come from one configuration: a chain id or a helper that does
+/// not match what the minter runs against yields a well-formed signature the delegate's
 /// `ecrecover` rejects, and nothing notices until the sweep reverts on chain.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
 pub struct AttestationRequest {
@@ -41,27 +41,17 @@ pub struct AttestationRequest {
     deposit_helper: Address,
     #[n(2)]
     account: Account,
-    /// Which deposit-address scheme derives the key that signs, so the signing path cannot
-    /// disagree with the digest.
-    #[n(3)]
-    schema: DepositAddressSchema,
 }
 
 impl AttestationRequest {
     /// Prefer [`crate::state::State::attestation_request`], which is the only caller that composes
-    /// a request out of a chain, a helper and a schema; everything else reconstructs a request the
-    /// minter already built (event replay, the Candid layer, tests).
-    pub fn new(
-        chain_id: u64,
-        deposit_helper: Address,
-        schema: DepositAddressSchema,
-        account: Account,
-    ) -> Self {
+    /// a request out of a chain and a helper; everything else reconstructs a request the minter
+    /// already built (event replay, the Candid layer, tests).
+    pub fn new(chain_id: u64, deposit_helper: Address, account: Account) -> Self {
         Self {
             chain_id,
             deposit_helper,
             account,
-            schema,
         }
     }
 
@@ -75,10 +65,6 @@ impl AttestationRequest {
 
     pub fn account(&self) -> &Account {
         &self.account
-    }
-
-    pub fn schema(&self) -> DepositAddressSchema {
-        self.schema
     }
 
     /// `"ck-deposit-owner" || chain_id || deposit_helper || principal || subaccount`, exactly what
@@ -104,8 +90,9 @@ impl AttestationRequest {
     }
 }
 
-/// Sign `request` with the deposit address' own derived key. The delegate wants the signature as
-/// `(r, s, v)`, which is where [`crate::sweeper_contract`] encodes it.
+/// Sign `request` with the deposit address' own derived key. Only ckERC20 deposit addresses are
+/// ever attested, so that is the schema whose derivation path signs. The delegate wants the
+/// signature as `(r, s, v)`, which is where [`crate::sweeper_contract`] encodes it.
 ///
 /// # Errors
 /// * a description of why the threshold-ECDSA signature could not be produced.
@@ -114,7 +101,7 @@ pub async fn sign_attestation(
 ) -> Result<TransactionSignature, String> {
     sign_digest(
         &request.digest(),
-        &deposit_derivation_path(request.schema, &request.account),
+        &deposit_derivation_path(DepositAddressSchema::CkErc20, &request.account),
     )
     .await
 }
