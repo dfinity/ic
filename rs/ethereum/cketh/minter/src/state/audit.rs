@@ -8,7 +8,6 @@ use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
 use crate::state::transactions::{Reimbursed, ReimbursementIndex, WithdrawalRequest};
 use crate::storage::{record_event, with_event_iter};
-use icrc_ledger_types::icrc1::account::Account;
 
 /// Updates the state to reflect the given state transition.
 // public because it's used in tests since process_event
@@ -113,21 +112,8 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         } => {
             state.record_finalized_transaction(withdrawal_id, transaction_receipt);
         }
-        EventType::AttestedDepositAddress {
-            deposit_helper,
-            owner,
-            subaccount,
-            signature,
-            ..
-        } => {
-            state.record_attestation(
-                *deposit_helper,
-                Account {
-                    owner: *owner,
-                    subaccount: *subaccount,
-                },
-                signature.clone(),
-            );
+        EventType::AttestedDepositAddress { request, signature } => {
+            state.record_attestation(request.clone(), signature.clone());
         }
         EventType::AcceptedSweepRequest(request) => {
             state.next_sweep_id = request.id.next();

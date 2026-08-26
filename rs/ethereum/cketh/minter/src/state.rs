@@ -62,11 +62,11 @@ impl MintedEvent {
 #[derive(Clone, PartialEq, Debug)]
 pub struct State {
     pub ethereum_network: EthereumNetwork,
-    /// Attestations the minter has signed, keyed by the deposit helper each one names and then by
-    /// the account it credits. An attestation binds an account to one helper deployment and never
-    /// expires, so a later sweep of the same address reuses it instead of paying for another
-    /// threshold-ECDSA signature; a new helper deployment simply misses.
-    pub attestations: BTreeMap<Address, BTreeMap<Account, TransactionSignature>>,
+    /// Attestations the minter has signed, keyed by exactly what each one signed. An attestation
+    /// binds an account to one chain and one helper deployment and never expires, so a later sweep
+    /// of the same address reuses it instead of paying for another threshold-ECDSA signature; a
+    /// new helper deployment yields a different key and simply misses.
+    pub attestations: BTreeMap<AttestationRequest, TransactionSignature>,
     pub ecdsa_key_name: String,
     pub cketh_ledger_id: Principal,
     pub log_scrapings: LogScrapings,
@@ -280,25 +280,14 @@ impl State {
         ))
     }
 
-    /// The attestation `account` has already signed for the helper this minter runs against, if
-    /// any: signing another would cost a threshold-ECDSA signature for the same digest.
-    pub fn attestation(&self, account: &Account) -> Option<&TransactionSignature> {
-        let deposit_helper = self
-            .log_scrapings
-            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)?;
-        self.attestations.get(deposit_helper)?.get(account)
+    /// The attestation `account` has already signed for the configuration this minter runs
+    /// against, if any: signing another would cost a threshold-ECDSA signature for the same digest.
+    pub fn attestation(&self, account: Account) -> Option<&TransactionSignature> {
+        self.attestations.get(&self.attestation_request(account)?)
     }
 
-    fn record_attestation(
-        &mut self,
-        deposit_helper: Address,
-        account: Account,
-        signature: TransactionSignature,
-    ) {
-        self.attestations
-            .entry(deposit_helper)
-            .or_default()
-            .insert(account, signature);
+    fn record_attestation(&mut self, request: AttestationRequest, signature: TransactionSignature) {
+        self.attestations.insert(request, signature);
     }
 
     pub fn is_ckerc20_feature_active(&self) -> bool {

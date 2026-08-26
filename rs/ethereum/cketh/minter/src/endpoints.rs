@@ -473,6 +473,14 @@ pub mod events {
         pub authorization_list: Vec<SignedAuthorization>,
     }
 
+    /// Which family of per-account deposit addresses the attesting address belongs to, and so
+    /// which derivation path signed the attestation.
+    #[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub enum DepositAddressSchema {
+        CkErc20,
+        CkEth,
+    }
+
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub enum TransactionStatus {
         Success,
@@ -567,6 +575,7 @@ pub mod events {
             deposit_helper: String,
             owner: Principal,
             subaccount: Option<ByteBuf>,
+            schema: DepositAddressSchema,
             y_parity: bool,
             /// 32-byte signature component.
             r: ByteBuf,

@@ -698,8 +698,10 @@ async fn get_canister_status() -> ic_cdk_management_canister::CanisterStatusResu
 
 #[query]
 fn get_events(arg: GetEventsArg) -> GetEventsResult {
+    use ic_cketh_minter::deposit_address::DepositAddressSchema;
     use ic_cketh_minter::endpoints::events::{
-        AccessListItem, ReimbursementIndex as CandidReimbursementIndex,
+        AccessListItem, DepositAddressSchema as CandidDepositAddressSchema,
+        ReimbursementIndex as CandidReimbursementIndex,
         SignedAuthorization as CandidSignedAuthorization,
         TransactionReceipt as CandidTransactionReceipt,
         TransactionStatus as CandidTransactionStatus, UnsignedSweeperTransaction,
@@ -801,6 +803,13 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 TransactionStatus::Failure => CandidTransactionStatus::Failure,
             },
             transaction_hash: receipt.transaction_hash.to_string(),
+        }
+    }
+
+    fn map_deposit_address_schema(schema: DepositAddressSchema) -> CandidDepositAddressSchema {
+        match schema {
+            DepositAddressSchema::CkErc20 => CandidDepositAddressSchema::CkErc20,
+            DepositAddressSchema::CkEth => CandidDepositAddressSchema::CkEth,
         }
     }
 
@@ -958,21 +967,19 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id: withdrawal_id.get().into(),
                     transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
-                EventType::AttestedDepositAddress {
-                    chain_id,
-                    deposit_helper,
-                    owner,
-                    subaccount,
-                    signature,
-                } => EP::AttestedDepositAddress {
-                    chain_id: chain_id.into(),
-                    deposit_helper: deposit_helper.to_string(),
-                    owner,
-                    subaccount: subaccount.map(ByteBuf::from),
-                    y_parity: signature.signature_y_parity,
-                    r: ByteBuf::from(signature.r.to_be_bytes()),
-                    s: ByteBuf::from(signature.s.to_be_bytes()),
-                },
+                EventType::AttestedDepositAddress { request, signature } => {
+                    let account = request.account();
+                    EP::AttestedDepositAddress {
+                        chain_id: request.chain_id().into(),
+                        deposit_helper: request.deposit_helper().to_string(),
+                        owner: account.owner,
+                        subaccount: account.subaccount.map(ByteBuf::from),
+                        schema: map_deposit_address_schema(request.schema()),
+                        y_parity: signature.signature_y_parity,
+                        r: ByteBuf::from(signature.r.to_be_bytes()),
+                        s: ByteBuf::from(signature.s.to_be_bytes()),
+                    }
+                }
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,

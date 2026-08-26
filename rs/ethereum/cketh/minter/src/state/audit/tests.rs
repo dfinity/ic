@@ -1,7 +1,10 @@
+use crate::attestation::AttestationRequest;
 use crate::checked_amount::CheckedAmountOf;
+use crate::deposit_address::DepositAddressSchema;
 use crate::endpoints::events::{
-    Event as CandidEvent, EventPayload, SignedAuthorization as CandidSignedAuthorization,
-    UnsignedSweeperTransaction, UnsignedTransaction,
+    DepositAddressSchema as CandidDepositAddressSchema, Event as CandidEvent, EventPayload,
+    SignedAuthorization as CandidSignedAuthorization, UnsignedSweeperTransaction,
+    UnsignedTransaction,
 };
 use crate::erc20::CkErc20Token;
 use crate::eth_logs::{LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent};
@@ -21,6 +24,7 @@ use crate::tx::{
 };
 use candid::Principal;
 use ic_agent::identity::AnonymousIdentity;
+use icrc_ledger_types::icrc1::account::Account;
 use num_traits::ToPrimitive;
 use phantom_newtype::Id;
 use std::env;
@@ -433,16 +437,25 @@ impl GetEventsFile {
                     deposit_helper,
                     owner,
                     subaccount,
+                    schema,
                     y_parity,
                     r,
                     s,
                 } => ET::AttestedDepositAddress {
-                    chain_id: chain_id.0.to_u64().unwrap(),
-                    deposit_helper: deposit_helper.parse().unwrap(),
-                    owner,
-                    subaccount: subaccount.map(|subaccount| {
-                        <[u8; 32]>::try_from(subaccount.into_vec().as_slice()).unwrap()
-                    }),
+                    request: AttestationRequest::new(
+                        chain_id.0.to_u64().unwrap(),
+                        deposit_helper.parse().unwrap(),
+                        match schema {
+                            CandidDepositAddressSchema::CkErc20 => DepositAddressSchema::CkErc20,
+                            CandidDepositAddressSchema::CkEth => DepositAddressSchema::CkEth,
+                        },
+                        Account {
+                            owner,
+                            subaccount: subaccount.map(|subaccount| {
+                                <[u8; 32]>::try_from(subaccount.into_vec().as_slice()).unwrap()
+                            }),
+                        },
+                    ),
                     signature: TransactionSignature {
                         signature_y_parity: y_parity,
                         r: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(r.as_slice()).unwrap()),

@@ -2,10 +2,13 @@ use candid::Decode;
 use flate2::Compression;
 use flate2::bufread::GzEncoder;
 use flate2::read::GzDecoder;
+use ic_cketh_minter::attestation::AttestationRequest;
 use ic_cketh_minter::checked_amount::CheckedAmountOf;
+use ic_cketh_minter::deposit_address::DepositAddressSchema;
 use ic_cketh_minter::endpoints::events::{
-    AccessListItem as CandidAccessListItem, Event as CandidEvent, EventSource as CandidEventSource,
-    GetEventsResult, ReimbursementIndex as CandidReimbursementIndex,
+    AccessListItem as CandidAccessListItem, DepositAddressSchema as CandidDepositAddressSchema,
+    Event as CandidEvent, EventSource as CandidEventSource, GetEventsResult,
+    ReimbursementIndex as CandidReimbursementIndex,
     SignedAuthorization as CandidSignedAuthorization,
     TransactionReceipt as CandidTransactionReceipt, TransactionStatus as CandidTransactionStatus,
     UnsignedSweeperTransaction, UnsignedTransaction,
@@ -31,6 +34,7 @@ use ic_cketh_minter::tx::{
 use ic_stable_structures::Memory;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use ic_stable_structures::{DefaultMemoryImpl, log::Log as StableLog};
+use icrc_ledger_types::icrc1::account::Account;
 use num_traits::ToPrimitive;
 use phantom_newtype::Id;
 use std::io::{BufReader, BufWriter, Read, Write};
@@ -379,16 +383,25 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 deposit_helper,
                 owner,
                 subaccount,
+                schema,
                 y_parity,
                 r,
                 s,
             } => ET::AttestedDepositAddress {
-                chain_id: chain_id.0.to_u64().unwrap(),
-                deposit_helper: deposit_helper.parse().unwrap(),
-                owner,
-                subaccount: subaccount.map(|subaccount| {
-                    <[u8; 32]>::try_from(subaccount.into_vec().as_slice()).unwrap()
-                }),
+                request: AttestationRequest::new(
+                    chain_id.0.to_u64().unwrap(),
+                    deposit_helper.parse().unwrap(),
+                    match schema {
+                        CandidDepositAddressSchema::CkErc20 => DepositAddressSchema::CkErc20,
+                        CandidDepositAddressSchema::CkEth => DepositAddressSchema::CkEth,
+                    },
+                    Account {
+                        owner,
+                        subaccount: subaccount.map(|subaccount| {
+                            <[u8; 32]>::try_from(subaccount.into_vec().as_slice()).unwrap()
+                        }),
+                    },
+                ),
                 signature: TransactionSignature {
                     signature_y_parity: y_parity,
                     r: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(r.as_slice()).unwrap()),
