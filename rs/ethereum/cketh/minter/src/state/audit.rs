@@ -112,6 +112,9 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         } => {
             state.record_finalized_transaction(withdrawal_id, transaction_receipt);
         }
+        EventType::AttestedDepositAddress { request, signature } => {
+            state.record_attestation(request.clone(), signature.clone());
+        }
         EventType::AcceptedSweepRequest(request) => {
             state.next_sweep_id = request.id.next();
             state.sweeper_transactions.record_request(request.clone());

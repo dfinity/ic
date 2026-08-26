@@ -958,6 +958,18 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id: withdrawal_id.get().into(),
                     transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
+                EventType::AttestedDepositAddress { request, signature } => {
+                    let account = request.account();
+                    EP::AttestedDepositAddress {
+                        chain_id: request.chain_id().into(),
+                        deposit_helper: request.deposit_helper().to_string(),
+                        owner: account.owner,
+                        subaccount: account.subaccount.map(ByteBuf::from),
+                        y_parity: signature.signature_y_parity,
+                        r: ByteBuf::from(signature.r.to_be_bytes()),
+                        s: ByteBuf::from(signature.s.to_be_bytes()),
+                    }
+                }
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,
@@ -1237,6 +1249,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_oldest_incomplete_eth_withdrawal_request_age_seconds",
                     (age_nanos / 1_000_000_000) as f64,
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
+                )?;
+
+                w.encode_gauge(
+                    "cketh_minter_stored_attestations",
+                    s.automatic_deposits.attestations_len() as f64,
+                    "Number of deposit address attestations the minter has signed and stored.",
                 )?;
 
                 w.encode_gauge(
