@@ -48,6 +48,7 @@ use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 
 /// Deposits swept in one transaction, which with one token per sweep is also the addresses it
 /// touches.
@@ -349,6 +350,11 @@ pub async fn enqueue_batched_sweep() {
     for batch in batches {
         enqueue_token_sweep(batch, sweeper_contract, &gas_fee_estimate).await;
     }
+    // Send them now rather than at the send task's next tick: the mint follows the sweep, so every
+    // interval spent waiting here is crediting latency a user sees.
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
+        process_sweeper_transactions().await;
+    });
 }
 
 /// The sweep queue folded into one batch per token, each holding at most

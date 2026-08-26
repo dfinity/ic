@@ -110,6 +110,8 @@ fn setup_timers() {
     ic_cdk_timers::set_timer_interval(SWEEP_ENQUEUE_INTERVAL, async || {
         enqueue_batched_sweep().await;
     });
+    // A freshly enqueued sweep does not wait for this tick: `enqueue_batched_sweep` kicks the
+    // pipeline itself.
     ic_cdk_timers::set_timer_interval(PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, async || {
         process_sweeper_transactions().await;
     });
