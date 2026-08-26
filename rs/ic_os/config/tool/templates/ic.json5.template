@@ -629,5 +629,9 @@ table ip6 filter {\n\
         node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem"
     },
 
+    cloud_engine: {
+        engine_management_canister_id: {{ engine_management_canister_id }},
+    },
+
     malicious_behavior: {{ malicious_behavior }},
 }

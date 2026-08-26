@@ -17,13 +17,15 @@ use ic_registry_client_helpers::{
     node::{NodeRecord, NodeRegistry},
     node_operator::NodeOperatorRegistry,
     replica_version::ReplicaVersionRegistry,
+    routing_table::RoutingTableRegistry,
     subnet::SubnetRegistry,
     unassigned_nodes::UnassignedNodeRegistry,
 };
 use ic_registry_keys::FirewallRulesScope;
+use ic_registry_routing_table::CanisterIdRange;
 use ic_types::{
-    NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
-    hostos_version::HostosVersion,
+    CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
+    consensus::CatchUpPackage, hostos_version::HostosVersion,
 };
 use std::{convert::TryFrom, net::IpAddr, sync::Arc};
 
@@ -411,6 +413,54 @@ impl RegistryHelper {
             .get_node_record(self.node_id, version)?
             .and_then(|node_record| node_record.domain);
         result.ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id, version))
+    }
+
+    /// Return the principals that have admin privileges on the given subnet.
+    pub(crate) fn get_subnet_admins(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Vec<PrincipalId>> {
+        self.get_subnet_record(subnet_id, version)?
+            .subnet_admins
+            .into_iter()
+            .map(|admin| {
+                PrincipalId::try_from(admin).map_err(|err| {
+                    OrchestratorError::cloud_engine_error(format!(
+                        "subnet {subnet_id} has a malformed subnet admin: {err}"
+                    ))
+                })
+            })
+            .collect()
+    }
+
+    /// Return the canister ID ranges assigned to the given subnet.
+    pub(crate) fn get_subnet_canister_ranges(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Vec<CanisterIdRange>> {
+        Ok(self
+            .registry_client
+            .get_subnet_canister_ranges(version, subnet_id)?
+            .unwrap_or_default())
+    }
+
+    /// Return the subnet that hosts the given canister.
+    pub(crate) fn get_subnet_of_canister(
+        &self,
+        canister_id: CanisterId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<SubnetId> {
+        self.registry_client
+            .get_routing_table(version)?
+            .and_then(|routing_table| routing_table.lookup_entry(canister_id))
+            .map(|(_, subnet_id)| subnet_id)
+            .ok_or_else(|| {
+                OrchestratorError::cloud_engine_error(format!(
+                    "canister {canister_id} is not in the routing table at version {version}"
+                ))
+            })
     }
 }
 
