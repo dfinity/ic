@@ -2971,12 +2971,11 @@ mod sweep_lane {
     use super::{gas_fee_estimate, sign_transaction, transaction_receipt};
     use crate::eth_rpc_client::responses::TransactionStatus;
     use crate::lifecycle::EthereumNetwork;
-    use crate::numeric::{TransactionCount, TransactionNonce, Wei, WeiPerGas};
+    use crate::numeric::{GasAmount, TransactionCount, TransactionNonce, Wei, WeiPerGas};
     use crate::state::transactions::{
         CreateSweepTransactionError, PipelineRequest, ResubmitTransactionError, SweepId,
-        SweepRequest, TransactionPipeline,
+        SweepRequest, SweptDeposit, TransactionPipeline,
     };
-    use crate::sweep::SWEEP_TRANSACTION_GAS_LIMIT;
     use crate::tx::{
         DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate,
         SignableTransaction, SignedAuthorization, SweepTransaction,
@@ -2996,6 +2995,7 @@ mod sweep_lane {
             data: vec![0xaa, 0xbb, 0xcc],
             max_transaction_fee: Wei::from(1_000_000_000_000_000_u64),
             created_at: 1_620_328_630_000_000_000,
+            deposits: vec![],
             authorizations: vec![],
         }
     }
@@ -3040,7 +3040,7 @@ mod sweep_lane {
             .create_transaction(
                 pipeline.next_transaction_nonce(),
                 gas_fee_estimate(),
-                SWEEP_TRANSACTION_GAS_LIMIT,
+                request.gas_limit(),
                 EthereumNetwork::Sepolia,
             )
             .expect("BUG: the fixture allowance covers the fixture fee");
@@ -3242,7 +3242,7 @@ mod sweep_lane {
             .create_transaction(
                 pipeline.next_transaction_nonce(),
                 gas_fee_estimate(),
-                SWEEP_TRANSACTION_GAS_LIMIT,
+                request.gas_limit(),
                 EthereumNetwork::Sepolia,
             )
             .expect("BUG: the fixture allowance covers the fixture fee")
@@ -3259,9 +3259,15 @@ mod sweep_lane {
         };
 
         assert_eq!(
-            tx.max_fee_per_gas
-                .transaction_cost(SWEEP_TRANSACTION_GAS_LIMIT),
-            Some(request.max_transaction_fee)
+            tx.max_fee_per_gas,
+            request
+                .max_transaction_fee
+                .into_wei_per_gas(request.gas_limit())
+                .unwrap()
+        );
+        assert!(
+            tx.max_fee_per_gas.transaction_cost(request.gas_limit())
+                <= Some(request.max_transaction_fee)
         );
         assert_eq!(
             tx.max_priority_fee_per_gas,
@@ -3280,7 +3286,7 @@ mod sweep_lane {
         let created = request.create_transaction(
             TransactionNonce::ZERO,
             spiked_fee,
-            SWEEP_TRANSACTION_GAS_LIMIT,
+            request.gas_limit(),
             EthereumNetwork::Sepolia,
         );
 
@@ -3306,14 +3312,14 @@ mod sweep_lane {
             gas_fee_estimate().max_priority_fee_per_gas
                 > request
                     .max_transaction_fee
-                    .into_wei_per_gas(SWEEP_TRANSACTION_GAS_LIMIT)
+                    .into_wei_per_gas(request.gas_limit())
                     .unwrap()
         );
 
         let created = request.create_transaction(
             TransactionNonce::ZERO,
             gas_fee_estimate(),
-            SWEEP_TRANSACTION_GAS_LIMIT,
+            request.gas_limit(),
             EthereumNetwork::Sepolia,
         );
 
@@ -3347,6 +3353,117 @@ mod sweep_lane {
                 && *allowed_max_transaction_fee == sweep_request(0).max_transaction_fee
                 && *max_transaction_fee > sweep_request(0).max_transaction_fee
         );
+    }
+
+    #[test]
+    fn should_scale_the_gas_limit_with_the_work_the_delegate_does() {
+        struct Case {
+            scenario: &'static str,
+            deposits: Vec<(u8, u8)>,
+            authorizations: usize,
+            expected_gas_limit: u64,
+        }
+
+        for case in [
+            Case {
+                scenario: "nothing to sweep",
+                deposits: vec![],
+                authorizations: 0,
+                expected_gas_limit: 60_000,
+            },
+            Case {
+                scenario: "one address already delegated, holding one token",
+                deposits: vec![(1, 1)],
+                authorizations: 0,
+                expected_gas_limit: 60_000 + 15_000 + 110_000,
+            },
+            Case {
+                scenario: "one address to delegate, holding one token",
+                deposits: vec![(1, 1)],
+                authorizations: 1,
+                expected_gas_limit: 60_000 + 15_000 + 110_000 + 40_000,
+            },
+            Case {
+                scenario: "one address holding two tokens: two pairs, one authorization",
+                deposits: vec![(1, 1), (1, 2)],
+                authorizations: 1,
+                expected_gas_limit: 60_000 + 2 * 15_000 + 2 * 110_000 + 40_000,
+            },
+            Case {
+                scenario: "two addresses holding the same token",
+                deposits: vec![(1, 1), (2, 1)],
+                authorizations: 2,
+                expected_gas_limit: 60_000 + 2 * 15_000 + 2 * 110_000 + 2 * 40_000,
+            },
+            Case {
+                scenario: "two addresses holding a token each: every pair is checked and may move",
+                deposits: vec![(1, 1), (2, 2)],
+                authorizations: 2,
+                expected_gas_limit: 60_000 + 4 * 15_000 + 4 * 110_000 + 2 * 40_000,
+            },
+        ] {
+            assert_eq!(
+                with_deposits(&case.deposits, case.authorizations).gas_limit(),
+                GasAmount::from(case.expected_gas_limit),
+                "{}",
+                case.scenario
+            );
+        }
+    }
+
+    #[test]
+    fn should_budget_more_for_more_pairs_than_for_more_deposits() {
+        // The delegate transfers any balance it finds at a pair, not only the pairs the sweep queue
+        // named, so what the limit must follow is the pairs. Three addresses funded in three
+        // different tokens are nine pairs from three deposits; six addresses sharing one token are
+        // six pairs from twice the deposits.
+        let mixed = with_deposits(&[(1, 1), (2, 2), (3, 3)], 0);
+        let one_token = with_deposits(&[(1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1)], 0);
+
+        assert!(mixed.deposits.len() < one_token.deposits.len());
+        assert!(
+            mixed.gas_limit() > one_token.gas_limit(),
+            "a limit that follows the deposits cannot tell the two batches apart"
+        );
+    }
+
+    #[test]
+    fn should_charge_a_mixed_token_batch_more_than_a_single_token_one() {
+        // The delegate hands the whole token array to every address, so a batch of four addresses
+        // funded in four different tokens makes sixteen balance checks for four transfers. A limit
+        // linear in the number of deposits cannot tell the two batches apart.
+        let mixed: Vec<_> = (1..=4).map(|seed| (seed, seed)).collect();
+        let one_token: Vec<_> = (1..=4).map(|seed| (seed, 1)).collect();
+
+        assert!(
+            with_deposits(&mixed, 4).gas_limit() > with_deposits(&one_token, 4).gas_limit(),
+            "the balance checks of a mixed batch must not be priced as a single-token one"
+        );
+    }
+
+    /// A sweep of one deposit per `(address seed, token seed)` pair, installing `authorizations`
+    /// delegations on the way.
+    fn with_deposits(deposits: &[(u8, u8)], authorizations: usize) -> SweepRequest {
+        SweepRequest {
+            deposits: deposits
+                .iter()
+                .map(|(address, token)| SweptDeposit {
+                    account: icrc_ledger_types::icrc1::account::Account {
+                        owner: candid::Principal::management_canister(),
+                        subaccount: None,
+                    },
+                    erc20_contract_address: Address::new([*token; 20]),
+                    address: crate::deposit_address::DepositAddress::new(Address::new(
+                        [*address; 20],
+                    )),
+                    delegating: true,
+                })
+                .collect(),
+            authorizations: (0..authorizations)
+                .map(|seed| authorization(u8::try_from(seed).unwrap()))
+                .collect(),
+            ..sweep_request(0)
+        }
     }
 
     #[test]

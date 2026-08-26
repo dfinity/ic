@@ -5,6 +5,7 @@ pub(in crate::state) mod tests;
 
 pub use request::PipelineRequest;
 
+use crate::deposit_address::DepositAddress;
 use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus};
 use crate::eth_logs::LedgerSubaccount;
 use crate::eth_rpc::Hash;
@@ -13,7 +14,7 @@ use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::logs::INFO;
 use crate::map::MultiKeyMap;
 use crate::numeric::{
-    CkTokenAmount, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
+    CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
 use crate::tx::{
@@ -212,6 +213,39 @@ impl SweepId {
     }
 }
 
+/// Gas a sweep transaction needs before any of the addresses it sweeps: the 21'000 intrinsic cost,
+/// the batch call's own dispatch and the two calldata arrays it copies into memory.
+///
+/// This and the constants below are derived from the EVM's own costs rather than from the ~42'000
+/// per deposit measured for a batch of 20, which does not record how many distinct tokens that
+/// batch covered and so cannot separate the work that grows with the pairs from the work that grows
+/// with the transfers. Each is deliberately generous: unspent gas is refunded, whereas an
+/// underestimate wastes the whole transaction.
+const SWEEP_BASE_GAS: GasAmount = GasAmount::new(60_000);
+
+/// Gas each `balanceOf` the delegate makes costs. `sweepErc20Batch` hands the whole token array to
+/// every item and `sweepErc20` loops over it, so a sweep pays one balance check per
+/// `(address, token)` pair whether or not the pair holds anything — and therefore at least one per
+/// address, which is where that address' calldata, `ecrecover` and delegated call are accounted
+/// for. A cold `balanceOf` is ~5'000 (2'600 account access, 2'100 cold slot, call overhead) and the
+/// per-address dispatch ~10'000.
+const SWEEP_GAS_PER_BALANCE_CHECK: GasAmount = GasAmount::new(15_000);
+
+/// Gas moving one pair costs beyond its balance check: the `approve` (a 20'000 slot write), the
+/// helper's `depositErc20` and the `transferFrom` it makes (two slot writes and two logs), ~55'000
+/// in the worst case, doubled.
+///
+/// Budgeted for every pair the batch touches rather than only for the deposits the queue named:
+/// `sweepErc20` moves whatever balance it finds, and a deposit address accumulates residue — a pair
+/// armed but not yet scanned, a pair whose watchlist window closed before the funds arrived, a token
+/// the sender was never asked for. A pair therefore costs a balance check and, on top of it,
+/// possibly a transfer.
+const SWEEP_GAS_PER_TRANSFER: GasAmount = GasAmount::new(110_000);
+
+/// Gas one EIP-7702 authorization costs: 12'500 (`PER_AUTH_BASE_COST`) plus the 25'000
+/// (`PER_EMPTY_ACCOUNT_COST`) a deposit EOA pays, its account holding no ETH and no code yet.
+const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
+
 /// A sweep the minter issues **from its dedicated sweeper address**, on the sweeper's own nonce
 /// sequence — the request type of the sweeper [`TransactionPipeline`]. It carries no ckETH burn
 /// and is never reimbursed.
@@ -246,6 +280,69 @@ pub struct SweepRequest {
     /// with none is a plain EIP-1559 transaction.
     #[n(6)]
     pub authorizations: Vec<SignedAuthorization>,
+    /// The deposits this sweep moves, one per `(account, token)` pair, in the order the sweep queue
+    /// offered them. Not the shape of `data`, which names one item per deposit address: an account
+    /// with two tokens queued is two deposits here and one item there. Recording them makes the
+    /// request self-describing — the sweep queue and the set of delegated addresses are both
+    /// reconstructible from the log, without decoding call data.
+    #[n(7)]
+    pub deposits: Vec<SweptDeposit>,
+}
+
+/// One `(account, token)` deposit a sweep moves, and the address it moves it from.
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+pub struct SweptDeposit {
+    #[n(0)]
+    pub account: Account,
+    #[n(1)]
+    pub erc20_contract_address: Address,
+    #[n(2)]
+    pub address: DepositAddress,
+    /// Whether this sweep installs the delegation of `address`, i.e. whether that address'
+    /// authorization is in [`SweepRequest::authorizations`]. All of an account's deposits sit at the
+    /// one address, so they share one authorization and agree on this flag.
+    #[n(3)]
+    pub delegating: bool,
+}
+
+impl SweepRequest {
+    /// Gas limit for this sweep's transaction, scaled to the work its delegate does rather than to
+    /// the number of deposits: the delegate hands the whole token array to every address it sweeps,
+    /// so both the balance checks and the transfers grow as distinct addresses × distinct tokens. It
+    /// checks every pair, and moves any pair it finds a balance at — not only the pairs `deposits`
+    /// names. Only the addresses this sweep delegates pay an authorization on top.
+    ///
+    /// The enqueuing side sends one token per sweep, so the product is the addresses in practice;
+    /// the general form is what keeps the limit safe for any request that reaches here.
+    pub fn gas_limit(&self) -> GasAmount {
+        let pairs = self
+            .distinct_count(|deposit| deposit.address)
+            .saturating_mul(self.distinct_count(|deposit| deposit.erc20_contract_address));
+        [
+            (SWEEP_GAS_PER_BALANCE_CHECK, pairs),
+            (SWEEP_GAS_PER_TRANSFER, pairs),
+            (
+                SWEEP_GAS_PER_AUTHORIZATION,
+                as_u64(self.authorizations.len()),
+            ),
+        ]
+        .into_iter()
+        .fold(SWEEP_BASE_GAS, |total, (gas_per_unit, units)| {
+            total
+                .checked_add(gas_per_unit.checked_mul(units).unwrap_or(GasAmount::MAX))
+                .unwrap_or(GasAmount::MAX)
+        })
+    }
+
+    /// How many distinct values `key` takes over the swept deposits.
+    fn distinct_count<K: Ord>(&self, key: impl FnMut(&SweptDeposit) -> K) -> u64 {
+        as_u64(self.deposits.iter().map(key).collect::<BTreeSet<_>>().len())
+    }
+}
+
+/// A count as the gas arithmetic takes it, saturating rather than wrapping.
+fn as_u64(count: usize) -> u64 {
+    u64::try_from(count).unwrap_or(u64::MAX)
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
