@@ -23,7 +23,7 @@ const NNS_PUBLIC_KEY: &[u8; 133] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x0
 ///    (e.g. by using ic-agent's Agent::update().call().and_wait()) and storing it in a file.
 pub fn read_and_verify_signed_bless_alternative_guest_os_version_proposal(
     proposal_path: &Path,
-    #[cfg(any(feature = "dev", test))] nns_public_key_override: Option<&[u8]>,
+    nns_public_key_override: Option<&[u8]>,
 ) -> Result<BlessAlternativeGuestOsVersion> {
     ensure!(
         proposal_path.exists(),
@@ -37,10 +37,7 @@ pub fn read_and_verify_signed_bless_alternative_guest_os_version_proposal(
     let certificate: Certificate = serde_cbor::from_slice(&proposal_bytes)
         .context("Failed to deserialize Certificate from CBOR")?;
 
-    let nns_public_key = NNS_PUBLIC_KEY;
-    // Allow overriding the NNS public key if running in dev or test mode
-    #[cfg(any(feature = "dev", test))]
-    let nns_public_key = nns_public_key_override.unwrap_or(nns_public_key);
+    let nns_public_key = nns_public_key_override.unwrap_or(NNS_PUBLIC_KEY);
 
     // Verify the certificate against the NNS public key. This is the proof that the proposal
     // came from the NNS governance canister.

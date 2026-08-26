@@ -17,8 +17,9 @@ use crate::numeric::{
     TransactionNonce, Wei,
 };
 use crate::tx::{
-    Eip1559TransactionRequest, FinalizedEip1559Transaction, GasFeeEstimate,
-    SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
+    Eip1559TransactionRequest, Finalized, FinalizedEip1559Transaction, GasFeeEstimate,
+    Resubmittable, SignableTransaction, Signed, SignedAuthorization,
+    SignedEip1559TransactionRequest, TransactionPrice,
 };
 use candid::Principal;
 use ic_canister_log::log;
@@ -192,6 +193,59 @@ pub struct Erc20WithdrawalRequest {
     /// The IC time at which the withdrawal request arrived.
     #[n(9)]
     pub created_at: u64,
+}
+
+/// Monotonic identity of a sweep, used as the sweeper pipeline's alternate map key. Unlike a
+/// withdrawal's `LedgerBurnIndex`, a sweep burns no ckETH, so its id is a plain counter.
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug, Hash, Decode, Encode)]
+#[cbor(transparent)]
+pub struct SweepId(#[n(0)] pub u64);
+
+impl SweepId {
+    /// The id following this one, minted when a sweep is accepted.
+    pub fn next(self) -> Self {
+        SweepId(
+            self.0
+                .checked_add(1)
+                .expect("BUG: sweep id space exhausted"),
+        )
+    }
+}
+
+/// A sweep the minter issues **from its dedicated sweeper address**, on the sweeper's own nonce
+/// sequence — the request type of the sweeper [`TransactionPipeline`]. It carries no ckETH burn
+/// and is never reimbursed.
+///
+/// The sweep-queue-driven construction of the delegate call data is a follow-up.
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+pub struct SweepRequest {
+    /// This sweep's identity (the pipeline's alternate map key).
+    #[n(0)]
+    pub id: SweepId,
+    /// Address the sweep transaction is sent to: the sweeper contract, whose batch entry point
+    /// sweeps every delegated deposit address named in `data`.
+    #[n(1)]
+    pub destination: Address,
+    /// ETH value moved by the transaction (zero for an ERC-20 sweep, which moves tokens via calldata).
+    #[n(2)]
+    pub amount: Wei,
+    /// Transaction call data: the sweeper contract's batch call, naming the deposit addresses to
+    /// sweep, the IC account each is credited to, and the tokens to move. Its size is bounded by
+    /// the number of deposits the enqueuing side puts in one batch, which is where that limit
+    /// lives.
+    #[n(3)]
+    pub data: Vec<u8>,
+    /// Ceiling on the transaction fee, used as the resubmission fee cap.
+    #[n(4)]
+    pub max_transaction_fee: Wei,
+    /// The IC time at which the sweep was decided.
+    #[n(5)]
+    pub created_at: u64,
+    /// Delegations to install on the way, one signed by each deposit address the sweep touches
+    /// that is not yet delegated to the sweeper contract. Empty once they all are, and a sweep
+    /// with none is a plain EIP-1559 transaction.
+    #[n(6)]
+    pub authorizations: Vec<SignedAuthorization>,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
@@ -368,9 +422,9 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 }
 
 /// State machine holding Ethereum transactions issued by the minter from a **single sender
-/// address**, on that address' **own nonce sequence** — generic over the request type `R` so a
-/// second sender address can drive the same machinery on a nonce sequence of its own without
-/// interfering with user withdrawals (`R = WithdrawalRequest`, wrapped by [`WithdrawalTransactions`]).
+/// address**, on that address' **own nonce sequence** — generic over the request type `R` so the
+/// same machinery serves both the main-address withdrawal pipeline (`R = WithdrawalRequest`, aliased
+/// as [`WithdrawalTransactions`]) and the dedicated sweeper-address pipeline (`R = SweepRequest`).
 ///
 /// Overall the transaction lifecycle is as follows:
 /// 1. The request is enqueued and processed in a FIFO order.
@@ -386,23 +440,39 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 ///    discarded. Paying the requester back is not the pipeline's concern — see
 ///    [`WithdrawalTransactions`].
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub(in crate::state) struct TransactionPipeline<R: PipelineRequest> {
+pub struct TransactionPipeline<R: PipelineRequest> {
     pending_requests: VecDeque<R>,
     // Processed requests (transaction created, sent, or finalized).
     processed_requests: BTreeMap<R::Id, R>,
-    created_tx: MultiKeyMap<TransactionNonce, R::Id, TransactionRequest>,
-    sent_tx: MultiKeyMap<TransactionNonce, R::Id, Vec<SignedTransactionRequest>>,
-    finalized_tx: MultiKeyMap<TransactionNonce, R::Id, FinalizedEip1559Transaction>,
+    created_tx: MultiKeyMap<TransactionNonce, R::Id, CreatedTransaction<R>>,
+    sent_tx: MultiKeyMap<TransactionNonce, R::Id, Vec<SentTransaction<R>>>,
+    finalized_tx: MultiKeyMap<TransactionNonce, R::Id, Finalized<R::Transaction>>,
     next_nonce: TransactionNonce,
 }
 
 /// The pipeline sending from the minter's main address, on which user withdrawals travel.
-pub(in crate::state) type MinterTransactionPipeline = TransactionPipeline<WithdrawalRequest>;
+pub type MinterTransactionPipeline = TransactionPipeline<WithdrawalRequest>;
+
+/// The pipeline sending from the minter's dedicated sweeper address.
+pub type SweeperTransactionPipeline = TransactionPipeline<SweepRequest>;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CreateTransactionError {
     InsufficientTransactionFee {
         cketh_ledger_burn_index: LedgerBurnIndex,
+        allowed_max_transaction_fee: Wei,
+        actual_max_transaction_fee: Wei,
+    },
+}
+
+/// Why a sweep could not be turned into a transaction.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum CreateSweepTransactionError {
+    /// The gas prepaid for this sweep cannot pay the current fee, so no transaction is created:
+    /// one priced within the allowance could not be mined, and would hold the sweeper's nonce
+    /// while the resubmission strategy refused to bump it past the same allowance.
+    InsufficientTransactionFee {
+        id: SweepId,
         allowed_max_transaction_fee: Wei,
         actual_max_transaction_fee: Wei,
     },
@@ -421,18 +491,28 @@ pub enum ResubmitTransactionError<Id> {
 /// How far a transaction has got through the pipeline. Carries the transaction itself, since
 /// every caller that asks the stage also wants the transaction at it.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub(in crate::state) enum TransactionStage<'a> {
-    Created(&'a Eip1559TransactionRequest),
+pub enum TransactionStage<'a, T: SignableTransaction> {
+    Created(&'a T),
     /// The most recently sent transaction, i.e. the one with the highest fee.
-    Sent(&'a SignedTransactionRequest),
-    Finalized(&'a FinalizedEip1559Transaction),
+    Sent(&'a Resubmittable<Signed<T>>),
+    Finalized(&'a Finalized<T>),
 }
 
 /// One outcome of [`TransactionPipeline::create_resubmit_transactions`]: the fee-bumped transaction to
 /// re-sign (paired with its pipeline id), or why it could not be bumped.
-type ResubmitResult<Id> = Result<(Id, Eip1559TransactionRequest), ResubmitTransactionError<Id>>;
+type ResubmitResult<Id, Tx> = Result<(Id, Tx), ResubmitTransactionError<Id>>;
 
-impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
+/// A transaction created for a request, with the strategy for bumping its fee.
+type CreatedTransaction<R> = Resubmittable<<R as PipelineRequest>::Transaction>;
+
+/// A transaction signed and sent for a request, with the strategy for bumping its fee.
+type SentTransaction<R> = Resubmittable<Signed<<R as PipelineRequest>::Transaction>>;
+
+impl<R> TransactionPipeline<R>
+where
+    R: PipelineRequest + Clone + Eq + fmt::Debug,
+    R::Transaction: Clone + Eq + fmt::Debug,
+{
     pub fn new(next_nonce: TransactionNonce) -> Self {
         Self {
             pending_requests: VecDeque::new(),
@@ -487,11 +567,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
         self.record_request(request);
     }
 
-    pub fn record_created_transaction(
-        &mut self,
-        id: R::Id,
-        transaction: Eip1559TransactionRequest,
-    ) {
+    pub fn record_created_transaction(&mut self, id: R::Id, transaction: R::Transaction) {
         let position = self
             .pending_requests
             .iter()
@@ -501,7 +577,11 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
         request.assert_created_transaction(&transaction);
         let resubmission = request.resubmission_strategy();
         let nonce = self.next_nonce;
-        assert_eq!(transaction.nonce, nonce, "BUG: transaction nonce mismatch");
+        assert_eq!(
+            transaction.nonce(),
+            nonce,
+            "BUG: transaction nonce mismatch"
+        );
         self.next_nonce = self
             .next_nonce
             .checked_increment()
@@ -510,7 +590,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
             .pending_requests
             .remove(position)
             .expect("BUG: position was just found in the queue");
-        let transaction_request = TransactionRequest {
+        let transaction_request = Resubmittable {
             transaction,
             resubmission,
         };
@@ -522,10 +602,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
         assert_eq!(self.processed_requests.insert(id, request), None);
     }
 
-    pub fn record_signed_transaction(
-        &mut self,
-        signed_transaction: SignedEip1559TransactionRequest,
-    ) {
+    pub fn record_signed_transaction(&mut self, signed_transaction: Signed<R::Transaction>) {
         let created_tx = self
             .created_tx
             .get(&signed_transaction.nonce())
@@ -560,7 +637,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
         &self,
         latest_transaction_count: TransactionCount,
         current_gas_fee: GasFeeEstimate,
-    ) -> Vec<ResubmitResult<R::Id>> {
+    ) -> Vec<ResubmitResult<R::Id, R::Transaction>> {
         // If transaction count at block height H is c > 0, then transactions with nonces
         // 0, 1, ..., c - 1 were mined. If transaction count is 0, then no transactions were mined.
         // The nonce of the first pending transaction is then exactly c.
@@ -600,8 +677,8 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
         transactions_to_resubmit
     }
 
-    pub fn record_resubmit_transaction(&mut self, new_tx: Eip1559TransactionRequest) {
-        let nonce = new_tx.nonce;
+    pub fn record_resubmit_transaction(&mut self, new_tx: R::Transaction) {
+        let nonce = new_tx.nonce();
         let (id, last_sent_tx) = Self::expect_last_sent_tx_entry(&self.sent_tx, &nonce);
         assert!(
             equal_ignoring_fee_and_amount(last_sent_tx.as_ref().transaction(), &new_tx),
@@ -644,7 +721,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
         &mut self,
         id: R::Id,
         receipt: &TransactionReceipt,
-    ) -> FinalizedEip1559Transaction {
+    ) -> Finalized<R::Transaction> {
         let sent_tx = self
             .sent_tx
             .get_alt(&id)
@@ -700,16 +777,13 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
 
     pub fn transactions_to_sign_iter(
         &self,
-    ) -> impl Iterator<Item = (&TransactionNonce, &R::Id, &Eip1559TransactionRequest)> {
+    ) -> impl Iterator<Item = (&TransactionNonce, &R::Id, &R::Transaction)> {
         self.created_tx
             .iter()
             .map(|(nonce, id, tx)| (nonce, id, tx.as_ref()))
     }
 
-    pub fn transactions_to_sign_batch(
-        &self,
-        batch_size: usize,
-    ) -> Vec<(R::Id, Eip1559TransactionRequest)> {
+    pub fn transactions_to_sign_batch(&self, batch_size: usize) -> Vec<(R::Id, R::Transaction)> {
         self.transactions_to_sign_iter()
             .take(batch_size)
             .map(|(_nonce, id, tx)| (*id, tx.clone()))
@@ -720,7 +794,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
         &self,
         latest_transaction_count: TransactionCount,
         batch_size: usize,
-    ) -> Vec<SignedEip1559TransactionRequest> {
+    ) -> Vec<Signed<R::Transaction>> {
         let first_pending_tx_nonce: TransactionNonce = latest_transaction_count.change_units();
         self.sent_tx
             .iter()
@@ -737,19 +811,13 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
 
     pub fn sent_transactions_iter(
         &self,
-    ) -> impl Iterator<
-        Item = (
-            &TransactionNonce,
-            &R::Id,
-            Vec<&SignedEip1559TransactionRequest>,
-        ),
-    > {
+    ) -> impl Iterator<Item = (&TransactionNonce, &R::Id, Vec<&Signed<R::Transaction>>)> {
         self.sent_tx
             .iter()
             .map(|(nonce, index, txs)| (nonce, index, txs.iter().map(|tx| tx.as_ref()).collect()))
     }
 
-    pub fn get_finalized_transaction(&self, id: &R::Id) -> Option<&FinalizedEip1559Transaction> {
+    pub fn get_finalized_transaction(&self, id: &R::Id) -> Option<&Finalized<R::Transaction>> {
         self.finalized_tx.get_alt(id)
     }
 
@@ -758,7 +826,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
     }
 
     /// How far the transaction for `id` has got, or `None` if the pipeline holds none.
-    pub fn transaction_stage(&self, id: &R::Id) -> Option<TransactionStage<'_>> {
+    pub fn transaction_stage(&self, id: &R::Id) -> Option<TransactionStage<'_, R::Transaction>> {
         if let Some(tx) = self.created_tx.get_alt(id) {
             return Some(TransactionStage::Created(tx.as_ref()));
         }
@@ -777,7 +845,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
 
     pub fn finalized_transactions_iter(
         &self,
-    ) -> impl Iterator<Item = (&TransactionNonce, &R::Id, &FinalizedEip1559Transaction)> {
+    ) -> impl Iterator<Item = (&TransactionNonce, &R::Id, &Finalized<R::Transaction>)> {
         self.finalized_tx.iter()
     }
 
@@ -790,9 +858,9 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
     }
 
     fn expect_last_sent_tx_entry<'a>(
-        sent_tx: &'a MultiKeyMap<TransactionNonce, R::Id, Vec<SignedTransactionRequest>>,
+        sent_tx: &'a MultiKeyMap<TransactionNonce, R::Id, Vec<SentTransaction<R>>>,
         nonce: &TransactionNonce,
-    ) -> (&'a R::Id, &'a SignedTransactionRequest) {
+    ) -> (&'a R::Id, &'a SentTransaction<R>) {
         let (id, sent_txs) = sent_tx
             .get_entry(nonce)
             .expect("BUG: sent transaction not found");
@@ -801,7 +869,7 @@ impl<R: PipelineRequest + Clone + Eq + fmt::Debug> TransactionPipeline<R> {
     }
 
     fn cleanup_failed_resubmitted_transactions(
-        created_tx: &mut MultiKeyMap<TransactionNonce, R::Id, TransactionRequest>,
+        created_tx: &mut MultiKeyMap<TransactionNonce, R::Id, CreatedTransaction<R>>,
         nonce: &TransactionNonce,
     ) {
         use crate::logs::INFO;
@@ -996,7 +1064,7 @@ impl WithdrawalTransactions {
         &self,
         latest_transaction_count: TransactionCount,
         current_gas_fee: GasFeeEstimate,
-    ) -> Vec<ResubmitResult<LedgerBurnIndex>> {
+    ) -> Vec<ResubmitResult<LedgerBurnIndex, Eip1559TransactionRequest>> {
         self.pipeline
             .create_resubmit_transactions(latest_transaction_count, current_gas_fee)
     }
@@ -1019,6 +1087,27 @@ impl WithdrawalTransactions {
 
     pub fn requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
         self.pipeline.requests_iter()
+    }
+
+    /// The sweeper funding whose transaction has not finalized yet, if any.
+    ///
+    /// Read off the pipeline rather than tracked next to it, so the two cannot disagree, and walked
+    /// from the furthest stage backwards, so that two outstanding fundings report the older one.
+    pub fn outstanding_sweeper_funding(&self) -> Option<&EthWithdrawalRequest> {
+        fn as_funding(request: &WithdrawalRequest) -> Option<&EthWithdrawalRequest> {
+            match request {
+                WithdrawalRequest::SweeperFunding(request) => Some(request),
+                WithdrawalRequest::CkEth(_) | WithdrawalRequest::CkErc20(_) => None,
+            }
+        }
+
+        self.pipeline
+            .sent_tx
+            .alt_keys()
+            .chain(self.pipeline.created_tx.alt_keys())
+            .filter_map(|id| self.pipeline.processed_requests.get(id))
+            .chain(self.pipeline.pending_requests.iter())
+            .find_map(as_funding)
     }
 
     pub fn requests_len(&self) -> usize {
@@ -1363,14 +1452,15 @@ impl TransactionCallData {
 /// * `max_fee_per_gas`
 /// * `max_priority_fee_per_gas`
 /// * `amount` (because the cost of the transaction is paid by the beneficiary and so influencing the fee does influence the transaction amount)
-fn equal_ignoring_fee_and_amount(
-    lhs: &Eip1559TransactionRequest,
-    rhs: &Eip1559TransactionRequest,
-) -> bool {
-    let mut rhs_with_lhs_fee_and_amount = rhs.clone();
-    rhs_with_lhs_fee_and_amount.max_fee_per_gas = lhs.max_fee_per_gas;
-    rhs_with_lhs_fee_and_amount.max_priority_fee_per_gas = lhs.max_priority_fee_per_gas;
-    rhs_with_lhs_fee_and_amount.amount = lhs.amount;
+fn equal_ignoring_fee_and_amount<T: SignableTransaction + Eq>(lhs: &T, rhs: &T) -> bool {
+    let rhs_with_lhs_fee_and_amount = rhs.with_price_and_amount(
+        TransactionPrice {
+            gas_limit: rhs.gas_limit(),
+            max_fee_per_gas: lhs.max_fee_per_gas(),
+            max_priority_fee_per_gas: lhs.max_priority_fee_per_gas(),
+        },
+        *lhs.amount(),
+    );
 
     lhs == &rhs_with_lhs_fee_and_amount
 }

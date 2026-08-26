@@ -38,13 +38,14 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::SystemTime;
 
 pub mod anvil;
 pub mod ckerc20;
 pub mod events;
 mod evm_rpc_provider;
 pub mod flow;
-pub mod live_scan;
+pub mod live;
 pub mod mock;
 pub mod response;
 
@@ -99,6 +100,7 @@ pub const USDC_ERC20_CONTRACT_ADDRESS: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0c
 pub const USDC_ERC20_CONTRACT_ADDRESS_LOWERCASE: &str =
     "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 pub const MINTER_ADDRESS: &str = "0x30a14171b7c4c93ff5213f82eeb74f7c7e3f1ebc";
+pub const SWEEPER_ADDRESS: &str = "0x07e326c6604e3801270fc52ffb7ad3d6c5dfe89c";
 pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
 pub const ETH_HELPER_CONTRACT_ADDRESS: &str = "0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1";
@@ -147,7 +149,7 @@ impl PocketIcHttpQuery for &CkEthSetup {
 impl CkEthSetup {
     /// Builds a fresh PocketIC instance (fiduciary subnet only, non-live) and installs the minter,
     /// its ckETH ledger and the EVM RPC canister on it — each under the anonymous controller —
-    /// against `backend`. [`Default`] uses [`EthereumBackend::Mocked`]; [`live_scan`] passes
+    /// against `backend`. [`Default`] uses [`EthereumBackend::Mocked`]; [`crate::live`] passes
     /// [`EthereumBackend::Anvil`] for the live balance-scan harness.
     fn new(backend: EthereumBackend) -> Self {
         let env = Arc::new(new_env());
@@ -729,9 +731,24 @@ impl CkEthSetup {
     }
 }
 
+/// Switches a fixture built against [`EthereumBackend::Anvil`] to live outcalls, so that from here
+/// on the EVM RPC canister's requests reach anvil for real. Both steps are load-bearing and both
+/// have bitten this crate; [`crate::live`]'s module documentation explains them at length.
+///
+/// In short: the in-flight outcalls from construction are answered while their request time is still
+/// current, because the clock jump below would otherwise time them all out and leave the minter's
+/// timer guards held; and the jump itself is applied synchronously, so an ingress message submitted
+/// once this returns cannot be stamped behind `auto_progress`'s own asynchronous time-set and then
+/// be retroactively expired.
+pub(crate) fn switch_to_live(cketh: &CkEthSetup) {
+    cketh.stop_ongoing_https_outcalls();
+    cketh.env.set_certified_time(SystemTime::now().into());
+    cketh.env.auto_progress();
+}
+
 /// Builds the PocketIC instance for [`CkEthSetup::new`]: the fiduciary subnet every ckETH fixture
 /// needs for the secp256k1 `key_1` used by the minter. Always a non-live (manual-round) instance,
-/// even for [`EthereumBackend::Anvil`]: [`crate::live_scan`] builds its whole fixture here first and
+/// even for [`EthereumBackend::Anvil`]: [`crate::live`] builds its whole fixture here first and
 /// only switches to live outcalls once construction is complete, so `await_call` ticks
 /// deterministically for every setup call in between.
 fn new_env() -> PocketIc {
@@ -843,7 +860,7 @@ enum EthereumBackend {
     /// it running for the fixture's lifetime; this particular clone is dropped once
     /// [`CkEthSetup::new`] returns, having done its job of computing the install args below. The
     /// canisters themselves are created and installed in the same order as for
-    /// [`EthereumBackend::Mocked`] — only their init args differ; [`crate::live_scan`] is the one
+    /// [`EthereumBackend::Mocked`] — only their init args differ; [`crate::live`] is the one
     /// that switches the PocketIC instance to live outcalls, once its whole fixture is built.
     Anvil(Arc<Anvil>),
 }
@@ -898,6 +915,7 @@ fn install_minter(env: &PocketIc, canisters: &CkEthCanisters, backend: &Ethereum
         last_scraped_block_number: backend.last_scraped_block_number(),
         evm_rpc_id: Some(canisters.evm_rpc_id),
         ethereum_sweeper_contract_address: None,
+        next_sweeper_transaction_nonce: None,
     };
     env.install_canister(
         canisters.minter_id,

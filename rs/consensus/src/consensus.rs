@@ -253,12 +253,13 @@ impl ConsensusImpl {
                 crypto.clone(),
                 state_manager.clone(),
                 message_routing.clone(),
+                registry_client.clone(),
                 logger.clone(),
             ),
             block_maker: BlockMaker::new(
                 Arc::clone(&time_source) as Arc<_>,
                 replica_config.clone(),
-                Arc::clone(&registry_client),
+                registry_client.clone(),
                 membership.clone(),
                 crypto.clone(),
                 payload_builder.clone(),
@@ -272,7 +273,7 @@ impl ConsensusImpl {
             validator: Validator::new(
                 replica_config.clone(),
                 membership.clone(),
-                Arc::clone(&registry_client),
+                registry_client.clone(),
                 crypto.clone(),
                 payload_builder,
                 state_manager.clone(),
@@ -287,6 +288,8 @@ impl ConsensusImpl {
                 membership,
                 message_routing.clone(),
                 crypto.clone(),
+                registry_client.clone(),
+                replica_config.clone(),
                 logger.clone(),
             ),
             purger: Purger::new(

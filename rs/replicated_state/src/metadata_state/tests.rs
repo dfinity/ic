@@ -470,14 +470,7 @@ fn network_topology_roundtrip_encoding() {
         ..Default::default()
     };
 
-    let filtered_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            range(10, 19) => app_subnet_id,
-        })
-        .unwrap(),
-    );
-
-    let full_routing_table = Arc::new(
+    let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             range(10, 19) => app_subnet_id,
             range(20, 29) => engine_subnet_id,
@@ -503,16 +496,17 @@ fn network_topology_roundtrip_encoding() {
     let bitcoin_testnet_canister_id = Some(canister_test_id(100));
     let bitcoin_mainnet_canister_id = Some(canister_test_id(101));
 
-    // NetworkTopology without full_topology (non-NNS subnet).
     let network_topology = NetworkTopology::new(
-        btreemap! { app_subnet_id => app_subnet_topo.clone() },
-        filtered_routing_table.clone(),
-        canister_migrations.clone(),
+        btreemap! {
+            app_subnet_id => app_subnet_topo,
+            engine_subnet_id => engine_subnet_topo,
+        },
+        routing_table,
+        canister_migrations,
         nns_subnet_id,
-        chain_key_enabled_subnets.clone(),
+        chain_key_enabled_subnets,
         bitcoin_testnet_canister_id,
         bitcoin_mainnet_canister_id,
-        None,
         Some(app_subnet_id),
         Default::default(),
     );
@@ -520,30 +514,6 @@ fn network_topology_roundtrip_encoding() {
     let proto = pb::NetworkTopology::from(&network_topology);
     let round_trip = NetworkTopology::try_from(proto).unwrap();
     assert_eq!(network_topology, round_trip);
-
-    // NetworkTopology with full_topology (NNS subnet).
-    let network_topology_with_full = NetworkTopology::new(
-        btreemap! { app_subnet_id => app_subnet_topo.clone() },
-        filtered_routing_table,
-        canister_migrations,
-        nns_subnet_id,
-        chain_key_enabled_subnets,
-        bitcoin_testnet_canister_id,
-        bitcoin_mainnet_canister_id,
-        Some(FullTopology {
-            subnets: btreemap! {
-                app_subnet_id => app_subnet_topo,
-                engine_subnet_id => engine_subnet_topo,
-            },
-            routing_table: full_routing_table,
-        }),
-        Some(app_subnet_id),
-        Default::default(),
-    );
-
-    let proto = pb::NetworkTopology::from(&network_topology_with_full);
-    let round_trip = NetworkTopology::try_from(proto).unwrap();
-    assert_eq!(network_topology_with_full, round_trip);
 }
 
 #[test]
@@ -1619,11 +1589,11 @@ fn network_topology_ecdsa_subnets() {
 }
 
 #[test]
-fn network_topology_route_uses_filtered_topology() {
+fn network_topology_routing() {
     let subnet_a = subnet_test_id(1);
     let subnet_b = subnet_test_id(2);
 
-    // The filtered routing table only contains subnet_a's range.
+    // The routing table only contains subnet_a's range.
     let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
@@ -1631,8 +1601,7 @@ fn network_topology_route_uses_filtered_topology() {
         .unwrap(),
     );
 
-    // The filtered subnets map only contains subnet_a.
-    // subnet_b exists in the network but is not visible to this subnet.
+    // The subnets map only contains subnet_a.
     let network_topology = NetworkTopology {
         subnets: btreemap! {
             subnet_a => SubnetTopology::default(),
@@ -1645,101 +1614,20 @@ fn network_topology_route_uses_filtered_topology() {
 
     // --- Canister ID routing ---
 
-    // Canister on subnet_a: resolvable via the filtered routing table.
+    // Canister on subnet_a: resolvable via the routing table.
     assert_eq!(
         network_topology.route(canister_test_id(50).get()),
         Some(subnet_a),
     );
-    // Canister 150 is not in the filtered routing table at all.
+    // Canister 150 is not in the routing table at all.
     assert_eq!(network_topology.route(canister_test_id(150).get()), None);
 
     // --- Subnet ID routing ---
 
-    // subnet_a is in the filtered subnets map.
+    // subnet_a is in the subnets map.
     assert_eq!(network_topology.route(subnet_a.get()), Some(subnet_a));
-    // subnet_b is NOT in the filtered subnets map.
+    // subnet_b is NOT in the subnets map.
     assert_eq!(network_topology.route(subnet_b.get()), None);
-}
-
-#[test]
-fn subnets_for_certification_falls_back_to_filtered() {
-    let subnet_a = subnet_test_id(1);
-
-    let routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-        })
-        .unwrap(),
-    );
-
-    let network_topology = NetworkTopology {
-        subnets: btreemap! {
-            subnet_a => SubnetTopology::default(),
-        },
-        routing_table: routing_table.clone(),
-        ..Default::default()
-    };
-
-    // Without full_topology, subnets_for_certification returns the filtered map.
-    assert_eq!(
-        network_topology.subnets_for_certification(),
-        network_topology.subnets()
-    );
-    assert_eq!(network_topology.routing_table(), &routing_table);
-    assert_eq!(
-        network_topology.routing_table_for_certification(),
-        network_topology.routing_table()
-    );
-}
-
-#[test]
-fn subnets_for_certification_returns_full_topology_when_set() {
-    use crate::metadata_state::testing::NetworkTopologyTesting;
-
-    let subnet_a = subnet_test_id(1);
-    let subnet_b = subnet_test_id(2); // e.g., a cloud engine
-
-    let full_subnets = btreemap! {
-        subnet_a => SubnetTopology::default(),
-        subnet_b => SubnetTopology::default(),
-    };
-    let full_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-            CanisterIdRange { start: CanisterId::from(100_u64), end: CanisterId::from(199_u64) } => subnet_b,
-        })
-        .unwrap(),
-    );
-
-    let filtered_subnets = btreemap! {
-        subnet_a => SubnetTopology::default(),
-    };
-    let filtered_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-        })
-        .unwrap(),
-    );
-
-    let mut network_topology = NetworkTopology {
-        subnets: filtered_subnets.clone(),
-        routing_table: filtered_routing_table.clone(),
-        ..Default::default()
-    };
-    network_topology.set_full_topology(Some(FullTopology {
-        subnets: full_subnets.clone(),
-        routing_table: full_routing_table.clone(),
-    }));
-
-    // subnets() and routing_table() return the filtered view.
-    assert_eq!(network_topology.subnets(), &filtered_subnets);
-    assert_eq!(network_topology.routing_table(), &filtered_routing_table);
-    // subnets_for_certification() and routing_table_for_certification() return the full view.
-    assert_eq!(network_topology.subnets_for_certification(), &full_subnets);
-    assert_eq!(
-        network_topology.routing_table_for_certification(),
-        &full_routing_table
-    );
 }
 
 /// Test fixture that will produce an ingress status of type completed or failed,
@@ -1932,7 +1820,7 @@ fn ingress_history_respects_limits() {
     let run_test = |num_statuses, max_num_terminal| {
         let mut ingress_history = IngressHistoryState::default();
 
-        assert_eq!(ingress_history.memory_usage, 0);
+        assert_eq!(ingress_history.stats.memory_usage, 0);
 
         let terminal_size =
             NumBytes::from(max_num_terminal * test_status_terminal(0).payload_bytes() as u64);
@@ -2879,13 +2767,14 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     );
 }
 
-/// The `replicated_state_consumed_cycles_since_replica_started` gauge is
-/// computed in `ReplicatedStateMetrics::observe` by summing the per-canister
-/// totals with the subnet-level use cases. This test exercises every
-/// subnet-level use case that contributes to the total, so that omitting any of
-/// them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use cases once were)
-/// would change the reported value and fail the assertion. Distinct powers of
-/// two are used so that a missing use case is always detectable in the total.
+/// The `replicated_state_consumed_cycles_since_replica_started` gauge is set in
+/// `ReplicatedStateMetrics::observe` from
+/// [`SubnetMetrics::consumed_cycles_total_including_canisters`]. This test
+/// exercises every subnet-level use case that contributes to the total, so that
+/// omitting any of them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use
+/// cases once were) would change the reported value and fail the assertion, plus
+/// the canisters' half of the total. Distinct powers of two are used so that a
+/// missing contribution is always detectable in the total.
 #[test]
 fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
     // The three use cases with a dedicated scalar field are also mirrored in the
@@ -2901,7 +2790,7 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
 
     // The canister-level use cases are also present in the by-use-case map (in
     // production they end up there via deleted canisters), but the gauge derives
-    // their contribution from the per-canister totals and the
+    // their contribution from `consumed_cycles_by_canisters` and the
     // `consumed_cycles_by_deleted_canisters` scalar rather than from the map.
     // Insert them with a large value to ensure they are *not* double-counted
     // into the gauge total from the map.
@@ -2923,6 +2812,9 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         consumed_cycles_ecdsa_outcalls: NominalCycles::new(2),
         consumed_cycles_http_outcalls: NominalCycles::new(4),
         consumed_cycles_by_use_case,
+        // The canisters' half of the total, as refreshed by
+        // `ReplicatedState::refresh_consumed_cycles_by_canisters`.
+        consumed_cycles_by_canisters: NominalCycles::new(64),
         ..Default::default()
     };
 
@@ -2939,15 +2831,15 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
     );
 
     // Deleted canisters (1) + ECDSA (2) + HTTP (4) + Schnorr (8) + VetKd (16)
-    // + dropped messages (32) = 63. There are no canisters, so the per-canister
-    // contribution is zero, and the canister-level use cases inserted into the
-    // map above (each worth 1024) must not appear in the total.
+    // + dropped messages (32) + the canisters' half (64) = 127. The
+    // canister-level use cases inserted into the map above (each worth 1024)
+    // must not appear in the total.
     let gauge = fetch_gauge(
         &registry,
         "replicated_state_consumed_cycles_since_replica_started",
     )
     .unwrap();
-    assert_eq!(gauge, 63.0);
+    assert_eq!(gauge, 127.0);
 }
 
 #[test]
@@ -3205,7 +3097,7 @@ fn blockmaker_metrics_time_series_check_observe_works() {
             .is_none()
     );
 
-    // Check `observe()` does nothing with a batch time before the last obseration.
+    // Check `observe()` does nothing with a batch time before the last observation.
     let metrics_before = metrics.clone();
     metrics.observe(
         batch_time,

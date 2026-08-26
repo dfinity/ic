@@ -4,7 +4,7 @@ use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, CkErc20Token, Erc20Balance, MinterInfo, WithdrawalDetail,
+    AddCkErc20Token, CkErc20Token, Erc20Balance, Erc20MinimumDeposit, MinterInfo, WithdrawalDetail,
     WithdrawalSearchParameter,
 };
 use ic_cketh_minter::memo::MintMemo;
@@ -27,7 +27,8 @@ use ic_cketh_test_utils::{
     DEFAULT_ERC20_DEPOSIT_LOG_INDEX, DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH,
     DEFAULT_USER_SUBACCOUNT, DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, EFFECTIVE_GAS_PRICE,
     ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS, GAS_USED,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, format_ethereum_address_to_eip_55,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, SWEEPER_ADDRESS,
+    format_ethereum_address_to_eip_55,
 };
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::pocket_ic::flow::call_ledger_icrc1_total_supply;
@@ -145,12 +146,13 @@ fn should_mint_with_ckerc20_setup() {
 
 mod deposit_erc20 {
     use assert_matches::assert_matches;
-    use candid::Principal;
+    use candid::{Nat, Principal};
     use ic_cketh_minter::endpoints::events::EventPayload;
     use ic_cketh_minter::endpoints::{DepositErc20Error, DepositStatus};
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
-    use ic_cketh_test_utils::ckerc20::CkErc20Setup;
+    use ic_cketh_test_utils::ckerc20::{CKWBTC_CONTRACT_ADDRESS, CkErc20Setup, ckwbtc};
     use ic_cketh_test_utils::{DEFAULT_USER_SUBACCOUNT, format_ethereum_address_to_eip_55};
+    use std::collections::BTreeMap;
 
     /// Number of `AutomaticDepositReceived` events currently in the minter's audit log.
     fn count_automatic_deposits_received(ckerc20: &CkErc20Setup) -> usize {
@@ -328,6 +330,62 @@ mod deposit_erc20 {
             .check_minter_metrics()
             .assert_contains_metric_matching(r"cketh_minter_latest_block_height 2000 \d+")
             .assert_does_not_contain_metric_matching(r"cketh_minter_latest_block_height 1500 \d+");
+    }
+
+    #[test]
+    fn should_report_the_minimum_deposit_amount_of_the_requested_token() {
+        // The default supported tokens, ckUSDC and ckUSDT, are both $10 worth of a 6-decimal
+        // stablecoin. ckWBTC is added so the set holds a token whose minimum differs, which is what
+        // makes the per-token lookup below observable at all.
+        const STABLECOIN_MINIMUM_DEPOSIT: u64 = 10_000_000;
+        const CKWBTC_MINIMUM_DEPOSIT: u64 = 15_000;
+
+        let ckerc20 = CkErc20Setup::default()
+            .add_supported_erc20_tokens()
+            .add_supported_erc20_token(ckwbtc());
+        let caller = ckerc20.caller();
+        let minimums_from_minter_info: BTreeMap<_, _> = ckerc20
+            .cketh
+            .get_minter_info()
+            .minimum_deposit_amounts
+            .expect("BUG: the ckERC20 feature is active")
+            .into_iter()
+            .map(|minimum| {
+                (
+                    minimum.erc20_contract_address,
+                    minimum.minimum_deposit_amount,
+                )
+            })
+            .collect();
+        let tokens: Vec<String> = ckerc20
+            .supported_erc20_tokens
+            .iter()
+            .map(|token| format_ethereum_address_to_eip_55(&token.contract.address))
+            .collect();
+        assert_eq!(tokens.len(), 3, "BUG: expected ckUSDC, ckUSDT and ckWBTC");
+
+        let mut ckerc20 = ckerc20;
+        for token in tokens {
+            let expected = match token.as_str() {
+                CKWBTC_CONTRACT_ADDRESS => Nat::from(CKWBTC_MINIMUM_DEPOSIT),
+                _ => Nat::from(STABLECOIN_MINIMUM_DEPOSIT),
+            };
+            let (setup, response) = ckerc20
+                .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
+                .expect_deposit_response();
+            ckerc20 = setup;
+
+            assert_eq!(
+                response.minimum_deposit_amount, expected,
+                "wrong minimum reported for {token}"
+            );
+            // Both endpoints must quote the same threshold as the one the balance scan enforces.
+            assert_eq!(
+                Some(&response.minimum_deposit_amount),
+                minimums_from_minter_info.get(&token),
+                "deposit_erc20 and get_minter_info disagree for {token}"
+            );
+        }
     }
 
     #[test]
@@ -2054,11 +2112,21 @@ fn should_retrieve_minter_info() {
         })
         .collect();
 
+    const USD_STABLECOIN_MINIMUM_DEPOSIT: u64 = 10_000_000;
+    let minimum_deposit_amounts = supported_ckerc20_tokens
+        .iter()
+        .map(|token| Erc20MinimumDeposit {
+            erc20_contract_address: token.erc20_contract_address.clone(),
+            minimum_deposit_amount: Nat::from(USD_STABLECOIN_MINIMUM_DEPOSIT),
+        })
+        .collect();
+
     let info_at_start = ckerc20.cketh.get_minter_info();
     assert_eq!(
         info_at_start,
         MinterInfo {
             minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            sweeper_address: Some(format_ethereum_address_to_eip_55(SWEEPER_ADDRESS)),
             smart_contract_address: Some(format_ethereum_address_to_eip_55(
                 ETH_HELPER_CONTRACT_ADDRESS
             )),
@@ -2077,6 +2145,7 @@ fn should_retrieve_minter_info() {
             eth_balance: Some(Nat::from(0_u8)),
             last_gas_fee_estimate: None,
             erc20_balances: Some(erc20_balances),
+            minimum_deposit_amounts: Some(minimum_deposit_amounts),
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_deposit_with_subaccount_scraped_block_number: Some(
