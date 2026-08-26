@@ -175,8 +175,8 @@ jobs:
       # canisters/SHA256SUMS, which is itself verified against the
       # build-provenance attestation created by the attest-uploads job of the
       # ci-kickoff pipeline for this exact commit. Any CDN substitution fails
-      # the release instead of being republished with matching checksums
-      # (security finding 3618194). The SHA256SUMS this emits into out-dir
+      # the release instead of being republished with matching checksums.
+      # The SHA256SUMS this emits into out-dir
       # lists the verified hashes under the release filenames and is published
       # as the release's verification data.
       - name: Download and verify artifacts and SHA256SUMS

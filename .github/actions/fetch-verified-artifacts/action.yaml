@@ -2,7 +2,7 @@ name: Fetch Verified Artifacts
 description: |
   Download artifacts from the CDN (download.dfinity.systems) and verify every
   one of them against the build-provenance attestation of the pipeline that
-  built them, aborting on any mismatch (security finding 3618194).
+  built them, aborting on any mismatch.
 
   For each directory named in `files`, the directory's SHA256SUMS is fetched
   and verified with `gh attestation verify --source-digest <commit>` via
