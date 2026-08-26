@@ -39,7 +39,7 @@ pub struct AttestationRequest {
     /// call and is deliberately absent from the preimage.
     #[n(1)]
     deposit_helper: Address,
-    #[cbor(n(2), with = "cbor_account")]
+    #[cbor(n(2), with = "crate::cbor::account")]
     account: Account,
     /// Which deposit-address scheme derives the key that signs, so the signing path cannot
     /// disagree with the digest.
@@ -117,39 +117,4 @@ pub async fn sign_attestation(
         &deposit_derivation_path(request.schema, &request.account),
     )
     .await
-}
-
-/// Encodes the [`Account`] of an [`AttestationRequest`] the way every other event splits one: an
-/// owner and an optional 32-byte subaccount.
-mod cbor_account {
-    use candid::Principal;
-    use icrc_ledger_types::icrc1::account::Account;
-    use minicbor::decode::{Decoder, Error};
-    use minicbor::encode::{Encoder, Write};
-    use minicbor::{Decode, Encode};
-
-    #[derive(Decode, Encode)]
-    struct CborAccount {
-        #[cbor(n(0), with = "icrc_cbor::principal")]
-        owner: Principal,
-        #[cbor(n(1), with = "minicbor::bytes")]
-        subaccount: Option<[u8; 32]>,
-    }
-
-    pub fn decode<Ctx>(d: &mut Decoder<'_>, ctx: &mut Ctx) -> Result<Account, Error> {
-        let CborAccount { owner, subaccount } = CborAccount::decode(d, ctx)?;
-        Ok(Account { owner, subaccount })
-    }
-
-    pub fn encode<Ctx, W: Write>(
-        v: &Account,
-        e: &mut Encoder<W>,
-        ctx: &mut Ctx,
-    ) -> Result<(), minicbor::encode::Error<W::Error>> {
-        CborAccount {
-            owner: v.owner,
-            subaccount: v.subaccount,
-        }
-        .encode(e, ctx)
-    }
 }
