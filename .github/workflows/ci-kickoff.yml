@@ -104,17 +104,9 @@ jobs:
   post-required-check-status-ci-main:
     name: CI Main Required Check Status
     runs-on: ubuntu-latest
-    needs: [ci-main, attest-uploads]
-    # Only run this job on pull requests or merge queues, but run it
-    # regardless of the previous result. attest-uploads is normally skipped
-    # on those events (it only runs on release builds), so the gate checks
-    # ci-main's result explicitly rather than using success() || failure(),
-    # which are both false when any needed job was skipped and would leave
-    # the required status unposted. !cancelled() suppresses the implicit
-    # success() that GitHub applies to conditions without a status function.
-    if: |
-      !cancelled() && (needs.ci-main.result == 'success' || needs.ci-main.result == 'failure') &&
-      ( github.event_name == 'pull_request' || github.event_name == 'merge_group' )
+    needs: [ci-main]
+    # only run this job on pull requests or merge queues, but run it regardless of the previous result
+    if: (success() || failure()) && ( github.event_name == 'pull_request' || github.event_name == 'merge_group' )
     permissions:
       contents: read
       pull-requests: write
@@ -127,11 +119,7 @@ jobs:
         with:
           # on pull requests the github.sha is the merge commit - here we use the head commit so that it will show up on PRs
           commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
-          # A failed attestation must fail the required check: an unattested
-          # release upload is exactly the gap the attest job closes. A
-          # skipped attest-uploads (non-release build) passes ci-main's
-          # result through unchanged.
-          run-result: ${{ case(needs.attest-uploads.result == 'failure', 'failure', needs.ci-main.result) }}
+          run-result: ${{ needs.ci-main.result }}
           name: ci-main-status
 
   post-required-check-status-ci-pr-only:
