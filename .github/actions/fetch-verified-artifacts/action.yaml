@@ -112,7 +112,11 @@ runs:
         # verified": refuse a non-empty directory rather than mixing stale,
         # unverified files in with the verified ones — a consumer publishing
         # the directory with a glob would otherwise publish those too.
-        if [ -n "$(find "$out_dir" -mindepth 1 -print -quit)" ]; then
+        # -H follows a symlink given as the start point (the writes below
+        # follow it too, so its target's contents are what matter), while
+        # entries below are not followed — a child symlink counts as an
+        # entry and is rejected.
+        if [ -n "$(find -H "$out_dir" -mindepth 1 -print -quit)" ]; then
           echo "ERROR: out-dir '$out_dir' is not empty" >&2
           exit 1
         fi
