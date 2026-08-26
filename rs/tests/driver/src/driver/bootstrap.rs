@@ -458,7 +458,13 @@ pub fn setup_and_start_nested_vms(
     let logger = env.logger();
     info!(logger, "Setting up nested VM(s) ...");
 
-    let nns_url = nested_nns_url(env, &logger);
+    let ic_gateway_url = env
+        .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
+        .map(|v| v.get_public_url())
+        .unwrap_or_else(|_| {
+            info!(logger, "No gateway found, using dummy URL");
+            url::Url::parse("http://localhost:8080").unwrap()
+        });
     let nns_public_key_override = env.prep_dir("").map(|v| v.root_public_key_path());
 
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
@@ -466,7 +472,7 @@ pub fn setup_and_start_nested_vms(
         let t_env = env.clone();
         let t_farm = farm.clone();
         let t_group_name = group_name.to_string();
-        let t_nns_url = nns_url.clone();
+        let t_ic_gateway_url = ic_gateway_url.clone();
         let t_nns_public_key_override = nns_public_key_override.clone();
         join_handles.push(thread::spawn(move || {
             let vm_name = node.vm_name();
@@ -474,7 +480,7 @@ pub fn setup_and_start_nested_vms(
             let config_image = create_setupos_config_image(
                 &t_env,
                 &vm_name,
-                &t_nns_url,
+                &t_ic_gateway_url,
                 t_nns_public_key_override.as_deref(),
             )?;
 
@@ -548,39 +554,6 @@ pub fn setup_and_start_nested_vms(
     }
 
     result
-}
-
-/// The NNS URL a nested node is told to register through, written into its
-/// SetupOS `deployment.json` as `nns.urls`.
-///
-/// The ic-gateway, on both backends. A nested node is *not* in the registry yet,
-/// so it cannot pass the replicas' firewall — the orchestrator's automatic
-/// whitelist only covers nodes the registry already knows — whereas the gateway
-/// fronts an API boundary node that is. Its domain resolves (in public DNS on
-/// Farm, through the group's `dnsmasq` on the Local backend) and its certificate
-/// is issued by a CA the node trusts (a public one on Farm, the dev root CA that
-/// every dev IC-OS image carries on the Local backend), so the node can use it
-/// out of the box either way.
-///
-/// A nested VM can also be brought up with no IC at all —
-/// `rs/tests/node/launch_single_host.rs` does exactly that, and only waits for
-/// HostOS to accept an SSH login — in which case there is no gateway either and
-/// the URL is never used, so a dummy will do.
-fn nested_nns_url(env: &TestEnv, logger: &Logger) -> Url {
-    match env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME) {
-        Ok(gateway) => {
-            let url = gateway.get_public_url();
-            // Worth logging: SetupOS prints its own config to the serial console,
-            // but that output is lost to `serial-getty`'s `TTYVHangup`, so this is
-            // the only place a test log records which URL the node was given.
-            info!(logger, "Nested node(s) will register through {url}");
-            url
-        }
-        Err(_) => {
-            info!(logger, "No ic-gateway found, using dummy URL");
-            Url::parse("http://localhost:8080").unwrap()
-        }
-    }
 }
 
 fn validate_version_config(env: &TestEnv) {
