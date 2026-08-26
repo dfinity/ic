@@ -109,34 +109,6 @@ impl SweeperFundingAccounting {
     }
 }
 
-/// Why sweeping is not currently allowed to spend gas.
-#[derive(Clone, Copy, Eq, PartialEq, Debug)]
-pub enum PrepaidGasUnavailable {
-    Insufficient { available: Wei, required: Wei },
-}
-
-/// Whether the prepaid sweep gas the minter can vouch for covers `required` wei for *one* sweep.
-///
-/// `bound` is [`SweeperFundingAccounting::sweeper_balance_lower_bound`], not a reading: it errs low,
-/// so refusing on it can only withhold a sweep that would in fact have been paid for, which costs
-/// delay. Fails closed in that sense — nothing is authorised that the minter's own records do not
-/// already account for.
-///
-/// A precondition on a bound, not an allowance: it neither reserves nor deducts, so a caller issuing
-/// several sweeps has to subtract what it has already committed. Two 6-wei sweeps both pass against
-/// a 10-wei bound. The backing invariant does not rest on this: funding counts the whole transfer as
-/// spent once it finalizes, so every wei at the sweeper address is already covered by a burn that
-/// preceded it, and drawing it down cannot make spend outrun burn.
-pub fn check_prepaid_sweep_gas(bound: Wei, required: Wei) -> Result<Wei, PrepaidGasUnavailable> {
-    if bound < required {
-        return Err(PrepaidGasUnavailable::Insufficient {
-            available: bound,
-            required,
-        });
-    }
-    Ok(bound)
-}
-
 /// When to top the sweeper address up, and to what. Derived from the minimum withdrawal amount, so
 /// that the gap between the two — the smallest amount a funding moves — clears the ledger minimum by
 /// construction.
