@@ -508,35 +508,24 @@ fn wei_row(setup: &LiveSetup<CkEthSetup>, id: &str) -> u128 {
 
 /// The burn index of the funding the minter currently has in flight, waiting for it to appear.
 fn await_in_flight_burn_index(setup: &LiveSetup<CkEthSetup>) -> u64 {
-    let start = std::time::Instant::now();
-    loop {
-        if let Some(index) = setup.in_flight_funding_burn_index() {
-            return index;
-        }
-        assert!(
-            start.elapsed() <= AWAIT_DEADLINE,
-            "the minter burned ckETH but recorded no in-flight funding within {AWAIT_DEADLINE:?}; \
-             minter logs:\n{}",
-            setup.minter_logs().join("\n")
-        );
-        std::thread::sleep(Duration::from_secs(2));
-    }
+    setup.poll_until(
+        AWAIT_DEADLINE,
+        |_| "the minter burned ckETH but recorded no in-flight funding".to_string(),
+        |setup| setup.in_flight_funding_burn_index(),
+    )
 }
 
+/// What a funding burned, waiting for the supply to drop.
 fn await_burn(setup: &LiveSetup<CkEthSetup>, supply_before: u128) -> u128 {
-    let start = std::time::Instant::now();
-    loop {
-        let supply = setup.cketh_total_supply();
-        if supply < supply_before {
-            return supply_before - supply;
-        }
-        assert!(
-            start.elapsed() <= AWAIT_DEADLINE,
-            "no burn observed within {AWAIT_DEADLINE:?}; minter logs:\n{}",
-            setup.minter_logs().join("\n")
-        );
-        std::thread::sleep(Duration::from_secs(2));
-    }
+    setup.poll_until(
+        AWAIT_DEADLINE,
+        |_| "no burn observed".to_string(),
+        |setup| {
+            supply_before
+                .checked_sub(setup.cketh_total_supply())
+                .filter(|burned| *burned > 0)
+        },
+    )
 }
 
 fn holder_at(index: u64) -> Address {
