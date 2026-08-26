@@ -80,7 +80,7 @@ mod private {
     impl SignatureDomainSeal for RandomTapeContent {}
     impl SignatureDomainSeal for SignableMock {}
     impl SignatureDomainSeal for QueryResponseHash {}
-    impl<'a> SignatureDomainSeal for VetKdEncryptedKeyShareSigningContent<'a> {}
+    impl SignatureDomainSeal for VetKdEncryptedKeyShareSigningContent<'_> {}
 }
 
 impl SignatureDomain for CanisterHttpResponseReceipt {
