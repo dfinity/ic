@@ -93,21 +93,31 @@ runs:
         GH_TOKEN: ${{ inputs.gh-token }}
       run: |
         set -euo pipefail
+        # Command-substitution subshells do not inherit errexit by default,
+        # which would let a failing command inside $(...) go unnoticed.
+        shopt -s inherit_errexit
 
         out_dir="${OUT_DIR:-$(mktemp -d)}"
         mkdir -p "$out_dir"
         sums_cache="$(mktemp -d)"
 
         # Fetch (once per directory) the CDN SHA256SUMS, verified against the
-        # build's attestation. Everything else is verified locally against it.
-        verified_sums_for_dir() { # <cdn-subdir>; echoes the local sums path
+        # build's attestation, and set $sums to its local path. Everything
+        # else is verified locally against it. This deliberately runs in the
+        # main shell and reports via a variable instead of echoing from a
+        # command substitution: a $(...) subshell would swallow the
+        # verifier's failure and hand back the path of an UNVERIFIED file.
+        # The verifier also writes to a temp name that is only moved to the
+        # cache path on success, so no later iteration can mistake a failed
+        # download for a verified one.
+        ensure_verified_sums_for_dir() { # <cdn-subdir>; sets $sums
           local dir="$1"
-          local cached="$sums_cache/${dir//\//_}.SHA256SUMS"
-          if ! [ -f "$cached" ]; then
+          sums="$sums_cache/${dir//\//_}.SHA256SUMS"
+          if ! [ -f "$sums" ]; then
             "$GITHUB_WORKSPACE/ci/scripts/fetch-attested-sums.sh" \
-              "$COMMIT" "$dir" "$SIGNER_WORKFLOW" "$cached"
+              "$COMMIT" "$dir" "$SIGNER_WORKFLOW" "$sums.unverified"
+            mv "$sums.unverified" "$sums"
           fi
-          echo "$cached"
         }
 
         : >"$out_dir/SHA256SUMS"
@@ -142,7 +152,7 @@ runs:
 
           dir="$(dirname "$rel")"
           base="$(basename "$rel")"
-          sums="$(verified_sums_for_dir "$dir")"
+          ensure_verified_sums_for_dir "$dir"
 
           expected="$(awk -v n="$base" '$NF == n { print $1; exit }' "$sums")"
           if ! [[ "$expected" =~ ^[0-9a-f]{64}$ ]]; then
