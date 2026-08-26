@@ -27,6 +27,14 @@ inputs:
       dfinity/ic/.github/workflows/ci-kickoff.yml for master commits,
       dfinity/ic/.github/workflows/release-testing.yml for rc--*/hotfix-*
       commits.
+  source-ref-regex:
+    required: true
+    description: |
+      Regex (anchored by the verifier) that the attestation's source git ref
+      must match: "refs/heads/master" for master commits,
+      "refs/heads/(rc--|hotfix-|public-hotfix-).+" for release-qualification
+      branches. The signer-workflow pin alone fixes which workflow signed,
+      not from which ref it ran — see ci/scripts/fetch-attested-sums.sh.
   files:
     required: true
     description: |
@@ -88,6 +96,7 @@ runs:
       env:
         COMMIT: ${{ inputs.commit }}
         SIGNER_WORKFLOW: ${{ inputs.signer-workflow }}
+        SOURCE_REF_REGEX: ${{ inputs.source-ref-regex }}
         FILES: ${{ inputs.files }}
         OUT_DIR: ${{ inputs.out-dir }}
         GH_TOKEN: ${{ inputs.gh-token }}
@@ -99,6 +108,14 @@ runs:
 
         out_dir="${OUT_DIR:-$(mktemp -d)}"
         mkdir -p "$out_dir"
+        # The out-dir's contract is "exactly the files this invocation
+        # verified": refuse a non-empty directory rather than mixing stale,
+        # unverified files in with the verified ones — a consumer publishing
+        # the directory with a glob would otherwise publish those too.
+        if [ -n "$(find "$out_dir" -mindepth 1 -print -quit)" ]; then
+          echo "ERROR: out-dir '$out_dir' is not empty" >&2
+          exit 1
+        fi
         sums_cache="$(mktemp -d)"
 
         # Fetch (once per directory) the CDN SHA256SUMS, verified against the
@@ -119,7 +136,7 @@ runs:
           sums="$sums_cache/$(printf '%s' "$dir" | sha256sum | cut -d' ' -f1).SHA256SUMS"
           if ! [ -f "$sums" ]; then
             "$GITHUB_WORKSPACE/ci/scripts/fetch-attested-sums.sh" \
-              "$COMMIT" "$dir" "$SIGNER_WORKFLOW" "$sums.unverified"
+              "$COMMIT" "$dir" "$SIGNER_WORKFLOW" "$SOURCE_REF_REGEX" "$sums.unverified"
             mv "$sums.unverified" "$sums"
           fi
         }
@@ -151,6 +168,13 @@ runs:
           # checksum file.
           if ! [[ "$local_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || [ "$local_name" = "SHA256SUMS" ]; then
             echo "ERROR: invalid local-name: $local_name" >&2
+            exit 1
+          fi
+          # out_dir starts empty, so an existing file means two `files`
+          # entries mapped to the same local name — the second would
+          # overwrite the first while SHA256SUMS listed both.
+          if [ -e "$out_dir/$local_name" ]; then
+            echo "ERROR: duplicate local-name: $local_name" >&2
             exit 1
           fi
 
