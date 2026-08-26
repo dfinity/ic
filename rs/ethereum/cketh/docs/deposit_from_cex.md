@@ -244,22 +244,22 @@ flowchart LR
     subgraph EOA["Minter-key EOAs — one derivation path per role"]
         Main["main address — path []<br/>holds all backing funds (R6);<br/>sends withdrawals on its own nonce lane"]
         Sweeper["sweeper address — path [3]<br/>holds prepaid gas only (R14);<br/>sends sweeps on its own nonce lane (R17)"]
-        Dep["deposit EOA addr(p, s) — path [1, p, s]<br/>one per IC account; receives the CEX transfer;<br/>delegated to S at its first sweep"]
-        DepEth["ETH deposit EOA — path [2, p, s]<br/>Phase 2; never delegated, never any code"]
+        Dep["deposit address (EOA) — path [1, principal, subaccount]<br/>one per IC account; receives the CEX transfer;<br/>delegated to SweeperContract at its first sweep"]
+        DepEth["ETH deposit address (EOA) — path [2, principal, subaccount]<br/>Phase 2; never delegated, never any code"]
     end
     subgraph SC["Deployed contracts — no minter key"]
-        S["S — CkSweeperAttested (new)<br/>EIP-7702 sweeper delegate, deployed once;<br/>the deployed instance is also the batch entry point"]
-        H["H — DepositHelperWithSubaccount (existing)<br/>emits ReceivedEthOrErc20"]
-        T["T — ERC-20 token contract (USDT, USDC, ...)"]
+        S["SweeperContract — CkSweeperAttested (new)<br/>EIP-7702 sweeper delegate, deployed once;<br/>the deployed instance is also the batch entry point"]
+        H["Helper — DepositHelperWithSubaccount (existing)<br/>emits ReceivedEthOrErc20"]
+        T["Token — ERC-20 contract (USDT, USDC, ...)"]
     end
 
     Minter -. "signs for every EOA (tECDSA)" .-> EOA
-    CEX -- "T.transfer(addr(p, s), amount)" --> T
+    CEX -- "Token.transfer(deposit address, amount)" --> T
     Main -- "funding withdrawal (step 0)" --> Sweeper
-    Sweeper -- "sweep tx, to = S:<br/>sweepErc20Batch(...)" --> S
-    S -- "delegated call: S's code<br/>runs as addr(p, s)" --> Dep
-    Dep -- "approve +<br/>H.depositErc20(T, balance, p, s)" --> H
-    H -- "T.transferFrom(addr(p, s) → main)" --> T
+    Sweeper -- "sweep tx, to = SweeperContract:<br/>sweepErc20Batch(...)" --> S
+    S -- "delegated call: SweeperContract's code<br/>runs as the deposit address" --> Dep
+    Dep -- "approve + Helper.depositErc20(Token,<br/>balance, principal, subaccount)" --> H
+    H -- "Token.transferFrom(deposit address → main address)" --> T
     T -. "swept balance now at the main address" .-> Main
 ```
 
@@ -275,8 +275,9 @@ load-bearing:
   transaction on its own nonce lane, so a stuck sweep can never
   head-of-line-block a withdrawal and vice versa (`R17`). Swept funds never
   pass through it.
-* **Deposit EOAs** (paths `[1, p, s]`, Phase 2 `[2, p, s]`): one per IC
-  account, the only addresses a user ever sees. They hold deposits between the
+* **Deposit EOAs** (paths `[1, principal, subaccount]`, Phase 2
+  `[2, principal, subaccount]`): one per IC account, the only addresses a user
+  ever sees. They hold deposits between the
   CEX transfer and the sweep and never need ETH for gas; because the minter
   holds their keys, funds there stay recoverable even without any contract.
 
@@ -289,45 +290,45 @@ consensus; the boxes separate the minter-key EOAs from the deployed contracts:
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as User (principal p)
+    actor User
     participant CEX
     participant Minter as Minter canister
     box Minter-key EOAs
         participant Sw as sweeper address — path [3]
-        participant D as deposit EOA addr(p, s) — path [1, p, s]
+        participant D as deposit address (EOA) — path [1, principal, subaccount]
         participant Main as main address — path []
     end
     box Deployed contracts
-        participant S as S (CkSweeperAttested)
-        participant T as T (USDT)
-        participant H as H (deposit helper)
+        participant S as SweeperContract (CkSweeperAttested)
+        participant T as USDT token
+        participant H as Helper (deposit helper)
     end
     participant Ledger as ckUSDT ledger
 
     User->>Minter: deposit_erc20(USDT)
-    Note right of Minter: derive addr(p, s) locally, register the (address, USDT) pair<br/>and arm its scanning window (R15).<br/>No tECDSA signature, no Ethereum tx (R13)
-    Minter-->>User: addr(p, s)
-    User->>CEX: withdraw USDT to addr(p, s)
-    CEX->>T: USDT.transfer(addr(p, s), 250)
-    Note over D,T: the "250 USDT at addr(p, s)" is a storage slot inside T —<br/>the deposit EOA itself stays untouched (no ETH, no nonce, no code)
-    loop while the (addr(p, s), USDT) pair is armed
+    Note right of Minter: derive the caller's deposit address locally, register the<br/>(deposit address, USDT) pair and arm its scanning window (R15).<br/>No tECDSA signature, no Ethereum tx (R13)
+    Minter-->>User: the deposit address
+    User->>CEX: withdraw USDT to the deposit address
+    CEX->>T: USDT.transfer(deposit address, 250)
+    Note over D,T: the "250 USDT at the deposit address" is a storage slot inside the<br/>token contract — the EOA itself stays untouched (no ETH, no nonce, no code)
+    loop while the (deposit address, USDT) pair is armed
         Minter->>T: balance scan of all registered pairs<br/>(deployless batcher eth_call, latest block)
     end
-    Note over Minter: balance detected: queue (addr(p, s), USDT) for sweeping.<br/>Scheduling hint only, no finality needed —<br/>a reorged deposit just wastes the sweep's gas
-    Note over Minter,D: first sweep of addr(p, s) only — sign with the deposit EOA's key (tECDSA):<br/>an EIP-7702 authorization (delegate = S) and the account attestation (p, s)
+    Note over Minter: balance detected: queue (deposit address, USDT) for sweeping.<br/>Scheduling hint only, no finality needed —<br/>a reorged deposit just wastes the sweep's gas
+    Note over Minter,D: first sweep of this address only — sign with the deposit address' key (tECDSA):<br/>an EIP-7702 authorization (delegate = SweeperContract) and the attestation<br/>of the account (principal, subaccount)
     Note over Minter,Sw: sweeper address already funded:<br/>ckETH burned from the fee account at funding time (R14)
-    Sw->>S: sweep tx on the sweeper's own nonce lane (R17), signed with path [3]:<br/>type 0x04 (0x02 once delegated), one token per tx, up to 20 deposits:<br/>sweepErc20Batch([(addr(p, s), p, s, attestation)], [USDT])
-    S->>D: sweepErc20 — delegated: S's code runs as addr(p, s)
-    Note right of D: ecrecover(attestation digest) must equal address(this):<br/>only the account attested by addr(p, s)'s own key can be credited
-    D->>T: approve(H, 250)
-    D->>H: depositErc20(USDT, 250, p, s)
-    H->>T: transferFrom(addr(p, s), main address, 250)
+    Sw->>S: sweep tx on the sweeper's own nonce lane (R17), signed with path [3]:<br/>type 0x04 (0x02 once delegated), one token per tx, up to 20 deposits:<br/>sweepErc20Batch([(deposit address, principal, subaccount, attestation)], [USDT])
+    S->>D: sweepErc20 — delegated: SweeperContract's code runs as the deposit address
+    Note right of D: ecrecover(attestation digest) must equal address(this):<br/>only the account attested by the deposit address' own key can be credited
+    D->>T: approve(Helper, 250)
+    D->>H: depositErc20(USDT, 250, principal, subaccount)
+    H->>T: transferFrom(deposit address, main address, 250)
     T-->>Main: the 250 USDT now back the mint at the main address (R6)
-    Note over H: emits ReceivedEthOrErc20(USDT, addr(p, s), 250, p, s)
+    Note over H: emits ReceivedEthOrErc20(USDT, deposit address, 250, principal, subaccount)
     Note over Minter,H: from here the EXISTING deposit pipeline runs unchanged
     Minter->>H: eth_getLogs(helper contract, up to finalized)
-    Note over Minter: cross-check owner addr(p, s) vs p against own map,<br/>dedup by (tx hash, log index)
-    Minter->>Ledger: mint 250 - fee to p, fee to minter fee account
+    Note over Minter: cross-check the event's owner (the deposit address) against the<br/>registered account, dedup by (tx hash, log index)
+    Minter->>Ledger: mint 250 - fee to the user's account, fee to the minter fee account
 ```
 
 Deposit of ETH from a CEX (**Phase 2**, dedicated never-delegated ETH deposit
@@ -337,26 +338,26 @@ involved):
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as User (principal p)
+    actor User
     participant CEX
     participant Minter as Minter canister
-    participant DEth as ETH deposit EOA eth_addr(p) — path [2, p, s]
-    participant H as H (deposit helper)
+    participant DEth as ETH deposit address (EOA) — path [2, principal, subaccount]
+    participant H as Helper (deposit helper)
     participant Main as main address — path []
     participant Ledger as ckETH ledger
 
-    User->>Minter: deposit_eth(p)
-    Minter-->>User: eth_addr(p) (schema 2: never delegated, never any code)
-    User->>CEX: withdraw ETH to eth_addr(p)
+    User->>Minter: deposit_eth()
+    Minter-->>User: the ETH deposit address (schema 2: never delegated, never any code)
+    User->>CEX: withdraw ETH to the ETH deposit address
     CEX->>DEth: plain ETH transfer — safe even with a fixed 21000 gas limit (R12)
-    loop while eth_addr(p) is in its scanning window
-        Minter->>DEth: eth_getBalance(eth_addr(p), finalized)
+    loop while the ETH deposit address is in its scanning window
+        Minter->>DEth: eth_getBalance(ETH deposit address, finalized)
     end
-    Note over Minter,DEth: the deposit pays its own sweep gas — no delegation, no R14 burn.<br/>The sweep is an ordinary EIP-1559 tx signed with eth_addr(p)'s own key (tECDSA),<br/>its max fee capped by the charged deposit fee (step 0)
-    DEth->>H: depositEth{value: balance - gas}(p, s)
+    Note over Minter,DEth: the deposit pays its own sweep gas — no delegation, no R14 burn.<br/>The sweep is an ordinary EIP-1559 tx signed with the deposit address' own key (tECDSA),<br/>its max fee capped by the charged deposit fee (step 0)
+    DEth->>H: depositEth{value: balance - gas}(principal, subaccount)
     H->>Main: forwards the ETH to the main address (R6)<br/>and emits ReceivedEthOrErc20
     Minter->>H: eth_getLogs(helper contract, up to finalized)
-    Minter->>Ledger: mint to p (existing pipeline, unchanged)
+    Minter->>Ledger: mint to the user's account (existing pipeline, unchanged)
 ```
 
 ### Step 0: Fund the transaction fees without touching the ckETH backing
@@ -480,10 +481,11 @@ Attribution is by **destination address** — the only channel a CEX supports (t
 sender is a shared hot wallet, plain transfers carry no memo). Each IC account gets a
 unique, deterministic deposit address, derived from the minter's threshold-ECDSA key:
 
-* Derivation path for account `(p, s)`: `[SCHEMA, p.as_slice(), s]` where `SCHEMA`
-  is a 1-byte tag (`[1u8]` for ERC-20 deposit addresses, `[2u8]` for Phase 2 ETH
-  deposit addresses) and `s` is the 32-byte subaccount (all-zero for the default
-  subaccount). Non-empty by construction, hence distinct from the main address' empty
+* Derivation path for account `(principal, subaccount)`:
+  `[SCHEMA, principal.as_slice(), subaccount]` where `SCHEMA` is a 1-byte tag
+  (`[1u8]` for ERC-20 deposit addresses, `[2u8]` for Phase 2 ETH deposit
+  addresses) and `subaccount` is the 32-byte subaccount (all-zero for the
+  default subaccount). Non-empty by construction, hence distinct from the main address' empty
   path (`MAIN_DERIVATION_PATH`).
 * The child *public key* (and hence the address) is computed locally from the cached
   master public key using non-hardened derivation (`ic-secp256k1`'s
@@ -776,8 +778,9 @@ finalized deposit through a new detection→mint path — is in
 
 Each ERC-20 deposit EOA signs (threshold ECDSA) **one** EIP-7702
 authorization — lazily, together with its first sweep, never at registration
-(`R13`) — delegating its code to `S`, a single immutable, storage-less sweeper
-delegate (`CkSweeperAttested`, [below](#sweeper-delegate-contract)). Sweep
+(`R13`) — delegating its code to `SweeperContract`, a single immutable,
+storage-less sweeper delegate (`CkSweeperAttested`,
+[below](#sweeper-delegate-contract)). Sweep
 transactions are sent from the **dedicated sweeper address** (tECDSA-derived
 with derivation path `[3u8]` — its own schema tag, no account components),
 whose nonce sequence is independent of the main address' so that a stuck sweep
@@ -811,8 +814,8 @@ Sweeping is two background tasks feeding one transaction pipeline:
   attestation, plus the EIP-7702 authorization if the address is not yet
   delegated — a sweep that still installs delegations is a type-`0x04`
   transaction, any other a plain type-`0x02` — and the transaction's `to` is
-  always the deployed delegate instance `S`, whose batch entry point fans out
-  to every deposit address in the batch.
+  always the deployed delegate instance `SweeperContract`, whose batch entry
+  point fans out to every deposit address in the batch.
 * The **send task** drives the sweeper pipeline through the same
   create → sign → send → resubmit → finalize state machine as user withdrawals,
   but signs with the sweeper derivation path `[3u8]` and tracks the sweeper
@@ -1123,10 +1126,10 @@ the minter can `sign_with_ecdsa` for it under the same `path`. The paths are
 
 ```
 master key (+ root chain code)
-├── []          → minter main address        (MAIN_DERIVATION_PATH; withdrawals, R6 destination)
-├── [1, p, s]   → ckERC20 deposit EOA addr(p, s)
-├── [2, p, s]   → ckETH   deposit EOA addr(p, s)   (Phase 2)
-└── [3]         → dedicated sweeper address   (R17; its own schema tag, no account components)
+├── []                            → minter main address      (MAIN_DERIVATION_PATH; withdrawals, R6 destination)
+├── [1, principal, subaccount]    → ckERC20 deposit address, one per IC account
+├── [2, principal, subaccount]    → ckETH   deposit address, one per IC account   (Phase 2)
+└── [3]                           → dedicated sweeper address (R17; its own schema tag, no account components)
 ```
 
 A deposit EOA is **not** derived beneath the sweeper. Tree position carries no
@@ -1142,8 +1145,8 @@ unrelated sibling paths, alongside the unchanged withdrawal path:
 
 | Signature | Signed with derivation path | Purpose |
 |---|---|---|
-| EIP-7702 authorization tuple `(chain_id, S, nonce)` over `keccak256(0x05 ‖ rlp(...))` | the deposit EOA, `[1\|2, p, s]` | `ecrecover` must yield `addr(p, s)`, so the delegation designator installs on the deposit EOA (first sweep only) |
-| account attestation over `keccak256("ck-deposit-owner" ‖ ...)` (step 5) | the deposit EOA, `[1\|2, p, s]` | `ecrecover` in the delegate must yield `addr(p, s)`, so only the attested IC account can be credited |
+| EIP-7702 authorization tuple `(chain_id, SweeperContract, nonce)` over `keccak256(0x05 ‖ rlp(...))` | the deposit EOA, `[1\|2, principal, subaccount]` | `ecrecover` must yield the deposit address, so the delegation designator installs on the deposit EOA (first sweep only) |
+| account attestation over `keccak256("ck-deposit-owner" ‖ ...)` (step 5) | the deposit EOA, `[1\|2, principal, subaccount]` | `ecrecover` in the delegate must yield the deposit address, so only the attested IC account can be credited |
 | type-`0x04`/`0x02` sweep transaction (sender / gas payer) | the sweeper address, `[3]` | `R17`: sweeps are issued from the dedicated sweeper address |
 | type-`0x02` withdrawal transaction (sender) | the main address, `[]` | unchanged; withdrawals are sent from the main address |
 
@@ -1159,7 +1162,7 @@ the on-chain account, not to key derivation, so each sibling has its own lane:
 * **Sweeper address (`[3]`)** — one nonce sequence for *all* sweeps, deliberately
   separate from the main address' so that a stuck sweep can never delay a withdrawal
   (`R17`).
-* **Each deposit EOA (`[1|2, p, s]`)** — its own nonce, starting at 0. Incoming CEX
+* **Each deposit EOA (`[1|2, principal, subaccount]`)** — its own nonce, starting at 0. Incoming CEX
   transfers never touch it (they move only the token contract's storage); it advances
   by 1 only when one of *its own* authorizations is applied, since EIP-7702 bumps the
   authority's nonce. That nonce is fetched via `eth_getTransactionCount` and tracked in
@@ -1464,29 +1467,29 @@ asynchronous treasury consolidation):
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as User (principal p)
+    actor User
     participant CEX
     participant Minter
     participant Eth as Ethereum (via EVM-RPC)
     participant CkUsdtLedger as ckUSDT ledger
     participant CkEthLedger as ckETH ledger
 
-    User->>Minter: deposit_erc20(p, USDT)
-    Note right of Minter: derive addr(p) locally, register it and<br/>arm its scanning window (R15).<br/>No tECDSA signature, no Ethereum tx (R13)
-    Minter-->>User: addr(p)
-    User->>CEX: withdraw USDT to addr(p)
-    CEX->>Eth: USDT.transfer(addr(p), 250)
-    loop background task, while addr(p) is in its scanning window
+    User->>Minter: deposit_erc20(USDT)
+    Note right of Minter: derive the caller's deposit address locally, register it and<br/>arm its scanning window (R15).<br/>No tECDSA signature, no Ethereum tx (R13)
+    Minter-->>User: the deposit address
+    User->>CEX: withdraw USDT to the deposit address
+    CEX->>Eth: USDT.transfer(deposit address, 250)
+    loop background task, while the deposit address is in its scanning window
         Minter->>Eth: bulk balance scan of active addresses (finalized)
     end
-    Minter->>Eth: eth_getLogs(USDT Transfer to addr(p), up to finalized)
+    Minter->>Eth: eth_getLogs(USDT Transfer to the deposit address, up to finalized)
     Note over Minter: amount >= min (R4), sender not blocked (R3),<br/>dedup by (tx hash, log index) (R2)
-    Minter->>CkUsdtLedger: mint 250 - fee to p
+    Minter->>CkUsdtLedger: mint 250 - fee to the user's account
     Minter->>CkUsdtLedger: mint fee to minter fee account
     Note over Minter: user is credited - sweeping is asynchronous<br/>treasury consolidation (R5)
     Note over Minter,CkEthLedger: sweeper address already funded:<br/>ckETH burned from the fee account at funding time (R14)
-    Note over Minter: sign EIP-7702 authorization for addr(p)<br/>(tECDSA, only before the first sweep)
-    Minter->>Eth: type-0x04 tx from the sweeper address (R17):<br/>sweepErc20 on addr(p), USDT: addr(p) -> minter address
+    Note over Minter: sign EIP-7702 authorization for the deposit address<br/>(tECDSA, only before the first sweep)
+    Minter->>Eth: type-0x04 tx from the sweeper address (R17):<br/>sweepErc20 on the deposit address:<br/>USDT moves from the deposit address to the minter's main address
     Eth-->>Minter: receipt: sweeper balance -= effective fee
 ```
 
