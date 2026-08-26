@@ -6,7 +6,7 @@ description: |
 
   The attestation is the integrity anchor that lets release workflows and the
   mainnet-revisions updater verify CDN downloads against something independent
-  of the CDN (security finding 3618194): they fetch a directory's SHA256SUMS
+  of the CDN: they fetch a directory's SHA256SUMS
   from the CDN, check it with
   `gh attestation verify --repo dfinity/ic --signer-workflow <this pipeline>
   --source-digest <commit>` and then verify each artifact against the now

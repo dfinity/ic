@@ -42,7 +42,7 @@ jobs:
 
   # Attest what ci-main uploaded to the CDN so that release workflows and the
   # mainnet-revisions updater can verify their CDN downloads against an anchor
-  # independent of the CDN (security finding 3618194). This job lives here in
+  # independent of the CDN. This job lives here in
   # the caller rather than in ci-main.yml because GitHub validates a called
   # workflow's permission requests against the caller's grant statically (even
   # for jobs whose `if:` would skip them), and ci-kickoff-manual.yml — which
