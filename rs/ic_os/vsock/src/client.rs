@@ -42,10 +42,10 @@ mod linux {
 
             let mut stream = VsockStream::connect_with_cid_port(VMADDR_CID_HOST, self.port)
                 .map_err(|e| e.to_string())?;
-            // Set a long timeout, so HostOS has enough time to upgrade.
             stream
-                .set_write_timeout(Some(std::time::Duration::from_secs(60 * 5)))
+                .set_write_timeout(Some(std::time::Duration::from_secs(5)))
                 .map_err(|e| e.to_string())?;
+            // Set a long timeout, so HostOS has enough time to upgrade.
             stream
                 .set_read_timeout(Some(std::time::Duration::from_secs(60 * 5)))
                 .map_err(|e| e.to_string())?;
