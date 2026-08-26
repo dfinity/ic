@@ -18,7 +18,6 @@ use ic_types::{
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamIndex},
 };
-use ic_types_cycles::NominalCycles;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
@@ -725,14 +724,12 @@ impl
 impl
     From<(
         &ic_replicated_state::metadata_state::SubnetMetrics,
-        NominalCycles,
         CertificationVersion,
     )> for SubnetMetrics
 {
     fn from(
-        (metrics, consumed_cycles_by_canisters, certification_version): (
+        (metrics, certification_version): (
             &ic_replicated_state::metadata_state::SubnetMetrics,
-            NominalCycles,
             CertificationVersion,
         ),
     ) -> Self {
@@ -742,9 +739,9 @@ impl
         //
         // Starting with `V29`, the reported total uses the fixed
         // `consumed_cycles_total` (which no longer double counts deleted
-        // canisters) plus the cycles consumed by all non-deleted canisters.
+        // canisters) plus `SubnetMetrics::consumed_cycles_by_canisters`.
         let consumed_cycles_total = if certification_version >= CertificationVersion::V29 {
-            metrics.consumed_cycles_total_including_canisters(consumed_cycles_by_canisters)
+            metrics.consumed_cycles_total_including_canisters()
         } else {
             metrics.consumed_cycles_total_v28()
         };

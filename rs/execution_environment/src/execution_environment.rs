@@ -3423,10 +3423,12 @@ impl ExecutionEnvironment {
         }
         let metrics = &state.metadata.subnet_metrics;
         // The same function the certified state tree at `/subnet/<subnet_id>/metrics`
-        // uses from certification version `V29` on, so the two cannot drift.
-        let consumed_cycles_total = metrics.consumed_cycles_total_including_canisters(
-            state.canister_states().total_consumed_cycles(),
-        );
+        // uses from certification version `V29` on, so the two cannot drift. Its
+        // canisters' part is the stored `consumed_cycles_by_canisters`, refreshed
+        // on every `commit_and_certify` (`rs/state_manager/src/lib.rs`), so a call
+        // executing in round N reads the end-of-round-(N-1) value -- the same
+        // one-round lag as `num_canisters` below.
+        let consumed_cycles_total = metrics.consumed_cycles_total_including_canisters();
         let res = SubnetMetricsResponse {
             // The height of the block in whose execution this call is processed.
             // `ExecutionRound` is numerically the finalized consensus block
