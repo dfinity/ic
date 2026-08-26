@@ -249,7 +249,7 @@ mod tests {
         setup_registry_non_final,
     };
     use ic_test_utilities_types::ids::{
-        NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_1, SUBNET_2, SUBNET_3,
+        NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_1, SUBNET_2, SUBNET_3, test_replica_version,
     };
     use ic_types::{
         Height, ReplicaVersion, Time,
@@ -593,7 +593,7 @@ mod tests {
         let mut summary = SummaryPayload::fake();
         summary.dkg.subnet_splitting_status = subnet_splitting_status;
         Block {
-            version: ReplicaVersion::default(),
+            version: test_replica_version(),
             parent: CryptoHashOf::from(CryptoHash(vec![])),
             payload: Payload::new(
                 ic_types::crypto::crypto_hash,
