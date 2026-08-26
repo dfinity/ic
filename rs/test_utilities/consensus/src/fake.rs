@@ -15,7 +15,7 @@ use ic_types::{
         NotarizationContent, NotarizationShare, Payload, RandomBeacon, RandomBeaconContent,
         RandomBeaconShare, RandomTapeContent, RandomTapeShare, Rank, SummaryPayload,
         certification::{Certification, CertificationContent},
-        dkg::{DkgDataPayload, DkgSummary},
+        dkg::{DkgDataPayload, DkgSummary, SubnetSplittingStatus},
         hashed,
     },
     crypto::{
@@ -66,6 +66,7 @@ impl Fake for DkgSummary {
             /*next_interval_length=*/ Height::new(59),
             /*height=*/ Height::new(0),
             /*remote_dkg_attempts=*/ BTreeMap::default(),
+            /*subnet_splitting_status=*/ SubnetSplittingStatus::default(),
         )
     }
 }

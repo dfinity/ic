@@ -1121,7 +1121,6 @@ impl CanisterHttpPayloadBuilderImpl {
                         .filter(|share| !share.content.is_reject())
                         .map(|share| {
                             FlexibleCanisterHttpResponseWithProof::count_bytes_from_parts(
-                                &context.request.sender,
                                 share.content.content_size() as usize,
                                 share,
                             )

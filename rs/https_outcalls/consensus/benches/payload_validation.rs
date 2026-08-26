@@ -20,7 +20,7 @@ use ic_test_utilities::artifact_pool_config::with_test_pool_config;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, node_test_id, subnet_test_id},
+    ids::{node_test_id, subnet_test_id},
     messages::RequestBuilder,
 };
 use ic_types::{
@@ -491,7 +491,6 @@ fn response_and_metadata(
 ) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
     let response = CanisterHttpResponse {
         id: CallbackId::new(callback_id),
-        canister_id: canister_test_id(0),
         content,
     };
     let metadata = CanisterHttpResponseMetadata {

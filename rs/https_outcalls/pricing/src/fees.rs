@@ -306,6 +306,10 @@ pub(crate) fn max_consensus_fee(
             // split across.
             consensus_fee(response_bytes, subnet_size).div_ceil(threshold) * n
         }
+        // Fire-and-forget: no response is ever delivered, so consensus never puts one in a block.
+        ReplicationKind::Flexible {
+            max_responses: 0, ..
+        } => Cycles::zero(),
         ReplicationKind::Flexible {
             total_requests,
             min_responses,
@@ -1210,6 +1214,53 @@ mod tests {
         );
     }
 
+    #[test]
+    fn max_consensus_fee_flexible_is_free_for_fire_and_forget() {
+        // A fire-and-forget outcall asks for no responses at all, so consensus never puts
+        // one in a block and there is nothing to reserve a consensus fee for.
+        let n = NumberOfNodes::from(13);
+        let fire_and_forget = |total_requests| ReplicationKind::Flexible {
+            total_requests,
+            min_responses: 0,
+            max_responses: 0,
+        };
+        for total_requests in [1, 5, 13] {
+            assert_eq!(
+                max_consensus_fee(
+                    fire_and_forget(total_requests),
+                    NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
+                    n
+                ),
+                Cycles::zero(),
+                "{total_requests} delegated replicas"
+            );
+        }
+        // Asking for even a single response is not free, though ...
+        assert!(
+            max_consensus_fee(
+                ReplicationKind::Flexible {
+                    total_requests: 13,
+                    min_responses: 0,
+                    max_responses: 1,
+                },
+                NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
+                n
+            ) > Cycles::zero()
+        );
+        // ... and neither is the outcall itself: its replicas still perform the request
+        // and gossip their shares, they just never have a response delivered.
+        assert!(
+            usage_fee(
+                fire_and_forget(13),
+                MAX_RESPONSE_TIME,
+                NumBytes::from(1_000),
+                NumInstructions::from(26),
+                NumBytes::from(2_000),
+                n,
+            ) > Cycles::zero()
+        );
+    }
+
     /// Asserts that for every result an outcall with the given `replication_kind` and
     /// transformed response size could deliver, the replicas that produced *that result*
     /// hold enough of the priced consensus fee — [`max_consensus_fee`] — to pay what
@@ -1295,20 +1346,24 @@ mod tests {
                     &format!("{min_responses} responses of {transformed_bytes} bytes"),
                 );
                 // ... or a `TooManyRejects` in which every committee member rejected,
-                // each with a maximally large reject.
-                let rejects: Vec<_> = (0..total_requests)
-                    .map(|i| reject_share(i as u64, MAX_CANISTER_HTTP_REJECT_BYTES as u32, 0))
-                    .collect();
-                assert_covers(
-                    total_requests as usize,
-                    flexible_initial_spent(
-                        rejects.iter(),
-                        std::iter::empty(),
-                        subnet_size,
-                        min_responses,
-                    ),
-                    &format!("a TooManyRejects of {total_requests} rejects"),
-                );
+                // each with a maximally large reject. Unreachable when no responses are
+                // required at all: rejecting can never keep an outcall from reaching
+                // `min_responses` of them if that is zero.
+                if min_responses > 0 {
+                    let rejects: Vec<_> = (0..total_requests)
+                        .map(|i| reject_share(i as u64, MAX_CANISTER_HTTP_REJECT_BYTES as u32, 0))
+                        .collect();
+                    assert_covers(
+                        total_requests as usize,
+                        flexible_initial_spent(
+                            rejects.iter(),
+                            std::iter::empty(),
+                            subnet_size,
+                            min_responses,
+                        ),
+                        &format!("a TooManyRejects of {total_requests} rejects"),
+                    );
+                }
             }
         }
     }
@@ -1384,11 +1439,13 @@ mod tests {
                 assert_whole(ReplicationKind::NonReplicated);
                 for total_requests in 1..=subnet_size.get() {
                     for min_responses in 0..=total_requests {
-                        assert_whole(ReplicationKind::Flexible {
-                            total_requests,
-                            min_responses,
-                            max_responses: total_requests,
-                        });
+                        for max_responses in [min_responses, total_requests] {
+                            assert_whole(ReplicationKind::Flexible {
+                                total_requests,
+                                min_responses,
+                                max_responses,
+                            });
+                        }
                     }
                 }
             }

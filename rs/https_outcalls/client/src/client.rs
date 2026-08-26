@@ -287,7 +287,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             permit.send((
                 CanisterHttpResponse {
                     id: request_id,
-                    canister_id: request_sender,
                     content: match payload {
                         Ok(resp) => {
                             metrics
@@ -829,7 +828,6 @@ mod tests {
     ) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(request_id),
-            canister_id: ic_types::CanisterId::from(1),
             content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
                 reject_code,
                 message: reject_message,
@@ -845,7 +843,6 @@ mod tests {
     ) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(request_id),
-            canister_id: ic_types::CanisterId::from(1),
             content: CanisterHttpResponseContent::Success(
                 Encode!(
                     &ic_management_canister_types_private::CanisterHttpResponsePayload {

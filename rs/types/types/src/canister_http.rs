@@ -42,7 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
+    CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     consensus::get_faults_tolerated,
     crypto::{BasicSigOf, CryptoHashOf},
@@ -56,9 +56,8 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
     ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, CanisterHttpRequestArgs,
-    DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, DataSize, FlexibleCanisterHttpRequestArgs, HttpHeader,
-    HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts,
-    TransformContext,
+    DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod,
+    PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, TransformContext,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
@@ -967,25 +966,20 @@ pub struct CanisterHttpRequest {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
-    pub canister_id: CanisterId,
     pub content: CanisterHttpResponseContent,
 }
 
 impl CanisterHttpResponse {
     /// Same calculation as `Self::count_bytes` but from decomposed parts.
-    pub fn count_bytes_from_parts(canister_id: &CanisterId, content_size: usize) -> usize {
-        size_of::<CanisterHttpRequestId>() + canister_id.get_ref().data_size() + content_size
+    pub const fn count_bytes_from_parts(content_size: usize) -> usize {
+        size_of::<CanisterHttpRequestId>() + content_size
     }
 }
 
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
-        let CanisterHttpResponse {
-            id: _,
-            canister_id,
-            content,
-        } = &self;
-        Self::count_bytes_from_parts(canister_id, content.count_bytes())
+        let CanisterHttpResponse { id: _, content } = &self;
+        Self::count_bytes_from_parts(content.count_bytes())
     }
 }
 
@@ -1427,6 +1421,7 @@ impl PbArtifact for CanisterHttpResponseArtifact {
 #[cfg(test)]
 mod tests {
     use crate::{
+        CanisterId,
         crypto::{CryptoHash, SignedBytesWithoutDomainSeparator},
         messages::NO_DEADLINE,
         time::UNIX_EPOCH,
