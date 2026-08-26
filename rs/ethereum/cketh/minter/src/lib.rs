@@ -1,4 +1,5 @@
 pub mod address;
+pub mod attestation;
 pub mod balance_scan;
 pub mod blocklist;
 mod cbor;
@@ -22,6 +23,7 @@ pub mod state;
 pub mod storage;
 pub mod sweep;
 pub mod sweeper;
+pub mod sweeper_contract;
 pub mod timed_sized_map;
 pub mod tx;
 pub mod withdraw;

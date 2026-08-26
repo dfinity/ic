@@ -1,4 +1,5 @@
 use crate::address::ecdsa_public_key_to_address;
+use crate::attestation::AttestationRequest;
 use crate::deposit_address::{DepositAddressSchema, deposit_address, sweeper_address};
 use crate::endpoints::{CandidBlockTag, DepositErc20Error};
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
@@ -257,6 +258,24 @@ impl State {
     pub fn sweeper_address(&self) -> Option<Address> {
         let (master_public_key, chain_code) = self.public_key_and_chain_code()?;
         Some(sweeper_address(&master_public_key, &chain_code))
+    }
+
+    /// What a ckERC20 deposit address must attest to in order to be swept: the account it credits,
+    /// bound to the chain and the subaccount-aware deposit helper this minter runs against.
+    /// `None` while that helper is unknown.
+    ///
+    /// The only place an [`AttestationRequest`] is built outside its own module, so a caller cannot
+    /// attest under a chain or a helper the minter does not use.
+    pub fn attestation_request(&self, account: Account) -> Option<AttestationRequest> {
+        let deposit_helper = *self
+            .log_scrapings
+            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)?;
+        Some(AttestationRequest::new(
+            self.ethereum_network.chain_id(),
+            deposit_helper,
+            DepositAddressSchema::CkErc20,
+            account,
+        ))
     }
 
     pub fn is_ckerc20_feature_active(&self) -> bool {
