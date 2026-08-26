@@ -39,8 +39,8 @@ jobs:
 
       # Every CDN download below is verified against the build-provenance
       # attestation created by the attest-uploads job of release-testing.yml
-      # for this exact commit, and the release aborts on any mismatch
-      # (security finding 3618194). Pinning the release-testing.yml signer
+      # for this exact commit, and the release aborts on any mismatch.
+      # Pinning the release-testing.yml signer
       # also enforces that a release-* tag can only ship commits that went
       # through the release-qualification pipeline.
       #
