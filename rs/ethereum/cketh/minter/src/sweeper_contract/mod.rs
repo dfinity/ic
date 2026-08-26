@@ -36,9 +36,15 @@ pub struct SweepItem {
 /// sweeps every `token` balance held by every `item`'s deposit address to the minter's main address
 /// through the deposit helper.
 ///
-/// The tokens apply to every item, so a batch mixing addresses that hold different tokens pays a
-/// `balanceOf` call per pair that holds nothing.
-/// TODO(DEFI-2980): group a batch by token so every pair in it holds a balance.
+/// The tokens apply to every item, so a batch mixing addresses that hold different tokens would pay
+/// a `balanceOf` call per pair that holds nothing, and its gas would grow as addresses × tokens.
+/// The minter therefore sends one token per batch (see `sweep::sweep_batches_by_token`), which is
+/// what keeps a sweep's gas linear in the addresses it touches.
+///
+/// `sweepErc20Batch` has no per-item error handling either, so one address whose transfer reverts —
+/// blacklisted for that token, say — takes the whole batch down with it and blocks every other
+/// deposit in it.
+/// TODO: catch the per-item revert in the delegate, or split a failing batch and retry the halves.
 ///
 /// See the [Contract ABI Specification](https://docs.soliditylang.org/en/develop/abi-spec.html#contract-abi-specification):
 /// both arguments are dynamic, so the head holds one offset each and the two blocks follow.

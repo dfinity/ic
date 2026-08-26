@@ -43,6 +43,11 @@ pub const REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL: Duration = Duration::from_secs(3
 pub const BALANCE_SCAN_INTERVAL: Duration = Duration::from_secs(30);
 pub const SWEEPER_FUNDING_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 pub const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs(6 * 60);
+/// How often the minter turns detected deposits into a sweep. Deliberately far shorter than
+/// [`PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL`]: under the decided design the mint follows the
+/// sweep, so this interval is part of a user's crediting latency, and enqueueing is cheap — it
+/// signs, but sends nothing.
+pub const SWEEP_ENQUEUE_INTERVAL: Duration = Duration::from_secs(60);
 pub const PROCESS_REIMBURSEMENT: Duration = Duration::from_secs(3 * 60);
 pub const PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL: Duration = Duration::from_secs(3 * 60);
 pub const PROCESS_SWEEPER_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs(6 * 60);
