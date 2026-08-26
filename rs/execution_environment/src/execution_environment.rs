@@ -1882,17 +1882,10 @@ impl ExecutionEnvironment {
                     self.reject_unexpected_ingress(Ic00Method::SubnetMetrics)
                 }
                 CanisterCall::Request(_) => {
-                    // Only deduct round instructions for building the response
-                    // when the request is accepted; a rejected call must not
-                    // consume round instructions.
                     let res = SubnetMetricsArgs::decode(payload)
-                        .and_then(|args| self.subnet_metrics(&state, current_round, args))
-                        .map(|(res, instructions)| {
-                            round_limits.instructions -= as_round_instructions(instructions);
-                            (res, None)
-                        });
+                        .and_then(|args| self.subnet_metrics(&state, current_round, args));
                     ExecuteSubnetMessageResult::Finished {
-                        response: res,
+                        response: res.map(|res| (res, None)),
                         refund: msg.take_cycles(),
                     }
                 }
@@ -3403,15 +3396,17 @@ impl ExecutionEnvironment {
         Ok(Encode!(&res).unwrap())
     }
 
-    /// Computes the response to the `subnet_metrics` management canister method,
-    /// together with the number of round instructions the caller must deduct for
-    /// computing it.
+    /// Computes the response to the `subnet_metrics` management canister method.
+    ///
+    /// Charges no round instructions: every field is a constant-time read of a
+    /// `SubnetMetrics` field, so there is no work here to price. See the
+    /// `counts_toward_round_limit: false` grouping in `ic00_permissions.rs`.
     fn subnet_metrics(
         &self,
         state: &ReplicatedState,
         current_round: ExecutionRound,
         args: SubnetMetricsArgs,
-    ) -> Result<(Vec<u8>, NumInstructions), UserError> {
+    ) -> Result<Vec<u8>, UserError> {
         if args.subnet_id != self.own_subnet_id.get() {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
@@ -3450,7 +3445,7 @@ impl ExecutionEnvironment {
             consumed_cycles_total: candid::Nat::from(consumed_cycles_total.get()),
             update_transactions_total: candid::Nat::from(metrics.update_transactions_total),
         };
-        Ok((Encode!(&res).unwrap(), subnet_metrics_instructions(state)))
+        Ok(Encode!(&res).unwrap())
     }
 
     // Executes an inter-canister response.
@@ -5047,121 +5042,6 @@ pub(crate) fn full_subnet_memory_capacity(
             .get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
         NonZeroU64::new(1).expect("scaling_factor must be non zero"),
-    )
-}
-
-/// Computes the number of round instructions consumed by executing the
-/// `subnet_metrics` management method against the given state.
-///
-/// The dominant cost is `CanisterStates::total_consumed_cycles()`, which folds
-/// over the **hot** canister pool only; the cold pool contributes a precomputed
-/// `O(1)` aggregate. The variable term is therefore keyed on
-/// `CanisterStates::hot_len()`, which is exactly what the fold visits — *not* on
-/// `num_canisters()`.
-///
-/// Keying on the total would over-charge by the ratio `len / hot_len`, which is
-/// large in the steady state: `repartition_canister_states()` runs on every
-/// `commit_and_certify` (`rs/state_manager/src/lib.rs`), so at the start of a
-/// round the hot pool holds only canisters that were active in the previous one.
-/// On a 100k-canister subnet with a few thousand hot canisters that is a ~40x
-/// over-charge — i.e. ~40x more of the shared per-round subnet-message budget
-/// consumable per call than the call actually costs the subnet, which is denial
-/// capacity that is not backed by any work. See the note on inflation below: this
-/// is the same mistake in a different guise.
-///
-/// **This makes execution depend on the *cardinality* of the hot/cold partition,
-/// which is new.** Every prior consumer of the partition is
-/// partition-*independent* — `total_canister_memory_usage()` and
-/// `total_consumed_cycles()` are `fold(hot) + cold aggregate`, so they yield the
-/// same number wherever the split lies. `hot_len()` is a raw count of one side of
-/// it, so for the first time *where* the split lies changes an execution result,
-/// and hence how many subnet messages fit in a round. The determinism argument is
-/// therefore not the one those consumers rely on; it is:
-///
-/// 1. `CanisterState::is_cold()` is a pure function of the canister
-///    (`rs/replicated_state/src/canister_state.rs`). The one term that reads as
-///    time-dependent is not: `has_unexpired_callbacks()` is
-///    `!unexpired_callbacks.is_empty()` and takes no `now`, unlike the
-///    `has_expired_callbacks(now)` defined just above it, which `is_cold()` does
-///    not call.
-/// 2. The partition is **never serialized**. A checkpoint stores only the flat
-///    canister set; every load path goes through
-///    `ReplicatedState::new_from_checkpoint` → `CanisterStates::new`, which
-///    re-derives the split from `is_cold()`. So no persisted or
-///    attacker-writable value can encode a non-derived partition.
-/// 3. `ReplicatedState::repartition_canister_states()` runs **unconditionally** on
-///    every `commit_and_certify` (`rs/state_manager/src/lib.rs`, outside the
-///    `CertificationScope::Metadata` branch), so the committed partition equals
-///    the one `CanisterStates::new` would derive.
-/// 4. By (2) and (3) every way a replica can acquire the state for the next round
-///    yields the same partition: continuing in memory, restarting from a
-///    checkpoint, state sync (same load path), and the catch-up branch of
-///    `take_tip`, which clones a snapshot produced by one of the former.
-///
-/// Fact (3) is load-bearing and is **pinned by
-/// `hot_cold_partition_is_canonical_after_every_commit`** in
-/// `rs/state_manager/tests/state_manager.rs`: making that repartition conditional
-/// on checkpoint rounds would diverge the charge between a replica that kept
-/// running and one that restarted, and that test fails if anyone does.
-///
-/// Cost model, using the conversion `2B instructions = 1 second`
-/// (i.e. `2M instructions = 1 ms`):
-///   - a base cost of 100K instructions (≈50us), and
-///   - a variable cost of 40 instructions (≈20ns) per **hot** canister.
-///
-/// The variable term is measured by the `subnet_metrics_consumed_cycles_fold`
-/// group of `benches/management_canister/subnet_metrics.rs`, which folds over a
-/// fully hot pool. Measured per-hot-canister cost at 100K hot canisters: 7.2ns
-/// with sequential allocation, 8.2ns with shuffled insertion order and allocator
-/// churn (the `hot/…/shuffled` variants), and 13.2ns worst case on a loaded
-/// machine — i.e. 14 to 27 instructions. 40 is ≈1.5x the worst observation.
-///
-/// Two reasons allocation order barely matters here, so the measurement is not
-/// optimistic. `size_of::<CanisterState>()` is 2544 bytes, so 100K hot canisters
-/// are ≈254MB of separately allocated `Arc` payloads: the working set is
-/// DRAM-resident regardless of the order they were created in, which is why
-/// shuffling costs only ~13%. And the fold touches one cache line *inside* that
-/// fixed-size allocation (`system_state.canister_metrics.consumed_cycles`), so a
-/// canister that owns more heap elsewhere — queues, execution state, snapshots —
-/// does not make the fold slower.
-///
-/// An attacker can pin canisters in the hot pool cheaply (e.g. a `global_timer`
-/// set far in the future keeps `is_cold()` false forever). Under this keying that
-/// raises the charge in proportion to the work it creates, which is the intent;
-/// it cannot be used to make the charge under-state the work.
-///
-/// The base covers the per-call work that does not scale with the number of
-/// canisters: the Candid decode of the argument, five field reads, and the Candid
-/// encode of five `Nat`s. **It is estimated from that work and was never measured
-/// end to end** — there is no benchmark for it, deliberately, since an end-to-end
-/// `StateMachine` measurement is dominated by round overhead rather than by the
-/// handler. The estimate is generous: that work is order 2-10us against the 50us
-/// that 100K instructions represents, and the constant is 200x below
-/// `list_canisters`'s 20M. Over-estimating the base is safe for the wall-clock
-/// bound (fewer calls are served per round) and costs only denial headroom, which
-/// is priced in the security review against `fetch_canister_logs` — a deployed
-/// method of the same shape with a *larger* base of 150K and likewise no cycle fee.
-///
-/// Both constants are far below `list_canisters`'s 20M / 16K. That is
-/// intentional: `list_canisters` is gated to subnet admins, whereas
-/// `subnet_metrics` is open to any canister with no cycle fee, so overcharging
-/// here would let an unauthenticated caller exhaust the per-round subnet-message
-/// instruction budget and defer unrelated subnet messages. Do not inflate these
-/// to "be safe", and do not key them on a count larger than the work — either
-/// widens the denial surface rather than narrowing it.
-///
-/// Saturating arithmetic, unlike `list_canisters_instructions`: a release-build
-/// wrap would silently produce a small charge and remove the bound this function
-/// exists to provide.
-// Keep in sync with `SUBNET_METRICS_BASE_INSTRUCTIONS` /
-// `SUBNET_METRICS_INSTRUCTIONS_PER_HOT_CANISTER` in `execution_test.rs`.
-fn subnet_metrics_instructions(state: &ReplicatedState) -> NumInstructions {
-    const BASE_INSTRUCTIONS: u64 = 100_000;
-    const INSTRUCTIONS_PER_HOT_CANISTER: u64 = 40;
-    let hot_canisters = state.canister_states().hot_len() as u64;
-    NumInstructions::new(
-        BASE_INSTRUCTIONS
-            .saturating_add(INSTRUCTIONS_PER_HOT_CANISTER.saturating_mul(hot_canisters)),
     )
 }
 

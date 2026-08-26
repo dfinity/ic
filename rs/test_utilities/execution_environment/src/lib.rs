@@ -1831,9 +1831,8 @@ impl ExecutionTest {
                 }
             }
         } else if !consumes_round_instructions_without_effective_canister_id {
-            // `list_canisters` and `subnet_metrics` have no effective canister ID
-            // but still consume round instructions, so they are exempt from this
-            // assertion.
+            // `list_canisters` has no effective canister ID but still consumes
+            // round instructions, so it is exempt from this assertion.
             assert_eq!(slice_instructions_used.get(), 0);
         }
         self.check_invariants();
@@ -3366,13 +3365,17 @@ fn check_is_install_code(message: SubnetMessage) -> bool {
 /// `can_be_executed` — so it cannot be used to identify them, whatever its
 /// value. Keep in sync with the special case in
 /// `Scheduler::can_execute_subnet_msg`.
+///
+/// Note that `subnet_metrics` is *not* one of them: it also has no effective
+/// canister ID, but charges no round instructions, so it is subject to the
+/// `slice_instructions_used == 0` assertion like any other such method.
 fn check_consumes_round_instructions_without_effective_canister_id(message: SubnetMessage) -> bool {
     let message = match message {
         SubnetMessage::Response(_) => return false,
         SubnetMessage::Request(request) => CanisterCall::Request(request),
         SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };
-    matches!(message.method_name(), "list_canisters" | "subnet_metrics")
+    message.method_name() == "list_canisters"
 }
 
 pub fn wat_compilation_cost(wat: &str) -> NumInstructions {

@@ -29,9 +29,7 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
-use ic_types::{
-    CanisterId, NumBytes, NumInstructions, Time, ingress::WasmResult, messages::NO_DEADLINE,
-};
+use ic_types::{CanisterId, NumBytes, Time, ingress::WasmResult, messages::NO_DEADLINE};
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
@@ -2884,28 +2882,6 @@ fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
     assert_eq!(env.subnet_message_instructions(), instructions_baseline);
 }
 
-/// Keep in sync with `subnet_metrics_instructions` in
-/// `rs/execution_environment/src/execution_environment.rs`.
-const SUBNET_METRICS_BASE_INSTRUCTIONS: u64 = 100_000;
-/// Keep in sync with `subnet_metrics_instructions` in
-/// `rs/execution_environment/src/execution_environment.rs`. Note this is per
-/// **hot** canister, which is what the fold visits — not per canister.
-const SUBNET_METRICS_INSTRUCTIONS_PER_HOT_CANISTER: u64 = 40;
-
-fn subnet_metrics_count(env: &StateMachine) -> u64 {
-    fetch_histogram_vec_stats(
-        env.metrics_registry(),
-        "execution_subnet_message_duration_seconds",
-    )
-    .get(&labels(&[
-        ("method_name", "ic00_subnet_metrics"),
-        ("outcome", "finished"),
-        ("status", "success"),
-        ("speed", "fast"),
-    ]))
-    .map_or(0, |stats| stats.count)
-}
-
 fn subnet_metrics_payload(env: &StateMachine) -> Vec<u8> {
     SubnetMetricsArgs {
         subnet_id: env.get_subnet_id().get(),
@@ -2913,205 +2889,15 @@ fn subnet_metrics_payload(env: &StateMachine) -> Vec<u8> {
     .encode()
 }
 
-/// Builds a `StateMachine` whose round instruction limit is small enough that
-/// the derived per-round subnet-message budget
-/// (`max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION`) is only a
-/// small multiple of the `subnet_metrics` per-call charge.
-///
-/// All four instruction-limit fields must be set together. In particular
-/// `max_instructions_per_install_code_slice` defaults to `2 * B`, and the
-/// canister round budget is
-/// `max_instructions_per_round - max(max_instructions_per_slice, max_instructions_per_install_code_slice) + 1`
-/// (see `Scheduler::round_limits` in `rs/execution_environment/src/scheduler.rs`).
-/// Leaving the install-code slice at its default would make that budget negative
-/// (`80M - 2B + 1 < 0`, and `RoundInstructions` is a signed `i64`), so
-/// `RoundInstructions::instructions_reached()` would be true from round start, the
-/// inner round would break before any canister message executed, and no
-/// `subnet_metrics` call would ever be made.
-///
-/// Note that the *production* sizing rule documented at
-/// `rs/config/src/subnet_config.rs` — round at least
-/// `max(slice, install_code_slice) + 2 * B`, so that a round lasts about a second
-/// — cannot hold once the round budget is shrunk below `2 * B`. It is a sizing
-/// rule, not a correctness requirement; what execution actually requires is the
-/// positive canister round budget asserted below.
-fn subnet_metrics_env_with_round_limit(max_instructions_per_round: u64) -> StateMachine {
-    let slice = max_instructions_per_round / 2;
-    let mut subnet_config = SubnetConfig::new(SubnetType::Application);
-    subnet_config.scheduler_config.max_instructions_per_round =
-        NumInstructions::new(max_instructions_per_round);
-    subnet_config.scheduler_config.max_instructions_per_slice = NumInstructions::new(slice);
-    subnet_config.scheduler_config.max_instructions_per_message = NumInstructions::new(slice);
-    subnet_config
-        .scheduler_config
-        .max_instructions_per_install_code_slice = NumInstructions::new(slice);
-
-    // Executable precondition: the canister round budget, recomputed exactly as
-    // `Scheduler::round_limits` does, must be positive. Otherwise
-    // `RoundInstructions::instructions_reached()` is true from round start, the
-    // inner round breaks before executing any canister message, and every test
-    // built on this environment would pass vacuously.
-    let canister_round_budget = max_instructions_per_round as i64
-        - std::cmp::max(
-            subnet_config
-                .scheduler_config
-                .max_instructions_per_slice
-                .get(),
-            subnet_config
-                .scheduler_config
-                .max_instructions_per_install_code_slice
-                .get(),
-        ) as i64
-        + 1;
-    assert!(
-        canister_round_budget > 0,
-        "canister round budget {canister_round_budget} is not positive: \
-         max_instructions_per_round ({}) must exceed \
-         max(max_instructions_per_slice ({}), max_instructions_per_install_code_slice ({}))",
-        max_instructions_per_round,
-        subnet_config.scheduler_config.max_instructions_per_slice,
-        subnet_config
-            .scheduler_config
-            .max_instructions_per_install_code_slice,
-    );
-
-    StateMachineBuilder::new()
-        .with_config(Some(StateMachineConfig::new(
-            subnet_config,
-            HypervisorConfig::default(),
-        )))
-        .with_subnet_type(SubnetType::Application)
-        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
-        .build()
-}
-
-// `subnet_metrics` consumes round instructions according to its cost model (a
-// base cost plus a per-canister cost). This test checks that the round
-// instruction limit is respected: when many `subnet_metrics` calls are pending
-// at once, the per-round subnet-message instruction budget only allows some of
-// them to execute per round, so the rest are deferred to later rounds (i.e. not
-// all calls execute in the same round).
-//
-// Mirrors `list_canisters_respects_round_instruction_limit`. Unlike that test it
-// has to shrink the round budget, because at the default
-// `max_instructions_per_round` of `4 * B` the per-round subnet-message budget of
-// 250M would need thousands of concurrent `subnet_metrics` calls to saturate,
-// well past the canister output queue capacity of
-// `DEFAULT_QUEUE_CAPACITY = 500`.
+// `block_height` tracks the *real* block height, not just whatever round number a
+// harness handed the handler: after N further rounds it has advanced by at least
+// N. (`subnet_metrics_block_height_matches_current_round` in
+// `canister_manager/tests.rs` pins the `current_round` plumbing; this pins that
+// `current_round` is the block height in a running `StateMachine`.)
 #[test]
-fn subnet_metrics_respects_round_instruction_limit() {
-    // Number of concurrent `subnet_metrics` calls, bounded by
-    // `DEFAULT_QUEUE_CAPACITY = 500`.
-    const NUM_CALLS: u64 = 200;
-    // Keep in sync with `SUBNET_MESSAGES_LIMIT_FRACTION` in
-    // `rs/execution_environment/src/scheduler.rs`.
-    const SUBNET_MESSAGES_LIMIT_FRACTION: u64 = 16;
-    const MAX_INSTRUCTIONS_PER_ROUND: u64 = 80_000_000;
+fn subnet_metrics_block_height_tracks_block_height() {
+    const TICKS: u64 = 5;
 
-    let env = subnet_metrics_env_with_round_limit(MAX_INSTRUCTIONS_PER_ROUND);
-    let caller = create_universal_canister_with_cycles(
-        &env,
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
-
-    let num_canisters = env.get_latest_state().num_canisters() as u64;
-    assert_eq!(num_canisters, 1);
-    // The charge is `BASE + 40 * hot_len`, and `hot_len` is a property of the
-    // round the call happens to execute in — the caller canister is hot while it
-    // has pending work and cold otherwise — so an exact per-call cost is not
-    // observable from here. With a single canister on the subnet it is bracketed
-    // by `hot_len ∈ {0, 1}`, which is tight enough for every assertion below.
-    let min_cost_per_call = SUBNET_METRICS_BASE_INSTRUCTIONS;
-    let max_cost_per_call = SUBNET_METRICS_BASE_INSTRUCTIONS
-        + SUBNET_METRICS_INSTRUCTIONS_PER_HOT_CANISTER * num_canisters;
-    let budget = MAX_INSTRUCTIONS_PER_ROUND / SUBNET_MESSAGES_LIMIT_FRACTION;
-    // Use the *minimum* charge here, so reaching the condition is guaranteed
-    // rather than merely likely.
-    assert!(
-        NUM_CALLS * min_cost_per_call > budget,
-        "test cannot reach the condition it asserts: {NUM_CALLS} calls x \
-         {min_cost_per_call} instructions do not exceed the per-round \
-         subnet-message budget {budget}; lower MAX_INSTRUCTIONS_PER_ROUND or \
-         raise NUM_CALLS"
-    );
-    // ...and the *maximum* charge here, for the same reason.
-    assert!(
-        budget >= 2 * max_cost_per_call,
-        "budget {budget} fits fewer than two calls, so the test degenerates to \
-         one call per round and proves nothing about batching"
-    );
-
-    // Build an update that fires `NUM_CALLS` concurrent `subnet_metrics`
-    // inter-canister calls (ignoring their responses) and then replies.
-    let payload = subnet_metrics_payload(&env);
-    let mut update = wasm();
-    for _ in 0..NUM_CALLS {
-        update = update.call_simple(
-            CanisterId::ic_00(),
-            Method::SubnetMetrics,
-            call_args()
-                .other_side(payload.clone())
-                .on_reply(wasm().noop())
-                .on_reject(wasm().noop()),
-        );
-    }
-    let update = update.reply().build();
-
-    let instructions_baseline = env.subnet_message_instructions();
-    let calls_baseline = subnet_metrics_count(&env);
-    assert_eq!(calls_baseline, 0);
-    env.send_ingress(PrincipalId::new_anonymous(), caller, "update", update);
-
-    let executed_so_far = || subnet_metrics_count(&env) - calls_baseline;
-    let mut executed_per_round = vec![];
-    for _ in 0..200 {
-        env.tick();
-        executed_per_round.push(executed_so_far());
-        if executed_so_far() == NUM_CALLS {
-            break;
-        }
-    }
-
-    // Not all `subnet_metrics` calls were executed in the same round: there is a
-    // round after which some but not all of them had been executed.
-    assert!(
-        executed_per_round.iter().any(|&n| n > 0 && n < NUM_CALLS),
-        "expected subnet_metrics calls to be spread across rounds, got progression {:?}",
-        executed_per_round,
-    );
-    // Eventually all of them were executed.
-    assert_eq!(*executed_per_round.last().unwrap(), NUM_CALLS);
-    // The calls were *batched*, not executed one per round: some round drained at
-    // least two of them. Asserting only "spread across rounds" above would also be
-    // satisfied by a degenerate one-call-per-round progression, which is what the
-    // `budget >= 2 * max_cost_per_call` precondition exists to rule out — so
-    // assert the consequence too, not just the precondition.
-    let per_round_deltas: Vec<u64> = std::iter::once(executed_per_round[0])
-        .chain(executed_per_round.windows(2).map(|w| w[1] - w[0]))
-        .collect();
-    assert!(
-        per_round_deltas.iter().any(|&n| n >= 2),
-        "expected at least one round to execute two or more calls, got per-round \
-         counts {per_round_deltas:?}"
-    );
-    // Every executed call was charged per the cost model, within the `hot_len`
-    // bracket established above.
-    let charged = env.subnet_message_instructions() - instructions_baseline;
-    assert!(
-        charged >= (NUM_CALLS * min_cost_per_call) as f64
-            && charged <= (NUM_CALLS * max_cost_per_call) as f64,
-        "total charge {charged} outside [{}, {}] for {NUM_CALLS} calls",
-        NUM_CALLS * min_cost_per_call,
-        NUM_CALLS * max_cost_per_call,
-    );
-}
-
-// A successful `subnet_metrics` call is charged round instructions per the cost
-// model; a rejected one (malformed payload, or a `subnet_id` naming a different
-// subnet) is charged nothing.
-#[test]
-fn subnet_metrics_charges_round_instructions() {
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
             SubnetConfig::new(SubnetType::Application),
@@ -3125,14 +2911,6 @@ fn subnet_metrics_charges_round_instructions() {
         Some(CanisterSettingsArgsBuilder::new().build()),
         INITIAL_CYCLES_BALANCE,
     );
-
-    let num_canisters = env.get_latest_state().num_canisters() as u64;
-    assert_eq!(num_canisters, 1);
-    // See the note in `subnet_metrics_respects_round_instruction_limit`: the exact
-    // `hot_len` at handler time is not observable, so bracket it.
-    let min_cost_per_call = SUBNET_METRICS_BASE_INSTRUCTIONS;
-    let max_cost_per_call = SUBNET_METRICS_BASE_INSTRUCTIONS
-        + SUBNET_METRICS_INSTRUCTIONS_PER_HOT_CANISTER * num_canisters;
 
     let call = |payload: Vec<u8>| {
         wasm()
@@ -3146,27 +2924,15 @@ fn subnet_metrics_charges_round_instructions() {
             .build()
     };
 
-    // Success: charged per the cost model.
-    let baseline = env.subnet_message_instructions();
     let reply =
         get_reply(env.execute_ingress(caller, "update", call(subnet_metrics_payload(&env))));
     let first = SubnetMetricsResponse::decode(&reply).unwrap();
-    let charged = env.subnet_message_instructions() - baseline;
-    assert!(
-        charged >= min_cost_per_call as f64 && charged <= max_cost_per_call as f64,
-        "charge {charged} outside [{min_cost_per_call}, {max_cost_per_call}]"
-    );
-
-    // `block_height` tracks the *real* block height, not just whatever round
-    // number a harness handed the handler: after N further rounds it has advanced
-    // by at least N. (`subnet_metrics_block_height_matches_current_round` in
-    // `canister_manager/tests.rs` pins the `current_round` plumbing; this pins that
-    // `current_round` is the block height in a running `StateMachine`.)
-    const TICKS: u64 = 5;
     assert!(first.block_height > 0_u64);
+
     for _ in 0..TICKS {
         env.tick();
     }
+
     let reply =
         get_reply(env.execute_ingress(caller, "update", call(subnet_metrics_payload(&env))));
     let second = SubnetMetricsResponse::decode(&reply).unwrap();
@@ -3176,128 +2942,6 @@ fn subnet_metrics_charges_round_instructions() {
          {TICKS} ticks",
         first.block_height,
         second.block_height,
-    );
-
-    // Malformed payload: rejected, charged nothing.
-    let baseline = env.subnet_message_instructions();
-    let reject = get_reject(env.execute_ingress(caller, "update", call(EmptyBlob.encode())));
-    assert!(
-        reject.contains("Error decoding candid"),
-        "unexpected reject: {reject}"
-    );
-    assert_eq!(env.subnet_message_instructions(), baseline);
-
-    // Foreign `subnet_id`: rejected, charged nothing.
-    //
-    // Note which layer rejects here. `resolve_destination` routes the call to the
-    // subnet named in the payload, and this single-subnet `StateMachine` has no
-    // route to it, so the call is rejected by message routing and the handler
-    // never runs. That is exactly the behaviour the interface spec relies on for
-    // the cross-subnet case; the handler's own-subnet check is exercised instead
-    // by `subnet_metrics_foreign_subnet_id_is_rejected` in
-    // `canister_manager/tests.rs`, which injects the request directly into the
-    // subnet queue. Either way, nothing is charged.
-    let foreign = SubnetMetricsArgs {
-        subnet_id: PrincipalId::new_subnet_test_id(0x1234),
-    }
-    .encode();
-    let baseline = env.subnet_message_instructions();
-    let reject = get_reject(env.execute_ingress(caller, "update", call(foreign)));
-    assert!(
-        reject.contains("No route to canister"),
-        "unexpected reject: {reject}"
-    );
-    assert_eq!(env.subnet_message_instructions(), baseline);
-}
-
-// The `subnet_metrics` charge must scale with the number of **hot** canisters —
-// what `CanisterStates::total_consumed_cycles()` actually folds over — and not
-// with the total number of canisters on the subnet.
-//
-// This is the regression test for a real defect: keying the charge on
-// `num_canisters()` while the work is `O(|hot|)` manufactures denial capacity that
-// is not backed by any work. `repartition_canister_states()` runs on every
-// `commit_and_certify`, so `hot_len() << len()` is the steady state: on a
-// 100k-canister subnet a `num_canisters()`-keyed charge over-states the cost by
-// ~40x, meaning ~40x fewer calls suffice to pin the shared per-round
-// subnet-message budget at zero and defer every `install_code` / `upload_chunk` /
-// snapshot / `update_settings` on that subnet.
-#[test]
-fn subnet_metrics_charge_ignores_cold_canisters() {
-    // Enough extra canisters that a `num_canisters()`-keyed charge is
-    // unambiguously distinguishable from a `hot_len()`-keyed one, while keeping
-    // the test cheap.
-    const EXTRA_CANISTERS: u64 = 30;
-
-    let env = StateMachineBuilder::new()
-        .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(SubnetType::Application),
-            HypervisorConfig::default(),
-        )))
-        .with_subnet_type(SubnetType::Application)
-        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
-        .build();
-    let caller = create_universal_canister_with_cycles(
-        &env,
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
-    for _ in 0..EXTRA_CANISTERS {
-        env.create_canister(Some(CanisterSettingsArgsBuilder::new().build()));
-    }
-    // Let the freshly created canisters go quiet and be demoted to the cold pool.
-    for _ in 0..3 {
-        env.tick();
-    }
-
-    let state = env.get_latest_state();
-    let num_canisters = state.num_canisters() as u64;
-    let hot_canisters = state.canister_states().hot_len() as u64;
-    assert_eq!(num_canisters, EXTRA_CANISTERS + 1);
-    // Executable precondition: the pool really is mostly cold, so the two keyings
-    // give different answers and the assertion below is not vacuous.
-    assert!(
-        hot_canisters * 4 < num_canisters,
-        "precondition failed: {hot_canisters} of {num_canisters} canisters are hot, \
-         so a hot-keyed and a total-keyed charge are not distinguishable; the \
-         test proves nothing"
-    );
-    drop(state);
-
-    let call = wasm()
-        .call_simple(
-            CanisterId::ic_00(),
-            Method::SubnetMetrics,
-            call_args()
-                .other_side(subnet_metrics_payload(&env))
-                .on_reject(wasm().reject_message().reject()),
-        )
-        .build();
-
-    let baseline = env.subnet_message_instructions();
-    let reply = get_reply(env.execute_ingress(caller, "update", call));
-    SubnetMetricsResponse::decode(&reply).unwrap();
-    let charged = env.subnet_message_instructions() - baseline;
-
-    // The charge is strictly below what keying on the total would give. This is
-    // the assertion that fails if the cost function regresses to
-    // `state.num_canisters()`.
-    let total_keyed = SUBNET_METRICS_BASE_INSTRUCTIONS
-        + SUBNET_METRICS_INSTRUCTIONS_PER_HOT_CANISTER * num_canisters;
-    assert!(
-        charged < total_keyed as f64,
-        "charge {charged} matches a total-keyed cost model ({total_keyed} for \
-         {num_canisters} canisters, of which only {hot_canisters} are hot); the \
-         charge must scale with the hot pool only"
-    );
-    // And it is within the hot-keyed bracket. `hot_len` at handler time can differ
-    // from the value read above by the caller canister itself, hence the slack.
-    let hot_keyed_upper = SUBNET_METRICS_BASE_INSTRUCTIONS
-        + SUBNET_METRICS_INSTRUCTIONS_PER_HOT_CANISTER * (hot_canisters + 2);
-    assert!(
-        charged >= SUBNET_METRICS_BASE_INSTRUCTIONS as f64 && charged <= hot_keyed_upper as f64,
-        "charge {charged} outside the hot-keyed bracket \
-         [{SUBNET_METRICS_BASE_INSTRUCTIONS}, {hot_keyed_upper}]"
     );
 }
 
