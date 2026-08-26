@@ -43,6 +43,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
+      # An explicit permissions map zeroes everything unlisted, and
+      # `gh attestation verify` reads the attestations API with this job's
+      # GITHUB_TOKEN — grant that read explicitly rather than relying on the
+      # integration token's implicit access to public data.
+      attestations: read
       contents: write
 
     steps:
@@ -185,6 +190,10 @@ jobs:
         with:
           commit: ${{ steps.parse_tag.outputs.tag_commit }}
           signer-workflow: dfinity/ic/.github/workflows/ci-kickoff.yml
+          # Ledger-suite tags point at master commits; only attestations
+          # minted from master itself are acceptable (ci-kickoff.yml also
+          # runs for other refs).
+          source-ref-regex: refs/heads/master
           files: ${{ steps.file_list.outputs.files }}
           gh-token: ${{ secrets.GITHUB_TOKEN }}
 
