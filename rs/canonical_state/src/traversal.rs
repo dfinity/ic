@@ -1256,8 +1256,7 @@ mod tests {
             NominalCycles::zero()
         );
 
-        // The refresh publishes the fold into `SubnetMetrics`. This subnet has no
-        // subnet-level consumption, so the canisters' part is the whole total.
+        // The refresh publishes the fold into `SubnetMetrics`.
         let subnet_level = state.metadata.subnet_metrics.consumed_cycles_total();
         state.refresh_consumed_cycles();
         assert_eq!(

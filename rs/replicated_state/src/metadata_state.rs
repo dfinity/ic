@@ -452,11 +452,7 @@ pub struct SubnetMetrics {
     /// Every consumer of the full total reads this one field -- the certified state
     /// tree at `/subnet/<subnet_id>/metrics` (from certification version `V29`) and
     /// the `replicated_state_consumed_cycles_since_replica_started` gauge -- so they
-    /// cannot drift apart. It also gives a consumer executing *during* a round a
-    /// self-consistent total: recomputing one would count a canister deleted earlier
-    /// in the same round twice, since its consumption lands in
-    /// `consumed_cycles_by_deleted_canisters` at once while the canisters' part is
-    /// only refreshed at the next commit.
+    /// cannot drift apart.
     #[validate_eq(Ignore)]
     pub consumed_cycles_total_including_canisters: NominalCycles,
 }
