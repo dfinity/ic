@@ -14,7 +14,7 @@
 //! whose call data sweeps them all through the deployed delegate.
 
 use crate::{
-    attestation::sign_attestation,
+    attestation::{AttestationRequest, sign_attestation},
     deposit_address::{DepositAddressSchema, deposit_derivation_path, sweeper_derivation_path},
     guard::TimerGuard,
     logs::{DEBUG, INFO},
@@ -22,11 +22,15 @@ use crate::{
     state::{
         State, TaskType,
         audit::{EventType, process_event},
+        automatic_deposits::SweepTarget,
         mutate_state, read_state,
         transactions::{CreateSweepTransactionError, PipelineRequest, SweepRequest, SweptDeposit},
     },
     sweeper_contract::{SweepItem, encode_sweep_erc20_batch},
-    tx::{Authorization, GasFeeEstimate, lazy_refresh_gas_fee_estimate},
+    tx::{
+        Authorization, GasFeeEstimate, SignedAuthorization, TransactionSignature,
+        lazy_refresh_gas_fee_estimate,
+    },
     withdraw::{
         fetch_finalized_receipts, finalized_transaction_count, latest_transaction_count,
         send_signed_transactions,
@@ -35,7 +39,7 @@ use crate::{
 use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Deposits swept in one transaction. Bounded by gas: each one adds an authorization, a delegated
 /// call, an approval and a transfer.
@@ -306,67 +310,41 @@ pub async fn enqueue_batched_sweep() {
     }
 
     let chain_id = read_state(State::ethereum_network).chain_id();
-    let mut items = Vec::with_capacity(targets.len());
-    let mut deposits = Vec::with_capacity(targets.len());
+    let Some(requests) = read_state(|s| {
+        targets
+            .iter()
+            .map(|target| s.attestation_request(target.account()))
+            .collect::<Option<Vec<_>>>()
+    }) else {
+        log!(
+            DEBUG,
+            "[enqueue_batched_sweep]: SKIPPING: no deposit helper with subaccount is configured"
+        );
+        return;
+    };
+
+    let prepared = prepare_deposits(&targets, &requests, chain_id, sweeper_contract).await;
+    if prepared.is_empty() {
+        log!(
+            INFO,
+            "[enqueue_batched_sweep]: SKIPPING: none of the {} queued deposits could be signed for",
+            targets.len()
+        );
+        return;
+    }
+    let mut items = Vec::with_capacity(prepared.len());
+    let mut deposits = Vec::with_capacity(prepared.len());
     let mut authorizations = Vec::new();
-    for target in targets {
+    for PreparedDeposit {
+        target,
+        attestation,
+        authorization,
+    } in prepared
+    {
         let account = target.account();
-        let Some(request) = read_state(|s| s.attestation_request(account)) else {
-            log!(
-                DEBUG,
-                "[enqueue_batched_sweep]: SKIPPING: no deposit helper with subaccount is configured"
-            );
-            return;
-        };
-        // An attestation is signed once per address and reused by every later sweep: it names the
-        // account and the helper, neither of which this sweep changes.
-        let attestation = match read_state(|s| s.attestation(account).cloned()) {
-            Some(attestation) => attestation,
-            None => match sign_attestation(&request).await {
-                Ok(attestation) => {
-                    mutate_state(|s| {
-                        process_event(
-                            s,
-                            EventType::AttestedDepositAddress {
-                                request: request.clone(),
-                                signature: attestation.clone(),
-                            },
-                        )
-                    });
-                    attestation
-                }
-                Err(e) => {
-                    log!(
-                        INFO,
-                        "[enqueue_batched_sweep]: failed attesting {account:?}, skipping the whole sweep: {e}"
-                    );
-                    return;
-                }
-            },
-        };
-        let delegating = !read_state(|s| s.automatic_deposits.is_delegated(&target.address()));
-        if delegating {
-            let authorization = Authorization {
-                chain_id,
-                delegate: sweeper_contract,
-                nonce: TransactionNonce::ZERO,
-            };
-            match authorization
-                .sign(deposit_derivation_path(
-                    DepositAddressSchema::CkErc20,
-                    &account,
-                ))
-                .await
-            {
-                Ok(authorization) => authorizations.push(authorization),
-                Err(e) => {
-                    log!(
-                        INFO,
-                        "[enqueue_batched_sweep]: failed authorizing {account:?}, skipping the whole sweep: {e}"
-                    );
-                    return;
-                }
-            }
+        let delegating = authorization.is_some();
+        if let Some(authorization) = authorization {
+            authorizations.push(authorization);
         }
         items.push(SweepItem {
             deposit: target.address(),
@@ -416,4 +394,152 @@ pub async fn enqueue_batched_sweep() {
         request.authorizations.len()
     );
     mutate_state(|s| process_event(s, EventType::AcceptedSweepRequest(request)));
+}
+
+/// What one deposit contributes to a sweep: the attestation naming the account it credits, and the
+/// EIP-7702 authorization delegating its address when this is that address' first sweep.
+struct PreparedDeposit {
+    target: SweepTarget,
+    attestation: TransactionSignature,
+    authorization: Option<SignedAuthorization>,
+}
+
+/// Everything the queued `targets` need signed, in target order. Each threshold-ECDSA signature is
+/// an outcall, so the attestations are signed in one batch and the authorizations in another; a
+/// deposit left without either signature drops out of the sweep rather than sinking it, since
+/// nothing the others contribute depends on it.
+async fn prepare_deposits(
+    targets: &[SweepTarget],
+    requests: &[AttestationRequest],
+    chain_id: u64,
+    sweeper_contract: Address,
+) -> Vec<PreparedDeposit> {
+    let attestations = sign_attestations_batch(requests).await;
+    let delegating: Vec<usize> = targets
+        .iter()
+        .enumerate()
+        .filter(|(index, target)| {
+            attestations[*index].is_some()
+                && read_state(|s| !s.automatic_deposits.is_delegated(&target.address()))
+        })
+        .map(|(index, _)| index)
+        .collect();
+    let authorizations =
+        sign_authorizations_batch(&delegating, targets, chain_id, sweeper_contract).await;
+    targets
+        .iter()
+        .enumerate()
+        .filter_map(|(index, target)| {
+            let attestation = attestations[index].clone()?;
+            let authorization = match delegating.contains(&index) {
+                true => Some(authorizations.get(&index)?.clone()),
+                false => None,
+            };
+            Some(PreparedDeposit {
+                target: *target,
+                attestation,
+                authorization,
+            })
+        })
+        .collect()
+}
+
+/// The attestation of each request, in request order, `None` where it could not be signed. An
+/// attestation is signed once per address and reused by every later sweep — it names the account
+/// and the helper, neither of which a sweep changes — so only the ones the minter does not have
+/// yet cost a signature, and each is recorded the moment it exists.
+async fn sign_attestations_batch(
+    requests: &[AttestationRequest],
+) -> Vec<Option<TransactionSignature>> {
+    let mut attestations: Vec<_> = read_state(|s| {
+        requests
+            .iter()
+            .map(|request| s.attestation(*request.account()).cloned())
+            .collect()
+    });
+    let signed = join_all(
+        attestations
+            .iter()
+            .enumerate()
+            .filter(|(_, attestation)| attestation.is_none())
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|index| async move { (index, sign_attestation(&requests[index]).await) }),
+    )
+    .await;
+    let mut errors = Vec::new();
+    for (index, result) in signed {
+        match result {
+            Ok(attestation) => {
+                mutate_state(|s| {
+                    process_event(
+                        s,
+                        EventType::AttestedDepositAddress {
+                            request: requests[index].clone(),
+                            signature: attestation.clone(),
+                        },
+                    )
+                });
+                attestations[index] = Some(attestation);
+            }
+            Err(e) => errors.push(format!("{:?}: {e}", requests[index].account())),
+        }
+    }
+    if !errors.is_empty() {
+        log!(
+            INFO,
+            "[enqueue_batched_sweep]: leaving out the deposits this sweep could not attest: {errors:?}"
+        );
+    }
+    attestations
+}
+
+/// One authorization per `delegating` index, keyed by it, missing where it could not be signed. An
+/// authorization pins the address' nonce, which is `0` for a deposit EOA: incoming ERC-20 transfers
+/// never touch it, and only one of its own authorizations can advance it.
+async fn sign_authorizations_batch(
+    delegating: &[usize],
+    targets: &[SweepTarget],
+    chain_id: u64,
+    sweeper_contract: Address,
+) -> BTreeMap<usize, SignedAuthorization> {
+    let signed = join_all(delegating.iter().map(|index| {
+        let account = targets[*index].account();
+        let authorization = Authorization {
+            chain_id,
+            delegate: sweeper_contract,
+            nonce: TransactionNonce::ZERO,
+        };
+        async move {
+            (
+                *index,
+                account,
+                authorization
+                    .sign(deposit_derivation_path(
+                        DepositAddressSchema::CkErc20,
+                        &account,
+                    ))
+                    .await,
+            )
+        }
+    }))
+    .await;
+    let mut authorizations = BTreeMap::new();
+    let mut errors = Vec::new();
+    for (index, account, result) in signed {
+        match result {
+            Ok(authorization) => {
+                authorizations.insert(index, authorization);
+            }
+            Err(e) => errors.push(format!("{account:?}: {e}")),
+        }
+    }
+    if !errors.is_empty() {
+        log!(
+            INFO,
+            "[enqueue_batched_sweep]: leaving out the deposits this sweep could not authorize: {errors:?}"
+        );
+    }
+    authorizations
 }
