@@ -1051,57 +1051,107 @@ fn full_refund_resets_consumed_cycles() {
 
 #[test]
 fn consume_cycles_exceeding_balance_reports_only_the_charged_amount() {
-    let mut system_state = CanisterStateFixture::new().canister_state.system_state;
-    let cost_schedule = CanisterCyclesCostSchedule::Normal;
-    // Request more cycles than the balance can cover.
-    let requested_cycles =
-        CompoundCycles::<Instructions>::new(INITIAL_CYCLES + Cycles::new(1000), cost_schedule);
-    system_state.consume_cycles(requested_cycles);
+    fn test(cost_schedule: CanisterCyclesCostSchedule) {
+        let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+        let ctx = format!("{cost_schedule:?} cost schedule");
+        // Request more cycles than the balance can cover.
+        let requested_cycles =
+            CompoundCycles::<Instructions>::new(INITIAL_CYCLES + Cycles::new(1000), cost_schedule);
+        system_state.consume_cycles(requested_cycles);
 
-    // The balance is drained and only the drained amount is reported as consumed,
-    // i.e. the part of the request that the balance could not cover is not.
-    assert_eq!(Cycles::zero(), system_state.balance());
-    assert_eq!(
-        NominalCycles::new(INITIAL_CYCLES.get()),
-        system_state.canister_metrics().consumed_cycles()
-    );
-    assert_eq!(
-        *system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases()
-            .get(&CyclesUseCase::Instructions)
-            .unwrap(),
-        NominalCycles::new(INITIAL_CYCLES.get()),
-    );
+        // Under the normal cost schedule the balance is drained and only the drained
+        // amount is reported as consumed, i.e. the part of the request that the balance
+        // could not cover is not. Under the free cost schedule this use case is not
+        // charged at all, so there is nothing to cap: the balance is untouched and the
+        // full nominal amount is reported.
+        let (expected_balance, expected_consumed) = match cost_schedule {
+            CanisterCyclesCostSchedule::Normal => {
+                (Cycles::zero(), NominalCycles::new(INITIAL_CYCLES.get()))
+            }
+            CanisterCyclesCostSchedule::Free => (INITIAL_CYCLES, requested_cycles.nominal()),
+        };
+        assert_eq!(expected_balance, system_state.balance(), "{ctx}");
+        assert_eq!(
+            expected_consumed,
+            system_state.canister_metrics().consumed_cycles(),
+            "{ctx}"
+        );
+        assert_eq!(
+            *system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases()
+                .get(&CyclesUseCase::Instructions)
+                .unwrap(),
+            expected_consumed,
+            "{ctx}"
+        );
+    }
+
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        test(cost_schedule);
+    }
 }
 
 #[test]
 fn consume_cycles_exceeding_balance_and_reserved_balance_reports_only_the_charged_amount() {
-    let mut system_state = CanisterStateFixture::new().canister_state.system_state;
-    let cost_schedule = CanisterCyclesCostSchedule::Normal;
-    let reserved_cycles = Cycles::new(1000);
-    system_state.reserve_cycles(reserved_cycles).unwrap();
+    fn test(cost_schedule: CanisterCyclesCostSchedule) {
+        let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+        let ctx = format!("{cost_schedule:?} cost schedule");
+        let reserved_cycles = Cycles::new(1000);
+        system_state.reserve_cycles(reserved_cycles).unwrap();
 
-    // Request more cycles than the reserved balance and the balance together can cover.
-    let requested_cycles =
-        CompoundCycles::<MemoryUseCase>::new(INITIAL_CYCLES + Cycles::new(500), cost_schedule);
-    system_state.consume_cycles(requested_cycles);
+        // Request more cycles than the reserved balance and the balance together can cover.
+        let requested_cycles =
+            CompoundCycles::<MemoryUseCase>::new(INITIAL_CYCLES + Cycles::new(500), cost_schedule);
+        system_state.consume_cycles(requested_cycles);
 
-    // Both balances are drained and only the drained amount is reported as consumed.
-    assert_eq!(Cycles::zero(), system_state.balance());
-    assert_eq!(Cycles::zero(), system_state.reserved_balance());
-    assert_eq!(
-        NominalCycles::new(INITIAL_CYCLES.get()),
-        system_state.canister_metrics().consumed_cycles()
-    );
-    assert_eq!(
-        *system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases()
-            .get(&CyclesUseCase::Memory)
-            .unwrap(),
-        NominalCycles::new(INITIAL_CYCLES.get()),
-    );
+        // Under the normal cost schedule both balances are drained and only the drained
+        // amount is reported as consumed. Under the free cost schedule this use case is
+        // not charged at all, so neither balance is touched and the full nominal amount
+        // is reported.
+        let (expected_balance, expected_reserved_balance, expected_consumed) = match cost_schedule {
+            CanisterCyclesCostSchedule::Normal => (
+                Cycles::zero(),
+                Cycles::zero(),
+                NominalCycles::new(INITIAL_CYCLES.get()),
+            ),
+            CanisterCyclesCostSchedule::Free => (
+                INITIAL_CYCLES - reserved_cycles,
+                reserved_cycles,
+                requested_cycles.nominal(),
+            ),
+        };
+        assert_eq!(expected_balance, system_state.balance(), "{ctx}");
+        assert_eq!(
+            expected_reserved_balance,
+            system_state.reserved_balance(),
+            "{ctx}"
+        );
+        assert_eq!(
+            expected_consumed,
+            system_state.canister_metrics().consumed_cycles(),
+            "{ctx}"
+        );
+        assert_eq!(
+            *system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases()
+                .get(&CyclesUseCase::Memory)
+                .unwrap(),
+            expected_consumed,
+            "{ctx}"
+        );
+    }
+
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        test(cost_schedule);
+    }
 }
 
 #[test]
