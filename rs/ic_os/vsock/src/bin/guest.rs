@@ -1,8 +1,5 @@
-use std::fs::OpenOptions;
-use std::io::Write;
-
-use vsock_lib::protocol::{Command as ProtocolCommand, NotifyData, Payload, UpgradeData};
 use vsock_lib::client::{LinuxVsockClient, VsockClient};
+use vsock_lib::protocol::{Command as ProtocolCommand, NotifyData, Payload, UpgradeData};
 
 use clap::{Parser, Subcommand};
 
@@ -62,16 +59,6 @@ fn main() -> Result<(), String> {
             ProtocolCommand::Notify(NotifyData { message, count })
         }
     };
-
-    // Echo notify messages to the local GuestOS console so they are visible
-    // in cloud environments where the host console is not accessible.
-    if let ProtocolCommand::Notify(NotifyData { ref message, .. }) = command {
-        for path in ["/dev/tty1", "/dev/ttyS0"] {
-            if let Ok(mut tty) = OpenOptions::new().write(true).open(path) {
-                let _ = writeln!(tty, "\n{message}");
-            }
-        }
-    }
 
     let payload = LinuxVsockClient::with_port(cli.port).send_command(command)?;
 

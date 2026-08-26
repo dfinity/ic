@@ -20,7 +20,15 @@ pub(crate) fn get_hostos_vsock_version() -> Response {
 }
 
 pub(crate) fn notify(notify_data: &NotifyData) -> Response {
-    // Skip logging if manual recovery TUI is running to avoid interfering with the display
+    // Echo notify messages to the local GuestOS console so they are visible
+    // in cloud environments where the host console is not accessible.
+    for path in ["/dev/tty1", "/dev/ttyS0"] {
+        if let Ok(mut tty) = OpenOptions::new().write(true).open(path) {
+            let _ = writeln!(tty, "\n{}", notify_data.message);
+        }
+    }
+
+    // Skip logging to host if manual recovery TUI is running to avoid interfering with the display
     if procfs::process::all_processes().is_ok_and(|processes| {
         processes.flatten().any(|process| {
             process.cmdline().is_ok_and(|args| {
