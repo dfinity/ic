@@ -1341,6 +1341,30 @@ fn decode_ledger_memo_smoke() {
 }
 
 /// Tests with the EVM RPC canister
+/// The six sweeper-funding metrics, present and zero on a minter that has never funded. Cheap, and
+/// it is the only thing that catches a mistyped metric name or an encoder error, whose feedback loop
+/// is otherwise a Grafana dashboard that silently stays empty.
+#[test]
+fn should_export_the_sweeper_funding_metrics() {
+    CkEthSetup::default()
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_cketh_burned_total 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_eth_spent_total 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeper_funding_finalized_total\{status="success"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeper_funding_finalized_total\{status="failure"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_burned_not_yet_spent 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_gas_balance 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_low_water_mark \d+ \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_target \d+ \d+")
+        .assert_contains_metric_matching(
+            r"cketh_minter_sweeper_funding_in_flight_age_seconds 0 \d+",
+        );
+}
+
 mod cketh_evm_rpc {
     use super::*;
 

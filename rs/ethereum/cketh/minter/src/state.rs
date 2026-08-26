@@ -435,6 +435,7 @@ impl State {
         self.withdrawal_transactions
             .record_finalized_transaction(*withdrawal_id, receipt.clone());
         self.update_balance_upon_withdrawal(withdrawal_id, receipt);
+        self.update_sweeper_funding_upon_withdrawal(withdrawal_id, receipt);
     }
 
     pub fn next_request_id(&mut self) -> u64 {
@@ -452,6 +453,34 @@ impl State {
                 .erc20_balances
                 .erc20_add(event.erc20_contract_address, event.value),
         };
+    }
+
+    /// Records what a finalized funding did to the sweeper's accounting, if the request was one.
+    /// Separate from [`Self::update_balance_upon_withdrawal`], which is about the minter's own ETH
+    /// balance and says nothing about fundings in its name.
+    fn update_sweeper_funding_upon_withdrawal(
+        &mut self,
+        withdrawal_id: &LedgerBurnIndex,
+        receipt: &TransactionReceipt,
+    ) {
+        let request = self
+            .withdrawal_transactions
+            .get_processed_request(withdrawal_id)
+            .expect("BUG: missing withdrawal request");
+        if !matches!(request, WithdrawalRequest::SweeperFunding(_)) {
+            return;
+        }
+        let amount = self
+            .withdrawal_transactions
+            .get_finalized_transaction(withdrawal_id)
+            .expect("BUG: missing finalized transaction")
+            .transaction()
+            .amount;
+        self.sweeper_funding.record_finalized_funding(
+            &receipt.status,
+            amount,
+            receipt.effective_transaction_fee(),
+        );
     }
 
     fn update_balance_upon_withdrawal(
@@ -489,18 +518,6 @@ impl State {
         self.eth_balance.eth_balance_sub(debited_amount);
         self.eth_balance.total_effective_tx_fees_add(tx_fee);
         self.eth_balance.total_unspent_tx_fees_add(unspent_tx_fee);
-
-        if matches!(withdrawal_request, WithdrawalRequest::SweeperFunding(_)) {
-            let transferred = match receipt.status {
-                TransactionStatus::Success => tx.transaction().amount,
-                TransactionStatus::Failure => {
-                    self.sweeper_funding.record_failed_funding();
-                    Wei::ZERO
-                }
-            };
-            self.sweeper_funding
-                .record_finalized_funding(transferred, tx_fee);
-        }
 
         if receipt.status == TransactionStatus::Success && !tx.transaction_data().is_empty() {
             let TransactionCallData::Erc20Transfer { to: _, value } = TransactionCallData::decode(
