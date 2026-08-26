@@ -643,7 +643,6 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         NodeId, RegistryVersion, SubnetId,
-        backwards_compatibility::BackwardsCompatible,
         consensus::{
             BlockPayload, HashedBlock, Payload,
             dkg::{SplittingArgs, SubnetSplittingStatus},
@@ -908,12 +907,10 @@ mod tests {
                     .with_current_transcripts(current_transcripts);
 
                 splitting_summary.dkg.subnet_splitting_status =
-                    BackwardsCompatible::new_for_test_only(Some(SubnetSplittingStatus::Scheduled(
-                        SplittingArgs {
-                            source_subnet_id,
-                            destination_subnet_id,
-                        },
-                    )));
+                    SubnetSplittingStatus::Scheduled(SplittingArgs {
+                        source_subnet_id,
+                        destination_subnet_id,
+                    });
                 splitting_block.payload = Payload::new(
                     crypto_hash,
                     BlockPayload::Summary(splitting_summary.clone()),
