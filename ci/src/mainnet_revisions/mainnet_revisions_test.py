@@ -14,8 +14,11 @@ warning only for versions whose commit is not public yet.
 """
 
 import hashlib
+import io
 import logging
 import subprocess
+import urllib.error
+import urllib.request
 
 import mainnet_revisions
 import pytest
@@ -211,3 +214,46 @@ def test_get_binary_hashes_requires_every_binary(monkeypatch):
     sums = sums_with(monkeypatch, attested={"binaries/x86_64-linux": incomplete})
     with pytest.raises(Exception, match="No sha256 for ic-replay"):
         get_binary_hashes(sums)
+
+
+def http_error(code: int, body: str) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError("https://api.github.com/x", code, "err", {}, io.BytesIO(body.encode()))
+
+
+def test_commit_is_public(monkeypatch):
+    # The commits endpoint answers 422 "No commit found for SHA" (not 404) for a
+    # well-formed absent sha; only that exact answer means "not public". Other
+    # errors -- including other 422s (validation failures, throttling) -- must
+    # raise, because the answer gates whether unverified CDN data may be recorded.
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def urlopen_returning(result):
+        def fake(req, timeout):
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        return fake
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen_returning(FakeResponse()))
+    assert mainnet_revisions.commit_is_public(VERSION) is True
+
+    monkeypatch.setattr(
+        urllib.request, "urlopen", urlopen_returning(http_error(422, '{"message":"No commit found for SHA: x"}'))
+    )
+    assert mainnet_revisions.commit_is_public(VERSION) is False
+
+    monkeypatch.setattr(
+        urllib.request, "urlopen", urlopen_returning(http_error(422, '{"message":"Validation Failed"}'))
+    )
+    with pytest.raises(urllib.error.HTTPError):
+        mainnet_revisions.commit_is_public(VERSION)
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen_returning(http_error(403, '{"message":"rate limited"}')))
+    with pytest.raises(urllib.error.HTTPError):
+        mainnet_revisions.commit_is_public(VERSION)

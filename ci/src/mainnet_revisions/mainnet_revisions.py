@@ -537,9 +537,12 @@ def commit_is_public(version: str) -> bool:
     """
     Whether `version` is a commit in the public dfinity/ic repository.
 
-    The updater's checkout is shallow, so ask the GitHub API. Only a definite
-    404/422 counts as "not public": any other failure raises, because the answer
-    gates whether unverified CDN data may be recorded.
+    The updater's checkout is shallow, so ask the GitHub API. For a well-formed
+    sha that is absent, GET /repos/dfinity/ic/commits/<sha> answers 422 with the
+    message "No commit found for SHA" (verified live; NOT 404). Only that exact
+    answer counts as "not public": GitHub also uses 422 for other validation
+    failures and request throttling, and this answer gates whether unverified
+    CDN data may be recorded, so anything else fails closed by raising.
     """
     headers = {"user-agent": "python"}
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
@@ -550,7 +553,7 @@ def commit_is_public(version: str) -> bool:
         with urllib.request.urlopen(req, timeout=30):
             return True
     except urllib.error.HTTPError as e:
-        if e.code in (404, 422):
+        if e.code == 422 and "No commit found for SHA" in e.read().decode(errors="replace"):
             return False
         raise
 
