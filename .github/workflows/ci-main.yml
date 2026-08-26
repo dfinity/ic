@@ -544,10 +544,13 @@ jobs:
           # sha256sum rejects input without valid checksum lines.
           check() { # <download-dir> <recorded sha256sum lines>
             echo "$2" | (cd "$1" && sha256sum --check --strict)
-            # Also reject artifacts carrying files beyond the recorded ones,
-            # so a future edit that globs from these directories cannot pick
-            # up unrecorded extras that the check above never covered.
-            diff <(echo "$2" | awk '{print $2}' | LC_ALL=C sort) <(ls "$1" | LC_ALL=C sort)
+            # Also reject artifacts carrying anything beyond the recorded
+            # files — enumerated with find so hidden entries and
+            # subdirectories count too — so a future edit that globs from
+            # these directories cannot pick up unrecorded extras that the
+            # check above never covered.
+            diff <(echo "$2" | awk '{print $2}' | LC_ALL=C sort) \
+              <(cd "$1" && find . -mindepth 1 | sed 's|^\./||' | LC_ALL=C sort)
           }
           check ~/.cache/arm64-binaries-linux "$ARM64_LINUX_SUMS"
           check ~/.cache/arm64-binaries-darwin "$ARM64_DARWIN_SUMS"
