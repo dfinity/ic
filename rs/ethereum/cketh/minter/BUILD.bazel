@@ -291,15 +291,18 @@ rust_test(
 
 rust_test(
     name = "deposit_from_cex",
-    # The end-to-end balance-scan test runs a live PocketIC and waits (wall-clock) for the minter's
-    # periodic scan, so it needs a larger timeout than the pure-anvil tests.
-    size = "medium",
+    # The end-to-end tests run a live PocketIC and wait (wall-clock) for the minter's periodic tasks
+    # — a balance scan, then a sweep, then the log scraping the mint follows from — so they need a
+    # much larger timeout than the pure-anvil tests.
+    size = "large",
     srcs = ["tests/deposit_from_cex.rs"],
     data = [
         "//:anvil",
         "//:solc",
-        # Reuses the mock ERC-20 source compiled at test time by the vendored solc.
+        # Contract sources compiled at test time by the vendored solc: the mock ERC-20, the real
+        # deposit helper the sweep transfers through, and the delegate it sweeps with.
         "DepositHelperWithSubaccount.sol",
+        "CkSweeperAttested.sol",
         "tests/deposit_from_cex_demo/MockUSDT.sol",
         # End-to-end balance scan and sweeper funding on a live PocketIC + local anvil node.
         ":cketh_minter_debug.wasm.gz",
@@ -317,6 +320,7 @@ rust_test(
         # concurrently starve each other of CPU, and an ingress message that loses that race is
         # stamped with an expiry the auto-progressing clock then moves past, never to be answered.
         "RUST_TEST_THREADS": "1",
+        "CKSWEEPER_ATTESTED_SOL": "$(rootpath CkSweeperAttested.sol)",
         "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
         "SOLC_BIN": "$(rootpath //:solc)",
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
@@ -332,8 +336,10 @@ rust_test(
         # Keep sorted.
         ":minter",
         "//packages/ic-ethereum-types",
+        "//packages/icrc-ledger-types",
         "//rs/ethereum/cketh/test_utils",
         "@crate_index//:assert_matches",
+        "@crate_index//:candid",
     ],
 )
 
