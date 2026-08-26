@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail, ensure};
 use askama::Template;
-use config_types::{GuestOSConfig, Ipv6Config};
+use config_types::{DeploymentEnvironment, GuestOSConfig, Ipv6Config};
 use ipnet::Ipv6Net;
 use serde_json;
 use std::fs::write;
@@ -14,6 +14,10 @@ use crate::guestos::network::{get_best_interface_name, get_interface_addresses};
 
 const TLS_KEY_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.key";
 const TLS_CERT_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.crt";
+
+/// Engine management canister on mainnet. Other environments have to configure
+/// their own via `guestos_settings.engine_management_canister_id`.
+const MAINNET_ENGINE_MANAGEMENT_CANISTER_ID: &str = "q6cfj-fyaaa-aaaar-qb77q-cai";
 
 #[derive(Template)]
 #[template(path = "ic.json5.template", escape = "none")]
@@ -31,6 +35,7 @@ pub struct IcConfigTemplate {
     pub malicious_behavior: String,
     /// Already JSON-encoded: either `null` or a quoted string.
     pub extra_api_boundary_node_trust_anchors_pem: String,
+    pub engine_management_canister_id: String,
 }
 
 /// Generate IC configuration from template and guestos config
@@ -200,6 +205,21 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         None => "null".to_string(),
     };
 
+    let engine_management_canister_id = match guestos_config
+        .guestos_settings
+        .engine_management_canister_id
+        .as_deref()
+        .or(matches!(
+            guestos_config.icos_settings.deployment_environment,
+            DeploymentEnvironment::Mainnet
+        )
+        .then_some(MAINNET_ENGINE_MANAGEMENT_CANISTER_ID))
+    {
+        Some(id) => serde_json::to_string(id)
+            .context("Failed to encode the engine management canister id")?,
+        None => "null".to_string(),
+    };
+
     Ok(IcConfigTemplate {
         // TODO https://dfinity.atlassian.net/browse/NODE-1909
         ipv6_prefix,
@@ -214,6 +234,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         node_reward_type,
         malicious_behavior: with_default(malicious_behavior, "null"),
         extra_api_boundary_node_trust_anchors_pem,
+        engine_management_canister_id,
     })
 }
 

@@ -14,7 +14,7 @@ pub trait Signer: Send + Sync {
 }
 
 type SignBytes = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> + Send + Sync>;
-type SignMessageId =
+pub(crate) type SignMessageId =
     Arc<dyn Fn(&MessageId) -> Result<Vec<u8>, Box<dyn std::error::Error>> + Send + Sync>;
 
 pub struct Hsm;

@@ -21,6 +21,8 @@ pub(crate) struct OrchestratorMetrics {
     pub(crate) critical_error_task_failed: IntCounterVec,
     pub(crate) processes_start_attempts: IntCounterVec,
     pub(crate) processes_stop_attempts: IntCounterVec,
+    pub(crate) cloud_engine_config_fetches: IntCounterVec,
+    pub(crate) cloud_engine_config_last_success: IntGauge,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, AsRefStr)]
@@ -117,6 +119,16 @@ impl OrchestratorMetrics {
                 "orchestrator_processes_stop_attempts_total",
                 "Number of times a process was attempted to be stopped",
                 &["process_name"],
+            ),
+            cloud_engine_config_fetches: metrics_registry.int_counter_vec(
+                "orchestrator_cloud_engine_config_fetches_total",
+                "Number of attempts to fetch the ic-gateway configuration from \
+                the engine operator canister, grouped by outcome",
+                &["outcome"],
+            ),
+            cloud_engine_config_last_success: metrics_registry.int_gauge(
+                "orchestrator_cloud_engine_config_last_success_seconds",
+                "Unix timestamp of the last successfully fetched ic-gateway configuration",
             ),
         }
     }

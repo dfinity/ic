@@ -348,6 +348,12 @@ pub const SAMPLE_CONFIG: &str = r#"
       pkcs11_keycard_transport_pin: "358138",
     },
     // =================================
+    // Cloud engine nodes only.
+    // =================================
+    cloud_engine: {
+      engine_management_canister_id: "q6cfj-fyaaa-aaaar-qb77q-cai",
+    },
+    // =================================
     // NNS Registry Replicator
     // =================================
     nns_registry_replicator: {
