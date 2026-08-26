@@ -671,6 +671,9 @@ type Event = record {
             deposit_helper : text;
             owner : principal;
             subaccount : opt blob;
+            // Which family of per-account deposit addresses the attesting address
+            // belongs to, and so which derivation path signed.
+            schema : variant { CkErc20; CkEth };
             y_parity : bool;
             // 32-byte signature components.
             r : blob;

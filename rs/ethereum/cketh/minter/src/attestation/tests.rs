@@ -124,6 +124,7 @@ fn account() -> Account {
 }
 
 mod recorded {
+    use crate::attestation::AttestationRequest;
     use crate::state::State;
     use crate::state::audit::apply_state_transition;
     use crate::state::eth_logs_scraping::LogScrapingId;
@@ -136,20 +137,32 @@ mod recorded {
     use icrc_ledger_types::icrc1::account::Account;
 
     #[test]
-    fn should_replay_an_attestation_under_the_helper_it_names() {
-        let mut state = configured_state(helper());
+    fn should_replay_an_attestation_signed_for_the_configuration_in_force() {
+        let state = &mut configured_state();
 
-        apply_state_transition(&mut state, &attested(helper(), account()));
+        apply_state_transition(state, &attested(in_force(state)));
 
-        assert_eq!(state.attestation(&account()), Some(&signature()));
+        assert_eq!(state.attestation(account()), Some(&signature()));
     }
 
     #[test]
     fn should_not_reuse_an_attestation_signed_for_another_helper() {
-        let mut state = configured_state(helper());
-        apply_state_transition(&mut state, &attested(Address::new([0xab; 20]), account()));
+        let state = &mut configured_state();
+        let other_helper = super::request(chain_id(state), Address::new([0xab; 20]), account());
 
-        assert_eq!(state.attestation(&account()), None);
+        apply_state_transition(state, &attested(other_helper));
+
+        assert_eq!(state.attestation(account()), None);
+    }
+
+    #[test]
+    fn should_not_reuse_an_attestation_signed_for_another_chain() {
+        let state = &mut configured_state();
+        let other_chain = super::request(chain_id(state) + 1, helper(), account());
+
+        apply_state_transition(state, &attested(other_chain));
+
+        assert_eq!(state.attestation(account()), None);
     }
 
     #[test]
@@ -158,29 +171,35 @@ mod recorded {
             owner: Principal::from_slice(&[9, 9, 9]),
             subaccount: None,
         };
-        let mut state = configured_state(helper());
+        let state = &mut configured_state();
 
-        apply_state_transition(&mut state, &attested(helper(), account()));
+        apply_state_transition(state, &attested(in_force(state)));
 
-        assert_eq!(state.attestation(&account()), Some(&signature()));
-        assert_eq!(state.attestation(&other), None);
+        assert_eq!(state.attestation(account()), Some(&signature()));
+        assert_eq!(state.attestation(other), None);
     }
 
-    fn configured_state(deposit_helper: Address) -> State {
+    fn configured_state() -> State {
         let mut state = initial_state();
-        state.log_scrapings.set_contract_address(
-            LogScrapingId::EthOrErc20DepositWithSubaccount,
-            deposit_helper,
-        );
+        state
+            .log_scrapings
+            .set_contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount, helper());
         state
     }
 
-    fn attested(deposit_helper: Address, account: Account) -> EventType {
+    fn in_force(state: &State) -> AttestationRequest {
+        state
+            .attestation_request(account())
+            .expect("BUG: the deposit helper is configured")
+    }
+
+    fn chain_id(state: &State) -> u64 {
+        state.ethereum_network.chain_id()
+    }
+
+    fn attested(request: AttestationRequest) -> EventType {
         EventType::AttestedDepositAddress {
-            chain_id: 1,
-            deposit_helper,
-            owner: account.owner,
-            subaccount: account.subaccount,
+            request,
             signature: signature(),
         }
     }

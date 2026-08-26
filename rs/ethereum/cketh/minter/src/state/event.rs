@@ -1,3 +1,4 @@
+use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::erc20::CkErc20Token;
 use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
@@ -229,20 +230,11 @@ pub enum EventType {
     /// needed it: the attestation outlives that sweep and every later one reuses it.
     #[n(33)]
     AttestedDepositAddress {
-        /// The chain the attestation is bound to, for a log that reads on its own — the minter
-        /// runs against one chain, so it is the helper below that decides whether an attestation
-        /// is still usable.
+        /// What was signed, which is also what replay keys the attestation by: a signature is only
+        /// usable for the chain, the deposit helper and the account named here.
         #[n(0)]
-        chain_id: u64,
-        /// The deposit helper the attestation names. An attestation is only valid against this
-        /// deployment, which is why replay keys them by it.
+        request: AttestationRequest,
         #[n(1)]
-        deposit_helper: Address,
-        #[cbor(n(2), with = "icrc_cbor::principal")]
-        owner: Principal,
-        #[cbor(n(3), with = "minicbor::bytes")]
-        subaccount: Option<[u8; 32]>,
-        #[n(4)]
         signature: TransactionSignature,
     },
 }
