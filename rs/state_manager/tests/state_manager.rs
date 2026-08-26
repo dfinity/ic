@@ -744,22 +744,26 @@ fn derived_hot_len(state: &ReplicatedState) -> usize {
     CanisterStates::new(flat).hot_len()
 }
 
-/// The hot/cold partition must be re-canonicalised on **every** commit, not only
-/// on checkpoint rounds.
+/// The hot/cold partition is re-canonicalised on **every** commit, not only on
+/// checkpoint rounds. This test commits with `CertificationScope::Metadata` — a
+/// *non-checkpoint* round — and asserts the committed partition still equals the
+/// one a replica loading from a checkpoint would derive.
 ///
-/// This is a correctness requirement, not a canonicalisation convenience, since
-/// `subnet_metrics_instructions` in `rs/execution_environment` charges round
-/// instructions proportional to `CanisterStates::hot_len()`. If
-/// `repartition_canister_states()` were made conditional — the plausible
-/// optimisation being "strictness is only *needed* at checkpoint time, so only do
-/// it there" — a replica continuing in memory would carry quiet-but-still-hot
-/// canisters into the next round while a replica that restarted from the last
-/// checkpoint would load them as cold. Different `hot_len()` means a different
-/// charge, which means a different number of subnet messages drained in that
-/// round, which is state divergence.
+/// What *requires* canonicality is checkpoint validation:
+/// `CanisterStates::validate_strict_split`, run from
+/// `rs/state_manager/src/checkpoint.rs`, rejects a canister left in `hot` that
+/// satisfies `is_cold()`. Repartitioning unconditionally meets that without
+/// depending on `batch_summary` to predict which rounds checkpoint, so this test
+/// guards that implementation choice.
 ///
-/// So this test commits with `CertificationScope::Metadata` — a *non-checkpoint*
-/// round — and asserts the committed partition still equals the derived one.
+/// It is deliberately *not* a divergence test, and it should not be read as one:
+/// no execution result depends on where the split lies. Every consumer of the
+/// partition is `fold(hot) + cold aggregate`
+/// (`CanisterStates::total_consumed_cycles`, `total_canister_memory_usage`) and
+/// so is partition-independent, and `hot_len()` — the one raw count of a single
+/// side — is read only by the `hot_canisters_count` metric. Should a future
+/// consumer key an execution result on `hot_len()`, this test becomes the
+/// divergence guard for it, and that is the reason to keep it cheap and in place.
 #[test]
 fn hot_cold_partition_is_canonical_after_every_commit() {
     state_manager_test(|_metrics, state_manager| {
@@ -789,8 +793,8 @@ fn hot_cold_partition_is_canonical_after_every_commit() {
             derived_hot_len(&state),
             "the committed hot/cold partition differs from the one a replica \
              loading this state from a checkpoint would derive; \
-             `repartition_canister_states()` must run on every commit, because \
-             `subnet_metrics_instructions` charges on `hot_len()`"
+             `repartition_canister_states()` must run on every commit, so that \
+             `validate_strict_split()` cannot fail at the next checkpoint"
         );
         assert_eq!(state.canister_states().hot_len(), 0);
     });
