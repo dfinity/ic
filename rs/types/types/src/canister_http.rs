@@ -1904,7 +1904,10 @@ mod tests {
             max_responses: 0,
         }));
         let ctx = generate_flexible_context(&node_ids, args).expect("ACCEPTED");
-        eprintln!("PROBE: context accepted, kind = {:?}", ctx.replication.kind());
+        eprintln!(
+            "PROBE: context accepted, kind = {:?}",
+            ctx.replication.kind()
+        );
     }
 
     #[test]
