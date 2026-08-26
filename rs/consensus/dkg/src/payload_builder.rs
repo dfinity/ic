@@ -1037,7 +1037,7 @@ mod tests {
     };
     use ic_types::consensus::dkg::RemoteDkgAttempts;
     use ic_types::{
-        RegistryVersion, ReplicaVersion,
+        RegistryVersion,
         consensus::{BlockPayload, Payload, Rank, SummaryPayload, dkg::SplittingArgs},
         crypto::{
             CryptoHash, CryptoHashOf,

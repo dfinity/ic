@@ -252,7 +252,7 @@ mod tests {
         NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_1, SUBNET_2, SUBNET_3, test_replica_version,
     };
     use ic_types::{
-        Height, ReplicaVersion, Time,
+        Height, Time,
         batch::ValidationContext,
         consensus::{BlockPayload, Payload, Rank, SummaryPayload, dkg::PostSplitArgs},
         crypto::{CryptoHash, CryptoHashOf},

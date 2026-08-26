@@ -2181,7 +2181,7 @@ pub mod test {
     };
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
-        ids::{node_test_id, subnet_test_id},
+        ids::{node_test_id, subnet_test_id, test_replica_version},
         messages::SignedIngressBuilder,
     };
     use ic_types::{
@@ -3687,6 +3687,7 @@ pub mod test {
                     registry.as_ref(),
                     replica_config.subnet_id,
                     &PoolReader::new(&pool),
+                    &replica_config.replica_version,
                     &no_op_logger(),
                 ),
                 Some(Status::Halting | Status::Halted)
@@ -5346,6 +5347,7 @@ pub mod test {
                 .with_replica_config(ReplicaConfig {
                     node_id: validator_node_id,
                     subnet_id: SOURCE_SUBNET_ID,
+                    replica_version: test_replica_version(),
                 })
                 .build();
                 // Manually insert DKG transcripts at the splitting version to simulate what the
@@ -5375,6 +5377,7 @@ pub mod test {
                     ReplicaConfig {
                         node_id: cup_share_node_id,
                         subnet_id: SOURCE_SUBNET_ID,
+                        replica_version: test_replica_version(),
                     },
                     membership,
                     crypto,
@@ -5603,6 +5606,7 @@ pub mod test {
             .with_replica_config(ReplicaConfig {
                 node_id: validator_node_id,
                 subnet_id: SOURCE_SUBNET_ID,
+                replica_version: test_replica_version(),
             })
             .build();
 
