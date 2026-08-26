@@ -251,8 +251,16 @@ alias(
     }),
 )
 
-### e2fsdroid, used to populate ext4 filesystem images (fs_config + SELinux contexts)
+### debugfs, used to inspect ext filesystems (e.g. extract files from ext4 images)
+alias(
+    name = "debugfs",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@e2fsprogs//:debugfs",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
 
+### e2fsdroid, used to populate ext4 filesystem images (fs_config + SELinux contexts)
 alias(
     name = "e2fsdroid",
     actual = select({

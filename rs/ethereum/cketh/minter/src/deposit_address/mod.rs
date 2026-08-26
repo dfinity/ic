@@ -87,7 +87,7 @@ pub fn sweeper_address(master_public_key: &PublicKey, chain_code: &[u8; 32]) -> 
     derive_address(master_public_key, chain_code, sweeper_derivation_path())
 }
 
-fn deposit_derivation_path(schema: DepositAddressSchema, account: &Account) -> Vec<ByteBuf> {
+pub fn deposit_derivation_path(schema: DepositAddressSchema, account: &Account) -> Vec<ByteBuf> {
     vec![
         ByteBuf::from(vec![schema.tag()]),
         ByteBuf::from(account.owner.as_slice().to_vec()),

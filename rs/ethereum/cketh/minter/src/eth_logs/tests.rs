@@ -522,3 +522,42 @@ mod subaccount {
         pub field_after: u64,
     }
 }
+
+mod encode_principal {
+    use crate::eth_logs::{encode_principal, parse_principal_from_slice};
+    use crate::test_fixtures::arb::arb_principal;
+    use candid::Principal;
+    use proptest::prelude::{Strategy, prop_assert_eq, proptest};
+
+    proptest! {
+        /// Every principal the helper can carry survives the round trip. The two it refuses are
+        /// pinned by `should_reject_what_the_helper_never_carries` instead.
+        #[test]
+        fn should_round_trip_through_the_helper_encoding(
+            principal in arb_principal().prop_filter(
+                "the helper carries neither the management nor the anonymous principal",
+                |principal| {
+                    *principal != Principal::management_canister()
+                        && *principal != Principal::anonymous()
+                },
+            ),
+        ) {
+            prop_assert_eq!(
+                parse_principal_from_slice(&encode_principal(&principal)),
+                Ok(principal)
+            );
+        }
+    }
+
+    #[test]
+    fn should_reject_what_the_helper_never_carries() {
+        assert_eq!(
+            parse_principal_from_slice(&encode_principal(&Principal::management_canister())),
+            Err("management canister principal is not allowed".to_string())
+        );
+        assert_eq!(
+            parse_principal_from_slice(&encode_principal(&Principal::anonymous())),
+            Err("anonymous principal is not allowed".to_string())
+        );
+    }
+}
