@@ -39,7 +39,7 @@ pub struct AttestationRequest {
     /// call and is deliberately absent from the preimage.
     #[n(1)]
     deposit_helper: Address,
-    #[cbor(n(2), with = "crate::cbor::account")]
+    #[n(2)]
     account: Account,
     /// Which deposit-address scheme derives the key that signs, so the signing path cannot
     /// disagree with the digest.
