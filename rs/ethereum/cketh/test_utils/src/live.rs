@@ -4,9 +4,10 @@
 //!
 //! [`LiveSetup`] is generic over the fixture it wraps, so the facilities every live test needs live
 //! in one place: buying minter time, depositing through the production helper contract, reading the
-//! minter's canister log, and arranging state on anvil. The two flavours differ only in
-//! what they build and seed — [`LiveSetup::new_balance_scan`] for the ckERC20 balance scan,
-//! [`LiveSetup::new_funding`] for sweeper fee funding.
+//! minter's canister log, and arranging state on anvil. The flavours differ only in what they build
+//! and seed — [`LiveSetup::new_balance_scan`] for the ckERC20 balance scan,
+//! [`LiveSetup::new_funding`] for sweeper fee funding, and [`LiveSetup::new_sweep`] for the sweep
+//! of detected ckERC20 deposits.
 //!
 //! The whole fixture is built on an ordinary (non-live) PocketIC instance, exactly as the mocked
 //! fixtures are: `await_call` ticks deterministically, and every setup call completes in a bounded
@@ -46,8 +47,10 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL;
+use ic_cketh_minter::endpoints::events::Event;
 use ic_cketh_minter::endpoints::{
-    DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode, DepositStatus,
+    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
+    DepositStatus,
 };
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
@@ -60,11 +63,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::anvil::{
-    Anvil, DEV_ACCOUNT, address_from_hex, deploy_deposit_helper, deploy_mock_erc20, deposit_eth,
-    erc20_balance_slot, u256_be,
+    Anvil, DEV_ACCOUNT, SweepContracts, address_from_hex, deploy_deposit_helper, deploy_mock_erc20,
+    deploy_sweep_contracts, deposit_eth, erc20_balance_slot, u256_be,
 };
 use crate::ckerc20::{CkErc20Setup, Erc20Token};
-use crate::{CkEthSetup, EthereumBackend, minter_wasm, switch_to_live};
+use crate::{CkEthSetup, EthereumBackend, MINTER_ADDRESS, minter_wasm, switch_to_live};
 
 /// Deposited for a test principal, so funding has deposit-backed ETH to spend. Comfortably above the
 /// 0.3 ETH funding target that the fixture's minimum withdrawal amount implies.
@@ -140,6 +143,8 @@ pub struct LiveSetup<S> {
     /// The production deposit helper, for fixtures that deposit. Deployed only where it is needed:
     /// it costs a minter upgrade, which a test that never deposits should not pay for.
     deposit_helper: Option<Address>,
+    /// The contracts a sweep goes through, for the fixture that deploys them.
+    sweep_contracts: Option<SweepContracts>,
 }
 
 impl LiveSetup<CkErc20Setup> {
@@ -148,9 +153,47 @@ impl LiveSetup<CkErc20Setup> {
     /// then switches the instance to live outcalls.
     pub fn new_balance_scan() -> Self {
         let anvil = Arc::new(Anvil::start_mainnet_like());
-        let cketh = CkEthSetup::new(EthereumBackend::Anvil(Arc::clone(&anvil)));
+        let cketh = CkEthSetup::new(EthereumBackend::Anvil {
+            anvil: Arc::clone(&anvil),
+            sweep_contracts: None,
+        });
         let ckerc20 = CkErc20Setup::with_cketh(cketh).add_supported_erc20_tokens();
         Self::go_live(ckerc20, anvil)
+    }
+
+    /// Like [`Self::new_balance_scan`], but with the real deposit helper and the attested sweeper
+    /// delegate deployed on the node first, so the minter is installed knowing both, and with the
+    /// minter's dedicated sweeper address pre-funded with `sweeper_gas_wei` of ETH.
+    ///
+    /// Funding the sweeper directly is a shortcut: in production its gas comes from a ckETH burn
+    /// out of the minter's fee account, which is a separate pipeline from sweeping.
+    pub fn new_sweep(sweeper: &Address, sweeper_gas_wei: u128) -> Self {
+        let anvil = Arc::new(Anvil::start_mainnet_like());
+        // The helper pays out to the minter's main address, which the minter only derives once
+        // installed. It is only ever read back out of the helper event, never by the helper
+        // itself, so the deployment can name the address the test asserts against.
+        let contracts = deploy_sweep_contracts(&anvil, &address_from_hex(MINTER_ADDRESS));
+        let cketh = CkEthSetup::new(EthereumBackend::Anvil {
+            anvil: Arc::clone(&anvil),
+            sweep_contracts: Some(contracts),
+        });
+        let ckerc20 = CkErc20Setup::with_cketh(cketh)
+            .add_supported_erc20_tokens()
+            .add_support_for_subaccount_helper(contracts.helper);
+        let mut setup = Self::go_live(ckerc20, anvil);
+        setup.sweep_contracts = Some(contracts);
+        setup.anvil.set_balance(sweeper, sweeper_gas_wei);
+        setup
+    }
+
+    /// The ckERC20 token the orchestrator spawned for `symbol`, whose ledger the mint lands on.
+    pub fn ckerc20_token(&self, symbol: &str) -> CkErc20Token {
+        self.fixture.find_ckerc20_token(symbol)
+    }
+
+    /// `account`'s balance on `ledger_id`, i.e. what the deposit was credited.
+    pub fn balance_of_ledger(&self, ledger_id: Principal, account: impl Into<Account>) -> Nat {
+        self.fixture.balance_of_ledger(ledger_id, account)
     }
 
     /// A distinct non-anonymous depositing principal for `seed`, so a test can register several
@@ -276,7 +319,10 @@ impl LiveSetup<CkEthSetup> {
     /// a test could read the pre-burn numbers.
     pub fn new_funding() -> Self {
         let anvil = Arc::new(Anvil::start_mainnet_like());
-        let cketh = CkEthSetup::new(EthereumBackend::Anvil(Arc::clone(&anvil)));
+        let cketh = CkEthSetup::new(EthereumBackend::Anvil {
+            anvil: Arc::clone(&anvil),
+            sweep_contracts: None,
+        });
         let setup = Self::go_live(cketh, anvil).with_deposit_helper();
 
         // Funding may only spend ETH the minter received through deposits, so it needs a real one.
@@ -338,7 +384,24 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
             anvil,
             minter_address,
             deposit_helper: None,
+            sweep_contracts: None,
         }
+    }
+
+    /// The contracts the sweep goes through, if this harness deployed them.
+    pub fn sweep_contracts(&self) -> SweepContracts {
+        self.sweep_contracts
+            .expect("BUG: this harness was built without sweeping")
+    }
+
+    /// The owned anvil node, so a test can read balances and code straight off the chain.
+    pub fn anvil(&self) -> &Anvil {
+        &self.anvil
+    }
+
+    /// The audit events the minter has recorded, to see how far a sweep got.
+    pub fn minter_events(&self) -> Vec<Event> {
+        self.cketh().get_all_events()
     }
 
     /// Polls until `observe` produces a value, or fails with what the minter was doing. The shape
@@ -462,7 +525,7 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
     ///
     /// `what` is rendered only on failure, so it can read state that is worth knowing at that point
     /// and would say nothing at the start.
-    fn drive_until(
+    pub fn drive_until(
         &self,
         max_ticks: u32,
         what: impl Fn(&Self) -> String,
