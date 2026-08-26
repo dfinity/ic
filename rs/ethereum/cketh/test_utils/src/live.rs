@@ -4,7 +4,7 @@
 //!
 //! [`LiveSetup`] is generic over the fixture it wraps, so the facilities every live test needs live
 //! in one place: buying minter time, depositing through the production helper contract, reading the
-//! dashboard and the canister log, and arranging state on anvil. The two flavours differ only in
+//! minter's canister log, and arranging state on anvil. The two flavours differ only in
 //! what they build and seed — [`LiveSetup::new_balance_scan`] for the ckERC20 balance scan,
 //! [`LiveSetup::new_funding`] for sweeper fee funding.
 //!
