@@ -714,10 +714,12 @@ impl ExecutionEnvironment {
 
         let mut msg = match msg {
             SubnetMessage::Response(response) => {
-                let context = state
-                    .metadata
-                    .subnet_call_context_manager
-                    .retrieve_context(response.originator_reply_callback, &self.log);
+                let time = state.time();
+                let context = state.metadata.subnet_call_context_manager.retrieve_context(
+                    response.originator_reply_callback,
+                    time,
+                    &self.log,
+                );
                 return match context {
                     None => (state, ExecuteSubnetMessageResultType::Finished),
                     Some(context) => {
