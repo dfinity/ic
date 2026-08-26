@@ -234,7 +234,7 @@ impl DkgKeyManager {
             let summary = if let Some(scheduled) =
                 subnet_splitting::is_split_scheduled(&summary_block)
             {
-                // If a subnet split is in progress, we should skip the `Scheduled` summary's
+                // If a subnet split is in progress, we can skip the `Scheduled` summary's
                 // transcripts (as the interval is skipped) and instead load the post-split one's.
                 match self.get_post_split_summary(&summary_block, scheduled) {
                     Ok(post_split_summary) => {
