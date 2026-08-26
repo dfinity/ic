@@ -973,18 +973,37 @@ sequenceDiagram
     participant Sw as SweeperAddress
     participant S as SweeperContract (deployed instance)
     participant D as Deposit (EOA)
+    participant T as Token (ERC-20)
+    participant H as Helper
 
-    Note over Sw,D: Transaction 2 — first sweep, type 0x04,<br/>authorization_list = [tuple signed by Deposit's key]
-    Note over D: tuple processing, before any code runs:<br/>Deposit's code := 0xef0100‖SweeperContract, nonce 0 → 1
-    Sw->>S: sweepErc20Batch([(Deposit, principal, subaccount, attestation)], [Token])
-    Note right of S: plain-contract hat: address(this) = SweeperContract,<br/>msg.sender = SweeperAddress
+    Note over Sw,H: Transaction 2 — first sweep: type 0x04, to = SweeperContract,<br/>authorization_list = [tuple signed by Deposit's key]
+    Note over Sw: upfront gas, charged to SweeperAddress:<br/>21'000 base + calldata + 25'000 per tuple
+    Note over D: TUPLE PROCESSING — by the protocol, before any code runs:<br/>1. recover the tuple's signer → Deposit<br/>2. check Deposit has no code yet<br/>3. check the tuple's pinned nonce (0) is Deposit's account nonce<br/>4. write the designator 0xef0100‖SweeperContract as Deposit's code<br/>5. bump Deposit's nonce to 1.<br/>Independent of the transaction's `to`: the tuple delegates<br/>whoever signed it
+    Sw->>S: execution starts at `to`:<br/>sweepErc20Batch([(Deposit, principal, subaccount, attestation)], [Token])
+    activate S
+    Note right of S: PLAIN-CONTRACT HAT — the deployed instance runs its own code<br/>at its own address: address(this) = SweeperContract,<br/>msg.sender = SweeperAddress, storage = SweeperContract's<br/>(empty — configuration lives in immutables).<br/>The batch function only loops: one external call per SweepItem
     S->>D: sweepErc20([Token], principal, subaccount, attestation)
-    Note right of D: delegate hat: the designator loads SweeperContract's code,<br/>which runs AS Deposit — address(this) = Deposit,<br/>msg.sender = SweeperContract.<br/>Attestation verified, then approve + Helper.depositErc20:<br/>the whole Token balance lands at MainAddress (R6)
+    activate D
+    Note right of D: DELEGATE HAT — the call finds the designator, so the EVM loads<br/>SweeperContract's BYTECODE but runs it in DEPOSIT's context:<br/>address(this) = Deposit, msg.sender = SweeperContract,<br/>storage and ETH balance are Deposit's
+    D->>D: require ecrecover(attestation digest) == address(this)
+    D->>T: balanceOf(address(this))
+    T-->>D: 250
+    D->>T: approve(Helper, 250)
+    Note right of T: allowance[Deposit][Helper] = 250 — the owner is Deposit,<br/>because the code executes as Deposit
+    D->>H: depositErc20(Token, 250, principal, subaccount)
+    H->>T: transferFrom(Deposit, MainAddress, 250)
+    Note right of H: emits ReceivedEthOrErc20(Token, Deposit, 250, principal, subaccount).<br/>The funds are now at MainAddress (R6) and the finalized event<br/>mints through the unchanged pipeline (step 4)
+    deactivate D
+    deactivate S
 
-    Note over Sw,D: Transaction 3 — any later sweep, plain type 0x02 (EIP-1559):<br/>no authorization list
+    Note over Sw,H: Transaction 3 — any later sweep: plain type 0x02 (EIP-1559), no authorization list.<br/>Tuple processing does not happen — the designator persists and Deposit's nonce<br/>is untouched (only its own authorizations advance it)
     Sw->>S: sweepErc20Batch([(Deposit, principal, subaccount, attestation)], [Token])
+    activate S
     S->>D: sweepErc20([Token], principal, subaccount, attestation)
-    Note right of D: same delegated execution — the designator persists,<br/>and Deposit's nonce is unchanged since<br/>(only its own authorizations advance it)
+    activate D
+    Note over D,H: same two hats, same calls as above — just cheaper:<br/>no 25'000-gas tuple to process
+    deactivate D
+    deactivate S
 ```
 
 **Transaction 2 — first sweep (type `0x04`, sent and paid by `SweeperAddress`,
