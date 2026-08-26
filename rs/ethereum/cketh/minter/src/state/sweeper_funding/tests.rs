@@ -32,6 +32,89 @@ mod accounting {
         );
     }
 
+    /// The bound is only a bound if a committed sweep stops counting as available gas.
+    #[test]
+    fn should_take_an_accepted_sweep_out_of_the_bound_before_it_spends() {
+        let mut accounting = SweeperFundingAccounting::default();
+        accounting.record_burn(Wei::new(BURN));
+        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
+
+        accounting.record_accepted_sweep(Wei::new(FEE));
+
+        assert_eq!(
+            accounting.sweeper_balance_lower_bound(),
+            Wei::new(BURN - FEE - FEE),
+            "gas a committed sweep will pay is no longer available"
+        );
+    }
+
+    /// What the sweep did not need comes back, so the bound settles on what it actually cost.
+    #[test]
+    fn should_hand_back_what_a_finalized_sweep_did_not_need() {
+        let mut accounting = SweeperFundingAccounting::default();
+        accounting.record_burn(Wei::new(BURN));
+        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
+        accounting.record_accepted_sweep(Wei::new(FEE));
+
+        // Paid a quarter of its ceiling.
+        accounting.record_finalized_sweep(Wei::new(FEE - FEE / 4));
+
+        assert_eq!(
+            accounting.sweeper_balance_lower_bound(),
+            Wei::new(BURN - FEE - FEE / 4),
+            "only the fee the sweep actually paid stays subtracted"
+        );
+    }
+
+    /// A sweep whose finalization is never observed keeps its provision, which leaves the bound too
+    /// low. That delays a funding; the reverse would let the minter believe in gas that is gone.
+    #[test]
+    fn should_keep_the_provision_of_a_sweep_that_never_finalizes() {
+        let mut accounting = SweeperFundingAccounting::default();
+        accounting.record_burn(Wei::new(BURN));
+        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
+
+        accounting.record_accepted_sweep(Wei::new(FEE));
+
+        assert_eq!(
+            accounting.sweeper_balance_lower_bound(),
+            Wei::new(BURN - FEE - FEE)
+        );
+    }
+
+    /// Sweep provisioning is the sweeper's ETH, already counted as spent when the funding delivered
+    /// it.
+    #[test]
+    fn should_not_count_sweep_provisioning_against_the_burn() {
+        let mut accounting = SweeperFundingAccounting::default();
+        accounting.record_burn(Wei::new(BURN));
+        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
+        let spent_before = accounting.cumulative_spent();
+        let surplus_before = accounting.burned_not_yet_spent();
+
+        accounting.record_accepted_sweep(Wei::new(BURN - FEE));
+        accounting.record_finalized_sweep(Wei::new(FEE));
+
+        assert_eq!(
+            accounting.cumulative_spent(),
+            spent_before,
+            "the minter's own spend is unchanged by what the sweeper spends"
+        );
+        assert_eq!(accounting.burned_not_yet_spent(), surplus_before);
+    }
+
+    /// A bound that would go negative means the minter's records start behind the chain — after an
+    /// upgrade, or with a sweeper funded before it was tracked. Flooring says "assume nothing is
+    /// prepaid", where trapping would take the replay of every later event with it.
+    #[test]
+    fn should_floor_the_bound_at_zero_when_sweeps_outprovision_deliveries() {
+        let mut accounting = SweeperFundingAccounting::default();
+
+        accounting.record_accepted_sweep(Wei::new(BURN));
+
+        assert_eq!(accounting.sweeper_balance_lower_bound(), Wei::ZERO);
+    }
+
     #[test]
     fn should_bound_the_sweeper_balance_by_what_fundings_delivered() {
         let mut accounting = SweeperFundingAccounting::default();

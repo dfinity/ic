@@ -4,6 +4,7 @@ mod tests;
 use super::State;
 pub use super::event::{Event, EventType};
 use crate::erc20::CkTokenSymbol;
+use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
 use crate::state::transactions::{Reimbursed, ReimbursementIndex, WithdrawalRequest};
@@ -117,6 +118,15 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         }
         EventType::AcceptedSweepRequest(request) => {
             state.next_sweep_id = request.id.next();
+            // Provisioned against the sweeper's balance bound before the transaction exists: the
+            // most this sweep can cost that address is the ETH it moves plus its fee ceiling, and
+            // that ceiling caps every resubmission the pipeline makes for it.
+            state.sweeper_funding.record_accepted_sweep(
+                request
+                    .amount
+                    .checked_add(request.max_transaction_fee)
+                    .expect("BUG: sweep provision always fits into U256"),
+            );
             state.sweeper_transactions.record_request(request.clone());
         }
         EventType::CreatedSweeperTransaction {
@@ -147,11 +157,30 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             sweep_id,
             transaction_receipt,
         } => {
-            // The sweeper pipeline is never reimbursed and holds no ckETH balance, so unlike the main
-            // pipeline there is no reimbursement tail or balance update — just the finalize mechanics.
+            // The sweeper pipeline is never reimbursed and holds no ckETH balance, so unlike the
+            // main pipeline there is no reimbursement tail and no ckETH accounting here.
             let _ = state
                 .sweeper_transactions
                 .record_finalized_transaction(*sweep_id, transaction_receipt);
+            // What the sweep provisioned but did not need, handed back to the balance bound: the fee
+            // it did not pay, plus the value it did not move if it failed. The provision itself was
+            // taken when the sweep was accepted.
+            let request = state
+                .sweeper_transactions
+                .get_processed_request(sweep_id)
+                .expect("BUG: missing sweep request");
+            let unspent_fee = request
+                .max_transaction_fee
+                .checked_sub(transaction_receipt.effective_transaction_fee())
+                .expect("BUG: a sweep may not pay more than its fee ceiling");
+            let refunded = match transaction_receipt.status {
+                TransactionStatus::Success => unspent_fee,
+                TransactionStatus::Failure => request
+                    .amount
+                    .checked_add(unspent_fee)
+                    .expect("BUG: sweep refund always fits into U256"),
+            };
+            state.sweeper_funding.record_finalized_sweep(refunded);
         }
         EventType::ReimbursedEthWithdrawal(Reimbursed {
             burn_in_block: withdrawal_id,
