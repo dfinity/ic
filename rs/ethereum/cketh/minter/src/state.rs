@@ -15,7 +15,9 @@ use crate::numeric::{
 use crate::state::automatic_deposits::{AutomaticDeposits, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
-use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
+use crate::state::transactions::{
+    Erc20WithdrawalRequest, SweepRequest, TransactionCallData, WithdrawalRequest,
+};
 use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::GasFeeEstimate;
 use crate::tx::TransactionSignature;
@@ -437,6 +439,20 @@ impl State {
         self.update_balance_upon_withdrawal(withdrawal_id, receipt);
     }
 
+    pub fn record_finalized_sweeper_transaction(
+        &mut self,
+        sweep_id: &SweepId,
+        receipt: &TransactionReceipt,
+    ) {
+        // The sweeper pipeline is never reimbursed and holds no ckETH balance, so unlike the main
+        // pipeline there is no reimbursement tail and no ckETH accounting here — only the sweeper
+        // address' own balance bound to settle.
+        let _ = self
+            .sweeper_transactions
+            .record_finalized_transaction(*sweep_id, receipt);
+        self.update_sweeper_balance_upon_sweep(sweep_id, receipt);
+    }
+
     pub fn next_request_id(&mut self) -> u64 {
         let current_request_id = self.http_request_counter;
         // overflow is not an issue here because we only use `next_request_id` to correlate
@@ -452,6 +468,45 @@ impl State {
                 .erc20_balances
                 .erc20_add(event.erc20_contract_address, event.value),
         };
+    }
+
+    /// Takes the most an accepted sweep can cost the sweeper address out of the balance bound: the
+    /// ETH it moves plus its fee ceiling, which caps every resubmission the pipeline makes for it.
+    pub fn update_sweeper_balance_upon_accepted_sweep(&mut self, request: &SweepRequest) {
+        self.sweeper_funding.record_accepted_sweep(
+            request
+                .amount
+                .checked_add(request.max_transaction_fee)
+                .expect("BUG: sweep provision always fits into U256"),
+        );
+    }
+
+    /// Hands back the part of a finalized sweep's provision it did not need: the fee it did not pay,
+    /// plus the value it did not move if it failed.
+    fn update_sweeper_balance_upon_sweep(
+        &mut self,
+        sweep_id: &SweepId,
+        receipt: &TransactionReceipt,
+    ) {
+        let request = self
+            .sweeper_transactions
+            .get_processed_request(sweep_id)
+            .expect("BUG: missing sweep request");
+        // Cannot underflow: a sweep transaction is created, and resubmitted, only while its fee
+        // stays within this ceiling, and the fee it actually pays is at most the fee it was signed
+        // for.
+        let unspent_fee = request
+            .max_transaction_fee
+            .checked_sub(receipt.effective_transaction_fee())
+            .expect("BUG: a sweep may not pay more than its fee ceiling");
+        let refunded = match receipt.status {
+            TransactionStatus::Success => unspent_fee,
+            TransactionStatus::Failure => request
+                .amount
+                .checked_add(unspent_fee)
+                .expect("BUG: sweep refund always fits into U256"),
+        };
+        self.sweeper_funding.record_finalized_sweep(refunded);
     }
 
     fn update_balance_upon_withdrawal(

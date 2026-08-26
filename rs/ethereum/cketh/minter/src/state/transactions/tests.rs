@@ -2977,6 +2977,7 @@ mod sweep_lane {
         SweepRequest, TransactionPipeline,
     };
     use crate::sweep::SWEEP_TRANSACTION_GAS_LIMIT;
+    use crate::test_fixtures::sweep_request;
     use crate::tx::{
         DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate,
         SignableTransaction, SignedAuthorization, SweepTransaction,
@@ -2987,18 +2988,6 @@ mod sweep_lane {
 
     const EIP1559_TX_ID: u8 = 2;
     const SET_CODE_TX_ID: u8 = 4;
-
-    fn sweep_request(id: u64) -> SweepRequest {
-        SweepRequest {
-            id: SweepId(id),
-            destination: Address::new([id as u8; 20]),
-            amount: Wei::ZERO,
-            data: vec![0xaa, 0xbb, 0xcc],
-            max_transaction_fee: Wei::from(1_000_000_000_000_000_u64),
-            created_at: 1_620_328_630_000_000_000,
-            authorizations: vec![],
-        }
-    }
 
     /// A sweep of two deposit addresses that are not yet delegated to the sweeper contract.
     fn delegating_sweep_request(id: u64) -> SweepRequest {

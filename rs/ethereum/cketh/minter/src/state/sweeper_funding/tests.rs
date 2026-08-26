@@ -32,89 +32,6 @@ mod accounting {
         );
     }
 
-    /// The bound is only a bound if a committed sweep stops counting as available gas.
-    #[test]
-    fn should_take_an_accepted_sweep_out_of_the_bound_before_it_spends() {
-        let mut accounting = SweeperFundingAccounting::default();
-        accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
-
-        accounting.record_accepted_sweep(Wei::new(FEE));
-
-        assert_eq!(
-            accounting.sweeper_balance_lower_bound(),
-            Wei::new(BURN - FEE - FEE),
-            "gas a committed sweep will pay is no longer available"
-        );
-    }
-
-    /// What the sweep did not need comes back, so the bound settles on what it actually cost.
-    #[test]
-    fn should_hand_back_what_a_finalized_sweep_did_not_need() {
-        let mut accounting = SweeperFundingAccounting::default();
-        accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
-        accounting.record_accepted_sweep(Wei::new(FEE));
-
-        // Paid a quarter of its ceiling.
-        accounting.record_finalized_sweep(Wei::new(FEE - FEE / 4));
-
-        assert_eq!(
-            accounting.sweeper_balance_lower_bound(),
-            Wei::new(BURN - FEE - FEE / 4),
-            "only the fee the sweep actually paid stays subtracted"
-        );
-    }
-
-    /// A sweep whose finalization is never observed keeps its provision, which leaves the bound too
-    /// low. That delays a funding; the reverse would let the minter believe in gas that is gone.
-    #[test]
-    fn should_keep_the_provision_of_a_sweep_that_never_finalizes() {
-        let mut accounting = SweeperFundingAccounting::default();
-        accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
-
-        accounting.record_accepted_sweep(Wei::new(FEE));
-
-        assert_eq!(
-            accounting.sweeper_balance_lower_bound(),
-            Wei::new(BURN - FEE - FEE)
-        );
-    }
-
-    /// Sweep provisioning is the sweeper's ETH, already counted as spent when the funding delivered
-    /// it.
-    #[test]
-    fn should_not_count_sweep_provisioning_against_the_burn() {
-        let mut accounting = SweeperFundingAccounting::default();
-        accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
-        let spent_before = accounting.cumulative_spent();
-        let surplus_before = accounting.burned_not_yet_spent();
-
-        accounting.record_accepted_sweep(Wei::new(BURN - FEE));
-        accounting.record_finalized_sweep(Wei::new(FEE));
-
-        assert_eq!(
-            accounting.cumulative_spent(),
-            spent_before,
-            "the minter's own spend is unchanged by what the sweeper spends"
-        );
-        assert_eq!(accounting.burned_not_yet_spent(), surplus_before);
-    }
-
-    /// A bound that would go negative means the minter's records start behind the chain — after an
-    /// upgrade, or with a sweeper funded before it was tracked. Flooring says "assume nothing is
-    /// prepaid", where trapping would take the replay of every later event with it.
-    #[test]
-    fn should_floor_the_bound_at_zero_when_sweeps_outprovision_deliveries() {
-        let mut accounting = SweeperFundingAccounting::default();
-
-        accounting.record_accepted_sweep(Wei::new(BURN));
-
-        assert_eq!(accounting.sweeper_balance_lower_bound(), Wei::ZERO);
-    }
-
     #[test]
     fn should_bound_the_sweeper_balance_by_what_fundings_delivered() {
         let mut accounting = SweeperFundingAccounting::default();
@@ -288,5 +205,176 @@ mod config {
 
             prop_assert_eq!(balance.checked_add(amount_due), Some(config.target));
         }
+    }
+}
+
+/// The sweeper's own spending, driven through the state transitions the sweep pipeline records, so
+/// that the wiring is covered and not only the arithmetic. The funding that delivers the ETH is a
+/// precondition here rather than the subject, so it is arranged directly.
+mod sweep_events {
+    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+    use crate::lifecycle::EthereumNetwork;
+    use crate::numeric::{BlockNumber, GasAmount, Wei, WeiPerGas};
+    use crate::state::State;
+    use crate::state::audit::{EventType, apply_state_transition};
+    use crate::state::transactions::{PipelineRequest, SweepRequest};
+    use crate::sweep::SWEEP_TRANSACTION_GAS_LIMIT;
+    use crate::test_fixtures::{initial_state, sweep_request};
+    use crate::tx::{GasFeeEstimate, SignedSweepTransaction, TransactionSignature};
+
+    /// The gas the receipt below charges: the sweep's whole gas limit at one wei per gas.
+    const SWEEP_GAS: u64 = 100_000;
+    /// Comfortably above [`SWEEP_GAS`], so a sweep leaves an unspent part to hand back.
+    const FEE_CEILING: u64 = 10 * SWEEP_GAS;
+    /// What a funding is taken to have delivered to the sweeper, arranged directly.
+    const DELIVERED: u128 = 1_000_000 * SWEEP_GAS as u128;
+
+    /// A state whose sweeper address holds `DELIVERED`, as a finalized funding would have left it.
+    fn state_with_a_funded_sweeper() -> State {
+        let mut state = initial_state();
+        state.sweeper_funding.record_burn(Wei::new(DELIVERED));
+        state
+            .sweeper_funding
+            .record_finalized_funding(Wei::new(DELIVERED), Wei::ZERO);
+        state
+    }
+
+    fn bound(state: &State) -> Wei {
+        state.sweeper_funding.sweeper_balance_lower_bound()
+    }
+
+    fn accept(state: &mut State, amount: Wei) -> SweepRequest {
+        let request = SweepRequest {
+            amount,
+            max_transaction_fee: Wei::from(FEE_CEILING),
+            ..sweep_request(1)
+        };
+        apply_state_transition(state, &EventType::AcceptedSweepRequest(request.clone()));
+        request
+    }
+
+    fn finalize(state: &mut State, request: &SweepRequest, status: TransactionStatus) {
+        let sweep_id = request.id;
+        let transaction = request
+            .clone()
+            .create_transaction(
+                state.sweeper_transactions.next_transaction_nonce(),
+                GasFeeEstimate {
+                    base_fee_per_gas: WeiPerGas::ONE,
+                    max_priority_fee_per_gas: WeiPerGas::ONE,
+                },
+                SWEEP_TRANSACTION_GAS_LIMIT,
+                EthereumNetwork::Mainnet,
+            )
+            .expect("test setup: the fee ceiling covers the fixture's fee");
+        apply_state_transition(
+            state,
+            &EventType::CreatedSweeperTransaction {
+                sweep_id,
+                transaction: transaction.clone(),
+            },
+        );
+        let signed = SignedSweepTransaction::from((
+            transaction,
+            TransactionSignature {
+                signature_y_parity: false,
+                r: Default::default(),
+                s: Default::default(),
+            },
+        ));
+        apply_state_transition(
+            state,
+            &EventType::SignedSweeperTransaction {
+                sweep_id,
+                transaction: signed.clone(),
+            },
+        );
+        apply_state_transition(
+            state,
+            &EventType::FinalizedSweeperTransaction {
+                sweep_id,
+                transaction_receipt: TransactionReceipt {
+                    block_hash:
+                        "0xce67a85c9fb8bc50213815c32814c159fd75160acf7cb8631e8e7b7cf7f1d472"
+                            .parse()
+                            .unwrap(),
+                    block_number: BlockNumber::new(4190269),
+                    effective_gas_price: WeiPerGas::ONE,
+                    gas_used: GasAmount::from(SWEEP_GAS),
+                    status,
+                    transaction_hash: signed.hash(),
+                },
+            },
+        );
+    }
+
+    #[test]
+    fn should_provision_an_accepted_sweep_before_it_has_spent_anything() {
+        let mut state = state_with_a_funded_sweeper();
+        let value = Wei::from(7 * SWEEP_GAS);
+
+        accept(&mut state, value);
+
+        assert_eq!(
+            bound(&state),
+            Wei::new(DELIVERED)
+                .checked_sub(value.checked_add(Wei::from(FEE_CEILING)).unwrap())
+                .unwrap(),
+            "the whole of what the sweep may cost stops counting as available gas"
+        );
+    }
+
+    /// What each outcome leaves subtracted, which is the refund rule in full: gas is paid either
+    /// way, the value only leaves if the transaction succeeded, and the unused fee always returns.
+    #[test]
+    fn should_settle_the_bound_on_what_a_finalized_sweep_actually_cost() {
+        let value = Wei::from(7 * SWEEP_GAS);
+        for (status, amount, cost) in [
+            (TransactionStatus::Success, Wei::ZERO, Wei::from(SWEEP_GAS)),
+            (
+                TransactionStatus::Success,
+                value,
+                value.checked_add(Wei::from(SWEEP_GAS)).unwrap(),
+            ),
+            (TransactionStatus::Failure, value, Wei::from(SWEEP_GAS)),
+        ] {
+            let mut state = state_with_a_funded_sweeper();
+            let request = accept(&mut state, amount);
+
+            finalize(&mut state, &request, status);
+
+            assert_eq!(
+                bound(&state),
+                Wei::new(DELIVERED).checked_sub(cost).unwrap(),
+                "a {status:?} sweep moving {amount} must cost the sweeper {cost}"
+            );
+        }
+    }
+
+    /// Sweep spending is the sweeper's ETH, already counted as spent when the funding delivered it.
+    /// Counting it again here would make spend overtake burn and trip the invariant.
+    #[test]
+    fn should_leave_the_burn_first_accounting_alone() {
+        let mut state = state_with_a_funded_sweeper();
+        let burned = state.sweeper_funding.cumulative_burned();
+        let spent = state.sweeper_funding.cumulative_spent();
+        let request = accept(&mut state, Wei::ZERO);
+
+        finalize(&mut state, &request, TransactionStatus::Success);
+
+        assert_eq!(state.sweeper_funding.cumulative_burned(), burned);
+        assert_eq!(state.sweeper_funding.cumulative_spent(), spent);
+    }
+
+    /// Provisioning beyond what the minter has recorded as delivered — an upgrade that starts the
+    /// counters from zero, or a sweeper funded before it was tracked — floors the bound rather than
+    /// trapping, which would take the replay of every later event with it.
+    #[test]
+    fn should_floor_the_bound_at_zero_rather_than_trap() {
+        let mut state = initial_state();
+
+        accept(&mut state, Wei::from(SWEEP_GAS));
+
+        assert_eq!(bound(&state), Wei::ZERO);
     }
 }

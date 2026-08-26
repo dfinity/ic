@@ -4,7 +4,7 @@ use crate::lifecycle::init::InitArg;
 use crate::numeric::{LedgerBurnIndex, Wei};
 use crate::state::State;
 use crate::state::eth_logs_scraping::LogScrapingId;
-use crate::state::transactions::EthWithdrawalRequest;
+use crate::state::transactions::{EthWithdrawalRequest, SweepId, SweepRequest};
 use crate::tx::TransactionSignature;
 use candid::{Nat, Principal};
 use ethnum::u256;
@@ -89,6 +89,18 @@ pub fn sweeper_funding_request(withdrawal_amount: Wei) -> EthWithdrawalRequest {
             .unwrap(),
         from_subaccount: LedgerSubaccount::from_bytes(crate::CKETH_FEE_SUBACCOUNT),
         created_at: Some(1699527697000000000),
+    }
+}
+
+pub fn sweep_request(id: u64) -> SweepRequest {
+    SweepRequest {
+        id: SweepId(id),
+        destination: Address::new([id as u8; 20]),
+        amount: Wei::ZERO,
+        data: vec![0xaa, 0xbb, 0xcc],
+        max_transaction_fee: Wei::from(1_000_000_000_000_000_u64),
+        created_at: 1_620_328_630_000_000_000,
+        authorizations: vec![],
     }
 }
 
