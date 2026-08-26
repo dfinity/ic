@@ -49,7 +49,7 @@ MAINNET_BINARIES = [
 # //bazel:mainnet-icos-{images,binaries,versions}.bzl. They are read from the public
 # dashboard API -- which is not authenticated -- and from CDN-served SHA256SUMS files,
 # which are verified against the build's provenance attestation whenever the version's
-# commit is public (see VersionArtifactSums; finding 3618194). The resulting PR is
+# commit is public (see VersionArtifactSums). The resulting PR is
 # auto-approved and auto-merged, so a value that is not exactly a commit id / sha256 /
 # plain name must never be written to mainnet-icos-revisions.json in the first place.
 # The repository rules reject such values as well (see bazel/mainnet-artifact-refs.bzl,
@@ -520,7 +520,7 @@ def fetch_attested_sha256sums(version: str, subdir: str) -> dict:
 
     Downloads the directory's SHA256SUMS and verifies it against the
     build-provenance attestation minted by release-testing.yml's attest-uploads job
-    for exactly this commit (finding 3618194), via ci/scripts/fetch-attested-sums.sh.
+    for exactly this commit, via ci/scripts/fetch-attested-sums.sh.
     Raises CalledProcessError when no such attestation exists or the file does not
     match it; nothing is parsed before verification succeeds.
     """
@@ -560,7 +560,7 @@ def commit_is_public(version: str) -> bool:
 
 class VersionArtifactSums:
     """
-    SHA256SUMS access for one version's CDN artifacts (finding 3618194).
+    SHA256SUMS access for one version's CDN artifacts.
 
     For a public commit the SHA256SUMS files MUST verify against the build's
     attestation: a failure aborts the update (no PR is created; the cron retries).
