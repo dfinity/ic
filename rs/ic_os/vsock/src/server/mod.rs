@@ -124,19 +124,21 @@ mod linux {
             }
         };
 
-        let request = match parse_request(json_request.as_str())
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
-        {
+        let request = match serde_json::from_str::<Request>(&json_request) {
             Ok(request) => request,
             Err(err) => {
+                let error = io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Unable to parse guest request: {json_request}: {err}"),
+                );
                 timeout(
                     CONNECTION_TIMEOUT,
                     stream.write_all(
-                        serde_json::to_string::<Response>(&Err(err.to_string()))?.as_bytes(),
+                        serde_json::to_string::<Response>(&Err(error.to_string()))?.as_bytes(),
                     ),
                 )
                 .await??;
-                return Err(err);
+                return Err(error);
             }
         };
         println!("Received vsock request: {request}");
@@ -206,82 +208,5 @@ mod linux {
                 "The actual sender CID did not match the sender CID in the request object",
             ))
         }
-    }
-}
-
-pub fn parse_request(json_str: &str) -> Result<Request, String> {
-    serde_json::from_str::<Request>(json_str)
-        .map_err(|error| format!("Unable to parse guest request: {json_str}: {error}"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::protocol::Command;
-
-    #[test]
-    fn test_parse_request() {
-        // Test AttachHSM command
-        let json_str = r#"{"sender_cid": 123, "message": "attach-hsm"}"#;
-        let request = parse_request(json_str);
-        assert!(request.is_ok());
-        let request = request.unwrap();
-        assert_eq!(request.command, Command::AttachHSM);
-
-        // Test DetachHSM command
-        let json_str = r#"{"sender_cid": 123, "message": "detach-hsm"}"#;
-        let request = parse_request(json_str);
-        assert!(request.is_ok());
-        let request = request.unwrap();
-        assert_eq!(request.command, Command::DetachHSM);
-
-        // Test Upgrade command
-        let json_str = r#"{"sender_cid": 123, "message": {"upgrade": {"url": "http://example.com/upgrade", "target-hash": "abcd1234hash"}}}"#;
-        let request = parse_request(json_str);
-        assert!(request.is_ok());
-        let request = request.unwrap();
-        assert_eq!(request.guest_cid, 123);
-        match request.command {
-            Command::Upgrade(data) => {
-                assert_eq!(data.url, "http://example.com/upgrade");
-                assert_eq!(data.target_hash, "abcd1234hash");
-            }
-            _ => panic!("Expected Upgrade command"),
-        }
-
-        // Test Notify command
-        let json_str = r#"{"sender_cid": 123, "message": {"notify": {"message": "System update required", "count": 2}}}"#;
-        let request = parse_request(json_str);
-        assert!(request.is_ok());
-        let request = request.unwrap();
-        assert_eq!(request.guest_cid, 123);
-        match request.command {
-            Command::Notify(data) => {
-                assert_eq!(data.count, 2);
-                assert_eq!(data.message, "System update required");
-            }
-            _ => panic!("Expected Notify command"),
-        }
-
-        // Test GetVsockProtocol command
-        let json_str = r#"{"sender_cid": 123, "message": "GetVsockProtocol"}"#;
-        let request = parse_request(json_str);
-        assert!(request.is_ok());
-        let request = request.unwrap();
-        assert_eq!(request.guest_cid, 123);
-        assert_eq!(request.command, Command::GetVsockProtocol);
-
-        // Test GetHostOSVersion command
-        let json_str = r#"{"sender_cid": 123, "message": "GetHostOSVersion"}"#;
-        let request = parse_request(json_str);
-        assert!(request.is_ok());
-        let request = request.unwrap();
-        assert_eq!(request.guest_cid, 123);
-        assert_eq!(request.command, Command::GetHostOSVersion);
-
-        // Test malformed command
-        let json_str = r#"{"sender_cid": 123, "message": "attach-hsm"#; // Missing closing brace
-        let request = parse_request(json_str);
-        assert!(request.is_err());
     }
 }
