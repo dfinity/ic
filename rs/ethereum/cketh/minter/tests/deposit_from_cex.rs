@@ -34,7 +34,6 @@ use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
 use ic_cketh_test_utils::live::{Holding, LiveSetup};
 use ic_ethereum_types::Address;
-use std::time::Duration;
 
 #[test]
 fn should_read_erc20_balances_across_tokens_and_holders() {
@@ -221,23 +220,22 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
         .collect();
     setup.credit_deposits(&holdings);
 
-    let deadline = Duration::from_secs(180);
     assert_matches!(
-        setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, usdt, deadline).status,
+        setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, usdt).status,
         DepositStatus::AwaitingSweep(detected)
             if detected.erc20_contract_address == usdt.contract.address
                 && detected.scanned_balance == USDT_ABOVE_MINIMUM
                 && detected.detected_at_block > 0_u8
     );
     assert_matches!(
-        setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, usdc, deadline).status,
+        setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, usdc).status,
         DepositStatus::AwaitingSweep(detected)
             if detected.erc20_contract_address == usdc.contract.address
                 && detected.scanned_balance == USDC_ABOVE_MINIMUM
                 && detected.detected_at_block > 0_u8
     );
     assert_matches!(
-        setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, usdt, deadline).status,
+        setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, usdt).status,
         DepositStatus::Scanning { scan_count, last_scanned_block, .. }
             if scan_count >= 1 && last_scanned_block.is_some()
     );
