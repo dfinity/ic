@@ -1512,9 +1512,9 @@ fn test_custom_max_response_bytes_within_limits(env: TestEnv) {
 // ---------------------------------------------------------------------------
 
 /// Flexible outcalls work on a system subnet too: system subnets are free for
-/// HTTP outcalls (despite a normal cost schedule), so the request is routed
-/// through legacy pricing. The system subnet has a single node, so exactly one
-/// response comes back.
+/// HTTP outcalls despite a normal cost schedule, so nothing is charged even
+/// though the request is priced pay-as-you-go like every other flexible outcall.
+/// The system subnet has a single node, so exactly one response comes back.
 fn test_system_subnet_outcall(env: TestEnv) {
     let logger = env.logger();
     let runtime = system_runtime(&env);
@@ -1607,6 +1607,11 @@ fn test_fault_tolerance(env: TestEnv) {
 // Pay-as-you-go pricing
 // ---------------------------------------------------------------------------
 
+/// A response cap small enough that the worst case it admits is a small multiple
+/// of what a handful of bytes actually costs, yet far above the responses this
+/// suite asks for.
+const SMALL_MAX_RESPONSE_BYTES: u64 = 16 * 1024;
+
 /// Reads the proxy canister's own cycle balance.
 async fn cycle_balance(proxy: &Canister<'_>) -> Result<u128> {
     proxy
@@ -1662,7 +1667,10 @@ fn test_charged_and_refunded(env: TestEnv) {
             RETRY_BACKOFF,
             || async {
                 let before = cycle_balance(&proxy).await?;
-                let args = get_args(format!("{}/ascii/priced", webserver_base(&env)));
+                // Capped small on purpose: the second outcall below leaves it unset
+                // and the two charges are compared.
+                let mut args = get_args(format!("{}/ascii/priced", webserver_base(&env)));
+                args.max_response_bytes = Some(SMALL_MAX_RESPONSE_BYTES);
                 let payloads = expect_ok(
                     send_flexible(&proxy, args, CYCLES).await?,
                     DEFAULT_MIN_RESPONSES,
@@ -1685,6 +1693,36 @@ fn test_charged_and_refunded(env: TestEnv) {
                     bail!(
                         "expected the refund to return most of the {CYCLES}-cycle payment, \
                          but {charged} cycles were kept"
+                    );
+                }
+
+                // The same response, but asking for the largest one allowed. What is
+                // withheld up front grows with `max_response_bytes` — it bounds the
+                // worst case the allowances have to cover — while what the outcall
+                // actually spends does not, since every per-replica fee is charged on
+                // real bytes and real milliseconds. So the two charges have to come
+                // out close together, and only do if the unspent allowance is
+                // refunded. Comparing the two is what makes this a test of the
+                // refund: a bound on either charge alone passes even with refunding
+                // switched off, the payment being far larger than either amount.
+                let before_max = cycle_balance(&proxy).await?;
+                let mut args = get_args(format!("{}/ascii/priced", webserver_base(&env)));
+                args.max_response_bytes = None;
+                let payloads = expect_ok(
+                    send_flexible(&proxy, args, CYCLES).await?,
+                    DEFAULT_MIN_RESPONSES,
+                    DEFAULT_MAX_RESPONSES,
+                )?;
+                expect_all_bodies(&payloads, b"priced")?;
+                let after_max = cycle_balance(&proxy).await?;
+                let Some(charged_max) = before_max.checked_sub(after_max) else {
+                    bail!("balance grew from {before_max} to {after_max} across a paid outcall");
+                };
+                if charged_max > 5 * charged {
+                    bail!(
+                        "the same response cost {charged_max} cycles when asking for the largest \
+                         allowed response but only {charged} when asking for a small one; the \
+                         allowance withheld for the worst case looks not to have been refunded"
                     );
                 }
                 Ok(())
