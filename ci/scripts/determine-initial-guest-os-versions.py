@@ -2,7 +2,7 @@ import json
 import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, TypedDict, cast
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 ROLLOUT_DASHBOARD_ENDPOINT = "https://rollout-dashboard.dm1-dre1.dfinity.network/api/v1/rollouts"
 PUBLIC_DASHBOARD_ENDPOINT = "https://ic-api.internetcomputer.org/api/v3/subnets?format=json"
@@ -104,7 +104,8 @@ def eprint_fmt(str, *args):
 
 
 def request_json(url: str) -> Any:
-    resp = urlopen(url, timeout=15)
+    req = Request(url, headers={"User-Agent": "python"})
+    resp = urlopen(req, timeout=15)
     if resp.status != 200:
         try:
             data = resp.read()
