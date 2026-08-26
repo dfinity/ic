@@ -1089,6 +1089,27 @@ impl WithdrawalTransactions {
         self.pipeline.requests_iter()
     }
 
+    /// The sweeper funding whose transaction has not finalized yet, if any.
+    ///
+    /// Read off the pipeline rather than tracked next to it, so the two cannot disagree, and walked
+    /// from the furthest stage backwards, so that two outstanding fundings report the older one.
+    pub fn outstanding_sweeper_funding(&self) -> Option<&EthWithdrawalRequest> {
+        fn as_funding(request: &WithdrawalRequest) -> Option<&EthWithdrawalRequest> {
+            match request {
+                WithdrawalRequest::SweeperFunding(request) => Some(request),
+                WithdrawalRequest::CkEth(_) | WithdrawalRequest::CkErc20(_) => None,
+            }
+        }
+
+        self.pipeline
+            .sent_tx
+            .alt_keys()
+            .chain(self.pipeline.created_tx.alt_keys())
+            .filter_map(|id| self.pipeline.processed_requests.get(id))
+            .chain(self.pipeline.pending_requests.iter())
+            .find_map(as_funding)
+    }
+
     pub fn requests_len(&self) -> usize {
         self.pipeline.requests_len()
     }
