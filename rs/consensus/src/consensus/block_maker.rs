@@ -536,7 +536,9 @@ impl BlockMaker {
     /// version.
     /// If a subnet split is in progress, we "freeze" the registry version at the last version that
     /// does not contain the split, until we reach the next summary block, at which point we bump
-    /// the registry version to the scheduled version of the split.
+    /// the registry version to the scheduled version of the split. From that summary block on, the
+    /// registry version stays frozen at the scheduled version for all blocks built on top of it
+    /// (the subnet is halting at that point), until the post-split CUP replaces the chain.
     pub(crate) fn get_stable_registry_version(
         &self,
         parent: &Block,
@@ -544,7 +546,6 @@ impl BlockMaker {
     ) -> Option<RegistryVersion> {
         let parents_version = parent.context.registry_version;
         let parents_height = parent.height();
-        let last_summary_block_registry_version = last_summary.context.registry_version;
         let next_summary_block_height = last_summary
             .payload
             .as_ref()
@@ -565,7 +566,7 @@ impl BlockMaker {
             match subnet_splitting::get_status(
                 self.registry_client.as_ref(),
                 self.replica_config.subnet_id,
-                last_summary_block_registry_version,
+                last_summary,
                 version,
             ) {
                 Err(err) => {
@@ -1481,6 +1482,9 @@ mod tests {
             /// the subnet splitting status impossible to determine from that version onwards.
             unreadable_registry_version: Option<RegistryVersion>,
             last_summary_block_registry_version: RegistryVersion,
+            /// Whether the last summary block is itself the summary starting the split, i.e.
+            /// carries [`SubnetSplittingStatus::Scheduled`].
+            last_summary_block_has_scheduled_status: bool,
             is_summary_block: bool,
             parent_registry_version: RegistryVersion,
             expected_stable_registry_version: RegistryVersion,
@@ -1491,6 +1495,7 @@ mod tests {
             splitting_registry_version: None,
             unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(1),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: false,
             parent_registry_version: RegistryVersion::new(1),
             expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION),
@@ -1499,6 +1504,7 @@ mod tests {
             splitting_registry_version: None,
             unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(1),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: true,
             parent_registry_version: RegistryVersion::new(1),
             expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION),
@@ -1507,6 +1513,7 @@ mod tests {
             splitting_registry_version: Some(RegistryVersion::new(3)),
             unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(4),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: false,
             parent_registry_version: RegistryVersion::new(5),
             expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION),
@@ -1515,6 +1522,7 @@ mod tests {
             splitting_registry_version: Some(RegistryVersion::new(4)),
             unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(4),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: false,
             parent_registry_version: RegistryVersion::new(4),
             expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION),
@@ -1523,6 +1531,7 @@ mod tests {
             splitting_registry_version: Some(RegistryVersion::new(4)),
             unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(4),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: true,
             parent_registry_version: RegistryVersion::new(5),
             expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION),
@@ -1531,6 +1540,7 @@ mod tests {
             splitting_registry_version: Some(RegistryVersion::new(4)),
             unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(1),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: false,
             parent_registry_version: RegistryVersion::new(1),
             expected_stable_registry_version: RegistryVersion::new(3),
@@ -1539,6 +1549,7 @@ mod tests {
             splitting_registry_version: Some(RegistryVersion::new(4)),
             unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(1),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: false,
             parent_registry_version: RegistryVersion::new(3),
             expected_stable_registry_version: RegistryVersion::new(3),
@@ -1547,8 +1558,30 @@ mod tests {
             splitting_registry_version: Some(RegistryVersion::new(4)),
             unreadable_registry_version: None,
             last_summary_block_registry_version: RegistryVersion::new(1),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: true,
             parent_registry_version: RegistryVersion::new(1),
+            expected_stable_registry_version: RegistryVersion::new(4),
+        })]
+        // On top of the summary block starting the split, the registry version stays frozen at the
+        // version at which the split is scheduled (the version adopted by that summary block),
+        // until the post-split CUP replaces the chain.
+        #[case::version_frozen_on_top_of_the_scheduled_summary(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(4)),
+            unreadable_registry_version: None,
+            last_summary_block_registry_version: RegistryVersion::new(4),
+            last_summary_block_has_scheduled_status: true,
+            is_summary_block: false,
+            parent_registry_version: RegistryVersion::new(4),
+            expected_stable_registry_version: RegistryVersion::new(4),
+        })]
+        #[case::version_frozen_on_top_of_the_scheduled_summary_summary(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(4)),
+            unreadable_registry_version: None,
+            last_summary_block_registry_version: RegistryVersion::new(4),
+            last_summary_block_has_scheduled_status: true,
+            is_summary_block: true,
+            parent_registry_version: RegistryVersion::new(4),
             expected_stable_registry_version: RegistryVersion::new(4),
         })]
         // If the subnet splitting status cannot be determined, we fall back to the parent's registry
@@ -1558,6 +1591,7 @@ mod tests {
             splitting_registry_version: None,
             unreadable_registry_version: Some(RegistryVersion::new(5)),
             last_summary_block_registry_version: RegistryVersion::new(1),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: false,
             parent_registry_version: RegistryVersion::new(1),
             expected_stable_registry_version: RegistryVersion::new(4),
@@ -1568,6 +1602,7 @@ mod tests {
             splitting_registry_version: None,
             unreadable_registry_version: Some(RegistryVersion::new(5)),
             last_summary_block_registry_version: RegistryVersion::new(1),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: false,
             parent_registry_version: RegistryVersion::new(6),
             expected_stable_registry_version: RegistryVersion::new(6),
@@ -1576,6 +1611,7 @@ mod tests {
             splitting_registry_version: None,
             unreadable_registry_version: Some(RegistryVersion::new(5)),
             last_summary_block_registry_version: RegistryVersion::new(1),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: true,
             parent_registry_version: RegistryVersion::new(3),
             expected_stable_registry_version: RegistryVersion::new(4),
@@ -1584,6 +1620,7 @@ mod tests {
             splitting_registry_version: Some(RegistryVersion::new(6)),
             unreadable_registry_version: Some(RegistryVersion::new(5)),
             last_summary_block_registry_version: RegistryVersion::new(4),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: false,
             parent_registry_version: RegistryVersion::new(4),
             expected_stable_registry_version: RegistryVersion::new(4),
@@ -1592,6 +1629,7 @@ mod tests {
             splitting_registry_version: Some(RegistryVersion::new(6)),
             unreadable_registry_version: Some(RegistryVersion::new(5)),
             last_summary_block_registry_version: RegistryVersion::new(4),
+            last_summary_block_has_scheduled_status: false,
             is_summary_block: true,
             parent_registry_version: RegistryVersion::new(4),
             expected_stable_registry_version: RegistryVersion::new(6),
@@ -1654,6 +1692,13 @@ mod tests {
                     no_op_logger(),
                 );
 
+                if test_case.is_summary_block {
+                    pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
+                    assert!(pool.make_next_block().content.as_ref().payload.is_summary());
+                } else {
+                    assert!(!pool.make_next_block().content.as_ref().payload.is_summary());
+                }
+
                 if let Some(splitting_registry_version) = test_case.splitting_registry_version {
                     registry_data_provider
                         .add(
@@ -1684,17 +1729,23 @@ mod tests {
 
                 registry.reload();
 
-                if test_case.is_summary_block {
-                    pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
-                    assert!(pool.make_next_block().content.as_ref().payload.is_summary());
-                } else {
-                    assert!(!pool.make_next_block().content.as_ref().payload.is_summary());
-                }
                 let mut parent = pool.get_cache().finalized_block();
                 parent.context.registry_version = test_case.parent_registry_version;
                 let mut last_summary = pool.get_cache().summary_block();
                 last_summary.context.registry_version =
                     test_case.last_summary_block_registry_version;
+                if test_case.last_summary_block_has_scheduled_status {
+                    let mut summary_payload = last_summary.payload.as_ref().as_summary().clone();
+                    summary_payload.dkg.subnet_splitting_status =
+                        SubnetSplittingStatus::Scheduled(dkg::SplittingArgs {
+                            source_subnet_id: SOURCE_SUBNET_ID,
+                            destination_subnet_id: DESTINATION_SUBNET_ID,
+                        });
+                    last_summary.payload = Payload::new(
+                        ic_types::crypto::crypto_hash,
+                        BlockPayload::Summary(summary_payload),
+                    );
+                }
 
                 assert_eq!(
                     block_maker
