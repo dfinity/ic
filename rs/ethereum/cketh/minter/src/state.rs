@@ -18,6 +18,7 @@ use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConf
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::GasFeeEstimate;
+use crate::tx::TransactionSignature;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk_management_canister::EcdsaPublicKeyResult;
@@ -273,9 +274,21 @@ impl State {
         Some(AttestationRequest::new(
             self.ethereum_network.chain_id(),
             deposit_helper,
-            DepositAddressSchema::CkErc20,
             account,
         ))
+    }
+
+    /// The attestation `account`'s ckERC20 deposit address has already signed for the configuration
+    /// this minter runs against, if any: signing another would cost a threshold-ECDSA signature for
+    /// the same digest.
+    pub fn attestation(&self, account: Account) -> Option<&TransactionSignature> {
+        self.automatic_deposits
+            .attestation(&self.attestation_request(account)?)
+    }
+
+    fn record_attestation(&mut self, request: AttestationRequest, signature: TransactionSignature) {
+        self.automatic_deposits
+            .record_attestation(request, signature);
     }
 
     pub fn is_ckerc20_feature_active(&self) -> bool {
