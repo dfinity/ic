@@ -1,18 +1,17 @@
 use super::{
     AccessList, AccessListItem, SignableTransaction, Signed, StorageKey, TransactionPrice,
-    TransactionSignature, compute_recovery_id, encode_u256, split_in_two,
+    TransactionSignature, encode_u256,
 };
 use crate::{
     checked_amount::CheckedAmountOf,
     eth_rpc::Hash,
     numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas},
-    state::read_state,
 };
 use ethnum::u256;
 use ic_ethereum_types::Address;
-use ic_management_canister_types_private::DerivationPath;
 use minicbor::{Decode, Encode};
 use rlp::{Rlp, RlpStream};
+use serde_bytes::ByteBuf;
 
 const SET_CODE_TX_ID: u8 = 4;
 const EIP7702_AUTHORIZATION_MAGIC: u8 = 5;
@@ -82,33 +81,21 @@ impl Authorization {
         Hash(ic_sha3::Keccak256::hash(bytes))
     }
 
-    pub async fn sign(
-        self,
-        derivation_path: DerivationPath,
-    ) -> Result<SignedAuthorization, String> {
+    pub async fn sign(self, derivation_path: Vec<ByteBuf>) -> Result<SignedAuthorization, String> {
         if self.chain_id == 0 {
             return Err(
                 "BUG: EIP-7702 authorization chain_id must be set explicitly and never 0"
                     .to_string(),
             );
         }
-        let hash = self.hash();
-        let key_name = read_state(|s| s.ecdsa_key_name.clone());
-        let signature = crate::management::sign_with_ecdsa(key_name, derivation_path, hash.0)
-            .await
-            .map_err(|e| format!("failed to sign authorization: {e}"))?;
-        let recid = compute_recovery_id(&hash, &signature).await;
-        if recid.is_x_reduced() {
-            return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
-        }
-        let (r_bytes, s_bytes) = split_in_two(signature);
+        let signature = super::sign_digest(&self.hash(), &derivation_path).await?;
         Ok(SignedAuthorization {
             chain_id: self.chain_id,
             delegate: self.delegate,
             nonce: self.nonce,
-            y_parity: recid.is_y_odd(),
-            r: u256::from_be_bytes(r_bytes),
-            s: u256::from_be_bytes(s_bytes),
+            y_parity: signature.signature_y_parity,
+            r: signature.r,
+            s: signature.s,
         })
     }
 }

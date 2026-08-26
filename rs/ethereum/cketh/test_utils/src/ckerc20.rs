@@ -33,6 +33,7 @@ use ic_cketh_minter::{
 use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
+pub use ic_ledger_suite_orchestrator::candid::{Erc20Contract, LedgerInitArg};
 use ic_ledger_suite_orchestrator_test_utils::pocket_ic::LedgerSuiteOrchestrator;
 use ic_ledger_suite_orchestrator_test_utils::supported_erc20_tokens;
 use icrc_ledger_types::icrc1::account::Account;
@@ -69,6 +70,27 @@ impl Default for CkErc20Setup {
 impl AsRef<CkEthSetup> for CkErc20Setup {
     fn as_ref(&self) -> &CkEthSetup {
         &self.cketh
+    }
+}
+
+/// Mainnet ckWBTC. Its `MIN_DEPOSITS` entry (0.00015 WBTC) differs from the stablecoins', so
+/// registering it gives a test a supported token whose minimum deposit amount is distinguishable
+/// from ckUSDC's and ckUSDT's.
+pub const CKWBTC_CONTRACT_ADDRESS: &str = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599";
+
+pub fn ckwbtc() -> Erc20Token {
+    Erc20Token {
+        contract: Erc20Contract {
+            chain_id: Nat::from(1_u8),
+            address: CKWBTC_CONTRACT_ADDRESS.to_string(),
+        },
+        ledger_init_arg: LedgerInitArg {
+            transfer_fee: 2_000_000_u32.into(),
+            decimals: 8,
+            token_name: "Chain-Key Wrapped Bitcoin".to_string(),
+            token_symbol: "ckWBTC".to_string(),
+            token_logo: "".to_string(),
+        },
     }
 }
 
@@ -116,29 +138,36 @@ impl CkErc20Setup {
     }
 
     pub fn add_supported_erc20_tokens(mut self) -> Self {
-        self.supported_erc20_tokens = supported_erc20_tokens();
-        for token in self.supported_erc20_tokens.iter() {
-            self.orchestrator = self
-                .orchestrator
-                .add_erc20_token(token.clone())
-                .expect_new_ledger_and_index_canisters()
-                .setup;
-            let new_ledger_id = self
-                .orchestrator
-                .call_orchestrator_canister_ids(&token.contract)
-                .unwrap()
-                .ledger
-                .unwrap();
-
-            self.cketh =
-                self.cketh
-                    .assert_has_unique_events_in_order(&[EventPayload::AddedCkErc20Token {
-                        chain_id: token.contract.chain_id.clone(),
-                        address: format_ethereum_address_to_eip_55(&token.contract.address),
-                        ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
-                        ckerc20_ledger_id: new_ledger_id,
-                    }]);
+        for token in supported_erc20_tokens() {
+            self = self.add_supported_erc20_token(token);
         }
+        self
+    }
+
+    /// Registers one more ckERC20 token with the orchestrator and the minter, on top of whatever
+    /// [`Self::add_supported_erc20_tokens`] already added.
+    pub fn add_supported_erc20_token(mut self, token: Erc20Token) -> Self {
+        self.orchestrator = self
+            .orchestrator
+            .add_erc20_token(token.clone())
+            .expect_new_ledger_and_index_canisters()
+            .setup;
+        let new_ledger_id = self
+            .orchestrator
+            .call_orchestrator_canister_ids(&token.contract)
+            .unwrap()
+            .ledger
+            .unwrap();
+
+        self.cketh =
+            self.cketh
+                .assert_has_unique_events_in_order(&[EventPayload::AddedCkErc20Token {
+                    chain_id: token.contract.chain_id.clone(),
+                    address: format_ethereum_address_to_eip_55(&token.contract.address),
+                    ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
+                    ckerc20_ledger_id: new_ledger_id,
+                }]);
+        self.supported_erc20_tokens.push(token);
         self
     }
 
