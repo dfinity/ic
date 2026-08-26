@@ -12,16 +12,17 @@ use rlp::RlpStream;
 /// `SignedSweepTransaction::from()` if the signature is already known.
 pub type SignedSweepTransaction = Signed<SweepTransaction>;
 
-/// A transaction sent from the minter's dedicated sweeper address: a plain EIP-1559 transaction
-/// (`0x02`), or an EIP-7702 one (`0x04`) whose authorization list additionally installs the
-/// delegation to the sweeper contract of those deposit addresses it sweeps that are not delegated
-/// yet. The ones already delegated are swept without an authorization tuple, so the list can be
-/// shorter than the set of addresses swept.
+/// A transaction sent from the minter's dedicated sweeper address: an EIP-7702 transaction
+/// (`0x04`) whose authorization list carries one tuple per deposit address it sweeps, or a plain
+/// EIP-1559 one (`0x02`) for a sweep that delegates nothing — the native-ETH deposit addresses are
+/// deliberately never delegated, so their sweeps take that shape.
 ///
-/// A deposit address is delegated once and stays delegated, so a sweep needs type `0x04` only as
-/// long as it still touches an address no earlier sweep delegated. The
-/// [`SweepTransaction::Eip7702`] variant therefore always carries a non-empty authorization list:
-/// [`SweepTransaction::new`] is what decides the variant, and it decides on exactly that.
+/// An address already delegated is not exempt from the list: the tuples are signed for nonce 0,
+/// which installs a delegation that is missing and is skipped for an address that has one, so no
+/// sweep has to know which is which. The [`SweepTransaction::Eip7702`] variant still always
+/// carries a non-empty authorization list, a type-`0x04` transaction with an empty one being
+/// invalid: [`SweepTransaction::new`] is what decides the variant, and it decides on exactly
+/// whether there is anything to put in that list.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub enum SweepTransaction {
     #[n(0)]

@@ -230,8 +230,8 @@ impl PipelineRequest for SweepRequest {
         );
     }
 
-    /// A sweep that must still install delegations becomes an EIP-7702 transaction, and a sweep of
-    /// addresses already delegated a plain EIP-1559 one.
+    /// A sweep that installs delegations becomes an EIP-7702 transaction, and one that installs
+    /// none a plain EIP-1559 one.
     fn create_transaction(
         &self,
         nonce: TransactionNonce,

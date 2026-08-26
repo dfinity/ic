@@ -244,6 +244,11 @@ const SWEEP_GAS_PER_TRANSFER: GasAmount = GasAmount::new(110_000);
 
 /// Gas one EIP-7702 authorization costs: 12'500 (`PER_AUTH_BASE_COST`) plus the 25'000
 /// (`PER_EMPTY_ACCOUNT_COST`) a deposit EOA pays, its account holding no ETH and no code yet.
+///
+/// Budgeted for every address the sweep touches, since every one of them carries a tuple. A tuple
+/// the EVM skips — the address is already delegated, so the nonce it was signed for no longer
+/// matches — still pays `PER_AUTH_BASE_COST`, and pays no `PER_EMPTY_ACCOUNT_COST` because such an
+/// account exists, so this is the worst case either way.
 const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
 
 /// A sweep the minter issues **from its dedicated sweeper address**, on the sweeper's own nonce
@@ -275,16 +280,17 @@ pub struct SweepRequest {
     /// The IC time at which the sweep was decided.
     #[n(5)]
     pub created_at: u64,
-    /// Delegations to install on the way, one signed by each deposit address the sweep touches
-    /// that is not yet delegated to the sweeper contract. Empty once they all are, and a sweep
-    /// with none is a plain EIP-1559 transaction.
+    /// Delegations to install on the way, one signed by every deposit address the sweep touches,
+    /// whether or not that address is already delegated: the tuples are signed for nonce 0, which
+    /// installs a delegation that is missing and is skipped otherwise. A sweep that delegates
+    /// nothing at all carries none, and is then a plain EIP-1559 transaction.
     #[n(6)]
     pub authorizations: Vec<SignedAuthorization>,
     /// The deposits this sweep moves, one per `(account, token)` pair, in the order the sweep queue
     /// offered them. Not the shape of `data`, which names one item per deposit address: an account
     /// with two tokens queued is two deposits here and one item there. Recording them makes the
-    /// request self-describing — the sweep queue and the set of delegated addresses are both
-    /// reconstructible from the log, without decoding call data.
+    /// request self-describing — the sweep queue is reconstructible from the log, without decoding
+    /// call data.
     #[n(7)]
     pub deposits: Vec<SweptDeposit>,
 }
@@ -298,11 +304,6 @@ pub struct SweptDeposit {
     pub erc20_contract_address: Address,
     #[n(2)]
     pub address: DepositAddress,
-    /// Whether this sweep installs the delegation of `address`, i.e. whether that address'
-    /// authorization is in [`SweepRequest::authorizations`]. All of an account's deposits sit at the
-    /// one address, so they share one authorization and agree on this flag.
-    #[n(3)]
-    pub delegating: bool,
 }
 
 impl SweepRequest {
@@ -310,21 +311,19 @@ impl SweepRequest {
     /// the number of deposits: the delegate hands the whole token array to every address it sweeps,
     /// so both the balance checks and the transfers grow as distinct addresses × distinct tokens. It
     /// checks every pair, and moves any pair it finds a balance at — not only the pairs `deposits`
-    /// names. Only the addresses this sweep delegates pay an authorization on top.
+    /// names. Every address pays an authorization on top, since the sweep carries a tuple for each
+    /// of them.
     ///
     /// The enqueuing side sends one token per sweep, so the product is the addresses in practice;
     /// the general form is what keeps the limit safe for any request that reaches here.
     pub fn gas_limit(&self) -> GasAmount {
-        let pairs = self
-            .distinct_count(|deposit| deposit.address)
-            .saturating_mul(self.distinct_count(|deposit| deposit.erc20_contract_address));
+        let addresses = self.distinct_count(|deposit| deposit.address);
+        let pairs =
+            addresses.saturating_mul(self.distinct_count(|deposit| deposit.erc20_contract_address));
         [
             (SWEEP_GAS_PER_BALANCE_CHECK, pairs),
             (SWEEP_GAS_PER_TRANSFER, pairs),
-            (
-                SWEEP_GAS_PER_AUTHORIZATION,
-                as_u64(self.authorizations.len()),
-            ),
+            (SWEEP_GAS_PER_AUTHORIZATION, addresses),
         ]
         .into_iter()
         .fold(SWEEP_BASE_GAS, |total, (gas_per_unit, units)| {

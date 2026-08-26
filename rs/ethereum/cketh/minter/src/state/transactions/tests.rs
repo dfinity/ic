@@ -2973,8 +2973,8 @@ mod sweep_lane {
     use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{GasAmount, TransactionCount, TransactionNonce, Wei, WeiPerGas};
     use crate::state::transactions::{
-        CreateSweepTransactionError, PipelineRequest, ResubmitTransactionError, SweepId,
-        SweepRequest, SweptDeposit, TransactionPipeline,
+        CreateSweepTransactionError, PipelineRequest, ResubmitTransactionError,
+        SWEEP_GAS_PER_AUTHORIZATION, SweepId, SweepRequest, SweptDeposit, TransactionPipeline,
     };
     use crate::tx::{
         DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate,
@@ -2983,6 +2983,7 @@ mod sweep_lane {
     use assert_matches::assert_matches;
     use ethnum::u256;
     use ic_ethereum_types::Address;
+    use std::collections::BTreeSet;
 
     const EIP1559_TX_ID: u8 = 2;
     const SET_CODE_TX_ID: u8 = 4;
@@ -3000,7 +3001,7 @@ mod sweep_lane {
         }
     }
 
-    /// A sweep of two deposit addresses that are not yet delegated to the sweeper contract.
+    /// A sweep of two deposit addresses, each authorizing its delegation to the sweeper contract.
     fn delegating_sweep_request(id: u64) -> SweepRequest {
         SweepRequest {
             authorizations: vec![authorization(1), authorization(2)],
@@ -3076,17 +3077,17 @@ mod sweep_lane {
 
         for case in [
             Case {
-                scenario: "every swept address already delegated",
+                scenario: "a sweep installing no delegation",
                 authorizations: vec![],
                 expected_transaction_type: EIP1559_TX_ID,
             },
             Case {
-                scenario: "one swept address still to delegate",
+                scenario: "a sweep installing one delegation",
                 authorizations: vec![authorization(1)],
                 expected_transaction_type: SET_CODE_TX_ID,
             },
             Case {
-                scenario: "two swept addresses still to delegate",
+                scenario: "a sweep installing two delegations",
                 authorizations: vec![authorization(1), authorization(2)],
                 expected_transaction_type: SET_CODE_TX_ID,
             },
@@ -3360,7 +3361,6 @@ mod sweep_lane {
         struct Case {
             scenario: &'static str,
             deposits: Vec<(u8, u8)>,
-            authorizations: usize,
             expected_gas_limit: u64,
         }
 
@@ -3368,42 +3368,31 @@ mod sweep_lane {
             Case {
                 scenario: "nothing to sweep",
                 deposits: vec![],
-                authorizations: 0,
                 expected_gas_limit: 60_000,
             },
             Case {
-                scenario: "one address already delegated, holding one token",
+                scenario: "one address holding one token",
                 deposits: vec![(1, 1)],
-                authorizations: 0,
-                expected_gas_limit: 60_000 + 15_000 + 110_000,
-            },
-            Case {
-                scenario: "one address to delegate, holding one token",
-                deposits: vec![(1, 1)],
-                authorizations: 1,
                 expected_gas_limit: 60_000 + 15_000 + 110_000 + 40_000,
             },
             Case {
                 scenario: "one address holding two tokens: two pairs, one authorization",
                 deposits: vec![(1, 1), (1, 2)],
-                authorizations: 1,
                 expected_gas_limit: 60_000 + 2 * 15_000 + 2 * 110_000 + 40_000,
             },
             Case {
                 scenario: "two addresses holding the same token",
                 deposits: vec![(1, 1), (2, 1)],
-                authorizations: 2,
                 expected_gas_limit: 60_000 + 2 * 15_000 + 2 * 110_000 + 2 * 40_000,
             },
             Case {
                 scenario: "two addresses holding a token each: every pair is checked and may move",
                 deposits: vec![(1, 1), (2, 2)],
-                authorizations: 2,
                 expected_gas_limit: 60_000 + 4 * 15_000 + 4 * 110_000 + 2 * 40_000,
             },
         ] {
             assert_eq!(
-                with_deposits(&case.deposits, case.authorizations).gas_limit(),
+                with_deposits(&case.deposits).gas_limit(),
                 GasAmount::from(case.expected_gas_limit),
                 "{}",
                 case.scenario
@@ -3412,13 +3401,28 @@ mod sweep_lane {
     }
 
     #[test]
+    fn should_budget_one_authorization_per_address() {
+        // Two batches of two pairs each, differing only in how the pairs are spread: one address
+        // holding two tokens carries a single tuple, two addresses holding one token each carry two.
+        let one_address = with_deposits(&[(1, 1), (1, 2)]);
+        let two_addresses = with_deposits(&[(1, 1), (2, 1)]);
+
+        assert_eq!(
+            two_addresses
+                .gas_limit()
+                .checked_sub(one_address.gas_limit()),
+            Some(SWEEP_GAS_PER_AUTHORIZATION)
+        );
+    }
+
+    #[test]
     fn should_budget_more_for_more_pairs_than_for_more_deposits() {
         // The delegate transfers any balance it finds at a pair, not only the pairs the sweep queue
         // named, so what the limit must follow is the pairs. Three addresses funded in three
         // different tokens are nine pairs from three deposits; six addresses sharing one token are
         // six pairs from twice the deposits.
-        let mixed = with_deposits(&[(1, 1), (2, 2), (3, 3)], 0);
-        let one_token = with_deposits(&[(1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1)], 0);
+        let mixed = with_deposits(&[(1, 1), (2, 2), (3, 3)]);
+        let one_token = with_deposits(&[(1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1)]);
 
         assert!(mixed.deposits.len() < one_token.deposits.len());
         assert!(
@@ -3436,14 +3440,15 @@ mod sweep_lane {
         let one_token: Vec<_> = (1..=4).map(|seed| (seed, 1)).collect();
 
         assert!(
-            with_deposits(&mixed, 4).gas_limit() > with_deposits(&one_token, 4).gas_limit(),
+            with_deposits(&mixed).gas_limit() > with_deposits(&one_token).gas_limit(),
             "the balance checks of a mixed batch must not be priced as a single-token one"
         );
     }
 
-    /// A sweep of one deposit per `(address seed, token seed)` pair, installing `authorizations`
-    /// delegations on the way.
-    fn with_deposits(deposits: &[(u8, u8)], authorizations: usize) -> SweepRequest {
+    /// A sweep of one deposit per `(address seed, token seed)` pair, authorizing each of its
+    /// distinct addresses.
+    fn with_deposits(deposits: &[(u8, u8)]) -> SweepRequest {
+        let addresses: BTreeSet<u8> = deposits.iter().map(|(address, _)| *address).collect();
         SweepRequest {
             deposits: deposits
                 .iter()
@@ -3456,12 +3461,9 @@ mod sweep_lane {
                     address: crate::deposit_address::DepositAddress::new(Address::new(
                         [*address; 20],
                     )),
-                    delegating: true,
                 })
                 .collect(),
-            authorizations: (0..authorizations)
-                .map(|seed| authorization(u8::try_from(seed).unwrap()))
-                .collect(),
+            authorizations: addresses.into_iter().map(authorization).collect(),
             ..sweep_request(0)
         }
     }

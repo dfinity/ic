@@ -299,7 +299,6 @@ impl GetEventsFile {
                 },
                 erc20_contract_address: deposit.erc20_contract_address.parse().unwrap(),
                 address: deposit.address.parse().unwrap(),
-                delegating: deposit.delegating,
             }
         }
 

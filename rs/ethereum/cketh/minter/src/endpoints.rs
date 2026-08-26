@@ -471,8 +471,6 @@ pub mod events {
         pub subaccount: Option<[u8; 32]>,
         pub erc20_contract_address: String,
         pub address: String,
-        /// Whether this sweep is the one that installs the address' delegation.
-        pub delegating: bool,
     }
 
     /// A sweep transaction the minter has created but not yet signed: a transaction, plus the
@@ -592,8 +590,8 @@ pub mod events {
             data: ByteBuf,
             max_transaction_fee: Nat,
             created_at: u64,
-            /// Delegations the sweep installs on the way, empty if every address it touches is
-            /// already delegated.
+            /// Delegations the sweep installs on the way, one per deposit address it touches.
+            /// Empty only for a sweep that delegates nothing at all.
             authorizations: Vec<SignedAuthorization>,
             /// The deposits the sweep moves, one per `(account, token)` pair. Its call data instead
             /// names one item per deposit address, so the two differ in length whenever an account

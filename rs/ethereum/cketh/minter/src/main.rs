@@ -1003,7 +1003,6 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                             subaccount: deposit.account.subaccount,
                             erc20_contract_address: deposit.erc20_contract_address.to_string(),
                             address: deposit.address.to_string(),
-                            delegating: deposit.delegating,
                         })
                         .collect(),
                 },
