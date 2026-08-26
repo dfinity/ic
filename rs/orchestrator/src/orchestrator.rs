@@ -271,11 +271,19 @@ impl Orchestrator {
         let ic_gateway_process_config = IcGatewayProcessConfig {
             ic_binary_dir: args.ic_binary_directory.clone(),
             ic_gateway_env_file: args.ic_gateway_env_file.clone(),
+            acme_cache_dir: args
+                .orchestrator_data_directory
+                .join("ic-gateway")
+                .join("acme"),
         };
+
+        // Published by the cloud engine task, consumed by the process manager.
+        let gateway_config = Arc::new(RwLock::new(None));
 
         let processes_manager = Arc::new(RwLock::new(MultipleProcessesManager::new(
             replica_process_config,
             ic_gateway_process_config,
+            Arc::clone(&gateway_config),
             Arc::clone(&registry),
             Arc::clone(&metrics),
             logger.clone(),
@@ -366,6 +374,7 @@ impl Orchestrator {
             config.cloud_engine.engine_management_canister_id.as_deref(),
             config.http_handler.listen_addr,
             &args.orchestrator_data_directory,
+            gateway_config,
             Arc::clone(&metrics),
             logger.clone(),
         );

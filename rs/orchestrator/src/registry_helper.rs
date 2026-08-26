@@ -415,6 +415,17 @@ impl RegistryHelper {
         result.ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id, version))
     }
 
+    /// Whether the given subnet is a cloud engine, i.e. an all-in-one node that
+    /// runs `ic-gateway` next to the replica. A subnet's type is immutable, so
+    /// this cannot change for a subnet the node stays assigned to.
+    pub(crate) fn is_cloud_engine_subnet(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<bool> {
+        Ok(self.get_subnet_type(subnet_id, version)? == Some(SubnetType::CloudEngine))
+    }
+
     /// Return the principals that have admin privileges on the given subnet.
     pub(crate) fn get_subnet_admins(
         &self,
