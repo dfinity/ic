@@ -697,6 +697,7 @@ mod test {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_types::ids::test_replica_version;
     use ic_types::{CanisterId, SubnetId};
     use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, SUBNET_3};
     use rstest::rstest;
@@ -726,7 +727,7 @@ mod test {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: "test_version".to_string(),
+            replica_version_id: test_replica_version().to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns,
