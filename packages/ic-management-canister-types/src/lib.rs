@@ -1419,12 +1419,12 @@ pub struct SubnetMetricsArgs {
 /// updates at the *end* of a round, so they describe the state as of an earlier
 /// block:
 ///
-/// - `num_canisters`, `update_transactions_total` and `consumed_cycles_total` are
+/// - `num_canisters`, `consumed_cycles_total` and `update_transactions_total` are
 ///   as of the end of the previous round.
 /// - `canister_state_bytes` is recomputed only every 10 rounds, because summing it
 ///   over every canister is expensive and it does not need to be exact. It can
 ///   therefore be up to ten rounds stale, and reads as `0` for the first rounds
-///   after a subnet's first canister appears.
+///   after the subnet is created.
 ///
 /// These are the same values, with the same staleness, that `read_state` returns
 /// for the `/subnet/<subnet_id>/metrics` path, so the two agree.
@@ -1432,17 +1432,18 @@ pub struct SubnetMetricsArgs {
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
 )]
 pub struct SubnetMetricsResult {
-    /// Current block height of the subnet, i.e. the height of the block in whose
-    /// execution the call is processed. Monotonically non-decreasing for a given
-    /// subnet; heights of different subnets are unrelated.
+    /// Height of the block in whose execution the call is processed.
+    /// Monotonically non-decreasing for a given subnet; the heights of different
+    /// subnets are unrelated.
     pub block_height: Nat,
     /// Number of canisters on the subnet, as of the end of the previous round.
     pub num_canisters: Nat,
-    /// Total size in bytes of the state taken by canisters on the subnet.
+    /// Total size in bytes of the state taken by the canisters on the subnet, as
+    /// of the end of the previous round.
     ///
-    /// Refreshed only every 10 rounds, so this can be up to ten rounds stale (and
-    /// reads as `0` for the first rounds of a subnet's life). See the type-level
-    /// "Freshness" note.
+    /// Recomputed only every 10 rounds, so this can be up to ten rounds stale
+    /// (and reads as `0` for the first rounds after the subnet is created). See
+    /// the type-level "Freshness" note.
     pub canister_state_bytes: Nat,
     /// Total cycles removed from circulation on the subnet by all current and
     /// deleted canisters, as of the end of the previous round.

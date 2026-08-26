@@ -9,6 +9,7 @@ use ic_config::{
 };
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_execution_environment::units::{GIB, MIB};
+use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallModeV2, CanisterMetadataRequest, CanisterMetadataResponse,
     CanisterMetricsArgs, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
@@ -2882,29 +2883,58 @@ fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
     assert_eq!(env.subnet_message_instructions(), instructions_baseline);
 }
 
-fn subnet_metrics_payload(env: &StateMachine) -> Vec<u8> {
-    SubnetMetricsArgs {
+/// Number of rounds one [`read_subnet_metrics`] takes: the ingress executes in
+/// the first, the `subnet_metrics` request it makes in the second, and the reply
+/// reaches the caller in the third.
+const ROUNDS_PER_SUBNET_METRICS_READ: u64 = 3;
+
+/// Calls `subnet_metrics` for the subnet under test from `caller` and returns the
+/// reply. The call has to go through a canister, as `subnet_metrics` cannot be
+/// called by a user.
+///
+/// Asserts on the way that `block_height` is the height of the block in whose
+/// execution the call was processed, i.e. the second of the
+/// [`ROUNDS_PER_SUBNET_METRICS_READ`] rounds this read takes.
+fn read_subnet_metrics(env: &StateMachine, caller: CanisterId) -> SubnetMetricsResponse {
+    let payload = SubnetMetricsArgs {
         subnet_id: env.get_subnet_id().get(),
     }
-    .encode()
+    .encode();
+    let call = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::SubnetMetrics,
+            call_args()
+                .other_side(payload)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    let height_before = env.state_manager.latest_state_height().get();
+    let reply = get_reply(env.execute_ingress(caller, "update", call));
+    let response = SubnetMetricsResponse::decode(&reply).unwrap();
+    assert_eq!(
+        env.state_manager.latest_state_height().get(),
+        height_before + ROUNDS_PER_SUBNET_METRICS_READ
+    );
+    assert_eq!(response.block_height, candid::Nat::from(height_before + 2));
+
+    response
 }
 
-// `block_height` tracks the *real* block height, not just whatever round number a
-// harness handed the handler: after N further rounds it has advanced by at least
-// N. (`subnet_metrics_block_height_matches_current_round` in
-// `canister_manager/tests.rs` pins the `current_round` plumbing; this pins that
-// `current_round` is the block height in a running `StateMachine`.)
+/// Covers the semantics of every `subnet_metrics` field on a running subnet:
+/// `block_height` is the height of the block in whose execution the call is
+/// processed (asserted by `read_subnet_metrics` on each read below), while the
+/// four aggregate fields report `SystemMetadata::subnet_metrics`, which is
+/// written at the end of a round and hence lags by (at least) one round.
 #[test]
-fn subnet_metrics_block_height_tracks_block_height() {
-    const TICKS: u64 = 5;
-
+fn subnet_metrics_reports_the_subnets_metrics() {
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
             SubnetConfig::new(SubnetType::Application),
             HypervisorConfig::default(),
         )))
         .with_subnet_type(SubnetType::Application)
-        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
         .build();
     let caller = create_universal_canister_with_cycles(
         &env,
@@ -2912,36 +2942,83 @@ fn subnet_metrics_block_height_tracks_block_height() {
         INITIAL_CYCLES_BALANCE,
     );
 
-    let call = |payload: Vec<u8>| {
-        wasm()
-            .call_simple(
-                CanisterId::ic_00(),
-                Method::SubnetMetrics,
-                call_args()
-                    .other_side(payload)
-                    .on_reject(wasm().reject_message().reject()),
-            )
-            .build()
-    };
-
-    let reply =
-        get_reply(env.execute_ingress(caller, "update", call(subnet_metrics_payload(&env))));
-    let first = SubnetMetricsResponse::decode(&reply).unwrap();
-    assert!(first.block_height > 0_u64);
-
-    for _ in 0..TICKS {
+    // Message routing recomputes `canister_state_bytes` only in rounds whose
+    // height is a multiple of 10. Idle the subnet up to such a round, so that the
+    // stored value is the memory the canisters take with nothing in flight; the
+    // three rounds of the read below are then 1, 2 and 3 modulo 10, so none of
+    // them can refresh it in between.
+    while !env
+        .state_manager
+        .latest_state_height()
+        .get()
+        .is_multiple_of(10)
+    {
         env.tick();
     }
+    let (metrics_before, memory_usage) = {
+        let state = env.get_latest_state();
+        (
+            state.metadata.subnet_metrics.clone(),
+            state.total_canister_memory_usage(),
+        )
+    };
+    assert_eq!(metrics_before.canister_state_bytes, memory_usage);
+    assert_gt!(memory_usage.get(), 0);
 
-    let reply =
-        get_reply(env.execute_ingress(caller, "update", call(subnet_metrics_payload(&env))));
-    let second = SubnetMetricsResponse::decode(&reply).unwrap();
-    assert!(
-        second.block_height >= first.block_height.clone() + candid::Nat::from(TICKS),
-        "block_height did not advance with the block height: {} then {} across \
-         {TICKS} ticks",
-        first.block_height,
-        second.block_height,
+    let response = read_subnet_metrics(&env, caller);
+
+    // `num_canisters`: the single canister installed above.
+    assert_eq!(response.num_canisters, candid::Nat::from(1_u64));
+    // `canister_state_bytes`: the memory the canisters take, as of the last
+    // refresh -- computed here independently of the handler.
+    assert_eq!(
+        response.canister_state_bytes,
+        candid::Nat::from(memory_usage.get())
+    );
+    // `update_transactions_total`: the messages executed in replicated mode.
+    // Exactly one was executed since the snapshot above, namely the ingress that
+    // made this call. The `subnet_metrics` request itself executes one round
+    // later still, and the handler reports the round before that, so it is not
+    // counted yet.
+    assert_eq!(
+        response.update_transactions_total,
+        candid::Nat::from(metrics_before.update_transactions_total + 1)
+    );
+    // `consumed_cycles_total`: the subnet-wide aggregate, including the cycles
+    // consumed by the canisters that still exist -- non-zero here only because
+    // `commit_and_certify` refreshes the canisters' part on every committed
+    // state. Creating and installing the caller charged cycles, and executing the
+    // ingress that made this call charged more, so both the reported total and
+    // the total the state holds now are above the snapshot.
+    //
+    // Deliberately no upper bound: while the call is in flight the caller has
+    // prepaid for a maximum-size response, and the prepayment counts as consumed
+    // until the unused part is refunded, so the reported total is in fact *above*
+    // the total once the call has completed.
+    let consumed_before = metrics_before.consumed_cycles_total_including_canisters();
+    let consumed_now = env
+        .get_latest_state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_total_including_canisters();
+    assert_gt!(consumed_before.get(), 0);
+    assert_gt!(consumed_now.get(), consumed_before.get());
+    assert_gt!(
+        response.consumed_cycles_total,
+        candid::Nat::from(consumed_now.get())
+    );
+
+    // `num_canisters` follows the canister population in both directions.
+    let other = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+    assert_eq!(
+        read_subnet_metrics(&env, caller).num_canisters,
+        candid::Nat::from(2_u64)
+    );
+    env.stop_canister(other).unwrap();
+    env.delete_canister(other).unwrap();
+    assert_eq!(
+        read_subnet_metrics(&env, caller).num_canisters,
+        candid::Nat::from(1_u64)
     );
 }
 

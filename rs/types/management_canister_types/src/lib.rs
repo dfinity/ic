@@ -3826,9 +3826,9 @@ impl Payload<'_> for SubnetMetricsArgs {}
 /// written at the *end* of a round, so they are as of the end of the previous round
 /// — except `canister_state_bytes`, which message routing recomputes only every 10
 /// rounds (summing it over every canister is expensive and it need not be exact),
-/// so it can be up to ten rounds stale and reads as `0` for the first rounds after a
-/// subnet's first canister appears. These are the same values, with the same
-/// staleness, that `read_state` serves at `/subnet/<subnet_id>/metrics`.
+/// so it can be up to ten rounds stale and reads as `0` for the first rounds after
+/// the subnet is created. These are the same values, with the same staleness, that
+/// `read_state` serves at `/subnet/<subnet_id>/metrics`.
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
 pub struct SubnetMetricsResponse {
     pub block_height: candid::Nat,

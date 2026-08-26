@@ -3398,9 +3398,10 @@ impl ExecutionEnvironment {
 
     /// Computes the response to the `subnet_metrics` management canister method.
     ///
-    /// Charges no round instructions: every field is a constant-time read of a
-    /// `SubnetMetrics` field, so there is no work here to price. See the
-    /// `counts_toward_round_limit: false` grouping in `ic00_permissions.rs`.
+    /// Charges no round instructions: every field comes from adding up a fixed
+    /// number of already-aggregated `SubnetMetrics` fields, so there is no work
+    /// here to price. See the `counts_toward_round_limit: false` grouping in
+    /// `ic00_permissions.rs`.
     fn subnet_metrics(
         &self,
         state: &ReplicatedState,

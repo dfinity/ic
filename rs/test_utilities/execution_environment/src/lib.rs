@@ -682,12 +682,6 @@ impl ExecutionTest {
         self.time += duration;
     }
 
-    /// Sets the round number passed to `execute_subnet_message` and friends,
-    /// i.e. the block height as seen by the execution environment.
-    pub fn set_current_round(&mut self, round: u64) {
-        self.current_round = ExecutionRound::new(round);
-    }
-
     pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
         self.state().get_ingress_status(message_id).clone()
     }
@@ -2867,13 +2861,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_time(mut self, time: Time) -> Self {
         self.time = time;
-        self
-    }
-
-    /// Sets the initial round number, i.e. the block height as seen by the
-    /// execution environment.
-    pub fn with_current_round(mut self, round: u64) -> Self {
-        self.current_round = ExecutionRound::new(round);
         self
     }
 
