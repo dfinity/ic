@@ -78,7 +78,8 @@ def check_artifact_name(value, what: str):
 
 
 def check_elected_hash_against_build(sums: "VersionArtifactSums", variant: str, elected_hash: str):
-    """The NNS-elected update-image hash and the hash recorded at build time must agree.
+    """
+    The NNS-elected update-image hash and the hash recorded at build time must agree.
 
     `elected_hash` comes from the proposal payload (via the dashboard API), the
     build-time hash from the (attestation-verified) CDN SHA256SUMS: a mismatch means
@@ -233,7 +234,8 @@ def get_subnet_latest_replica_version(subnet_id: str) -> str:
 
 
 def guestos_version_info_from_payload(payload: dict) -> VersionInfo:
-    """Build the GuestOS VersionInfo from a ReviseElectedGuestosVersions payload.
+    """
+    Build the GuestOS VersionInfo from a ReviseElectedGuestosVersions payload.
 
     The prod update-img hash comes from the proposal; every other hash comes from
     the version's (attestation-verified) CDN SHA256SUMS via VersionArtifactSums,
@@ -503,7 +505,8 @@ def parse_sha256sums(contents: str) -> dict:
 
 
 def download_sha256sums(url: str) -> dict:
-    """Download a SHA256SUMS file and return a mapping from filename to its hex sha256.
+    """
+    Download a SHA256SUMS file and return a mapping from filename to its hex sha256.
 
     The result restates whatever the CDN serves: only VersionArtifactSums may call
     this, as the fallback for versions whose commit is not public yet.
@@ -512,7 +515,8 @@ def download_sha256sums(url: str) -> dict:
 
 
 def fetch_attested_sha256sums(version: str, subdir: str) -> dict:
-    """Verified {filename: hex sha256} for the CDN directory ic/<version>/<subdir>.
+    """
+    Verified {filename: hex sha256} for the CDN directory ic/<version>/<subdir>.
 
     Downloads the directory's SHA256SUMS and verifies it against the
     build-provenance attestation minted by release-testing.yml's attest-uploads job
@@ -530,7 +534,8 @@ def fetch_attested_sha256sums(version: str, subdir: str) -> dict:
 
 
 def commit_is_public(version: str) -> bool:
-    """Whether `version` is a commit in the public dfinity/ic repository.
+    """
+    Whether `version` is a commit in the public dfinity/ic repository.
 
     The updater's checkout is shallow, so ask the GitHub API. Only a definite
     404/422 counts as "not public": any other failure raises, because the answer
@@ -551,7 +556,8 @@ def commit_is_public(version: str) -> bool:
 
 
 class VersionArtifactSums:
-    """SHA256SUMS access for one version's CDN artifacts (finding 3618194).
+    """
+    SHA256SUMS access for one version's CDN artifacts (finding 3618194).
 
     For a public commit the SHA256SUMS files MUST verify against the build's
     attestation: a failure aborts the update (no PR is created; the cron retries).

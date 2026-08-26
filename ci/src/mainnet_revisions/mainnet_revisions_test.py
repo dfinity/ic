@@ -17,9 +17,8 @@ import hashlib
 import logging
 import subprocess
 
-import pytest
-
 import mainnet_revisions
+import pytest
 from mainnet_revisions import (
     VersionArtifactSums,
     VersionInfo,
@@ -97,7 +96,8 @@ ATTESTATION_FAILED = subprocess.CalledProcessError(1, "gh attestation verify")
 
 
 def sums_with(monkeypatch, *, attested=None, cdn=None, public=True):
-    """A VersionArtifactSums whose collaborators are stubbed out.
+    """
+    A VersionArtifactSums whose collaborators are stubbed out.
 
     `attested`: {subdir: {filename: hash}} served by the (verified) attested path,
     or None to make attestation verification fail. `cdn`: the same, served by the
@@ -177,9 +177,7 @@ def test_verified_json_accepts_matching_bytes(monkeypatch):
         monkeypatch, attested={"guest-os/update-img": {"launch-measurements.json": hashlib.sha256(payload).hexdigest()}}
     )
     monkeypatch.setattr(mainnet_revisions, "download_bytes", lambda url: payload)
-    assert sums.verified_json("guest-os/update-img", "launch-measurements.json") == {
-        "guest_launch_measurements": []
-    }
+    assert sums.verified_json("guest-os/update-img", "launch-measurements.json") == {"guest_launch_measurements": []}
 
 
 def test_verified_json_rejects_tampered_bytes(monkeypatch):
