@@ -1279,6 +1279,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Number of deposit address attestations the minter has signed and stored.",
                 )?;
 
+                w.encode_gauge(
+                    "cketh_minter_stored_authorizations",
+                    s.automatic_deposits.authorizations_len() as f64,
+                    "Number of deposit address delegation authorizations the minter has signed and stored.",
+                )?;
+
                 let sweep_queue = s.automatic_deposits.sweep_queue_depth();
                 w.gauge_vec(
                     "cketh_minter_sweep_queue_deposits",

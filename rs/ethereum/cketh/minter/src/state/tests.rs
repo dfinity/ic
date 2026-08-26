@@ -1756,6 +1756,101 @@ mod sweeps {
     }
 }
 
+mod authorizations {
+    use crate::deposit_address::DepositAddress;
+    use crate::numeric::TransactionNonce;
+    use crate::state::State;
+    use crate::test_fixtures::initial_state;
+    use crate::tx::SignedAuthorization;
+    use ic_ethereum_types::Address;
+
+    #[test]
+    fn should_reuse_the_authorization_a_deposit_address_signed() {
+        let mut state = state_with_sweeper_contract();
+
+        record(&mut state, authorization(sweeper_contract()));
+
+        assert_eq!(
+            state.authorization(&deposit_address()),
+            Some(&authorization(sweeper_contract()))
+        );
+    }
+
+    #[test]
+    fn should_not_reuse_an_authorization_naming_another_delegate() {
+        let mut state = state_with_sweeper_contract();
+
+        record(&mut state, authorization(previous_sweeper_contract()));
+
+        assert_eq!(state.authorization(&deposit_address()), None);
+
+        // A newly deployed sweeper contract only costs the signature the stored tuple saved.
+        record(&mut state, authorization(sweeper_contract()));
+
+        assert_eq!(
+            state.authorization(&deposit_address()),
+            Some(&authorization(sweeper_contract()))
+        );
+    }
+
+    #[test]
+    fn should_not_reuse_an_authorization_naming_another_chain() {
+        let mut state = state_with_sweeper_contract();
+
+        let another_chain = SignedAuthorization {
+            chain_id: state.ethereum_network().chain_id() + 1,
+            ..authorization(sweeper_contract())
+        };
+
+        record(&mut state, another_chain);
+
+        assert_eq!(state.authorization(&deposit_address()), None);
+    }
+
+    #[test]
+    fn should_not_reuse_an_authorization_while_the_sweeper_contract_is_unknown() {
+        let mut state = initial_state();
+        assert_eq!(state.sweeper_contract_address, None);
+
+        record(&mut state, authorization(sweeper_contract()));
+
+        assert_eq!(state.authorization(&deposit_address()), None);
+    }
+
+    fn record(state: &mut State, authorization: SignedAuthorization) {
+        state.record_authorization(deposit_address(), authorization);
+    }
+
+    fn state_with_sweeper_contract() -> State {
+        let mut state = initial_state();
+        state.sweeper_contract_address = Some(sweeper_contract());
+        state
+    }
+
+    fn authorization(delegate: Address) -> SignedAuthorization {
+        SignedAuthorization {
+            chain_id: initial_state().ethereum_network().chain_id(),
+            delegate,
+            nonce: TransactionNonce::ZERO,
+            y_parity: false,
+            r: ethnum::u256::ONE,
+            s: ethnum::u256::ONE,
+        }
+    }
+
+    fn deposit_address() -> DepositAddress {
+        DepositAddress::new(Address::new([0x11; 20]))
+    }
+
+    fn sweeper_contract() -> Address {
+        Address::new([0xde; 20])
+    }
+
+    fn previous_sweeper_contract() -> Address {
+        Address::new([0xdd; 20])
+    }
+}
+
 mod eth_balance {
     use super::*;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};

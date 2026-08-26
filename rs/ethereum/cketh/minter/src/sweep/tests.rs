@@ -1,6 +1,6 @@
 use super::{
     MAX_DEPOSITS_PER_SWEEP, PreparedDeposit, SweepBatch, attested_addresses,
-    delegation_authorization, prepared_deposits, sweep_batches_by_token,
+    delegation_authorization, prepared_deposits, stored_authorizations, sweep_batches_by_token,
 };
 use crate::deposit_address::DepositAddress;
 use crate::numeric::{BlockNumber, Erc20Value, TransactionNonce};
@@ -304,6 +304,75 @@ mod attested_addresses {
             attested_addresses(&targets, &attestations),
             BTreeMap::from([(account(0), deposit_address(0))])
         );
+    }
+}
+
+mod stored_authorizations {
+    use super::{
+        account, authorization, deposit_address, queued_state, stored_authorizations,
+        sweeper_contract, usdc,
+    };
+    use crate::deposit_address::DepositAddress;
+    use crate::state::State;
+    use crate::test_fixtures::init_state;
+    use crate::tx::SignedAuthorization;
+    use ic_ethereum_types::Address;
+    use icrc_ledger_types::icrc1::account::Account;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn should_reuse_the_tuple_stored_for_the_configured_delegate() {
+        init_state(state_authorizing(sweeper_contract()));
+
+        let stored = stored_authorizations(&addresses());
+
+        assert_eq!(stored, BTreeMap::from([(account(0), authorization())]));
+    }
+
+    #[test]
+    fn should_re_sign_a_tuple_stored_for_a_retired_delegate() {
+        init_state(state_authorizing(previous_sweeper_contract()));
+
+        let stored = stored_authorizations(&addresses());
+
+        assert_eq!(stored, BTreeMap::new());
+    }
+
+    #[test]
+    fn should_hold_nothing_for_an_address_never_authorized() {
+        init_state(configured_state());
+
+        let stored = stored_authorizations(&addresses());
+
+        assert_eq!(stored, BTreeMap::new());
+    }
+
+    fn addresses() -> BTreeMap<Account, DepositAddress> {
+        BTreeMap::from([(account(0), deposit_address(0))])
+    }
+
+    /// A configured state that has already recorded account 0's authorization to `delegate`.
+    fn state_authorizing(delegate: Address) -> State {
+        let mut state = configured_state();
+        state.record_authorization(
+            deposit_address(0),
+            SignedAuthorization {
+                delegate,
+                ..authorization()
+            },
+        );
+        state
+    }
+
+    fn configured_state() -> State {
+        let mut state = queued_state(&[(0, usdc())]);
+        state.sweeper_contract_address = Some(sweeper_contract());
+        state
+    }
+
+    /// The sweeper contract a previous deployment delegated to.
+    fn previous_sweeper_contract() -> Address {
+        Address::new([0xdd; 20])
     }
 }
 

@@ -652,36 +652,68 @@ fn attested_addresses(
         .collect()
 }
 
+/// The authorizations the minter already holds for these addresses, keyed by account.
+///
+/// Only the ones still usable: [`State::authorization`] checks a stored tuple against the chain and
+/// the delegate the minter runs against, so an address delegated by a retired sweeper contract falls
+/// through to a fresh signature rather than being swept through the wrong delegate.
+fn stored_authorizations(
+    addresses: &BTreeMap<Account, DepositAddress>,
+) -> BTreeMap<Account, SignedAuthorization> {
+    read_state(|s| {
+        addresses
+            .iter()
+            .filter_map(|(account, address)| {
+                s.authorization(address)
+                    .map(|authorization| (*account, authorization.clone()))
+            })
+            .collect()
+    })
+}
+
 /// One authorization per account, keyed by it, missing where it could not be signed.
 ///
-/// Every address is signed afresh: the tuple names the chain and the delegate, and its nonce is
-/// fixed at 0, so nothing a sweep does can invalidate it — see [`delegation_authorization`].
+/// A tuple is signed once per address and reused by every later sweep of it: it names the chain and
+/// the delegate, and its nonce is fixed at 0, so nothing a sweep does can invalidate it. Only the
+/// addresses the minter holds no usable tuple for cost a signature, and each is recorded the moment
+/// it exists.
+///
+/// Reuse is a cost optimization, not correctness state — see [`delegation_authorization`]. A tuple
+/// the store never had, or one it holds under a delegate the minter no longer calls, costs one
+/// threshold-ECDSA signature; it can never cost a sweep.
 async fn sign_authorizations_batch(
     addresses: &BTreeMap<Account, DepositAddress>,
     sweeper_contract: Address,
 ) -> BTreeMap<Account, SignedAuthorization> {
+    let mut authorizations = stored_authorizations(addresses);
     let chain_id = read_state(State::ethereum_network).chain_id();
-    let signed = join_all(addresses.keys().map(|account| {
-        let account = *account;
-        let authorization = delegation_authorization(chain_id, sweeper_contract);
-        async move {
-            (
-                account,
-                authorization
-                    .sign(deposit_derivation_path(
-                        DepositAddressSchema::CkErc20,
-                        &account,
-                    ))
-                    .await,
-            )
-        }
-    }))
+    let signed = join_all(
+        addresses
+            .iter()
+            .filter(|(account, _address)| !authorizations.contains_key(*account))
+            .map(|(account, address)| {
+                let (account, address) = (*account, *address);
+                let authorization = delegation_authorization(chain_id, sweeper_contract);
+                async move {
+                    (
+                        account,
+                        address,
+                        authorization
+                            .sign(deposit_derivation_path(
+                                DepositAddressSchema::CkErc20,
+                                &account,
+                            ))
+                            .await,
+                    )
+                }
+            }),
+    )
     .await;
-    let mut authorizations = BTreeMap::new();
     let mut errors = Vec::new();
-    for (account, result) in signed {
+    for (account, address, result) in signed {
         match result {
             Ok(authorization) => {
+                mutate_state(|s| s.record_authorization(address, authorization.clone()));
                 authorizations.insert(account, authorization);
             }
             Err(e) => errors.push(format!("{account:?}: {e}")),

@@ -9,7 +9,7 @@ use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
 use crate::state::transactions::{SweepId, SweptDeposit};
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
-use crate::tx::TransactionSignature;
+use crate::tx::{SignedAuthorization, TransactionSignature};
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -69,6 +69,20 @@ pub struct AutomaticDeposits {
     /// entries naming a retired helper stay behind forever. [`Self::attestations_len`] is exported
     /// as a metric so that growth is visible before it needs bounding.
     attestations: BTreeMap<AttestationRequest, TransactionSignature>,
+    /// Delegation authorizations the minter has signed, keyed by the deposit address that signed
+    /// each one. A tuple is signed for nonce 0 and names the chain and the delegate it authorizes,
+    /// so it never expires and every later sweep of that address reuses it instead of paying for
+    /// another threshold-ECDSA signature.
+    ///
+    /// Purely a cost optimization: the stored tuple is validated against the configuration before
+    /// being reused (see [`crate::state::State::authorization`]), and losing an entry costs one
+    /// signature, never a sweep. Which is why this map is heap-only, unlike the rest of the state:
+    /// no event records it, an upgrade empties it, and each address pays one signature again on its
+    /// next sweep. Persisting it would mean an event per address in the log forever, replayed on
+    /// every upgrade, to save a cost that is bounded by the addresses in flight. Nothing prunes it
+    /// within a canister version — [`Self::authorizations_len`] is exported as a metric so its
+    /// growth is visible before it needs bounding.
+    authorizations: BTreeMap<DepositAddress, SignedAuthorization>,
 }
 
 impl AutomaticDeposits {
@@ -84,6 +98,21 @@ impl AutomaticDeposits {
         signature: TransactionSignature,
     ) {
         self.attestations.insert(request, signature);
+    }
+
+    /// The authorization `address` has already signed, whatever it authorizes. Callers go through
+    /// [`crate::state::State::authorization`], which is where a stored tuple is checked against the
+    /// configuration the minter runs against.
+    pub fn authorization(&self, address: &DepositAddress) -> Option<&SignedAuthorization> {
+        self.authorizations.get(address)
+    }
+
+    pub fn record_authorization(
+        &mut self,
+        address: DepositAddress,
+        authorization: SignedAuthorization,
+    ) {
+        self.authorizations.insert(address, authorization);
     }
 
     /// Arm the `(account, token)` pair, whose deposit `address` is derived for `account`.
@@ -439,6 +468,10 @@ impl AutomaticDeposits {
         self.attestations.len()
     }
 
+    pub fn authorizations_len(&self) -> usize {
+        self.authorizations.len()
+    }
+
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
     /// funds queued for sweeping (so it must be registered). Reports
     /// [`DepositStatus::AwaitingSweep`] once funds have been detected and queued, and otherwise
@@ -482,6 +515,7 @@ impl Default for AutomaticDeposits {
             watchlist: TimedSizedMap::new(DEPOSIT_ADDRESS_SCAN_WINDOW, MAX_ACTIVE_DEPOSITS),
             sweep: BTreeMap::new(),
             attestations: BTreeMap::new(),
+            authorizations: BTreeMap::new(),
         }
     }
 }

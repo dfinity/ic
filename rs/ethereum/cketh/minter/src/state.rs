@@ -1,6 +1,8 @@
 use crate::address::ecdsa_public_key_to_address;
 use crate::attestation::AttestationRequest;
-use crate::deposit_address::{DepositAddressSchema, deposit_address, sweeper_address};
+use crate::deposit_address::{
+    DepositAddress, DepositAddressSchema, deposit_address, sweeper_address,
+};
 use crate::endpoints::{CandidBlockTag, DepositErc20Error};
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
@@ -18,7 +20,7 @@ use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConf
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::GasFeeEstimate;
-use crate::tx::TransactionSignature;
+use crate::tx::{SignedAuthorization, TransactionSignature};
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk_management_canister::EcdsaPublicKeyResult;
@@ -289,6 +291,34 @@ impl State {
     fn record_attestation(&mut self, request: AttestationRequest, signature: TransactionSignature) {
         self.automatic_deposits
             .record_attestation(request, signature);
+    }
+
+    /// The delegation authorization `address` has already signed for the configuration this minter
+    /// runs against, if any: signing another would cost a threshold-ECDSA signature for a tuple the
+    /// minter already holds. `None` while the sweeper contract is unknown.
+    ///
+    /// A stored tuple is checked rather than trusted. It names the chain and the delegate it
+    /// authorizes, so one signed for a sweeper contract the minter no longer calls fails the check
+    /// and is simply re-signed. Losing an entry costs a signature, never a sweep, which is why the
+    /// store lives on the heap alone: an upgrade empties it and every address pays one signature
+    /// again on its next sweep, rather than the minter carrying an event per address forever.
+    pub fn authorization(&self, address: &DepositAddress) -> Option<&SignedAuthorization> {
+        let delegate = self.sweeper_contract_address?;
+        self.automatic_deposits
+            .authorization(address)
+            .filter(|authorization| {
+                authorization.chain_id == self.ethereum_network.chain_id()
+                    && authorization.delegate == delegate
+            })
+    }
+
+    pub fn record_authorization(
+        &mut self,
+        address: DepositAddress,
+        authorization: SignedAuthorization,
+    ) {
+        self.automatic_deposits
+            .record_authorization(address, authorization);
     }
 
     pub fn is_ckerc20_feature_active(&self) -> bool {
