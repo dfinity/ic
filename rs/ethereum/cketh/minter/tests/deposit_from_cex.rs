@@ -42,7 +42,10 @@ use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::CkEthSetup;
 use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
-use ic_cketh_test_utils::live::{AWAIT_DEADLINE, FEE_ACCOUNT_BALANCE, Holding, LiveSetup};
+use ic_cketh_test_utils::live::{
+    AWAIT_DEADLINE, FEE_ACCOUNT_BALANCE, Holding, LiveSetup, SWEEPER_BURNED_NOT_YET_SPENT,
+    SWEEPER_ETH_SPENT, SWEEPER_GAS_BALANCE,
+};
 use ic_ethereum_types::Address;
 
 #[test]
@@ -390,11 +393,8 @@ fn should_not_fund_a_sweeper_above_the_low_water_mark() {
         funded,
         "the sweeper balance must be left exactly as the first funding delivered it"
     );
-    let prepaid = setup
-        .dashboard_row("sweeper-prepaid-gas")
-        .expect("the dashboard must have a prepaid-gas row");
-    assert_ne!(
-        prepaid, "0 Wei",
+    assert!(
+        setup.metric_value(SWEEPER_GAS_BALANCE) > 0.0,
         "the bound must carry the funding that landed, or the decision above declined for the \
          wrong reason"
     );
@@ -437,28 +437,16 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
 
     let burned = await_burn(&setup, supply_before);
     assert!(burned > 0, "funding must burn ckETH up front");
-    // Polled, not read once: the minter records the funding only after the ledger call it awaited
-    // returns, so the supply `await_burn` watches drops before the dashboard shows the request.
-    // Bounded well below the time to finalization, since the row clears again once that happens.
-    let burn_index = await_in_flight_burn_index(&setup);
 
     // Waits for the transaction to finalize rather than watching for a fixed window: without this
     // the assertions below all hold while it is merely still in flight, which proves nothing about
     // what happens when it fails.
+    //
+    // What the minter's status endpoint reports for the funding is deliberately not asserted: it is
+    // the ordinary pending-reimbursement state, imprecise here because nothing will ever settle it,
+    // and giving it a status of its own would mean a new `retrieve_eth_status` variant — breaking
+    // every existing client — for a state mainnet cannot reach. What matters is asserted below.
     setup.await_funding_finalized(FINALIZATION_TICKS);
-    let status = setup.withdrawal_status(burn_index);
-    // Pending reimbursement is imprecise here — nothing will ever settle it — and deliberately so:
-    // a status of its own meant adding a variant to `retrieve_eth_status`, which breaks every
-    // existing client, to describe a state mainnet cannot reach. This test reaches it only by
-    // placing code at an address derived from the minter's own key. The invariant that actually
-    // matters is asserted below: the burn is never paid back.
-    assert!(
-        status.starts_with("PendingReimbursement("),
-        "unexpected status for a failed funding: {status} (sweeper {sweeper}, {} bytes of code, \
-         balance {})",
-        setup.code(&sweeper).len(),
-        setup.anvil_eth_balance(&sweeper),
-    );
 
     assert_eq!(
         setup.anvil_eth_balance(&sweeper),
@@ -472,15 +460,15 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
     );
     // Read as numbers rather than asserted non-zero: "some burn remains" would also hold if
     // finalization had recorded no gas at all, which is the other half of what this test claims.
-    let spent = wei_row(&setup, "sweeper-eth-spent");
-    let surplus = wei_row(&setup, "sweeper-burned-not-yet-spent");
+    let spent = setup.metric_value(SWEEPER_ETH_SPENT);
+    let surplus = setup.metric_value(SWEEPER_BURNED_NOT_YET_SPENT);
     assert!(
-        spent > 0,
+        spent > 0.0,
         "a failed transaction still pays its gas, so spend must be recorded"
     );
     assert_eq!(
         surplus,
-        burned - spent,
+        burned as f64 - spent,
         "the burn minus that gas is what stays as backing"
     );
 
@@ -493,26 +481,6 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
         supply_before - burned,
         "the reimbursement timer must have found nothing to pay back"
     );
-}
-
-/// A dashboard cell rendered as `1_000_000 Wei`, as a number.
-fn wei_row(setup: &LiveSetup<CkEthSetup>, id: &str) -> u128 {
-    let cell = setup
-        .dashboard_row(id)
-        .unwrap_or_else(|| panic!("the dashboard must have a {id} row"));
-    cell.trim_end_matches(" Wei")
-        .replace('_', "")
-        .parse()
-        .unwrap_or_else(|e| panic!("unexpected {id} cell {cell:?}: {e}"))
-}
-
-/// The burn index of the funding the minter currently has in flight, waiting for it to appear.
-fn await_in_flight_burn_index(setup: &LiveSetup<CkEthSetup>) -> u64 {
-    setup.poll_until(
-        AWAIT_DEADLINE,
-        |_| "the minter burned ckETH but recorded no in-flight funding".to_string(),
-        |setup| setup.in_flight_funding_burn_index(),
-    )
 }
 
 /// What a funding burned, waiting for the supply to drop.

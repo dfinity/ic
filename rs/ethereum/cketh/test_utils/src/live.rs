@@ -48,7 +48,6 @@ use ic_base_types::PrincipalId;
 use ic_cketh_minter::PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL;
 use ic_cketh_minter::endpoints::{
     DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode, DepositStatus,
-    RetrieveEthStatus,
 };
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
@@ -114,6 +113,13 @@ pub const AWAIT_DEADLINE: Duration = Duration::from_secs(60);
 /// The balance scan waits on a periodic scan of its own rather than on a minter timer, and that scan
 /// is slower to come round, so it gets its own budget.
 const SCAN_DEADLINE: Duration = Duration::from_secs(180);
+
+/// Cumulative ETH the minter has spent on funding transfers, which only a finalized funding moves.
+pub const SWEEPER_ETH_SPENT: &str = "cketh_minter_sweeper_funding_eth_spent_total";
+/// How far the ckETH burned for sweeping runs ahead of the ETH spent.
+pub const SWEEPER_BURNED_NOT_YET_SPENT: &str = "cketh_minter_sweeper_funding_burned_not_yet_spent";
+/// The lower bound the minter tracks on the sweeper address' balance.
+pub const SWEEPER_GAS_BALANCE: &str = "cketh_minter_sweeper_gas_balance";
 
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
 /// address, so the scan reads a real balance for that (address, token) pair.
@@ -532,11 +538,13 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         )
     }
 
-    /// The minter's rendered dashboard.
-    pub fn dashboard_html(&self) -> String {
+    /// The value of a minter metric, or `None` if it is not exported. Reads the same HTTP endpoint
+    /// an operator scrapes, so a test asserts on the numbers the minter publishes rather than on a
+    /// rendering of them.
+    pub fn metric(&self, name: &str) -> Option<f64> {
         let request = HttpRequest {
             method: "GET".to_string(),
-            url: "/dashboard".to_string(),
+            url: "/metrics".to_string(),
             headers: vec![],
             body: serde_bytes::ByteBuf::new(),
         };
@@ -548,17 +556,21 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
                 "http_request",
                 Encode!(&request).unwrap(),
             )
-            .expect("the dashboard query was rejected");
+            .expect("the metrics query was rejected");
         let response = Decode!(&reply, HttpResponse).unwrap();
-        String::from_utf8_lossy(&response.body).to_string()
+        String::from_utf8_lossy(&response.body)
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .find_map(|line| {
+                let rest = line.strip_prefix(name)?.trim_start();
+                rest.split_whitespace().next()?.parse().ok()
+            })
     }
 
-    /// The value rendered in a dashboard row, e.g. `sweeper-cketh-burned`.
-    pub fn dashboard_row(&self, id: &str) -> Option<String> {
-        let dashboard = self.dashboard_html();
-        let row = dashboard.split(&format!(r#"id="{id}""#)).nth(1)?;
-        let cell = row.split("<td>").nth(1)?.split("</td>").next()?;
-        Some(cell.trim().to_string())
+    /// As [`Self::metric`], for a metric a test knows the minter exports.
+    pub fn metric_value(&self, name: &str) -> f64 {
+        self.metric(name)
+            .unwrap_or_else(|| panic!("the minter does not export {name}"))
     }
 
     /// Waits until the minter has logged a line containing `needle`.
@@ -623,52 +635,24 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         }
     }
 
-    /// Drives the minter until the in-flight funding row clears, i.e. its transaction has finalized,
-    /// mining meanwhile so the minter's `finalized` view keeps advancing.
+    /// Drives the minter until a funding has finalized, mining meanwhile so the minter's `finalized`
+    /// view keeps advancing.
     ///
-    /// Costs at least one tick beyond the one that sent the transaction: fetching the receipt is
-    /// the *next* run of the withdrawal timer, and a single jump — however large — only ever makes
-    /// a due timer fire once.
+    /// Costs at least one tick beyond the one that sent the transaction: fetching the receipt is the
+    /// *next* run of the withdrawal timer, and a single jump — however large — only ever makes a due
+    /// timer fire once.
     ///
-    /// Polls the dashboard rather than the status endpoint: that endpoint is an update call, and a
-    /// steady stream of ingress messages is enough load to destabilise the PocketIC instance.
+    /// Watched through the spend counter, which only a finalized funding moves — a mined transaction
+    /// pays its gas whether it succeeded or failed. The age gauge beside it would not do: it reads
+    /// zero both when nothing is outstanding and when a funding was accepted less than a second of
+    /// instance time ago, which is every moment between the burn and the next tick.
     pub fn await_funding_finalized(&self, max_ticks: u32) {
+        let spent_before = self.metric_value(SWEEPER_ETH_SPENT);
         self.drive_until(
             max_ticks,
-            |setup| {
-                format!(
-                    "the funding had not finalized (in-flight row {:?})",
-                    setup.dashboard_row("sweeper-in-flight-funding")
-                )
-            },
-            |setup| setup.dashboard_row("sweeper-in-flight-funding").as_deref() == Some("none"),
+            |_| "the funding had not finalized".to_string(),
+            |setup| setup.metric_value(SWEEPER_ETH_SPENT) > spent_before,
         );
-    }
-
-    /// The burn index of the funding currently in flight, read from the dashboard. `None` once it has
-    /// finalized, so a test needing it must read it between the burn and the finalization.
-    pub fn in_flight_funding_burn_index(&self) -> Option<u64> {
-        let row = self.dashboard_row("sweeper-in-flight-funding")?;
-        let rest = row.strip_prefix("burn index ")?;
-        rest.split(',').next()?.trim().parse().ok()
-    }
-
-    /// The minter's public status for `burn_index`, rendered.
-    pub fn withdrawal_status(&self, burn_index: u64) -> String {
-        let message_id = self
-            .env()
-            .submit_call(
-                self.minter_id(),
-                Principal::anonymous(),
-                "retrieve_eth_status",
-                Encode!(&burn_index).unwrap(),
-            )
-            .expect("retrieve_eth_status submission rejected");
-        let reply = self
-            .env()
-            .await_call_no_ticks(message_id)
-            .expect("retrieve_eth_status rejected");
-        Decode!(&reply, RetrieveEthStatus).unwrap().to_string()
     }
 
     pub fn minter_address(&self) -> Address {
