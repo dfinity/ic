@@ -29,11 +29,11 @@ impl std::fmt::Display for HSMInfo {
     }
 }
 
-pub fn attach_hsm() -> Response {
+pub(crate) fn attach_hsm() -> Response {
     hsm_helper("attach-device")
 }
 
-pub fn detach_hsm() -> Response {
+pub(crate) fn detach_hsm() -> Response {
     hsm_helper("detach-device")
 }
 
@@ -121,7 +121,8 @@ fn write_to_temp_file(content: &str) -> Result<NamedTempFile, Error> {
     Ok(file)
 }
 
-pub mod tests {
+#[cfg(test)]
+mod tests {
     #[test]
     fn get_hsm_xml_string() {
         use super::*;

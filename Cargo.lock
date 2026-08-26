@@ -24669,7 +24669,6 @@ dependencies = [
 name = "vsock_lib"
 version = "1.0.0"
 dependencies = [
- "async-trait",
  "clap",
  "ic-http-utils",
  "mockall",

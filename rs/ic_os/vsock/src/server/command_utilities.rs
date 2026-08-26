@@ -3,7 +3,7 @@ use std::process::Output;
 
 use crate::protocol::{Payload, Response};
 
-pub fn handle_command_output(command_output: Result<Output, Error>) -> Response {
+pub(crate) fn handle_command_output(command_output: Result<Output, Error>) -> Response {
     command_output
         .map_err(|err| {
             let error_string = format!("Unable to read command output: {err}");

@@ -1,11 +1,11 @@
-use vsock_lib::server::{LinuxVsockServer, VsockServer};
+use vsock_lib::server::VsockServer;
 
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let vsock_server = LinuxVsockServer::with_port(LinuxVsockServer::DEFAULT_PORT)?;
+    let vsock_server = VsockServer::with_port(VsockServer::DEFAULT_PORT)?;
 
     println!("Listening for vsock connections...");
 

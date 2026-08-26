@@ -10,7 +10,6 @@ clap = { workspace = true } # only needed by bin, can't express in direct Cargo.
 mockall = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-async-trait = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true }
