@@ -16,19 +16,35 @@
 # attestation verification.
 #
 # Usage:
-#   fetch-attested-sums.sh <commit> <cdn-subdir> <signer-workflow> <out-file>
+#   fetch-attested-sums.sh <commit> <cdn-subdir> <signer-workflow> \
+#       <source-ref-regex> <out-file>
 #
-#   <commit>          40-hex git commit id whose artifacts to fetch
-#   <cdn-subdir>      directory under ic/<commit>/ on the CDN,
-#                     e.g. "canisters", "binaries/x86_64-linux",
-#                     "guest-os/update-img-dev"
-#   <signer-workflow> workflow whose attest-uploads job must have attested the
-#                     upload, e.g.
-#                       dfinity/ic/.github/workflows/ci-kickoff.yml
-#                         (master commits)
-#                       dfinity/ic/.github/workflows/release-testing.yml
-#                         (rc--*/hotfix-* commits)
-#   <out-file>        where to write the verified SHA256SUMS
+#   <commit>           40-hex git commit id whose artifacts to fetch
+#   <cdn-subdir>       directory under ic/<commit>/ on the CDN,
+#                      e.g. "canisters", "binaries/x86_64-linux",
+#                      "guest-os/update-img-dev"
+#   <signer-workflow>  workflow whose attest-uploads job must have attested
+#                      the upload, e.g.
+#                        dfinity/ic/.github/workflows/ci-kickoff.yml
+#                          (master commits)
+#                        dfinity/ic/.github/workflows/release-testing.yml
+#                          (rc--*/hotfix-* commits)
+#   <source-ref-regex> regex (anchored by this script) that the attestation's
+#                      source git ref must match, e.g.
+#                        refs/heads/master
+#                          (master commits)
+#                        refs/heads/(rc--|hotfix-|public-hotfix-).+
+#                          (release-qualification branches)
+#                      The signer-workflow pin alone fixes WHICH workflow
+#                      signed, not from which ref it ran: those workflows can
+#                      be dispatched on arbitrary branches (and ci-kickoff
+#                      also runs for dev-gh-* pushes and PRs), so without
+#                      this binding anyone able to trigger a release build of
+#                      an unreviewed branch could mint an acceptable
+#                      attestation. The ref regex confines acceptance to
+#                      branches whose content is controlled (branch
+#                      protection on master; release process on rc/hotfix).
+#   <out-file>         where to write the verified SHA256SUMS
 #
 # Requires the `gh` CLI (>= 2.61 for --source-digest) authenticated with any
 # token able to read the public dfinity/ic attestations (in GitHub Actions,
@@ -47,21 +63,23 @@
 #
 # Negative tests (documented per the house style for download verification):
 # flipping one hex char in the downloaded SHA256SUMS, passing the commit of a
-# different build, or serving another directory's SHA256SUMS at this
-# directory's URL (cross-directory substitution) each make this script exit
-# non-zero before the file is used.
+# different build, serving another directory's SHA256SUMS at this directory's
+# URL (cross-directory substitution), or presenting an attestation minted
+# from a ref outside <source-ref-regex> each make this script exit non-zero
+# before the file is used.
 
 set -euo pipefail
 
-if [ "$#" -ne 4 ]; then
-    echo "usage: $0 <commit> <cdn-subdir> <signer-workflow> <out-file>" >&2
+if [ "$#" -ne 5 ]; then
+    echo "usage: $0 <commit> <cdn-subdir> <signer-workflow> <source-ref-regex> <out-file>" >&2
     exit 1
 fi
 
 commit="$1"
 subdir="$2"
 signer_workflow="$3"
-out_file="$4"
+source_ref_regex="$4"
+out_file="$5"
 
 # The repository whose attestation store anchors the artifacts. Builds from
 # dfinity/ic-private are not attested; their commits gain attestations once
@@ -86,6 +104,14 @@ if ! [[ "$signer_workflow" =~ ^[A-Za-z0-9._/-]+$ ]]; then
     exit 1
 fi
 
+# An invalid regex is not a bypass — jq's test() errors out and this script
+# exits non-zero — but reject the empty string, which would anchor to ^()$
+# and match nothing while looking like a configuration rather than a failure.
+if [ -z "$source_ref_regex" ]; then
+    echo "ERROR: source-ref-regex must not be empty" >&2
+    exit 1
+fi
+
 url="https://download.dfinity.systems/ic/${commit}/${subdir}/SHA256SUMS"
 expected_subject="ic/${commit}/${subdir}/SHA256SUMS"
 
@@ -104,18 +130,26 @@ gh attestation verify "$out_file" \
     --format json \
     >"$verify_output"
 
-# Bind the digest to THIS directory's path: at least one verified attestation
-# must list the file's digest under the expected subject name.
+# Bind the digest to THIS directory's path and the attestation to the
+# expected source ref: at least one verified attestation must BOTH have been
+# minted from a ref matching <source-ref-regex> (sourceRepositoryRef in its
+# Sigstore certificate) AND list the file's digest under the expected subject
+# name. Both conditions are checked on the same attestation entry — an
+# attacker must not be able to satisfy them with two different attestations.
 digest="$(sha256sum "$out_file" | cut -d' ' -f1)"
 jq -e \
     --arg name "$expected_subject" \
     --arg digest "$digest" \
-    '[.[].verificationResult.statement.subject[]?
+    --arg refRegex "^(${source_ref_regex})\$" \
+    '[.[]
+      | select(.verificationResult.signature.certificate.sourceRepositoryRef // ""
+               | test($refRegex))
+      | .verificationResult.statement.subject[]?
       | select(.name == $name and .digest.sha256 == $digest)]
      | length > 0' \
     "$verify_output" >/dev/null || {
-    echo "ERROR: the verified attestation does not record digest $digest under subject '$expected_subject'." >&2
-    echo "The file served at $url is attested, but not as this directory's SHA256SUMS (cross-directory substitution?)." >&2
+    echo "ERROR: no verified attestation minted from a ref matching '${source_ref_regex}' records digest $digest under subject '$expected_subject'." >&2
+    echo "The file served at $url is either attested from an unexpected ref (unqualified build?) or not as this directory's SHA256SUMS (cross-directory substitution?)." >&2
     exit 1
 }
 
