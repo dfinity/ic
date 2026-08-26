@@ -414,7 +414,6 @@ impl ReplicatedStateMetrics {
         let mut num_paused_install = 0;
         let mut num_aborted_install = 0;
 
-        let mut consumed_cycles_total = NominalCycles::zero();
         let mut consumed_cycles_total_by_use_case = BTreeMap::new();
         let mut consumed_cycles_total_by_use_case_as_counters = BTreeMap::new();
 
@@ -474,7 +473,6 @@ impl ReplicatedStateMetrics {
                 | Some(ExecutionTask::OnLowWasmMemory)
                 | None => {}
             }
-            consumed_cycles_total += canister.system_state.canister_metrics().consumed_cycles();
             join_consumed_cycles_by_use_case(
                 &mut consumed_cycles_total_by_use_case,
                 canister
@@ -557,12 +555,6 @@ impl ReplicatedStateMetrics {
         self.current_heap_delta
             .set(state.metadata.heap_delta_estimate.get() as i64);
 
-        // Add the consumed cycles by canisters that were deleted.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_by_deleted_canisters();
-
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
             state
@@ -578,34 +570,16 @@ impl ReplicatedStateMetrics {
                 .get_consumed_cycles_by_use_case(),
         );
 
-        // Add the consumed cycles in ecdsa outcalls.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_ecdsa_outcalls();
-
-        // Add the consumed cycles in http outcalls.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_http_outcalls();
-
-        // Add the remaining subnet-level use cases. Unlike ECDSA/HTTP outcalls
-        // and deleted canisters, these have no dedicated scalar field, but their
-        // getters read the by-use-case map. The canister-level use cases in that
-        // map originate from deleted canisters and are already covered by
-        // `get_consumed_cycles_by_deleted_canisters()`.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_schnorr_outcalls();
-        consumed_cycles_total += state.metadata.subnet_metrics.get_consumed_cycles_vetkd();
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_dropped_messages();
-
-        self.consumed_cycles.set(consumed_cycles_total.get() as f64);
+        // Read from the shared definition rather than re-folding, so the gauge cannot
+        // drift from the certified state tree. The per-use-case breakdowns below do
+        // still fold over the canisters, as no aggregate holds them.
+        self.consumed_cycles.set(
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters()
+                .get() as f64,
+        );
 
         self.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
         self.observe_consumed_cycles_by_use_case_as_counters(
