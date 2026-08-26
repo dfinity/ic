@@ -653,13 +653,15 @@ mod combine_shares {
         });
 
         match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
-            Err(VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
-                threshold: reported_threshold,
-                share_count,
-            }) => {
-                assert_eq!(reported_threshold, threshold);
-                // Only the shares that were not skipped are counted.
-                assert_eq!(share_count, threshold - 1);
+            Err(VetKdKeyShareCombinationError::CombinationError(msg)) => {
+                // Only the shares that were not skipped are counted as usable.
+                let expected = format!(
+                    "only {} of {} encrypted key shares were usable, fewer than the \
+                reconstruction threshold of {threshold}",
+                    threshold - 1,
+                    shares.len()
+                );
+                assert!(msg.contains(&expected), "unexpected message: {msg}");
             }
             Ok(_) => panic!("Unexpected success"),
             Err(e) => panic!("Unexpected error {:?}", e),
@@ -713,8 +715,8 @@ mod combine_shares {
 
         /*
          * Shares that fail to deserialize are skipped before combination, which would
-         * leave too few shares and yield UnsatisfiedReconstructionThreshold instead of
-         * exercising the `combine_valid_shares` fallback we want to test here. We avoid
+         * leave too few usable shares and fail with the "usable" CombinationError instead
+         * of exercising the `combine_valid_shares` fallback we want to test here. We avoid
          * that by using the structure of the share; it is c1/c2/c3 where c1 and c3 are in
          * G1 and c2 is G2, and all the values are just concatenated. So by swapping the
          * first and last 48 bytes we get a valid share encoding which is still invalid.
