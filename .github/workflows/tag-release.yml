@@ -1,6 +1,9 @@
 name: Publish Release
 
 permissions:
+  # `gh attestation verify` reads the attestations API with this workflow's
+  # GITHUB_TOKEN; an explicit permissions map zeroes everything unlisted.
+  attestations: read
   contents: write
 
 on:
@@ -54,6 +57,10 @@ jobs:
         with:
           commit: ${{ steps.commit.outputs.sha }}
           signer-workflow: dfinity/ic/.github/workflows/release-testing.yml
+          # release-* tags ship release-qualified commits only: accept
+          # attestations minted from release branches, not from a
+          # workflow_dispatch of release-testing.yml on some other ref.
+          source-ref-regex: refs/heads/(rc--|hotfix-|public-hotfix-).+
           out-dir: ${{ runner.temp }}/release-binaries
           gh-token: ${{ secrets.GITHUB_TOKEN }}
           files: |
@@ -110,6 +117,10 @@ jobs:
         with:
           commit: ${{ steps.commit.outputs.sha }}
           signer-workflow: dfinity/ic/.github/workflows/release-testing.yml
+          # release-* tags ship release-qualified commits only: accept
+          # attestations minted from release branches, not from a
+          # workflow_dispatch of release-testing.yml on some other ref.
+          source-ref-regex: refs/heads/(rc--|hotfix-|public-hotfix-).+
           out-dir: ${{ runner.temp }}/release-canisters
           gh-token: ${{ secrets.GITHUB_TOKEN }}
           files: ${{ steps.canister_list.outputs.files }}
