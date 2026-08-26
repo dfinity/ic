@@ -42,9 +42,7 @@ pub struct VmResources {
 }
 
 impl Default for VmResources {
-    /// Fallback for a `deployment.json` that omits the field. Nested system-tests
-    /// never rely on it: `create_setupos_config_image` always writes an explicit
-    /// `dev_vm_resources`, derived from the VM's size minus what HostOS reserves.
+    /// Fallback for a `deployment.json` that omits the field.
     fn default() -> Self {
         VmResources {
             memory: 16,

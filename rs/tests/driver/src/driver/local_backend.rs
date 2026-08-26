@@ -1830,14 +1830,7 @@ fn extract_image(src: &Path, dst: &Path, logger: &Logger) -> Result<()> {
 /// FAT filesystem that records its own length and ignores trailing bytes, so the
 /// padding is inert.
 ///
-/// A GPT-partitioned image is a different matter: its backup header lives in the
-/// *last* sector, so appending bytes moves the end of the disk out from under it.
-/// Such images are left alone. Nested tests attach one — the SetupOS installer
-/// disk (see `setup_and_start_nested_vms`) — and its partitions are laid out on
-/// 1 MiB boundaries (`ic-os/setupos/partitions.csv`), so it needs no padding
-/// anyway. If one ever does, that is a genuine conflict between the two
-/// constraints rather than something to paper over, so say so instead of
-/// corrupting the partition table.
+/// Unaligned GPT-partitioned images cannot be padded and return an error instead.
 fn pad_to_request_alignment(path: &Path) -> Result<()> {
     /// Upper bound on the host block size (covers 512- and 4096-byte sectors).
     const DISK_REQUEST_ALIGNMENT: u64 = 4096;
@@ -1874,20 +1867,17 @@ fn pad_to_request_alignment(path: &Path) -> Result<()> {
 /// Whether the disk image at `path` carries a GPT: its primary header sits in
 /// LBA 1 and starts with the `EFI PART` signature (UEFI spec 5.3.2).
 fn has_gpt_header(path: &Path) -> Result<bool> {
-    use std::io::{Read, Seek, SeekFrom};
+    use std::os::unix::fs::FileExt;
 
     /// LBA size assumed by the GPT signature's location. Every image the backend
     /// attaches uses 512-byte logical sectors.
     const LBA_SIZE: u64 = 512;
     const GPT_SIGNATURE: &[u8; 8] = b"EFI PART";
 
-    let mut file = std::fs::File::open(path)
+    let file = std::fs::File::open(path)
         .with_context(|| format!("opening {} to look for a GPT", path.display()))?;
-    if file.seek(SeekFrom::Start(LBA_SIZE)).is_err() {
-        return Ok(false);
-    }
     let mut signature = [0_u8; GPT_SIGNATURE.len()];
-    match file.read_exact(&mut signature) {
+    match file.read_exact_at(&mut signature, LBA_SIZE) {
         Ok(()) => Ok(&signature == GPT_SIGNATURE),
         // An image shorter than two sectors cannot hold a GPT.
         Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),

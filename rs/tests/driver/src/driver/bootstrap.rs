@@ -489,13 +489,6 @@ pub fn setup_and_start_nested_vms(
                     .context("Setting up baremetal instance failed");
             }
 
-            // Attach the SetupOS image and the config image, then boot. The VM's
-            // *primary* disk is the all-zero install target
-            // (`get_resource_request_for_nested_nodes`), so it has nothing
-            // bootable on it and the firmware falls through to SetupOS; once
-            // SetupOS has written HostOS onto the primary disk and created its
-            // `IC-OS` UEFI boot entry, that entry wins and the VM comes up as
-            // HostOS.
             match SystemTestBackend::read_attribute(&t_env) {
                 SystemTestBackend::Farm => {
                     let config_image_spec = AttachImageSpec::new(t_farm.upload_file(

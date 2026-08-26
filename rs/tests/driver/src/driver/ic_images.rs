@@ -302,12 +302,7 @@ pub fn get_setupos_img_sha256() -> String {
 }
 
 /// Get the all-zero disk image a nested node uses as its primary disk from the
-/// environment.
-///
-/// This is the *install target*: the nested VM boots SetupOS from an attached
-/// disk, which writes HostOS onto this one. The Farm variables are only set by
-/// `run_systest.sh` when it uploads the image, which it does not do under the
-/// Local backend -- hence the Farm/Local split rather than one unconditional URL.
+/// environment. SetupOS installs HostOS onto this disk.
 pub fn get_empty_disk_image(env: &TestEnv) -> Result<DiskImage> {
     match SystemTestBackend::read_attribute(env) {
         SystemTestBackend::Farm => {

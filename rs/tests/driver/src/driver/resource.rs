@@ -32,18 +32,10 @@ const DEFAULT_VM_RESOURCES: VmResources = VmResources {
 };
 
 pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(8);
-/// Memory for a nested VM, out of which the nested GuestOS gets what is left
-/// after two independent reservations: the driver takes
-/// [`HOSTOS_MEMORY_RESERVED_GIB`] (8) off for HostOS when it writes
-/// `dev_vm_resources.memory` into the SetupOS `deployment.json`, and HostOS then
-/// takes another 4 off for the upgrade VM (`UPGRADE_VM_MEMORY_GIB` in
-/// `rs/ic_os/os_tools/guest_vm_runner/src/guest_vm_config.rs`).
-///
-/// So 16 GiB leaves the GuestOS [`DEFAULT_MEMORY_KIB_PER_VM`] (4 GiB), the same
-/// as every other node VM in a test: a nested node runs the same replica, and
-/// sizing it larger than its unnested peers only made nested tests harder to fit
-/// on one host. Tests that need more say so with `NestedNodes::with_resource_overrides`
-/// (see `rs/tests/nested/nns_recovery`).
+/// Allocates 16 GiB so the nested GuestOS retains the standard 4 GiB
+/// ([`DEFAULT_MEMORY_KIB_PER_VM`]) after the two host deductions: 8 GiB for
+/// HostOS ([`HOSTOS_MEMORY_RESERVED_GIB`]) and 4 GiB for the upgrade VM
+/// (`UPGRADE_VM_MEMORY_GIB` in `rs/ic_os/os_tools/guest_vm_runner/src/guest_vm_config.rs`).
 pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(16 * 1024 * 1024); // 16GiB
 const DEFAULT_NESTED_VM_RESOURCES: VmResources = VmResources {
     vcpus: HOSTOS_VCPUS_PER_VM,
@@ -246,9 +238,6 @@ pub fn get_resource_request_for_nested_nodes(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    // The primary disk is the install target: the nested VM boots SetupOS from an
-    // attached disk (see `setup_and_start_nested_vms`), which writes HostOS onto
-    // this one.
     let mut res_req = ResourceRequest::new(get_empty_disk_image(test_env)?);
     let group_setup = GroupSetup::read_attribute(test_env);
     let group_resource_overrides = group_setup.vm_resource_overrides;

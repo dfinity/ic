@@ -8,15 +8,6 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
 source /opt/ic/bin/functions.sh
 
-# Needs a reachable NTP source, and specifically one of the NTS servers:
-# `chrony.conf` pairs 14 NTS servers with two plain pool servers, and chrony's
-# `authselectmode` defaults to `mix`, which marks the authenticated sources
-# `require`d as soon as both kinds are configured -- so the clock is only ever
-# synchronized from an NTS server. A hermetic test environment therefore cannot
-# satisfy this check by standing up its own NTP server, however correct: it would
-# have to serve NTS under one of those 14 hostnames, with a certificate the guest
-# trusts. Hence the `ic.setupos.run_checks` gate in `main`, as for the other checks
-# that need connectivity. Test VMs take their clock from the hypervisor anyway.
 function check_ntp() {
     echo "* Checking Chrony status..."
 
@@ -51,6 +42,8 @@ main() {
     if check_cmdline_var ic.setupos.run_checks; then
         check_ntp
     else
+        # NTP is not available in test environments; test VMs take their clock
+        # from the hypervisor.
         echo "* NTP synchronization check skipped by request via kernel command line"
     fi
     set_hwclock_utc
