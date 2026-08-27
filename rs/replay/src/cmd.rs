@@ -47,7 +47,7 @@ pub struct ReplayToolArgs {
     pub skip_prompts: bool,
 
     /// Persist the replayed state by creating a checkpoint of it. Without this flag
-    /// the replay leaves the state on disk untouched, so it can be re-run as often as
+    /// the replayed tip is not persisted, so the replay can be re-run as often as
     /// needed; pass it once the replayed state should be committed.
     #[clap(long)]
     pub create_checkpoint: bool,
