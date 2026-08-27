@@ -12,6 +12,7 @@ use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
+use crate::runtime::CanisterRuntime;
 use crate::state::automatic_deposits::{AutomaticDeposits, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
@@ -799,11 +800,9 @@ where
     })
 }
 
-pub async fn lazy_call_ecdsa_public_key_with_chain_code() -> (PublicKey, [u8; 32]) {
-    use ic_cdk_management_canister::{
-        EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, ecdsa_public_key,
-    };
-
+pub async fn lazy_call_ecdsa_public_key_with_chain_code<R: CanisterRuntime>(
+    runtime: &R,
+) -> (PublicKey, [u8; 32]) {
     fn to_public_key_and_chain_code(response: &EcdsaPublicKeyResult) -> (PublicKey, [u8; 32]) {
         let public_key = PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
             ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
@@ -823,29 +822,26 @@ pub async fn lazy_call_ecdsa_public_key_with_chain_code() -> (PublicKey, [u8; 32
     }
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
     log!(DEBUG, "Fetching the ECDSA public key {key_name}");
-    let response = ecdsa_public_key(&EcdsaPublicKeyArgs {
-        canister_id: None,
-        derivation_path: crate::MAIN_DERIVATION_PATH
-            .into_iter()
-            .map(|x| x.to_vec())
-            .collect(),
-        key_id: EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: key_name,
-        },
-    })
-    .await
-    .unwrap_or_else(|err| ic_cdk::trap(format!("failed to get minter's public key: {err}")));
+    let response = runtime
+        .ecdsa_public_key(
+            key_name,
+            crate::MAIN_DERIVATION_PATH
+                .into_iter()
+                .map(|x| x.to_vec())
+                .collect(),
+        )
+        .await
+        .unwrap_or_else(|err| ic_cdk::trap(format!("failed to get minter's public key: {err}")));
     mutate_state(|s| s.ecdsa_public_key = Some(response.clone()));
     to_public_key_and_chain_code(&response)
 }
 
-pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
-    lazy_call_ecdsa_public_key_with_chain_code().await.0
+pub async fn lazy_call_ecdsa_public_key<R: CanisterRuntime>(runtime: &R) -> PublicKey {
+    lazy_call_ecdsa_public_key_with_chain_code(runtime).await.0
 }
 
-pub async fn minter_address() -> Address {
-    ecdsa_public_key_to_address(&lazy_call_ecdsa_public_key().await)
+pub async fn minter_address<R: CanisterRuntime>(runtime: &R) -> Address {
+    ecdsa_public_key_to_address(&lazy_call_ecdsa_public_key(runtime).await)
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -986,4 +982,5 @@ pub enum TaskType {
     BalanceScan,
     SweeperFunding,
     SweeperSend,
+    SweeperEnqueue,
 }

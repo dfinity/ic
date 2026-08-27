@@ -6,6 +6,7 @@ use crate::{
     checked_amount::CheckedAmountOf,
     eth_rpc::Hash,
     numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas},
+    runtime::CanisterRuntime,
 };
 use ethnum::u256;
 use ic_ethereum_types::Address;
@@ -81,14 +82,18 @@ impl Authorization {
         Hash(ic_sha3::Keccak256::hash(bytes))
     }
 
-    pub async fn sign(self, derivation_path: Vec<ByteBuf>) -> Result<SignedAuthorization, String> {
+    pub async fn sign<R: CanisterRuntime>(
+        self,
+        derivation_path: Vec<ByteBuf>,
+        runtime: &R,
+    ) -> Result<SignedAuthorization, String> {
         if self.chain_id == 0 {
             return Err(
                 "BUG: EIP-7702 authorization chain_id must be set explicitly and never 0"
                     .to_string(),
             );
         }
-        let signature = super::sign_digest(&self.hash(), &derivation_path).await?;
+        let signature = super::sign_digest(&self.hash(), &derivation_path, runtime).await?;
         Ok(SignedAuthorization {
             chain_id: self.chain_id,
             delegate: self.delegate,

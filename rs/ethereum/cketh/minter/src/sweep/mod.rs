@@ -9,11 +9,15 @@
 //! `fetch_finalized_receipts`), but signing with the sweeper derivation path (`[3]`) and reading
 //! the sweeper address' own transaction count.
 
+#[cfg(test)]
+mod tests;
+
 use crate::{
     deposit_address::sweeper_derivation_path,
     guard::TimerGuard,
     logs::{DEBUG, INFO},
     numeric::{GasAmount, TransactionCount},
+    runtime::CanisterRuntime,
     state::{
         State, TaskType,
         audit::{EventType, process_event},
@@ -39,7 +43,22 @@ const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
 
-pub async fn process_sweeper_transactions<T: TimeProvider>(time_provider: T) {
+/// Turns the deposits the balance scan queued into the sweep requests that
+/// [`process_sweeper_transactions`] prices, signs, sends and finalizes.
+pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(_runtime: &R) {
+    let _guard = match TimerGuard::new(TaskType::SweeperEnqueue) {
+        Ok(guard) => guard,
+        Err(e) => {
+            log!(
+                DEBUG,
+                "Failed retrieving timer guard to create pending sweeper requests: {e:?}",
+            );
+            return;
+        }
+    };
+}
+
+pub async fn process_sweeper_transactions<R: CanisterRuntime>(runtime: R) {
     let _guard = match TimerGuard::new(TaskType::SweeperSend) {
         Ok(guard) => guard,
         Err(e) => {
@@ -63,7 +82,7 @@ pub async fn process_sweeper_transactions<T: TimeProvider>(time_provider: T) {
         return;
     };
 
-    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate(&time_provider).await {
+    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate(&runtime).await {
         Some(gas_fee_estimate) => gas_fee_estimate,
         None => {
             // The withdrawal task refreshes the same estimate under a shared guard and runs first
@@ -74,27 +93,27 @@ pub async fn process_sweeper_transactions<T: TimeProvider>(time_provider: T) {
                 INFO,
                 "[process_sweeper_transactions]: failed retrieving gas fee estimate, retrying",
             );
-            schedule_retry(time_provider);
+            schedule_retry(runtime);
             return;
         }
     };
 
     let latest_transaction_count = latest_transaction_count(sender).await;
-    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate, &time_provider).await;
-    create_transactions_batch(&gas_fee_estimate, &time_provider);
-    sign_transactions_batch(&time_provider).await;
+    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate, &runtime).await;
+    create_transactions_batch(&gas_fee_estimate, &runtime);
+    sign_transactions_batch(&runtime).await;
     send_transactions_batch(sender, latest_transaction_count).await;
-    finalize_transactions_batch(sender, &time_provider).await;
+    finalize_transactions_batch(sender, &runtime).await;
 
     if read_state(|s| s.automatic_deposits.has_pending_sweeps()) {
-        schedule_retry(time_provider);
+        schedule_retry(runtime);
     }
 }
 
-fn schedule_retry<T: TimeProvider>(time_provider: T) {
+fn schedule_retry<R: CanisterRuntime>(runtime: R) {
     ic_cdk_timers::set_timer(
         crate::PROCESS_SWEEPER_TRANSACTIONS_RETRY_INTERVAL,
-        async move { process_sweeper_transactions(time_provider).await },
+        async move { process_sweeper_transactions(runtime).await },
     );
 }
 
@@ -185,7 +204,7 @@ fn create_transactions_batch<T: TimeProvider>(
     }
 }
 
-async fn sign_transactions_batch<T: TimeProvider>(time_provider: &T) {
+async fn sign_transactions_batch<R: CanisterRuntime>(runtime: &R) {
     let transactions_batch: Vec<_> = read_state(|s| {
         s.automatic_deposits
             .sweep_transactions_to_sign_batch(SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE)
@@ -196,7 +215,7 @@ async fn sign_transactions_batch<T: TimeProvider>(time_provider: &T) {
             .map(|(sweep_id, tx)| async move {
                 (
                     sweep_id,
-                    crate::tx::sign(tx, sweeper_derivation_path()).await,
+                    crate::tx::sign(tx, sweeper_derivation_path(), runtime).await,
                 )
             }),
     )
@@ -210,7 +229,7 @@ async fn sign_transactions_batch<T: TimeProvider>(time_provider: &T) {
                         sweep_id,
                         transaction,
                     },
-                    time_provider,
+                    runtime,
                 )
             }),
             Err(e) => log!(
