@@ -1,20 +1,310 @@
 use super::{
-    MAX_DEPOSITS_PER_SWEEP, PreparedDeposit, SweepBatch, attested_addresses,
-    delegation_authorization, prepared_deposits, sweep_batches_by_token,
+    MAX_DEPOSITS_PER_SWEEP, PreparedDeposit, SweepBatch, SweepContext, attested_addresses,
+    delegation_authorization, enqueue_token_sweep, prepared_deposits, sweep_batches_by_token,
 };
-use crate::deposit_address::DepositAddress;
-use crate::numeric::{BlockNumber, Erc20Value, TransactionNonce};
-use crate::state::State;
+use crate::deposit_address::{DepositAddress, DepositAddressSchema, deposit_derivation_path};
+use crate::eth_rpc::Hash;
+use crate::numeric::{BlockNumber, Erc20Value, TransactionNonce, WeiPerGas};
 use crate::state::audit::{EventType, apply_state_transition};
 use crate::state::automatic_deposits::SweepTarget;
 use crate::state::event::AutomaticDeposit;
-use crate::state::transactions::{SweepId, SweptDeposit};
-use crate::test_fixtures::{deposit_helper, state_with_deposit_helper, transaction_signature};
-use crate::tx::SignedAuthorization;
+use crate::state::transactions::{SweepId, SweepRequest, SweptDeposit};
+use crate::state::{State, read_state};
+use crate::test_fixtures::{
+    deposit_helper, init_state, state_with_deposit_helper, transaction_signature,
+};
+use crate::tx::{EcdsaSigner, GasFeeEstimate, SignedAuthorization, TransactionSignature};
 use candid::Principal;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
+use serde_bytes::ByteBuf;
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+
+mod enqueue_token_sweep {
+    use super::{
+        CREATED_AT, MockSigner, account, attestation_of, authorization_of, context,
+        deposit_address, enqueue_token_sweep, enqueued_sweep, enqueued_sweeps, gas_fee_estimate,
+        install, queued_state, queued_targets_len, sweeper_contract, transaction_signature, usdc,
+    };
+    use crate::numeric::{Wei, WeiPerGas};
+    use crate::state::audit::{EventType, apply_state_transition};
+    use crate::state::read_state;
+    use crate::state::transactions::{SweepId, SweepRequest, SweptDeposit};
+    use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch};
+    use crate::test_fixtures::{init_state, initial_state};
+    use crate::tx::GasFeeEstimate;
+    use icrc_ledger_types::icrc1::account::Account;
+
+    #[tokio::test]
+    async fn should_sweep_every_queued_deposit_of_the_token() {
+        let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
+
+        enqueue_token_sweep((usdc(), targets), &context(MockSigner::default())).await;
+
+        let sweep = enqueued_sweep();
+        assert_eq!(sweep.id, SweepId(0));
+        assert_eq!(sweep.destination, sweeper_contract());
+        assert_eq!(sweep.amount, Wei::ZERO, "an ERC-20 sweep moves no ETH");
+        assert_eq!(sweep.created_at, CREATED_AT);
+        assert_eq!(
+            sweep.deposits,
+            vec![
+                SweptDeposit {
+                    account: account(0),
+                    erc20_contract_address: usdc(),
+                    address: deposit_address(0),
+                },
+                SweptDeposit {
+                    account: account(1),
+                    erc20_contract_address: usdc(),
+                    address: deposit_address(1),
+                },
+            ]
+        );
+        assert_eq!(
+            sweep.data,
+            encode_sweep_erc20_batch(
+                &[
+                    SweepItem {
+                        deposit: deposit_address(0),
+                        account: account(0),
+                        attestation: transaction_signature(),
+                    },
+                    SweepItem {
+                        deposit: deposit_address(1),
+                        account: account(1),
+                        attestation: transaction_signature(),
+                    },
+                ],
+                &[usdc()],
+            ),
+            "every attested address must reach the call data carrying its own attestation"
+        );
+    }
+
+    #[tokio::test]
+    async fn should_sign_over_the_attestation_and_the_authorization_of_every_address() {
+        let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
+        let context = context(MockSigner::default());
+
+        enqueue_token_sweep((usdc(), targets), &context).await;
+
+        // What the signer is asked for is the sweep's whole cryptographic cost: one attestation
+        // digest per account, and one authorization tuple per deposit address.
+        let signed = context.signer.signed.borrow().clone();
+        assert_eq!(signed.len(), 4);
+        for expected in [
+            attestation_of(0),
+            attestation_of(1),
+            authorization_of(0),
+            authorization_of(1),
+        ] {
+            assert!(
+                signed.contains(&expected),
+                "the signer was never asked for {expected:?}, only for {signed:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn should_record_the_attestation_it_signed() {
+        let targets = install(queued_state(&[(0, usdc())]));
+
+        enqueue_token_sweep((usdc(), targets), &context(MockSigner::default())).await;
+
+        // An attestation outlives the sweep that paid for it, so it is recorded rather than
+        // recomputed: this is what lets the next sweep of the address skip the signature.
+        assert_eq!(
+            read_state(|s| s.attestation(account(0)).cloned()),
+            Some(transaction_signature())
+        );
+    }
+
+    #[tokio::test]
+    async fn should_reuse_a_stored_attestation_instead_of_signing_it_again() {
+        let mut state = queued_state(&[(0, usdc())]);
+        let request = state
+            .attestation_request(account(0))
+            .expect("BUG: the deposit helper is configured");
+        apply_state_transition(
+            &mut state,
+            &EventType::AttestedDepositAddress {
+                request,
+                signature: transaction_signature(),
+            },
+        );
+        let targets = install(state);
+        let context = context(MockSigner::default());
+
+        enqueue_token_sweep((usdc(), targets), &context).await;
+
+        assert_eq!(
+            context.signer.signed.borrow().clone(),
+            vec![authorization_of(0)],
+            "only the authorization should have cost a signature"
+        );
+        assert_eq!(swept_accounts(&enqueued_sweep()), vec![account(0)]);
+    }
+
+    #[tokio::test]
+    async fn should_take_the_deposits_it_sweeps_out_of_the_queue() {
+        let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
+
+        enqueue_token_sweep((usdc(), targets), &context(MockSigner::default())).await;
+
+        // A deposit gets one sweep and no more: taken by this one, it is no longer a target the
+        // next tick would sweep again. The entry itself stays, attributed to the sweep, so that its
+        // outcome can be applied to it.
+        assert_eq!(queued_targets_len(), 0);
+        assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 2);
+    }
+
+    #[tokio::test]
+    async fn should_advance_the_next_sweep_id() {
+        let targets = install(queued_state(&[(0, usdc())]));
+
+        enqueue_token_sweep((usdc(), targets), &context(MockSigner::default())).await;
+
+        // The next token's sweep in the same tick reads this, so it must not reuse the id.
+        assert_eq!(read_state(|s| s.next_sweep_id), SweepId(1));
+    }
+
+    #[tokio::test]
+    async fn should_skip_the_token_when_no_deposit_helper_is_configured() {
+        let targets = install(queued_state(&[(0, usdc())]));
+        // Without the helper the attestation preimage is unknown, so nothing can be attested.
+        init_state(initial_state());
+
+        enqueue_token_sweep((usdc(), targets), &context(MockSigner::default())).await;
+
+        assert_eq!(enqueued_sweeps(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn should_leave_out_a_deposit_whose_attestation_could_not_be_signed() {
+        let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
+
+        enqueue_token_sweep(
+            (usdc(), targets),
+            &context(MockSigner::refusing(&[attestation_of(0)])),
+        )
+        .await;
+
+        assert_eq!(swept_accounts(&enqueued_sweep()), vec![account(1)]);
+    }
+
+    #[tokio::test]
+    async fn should_leave_out_a_deposit_whose_authorization_could_not_be_signed() {
+        let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
+
+        enqueue_token_sweep(
+            (usdc(), targets),
+            &context(MockSigner::refusing(&[authorization_of(0)])),
+        )
+        .await;
+
+        // solc guards the delegate call with `extcodesize`, so sweeping an address whose code was
+        // never installed would revert the whole batch.
+        assert_eq!(swept_accounts(&enqueued_sweep()), vec![account(1)]);
+    }
+
+    #[tokio::test]
+    async fn should_still_record_the_attestation_of_a_deposit_it_could_not_authorize() {
+        let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
+
+        enqueue_token_sweep(
+            (usdc(), targets),
+            &context(MockSigner::refusing(&[authorization_of(0)])),
+        )
+        .await;
+
+        // Account 0 drops out of this sweep, but its attestation was signed and is good forever:
+        // losing it would make the next sweep pay for it again.
+        assert_eq!(
+            read_state(|s| s.attestation(account(0)).cloned()),
+            Some(transaction_signature())
+        );
+    }
+
+    #[tokio::test]
+    async fn should_not_authorize_an_address_it_could_not_attest() {
+        let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
+        let context = context(MockSigner::refusing(&[attestation_of(0)]));
+
+        enqueue_token_sweep((usdc(), targets), &context).await;
+
+        // Account 0 drops out of the sweep either way, so authorizing it would spend a
+        // threshold-ECDSA signature on nothing.
+        assert!(
+            !context
+                .signer
+                .signed
+                .borrow()
+                .contains(&authorization_of(0)),
+            "an unattested address must not cost an authorization"
+        );
+    }
+
+    #[tokio::test]
+    async fn should_skip_the_token_when_nothing_could_be_signed_for() {
+        let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
+
+        enqueue_token_sweep(
+            (usdc(), targets),
+            &context(MockSigner::refusing(&[
+                attestation_of(0),
+                attestation_of(1),
+            ])),
+        )
+        .await;
+
+        assert_eq!(enqueued_sweeps(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn should_skip_the_token_when_the_sweep_would_prepay_above_the_ceiling() {
+        let targets = install(queued_state(&[(0, usdc())]));
+        let mut context = context(MockSigner::default());
+        // A fee this high puts the prepayment far above the low-water mark the sweeper address is
+        // kept above, so this is a sweep the minter could not pay for.
+        context.gas_fee_estimate = GasFeeEstimate {
+            base_fee_per_gas: WeiPerGas::from(10_000_000_000_000_u64),
+            max_priority_fee_per_gas: WeiPerGas::from(1_000_000_000_u64),
+        };
+
+        enqueue_token_sweep((usdc(), targets), &context).await;
+
+        // The deposits stay queued for the next tick, at whatever the fee is then.
+        assert_eq!(enqueued_sweeps(), vec![]);
+        assert_eq!(queued_targets_len(), 1);
+    }
+
+    #[tokio::test]
+    async fn should_price_the_sweep_at_the_gas_estimate() {
+        let targets = install(queued_state(&[(0, usdc())]));
+
+        enqueue_token_sweep((usdc(), targets), &context(MockSigner::default())).await;
+
+        let sweep = enqueued_sweep();
+        assert_eq!(
+            sweep.max_transaction_fee,
+            gas_fee_estimate()
+                .to_price(sweep.gas_limit())
+                .max_transaction_fee()
+        );
+        assert_ne!(sweep.max_transaction_fee, Wei::ZERO);
+    }
+
+    /// The accounts a sweep names, in the order its call data sweeps them.
+    fn swept_accounts(sweep: &SweepRequest) -> Vec<Account> {
+        sweep
+            .deposits
+            .iter()
+            .map(|deposit| deposit.account)
+            .collect()
+    }
+}
 
 mod sweep_batch {
     use super::{
@@ -407,4 +697,108 @@ fn usdc() -> Address {
 
 fn usdt() -> Address {
     Address::new([0xbb; 20])
+}
+
+/// The IC time the sweeps a test enqueues are created at.
+const CREATED_AT: u64 = 1_699_527_697_000_000_000;
+
+/// A [`SweepContext`] over `signer`, at a gas fee the ceiling does not refuse.
+fn context<S>(signer: S) -> SweepContext<S> {
+    SweepContext {
+        signer,
+        sweeper_contract: sweeper_contract(),
+        gas_fee_estimate: gas_fee_estimate(),
+        created_at: CREATED_AT,
+    }
+}
+
+fn gas_fee_estimate() -> GasFeeEstimate {
+    GasFeeEstimate {
+        base_fee_per_gas: WeiPerGas::from(10_000_000_000_u64),
+        max_priority_fee_per_gas: WeiPerGas::from(1_000_000_000_u64),
+    }
+}
+
+/// Install `state` so `read_state` sees it, and hand back its sweep queue — which is what the
+/// enqueue path is given.
+fn install(state: State) -> Vec<SweepTarget> {
+    let targets = state.automatic_deposits.sweep_targets_iter().collect();
+    init_state(state);
+    targets
+}
+
+/// How many queued deposits are still sweep targets, i.e. what the next tick would batch.
+fn queued_targets_len() -> usize {
+    read_state(|s| s.automatic_deposits.sweep_targets_iter().count())
+}
+
+/// The sweeps the enqueue path has put on the sweeper pipeline.
+fn enqueued_sweeps() -> Vec<SweepRequest> {
+    read_state(|s| s.sweeper_transactions.requests_iter().cloned().collect())
+}
+
+/// The single sweep the enqueue path has put on the sweeper pipeline.
+fn enqueued_sweep() -> SweepRequest {
+    let mut sweeps = enqueued_sweeps();
+    assert_eq!(sweeps.len(), 1, "expected exactly one sweep: {sweeps:?}");
+    sweeps.remove(0)
+}
+
+/// What the signer is asked for when the account at `index` attests to owning its deposit address.
+fn attestation_of(index: u8) -> Signable {
+    let request = read_state(|s| s.attestation_request(account(index)))
+        .expect("BUG: the deposit helper must be configured");
+    (request.digest(), derivation_path(index))
+}
+
+/// What the signer is asked for when the deposit address of `index` delegates its code to the
+/// sweeper contract. Every address signs the same tuple — nonce 0 on the one chain and delegate —
+/// so only the derivation path tells two of these apart.
+fn authorization_of(index: u8) -> Signable {
+    let chain_id = read_state(State::ethereum_network).chain_id();
+    (
+        delegation_authorization(chain_id, sweeper_contract()).hash(),
+        derivation_path(index),
+    )
+}
+
+fn derivation_path(index: u8) -> Vec<ByteBuf> {
+    deposit_derivation_path(DepositAddressSchema::CkErc20, &account(index))
+}
+
+/// A digest and the derivation path it is signed under: all an [`EcdsaSigner`] is told, and so all a
+/// [`MockSigner`] can decide on.
+type Signable = (Hash, Vec<ByteBuf>);
+
+/// An [`EcdsaSigner`] that signs every digest as [`transaction_signature`], except the ones it is
+/// told to refuse, and records everything it was asked to sign.
+#[derive(Default)]
+struct MockSigner {
+    refused: Vec<Signable>,
+    signed: RefCell<Vec<Signable>>,
+}
+
+impl MockSigner {
+    /// A signer whose threshold-ECDSA call fails for exactly the given signables.
+    fn refusing(refused: &[Signable]) -> Self {
+        Self {
+            refused: refused.to_vec(),
+            signed: RefCell::default(),
+        }
+    }
+}
+
+impl EcdsaSigner for MockSigner {
+    async fn sign_digest(
+        &self,
+        digest: &Hash,
+        derivation_path: &[ByteBuf],
+    ) -> Result<TransactionSignature, String> {
+        let signable = (*digest, derivation_path.to_vec());
+        self.signed.borrow_mut().push(signable.clone());
+        if self.refused.contains(&signable) {
+            return Err(format!("no signature for {signable:?}"));
+        }
+        Ok(transaction_signature())
+    }
 }
