@@ -307,8 +307,8 @@ fn canonical_encoding_stream_header_v26() {
 /// Starting with `V29`, the `Instructions` (80B) and
 /// `RequestAndResponseTransmission` (20B) use case entries are no longer added
 /// on top of the deleted canisters scalar (fixing the double counting), while
-/// the cycles consumed by non-deleted canisters (50B, passed to
-/// `encode_subnet_metrics`) are added instead. Hence the expected value becomes
+/// the cycles consumed by non-deleted canisters (50B, folded into the stored
+/// aggregate by `SubnetMetrics::refresh_consumed_cycles`) are added instead. Hence the expected value becomes
 /// 0 (deleted) + 50B (HTTP) + 100B (ECDSA) + 50B (canisters) = 200B
 /// (`1B 0000002E90EDD000`).
 ///
@@ -344,8 +344,7 @@ fn canonical_encoding_subnet_metrics() {
 
         // From `V29` on the reported total is this stored aggregate: the subnet-level
         // total plus the part consumed by the canisters that still exist.
-        metrics.consumed_cycles_total_including_canisters =
-            metrics.consumed_cycles_total() + NominalCycles::new(50_000_000_000);
+        metrics.refresh_consumed_cycles(NominalCycles::new(50_000_000_000));
 
         let expected = if certification_version >= CertificationVersion::V29 {
             "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 2E 90 ED D0 00 01 00 03 19 10 68"

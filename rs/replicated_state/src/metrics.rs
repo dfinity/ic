@@ -577,7 +577,7 @@ impl ReplicatedStateMetrics {
             state
                 .metadata
                 .subnet_metrics
-                .consumed_cycles_total_including_canisters
+                .consumed_cycles_total_including_canisters()
                 .get() as f64,
         );
 

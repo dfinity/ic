@@ -1595,7 +1595,7 @@ fn consumed_cycles_total_is_the_same_across_a_restart() {
     assert_eq!(
         live.metadata
             .subnet_metrics
-            .consumed_cycles_total_including_canisters,
+            .consumed_cycles_total_including_canisters(),
         subnet_level + consumed_by_canister
     );
 

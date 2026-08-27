@@ -2786,7 +2786,7 @@ fn consumed_cycles_total_calculates_the_right_amount() {
 
 /// The `replicated_state_consumed_cycles_since_replica_started` gauge is set in
 /// `ReplicatedStateMetrics::observe` from
-/// [`SubnetMetrics::consumed_cycles_total_including_canisters`]. This test
+/// [`SubnetMetrics::consumed_cycles_total_including_canisters()`]. This test
 /// exercises every subnet-level use case that contributes to the total, so that
 /// omitting any of them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use
 /// cases once were) would change the reported value and fail the assertion, plus
@@ -2831,10 +2831,9 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         consumed_cycles_by_use_case,
         ..Default::default()
     };
-    // The stored aggregate the gauge reads, as `ReplicatedState::refresh_consumed_cycles`
-    // computes it: the subnet-level total plus the canisters' part (64).
-    subnet_metrics.consumed_cycles_total_including_canisters =
-        subnet_metrics.consumed_cycles_total() + NominalCycles::new(64);
+    // The stored aggregate the gauge reads: the subnet-level total plus the
+    // canisters' part (64).
+    subnet_metrics.refresh_consumed_cycles(NominalCycles::new(64));
 
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
     state.metadata.subnet_metrics = subnet_metrics;
