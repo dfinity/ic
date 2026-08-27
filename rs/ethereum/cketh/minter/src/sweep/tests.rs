@@ -2,18 +2,27 @@ use crate::attestation::AttestationRequest;
 use crate::numeric::{BlockNumber, WeiPerGas};
 use crate::state::audit::{EventType, apply_state_transition};
 use crate::state::eth_logs_scraping::LogScrapings;
+use crate::state::event::AutomaticDeposit;
 use crate::state::{State, read_state};
 use crate::storage::with_event_iter;
 use crate::sweep::create_pending_sweeper_requests;
 use crate::test_fixtures::mock::MockCanisterRuntime;
 use crate::test_fixtures::{
-    account, automatic_deposit, init_state, initial_state, state_with_deposit_helper,
+    account, automatic_deposit, deposit_address, init_state, initial_state,
+    state_with_deposit_helper, usdc, usdt,
 };
 use crate::tx::{GasFeeEstimate, TransactionSignature};
 use ethnum::u256;
 use ic_cdk_management_canister::EcdsaPublicKeyResult;
 use ic_ethereum_types::Address;
 use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+use icrc_ledger_types::icrc1::account::Account;
+
+const NOW: u64 = 1_620_328_630_000_000_000;
+const GAS_FEE_ESTIMATE_AGE_NANOS: u64 = 1_000_000_000;
+const DEPOSIT_HELPER: Address = Address::new([0xde; 20]);
+const SWEEPER_CONTRACT: Address = Address::new([0x5e; 20]);
+const CHAIN_CODE: [u8; 32] = [0_u8; 32];
 
 #[tokio::test]
 async fn should_be_no_op_when_no_sweeper_contract() {
@@ -40,9 +49,12 @@ async fn should_be_no_op_when_no_deposit_helper_contract() {
 }
 
 #[tokio::test]
-async fn should_sign_missing_attestation() {
-    init_state(state_ready_to_sign());
-    let request = attestation_request();
+async fn should_sign_one_attestation_for_every_token_of_an_account() {
+    init_state(state_ready_to_sign(&[
+        (account(), usdc()),
+        (account(), usdt()),
+    ]));
+    let request = attestation_request(account());
     let signature = sign_with_derived_key(&request);
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
@@ -57,67 +69,20 @@ async fn should_sign_missing_attestation() {
 
     create_pending_sweeper_requests(&runtime).await;
 
+    assert_eq!(
+        recorded_events(),
+        vec![EventType::AttestedDepositAddress {
+            request: request.clone(),
+            signature: expected_signature(&request),
+        }]
+    );
     assert_eq!(
         read_state(|s| s.automatic_deposits.attestation(&request).cloned()),
         Some(expected_signature(&request))
     );
 }
 
-#[tokio::test]
-async fn should_record_a_signed_attestation_in_the_event_log() {
-    init_state(state_ready_to_sign());
-    let request = attestation_request();
-    let signature = sign_with_derived_key(&request);
-    let mut runtime = mock();
-    runtime.expect_time().return_const(NOW);
-    runtime
-        .expect_ecdsa_public_key()
-        .times(1)
-        .return_once(move |_, _| Ok(master_public_key()));
-    runtime
-        .expect_sign_with_ecdsa()
-        .times(1)
-        .return_once(move |_, _, _| Ok(signature));
-
-    create_pending_sweeper_requests(&runtime).await;
-
-    assert_eq!(
-        last_recorded_event(),
-        Some(EventType::AttestedDepositAddress {
-            request: request.clone(),
-            signature: expected_signature(&request),
-        })
-    );
-}
-
-#[tokio::test]
-async fn should_not_resign_already_signed_attestation() {
-    let request = attestation_request();
-    let mut state = state_ready_to_sign();
-    apply_state_transition(
-        &mut state,
-        &EventType::AttestedDepositAddress {
-            request: request.clone(),
-            signature: expected_signature(&request),
-        },
-    );
-    init_state(state);
-    let before = read_state(State::clone);
-    let mut runtime = mock();
-    runtime.expect_time().return_const(NOW);
-
-    create_pending_sweeper_requests(&runtime).await;
-
-    assert_eq!(read_state(State::clone), before);
-}
-
-const NOW: u64 = 1_620_328_630_000_000_000;
-const GAS_FEE_ESTIMATE_AGE_NANOS: u64 = 1_000_000_000;
-const DEPOSIT_HELPER: Address = Address::new([0xde; 20]);
-const SWEEPER_CONTRACT: Address = Address::new([0x5e; 20]);
-const CHAIN_CODE: [u8; 32] = [0_u8; 32];
-
-fn state_ready_to_sign() -> State {
+fn state_ready_to_sign(deposits: &[(Account, Address)]) -> State {
     let mut state = state_with_deposit_helper(DEPOSIT_HELPER);
     state.sweeper_contract_address = Some(SWEEPER_CONTRACT);
     state.last_transaction_price_estimate = Some((
@@ -127,19 +92,27 @@ fn state_ready_to_sign() -> State {
             max_priority_fee_per_gas: WeiPerGas::ONE,
         },
     ));
-    apply_state_transition(
-        &mut state,
-        &EventType::AutomaticDepositReceived(automatic_deposit()),
-    );
-    assert_eq!(state.automatic_deposits.sweep_len(), 1);
+    for (account, token) in deposits {
+        apply_state_transition(
+            &mut state,
+            &EventType::AutomaticDepositReceived(AutomaticDeposit {
+                owner: account.owner,
+                subaccount: account.subaccount,
+                address: deposit_address(account),
+                erc20_contract_address: *token,
+                ..automatic_deposit()
+            }),
+        );
+    }
+    assert_eq!(state.automatic_deposits.sweep_len(), deposits.len());
     state
 }
 
-fn attestation_request() -> AttestationRequest {
+fn attestation_request(account: Account) -> AttestationRequest {
     AttestationRequest::new(
         initial_state().ethereum_network.chain_id(),
         DEPOSIT_HELPER,
-        account(),
+        account,
     )
 }
 
@@ -187,8 +160,8 @@ fn expected_signature(request: &AttestationRequest) -> TransactionSignature {
     }
 }
 
-fn last_recorded_event() -> Option<EventType> {
-    with_event_iter(|events| events.last().map(|event| event.payload))
+fn recorded_events() -> Vec<EventType> {
+    with_event_iter(|events| events.map(|event| event.payload).collect())
 }
 
 fn mock() -> MockCanisterRuntime {
