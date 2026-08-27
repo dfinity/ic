@@ -74,9 +74,6 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         return;
     }
 
-    // Priced only once there is something to sweep: the estimate expires on this task's own
-    // interval, so refreshing it before the queue is known to be non-empty spends an
-    // `eth_feeHistory` outcall every tick that an idle minter has no use for.
     let Some(_gas_fee_estimate) = lazy_refresh_gas_fee_estimate(runtime).await else {
         log!(
             INFO,

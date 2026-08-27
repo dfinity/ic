@@ -38,8 +38,6 @@ async fn should_be_no_op_when_no_sweeper_contract() {
 
 #[tokio::test]
 async fn should_be_no_op_when_no_deposit_helper_contract() {
-    // Everything the earlier guards want, so that the run reaches the deposit helper: without a
-    // sweeper contract and a queued deposit it would return before ever reading the helper.
     let mut state = state_ready_to_sign(&[(account(), usdc())]);
     state.log_scrapings = LogScrapings::new(BlockNumber::ONE);
     init_state(state);
@@ -47,7 +45,6 @@ async fn should_be_no_op_when_no_deposit_helper_contract() {
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
 
-    // No signing expectation: getting past the helper would be an unexpected call and fail here.
     create_pending_sweeper_requests(&runtime).await;
 
     assert_eq!(read_state(State::clone), before);
@@ -60,8 +57,6 @@ async fn should_not_price_an_empty_sweep_queue() {
     init_state(state);
     let before = read_state(State::clone);
 
-    // No `expect_time`: refreshing the gas fee estimate reads the clock, so pricing a queue with
-    // nothing to sweep would be an unexpected call and fail here.
     create_pending_sweeper_requests(&mock()).await;
 
     assert_eq!(read_state(State::clone), before);
