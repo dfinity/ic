@@ -12,6 +12,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::attestation::{AttestationRequest, sign_attestation};
 use crate::{
     deposit_address::sweeper_derivation_path,
     guard::TimerGuard,
@@ -34,6 +35,7 @@ use crate::{
 use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
+use std::collections::BTreeSet;
 
 /// Gas limit of a sweep transaction. A fixed, conservative bound; a per-request estimate arrives
 /// with the real delegate sweep call.
@@ -81,13 +83,45 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
     }
 
     for (_token, targets) in batch_per_token {
-        let Some(_attestation_requests) = read_state(|s| s.attestation_requests(&targets)) else {
+        let Some(attestation_requests) = read_state(|s| s.attestation_requests(&targets)) else {
             log!(
                 DEBUG,
                 "[create_pending_sweeper_requests]: SKIPPING: no deposit helper with subaccount is configured"
             );
             return;
         };
+        sign_attestations_batch(attestation_requests, runtime).await;
+    }
+}
+
+async fn sign_attestations_batch<R: CanisterRuntime>(
+    requests: Vec<AttestationRequest>,
+    runtime: &R,
+) {
+    let requests_to_sign: BTreeSet<_> = read_state(|s| {
+        requests
+            .into_iter()
+            .filter(|request| s.automatic_deposits.attestation(request).is_none())
+            .collect()
+    });
+
+    let signing_results = join_all(requests_to_sign.into_iter().map(|request| async move {
+        (request.clone(), sign_attestation(&request, runtime).await)
+    }))
+    .await;
+
+    let mut errors = Vec::new();
+    for (request, signing_result) in signing_results {
+        match signing_result {
+            Ok(signature) => {
+                mutate_state(|s| s.automatic_deposits.record_attestation(request, signature));
+            }
+            Err(e) => errors.push((request, e)),
+        }
+    }
+
+    if !errors.is_empty() {
+        log!(INFO, "Errors encountered during signing: {errors:?}");
     }
 }
 

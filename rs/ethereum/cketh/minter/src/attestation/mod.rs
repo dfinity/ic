@@ -18,6 +18,7 @@ use crate::tx::{TransactionSignature, sign_digest};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use minicbor::{Decode, Encode};
+use serde_bytes::ByteBuf;
 
 /// Domain separator of the attestation preimage. Its first byte (`0x63`) cannot collide with any
 /// other preimage the minter's key signs: typed transactions start `0x00`-`0x04`, EIP-7702
@@ -68,6 +69,10 @@ impl AttestationRequest {
         &self.account
     }
 
+    pub fn derivation_path(&self) -> Vec<ByteBuf> {
+        deposit_derivation_path(DepositAddressSchema::CkErc20, &self.account)
+    }
+
     /// `"ck-deposit-owner" || chain_id || deposit_helper || principal || subaccount`, exactly what
     /// `abi.encodePacked` produces in `CkSweeperAttested._attestationDigest`. Every field is
     /// fixed-length, so no two requests share a preimage.
@@ -103,7 +108,7 @@ pub async fn sign_attestation<R: CanisterRuntime>(
 ) -> Result<TransactionSignature, String> {
     sign_digest(
         &request.digest(),
-        &deposit_derivation_path(DepositAddressSchema::CkErc20, &request.account),
+        &request.derivation_path(),
         runtime,
     )
     .await
