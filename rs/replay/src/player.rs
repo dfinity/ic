@@ -255,14 +255,27 @@ impl Player {
             // Use the replica version from the finalized tip in the pool.
             PoolReader::new(pool).get_finalized_tip().version().clone()
         } else {
-            // Without a consensus pool, the replica version must be given.
-            replica_version.unwrap_or_else(|| {
-                panic!(
-                    "No consensus pool found at {:?} and no replica version was given; \
-                     one of the two is required.",
-                    cfg.artifact_pool.consensus_pool_path
-                )
-            })
+            // Without a consensus pool there is no finalized tip to take the version from:
+            // use the one given on the command line, and otherwise the version the subnet
+            // runs according to the local registry. The latter is the same registry the
+            // pool-less extra batch is executed against, and consensus derives a block's
+            // version the very same way.
+            replica_version
+                .or_else(|| {
+                    lookup_replica_version(
+                        registry.as_ref(),
+                        subnet_id,
+                        &log,
+                        registry.get_latest_version(),
+                    )
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "No consensus pool found at {:?}, no replica version was given, and \
+                         the registry holds none for subnet {subnet_id}.",
+                        cfg.artifact_pool.consensus_pool_path
+                    )
+                })
         };
 
         Player::new_with_params(
