@@ -647,7 +647,7 @@ impl WasmtimeEmbedder {
             memories,
             &mut *store,
             self.log.clone(),
-            self.config.dirty_page_overhead,
+            self.config.page_overhead,
             subtract_instruction_counter,
         );
 
@@ -923,7 +923,6 @@ pub struct PageAccessResults {
     pub stable_mprotect_count: usize,
     pub stable_copy_page_count: usize,
     pub stable_sigsegv_handler_duration: Duration,
-    pub dmt_projected_message_cost: usize,
 }
 
 /// Encapsulates a Wasmtime instance on the Internet Computer.
@@ -1056,9 +1055,6 @@ impl WasmtimeInstance {
             let stable_sigsegv_handler_duration =
                 stable_tracker.metrics().sigsegv_handler_duration();
 
-            // total cost of the message if the DMT charges for all page accesses. Overwritten later.
-            let dmt_projected_page_cost = 0;
-
             Ok(PageAccessResults {
                 wasm_dirty_pages,
                 wasm_num_accessed_pages: wasm_tracker.num_accessed_pages(),
@@ -1082,7 +1078,6 @@ impl WasmtimeInstance {
                 stable_mprotect_count: stable_tracker.metrics().mprotect_count(),
                 stable_copy_page_count: stable_tracker.metrics().copy_page_count(),
                 stable_sigsegv_handler_duration,
-                dmt_projected_message_cost: dmt_projected_page_cost,
             })
         }
     }
@@ -1126,7 +1121,6 @@ impl WasmtimeInstance {
             stable_mprotect_count: res.stable_mprotect_count,
             stable_copy_page_count: res.stable_copy_page_count,
             stable_sigsegv_handler_duration: res.stable_sigsegv_handler_duration,
-            dmt_projected_message_cost: res.dmt_projected_message_cost,
         };
     }
 

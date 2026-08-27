@@ -374,11 +374,7 @@ mod tests {
             });
             subnet_metrics.threshold_signature_agreements =
                 BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
-            // The stored aggregate the tree reports from `V29` on, as
-            // `ReplicatedState::refresh_consumed_cycles` computes it. This fixture has
-            // no canisters, so it is just the subnet-level total.
-            subnet_metrics.consumed_cycles_total_including_canisters =
-                subnet_metrics.consumed_cycles_total();
+            subnet_metrics.refresh_consumed_cycles(NominalCycles::zero());
 
             state.metadata.subnet_metrics = subnet_metrics;
 

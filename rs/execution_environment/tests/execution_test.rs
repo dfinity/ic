@@ -2995,12 +2995,12 @@ fn subnet_metrics_reports_the_subnets_metrics() {
     // prepaid for a maximum-size response, and the prepayment counts as consumed
     // until the unused part is refunded, so the reported total is in fact *above*
     // the total once the call has completed.
-    let consumed_before = metrics_before.consumed_cycles_total_including_canisters;
+    let consumed_before = metrics_before.consumed_cycles_total_including_canisters();
     let consumed_now = env
         .get_latest_state()
         .metadata
         .subnet_metrics
-        .consumed_cycles_total_including_canisters;
+        .consumed_cycles_total_including_canisters();
     assert_gt!(consumed_before.get(), 0);
     assert_gt!(consumed_now.get(), consumed_before.get());
     assert_gt!(
@@ -3098,7 +3098,7 @@ fn subnet_metrics_consumed_cycles_total_is_the_committed_aggregate() {
             state
                 .metadata
                 .subnet_metrics
-                .consumed_cycles_total_including_canisters,
+                .consumed_cycles_total_including_canisters(),
             state
                 .canister_state(&victim)
                 .expect("the victim must still exist at this point")
@@ -3117,7 +3117,7 @@ fn subnet_metrics_consumed_cycles_total_is_the_committed_aggregate() {
         .get_latest_state()
         .metadata
         .subnet_metrics
-        .consumed_cycles_total_including_canisters;
+        .consumed_cycles_total_including_canisters();
 
     // The reported total is a committed snapshot, so it cannot predate the state
     // the call started from.

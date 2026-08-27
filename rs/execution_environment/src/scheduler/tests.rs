@@ -815,7 +815,7 @@ fn zero_instruction_overhead_config() -> SchedulerConfig {
         instruction_overhead_per_execution: NumInstructions::from(0),
         instruction_overhead_per_canister: NumInstructions::from(0),
         instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-        dirty_page_overhead: NumInstructions::from(0),
+        page_overhead: NumInstructions::from(0),
         ..SchedulerConfig::application_subnet()
     }
 }
