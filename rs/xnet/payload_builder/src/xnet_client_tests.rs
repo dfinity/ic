@@ -3,6 +3,7 @@
 
 use super::test_fixtures::*;
 use super::*;
+use crate::proximity::METRIC_UNHEALTHY_NODES;
 use axum::{
     Router,
     http::{HeaderMap, StatusCode, header::CONTENT_TYPE},
@@ -14,7 +15,9 @@ use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{MetricVec, fetch_histogram_vec_count, metric_vec};
+use ic_test_utilities_metrics::{
+    MetricVec, fetch_histogram_vec_count, fetch_int_gauge, metric_vec,
+};
 use ic_test_utilities_types::ids::SUBNET_6;
 use ic_types::{SubnetId, xnet::CertifiedStreamSlice};
 use std::{net::SocketAddr, sync::Arc};
@@ -46,10 +49,18 @@ where
 
 fn make_xnet_client(metrics: &MetricsRegistry, log: ReplicaLogger) -> XNetClientImpl {
     let registry = get_simple_registry_for_test();
+    let unhealthy_nodes = Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, metrics));
     XNetClientImpl::new(
         metrics,
         Arc::new(MockTlsConfig::new()) as Arc<_>,
-        Arc::new(ProximityMap::new(LOCAL_NODE, registry, metrics, log)),
+        Arc::new(ProximityMap::new(
+            LOCAL_NODE,
+            registry,
+            unhealthy_nodes.clone(),
+            metrics,
+            log,
+        )),
+        unhealthy_nodes,
     )
 }
 
@@ -75,6 +86,7 @@ async fn query_success() {
         ]),
         response_counts(&metrics)
     );
+    assert_eq!(Some(0), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -99,6 +111,7 @@ async fn query_garbage_response() {
         ]),
         response_counts(&metrics)
     );
+    assert_eq!(Some(1), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -126,6 +139,7 @@ async fn query_invalid_proto() {
         ]),
         response_counts(&metrics)
     );
+    assert_eq!(Some(1), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -150,6 +164,7 @@ async fn query_no_content() {
         ]),
         response_counts(&metrics)
     );
+    assert_eq!(Some(0), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -175,6 +190,7 @@ async fn query_error_response() {
         ]),
         response_counts(&metrics)
     );
+    assert_eq!(Some(1), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -201,6 +217,7 @@ async fn query_request_timeout() {
         ]),
         response_counts(metrics)
     );
+    assert_eq!(Some(1), fetch_int_gauge(metrics, METRIC_UNHEALTHY_NODES));
 }
 
 // For some reason `bind()` on Darwin behaves the same as `bind() + listen()`,
@@ -248,6 +265,7 @@ async fn query_request_failed() {
         ]),
         response_counts(metrics)
     );
+    assert_eq!(Some(1), fetch_int_gauge(metrics, METRIC_UNHEALTHY_NODES));
 }
 
 /// Returns the result of invoking `xnet_client.query()` against an HTTP server
