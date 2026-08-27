@@ -4,10 +4,15 @@ mod tests;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
-use crate::numeric::{BlockNumber, Erc20Value};
+use crate::eth_rpc::Hash;
+use crate::eth_rpc_client::responses::TransactionReceipt;
+use crate::numeric::{BlockNumber, Erc20Value, TransactionCount, TransactionNonce};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
+use crate::state::transactions::{
+    ResubmitTransactionError, SweepId, SweepRequest, SweeperTransactionPipeline,
+};
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
-use crate::tx::TransactionSignature;
+use crate::tx::{Finalized, GasFeeEstimate, Signed, SweepTransaction, TransactionSignature};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
@@ -66,9 +71,128 @@ pub struct AutomaticDeposits {
     /// entries naming a retired helper stay behind forever. [`Self::attestations_len`] is exported
     /// as a metric so that growth is visible before it needs bounding.
     attestations: BTreeMap<AttestationRequest, TransactionSignature>,
+    /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
+    /// its own nonce sequence, independent of the main-address withdrawal pipeline.
+    sweeper_transactions: SweeperTransactionPipeline,
 }
 
 impl AutomaticDeposits {
+    pub fn new(initial_sweeper_nonce: TransactionNonce) -> Self {
+        Self {
+            sweeper_transactions: SweeperTransactionPipeline::new(initial_sweeper_nonce),
+            ..Default::default()
+        }
+    }
+
+    pub fn has_pending_sweeps(&self) -> bool {
+        self.sweeper_transactions.has_pending_requests()
+    }
+
+    pub fn is_sent_sweep_tx_empty(&self) -> bool {
+        self.sweeper_transactions.is_sent_tx_empty()
+    }
+
+    pub fn next_sweeper_transaction_nonce(&self) -> TransactionNonce {
+        self.sweeper_transactions.next_transaction_nonce()
+    }
+
+    pub fn update_next_sweeper_transaction_nonce(&mut self, new_nonce: TransactionNonce) {
+        self.sweeper_transactions
+            .update_next_transaction_nonce(new_nonce)
+    }
+
+    pub fn sweep_requests_batch(&self, requested_batch_size: usize) -> Vec<SweepRequest> {
+        self.sweeper_transactions
+            .requests_batch(requested_batch_size)
+    }
+
+    pub fn create_resubmit_sweep_transactions(
+        &self,
+        latest_transaction_count: TransactionCount,
+        current_gas_fee: GasFeeEstimate,
+    ) -> Vec<Result<(SweepId, SweepTransaction), ResubmitTransactionError<SweepId>>> {
+        self.sweeper_transactions
+            .create_resubmit_transactions(latest_transaction_count, current_gas_fee)
+    }
+
+    pub fn sweep_transactions_to_sign_batch(
+        &self,
+        batch_size: usize,
+    ) -> Vec<(SweepId, SweepTransaction)> {
+        self.sweeper_transactions
+            .transactions_to_sign_batch(batch_size)
+    }
+
+    pub fn sweep_transactions_to_send_batch(
+        &self,
+        latest_transaction_count: TransactionCount,
+        batch_size: usize,
+    ) -> Vec<Signed<SweepTransaction>> {
+        self.sweeper_transactions
+            .transactions_to_send_batch(latest_transaction_count, batch_size)
+    }
+
+    pub fn sent_sweep_transactions_to_finalize(
+        &self,
+        finalized_transaction_count: &TransactionCount,
+    ) -> BTreeMap<Hash, SweepId> {
+        self.sweeper_transactions
+            .sent_transactions_to_finalize(finalized_transaction_count)
+    }
+
+    pub fn record_sweep_request(&mut self, request: SweepRequest) {
+        self.sweeper_transactions.record_request(request)
+    }
+
+    pub fn reschedule_sweep_request(&mut self, id: SweepId) {
+        self.sweeper_transactions.reschedule_request(id)
+    }
+
+    pub fn record_created_sweep_transaction(&mut self, id: SweepId, transaction: SweepTransaction) {
+        self.sweeper_transactions
+            .record_created_transaction(id, transaction)
+    }
+
+    pub fn record_signed_sweep_transaction(
+        &mut self,
+        signed_transaction: Signed<SweepTransaction>,
+    ) {
+        self.sweeper_transactions
+            .record_signed_transaction(signed_transaction)
+    }
+
+    pub fn record_resubmit_sweep_transaction(&mut self, new_tx: SweepTransaction) {
+        self.sweeper_transactions
+            .record_resubmit_transaction(new_tx)
+    }
+
+    pub fn record_finalized_sweep_transaction(
+        &mut self,
+        id: SweepId,
+        receipt: &TransactionReceipt,
+    ) -> Finalized<SweepTransaction> {
+        self.sweeper_transactions
+            .record_finalized_transaction(id, receipt)
+    }
+
+    /// Equality as replay defines it: the sweeper pipeline reorders its queue without recording an
+    /// event, so it compares itself rather than being compared field by field.
+    pub fn is_equivalent_to(&self, other: &Self) -> Result<(), String> {
+        use ic_utils_ensure::ensure_eq;
+
+        let Self {
+            watchlist,
+            sweep,
+            attestations,
+            sweeper_transactions,
+        } = self;
+
+        ensure_eq!(watchlist, &other.watchlist);
+        ensure_eq!(sweep, &other.sweep);
+        ensure_eq!(attestations, &other.attestations);
+        sweeper_transactions.is_equivalent_to(&other.sweeper_transactions)
+    }
+
     /// The signature already stored for `request`, if any: signing another would cost a
     /// threshold-ECDSA signature for the same digest.
     pub fn attestation(&self, request: &AttestationRequest) -> Option<&TransactionSignature> {
@@ -357,6 +481,7 @@ impl Default for AutomaticDeposits {
             watchlist: TimedSizedMap::new(DEPOSIT_ADDRESS_SCAN_WINDOW, MAX_ACTIVE_DEPOSITS),
             sweep: BTreeMap::new(),
             attestations: BTreeMap::new(),
+            sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
         }
     }
 }

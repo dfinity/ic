@@ -51,7 +51,7 @@ pub async fn process_sweeper_transactions<T: TimeProvider>(time_provider: T) {
         }
     };
 
-    if read_state(|s| !s.sweeper_transactions.has_pending_requests()) {
+    if read_state(|s| !s.automatic_deposits.has_pending_sweeps()) {
         return;
     }
 
@@ -86,7 +86,7 @@ pub async fn process_sweeper_transactions<T: TimeProvider>(time_provider: T) {
     send_transactions_batch(sender, latest_transaction_count).await;
     finalize_transactions_batch(sender, &time_provider).await;
 
-    if read_state(|s| s.sweeper_transactions.has_pending_requests()) {
+    if read_state(|s| s.automatic_deposits.has_pending_sweeps()) {
         schedule_retry(time_provider);
     }
 }
@@ -103,15 +103,15 @@ async fn resubmit_transactions_batch<T: TimeProvider>(
     gas_fee_estimate: &GasFeeEstimate,
     time_provider: &T,
 ) {
-    if read_state(|s| s.sweeper_transactions.is_sent_tx_empty()) {
+    if read_state(|s| s.automatic_deposits.is_sent_sweep_tx_empty()) {
         return;
     }
     let Some(latest_transaction_count) = latest_transaction_count else {
         return;
     };
     let transactions_to_resubmit = read_state(|s| {
-        s.sweeper_transactions
-            .create_resubmit_transactions(latest_transaction_count, gas_fee_estimate.clone())
+        s.automatic_deposits
+            .create_resubmit_sweep_transactions(latest_transaction_count, gas_fee_estimate.clone())
     });
     for result in transactions_to_resubmit {
         match result {
@@ -146,11 +146,11 @@ fn create_transactions_batch<T: TimeProvider>(
     time_provider: &T,
 ) {
     for request in read_state(|s| {
-        s.sweeper_transactions
-            .requests_batch(SWEEP_REQUESTS_BATCH_SIZE)
+        s.automatic_deposits
+            .sweep_requests_batch(SWEEP_REQUESTS_BATCH_SIZE)
     }) {
         let ethereum_network = read_state(State::ethereum_network);
-        let nonce = read_state(|s| s.sweeper_transactions.next_transaction_nonce());
+        let nonce = read_state(|s| s.automatic_deposits.next_sweeper_transaction_nonce());
         let sweep_id = request.id;
         match request.create_transaction(
             nonce,
@@ -179,7 +179,7 @@ fn create_transactions_batch<T: TimeProvider>(
                     INFO,
                     "[process_sweeper_transactions]: Sweep {sweep_id:?} has prepaid gas {allowed_max_transaction_fee:?}, below the current transaction fee {actual_max_transaction_fee:?}. Sweep moved back to end of queue."
                 );
-                mutate_state(|s| s.sweeper_transactions.reschedule_request(sweep_id));
+                mutate_state(|s| s.automatic_deposits.reschedule_sweep_request(sweep_id));
             }
         }
     }
@@ -187,8 +187,8 @@ fn create_transactions_batch<T: TimeProvider>(
 
 async fn sign_transactions_batch<T: TimeProvider>(time_provider: &T) {
     let transactions_batch: Vec<_> = read_state(|s| {
-        s.sweeper_transactions
-            .transactions_to_sign_batch(SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE)
+        s.automatic_deposits
+            .sweep_transactions_to_sign_batch(SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE)
     });
     let results = join_all(
         transactions_batch
@@ -229,7 +229,7 @@ async fn send_transactions_batch(
         return;
     };
     let transactions_to_send: Vec<_> = read_state(|s| {
-        s.sweeper_transactions.transactions_to_send_batch(
+        s.automatic_deposits.sweep_transactions_to_send_batch(
             latest_transaction_count,
             SWEEP_TRANSACTIONS_TO_SEND_BATCH_SIZE,
         )
@@ -238,14 +238,14 @@ async fn send_transactions_batch(
 }
 
 async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_provider: &T) {
-    if read_state(|s| s.sweeper_transactions.is_sent_tx_empty()) {
+    if read_state(|s| s.automatic_deposits.is_sent_sweep_tx_empty()) {
         return;
     }
     match finalized_transaction_count(sender).await {
         Ok(finalized_tx_count) => {
             let txs_to_finalize = read_state(|s| {
-                s.sweeper_transactions
-                    .sent_transactions_to_finalize(&finalized_tx_count)
+                s.automatic_deposits
+                    .sent_sweep_transactions_to_finalize(&finalized_tx_count)
             });
             if let Some(receipts) = fetch_finalized_receipts(txs_to_finalize).await {
                 for (sweep_id, transaction_receipt) in receipts {

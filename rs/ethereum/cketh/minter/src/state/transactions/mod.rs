@@ -893,16 +893,26 @@ where
             buf
         }
 
+        let Self {
+            pending_requests,
+            processed_requests,
+            created_tx,
+            sent_tx,
+            finalized_tx,
+            next_nonce,
+        } = self;
+
         // We can reorder request in `reschedule_request`. The audit log won't
         // reflect this change, so we must sort the queues before comparing them.
         ensure_eq!(
-            sorted_requests(&self.pending_requests),
+            sorted_requests(pending_requests),
             sorted_requests(&other.pending_requests)
         );
-        ensure_eq!(self.created_tx, other.created_tx);
-        ensure_eq!(self.sent_tx, other.sent_tx);
-        ensure_eq!(self.finalized_tx, other.finalized_tx);
-        ensure_eq!(self.next_nonce, other.next_nonce);
+        ensure_eq!(processed_requests, &other.processed_requests);
+        ensure_eq!(created_tx, &other.created_tx);
+        ensure_eq!(sent_tx, &other.sent_tx);
+        ensure_eq!(finalized_tx, &other.finalized_tx);
+        ensure_eq!(next_nonce, &other.next_nonce);
 
         Ok(())
     }
@@ -1031,10 +1041,17 @@ impl WithdrawalTransactions {
     pub fn is_equivalent_to(&self, other: &Self) -> Result<(), String> {
         use ic_utils_ensure::ensure_eq;
 
-        ensure_eq!(self.maybe_reimburse, other.maybe_reimburse);
-        ensure_eq!(self.reimbursement_requests, other.reimbursement_requests);
-        ensure_eq!(self.reimbursed, other.reimbursed);
-        self.pipeline.is_equivalent_to(&other.pipeline)
+        let Self {
+            pipeline,
+            maybe_reimburse,
+            reimbursement_requests,
+            reimbursed,
+        } = self;
+
+        ensure_eq!(maybe_reimburse, &other.maybe_reimburse);
+        ensure_eq!(reimbursement_requests, &other.reimbursement_requests);
+        ensure_eq!(reimbursed, &other.reimbursed);
+        pipeline.is_equivalent_to(&other.pipeline)
     }
 
     pub fn next_transaction_nonce(&self) -> TransactionNonce {
