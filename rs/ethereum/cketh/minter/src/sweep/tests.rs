@@ -5,7 +5,7 @@ use crate::numeric::{BlockNumber, TransactionNonce, WeiPerGas};
 use crate::state::audit::{EventType, apply_state_transition};
 use crate::state::eth_logs_scraping::LogScrapings;
 use crate::state::event::AutomaticDeposit;
-use crate::state::{State, read_state};
+use crate::state::{State, mutate_state, read_state};
 use crate::storage::with_event_iter;
 use crate::sweep::create_pending_sweeper_requests;
 use crate::test_fixtures::mock::MockCanisterRuntime;
@@ -13,7 +13,7 @@ use crate::test_fixtures::{
     account, automatic_deposit, deposit_address, init_state, initial_state,
     state_with_deposit_helper, usdc, usdt,
 };
-use crate::tx::{Authorization, GasFeeEstimate, TransactionSignature};
+use crate::tx::{Authorization, AuthorizationRequest, GasFeeEstimate, TransactionSignature};
 use ethnum::u256;
 use ic_cdk_management_canister::EcdsaPublicKeyResult;
 use ic_ethereum_types::Address;
@@ -24,6 +24,7 @@ const NOW: u64 = 1_620_328_630_000_000_000;
 const GAS_FEE_ESTIMATE_AGE_NANOS: u64 = 1_000_000_000;
 const DEPOSIT_HELPER: Address = Address::new([0xde; 20]);
 const SWEEPER_CONTRACT: Address = Address::new([0x5e; 20]);
+const ANOTHER_SWEEPER_CONTRACT: Address = Address::new([0x99; 20]);
 const CHAIN_CODE: [u8; 32] = [0_u8; 32];
 
 #[tokio::test]
@@ -78,7 +79,10 @@ async fn should_sign_one_attestation_for_every_token_of_an_account() {
     create_pending_sweeper_requests(&runtime).await;
 
     assert_eq!(
-        recorded_events(),
+        recorded_events()
+            .into_iter()
+            .filter(|event| matches!(event, EventType::AttestedDepositAddress { .. }))
+            .collect::<Vec<_>>(),
         vec![EventType::AttestedDepositAddress {
             request: request.clone(),
             signature: expected_signature(&request),
@@ -91,24 +95,59 @@ async fn should_sign_one_attestation_for_every_token_of_an_account() {
 }
 
 #[tokio::test]
-async fn should_sign_one_authorization_for_every_deposit_of_an_account() {
+async fn should_sign_and_record_one_authorization_for_every_account() {
     init_state(state_ready_to_sign(&[
         (account(), usdc()),
         (account(), usdt()),
     ]));
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
-    expect_authorization_signing(&mut runtime, 2);
+    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
     expect_signing(&mut runtime);
 
     create_pending_sweeper_requests(&runtime).await;
+
+    assert_eq!(
+        recorded_events()
+            .into_iter()
+            .filter(|event| matches!(event, EventType::AuthorizedDepositAddress { .. }))
+            .count(),
+        1
+    );
+    assert!(stored_authorization(SWEEPER_CONTRACT).is_some());
+}
+
+#[tokio::test]
+async fn should_resign_the_authorization_when_the_sweeper_contract_changes() {
+    init_state(state_ready_to_sign(&[(account(), usdc())]));
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
+    expect_authorization_signing(&mut runtime, ANOTHER_SWEEPER_CONTRACT, 1);
+    expect_signing(&mut runtime);
+
+    create_pending_sweeper_requests(&runtime).await;
+    let first = stored_authorization(SWEEPER_CONTRACT);
+    assert!(first.is_some());
+
+    mutate_state(|s| s.sweeper_contract_address = Some(ANOTHER_SWEEPER_CONTRACT));
+
+    create_pending_sweeper_requests(&runtime).await;
+    let second = stored_authorization(ANOTHER_SWEEPER_CONTRACT);
+    assert!(second.is_some());
+    assert_ne!(first, second);
+    assert_eq!(stored_authorization(SWEEPER_CONTRACT), first);
 }
 
 /// Expects `times` signatures over the authorization tuple every deposit address delegates with:
-/// the minter's chain, the configured sweeper contract, and nonce 0, signed along the deposit
-/// address' own derivation path.
-fn expect_authorization_signing(runtime: &mut MockCanisterRuntime, times: usize) {
-    let digest = authorization_digest();
+/// the minter's chain, `delegate`, and nonce 0, signed along the deposit address' own derivation
+/// path.
+fn expect_authorization_signing(
+    runtime: &mut MockCanisterRuntime,
+    delegate: Address,
+    times: usize,
+) {
+    let digest = authorization_digest(delegate);
     let path = derivation_path_bytes();
     runtime
         .expect_sign_with_ecdsa()
@@ -144,10 +183,27 @@ fn sign_digest_with_derived_key(
 /// Spelled out rather than taken from `delegation_authorization`, so that changing the tuple the
 /// minter signs — its delegate, or the nonce 0 that makes a stale authorization skip harmlessly
 /// rather than sink the sweep — fails here.
-fn authorization_digest() -> [u8; 32] {
+fn stored_authorization(delegate: Address) -> Option<TransactionSignature> {
+    read_state(|s| {
+        s.automatic_deposits
+            .authorization(&authorization_request(delegate))
+            .cloned()
+    })
+}
+
+fn authorization_request(delegate: Address) -> AuthorizationRequest {
+    AuthorizationRequest::new(
+        account(),
+        initial_state().ethereum_network.chain_id(),
+        delegate,
+        TransactionNonce::ZERO,
+    )
+}
+
+fn authorization_digest(delegate: Address) -> [u8; 32] {
     Authorization {
         chain_id: initial_state().ethereum_network.chain_id(),
-        delegate: SWEEPER_CONTRACT,
+        delegate,
         nonce: TransactionNonce::ZERO,
     }
     .hash()

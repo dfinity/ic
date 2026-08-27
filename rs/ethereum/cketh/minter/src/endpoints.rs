@@ -573,6 +573,11 @@ pub mod events {
             /// 32-byte signature component.
             s: ByteBuf,
         },
+        AuthorizedDepositAddress {
+            owner: Principal,
+            subaccount: Option<ByteBuf>,
+            authorization: SignedAuthorization,
+        },
         AcceptedSweepRequest {
             sweep_id: Nat,
             destination: String,

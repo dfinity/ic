@@ -27,7 +27,10 @@ use crate::{
         transactions::{CreateSweepTransactionError, PipelineRequest},
     },
     time::TimeProvider,
-    tx::{Authorization, GasFeeEstimate, SignedAuthorization, lazy_refresh_gas_fee_estimate},
+    tx::{
+        AuthorizationRequest, GasFeeEstimate, SignedAuthorization, lazy_refresh_gas_fee_estimate,
+        sign_digest,
+    },
     withdraw::{
         fetch_finalized_receipts, finalized_transaction_count, latest_transaction_count,
         send_signed_transactions,
@@ -140,43 +143,67 @@ async fn sign_attestations_batch<R: CanisterRuntime>(
 /// One authorization per attested deposit address, keyed by the account it delegates.
 ///
 /// Only attested addresses are signed: a deposit that could not be attested drops out of the sweep
-/// anyway, so authorizing it would spend a signature on nothing. Every address is signed afresh,
-/// since nothing a sweep does can invalidate the tuple — see [`delegation_authorization`].
+/// anyway, so authorizing it would spend a signature on nothing. A tuple already recorded for the
+/// address is reused rather than signed again — it names nonce 0, so it stays applicable for every
+/// later sweep, see [`AuthorizationRequest`].
 async fn sign_authorizations_batch<R: CanisterRuntime>(
     targets: &[SweepTarget],
     sweeper_contract: Address,
     runtime: &R,
 ) -> BTreeMap<Account, SignedAuthorization> {
     let chain_id = read_state(State::ethereum_network).chain_id();
-    let attested: Vec<Account> = read_state(|s| {
-        targets
-            .iter()
-            .map(SweepTarget::account)
-            .filter(|account| s.attestation(*account).is_some())
-            .collect()
-    });
+    let (mut authorizations, to_sign): (BTreeMap<Account, SignedAuthorization>, Vec<_>) =
+        read_state(|s| {
+            let mut stored = BTreeMap::new();
+            let mut to_sign = Vec::new();
+            for request in targets
+                .iter()
+                .map(SweepTarget::account)
+                .filter(|account| s.attestation(*account).is_some())
+                .map(|account| {
+                    AuthorizationRequest::new(
+                        account,
+                        chain_id,
+                        sweeper_contract,
+                        TransactionNonce::ZERO,
+                    )
+                })
+            {
+                match s.automatic_deposits.authorization(&request) {
+                    Some(signature) => {
+                        stored.insert(request.account(), request.signed_with(signature.clone()));
+                    }
+                    None => to_sign.push(request),
+                }
+            }
+            (stored, to_sign)
+        });
 
-    let signing_results = join_all(attested.into_iter().map(|account| async move {
-        (
-            account,
-            delegation_authorization(chain_id, sweeper_contract)
-                .sign(
-                    deposit_derivation_path(DepositAddressSchema::CkErc20, &account),
-                    runtime,
-                )
-                .await,
+    let signing_results = join_all(to_sign.into_iter().map(|request| async move {
+        let signature = sign_digest(
+            &request.authorization().hash(),
+            &deposit_derivation_path(DepositAddressSchema::CkErc20, &request.account()),
+            runtime,
         )
+        .await;
+        (request, signature)
     }))
     .await;
 
-    let mut authorizations = BTreeMap::new();
     let mut errors = Vec::new();
-    for (account, signing_result) in signing_results {
+    for (request, signing_result) in signing_results {
         match signing_result {
-            Ok(authorization) => {
-                authorizations.insert(account, authorization);
+            Ok(signature) => {
+                authorizations.insert(request.account(), request.signed_with(signature.clone()));
+                mutate_state(|s| {
+                    process_event(
+                        s,
+                        EventType::AuthorizedDepositAddress { request, signature },
+                        runtime,
+                    )
+                });
             }
-            Err(e) => errors.push((account, e)),
+            Err(e) => errors.push((request.account(), e)),
         }
     }
 
@@ -187,35 +214,6 @@ async fn sign_authorizations_batch<R: CanisterRuntime>(
         );
     }
     authorizations
-}
-
-/// The tuple every deposit address signs to delegate its code to `sweeper_contract`: the minter's
-/// chain, that delegate, and **nonce 0**, whatever nonce the address actually holds.
-///
-/// Applying an EIP-7702 authorization increments the authority's nonce, and nothing else ever
-/// touches a deposit address' nonce — the minter never broadcasts a transaction from a deposit key,
-/// it only signs attestation digests and authorization tuples with it, and receiving an ERC-20
-/// transfer spends no nonce. So a deposit address holds nonce 0 exactly while it has never been
-/// delegated, and a tuple signed for nonce 0 either
-///
-/// * installs the delegation, the address never having had one; or
-/// * is skipped, the address already being delegated and its nonce no longer matching. The
-///   transaction stays valid, the delegation designator already in place is untouched, and the
-///   delegated call works.
-///
-/// Both outcomes are correct in every ordering of the sweeps that carry them, with nothing stored
-/// and nothing read from chain. That is what lets a sweep authorize every address it touches
-/// instead of tracking which ones are delegated.
-///
-/// The one thing this forecloses is **re-delegation**: an address delegated to an earlier sweeper
-/// contract holds nonce >= 1, so a nonce-0 tuple naming the new one is skipped and its code keeps
-/// pointing at the old contract.
-fn delegation_authorization(chain_id: u64, sweeper_contract: Address) -> Authorization {
-    Authorization {
-        chain_id,
-        delegate: sweeper_contract,
-        nonce: TransactionNonce::ZERO,
-    }
 }
 
 pub async fn process_sweeper_transactions<R: CanisterRuntime>(runtime: R) {

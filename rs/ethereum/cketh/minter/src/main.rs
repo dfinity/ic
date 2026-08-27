@@ -999,6 +999,16 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                         s: ByteBuf::from(signature.s.to_be_bytes()),
                     }
                 }
+                EventType::AuthorizedDepositAddress { request, signature } => {
+                    let account = request.account();
+                    EP::AuthorizedDepositAddress {
+                        owner: account.owner,
+                        subaccount: account.subaccount.map(ByteBuf::from),
+                        authorization: map_authorizations(&[request.signed_with(signature)])
+                            .pop()
+                            .expect("BUG: one authorization in, one out"),
+                    }
+                }
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,

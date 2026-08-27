@@ -10,6 +10,7 @@ use crate::{
 };
 use ethnum::u256;
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
 use minicbor::{Decode, Encode};
 use rlp::{Rlp, RlpStream};
 use serde_bytes::ByteBuf;
@@ -50,6 +51,63 @@ pub struct Eip7702TransactionRequest {
 impl AsRef<Eip7702TransactionRequest> for Eip7702TransactionRequest {
     fn as_ref(&self) -> &Eip7702TransactionRequest {
         self
+    }
+}
+
+/// What a deposit address authorizes, and what a stored signature over it is valid for: the tuple
+/// itself, plus the account whose deposit address signed it.
+///
+/// This is the key an authorization is cached under, so any change to what is authorized — another
+/// chain, another sweeper contract, another nonce — misses the cache and is signed afresh instead
+/// of reusing a tuple that no longer says what the minter means.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
+pub struct AuthorizationRequest {
+    #[n(0)]
+    account: Account,
+    #[n(1)]
+    chain_id: u64,
+    #[n(2)]
+    delegate: Address,
+    #[n(3)]
+    nonce: TransactionNonce,
+}
+
+impl AuthorizationRequest {
+    pub fn new(
+        account: Account,
+        chain_id: u64,
+        delegate: Address,
+        nonce: TransactionNonce,
+    ) -> Self {
+        Self {
+            account,
+            chain_id,
+            delegate,
+            nonce,
+        }
+    }
+
+    pub fn account(&self) -> Account {
+        self.account
+    }
+
+    pub fn authorization(&self) -> Authorization {
+        Authorization {
+            chain_id: self.chain_id,
+            delegate: self.delegate,
+            nonce: self.nonce,
+        }
+    }
+
+    pub fn signed_with(&self, signature: TransactionSignature) -> SignedAuthorization {
+        SignedAuthorization {
+            chain_id: self.chain_id,
+            delegate: self.delegate,
+            nonce: self.nonce,
+            y_parity: signature.signature_y_parity,
+            r: signature.r,
+            s: signature.s,
+        }
     }
 }
 

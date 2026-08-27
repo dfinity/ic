@@ -791,6 +791,14 @@ type Event = record {
             r : blob;
             s : blob;
         };
+        AuthorizedDepositAddress : record {
+            owner : principal;
+            subaccount : opt blob;
+            // The tuple the deposit address signed, delegating its code to the
+            // sweeper contract. Its nonce is always zero: the delegation is
+            // installed the first time the tuple is applied.
+            authorization : SignedAuthorization;
+        };
     };
 };
 
