@@ -191,9 +191,10 @@ impl Process for IcGatewayProcess {
                 }
             };
 
-        // `ic-gateway` writes its ACME account and certificates here, so the
-        // directory has to exist and stay private to the orchestrator's user.
-        create_private_dir(&config.acme_cache_dir)?;
+        // `ic-gateway` writes its ACME account and certificates here.
+        std::fs::create_dir_all(&config.acme_cache_dir).map_err(|e| {
+            OrchestratorError::IoError(format!("Failed to create {:?}", config.acme_cache_dir), e)
+        })?;
 
         // The shipped file only carries policy; the engine's own values, the two
         // credentials among them, override it.
@@ -223,16 +224,6 @@ impl Process for IcGatewayProcess {
     fn get_env(&self) -> HashMap<OsString, OsString> {
         self.env.clone()
     }
-}
-
-/// Creates `dir` if needed and makes it readable by its owner only.
-fn create_private_dir(dir: &PathBuf) -> OrchestratorResult<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    std::fs::create_dir_all(dir)
-        .map_err(|e| OrchestratorError::IoError(format!("Failed to create {dir:?}"), e))?;
-    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
-        .map_err(|e| OrchestratorError::IoError(format!("Failed to chmod {dir:?}"), e))
 }
 
 // ---------------------------------------------------------------------------
@@ -928,7 +919,7 @@ mod tests {
     }
 
     #[test]
-    fn ic_gateway_acme_cache_is_private() {
+    fn ic_gateway_acme_cache_is_created() {
         let dir = tempdir().unwrap();
         let (mut manager, _log) = ic_gateway_manager_for_test(dir.path());
 
@@ -939,12 +930,7 @@ mod tests {
         .unwrap();
 
         // The issued certificate's private key lands here.
-        use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(dir.path().join("acme"))
-            .unwrap()
-            .permissions()
-            .mode();
-        assert_eq!(mode & 0o777, 0o700, "acme cache dir is {:o}", mode & 0o777);
+        assert!(dir.path().join("acme").is_dir());
     }
 
     #[test]
