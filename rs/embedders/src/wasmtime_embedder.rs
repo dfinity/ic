@@ -647,7 +647,7 @@ impl WasmtimeEmbedder {
             memories,
             &mut *store,
             self.log.clone(),
-            self.config.dirty_page_overhead,
+            self.config.page_overhead,
             subtract_instruction_counter,
         );
 

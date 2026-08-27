@@ -4850,7 +4850,7 @@ fn install_code_calls_canister_init_and_start() {
     // Linux, 4 on 16 KiB hosts such as arm64-darwin).
     let os_pages_per_wasm_page = WASM_PAGE_SIZE_IN_BYTES as u64 / PAGE_SIZE as u64;
     let dirty_heap_cost =
-        NumInstructions::from(2 * os_pages_per_wasm_page * 2 * test.dirty_heap_page_overhead());
+        NumInstructions::from(2 * os_pages_per_wasm_page * 2 * test.heap_page_overhead());
     assert_eq!(
         // Function is 1 instruction.
         DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
@@ -5286,7 +5286,7 @@ fn ic0_trap_preserves_some_cycles() {
             + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 }, WasmMemoryType::Wasm32)
             + bytes_and_logging_cost(12) as u64 /* trap data */
             + 1 // Function is 1 instruction.
-            + os_pages_per_wasm_page * test.dirty_heap_page_overhead(),
+            + os_pages_per_wasm_page * test.heap_page_overhead(),
     );
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
     assert_eq!(
@@ -7962,7 +7962,7 @@ fn charge_for_dirty_pages() {
     test.ingress(canister_id, "test2", vec![]).unwrap();
     let i2 = test.canister_executed_instructions(canister_id);
 
-    let cdi = ic_config::subnet_config::SchedulerConfig::application_subnet().dirty_page_overhead;
+    let cdi = ic_config::subnet_config::SchedulerConfig::application_subnet().page_overhead;
     // test2 writes to the next Wasm page, i.e. (1 read + 1 write)x16=32 OS pages.
     assert_eq!((i2 - i1) - (i1 - i0), cdi * 32);
 }
