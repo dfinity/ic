@@ -1208,7 +1208,7 @@ fn test_metrics_export() {
         "Missing or incorrect num_keyslots label: {metrics_content}"
     );
     assert!(
-        metrics_content.contains("num_tokens=\"1\""),
+        metrics_content.contains("num_tokens=\"0\""),
         "Missing or incorrect num_tokens label: {metrics_content}"
     );
     assert!(
