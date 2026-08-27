@@ -115,6 +115,24 @@ pub fn valid_init_arg() -> InitArg {
     }
 }
 
+pub mod mock {
+    use crate::time::TimeProvider;
+    use mockall::mock;
+
+    mock! {
+        #[derive(Debug)]
+        pub TimeProvider {}
+
+        impl TimeProvider for TimeProvider {
+            fn time(&self) -> u64;
+        }
+
+        impl Clone for TimeProvider {
+            fn clone(&self) -> Self;
+        }
+    }
+}
+
 pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_logs::LedgerSubaccount;

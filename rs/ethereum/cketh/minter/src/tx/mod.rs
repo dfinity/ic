@@ -28,6 +28,7 @@ use crate::{
     logs::{DEBUG, INFO},
     numeric::{GasAmount, Wei, WeiPerGas},
     state::{TaskType, lazy_call_ecdsa_public_key_with_chain_code, mutate_state, read_state},
+    time::TimeProvider,
 };
 use candid::Nat;
 use ethnum::u256;
@@ -336,10 +337,12 @@ impl TransactionPrice {
     }
 }
 
-pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
+pub async fn lazy_refresh_gas_fee_estimate<T: TimeProvider>(
+    time_provider: &T,
+) -> Option<GasFeeEstimate> {
     const MAX_AGE_NS: u64 = 60_000_000_000_u64; //60 seconds
 
-    async fn do_refresh() -> Option<GasFeeEstimate> {
+    async fn do_refresh<T: TimeProvider>(time_provider: &T) -> Option<GasFeeEstimate> {
         let _guard = match TimerGuard::new(TaskType::RefreshGasFeeEstimate) {
             Ok(guard) => guard,
             Err(e) => {
@@ -366,7 +369,7 @@ pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
             Ok(estimate) => {
                 mutate_state(|s| {
                     s.last_transaction_price_estimate =
-                        Some((ic_cdk::api::time(), estimate.clone()));
+                        Some((time_provider.time(), estimate.clone()));
                 });
                 estimate
             }
@@ -398,14 +401,14 @@ pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
             }))
     }
 
-    let now_ns = ic_cdk::api::time();
+    let now_ns = time_provider.time();
     match read_state(|s| s.last_transaction_price_estimate.clone()) {
         Some((last_estimate_timestamp_ns, estimate))
             if now_ns < last_estimate_timestamp_ns.saturating_add(MAX_AGE_NS) =>
         {
             Some(estimate)
         }
-        _ => do_refresh().await,
+        _ => do_refresh(time_provider).await,
     }
 }
 #[derive(Eq, PartialEq, Debug)]

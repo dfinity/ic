@@ -8,10 +8,9 @@ use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
 use crate::state::transactions::{Reimbursed, ReimbursementIndex, WithdrawalRequest};
 use crate::storage::{record_event, with_event_iter};
+use crate::time::TimeProvider;
 
 /// Updates the state to reflect the given state transition.
-// public because it's used in tests since process_event
-// requires canister infrastructure to retrieve time
 pub fn apply_state_transition(state: &mut State, payload: &EventType) {
     match payload {
         EventType::Init(init_arg) => {
@@ -228,9 +227,9 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
 }
 
 /// Records the given event payload in the event log and updates the state to reflect the change.
-pub fn process_event(state: &mut State, payload: EventType) {
+pub fn process_event<T: TimeProvider>(state: &mut State, payload: EventType, time_provider: &T) {
     apply_state_transition(state, &payload);
-    record_event(payload);
+    record_event(payload, time_provider);
 }
 
 /// Recomputes the minter state from the event log.
