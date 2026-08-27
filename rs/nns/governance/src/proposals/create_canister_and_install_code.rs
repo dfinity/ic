@@ -290,24 +290,5 @@ impl From<CreateCanisterAndInstallCode> for SelfDescribingValue {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_reserved_cycles_limit_passes_through_to_root_settings() {
-        // Step 1: Prepare the world.
-        let canister_settings = crate::pb::v1::CanisterSettings {
-            reserved_cycles_limit: Some(1 << 29),
-            ..Default::default()
-        };
-
-        // Step 2: Run the code under test.
-        let root_settings = RootCanisterSettings::try_from(&canister_settings).unwrap();
-
-        // Step 3: Verify result(s).
-        assert_eq!(
-            root_settings.reserved_cycles_limit,
-            Some(Nat::from(1_u64 << 29)),
-        );
-    }
-}
+#[path = "create_canister_and_install_code_tests.rs"]
+mod tests;
