@@ -5,7 +5,8 @@ use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::eth_rpc::Hash;
-use crate::eth_rpc_client::responses::TransactionReceipt;
+use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::logs::INFO;
 use crate::numeric::{BlockNumber, Erc20Value, TransactionCount, TransactionNonce};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
 use crate::state::transactions::{
@@ -15,6 +16,7 @@ use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
 use crate::tx::{
     AuthorizationRequest, Finalized, GasFeeEstimate, Signed, SweepTransaction, TransactionSignature,
 };
+use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
@@ -177,13 +179,50 @@ impl AutomaticDeposits {
             .record_resubmit_transaction(new_tx)
     }
 
+    /// Finalize `id`'s transaction and release the deposits it held, whichever way it went: they
+    /// leave the queue on success because the funds moved, and on failure because the minter does
+    /// not retry them.
+    ///
+    /// # Panics
+    ///
+    /// If the sweep has no processed request, or a deposit it named is not queued or is held by
+    /// another sweep. Each means the queue has stopped describing which sweep owns which funds.
     pub fn record_finalized_sweep_transaction(
         &mut self,
         id: SweepId,
         receipt: &TransactionReceipt,
     ) -> Finalized<SweepTransaction> {
-        self.sweeper_transactions
-            .record_finalized_transaction(id, receipt)
+        let finalized = self
+            .sweeper_transactions
+            .record_finalized_transaction(id, receipt);
+        let request = self
+            .sweeper_transactions
+            .get_processed_request(&id)
+            .expect("BUG: missing sweep request");
+        let token = request.token;
+        let accounts: Vec<_> = request.items.iter().map(|item| item.item.account).collect();
+
+        for account in accounts {
+            let request = DepositRequest::new(account, token);
+            let entry = self
+                .sweep
+                .remove(&request)
+                .unwrap_or_else(|| panic!("BUG: {request:?} is not queued for sweeping"));
+            assert_eq!(
+                entry.swept_by,
+                Some(id),
+                "BUG: {request:?} is not held by sweep {id:?}"
+            );
+            if receipt.status == TransactionStatus::Failure {
+                log!(
+                    INFO,
+                    "[record_finalized_sweep_transaction]: DROPPING {request:?} from the sweep                      queue: {id:?} failed and the minter does not retry. Its {:?} stays at {}, and                      reaching it again needs the pair armed afresh.",
+                    entry.scanned_balance,
+                    entry.address
+                );
+            }
+        }
+        finalized
     }
 
     /// Equality as replay defines it: the sweeper pipeline reorders its queue without recording an

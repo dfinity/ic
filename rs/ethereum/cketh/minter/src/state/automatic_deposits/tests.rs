@@ -4,11 +4,17 @@ use super::{
 };
 use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
-use crate::numeric::{BlockNumber, Erc20Value};
+use crate::eth_rpc::Hash;
+use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::lifecycle::EthereumNetwork;
+use crate::numeric::{BlockNumber, Erc20Value, Wei, WeiPerGas};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
-use crate::state::transactions::SweepId;
+use crate::state::transactions::{AuthorizedSweepItem, PipelineRequest, SweepId, SweepRequest};
+use crate::sweep::SWEEP_TRANSACTION_GAS_LIMIT;
+use crate::sweeper_contract::SweepItem;
 use crate::test_fixtures::{deposit_address, usdc, usdt};
 use crate::timed_sized_map::{Entry, Timestamp};
+use crate::tx::{GasFeeEstimate, SignableTransaction, Signed, TransactionSignature};
 use candid::{Nat, Principal};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -765,6 +771,122 @@ fn should_refuse_to_schedule_a_deposit_that_is_not_queued() {
     let mut deposits = queued(&[(account(0), usdc())]);
 
     deposits.record_sweep_scheduled(SweepId(1), usdt(), [account(0)]);
+}
+
+#[test]
+fn should_release_a_deposit_once_its_sweep_succeeds() {
+    let mut deposits = queued(&[(account(0), usdc()), (account(1), usdc())]);
+    let request = sweep_request(SweepId(0), usdc(), &[account(0)]);
+    deposits.record_sweep_scheduled(SweepId(0), usdc(), [account(0)]);
+
+    finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+
+    // The swept pair is gone from the queue; the untouched one is still offered.
+    assert_eq!(deposits.sweep_len(), 1);
+    assert_eq!(
+        accounts_in(&deposits.requests_batch(10), usdc()),
+        vec![account(1)]
+    );
+}
+
+#[test]
+fn should_drop_a_deposit_once_its_sweep_fails() {
+    let mut deposits = queued(&[(account(0), usdc())]);
+    let request = sweep_request(SweepId(0), usdc(), &[account(0)]);
+    deposits.record_sweep_scheduled(SweepId(0), usdc(), [account(0)]);
+
+    finalize_sweep(&mut deposits, request, TransactionStatus::Failure);
+
+    // A reverted sweep moved nothing, but the minter does not retry: the pair leaves the queue and
+    // has to be armed afresh.
+    assert_eq!(deposits.sweep_len(), 0);
+    assert!(deposits.requests_batch(10).is_empty());
+}
+
+#[test]
+fn should_release_every_account_a_sweep_held() {
+    let mut deposits = queued(&[(account(0), usdc()), (account(1), usdc())]);
+    let request = sweep_request(SweepId(0), usdc(), &[account(0), account(1)]);
+    deposits.record_sweep_scheduled(SweepId(0), usdc(), [account(0), account(1)]);
+
+    finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+
+    assert_eq!(deposits.sweep_len(), 0);
+}
+
+#[test]
+#[should_panic(expected = "is not queued for sweeping")]
+fn should_refuse_to_finalize_a_sweep_whose_deposit_left_the_queue() {
+    let mut deposits = queued(&[(account(0), usdc())]);
+    let request = sweep_request(SweepId(0), usdc(), &[account(0), account(1)]);
+    deposits.record_sweep_scheduled(SweepId(0), usdc(), [account(0)]);
+
+    finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+}
+
+/// Drives `request` through the sweeper pipeline to a receipt of `status`.
+fn finalize_sweep(
+    deposits: &mut AutomaticDeposits,
+    request: SweepRequest,
+    status: TransactionStatus,
+) {
+    let id = request.id;
+    deposits.record_sweep_request(request.clone());
+    let transaction = request
+        .create_transaction(
+            deposits.next_sweeper_transaction_nonce(),
+            GasFeeEstimate {
+                base_fee_per_gas: WeiPerGas::new(10),
+                max_priority_fee_per_gas: WeiPerGas::new(1),
+            },
+            SWEEP_TRANSACTION_GAS_LIMIT,
+            EthereumNetwork::Sepolia,
+        )
+        .expect("BUG: the fixture allowance covers the fixture fee");
+    deposits.record_created_sweep_transaction(id, transaction.clone());
+    let signed = Signed::from((
+        transaction,
+        TransactionSignature {
+            signature_y_parity: false,
+            r: Default::default(),
+            s: Default::default(),
+        },
+    ));
+    let receipt = TransactionReceipt {
+        block_hash: Hash([0x11; 32]),
+        block_number: BlockNumber::new(4_190_269),
+        effective_gas_price: signed.transaction().max_fee_per_gas(),
+        gas_used: signed.transaction().gas_limit(),
+        status,
+        transaction_hash: signed.hash(),
+    };
+    deposits.record_signed_sweep_transaction(signed);
+    deposits.record_finalized_sweep_transaction(id, &receipt);
+}
+
+fn sweep_request(id: SweepId, token: Address, accounts: &[Account]) -> SweepRequest {
+    SweepRequest {
+        id,
+        destination: Address::new([0x5e; 20]),
+        token,
+        items: accounts
+            .iter()
+            .map(|account| AuthorizedSweepItem {
+                item: SweepItem {
+                    deposit: deposit_address(account),
+                    account: *account,
+                    attestation: TransactionSignature {
+                        signature_y_parity: false,
+                        r: Default::default(),
+                        s: Default::default(),
+                    },
+                },
+                authorization: None,
+            })
+            .collect(),
+        max_transaction_fee: Wei::from(1_000_000_000_000_000_u64),
+        created_at: 0,
+    }
 }
 
 /// An [`AutomaticDeposits`] whose sweep queue holds exactly these funded pairs.
