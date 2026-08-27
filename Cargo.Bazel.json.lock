@@ -1,5 +1,5 @@
 {
-  "checksum": "4f7560ce3b8a37d235222d5834d815a7b23f18528bcced08b5d6948aa84ec9b8",
+  "checksum": "935b90216f81acc7952e31ad401dce3fa571a2b65ddf1c9b0b733edcba350b02",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -20903,6 +20903,10 @@
             {
               "id": "tokio-util 0.7.17",
               "target": "tokio_util"
+            },
+            {
+              "id": "tokio-vsock 0.7.2",
+              "target": "tokio_vsock"
             },
             {
               "id": "toml 0.5.11",
@@ -75995,6 +75999,69 @@
       ],
       "license_file": "LICENSE"
     },
+    "tokio-vsock 0.7.2": {
+      "name": "tokio-vsock",
+      "version": "0.7.2",
+      "package_url": "https://github.com/rust-vsock/tokio-vsock",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tokio-vsock/0.7.2/download",
+          "sha256": "8b319ef9394889dab2e1b4f0085b45ba11d0c79dc9d1a9d1afc057d009d0f1c7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tokio_vsock",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tokio_vsock",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.11.1",
+              "target": "bytes"
+            },
+            {
+              "id": "futures 0.3.31",
+              "target": "futures"
+            },
+            {
+              "id": "libc 0.2.186",
+              "target": "libc"
+            },
+            {
+              "id": "tokio 1.50.0",
+              "target": "tokio"
+            },
+            {
+              "id": "vsock 0.5.4",
+              "target": "vsock"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.7.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "toml 0.5.11": {
       "name": "toml",
       "version": "0.5.11",
@@ -81078,6 +81145,57 @@
         },
         "edition": "2021",
         "version": "0.4.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "vsock 0.5.4": {
+      "name": "vsock",
+      "version": "0.5.4",
+      "package_url": "https://github.com/rust-vsock/vsock-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/vsock/0.5.4/download",
+          "sha256": "6ba782755fc073877e567c2253c0be48e4aa9a254c232d36d3985dfae0bd5205"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "vsock",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "vsock",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.186",
+              "target": "libc"
+            },
+            {
+              "id": "nix 0.31.3",
+              "target": "nix"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.5.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -92228,6 +92346,7 @@
     "tokio-test 0.4.4",
     "tokio-tungstenite 0.29.0",
     "tokio-util 0.7.17",
+    "tokio-vsock 0.7.2",
     "toml 0.5.11",
     "tonic 0.14.6",
     "tonic-build 0.14.6",

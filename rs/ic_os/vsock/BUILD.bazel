@@ -6,54 +6,40 @@ rust_library(
     name = "vsock_lib",
     srcs = glob(
         ["src/**/*.rs"],
+        exclude = ["src/bin/**"],
     ),
-    crate_name = "vsock_lib",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
     deps = [
-        # Keep sorted.
-        "//rs/http_utils",
-        "@crate_index//:anyhow",
         "@crate_index//:mockall",
-        "@crate_index//:procfs",
-        "@crate_index//:rusb",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
-        "@crate_index//:tempfile",
-        "@crate_index//:tokio",
-        "@crate_index//:vsock",
-    ],
+    ] + select({
+        "@platforms//os:linux": [
+            "//rs/http_utils",
+            "@crate_index//:procfs",
+            "@crate_index//:rusb",
+            "@crate_index//:tempfile",
+            "@crate_index//:tokio",
+            "@crate_index//:tokio-util",
+            "@crate_index//:tokio-vsock",
+            "@crate_index//:vsock",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 rust_test(
     name = "test",
     size = "small",
     crate = ":vsock_lib",
-    deps = [
-        # Keep sorted.
-        "//rs/http_utils",
-        "@crate_index//:anyhow",
-        "@crate_index//:mockall",
-        "@crate_index//:procfs",
-        "@crate_index//:rusb",
-        "@crate_index//:serde",
-        "@crate_index//:serde_json",
-        "@crate_index//:tempfile",
-        "@crate_index//:tokio",
-        "@crate_index//:vsock",
-    ],
 )
 
 rust_binary(
     name = "vsock_guest",
     srcs = ["src/bin/guest.rs"],
-    crate_name = "vsock_guest",
     target_compatible_with = [
         "@platforms//os:linux",
     ],
     deps = [
-        # Keep sorted.
         ":vsock_lib",
         "@crate_index//:clap",
     ],
@@ -62,12 +48,12 @@ rust_binary(
 rust_binary(
     name = "vsock_host",
     srcs = ["src/bin/host.rs"],
-    crate_name = "vsock_host",
     target_compatible_with = [
         "@platforms//os:linux",
     ],
     deps = [
-        # Keep sorted.
         ":vsock_lib",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
     ],
 )

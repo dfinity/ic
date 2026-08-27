@@ -29,7 +29,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
 use tempfile::NamedTempFile;
-use vsock_lib::MockVSockClient;
+use vsock_lib::client::MockVsockClient;
 use vsock_lib::protocol::{Command, Payload};
 
 static FREE_PORT: AtomicU16 = AtomicU16::new(DEFAULT_SERVER_PORT);
@@ -207,7 +207,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
 
     /// Run the key exchange test and return (server status, client status).
     async fn run_key_exchange_test(&self) -> (anyhow::Result<()>, anyhow::Result<()>) {
-        let mut vsock_client = MockVSockClient::default();
+        let mut vsock_client = MockVsockClient::default();
         let client_agent = self.create_client_agent();
 
         let (client_result_send, client_result_recv) = tokio::sync::oneshot::channel();
@@ -246,7 +246,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
 
     fn create_server_agent(
         &self,
-        vsock_client: MockVSockClient,
+        vsock_client: MockVsockClient,
     ) -> DiskEncryptionKeyExchangeServerAgent {
         let server_sev_firmware = self.server_sev_firmware.clone();
         DiskEncryptionKeyExchangeServerAgent::new(
@@ -460,7 +460,7 @@ async fn test_server_is_unreachable() {
 
 #[tokio::test]
 async fn test_server_timeout() {
-    let mut vsock_client = MockVSockClient::default();
+    let mut vsock_client = MockVsockClient::default();
 
     vsock_client
         .expect_send_command()
@@ -561,7 +561,7 @@ async fn test_can_open_disk() {
 async fn test_replica_version_not_in_registry() {
     let fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
     let result = fixture
-        .create_server_agent(MockVSockClient::default())
+        .create_server_agent(MockVsockClient::default())
         .exchange_keys(&ReplicaVersion::from_str("replica_version_missing").unwrap())
         .await
         .expect_err("Key exchange should fail when the target replica version is missing");
@@ -576,7 +576,7 @@ async fn test_replica_version_not_in_registry() {
 
 #[tokio::test]
 async fn test_start_upgrade_vm_command_fails() {
-    let mut vsock_client = MockVSockClient::default();
+    let mut vsock_client = MockVsockClient::default();
 
     vsock_client
         .expect_send_command()

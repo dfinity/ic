@@ -12,7 +12,7 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::runtime::Handle;
 use tokio::sync::watch;
-use vsock_lib::VSockClient;
+use vsock_lib::client::VsockClient;
 use vsock_lib::protocol::Command;
 
 pub mod orchestrator;
@@ -38,7 +38,7 @@ pub struct DiskEncryptionKeyExchangeServerAgent {
     sev_firmware_factory: SevFirmwareFactory,
     sev_root_certificate_verification: SevRootCertificateVerification,
     trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
-    vsock_client: Box<dyn VSockClient + Send + Sync>,
+    vsock_client: Box<dyn VsockClient + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     store_device_path: PathBuf,
     store_luks_header_path: PathBuf,
@@ -49,7 +49,7 @@ pub struct DiskEncryptionKeyExchangeServerAgent {
 impl DiskEncryptionKeyExchangeServerAgent {
     pub fn new(
         handle: Handle,
-        vsock_client: Box<dyn VSockClient + Send + Sync>,
+        vsock_client: Box<dyn VsockClient + Send + Sync>,
         sev_firmware_factory: SevFirmwareFactory,
         sev_root_certificate_verification: SevRootCertificateVerification,
         trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,

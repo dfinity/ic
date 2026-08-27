@@ -1,8 +1,9 @@
-use crate::protocol::{Payload, Response};
 use std::io::Error;
 use std::process::Output;
 
-pub fn handle_command_output(command_output: Result<Output, Error>) -> Response {
+use crate::protocol::{Payload, Response};
+
+pub(crate) fn handle_command_output(command_output: Result<Output, Error>) -> Response {
     command_output
         .map_err(|err| {
             let error_string = format!("Unable to read command output: {err}");

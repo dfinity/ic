@@ -6,7 +6,6 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = { workspace = true }
 clap = { workspace = true } # only needed by bin, can't express in direct Cargo.toml
 mockall = { workspace = true }
 serde = { workspace = true }
@@ -14,13 +13,21 @@ serde_json = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true }
-reqwest = { workspace = true }
 # vendored: build the bundled libusb instead of linking the system one, so
 # neither build needs libusb-1.0-0-dev (Bazel additionally disables the
 # libudev probe; see the libusb1-sys annotation in bazel/rust.MODULE.bazel).
 rusb = { version = "0.9", features = ["vendored"] }
-sha2 = { workspace = true }
 tempfile = { workspace = true }
-vsock = "0.4"
+vsock = "0.5.4"
 ic-http-utils = { path = "../../http_utils" }
-tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "sync"] }
+tokio-util = { workspace = true }
+tokio-vsock = "0.7.2"
+
+[[bin]]
+name = "guest"
+test = false
+
+[[bin]]
+name = "host"
+test = false
