@@ -16,6 +16,7 @@ path = "bin/principal_to_hex.rs"
 
 [dependencies]
 askama = { workspace = true }
+async-trait = { workspace = true }
 canbench-rs = { workspace = true, optional = true }
 candid = { workspace = true }
 ethnum = { workspace = true }
