@@ -55,9 +55,17 @@ use std::collections::{BTreeMap, BTreeSet};
 /// This is what bounds a sweep's gas, but only because the batch carries a single token: the
 /// delegate applies its whole token list to every address, so a one-token batch pays one balance
 /// check and at most one transfer per address and [`SweepRequest::gas_limit`] stays linear in the
-/// batch — ~3.4M gas at twenty deposits. A batch spanning several tokens would grow as their
-/// product instead, which is why [`sweep_batches_by_token`] never builds one.
-const MAX_DEPOSITS_PER_SWEEP: usize = 20;
+/// batch — ~1.7M gas at ten deposits. A batch spanning several tokens would grow as their product
+/// instead, which is why [`sweep_batches_by_token`] never builds one.
+///
+/// Ten, because that is where batching has bought what it can. `deposit_from_cex_demo`'s measured
+/// attested scenarios put a deposit at 98'000 gas alone, 60'943 in a batch of ten and 59'645 in a
+/// batch of twenty: the second doubling saves ~2%, one transaction's intrinsic gas spread over the
+/// extra deposits. A wider batch does not pay for what it costs — `sweepErc20Batch` has no
+/// per-item error handling, so it doubles how many deposits one revert drops (see
+/// [`next_batch_of`]), and it doubles what a single sweep prepays against the sweeper's low-water
+/// mark (see [`max_sweep_transaction_fee`]).
+const MAX_DEPOSITS_PER_SWEEP: usize = 10;
 
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
