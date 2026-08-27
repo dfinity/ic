@@ -4367,8 +4367,10 @@ pub mod test {
             let mut catch_up_package = pool.make_catch_up_package(finalization.height());
             let mut block = catch_up_package.content.block.as_ref().clone();
             let mut payload = block.payload.as_ref().clone();
-            match &mut payload {
-                BlockPayload::Summary(summary) => summary.dkg.registry_version = registry_version,
+            match payload {
+                BlockPayload::Summary(ref mut summary) => {
+                    summary.dkg.registry_version = registry_version
+                }
                 BlockPayload::Data(_) => panic!("A CatchUpPackage should contain a summary block"),
             }
             block.payload = Payload::new(ic_types::crypto::crypto_hash, payload);
