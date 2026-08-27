@@ -278,6 +278,27 @@ impl State {
         ))
     }
 
+    pub fn attestation_requests<I: IntoIterator<Item = Account>>(
+        &self,
+        accounts: I,
+    ) -> Option<Vec<AttestationRequest>> {
+        let deposit_helper = *self
+            .log_scrapings
+            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)?;
+        Some(
+            accounts
+                .into_iter()
+                .map(|account| {
+                    AttestationRequest::new(
+                        self.ethereum_network.chain_id(),
+                        deposit_helper,
+                        account,
+                    )
+                })
+                .collect(),
+        )
+    }
+
     /// The attestation `account`'s ckERC20 deposit address has already signed for the configuration
     /// this minter runs against, if any: signing another would cost a threshold-ECDSA signature for
     /// the same digest.
