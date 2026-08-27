@@ -63,7 +63,7 @@ pub async fn process_sweeper_transactions<T: TimeProvider>(time_provider: T) {
         return;
     };
 
-    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate().await {
+    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate(&time_provider).await {
         Some(gas_fee_estimate) => gas_fee_estimate,
         None => {
             // The withdrawal task refreshes the same estimate under a shared guard and runs first

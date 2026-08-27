@@ -674,7 +674,7 @@ async fn withdraw_erc20(
 }
 
 async fn estimate_erc20_transaction_fee() -> Option<Wei> {
-    lazy_refresh_gas_fee_estimate()
+    lazy_refresh_gas_fee_estimate(&IC_TIME_PROVIDER)
         .await
         .map(|gas_fee_estimate| {
             gas_fee_estimate
