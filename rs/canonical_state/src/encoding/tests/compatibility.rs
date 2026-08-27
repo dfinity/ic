@@ -308,7 +308,8 @@ fn canonical_encoding_stream_header_v26() {
 /// `RequestAndResponseTransmission` (20B) use case entries are no longer added
 /// on top of the deleted canisters scalar (fixing the double counting), while
 /// the cycles consumed by non-deleted canisters (50B, folded into the stored
-/// aggregate by `SubnetMetrics::refresh_consumed_cycles`) are added instead. Hence the expected value becomes
+/// aggregate by `SubnetMetrics::refresh_consumed_cycles`) are added instead.
+/// Hence the expected value becomes
 /// 0 (deleted) + 50B (HTTP) + 100B (ECDSA) + 50B (canisters) = 200B
 /// (`1B 0000002E90EDD000`).
 ///

@@ -440,8 +440,8 @@ pub struct SubnetMetrics {
     /// Transactions here refer to all messages processed in replicated mode.
     pub update_transactions_total: u64,
 
-    /// Backing store of [`Self::consumed_cycles_total_including_canisters()`], written
-    /// only by [`Self::refresh_consumed_cycles`].
+    /// Backing store of [`Self::consumed_cycles_total_including_canisters()`]; zero
+    /// until [`Self::refresh_consumed_cycles`] derives it.
     #[validate_eq(Ignore)]
     consumed_cycles_total_including_canisters: NominalCycles,
 }
