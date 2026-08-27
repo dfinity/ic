@@ -116,7 +116,10 @@ pub fn valid_init_arg() -> InitArg {
 }
 
 pub mod mock {
+    use crate::management::CallError;
+    use crate::runtime::CanisterRuntime;
     use crate::time::TimeProvider;
+    use async_trait::async_trait;
     use mockall::mock;
 
     mock! {
@@ -128,6 +131,29 @@ pub mod mock {
         }
 
         impl Clone for TimeProvider {
+            fn clone(&self) -> Self;
+        }
+    }
+
+    mock! {
+        #[derive(Debug)]
+        pub CanisterRuntime {}
+
+        impl TimeProvider for CanisterRuntime {
+            fn time(&self) -> u64;
+        }
+
+        #[async_trait]
+        impl CanisterRuntime for CanisterRuntime {
+            async fn sign_with_ecdsa(
+                &self,
+                key_name: String,
+                derivation_path: Vec<Vec<u8>>,
+                message_hash: [u8; 32],
+            ) -> Result<[u8; 64], CallError>;
+        }
+
+        impl Clone for CanisterRuntime {
             fn clone(&self) -> Self;
         }
     }
