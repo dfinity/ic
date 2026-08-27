@@ -94,6 +94,23 @@ pub fn sweeper_funding_request(withdrawal_amount: Wei) -> EthWithdrawalRequest {
     }
 }
 
+pub fn deposit_address(account: &Account) -> DepositAddress {
+    let mut preimage = account.owner.as_slice().to_vec();
+    preimage.extend_from_slice(account.effective_subaccount());
+    let hash = ic_sha3::Keccak256::hash(&preimage);
+    let mut bytes = [0_u8; 20];
+    bytes.copy_from_slice(&hash[12..32]);
+    DepositAddress::new(Address::new(bytes))
+}
+
+pub fn usdc() -> Address {
+    Address::new([0xaa; 20])
+}
+
+pub fn usdt() -> Address {
+    Address::new([0xbb; 20])
+}
+
 pub fn automatic_deposit() -> AutomaticDeposit {
     AutomaticDeposit {
         owner: account().owner,
