@@ -47,7 +47,7 @@ use crate::{
             NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
             ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
             RegisterExtension, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
-            TransferSnsTreasuryFunds, TreasuryMetrics, Uint128, UpgradeSnsControlledCanister, Vote,
+            TransferSnsTreasuryFunds, TreasuryMetrics, UpgradeSnsControlledCanister, Vote,
             VotingPowerMetrics, WaitForQuietState,
             claim_swap_neurons_response::SwapNeuron,
             get_neuron_response, get_proposal_response,
@@ -120,6 +120,7 @@ use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
+use num_bigint::BigUint;
 
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -700,21 +701,6 @@ fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
             .now_or_never()
             .expect("Future could not execute in non-WASM environment");
     }
-}
-
-fn try_convert_reward_shares_to_u128(reward_shares: Decimal) -> Result<u128, String> {
-    if reward_shares.is_sign_negative() {
-        return Err(format!(
-            "Reward shares must be non-negative: {reward_shares}."
-        ));
-    }
-
-    if reward_shares.fract() != Decimal::ZERO {
-        return Err(format!("Reward shares must be integral: {reward_shares}."));
-    }
-
-    u128::try_from(reward_shares)
-        .map_err(|err| format!("Cannot represent reward shares {reward_shares} as u128: {err}."))
 }
 
 impl Governance {
@@ -5992,18 +5978,30 @@ impl Governance {
                 };
 
                 if neuron_reward_shares > dec!(0) {
-                    let reward_shares = try_convert_reward_shares_to_u128(neuron_reward_shares)
-                        .unwrap_or_else(|err| {
-                            panic!(
-                                "Recording reward shares for neuron {neuron_id:?}:\n\
-                                 neuron_reward_shares: {neuron_reward_shares}\n\
-                                 err: {err}",
-                            )
-                        });
+                    // SNS reward shares are currently sums of integer ballot voting powers, so
+                    // the fractional part is expected to be zero. If this invariant is violated,
+                    // truncate only the participation value and continue calculating native
+                    // rewards with the original Decimal below.
+                    if neuron_reward_shares.fract() != Decimal::ZERO {
+                        log!(
+                            ERROR,
+                            "Unexpected fractional SNS reward shares for neuron {neuron_id:?}: \
+                             {neuron_reward_shares}. SNS reward shares are expected to be sums of \
+                             integer ballot voting powers. Recording the truncated value in \
+                             latest_reward_event_participation while native reward calculation \
+                             continues using the original Decimal."
+                        );
+                    }
+
+                    let truncated_reward_shares = neuron_reward_shares.trunc();
+                    // After truncation, the Decimal has scale zero, so its mantissa is the exact
+                    // integer value exposed as a Candid nat.
+                    let reward_shares =
+                        BigUint::from(truncated_reward_shares.mantissa().unsigned_abs());
 
                     neuron.latest_reward_event_participation = Some(RewardEventParticipation {
                         reward_event_end_timestamp_seconds,
-                        reward_shares: Some(Uint128::from(reward_shares)),
+                        reward_shares: reward_shares.to_bytes_be(),
                     });
                 }
 

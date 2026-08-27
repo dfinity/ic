@@ -4,24 +4,7 @@ use crate::{
 };
 use core::{convert::Into, option::Option::Some};
 use ic_sns_governance_api::pb::v1 as pb_api;
-
-impl From<pb::Uint128> for pb_api::Uint128 {
-    fn from(item: pb::Uint128) -> Self {
-        Self {
-            high: item.high,
-            low: item.low,
-        }
-    }
-}
-
-impl From<pb_api::Uint128> for pb::Uint128 {
-    fn from(item: pb_api::Uint128) -> Self {
-        Self {
-            high: item.high,
-            low: item.low,
-        }
-    }
-}
+use num_bigint::BigUint;
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
     fn from(item: pb::NeuronPermission) -> Self {
@@ -227,8 +210,8 @@ impl From<pb_api::Neuron> for pb::Neuron {
 impl From<pb::neuron::RewardEventParticipation> for pb_api::neuron::RewardEventParticipation {
     fn from(item: pb::neuron::RewardEventParticipation) -> Self {
         Self {
-            reward_event_end_timestamp_seconds: item.reward_event_end_timestamp_seconds,
-            reward_shares: item.reward_shares.map(pb_api::Uint128::from),
+            reward_event_end_timestamp_seconds: Some(item.reward_event_end_timestamp_seconds),
+            reward_shares: Some(candid::Nat(BigUint::from_bytes_be(&item.reward_shares))),
         }
     }
 }
@@ -236,8 +219,10 @@ impl From<pb::neuron::RewardEventParticipation> for pb_api::neuron::RewardEventP
 impl From<pb_api::neuron::RewardEventParticipation> for pb::neuron::RewardEventParticipation {
     fn from(item: pb_api::neuron::RewardEventParticipation) -> Self {
         Self {
-            reward_event_end_timestamp_seconds: item.reward_event_end_timestamp_seconds,
-            reward_shares: item.reward_shares.map(pb::Uint128::from),
+            reward_event_end_timestamp_seconds: item
+                .reward_event_end_timestamp_seconds
+                .unwrap_or_default(),
+            reward_shares: item.reward_shares.unwrap_or_default().0.to_bytes_be(),
         }
     }
 }

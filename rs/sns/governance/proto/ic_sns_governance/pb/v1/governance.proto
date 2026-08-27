@@ -94,15 +94,6 @@ message DisburseMaturityInProgress {
   optional uint64 finalize_disbursement_timestamp_seconds = 4;
 }
 
-// An exact unsigned 128-bit integer.
-message Uint128 {
-  // The most significant 64 bits.
-  uint64 high = 1;
-
-  // The least significant 64 bits.
-  uint64 low = 2;
-}
-
 // A neuron in the governance system.
 message Neuron {
   // The unique id of this neuron.
@@ -197,7 +188,10 @@ message Neuron {
 
     // The sum of the neuron's canonical ballot voting power over all
     // reward-eligible Yes and No ballots in proposals settled by this event.
-    Uint128 reward_shares = 2;
+    //
+    // Encoded as the canonical big-endian unsigned integer magnitude produced
+    // by BigUint::to_bytes_be().
+    bytes reward_shares = 2;
   }
 
   // The neuron's legacy followees (per proposal type), specified as a map of proposal functions IDs

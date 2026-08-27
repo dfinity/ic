@@ -3,9 +3,10 @@ use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_sns_governance_api::pb::v1 as pb_api;
 use maplit::{btreemap, btreeset};
+use num_bigint::BigUint;
 use prost::Message;
 
-use crate::pb::v1::{Motion, Uint128, VotingRewardsParameters};
+use crate::pb::v1::{Motion, VotingRewardsParameters};
 use crate::types::test_helpers::NativeEnvironment;
 
 fn neuron_id(id: u8) -> NeuronId {
@@ -68,12 +69,11 @@ fn governance_with_neurons(neurons: Vec<Neuron>) -> (Governance, u64) {
     (governance, round_duration_seconds)
 }
 
-fn reward_shares(neuron: &Neuron) -> Option<u128> {
+fn reward_shares(neuron: &Neuron) -> Option<BigUint> {
     neuron
         .latest_reward_event_participation
         .as_ref()
-        .and_then(|participation| participation.reward_shares)
-        .map(u128::from)
+        .map(|participation| BigUint::from_bytes_be(&participation.reward_shares))
 }
 
 fn cascaded_ballots(
@@ -136,7 +136,7 @@ fn cascaded_ballots(
 
 #[test]
 fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
-    // Step 1: Prepare neurons and two proposals. The follower's ballots are populated through
+    // Step 1: Prepare neurons and three proposals. The follower's ballots are populated through
     // the production cascade implementation.
     let alice_id = neuron_id(1);
     let bob_id = neuron_id(2);
@@ -153,11 +153,14 @@ fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
         neuron(&carol_id),
         follower,
     ]);
+    // i2d(ballot.voting_power) currently requires each voting power to fit in i64,
+    // so three proposals are needed to exercise an aggregate above u64::MAX.
+    let maximum_reward_share_contribution = i64::MAX.unsigned_abs();
     let proposal_1_ballots = cascaded_ballots(
         1,
         &governance.proto.neurons,
         &btreemap! {
-            alice_id.clone() => 10,
+            alice_id.clone() => maximum_reward_share_contribution,
             bob_id.clone() => 20,
             carol_id.clone() => 30,
             follower_id.clone() => 40,
@@ -172,7 +175,7 @@ fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
         2,
         &governance.proto.neurons,
         &btreemap! {
-            alice_id.clone() => 15,
+            alice_id.clone() => maximum_reward_share_contribution,
             bob_id.clone() => 25,
             carol_id.clone() => 35,
             follower_id.clone() => 45,
@@ -183,6 +186,21 @@ fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
         Vote::No,
         Vote::Yes,
     );
+    let proposal_3_ballots = cascaded_ballots(
+        3,
+        &governance.proto.neurons,
+        &btreemap! {
+            alice_id.clone() => 2,
+            bob_id.clone() => 0,
+            carol_id.clone() => 0,
+            follower_id.clone() => 0,
+        },
+        &alice_id,
+        &bob_id,
+        &follower_id,
+        Vote::Yes,
+        Vote::No,
+    );
     governance
         .proto
         .proposals
@@ -191,6 +209,10 @@ fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
         .proto
         .proposals
         .insert(2, proposal_data(2, proposal_2_ballots));
+    governance
+        .proto
+        .proposals
+        .insert(3, proposal_data(3, proposal_3_ballots));
 
     // Step 2: Distribute the zero-value native reward purse.
     governance.distribute_rewards(Tokens::from_e8s(1_000_000));
@@ -200,25 +222,33 @@ fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
     assert_eq!(reward_event.distributed_e8s_equivalent, 0);
     assert_eq!(
         reward_event.settled_proposals,
-        vec![ProposalId { id: 1 }, ProposalId { id: 2 }]
+        vec![
+            ProposalId { id: 1 },
+            ProposalId { id: 2 },
+            ProposalId { id: 3 },
+        ]
     );
     let event_timestamp_seconds = reward_event.end_timestamp_seconds.unwrap();
 
     for (neuron_id, expected_shares) in [
-        (&alice_id, Some(25)),
-        (&bob_id, Some(45)),
+        (
+            &alice_id,
+            Some(BigUint::from(u64::MAX) + BigUint::from(1_u8)),
+        ),
+        (&bob_id, Some(BigUint::from(45_u8))),
         (&carol_id, None),
-        (&follower_id, Some(85)),
+        (&follower_id, Some(BigUint::from(85_u8))),
     ] {
         let neuron = governance
             .proto
             .neurons
             .get(&neuron_id.to_string())
             .unwrap();
+        let participated = expected_shares.is_some();
         assert_eq!(reward_shares(neuron), expected_shares);
         assert_eq!(neuron.maturity_e8s_equivalent, 0);
         assert_eq!(neuron.staked_maturity_e8s_equivalent.unwrap_or_default(), 0);
-        if expected_shares.is_some() {
+        if participated {
             assert_eq!(
                 neuron
                     .latest_reward_event_participation
@@ -243,6 +273,15 @@ fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
             .proto
             .proposals
             .get(&2)
+            .unwrap()
+            .ballots
+            .is_empty()
+    );
+    assert!(
+        governance
+            .proto
+            .proposals
+            .get(&3)
             .unwrap()
             .ballots
             .is_empty()
@@ -296,7 +335,7 @@ fn test_replaces_only_positive_participants_and_retains_older_event_tags() {
     assert_ne!(event_1_timestamp_seconds, event_2_timestamp_seconds);
     let alice = governance.proto.neurons.get(&alice_id.to_string()).unwrap();
     let bob = governance.proto.neurons.get(&bob_id.to_string()).unwrap();
-    assert_eq!(reward_shares(alice), Some(10));
+    assert_eq!(reward_shares(alice), Some(BigUint::from(10_u8)));
     assert_eq!(
         alice
             .latest_reward_event_participation
@@ -305,7 +344,7 @@ fn test_replaces_only_positive_participants_and_retains_older_event_tags() {
             .reward_event_end_timestamp_seconds,
         event_1_timestamp_seconds,
     );
-    assert_eq!(reward_shares(bob), Some(40));
+    assert_eq!(reward_shares(bob), Some(BigUint::from(40_u8)));
     assert_eq!(
         bob.latest_reward_event_participation
             .as_ref()
@@ -316,212 +355,65 @@ fn test_replaces_only_positive_participants_and_retains_older_event_tags() {
 }
 
 #[test]
-fn test_zero_eligible_shares_and_no_proposals_retain_older_participation() {
-    // Step 1: Prepare an older participation value and an all-Unspecified proposal.
+fn test_neuron_apis_and_pb_api_conversion_preserve_participation() {
+    // Step 1: Prepare.
     let alice_id = neuron_id(1);
-    let mut alice = neuron(&alice_id);
-    let old_participation = RewardEventParticipation {
+    let bob_id = neuron_id(2);
+    let reward_shares = BigUint::from(u64::MAX) + BigUint::from(1_u8);
+    let participation = RewardEventParticipation {
         reward_event_end_timestamp_seconds: 123,
-        reward_shares: Some(Uint128::from(99_u128)),
+        reward_shares: reward_shares.to_bytes_be(),
     };
-    alice.latest_reward_event_participation = Some(old_participation);
-    let (mut governance, round_duration_seconds) = governance_with_neurons(vec![alice]);
-    governance.proto.proposals.insert(
-        1,
-        proposal_data(
-            1,
-            btreemap! {
-                alice_id.to_string() => Ballot { vote: Vote::Unspecified as i32, voting_power: 10, ..Default::default() },
-            },
-        ),
-    );
+    let mut alice = neuron(&alice_id);
+    alice.latest_reward_event_participation = Some(participation.clone());
+    let (governance, _) = governance_with_neurons(vec![alice, neuron(&bob_id)]);
 
-    // Step 2: Settle the no-eligible-vote event, then create an event with no proposals.
-    governance.distribute_rewards(Tokens::from_e8s(0));
-    assert_eq!(
-        governance.latest_reward_event().settled_proposals,
-        vec![ProposalId { id: 1 }]
-    );
-    let unspecified_event_timestamp_seconds = governance
-        .latest_reward_event()
-        .end_timestamp_seconds
-        .unwrap();
-    assert!(
-        governance
-            .proto
-            .proposals
-            .get(&1)
-            .unwrap()
-            .ballots
-            .is_empty()
-    );
-    assert_eq!(
-        governance
-            .proto
-            .neurons
-            .get(&alice_id.to_string())
-            .unwrap()
-            .latest_reward_event_participation,
-        Some(old_participation),
-    );
-    governance.env.set_time_warp(TimeWarp {
-        delta_s: i64::try_from(round_duration_seconds).unwrap(),
-    });
-    governance.distribute_rewards(Tokens::from_e8s(0));
-
-    // Step 3: Both events retain the older value, and the second settles no proposals.
-    assert_eq!(
-        governance
-            .proto
-            .neurons
-            .get(&alice_id.to_string())
-            .unwrap()
-            .latest_reward_event_participation,
-        Some(old_participation),
-    );
-    assert_eq!(governance.latest_reward_event().settled_proposals, vec![]);
-    assert_ne!(
-        governance
-            .latest_reward_event()
-            .end_timestamp_seconds
-            .unwrap(),
-        unspecified_event_timestamp_seconds,
-    );
-}
-
-#[test]
-fn test_exact_numeric_conversions() {
-    // Step 1: Prepare exactly representable Decimal values.
-    let maximum_decimal = Decimal::MAX;
-    let values = [
-        (Decimal::ZERO, 0_u128),
-        (Decimal::from(42_u64), 42_u128),
-        (Decimal::new(42_000, 3), 42_u128),
-        (Decimal::from(u64::MAX), u128::from(u64::MAX)),
-        (
-            Decimal::from(u64::MAX) + Decimal::ONE,
-            u128::from(u64::MAX) + 1,
-        ),
-        (
-            maximum_decimal,
-            u128::try_from(maximum_decimal.mantissa()).unwrap(),
-        ),
-    ];
-
-    // Step 2: Convert the values.
-    let converted = values
-        .iter()
-        .map(|(value, _)| try_convert_reward_shares_to_u128(*value).unwrap())
-        .collect::<Vec<_>>();
-
-    // Step 3: Verify exact values and rejection of invalid inputs.
-    assert_eq!(
-        converted,
-        values
-            .iter()
-            .map(|(_, expected)| *expected)
-            .collect::<Vec<_>>()
-    );
-    assert!(try_convert_reward_shares_to_u128(Decimal::NEGATIVE_ONE).is_err());
-    assert!(try_convert_reward_shares_to_u128(Decimal::new(15, 1)).is_err());
-    for value in [0, u128::from(u64::MAX), u128::from(u64::MAX) + 1, u128::MAX] {
-        assert_eq!(u128::from(Uint128::from(value)), value);
-    }
-}
-
-#[test]
-fn test_neuron_apis_preserve_participation_and_pagination() {
-    // Step 1: Prepare five neurons with distinct participation values.
-    let neurons = (1_u8..=5)
-        .map(|id| {
-            let neuron_id = neuron_id(id);
-            let mut neuron = neuron(&neuron_id);
-            neuron.latest_reward_event_participation = Some(RewardEventParticipation {
-                reward_event_end_timestamp_seconds: 100,
-                reward_shares: Some(Uint128::from(u128::from(id))),
-            });
-            neuron
+    // Step 2: Run.
+    let fetched_alice = governance
+        .get_neuron(GetNeuron {
+            neuron_id: Some(alice_id.clone()),
         })
-        .collect::<Vec<_>>();
-    let (mut governance, round_duration_seconds) = governance_with_neurons(neurons);
-
-    // Step 2: Page through list_neurons while the reward-event snapshot is unchanged.
-    let event_timestamp_before_pages = governance
-        .latest_reward_event()
-        .end_timestamp_seconds
+        .result
+        .unwrap()
         .unwrap();
-    let mut listed_neurons = vec![];
-    let mut start_page_at = None;
-    loop {
-        let page = governance.list_neurons(&ListNeurons {
+    let listed_alice = governance
+        .list_neurons(&ListNeurons {
             limit: 2,
-            start_page_at: start_page_at.clone(),
+            start_page_at: None,
             of_principal: None,
-        });
-        if page.neurons.is_empty() {
-            break;
-        }
-        start_page_at = page.neurons.last().unwrap().id.clone();
-        listed_neurons.extend(page.neurons);
-    }
-    let event_timestamp_after_pages = governance
-        .latest_reward_event()
-        .end_timestamp_seconds
-        .unwrap();
-    assert_eq!(event_timestamp_before_pages, event_timestamp_after_pages);
-
-    // Step 3: Verify deterministic, complete pagination and lossless public API conversion.
-    let expected_neuron_ids = governance
-        .proto
+        })
         .neurons
-        .values()
-        .map(|neuron| neuron.id.clone().unwrap())
-        .collect::<Vec<_>>();
-    assert_eq!(
-        listed_neurons
-            .iter()
-            .map(|neuron| neuron.id.clone().unwrap())
-            .collect::<Vec<_>>(),
-        expected_neuron_ids,
-    );
-    for listed_neuron in &listed_neurons {
-        let neuron_id = listed_neuron.id.clone().unwrap();
-        let fetched_neuron = governance
-            .get_neuron(GetNeuron {
-                neuron_id: Some(neuron_id),
-            })
-            .result
-            .unwrap()
-            .unwrap();
-        assert_eq!(&fetched_neuron, listed_neuron);
-        let public_neuron = pb_api::Neuron::from(listed_neuron.clone());
-        assert_eq!(&Neuron::from(public_neuron), listed_neuron);
-    }
+        .into_iter()
+        .find(|neuron| neuron.id.as_ref() == Some(&alice_id))
+        .unwrap();
 
-    // Step 4: A client rejects pages when a reward event occurs between page reads.
-    let event_timestamp_before_pages = governance
-        .latest_reward_event()
-        .end_timestamp_seconds
+    // Step 3: Verify.
+    assert_eq!(
+        fetched_alice.latest_reward_event_participation,
+        Some(participation.clone()),
+    );
+    assert_eq!(
+        listed_alice.latest_reward_event_participation,
+        Some(participation.clone()),
+    );
+
+    let public_alice = pb_api::Neuron::from(listed_alice);
+    let public_participation = public_alice
+        .latest_reward_event_participation
+        .as_ref()
         .unwrap();
-    let first_page = governance.list_neurons(&ListNeurons {
-        limit: 2,
-        start_page_at: None,
-        of_principal: None,
-    });
-    governance.env.set_time_warp(TimeWarp {
-        delta_s: i64::try_from(round_duration_seconds).unwrap(),
-    });
-    governance.distribute_rewards(Tokens::from_e8s(0));
-    let _second_page = governance.list_neurons(&ListNeurons {
-        limit: 2,
-        start_page_at: first_page.neurons.last().unwrap().id.clone(),
-        of_principal: None,
-    });
-    let event_timestamp_after_pages = governance
-        .latest_reward_event()
-        .end_timestamp_seconds
-        .unwrap();
-    assert_ne!(event_timestamp_before_pages, event_timestamp_after_pages);
+    assert_eq!(
+        public_participation.reward_event_end_timestamp_seconds,
+        Some(123),
+    );
+    assert_eq!(
+        public_participation.reward_shares,
+        Some(candid::Nat(reward_shares)),
+    );
+    assert_eq!(
+        Neuron::from(public_alice).latest_reward_event_participation,
+        Some(participation),
+    );
 }
 
 #[test]

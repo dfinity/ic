@@ -16,7 +16,7 @@ use crate::{
     },
     pb::v1::{
         Account as AccountProto, Motion, NervousSystemFunction, NeuronPermissionType, ProposalData,
-        ProposalId, Tally, Uint128, UpgradeJournalEntry, UpgradeSnsControlledCanister,
+        ProposalId, Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister,
         UpgradeSnsToNextVersion, VotingRewardsParameters, WaitForQuietState,
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
         manage_neuron_response,
@@ -59,6 +59,7 @@ use ic_sns_test_utils::itest_helpers::UserInfo;
 use ic_test_utilities_types::ids::canister_test_id;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use maplit::btreemap;
+use num_bigint::BigUint;
 use pretty_assertions::assert_eq;
 use proptest::prelude::{prop_assert, proptest};
 use std::{
@@ -4331,7 +4332,7 @@ async fn test_split_neuron_succeeds() {
     let mut setup = prepare_setup_for_split_neuron_tests(stake_e8s, maturity_e8s);
     let original_participation = neuron::RewardEventParticipation {
         reward_event_end_timestamp_seconds: 123,
-        reward_shares: Some(Uint128::from(99_u128)),
+        reward_shares: BigUint::from(99_u128).to_bytes_be(),
     };
     setup
         .governance
@@ -4339,7 +4340,7 @@ async fn test_split_neuron_succeeds() {
         .neurons
         .get_mut(&setup.neuron_id.to_string())
         .expect("Missing orig neuron!")
-        .latest_reward_event_participation = Some(original_participation);
+        .latest_reward_event_participation = Some(original_participation.clone());
     let orig_neuron = setup
         .governance
         .proto

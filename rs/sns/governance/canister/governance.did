@@ -584,14 +584,9 @@ type FolloweesForTopic = record {
   topic : opt Topic;
 };
 
-type Uint128 = record {
-  high : nat64;
-  low : nat64;
-};
-
 type RewardEventParticipation = record {
-  reward_event_end_timestamp_seconds : nat64;
-  reward_shares : opt Uint128;
+  reward_event_end_timestamp_seconds : opt nat64;
+  reward_shares : opt nat;
 };
 
 type Neuron = record {

@@ -45,6 +45,7 @@ use ic_sns_governance::{
     },
     types::{Environment, test_helpers::NativeEnvironment},
 };
+use ic_sns_governance_api::pb::v1 as pb_api;
 use ic_sns_test_utils::{
     icrc1,
     itest_helpers::{
@@ -1617,18 +1618,19 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             .neurons
             .get(&neuron.id.as_ref().unwrap().to_string())
             .unwrap();
+        let public_neuron = pb_api::Neuron::from(neuron.clone());
         if weight == 0 {
-            assert_eq!(neuron.latest_reward_event_participation, None);
+            assert_eq!(public_neuron.latest_reward_event_participation, None);
         } else {
-            let participation = neuron.latest_reward_event_participation.as_ref().unwrap();
+            let participation = public_neuron
+                .latest_reward_event_participation
+                .as_ref()
+                .unwrap();
             assert_eq!(
                 participation.reward_event_end_timestamp_seconds,
-                reward_event_end_timestamp_seconds,
+                Some(reward_event_end_timestamp_seconds),
             );
-            assert_eq!(
-                u128::from(participation.reward_shares.unwrap()),
-                u128::from(weight),
-            );
+            assert_eq!(participation.reward_shares, Some(candid::Nat::from(weight)),);
         }
         let expected_share = i2d(weight) / dec!(5);
         let observed_reward = if weight == 3 {

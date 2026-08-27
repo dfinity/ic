@@ -96,26 +96,6 @@ pub struct DisburseMaturityInProgress {
     #[prost(uint64, optional, tag = "4")]
     pub finalize_disbursement_timestamp_seconds: ::core::option::Option<u64>,
 }
-/// An exact unsigned 128-bit integer.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    ::prost::Message,
-)]
-pub struct Uint128 {
-    /// The most significant 64 bits.
-    #[prost(uint64, tag = "1")]
-    pub high: u64,
-    /// The least significant 64 bits.
-    #[prost(uint64, tag = "2")]
-    pub low: u64,
-}
 /// A neuron in the governance system.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[compare_default]
@@ -286,7 +266,6 @@ pub mod neuron {
         candid::Deserialize,
         comparable::Comparable,
         Clone,
-        Copy,
         PartialEq,
         Eq,
         Hash,
@@ -298,8 +277,11 @@ pub mod neuron {
         pub reward_event_end_timestamp_seconds: u64,
         /// The sum of the neuron's canonical ballot voting power over all
         /// reward-eligible Yes and No ballots in proposals settled by this event.
-        #[prost(message, optional, tag = "2")]
-        pub reward_shares: ::core::option::Option<super::Uint128>,
+        ///
+        /// Encoded as the canonical big-endian unsigned integer magnitude produced
+        /// by BigUint::to_bytes_be().
+        #[prost(bytes = "vec", tag = "2")]
+        pub reward_shares: ::prost::alloc::vec::Vec<u8>,
     }
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
