@@ -114,7 +114,13 @@ async fn sign_attestations_batch<R: CanisterRuntime>(
     for (request, signing_result) in signing_results {
         match signing_result {
             Ok(signature) => {
-                mutate_state(|s| s.automatic_deposits.record_attestation(request, signature));
+                mutate_state(|s| {
+                    process_event(
+                        s,
+                        EventType::AttestedDepositAddress { request, signature },
+                        runtime,
+                    )
+                });
             }
             Err(e) => errors.push((request, e)),
         }
