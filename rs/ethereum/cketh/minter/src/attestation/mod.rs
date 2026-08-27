@@ -106,10 +106,5 @@ pub async fn sign_attestation<R: CanisterRuntime>(
     request: &AttestationRequest,
     runtime: &R,
 ) -> Result<TransactionSignature, String> {
-    sign_digest(
-        &request.digest(),
-        &request.derivation_path(),
-        runtime,
-    )
-    .await
+    sign_digest(&request.digest(), &request.derivation_path(), runtime).await
 }
