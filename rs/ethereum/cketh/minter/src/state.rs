@@ -29,7 +29,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet, btree_map};
 use std::fmt::{Display, Formatter};
 use strum_macros::EnumIter;
-use transactions::{SweepId, SweeperTransactionPipeline, WithdrawalTransactions};
+use transactions::{SweepId, WithdrawalTransactions};
 
 pub mod audit;
 pub mod automatic_deposits;
@@ -78,9 +78,6 @@ pub struct State {
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
     pub withdrawal_transactions: WithdrawalTransactions,
-    /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
-    /// its own nonce sequence, independent of the main-address withdrawal pipeline.
-    pub sweeper_transactions: SweeperTransactionPipeline,
     /// Monotonic counter minting the next [`SweepId`] for the sweeper pipeline.
     pub next_sweep_id: SweepId,
     pub skipped_blocks: BTreeMap<Address, BTreeSet<BlockNumber>>,
@@ -598,8 +595,8 @@ impl State {
         if let Some(nonce) = next_sweeper_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
                 .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {e}")))?;
-            self.sweeper_transactions
-                .update_next_transaction_nonce(nonce);
+            self.automatic_deposits
+                .update_next_sweeper_transaction_nonce(nonce);
         }
         if let Some(amount) = minimum_withdrawal_amount {
             let minimum_withdrawal_amount = Wei::try_from(amount).map_err(|e| {
@@ -711,7 +708,8 @@ impl State {
             other.ledger_suite_orchestrator_id
         );
         ensure_eq!(self.ckerc20_tokens, other.ckerc20_tokens);
-        ensure_eq!(self.automatic_deposits, other.automatic_deposits);
+        self.automatic_deposits
+            .is_equivalent_to(&other.automatic_deposits)?;
         ensure_eq!(
             self.sweeper_contract_address,
             other.sweeper_contract_address
@@ -719,8 +717,6 @@ impl State {
         ensure_eq!(self.sweeper_funding, other.sweeper_funding);
         ensure_eq!(self.next_sweep_id, other.next_sweep_id);
 
-        self.sweeper_transactions
-            .is_equivalent_to(&other.sweeper_transactions)?;
         self.withdrawal_transactions
             .is_equivalent_to(&other.withdrawal_transactions)
     }
