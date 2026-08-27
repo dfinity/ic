@@ -220,13 +220,18 @@ impl Upgrade {
                     NiDkgTargetSubnet::Remote(_) => {
                         // If this CUP was created by a remote subnet, then it is a
                         // genesis/recovery/post-split CUP.
-                        // It is actually not possible to be a post-split CUP because for it to not
-                        // be deserializable, we must have just upgraded to a new replica version.
-                        // But the registry ensures the subnet record (including its replica
-                        // version) cannot change during a subnet split.
-                        // For genesis/recovery CUPs, we can read the subnet ID of the latest
-                        // registry version, as switching to them "resets" the "oldest registry
-                        // version in use" which is responsible for subnet membership.
+                        // In all cases, we look up our subnet at the latest registry version.
+                        // Doing so can have the following undesired effects:
+                        //   - Leaving the subnet even though we were still part of the DKG
+                        //   committee. As long as not too many nodes (including us) were swapped
+                        //   out, there should still be some fault tolerance.
+                        //   Moreover, requests involving Consensus (IDKG, HTTP outcalls, etc.) may
+                        //   fail/timeout.
+                        //   - We may have been assigned to a different subnet than the one that CUP
+                        //   is for. In that case, we will potentially join the new subnet with a
+                        //   different subnet's CUP. The other nodes will invalidate it and this
+                        //   should not affect the new subnet's operation. At some point, it is
+                        //   advisable to swap us out and we will become unassigned.
                         match self.registry.get_subnet_id(latest_registry_version) {
                             Ok(subnet_id) => subnet_id,
                             Err(OrchestratorError::NodeUnassignedError(_, _)) => {
