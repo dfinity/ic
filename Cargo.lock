@@ -17648,7 +17648,6 @@ dependencies = [
  "ic-replicated-state",
  "ic-sys",
  "ic-types",
- "lazy_static",
  "libc",
  "memmap2",
  "nix 0.31.3",
