@@ -437,7 +437,8 @@ impl Step for ReplayStep {
     fn descr(&self) -> String {
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
         let mut base = format!(
-            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}{}",
+            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}{} \
+            --create-checkpoint",
             checkpoint_path.display(),
             self.config.display(),
             self.subnet_id,
@@ -502,6 +503,9 @@ impl Step for ReplayStep {
             self.replay_until_height,
             self.result.clone(),
             self.skip_prompts,
+            // The recovery uploads the checkpoint of the replayed state, so persist it.
+            /*create_checkpoint=*/
+            true,
         ))?;
 
         let latest_height = state_params.height;
@@ -835,6 +839,9 @@ impl Step for UpdateLocalStoreStep {
             None,
             self.work_dir.join("update_local_store.txt"),
             self.skip_prompts,
+            // Only the registry local store is of interest, the state is left as is.
+            /*create_checkpoint=*/
+            false,
         ))?;
         Ok(())
     }
@@ -876,6 +883,9 @@ impl Step for GetRecoveryCUPStep {
             None,
             self.result.clone(),
             self.skip_prompts,
+            // The CUP is derived from the state replayed before, which is not changed.
+            /*create_checkpoint=*/
+            false,
         ))?;
         Ok(())
     }

@@ -226,8 +226,8 @@ pub(crate) fn deliver_batches_with_result_processor(
         // forces resource allocation charging and aborts *all* paused executions.
         // Deriving it from `max_batch_height_to_deliver` would make the last
         // replayed round diverge from the round the subnet actually executed at
-        // that height. `ic-replay` creates the checkpoint it needs by delivering an
-        // extra batch instead, see `Player::deliver_extra_batch`.
+        // that height. `ic-replay` creates the checkpoint it is asked for by delivering
+        // an extra batch instead, see `Player::deliver_extra_batch`.
         let requires_full_state_hash = block.payload.is_summary();
         let batch_content = match block.payload.as_ref() {
             BlockPayload::Summary(_summary_payload) => BatchContent::Data {

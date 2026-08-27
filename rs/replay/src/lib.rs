@@ -34,7 +34,8 @@ pub mod player;
 mod registry_helper;
 mod validator;
 
-/// Replays the past blocks and creates a checkpoint of the latest state.
+/// Replays the past blocks and, if `create_checkpoint` is set, creates a checkpoint of
+/// the latest state.
 /// # An example of how to set the arguments
 /// ```
 /// use ic_replay::cmd::ClapSubnetId;
@@ -62,6 +63,7 @@ mod validator;
 ///     })),
 ///     skip_prompts: true,
 ///     replica_version: None,
+///     create_checkpoint: false,
 /// };
 /// // Once the arguments are set well, the local store and spool directories are populated;
 /// // replay function could be called as follows:
@@ -100,8 +102,8 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             .0;
 
         let target_height = args.replay_until_height;
-        // When replaying a consensus pool, an extra batch persists the state reached
-        // at the target height into a checkpoint, so no warning is needed there.
+        // When replaying a consensus pool, `--create-checkpoint` persists the state
+        // reached at the target height into a checkpoint, so no warning is needed there.
         // Restoring from a backup delivers no extra batches: unless the target height
         // is a CUP height, no checkpoint is created at it and the restore makes no
         // persistent progress beyond the latest CUP at or below the target height.
@@ -137,7 +139,8 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
         {
             let _enter_guard = rt.enter();
             let player = Player::new(cfg, subnet_id, args.replica_version)
-                .with_replay_target_height(target_height);
+                .with_replay_target_height(target_height)
+                .with_create_checkpoint(args.create_checkpoint);
 
             if let Some(SubCommand::GetRecoveryCup(cmd)) = subcmd {
                 cmd_get_recovery_cup(&player, cmd).unwrap();
