@@ -4,6 +4,7 @@
 //! subnet and is reached over the network, so its answer is treated as a hint
 //! and checked against the local, NNS-verified registry before it is used.
 
+use super::agent::AgentFactory;
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     registry_helper::RegistryHelper,
@@ -13,16 +14,7 @@ use ic_agent::Agent;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::{CanisterId, PrincipalId, RegistryVersion, SubnetId};
 use serde::Deserialize;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    str::FromStr,
-    sync::Arc,
-};
-
-/// File under the orchestrator data directory that caches the resolved operator
-/// id, so a restart does not have to wait for the engine management canister.
-const CACHE_FILE_NAME: &str = "engine-operator-canister-id";
+use std::sync::Arc;
 
 #[derive(CandidType)]
 struct GetEngineOperatorBySubnetArgs {
@@ -37,7 +29,6 @@ struct GetEngineOperatorBySubnetResult {
 pub(super) struct Discovery {
     registry: Arc<RegistryHelper>,
     engine_management_canister_id: CanisterId,
-    cache_file: PathBuf,
     resolved: Option<CanisterId>,
     logger: ReplicaLogger,
 }
@@ -46,68 +37,67 @@ impl Discovery {
     pub(super) fn new(
         registry: Arc<RegistryHelper>,
         engine_management_canister_id: CanisterId,
-        data_directory: &Path,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
             registry,
             engine_management_canister_id,
-            cache_file: data_directory.join(CACHE_FILE_NAME),
             resolved: None,
             logger,
         }
     }
 
-    /// The operator canister of `own_subnet`, from memory, from the on-disk
-    /// cache, or by asking the engine management canister.
+    /// The operator canister of `own_subnet`, from memory or by asking the
+    /// engine management canister.
     ///
-    /// `agent` has to point at the subnet hosting the engine management
-    /// canister; [`Self::management_subnet`] says which one that is.
+    /// The engine management canister is only contacted (and the agent to it
+    /// only built) when memory does not hold an id that the local registry
+    /// still vouches for.
     pub(super) async fn resolve(
         &mut self,
-        agent: &Agent,
+        agent_factory: &AgentFactory,
         own_subnet: SubnetId,
         version: RegistryVersion,
     ) -> OrchestratorResult<CanisterId> {
-        if let Some(operator) = self.resolved {
+        if let Some(operator) = self.validated_from_memory(own_subnet, version) {
             return Ok(operator);
         }
 
-        if let Some(operator) = self.read_cache() {
-            // Validate before trusting the cache: the subnet's admins may have
-            // changed while this node was down.
-            match self.validate(operator.get(), own_subnet, version) {
-                Ok(operator) => {
-                    self.resolved = Some(operator);
-                    return Ok(operator);
-                }
-                Err(err) => warn!(self.logger, "Discarding the cached operator id: {}", err),
-            }
-        }
-
-        let candidate = self.ask_management_canister(agent, own_subnet).await?;
+        let agent = agent_factory.anonymous_via_api_boundary_node(version)?;
+        let candidate = self.ask_management_canister(&agent, own_subnet).await?;
         let operator = self.validate(candidate, own_subnet, version)?;
         info!(self.logger, "Resolved the engine operator: {}", operator);
-        self.write_cache(operator);
         self.resolved = Some(operator);
 
         Ok(operator)
     }
 
-    /// Forgets the resolved id, so the next [`Self::resolve`] asks again. Called
-    /// when the operator stops answering in a way that suggests we have the
-    /// wrong canister rather than a cold cache.
-    pub(super) fn invalidate(&mut self) {
-        self.resolved = None;
+    /// The previously resolved id, but only if the local registry still
+    /// confirms it at `version`: the subnet's admins may change while the
+    /// orchestrator keeps running.
+    fn validated_from_memory(
+        &mut self,
+        own_subnet: SubnetId,
+        version: RegistryVersion,
+    ) -> Option<CanisterId> {
+        let operator = self.resolved?;
+        match self.validate(operator.get(), own_subnet, version) {
+            Ok(operator) => Some(operator),
+            Err(err) => {
+                warn!(
+                    self.logger,
+                    "Discarding the previously resolved operator id: {}", err
+                );
+                self.resolved = None;
+                None
+            }
+        }
     }
 
-    /// The subnet hosting the engine management canister.
-    pub(super) fn management_subnet(
-        &self,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<SubnetId> {
-        self.registry
-            .get_subnet_of_canister(self.engine_management_canister_id, version)
+    /// Forgets the resolved id, so the next [`Self::resolve`] asks the engine
+    /// management canister again.
+    pub(super) fn invalidate(&mut self) {
+        self.resolved = None;
     }
 
     async fn ask_management_canister(
@@ -192,33 +182,6 @@ impl Discovery {
 
         Ok(candidate)
     }
-
-    fn read_cache(&self) -> Option<CanisterId> {
-        let contents = fs::read_to_string(&self.cache_file).ok()?;
-        match CanisterId::from_str(contents.trim()) {
-            Ok(canister_id) => Some(canister_id),
-            Err(err) => {
-                warn!(
-                    self.logger,
-                    "Ignoring the malformed operator id cache at {}: {}",
-                    self.cache_file.display(),
-                    err
-                );
-                None
-            }
-        }
-    }
-
-    fn write_cache(&self, operator: CanisterId) {
-        if let Err(err) = fs::write(&self.cache_file, operator.to_string()) {
-            warn!(
-                self.logger,
-                "Could not cache the operator id in {}: {}",
-                self.cache_file.display(),
-                err
-            );
-        }
-    }
 }
 
 #[cfg(test)]
@@ -234,7 +197,6 @@ mod tests {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2};
-    use tempfile::{TempDir, tempdir};
 
     const VERSION: RegistryVersion = RegistryVersion::new(1);
 
@@ -246,10 +208,7 @@ mod tests {
 
     /// Builds a registry where `SUBNET_1` owns canisters 0..=99 and has
     /// `admins` as its subnet admins, and `SUBNET_2` owns 100..=199.
-    ///
-    /// The returned `TempDir` backs the id cache and has to stay alive for as
-    /// long as the `Discovery`.
-    fn discovery_for_test(admins: &[PrincipalId]) -> (Discovery, TempDir) {
+    fn discovery_for_test(admins: &[PrincipalId]) -> Discovery {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
         let mut routing_table = RoutingTable::new();
@@ -290,20 +249,12 @@ mod tests {
             no_op_logger(),
         ));
 
-        let data_directory = tempdir().unwrap();
-        let discovery = Discovery::new(
-            registry,
-            CanisterId::from_u64(1000),
-            data_directory.path(),
-            no_op_logger(),
-        );
-
-        (discovery, data_directory)
+        Discovery::new(registry, CanisterId::from_u64(1000), no_op_logger())
     }
 
     #[test]
     fn own_subnet_admin_canister_is_accepted() {
-        let (discovery, _data_directory) = discovery_for_test(&[operator().get()]);
+        let discovery = discovery_for_test(&[operator().get()]);
 
         assert_matches!(
             discovery.validate(operator().get(), SUBNET_1, VERSION),
@@ -316,7 +267,7 @@ mod tests {
         // In `subnet_admins`, but outside this subnet's canister ranges: the
         // engine management canister itself would look like this.
         let foreign = CanisterId::from_u64(150);
-        let (discovery, _data_directory) = discovery_for_test(&[foreign.get()]);
+        let discovery = discovery_for_test(&[foreign.get()]);
 
         assert_matches!(
             discovery.validate(foreign.get(), SUBNET_1, VERSION),
@@ -328,7 +279,7 @@ mod tests {
     fn canister_that_is_not_a_subnet_admin_is_rejected() {
         // On this subnet, but not an admin of it: any canister an engine's users
         // happen to deploy.
-        let (discovery, _data_directory) = discovery_for_test(&[operator().get()]);
+        let discovery = discovery_for_test(&[operator().get()]);
         let bystander = CanisterId::from_u64(7);
 
         assert_matches!(
@@ -340,7 +291,7 @@ mod tests {
     #[test]
     fn non_canister_principal_is_rejected() {
         let user = PrincipalId::new_self_authenticating(&[1, 2, 3]);
-        let (discovery, _data_directory) = discovery_for_test(&[user]);
+        let discovery = discovery_for_test(&[user]);
 
         assert_matches!(
             discovery.validate(user, SUBNET_1, VERSION),
@@ -349,20 +300,35 @@ mod tests {
     }
 
     #[test]
-    fn cached_id_round_trips() {
-        let (discovery, _data_directory) = discovery_for_test(&[operator().get()]);
-        assert_eq!(discovery.read_cache(), None);
+    fn resolved_id_is_served_without_asking_again() {
+        let mut discovery = discovery_for_test(&[operator().get()]);
+        discovery.resolved = Some(operator());
 
-        discovery.write_cache(operator());
-
-        assert_eq!(discovery.read_cache(), Some(operator()));
+        assert_eq!(
+            discovery.validated_from_memory(SUBNET_1, VERSION),
+            Some(operator())
+        );
     }
 
     #[test]
-    fn malformed_cached_id_is_ignored() {
-        let (discovery, _data_directory) = discovery_for_test(&[operator().get()]);
-        fs::write(&discovery.cache_file, "not-a-canister-id").unwrap();
+    fn resolved_id_is_revalidated_against_the_registry() {
+        // The remembered operator is no longer an admin of the subnet (the
+        // registry lists someone else): it has to be dropped, not served.
+        let mut discovery = discovery_for_test(&[CanisterId::from_u64(4).get()]);
+        discovery.resolved = Some(operator());
 
-        assert_eq!(discovery.read_cache(), None);
+        assert_eq!(discovery.validated_from_memory(SUBNET_1, VERSION), None);
+        assert_eq!(discovery.resolved, None);
+    }
+
+    #[test]
+    fn invalidate_forgets_the_resolved_id() {
+        let mut discovery = discovery_for_test(&[operator().get()]);
+        discovery.resolved = Some(operator());
+
+        discovery.invalidate();
+
+        assert_eq!(discovery.resolved, None);
+        assert_eq!(discovery.validated_from_memory(SUBNET_1, VERSION), None);
     }
 }

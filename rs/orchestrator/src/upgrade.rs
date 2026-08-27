@@ -1578,7 +1578,6 @@ mod tests {
             )),
             gateway_config,
             Arc::clone(&registry),
-            /* ic_gateway_launch_enabled */ true,
         )));
 
         let manageboot_runner = Box::new(FakeManagebootRunner);

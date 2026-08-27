@@ -15,10 +15,6 @@ use crate::guestos::network::{get_best_interface_name, get_interface_addresses};
 const TLS_KEY_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.key";
 const TLS_CERT_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.crt";
 
-/// Engine management canister on mainnet. Other environments have to configure
-/// their own via `guestos_settings.engine_management_canister_id`.
-const MAINNET_ENGINE_MANAGEMENT_CANISTER_ID: &str = "q6cfj-fyaaa-aaaar-qb77q-cai";
-
 #[derive(Template)]
 #[template(path = "ic.json5.template", escape = "none")]
 pub struct IcConfigTemplate {
@@ -213,7 +209,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
             guestos_config.icos_settings.deployment_environment,
             DeploymentEnvironment::Mainnet
         )
-        .then_some(MAINNET_ENGINE_MANAGEMENT_CANISTER_ID))
+        .then_some(ic_config::cloud_engine::MAINNET_ENGINE_MANAGEMENT_CANISTER_ID))
     {
         Some(id) => serde_json::to_string(id)
             .context("Failed to encode the engine management canister id")?,
