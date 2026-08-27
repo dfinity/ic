@@ -587,7 +587,7 @@ impl SubnetMetrics {
     /// This is the current computation, which avoids double counting the cycles
     /// consumed by deleted canisters, as the legacy
     /// [`Self::consumed_cycles_total_v28`] does. It is one of the two summands of
-    /// [`Self::consumed_cycles_total_including_canisters()`], which is what the
+    /// [`Self::consumed_cycles_total_including_canisters`], which is what the
     /// canonical state consumer reports from certification version `V29` on.
     pub fn consumed_cycles_total(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
@@ -677,7 +677,7 @@ impl SubnetMetrics {
     /// `consumed_cycles_by_use_case` map, and both are summed here. It is kept
     /// unchanged to preserve the certified state for certification versions up
     /// to and including `V28`; from `V29` on the consumer reports
-    /// [`Self::consumed_cycles_total_including_canisters()`], which does not
+    /// [`Self::consumed_cycles_total_including_canisters`], which does not
     /// double count.
     pub fn consumed_cycles_total_v28(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();

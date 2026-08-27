@@ -2786,7 +2786,7 @@ fn consumed_cycles_total_calculates_the_right_amount() {
 
 /// The `replicated_state_consumed_cycles_since_replica_started` gauge is set in
 /// `ReplicatedStateMetrics::observe` from
-/// [`SubnetMetrics::consumed_cycles_total_including_canisters()`]. This test
+/// [`SubnetMetrics::consumed_cycles_total_including_canisters`]. This test
 /// exercises every subnet-level use case that contributes to the total, so that
 /// omitting any of them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use
 /// cases once were) would change the reported value and fail the assertion, plus
