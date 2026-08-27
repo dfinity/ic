@@ -3,6 +3,7 @@ use crate::{
     IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, OLD_IC_STATE,
     Recovery,
     admin_helper::IcAdmin,
+    cli::consent_given,
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_includes},
@@ -451,15 +452,31 @@ impl Step for ReplayStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        // Without a consensus pool, `ic-replay` silently replays no blocks and
-        // creates no checkpoint at all, so a missing pool means the state was
-        // downloaded incorrectly. Fail loudly instead.
+        // Without a consensus pool, `ic-replay` replays no blocks: it only executes the
+        // subcommand's extra batch, if any, on top of the latest local checkpoint. That
+        // is legitimate when no node could be reached over SSH to download the pool, but
+        // it also looks exactly like a state download gone wrong, so warn about it and
+        // let the operator decide.
         let consensus_pool_path = self.work_dir.join("data").join(IC_CONSENSUS_POOL_PATH);
         if !consensus_pool_path.exists() {
-            return Err(RecoveryError::UnexpectedError(format!(
-                "No consensus pool found at {}",
+            warn!(
+                self.logger,
+                "No consensus pool found at {}: no blocks will be replayed and {}.",
                 consensus_pool_path.display(),
-            )));
+                match &self.subcmd {
+                    Some(_) =>
+                        "only the subcommand will be executed, \
+                        on top of the latest local checkpoint",
+                    None => "the state will be left unchanged",
+                }
+            );
+            if !self.skip_prompts
+                && !consent_given(&self.logger, "Continue without a consensus pool?")
+            {
+                return Err(RecoveryError::UnexpectedError(
+                    "Replay without a consensus pool was declined".to_string(),
+                ));
+            }
         }
 
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);

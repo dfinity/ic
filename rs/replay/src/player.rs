@@ -783,6 +783,10 @@ impl Player {
             // batch anyway would mutate the state based on the latest registry version
             // and wall clock time from above, producing a non-deterministic state hash.
             if pool.is_none() {
+                println!(
+                    "Skipping the extra batch: without a consensus pool no blocks were \
+                    replayed, so the latest checkpoint already holds the latest state."
+                );
                 return (time, None);
             }
             // States above the replay target height can only come from the extra
