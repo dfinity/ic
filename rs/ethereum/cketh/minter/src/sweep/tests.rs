@@ -37,6 +37,46 @@ mod enqueue_token_sweep {
     use icrc_ledger_types::icrc1::account::Account;
 
     #[tokio::test]
+    async fn should_be_no_op_when_targets_empty() {
+        install(queued_state(&[(0, usdc())]));
+        let context = context(MockSigner::default());
+
+        enqueue_token_sweep((usdc(), vec![]), &context).await;
+
+        assert_eq!(
+            context.signer.signed.borrow().clone(),
+            vec![],
+            "a token with nothing queued must cost no signature"
+        );
+        assert_eq!(enqueued_sweeps(), vec![]);
+        assert_eq!(read_state(|s| s.next_sweep_id), SweepId(0));
+        assert_eq!(
+            queued_targets_len(),
+            1,
+            "nothing may be taken off the queue"
+        );
+    }
+
+    #[tokio::test]
+    async fn should_be_no_op_when_helper_deposit_smart_contract_not_configured() {
+        let targets = install(queued_state(&[(0, usdc())]));
+        // Without the helper there is no attestation preimage, so no deposit address can prove which
+        // account it credits and the delegate would refuse every item of the batch.
+        init_state(initial_state());
+        let context = context(MockSigner::default());
+
+        enqueue_token_sweep((usdc(), targets), &context).await;
+
+        assert_eq!(
+            context.signer.signed.borrow().clone(),
+            vec![],
+            "an unconfigured helper must cost no signature"
+        );
+        assert_eq!(enqueued_sweeps(), vec![]);
+        assert_eq!(read_state(|s| s.next_sweep_id), SweepId(0));
+    }
+
+    #[tokio::test]
     async fn should_sweep_every_queued_deposit_of_the_token() {
         let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
 
@@ -168,17 +208,6 @@ mod enqueue_token_sweep {
 
         // The next token's sweep in the same tick reads this, so it must not reuse the id.
         assert_eq!(read_state(|s| s.next_sweep_id), SweepId(1));
-    }
-
-    #[tokio::test]
-    async fn should_skip_the_token_when_no_deposit_helper_is_configured() {
-        let targets = install(queued_state(&[(0, usdc())]));
-        // Without the helper the attestation preimage is unknown, so nothing can be attested.
-        init_state(initial_state());
-
-        enqueue_token_sweep((usdc(), targets), &context(MockSigner::default())).await;
-
-        assert_eq!(enqueued_sweeps(), vec![]);
     }
 
     #[tokio::test]
