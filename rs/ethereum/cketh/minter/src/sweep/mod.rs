@@ -405,6 +405,9 @@ async fn enqueue_token_sweep<S: EcdsaSigner>(
     (token, targets): (Address, Vec<SweepTarget>),
     context: &SweepContext<S>,
 ) {
+    if targets.is_empty() {
+        return;
+    }
     let Some(requests) = attestation_requests(&targets) else {
         log!(
             DEBUG,
