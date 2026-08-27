@@ -26,14 +26,14 @@ run-name: "Disclose ${{ inputs.branch }} @ ${{ inputs.commit }} (confirm=${{ inp
 #     needs manual investigation.
 #   - A downstream "immutable file modified" upload failure means the public
 #     rebuild differs from the CDN bytes that were deployed — an incident
-#     signal for the security team. Never retry around it and never
+#     signal for the infra team. Never retry around it and never
 #     delete/overwrite CDN objects to make it pass.
 #   - Do not push further commits to the branch until its attest-uploads job
 #     is green: Release Testing cancels in-flight runs per ref, and a new tip
 #     would attest a different sha.
 #
 # The DISCLOSE_HOTFIX environment gates the "Push to RC Branch" app
-# credentials: required reviewers approve each run, and the environment's
+# credentials: required reviewers (DRE / Infra) approve each run, and the environment's
 # deployment branch policy (master only) prevents dispatching a modified copy
 # of this workflow from an unreviewed branch.
 
@@ -189,7 +189,9 @@ jobs:
             exit 1
           fi
 
-          if ! git show "$COMMIT:.github/workflows/release-testing.yml" 2>/dev/null | grep -q attest-uploads; then
+          # Match the top-level job key at the jobs indent level so a comment,
+          # a needs: reference or a commented-out job doesn't count.
+          if ! git show "$COMMIT:.github/workflows/release-testing.yml" 2>/dev/null | grep -qE '^  attest-uploads:'; then
             echo "::warning::the tree of $COMMIT has no attest-uploads job in release-testing.yml: the triggered run cannot mint an attestation"
           fi
 
@@ -247,7 +249,10 @@ jobs:
 
           run_url=""
           for _ in $(seq 24); do
-            run_url="$(gh api "repos/dfinity/ic/actions/workflows/release-testing.yml/runs?head_sha=$COMMIT" \
+            # branch and event=push narrow the match: head_sha alone could
+            # select a run for another branch or a prior workflow_dispatch
+            # at the same commit.
+            run_url="$(gh api "repos/dfinity/ic/actions/workflows/release-testing.yml/runs?head_sha=$COMMIT&branch=$BRANCH&event=push" \
               --jq '.workflow_runs[0].html_url // empty' 2>/dev/null || true)"
             if [ -n "$run_url" ]; then
               break
@@ -264,7 +269,7 @@ jobs:
             echo "no-ops (byte-identical to what the private build published). An"
             echo "\"immutable file modified\" failure means the public rebuild"
             echo "differs from the deployed CDN bytes — an incident signal for the"
-            echo "security team; never retry around it and never delete or"
+            echo "infra team; never retry around it and never delete or"
             echo "overwrite CDN objects. Do not push further commits to the branch"
             echo "until its attest-uploads job is green."
           } >>"$GITHUB_STEP_SUMMARY"
