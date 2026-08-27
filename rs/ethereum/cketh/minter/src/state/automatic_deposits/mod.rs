@@ -419,6 +419,7 @@ impl AutomaticDeposits {
                 last_scanned_block: deposit.last_scanned_block,
                 scan_count: deposit.scan_count,
                 scanned_balance: deposit.scanned_balance,
+                swept_by: None,
             },
         );
         assert!(
@@ -505,12 +506,16 @@ impl AutomaticDeposits {
             })
     }
 
+    /// The queued deposits a sweep could take next, batched by token, skipping those a sweep
+    /// already holds: taking them twice would move a balance the minter has already accounted for.
     pub fn requests_batch(
         &self,
         requested_batch_size: usize,
     ) -> BTreeMap<Address, Vec<SweepTarget>> {
         let mut batches = BTreeMap::new();
-        for (deposit_request, sweep_entry) in &self.sweep {
+        for (deposit_request, sweep_entry) in
+            self.sweep.iter().filter(|(_, entry)| entry.is_sweepable())
+        {
             let batch: &mut Vec<_> = batches.entry(deposit_request.token).or_default();
             if batch.len() < requested_batch_size {
                 batch.push(SweepTarget {
@@ -520,6 +525,33 @@ impl AutomaticDeposits {
             }
         }
         batches
+    }
+
+    /// Record that `sweep_id` took these accounts' deposits of `token`: each leaves the pool of
+    /// sweepable entries until the sweep is done with it.
+    ///
+    /// # Panics
+    ///
+    /// If a deposit is not queued, or another sweep already took it. Either means the queue no
+    /// longer describes which sweep owns which funds.
+    pub fn record_sweep_scheduled(
+        &mut self,
+        sweep_id: SweepId,
+        token: Address,
+        accounts: impl IntoIterator<Item = Account>,
+    ) {
+        for account in accounts {
+            let request = DepositRequest::new(account, token);
+            let entry = self
+                .sweep
+                .get_mut(&request)
+                .unwrap_or_else(|| panic!("BUG: {request:?} is not queued for sweeping"));
+            assert_eq!(
+                entry.swept_by, None,
+                "BUG: {request:?} was already taken by another sweep"
+            );
+            entry.swept_by = Some(sweep_id);
+        }
     }
 }
 
@@ -605,6 +637,17 @@ struct SweepEntry {
     scan_count: u32,
     /// The balance read for the token at `last_scanned_block`.
     scanned_balance: Erc20Value,
+    /// The sweep holding these funds, if one does. The entry stays queued while a sweep has it,
+    /// rather than leaving on being taken: until that sweep settles, this is the only record of
+    /// which balance sits at which address, and a failed sweep has to be able to say so.
+    swept_by: Option<SweepId>,
+}
+
+impl SweepEntry {
+    /// Whether a sweep could take these funds, i.e. no sweep already holds them.
+    fn is_sweepable(&self) -> bool {
+        self.swept_by.is_none()
+    }
 }
 
 /// The watchlist value held against one [`DepositRequest`]: the deposit address derived for its

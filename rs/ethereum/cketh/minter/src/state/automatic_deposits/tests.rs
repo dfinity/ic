@@ -1,16 +1,18 @@
 use super::{
     AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, MAX_ACTIVE_DEPOSITS,
-    MAX_TOKENS_PER_ACCOUNT, SCAN_GAP_SECS, SECS_PER_BLOCK, ScanProgress, SweepEntry,
+    MAX_TOKENS_PER_ACCOUNT, SCAN_GAP_SECS, SECS_PER_BLOCK, ScanProgress, SweepEntry, SweepTarget,
 };
 use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
+use crate::state::transactions::SweepId;
 use crate::test_fixtures::{deposit_address, usdc, usdt};
 use crate::timed_sized_map::{Entry, Timestamp};
 use candid::{Nat, Principal};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
+use std::collections::BTreeMap;
 
 #[test]
 fn should_watch_a_pair_for_the_scan_window() {
@@ -701,6 +703,96 @@ fn automatic_deposit(
     }
 }
 
+#[test]
+fn should_batch_queued_deposits_by_token() {
+    let deposits = queued(&[
+        (account(0), usdc()),
+        (account(1), usdc()),
+        (account(2), usdt()),
+    ]);
+
+    let batches = deposits.requests_batch(10);
+
+    assert_eq!(
+        batches.keys().copied().collect::<Vec<_>>(),
+        vec![usdc(), usdt()]
+    );
+    assert_eq!(accounts_in(&batches, usdc()), vec![account(0), account(1)]);
+    assert_eq!(accounts_in(&batches, usdt()), vec![account(2)]);
+
+    // Nothing has taken them, so batching again offers the same deposits.
+    let again = deposits.requests_batch(10);
+    assert_eq!(accounts_in(&again, usdc()), vec![account(0), account(1)]);
+    assert_eq!(accounts_in(&again, usdt()), vec![account(2)]);
+}
+
+#[test]
+fn should_stop_offering_a_deposit_a_sweep_has_taken() {
+    let mut deposits = queued(&[(account(0), usdc()), (account(1), usdc())]);
+
+    deposits.record_sweep_scheduled(SweepId(7), usdc(), [account(0)]);
+
+    let batches = deposits.requests_batch(10);
+    assert_eq!(accounts_in(&batches, usdc()), vec![account(1)]);
+
+    // The taken deposit is still queued: only a settled sweep removes it.
+    assert_eq!(deposits.sweep_len(), 2);
+}
+
+#[test]
+fn should_offer_nothing_once_every_deposit_is_taken() {
+    let mut deposits = queued(&[(account(0), usdc()), (account(1), usdt())]);
+
+    deposits.record_sweep_scheduled(SweepId(1), usdc(), [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(2), usdt(), [account(1)]);
+
+    assert!(deposits.requests_batch(10).is_empty());
+    assert_eq!(deposits.sweep_len(), 2);
+}
+
+#[test]
+#[should_panic(expected = "was already taken by another sweep")]
+fn should_refuse_to_hand_the_same_deposit_to_two_sweeps() {
+    let mut deposits = queued(&[(account(0), usdc())]);
+
+    deposits.record_sweep_scheduled(SweepId(1), usdc(), [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(2), usdc(), [account(0)]);
+}
+
+#[test]
+#[should_panic(expected = "is not queued for sweeping")]
+fn should_refuse_to_schedule_a_deposit_that_is_not_queued() {
+    let mut deposits = queued(&[(account(0), usdc())]);
+
+    deposits.record_sweep_scheduled(SweepId(1), usdt(), [account(0)]);
+}
+
+/// An [`AutomaticDeposits`] whose sweep queue holds exactly these funded pairs.
+fn queued(pairs: &[(Account, Address)]) -> AutomaticDeposits {
+    let mut deposits = AutomaticDeposits::default();
+    for (account, token) in pairs {
+        deposits
+            .watch_deposit(ts(0), *account, *token, deposit_address(account))
+            .unwrap();
+        deposits.record_automatic_deposit_received(&automatic_deposit(
+            *account,
+            *token,
+            10,
+            BlockNumber::new(900),
+            3,
+        ));
+    }
+    assert_eq!(deposits.sweep_len(), pairs.len());
+    deposits
+}
+
+fn accounts_in(batches: &BTreeMap<Address, Vec<SweepTarget>>, token: Address) -> Vec<Account> {
+    batches
+        .get(&token)
+        .map(|targets| targets.iter().map(|target| target.account()).collect())
+        .unwrap_or_default()
+}
+
 fn sweep_entry(
     address: DepositAddress,
     last_scanned_block: BlockNumber,
@@ -712,6 +804,7 @@ fn sweep_entry(
         last_scanned_block,
         scan_count,
         scanned_balance: Erc20Value::new(scanned_balance),
+        swept_by: None,
     }
 }
 
