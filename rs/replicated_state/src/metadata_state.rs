@@ -160,6 +160,7 @@ pub struct SystemMetadata {
     /// 2).
     pub heap_delta_estimate: NumBytes,
 
+    #[validate_eq(CompareWithValidateEq)]
     pub subnet_metrics: SubnetMetrics,
 
     /// The set of Wasm modules we expect to be present in the [`Hypervisor`]'s
@@ -422,7 +423,7 @@ pub struct OwnSubnetInfo {
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct SubnetMetrics {
     consumed_cycles_by_deleted_canisters: NominalCycles,
     consumed_cycles_http_outcalls: NominalCycles,
@@ -438,6 +439,16 @@ pub struct SubnetMetrics {
     ///
     /// Transactions here refer to all messages processed in replicated mode.
     pub update_transactions_total: u64,
+
+    /// The total cycles consumed by the canisters that currently exist on this
+    /// subnet, i.e. the sum of `CanisterMetrics::consumed_cycles()` over all of
+    /// them.
+    ///
+    /// Derived, not persisted: refreshed by
+    /// `ReplicatedState::refresh_consumed_cycles_by_canisters` when a state is
+    /// committed, and re-derived by `ReplicatedState::new_from_checkpoint` on load.
+    #[validate_eq(Ignore)]
+    pub consumed_cycles_by_canisters: NominalCycles,
 }
 
 impl SubnetMetrics {
@@ -634,6 +645,18 @@ impl SubnetMetrics {
         }
 
         total
+    }
+
+    /// All cycles removed from circulation on the subnet, by both deleted and
+    /// still-existing canisters: the subnet-level aggregate
+    /// ([`Self::consumed_cycles_total`]) plus [`Self::consumed_cycles_by_canisters`].
+    ///
+    /// Both the certified state tree at `/subnet/<subnet_id>/metrics` (from
+    /// certification version `V29`) and the
+    /// `replicated_state_consumed_cycles_since_replica_started` gauge report this
+    /// same definition, so the two cannot drift apart.
+    pub fn consumed_cycles_total_including_canisters(&self) -> NominalCycles {
+        self.consumed_cycles_total() + self.consumed_cycles_by_canisters
     }
 
     /// Legacy computation of the total consumed cycles, used by the canonical

@@ -346,6 +346,7 @@ rust_binary(
         # Keep sorted.
         ":minter",
         "//packages/ic-ethereum-types",
+        "//packages/icrc-ledger-types",
         "//rs/phantom_newtype",
         "@crate_index//:candid",
         "@crate_index//:ethers-core",

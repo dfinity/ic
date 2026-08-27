@@ -551,11 +551,27 @@ dependencies = [
 
 [[package]]
 name = "asn1-rs"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5493c3bedbacf7fd7382c6346bbd66687d12bbaad3a89a2d2c303ee6cf20b048"
+dependencies = [
+ "asn1-rs-derive 0.5.1",
+ "asn1-rs-impl",
+ "displaydoc",
+ "nom 7.1.3",
+ "num-traits",
+ "rusticata-macros",
+ "thiserror 1.0.68",
+ "time",
+]
+
+[[package]]
+name = "asn1-rs"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56624a96882bb8c26d61312ae18cb45868e5a9992ea73c58e45c3101e56a1e60"
 dependencies = [
- "asn1-rs-derive",
+ "asn1-rs-derive 0.6.0",
  "asn1-rs-impl",
  "displaydoc",
  "nom 7.1.3",
@@ -563,6 +579,18 @@ dependencies = [
  "rusticata-macros",
  "thiserror 2.0.18",
  "time",
+]
+
+[[package]]
+name = "asn1-rs-derive"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "965c2d33e53cb6b267e148a4cb0760bc01f4904c1cd4bb4002a085bb016d1490"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+ "synstructure",
 ]
 
 [[package]]
@@ -2998,11 +3026,25 @@ dependencies = [
 
 [[package]]
 name = "der-parser"
+version = "9.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5cd0a5c643689626bec213c4d8bd4d96acc8ffdb4ad4bb6bc16abf27d5f4b553"
+dependencies = [
+ "asn1-rs 0.6.2",
+ "displaydoc",
+ "nom 7.1.3",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "rusticata-macros",
+]
+
+[[package]]
+name = "der-parser"
 version = "10.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07da5016415d5a3c4dd39b11ed26f915f52fc4e0dc197d87908bc916e51bc1a6"
 dependencies = [
- "asn1-rs",
+ "asn1-rs 0.7.1",
  "displaydoc",
  "nom 7.1.3",
  "num-bigint 0.4.6",
@@ -3587,7 +3629,7 @@ dependencies = [
  "wsl",
  "wycheproof",
  "x509-cert",
- "x509-parser",
+ "x509-parser 0.18.1",
  "xz2",
  "yansi 0.5.1",
  "zeroize",
@@ -5582,7 +5624,7 @@ dependencies = [
  "uuid",
  "vrl",
  "webpki-root-certs",
- "x509-parser",
+ "x509-parser 0.18.1",
  "zeroize",
  "zstd 0.13.2",
 ]
@@ -8308,11 +8350,20 @@ dependencies = [
 
 [[package]]
 name = "oid-registry"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8d8034d9489cdaf79228eb9f6a3b8d7bb32ba00d6645ebd48eef4077ceb5bd9"
+dependencies = [
+ "asn1-rs 0.6.2",
+]
+
+[[package]]
+name = "oid-registry"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12f40cff3dde1b6087cc5d5f5d4d65712f34016a03ed60e9c08dcc392736b5b7"
 dependencies = [
- "asn1-rs",
+ "asn1-rs 0.7.1",
 ]
 
 [[package]]
@@ -9904,6 +9955,7 @@ dependencies = [
  "ring",
  "rustls-pki-types",
  "time",
+ "x509-parser 0.16.0",
  "yasna",
  "zeroize",
 ]
@@ -10522,7 +10574,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "webpki-roots 1.0.6",
- "x509-parser",
+ "x509-parser 0.18.1",
 ]
 
 [[package]]
@@ -14754,16 +14806,34 @@ dependencies = [
 
 [[package]]
 name = "x509-parser"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcbc162f30700d6f3f82a24bf7cc62ffe7caea42c0b2cba8bf7f3ae50cf51f69"
+dependencies = [
+ "asn1-rs 0.6.2",
+ "data-encoding",
+ "der-parser 9.0.0",
+ "lazy_static",
+ "nom 7.1.3",
+ "oid-registry 0.7.1",
+ "ring",
+ "rusticata-macros",
+ "thiserror 1.0.68",
+ "time",
+]
+
+[[package]]
+name = "x509-parser"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d43b0f71ce057da06bc0851b23ee24f3f86190b07203dd8f567d0b706a185202"
 dependencies = [
- "asn1-rs",
+ "asn1-rs 0.7.1",
  "data-encoding",
- "der-parser",
+ "der-parser 10.0.0",
  "lazy_static",
  "nom 7.1.3",
- "oid-registry",
+ "oid-registry 0.8.1",
  "rusticata-macros",
  "thiserror 2.0.18",
  "time",

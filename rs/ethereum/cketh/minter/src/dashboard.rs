@@ -81,6 +81,10 @@ pub struct DashboardWithdrawalRequest {
     pub value: Nat,
     pub token_symbol: CkTokenSymbol,
     pub created_at: Option<u64>,
+    /// Whether this is the minter funding its own sweeper address rather than a user withdrawal.
+    /// Both travel the same pipeline and so share this table, where a funding would otherwise read
+    /// as an unexplained ckETH withdrawal to an address nobody recognises.
+    pub is_sweeper_funding: bool,
 }
 
 #[derive(Clone)]
@@ -302,7 +306,7 @@ pub struct DashboardTemplate {
 /// Sweeper fee funding: where sweep gas comes from and how much of it is prepaid.
 #[derive(Clone)]
 pub struct DashboardSweeperFunding {
-    pub sweeper_address: Option<String>,
+    pub sweeper_address: Option<Address>,
     pub cketh_burned: Wei,
     pub eth_spent: Wei,
     pub burned_not_yet_spent: Wei,
@@ -366,13 +370,15 @@ impl DashboardTemplate {
             .requests_iter()
             .cloned()
             .map(|request| match request {
-                WithdrawalRequest::CkEth(req) | WithdrawalRequest::SweeperFunding(req) => {
+                WithdrawalRequest::CkEth(ref req) | WithdrawalRequest::SweeperFunding(ref req) => {
+                    let req = req.clone();
                     DashboardWithdrawalRequest {
                         cketh_ledger_burn_index: req.ledger_burn_index,
                         destination: req.destination,
                         value: req.withdrawal_amount.into(),
                         token_symbol: CkTokenSymbol::cketh_symbol_from_state(state),
                         created_at: req.created_at,
+                        is_sweeper_funding: matches!(request, WithdrawalRequest::SweeperFunding(_)),
                     }
                 }
                 WithdrawalRequest::CkErc20(req) => {
@@ -387,6 +393,7 @@ impl DashboardTemplate {
                             .expect("BUG: unknown ERC-20 token")
                             .clone(),
                         created_at: Some(req.created_at),
+                        is_sweeper_funding: false,
                     }
                 }
             })
@@ -507,6 +514,7 @@ impl DashboardTemplate {
             "reimbursed_transactions_start",
         );
 
+        let funding_config = state.sweeper_funding_config();
         DashboardTemplate {
             ethereum_network: state.ethereum_network,
             ecdsa_key_name: state.ecdsa_key_name.clone(),
@@ -536,13 +544,13 @@ impl DashboardTemplate {
                 .collect(),
             supported_ckerc20_tokens,
             sweeper_funding: DashboardSweeperFunding {
-                sweeper_address: state.sweeper_address().map(|address| address.to_string()),
+                sweeper_address: state.sweeper_address(),
                 cketh_burned: state.sweeper_funding.cumulative_burned(),
                 eth_spent: state.sweeper_funding.cumulative_spent(),
                 burned_not_yet_spent: state.sweeper_funding.burned_not_yet_spent(),
                 prepaid_gas_lower_bound: state.sweeper_funding.sweeper_balance_lower_bound(),
-                low_water_mark: state.sweeper_funding_config().low_water_mark,
-                target: state.sweeper_funding_config().target,
+                low_water_mark: funding_config.low_water_mark,
+                target: funding_config.target,
                 in_flight: state
                     .withdrawal_transactions
                     .outstanding_sweeper_funding()

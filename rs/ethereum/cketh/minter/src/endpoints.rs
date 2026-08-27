@@ -561,6 +561,18 @@ pub mod events {
             withdrawal_id: Nat,
             transaction_receipt: TransactionReceipt,
         },
+        AttestedDepositAddress {
+            chain_id: Nat,
+            /// The deposit helper the attestation names; it is only valid against this deployment.
+            deposit_helper: String,
+            owner: Principal,
+            subaccount: Option<ByteBuf>,
+            y_parity: bool,
+            /// 32-byte signature component.
+            r: ByteBuf,
+            /// 32-byte signature component.
+            s: ByteBuf,
+        },
         AcceptedSweepRequest {
             sweep_id: Nat,
             destination: String,

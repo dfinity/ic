@@ -12,6 +12,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::numeric::Wei;
 
 /// How much ckETH has been burned for sweeping and how much of it has actually been spent: the two
@@ -26,8 +27,9 @@ pub struct SweeperFundingAccounting {
     /// Grows at the same point by the fee the transaction paid, which it does either way. Together
     /// with the amount transferred it is the spend, which never overtakes the burn.
     cumulative_transaction_fees: Wei,
-    /// How many funding transactions finalized with a failure receipt. Expected to stay zero: a
-    /// bare transfer to an address derived from the minter's own key has no code to revert in.
+    /// How many funding transactions finalized, by outcome. Failures are expected to stay at zero:
+    /// a bare transfer to an address derived from the minter's own key has no code to revert in.
+    successful_fundings: u64,
     failed_fundings: u64,
 }
 
@@ -37,6 +39,7 @@ impl Default for SweeperFundingAccounting {
             cumulative_burned: Wei::ZERO,
             cumulative_transferred: Wei::ZERO,
             cumulative_transaction_fees: Wei::ZERO,
+            successful_fundings: 0,
             failed_fundings: 0,
         }
     }
@@ -51,9 +54,30 @@ impl SweeperFundingAccounting {
             .expect("BUG: overflow in cumulative burned for sweeping");
     }
 
-    /// Records a finalized funding transaction: `transferred` reached the sweeper address (zero if
-    /// the transaction failed) and `transaction_fee` was spent on gas either way.
-    pub fn record_finalized_funding(&mut self, transferred: Wei, transaction_fee: Wei) {
+    /// Records a finalized funding transaction: `amount` is what its transfer carried and
+    /// `transaction_fee` what it paid for gas, which it did either way.
+    ///
+    /// The outcome decides both the count and whether the transfer landed, so it is one call: a
+    /// failure counts as a failure *and* delivers nothing, and neither can be recorded without the
+    /// other. A failure is counted rather than trapped — the accounting stays sound, since the burn
+    /// simply goes unspent — but the count is the only signal that something believed impossible has
+    /// happened. `WithdrawalTransactions::record_finalized_transaction` logs the same receipt.
+    pub fn record_finalized_funding(
+        &mut self,
+        status: &TransactionStatus,
+        amount: Wei,
+        transaction_fee: Wei,
+    ) {
+        let transferred = match status {
+            TransactionStatus::Success => {
+                self.successful_fundings = self.successful_fundings.saturating_add(1);
+                amount
+            }
+            TransactionStatus::Failure => {
+                self.failed_fundings = self.failed_fundings.saturating_add(1);
+                Wei::ZERO
+            }
+        };
         self.cumulative_transferred = self
             .cumulative_transferred
             .checked_add(transferred)
@@ -62,15 +86,17 @@ impl SweeperFundingAccounting {
             .cumulative_transaction_fees
             .checked_add(transaction_fee)
             .expect("BUG: overflow in cumulative sweeper funding fees");
-        // Checked eagerly so a violation surfaces at the transition that caused it.
-        let _ = self.burned_not_yet_spent();
+        // Checked eagerly, and by the checked helper rather than the saturating getter, so that a
+        // violation traps at the transition that caused it rather than being smoothed over on the
+        // next metrics scrape.
+        self.checked_burned_not_yet_spent().expect(
+            "BUG: more ETH spent on sweeping than ckETH burned for it, \
+             meaning ckETH is under-backed",
+        );
     }
 
-    /// Records a funding transaction that finalized with a failure receipt. Counted rather than
-    /// trapped: the accounting stays sound either way, since the burn simply goes unspent, but the
-    /// count is the only signal that something believed impossible has happened.
-    pub fn record_failed_funding(&mut self) {
-        self.failed_fundings = self.failed_fundings.saturating_add(1);
+    pub fn successful_fundings(&self) -> u64 {
+        self.successful_fundings
     }
 
     pub fn failed_fundings(&self) -> u64 {
@@ -97,44 +123,22 @@ impl SweeperFundingAccounting {
     }
 
     /// ckETH burned for sweeping that has not been spent yet: the burn of a funding in flight, plus
-    /// the fees earlier fundings provisioned but did not pay. Panics rather than saturating if spend
-    /// ever exceeds burn, which would mean ckETH is under-backed.
+    /// the fees earlier fundings provisioned but did not pay. The in-flight part is drawn down when
+    /// that funding finalizes; what is left of it never is, so the floor only ever rises.
+    ///
+    /// Saturates, because the metrics and the dashboard read it from a query: an under-backed
+    /// minter is exactly when an operator needs those surfaces up, so they must not be the thing
+    /// that traps. The state transition that could cause it traps instead, through
+    /// [`Self::checked_burned_not_yet_spent`].
     pub fn burned_not_yet_spent(&self) -> Wei {
-        self.cumulative_burned
-            .checked_sub(self.cumulative_spent())
-            .expect(
-                "BUG: more ETH spent on sweeping than ckETH burned for it, \
-                 meaning ckETH is under-backed",
-            )
+        self.checked_burned_not_yet_spent().unwrap_or(Wei::ZERO)
     }
-}
 
-/// Why sweeping is not currently allowed to spend gas.
-#[derive(Clone, Copy, Eq, PartialEq, Debug)]
-pub enum PrepaidGasUnavailable {
-    Insufficient { available: Wei, required: Wei },
-}
-
-/// Whether the prepaid sweep gas the minter can vouch for covers `required` wei for *one* sweep.
-///
-/// `bound` is [`SweeperFundingAccounting::sweeper_balance_lower_bound`], not a reading: it errs low,
-/// so refusing on it can only withhold a sweep that would in fact have been paid for, which costs
-/// delay. Fails closed in that sense — nothing is authorised that the minter's own records do not
-/// already account for.
-///
-/// A precondition on a bound, not an allowance: it neither reserves nor deducts, so a caller issuing
-/// several sweeps has to subtract what it has already committed. Two 6-wei sweeps both pass against
-/// a 10-wei bound. The backing invariant does not rest on this: funding counts the whole transfer as
-/// spent once it finalizes, so every wei at the sweeper address is already covered by a burn that
-/// preceded it, and drawing it down cannot make spend outrun burn.
-pub fn check_prepaid_sweep_gas(bound: Wei, required: Wei) -> Result<Wei, PrepaidGasUnavailable> {
-    if bound < required {
-        return Err(PrepaidGasUnavailable::Insufficient {
-            available: bound,
-            required,
-        });
+    /// `None` if more ETH has been spent on sweeping than ckETH was burned for it, which would mean
+    /// ckETH is under-backed.
+    fn checked_burned_not_yet_spent(&self) -> Option<Wei> {
+        self.cumulative_burned.checked_sub(self.cumulative_spent())
     }
-    Ok(bound)
 }
 
 /// When to top the sweeper address up, and to what. Derived from the minimum withdrawal amount, so

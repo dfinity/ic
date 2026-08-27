@@ -966,6 +966,18 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id: withdrawal_id.get().into(),
                     transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
+                EventType::AttestedDepositAddress { request, signature } => {
+                    let account = request.account();
+                    EP::AttestedDepositAddress {
+                        chain_id: request.chain_id().into(),
+                        deposit_helper: request.deposit_helper().to_string(),
+                        owner: account.owner,
+                        subaccount: account.subaccount.map(ByteBuf::from),
+                        y_parity: signature.signature_y_parity,
+                        r: ByteBuf::from(signature.r.to_be_bytes()),
+                        s: ByteBuf::from(signature.s.to_be_bytes()),
+                    }
+                }
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,
@@ -1258,46 +1270,64 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     s.sweeper_funding.cumulative_spent().as_f64(),
                     "Cumulative ETH debited from the minter's main address for sweeping.",
                 )?;
-                // Alertable: a funding transaction cannot fail on Ethereum unless something the
-                // minter believed impossible has happened, so any non-zero value wants a look.
-                w.encode_counter(
-                    "cketh_minter_sweeper_funding_failed_total",
+                // By outcome rather than failures alone, so that a failure rate and the funding
+                // throughput are both expressible. Failures are expected to stay at zero: funding
+                // is a bare transfer to an address derived from the minter's own key, which has no
+                // code to revert in.
+                w.counter_vec(
+                    "cketh_minter_sweeper_funding_finalized_total",
+                    "Funding transactions that finalized, by outcome.",
+                )?
+                .value(
+                    &[("status", "success")],
+                    s.sweeper_funding.successful_fundings() as f64,
+                )?
+                .value(
+                    &[("status", "failure")],
                     s.sweeper_funding.failed_fundings() as f64,
-                    "Funding transactions that finalized with a failure receipt. Expected to stay \
-                     zero: funding is a bare transfer to an address derived from the minter's own \
-                     key, which has no code to revert in.",
                 )?;
+                // Note for whoever writes the alerts: for a funding that succeeded this is the same
+                // wei that `cketh_minter_total_unspent_tx_fees` already counts, so summing the two
+                // double counts. See DEFI-2965.
                 w.encode_gauge(
                     "cketh_minter_sweeper_funding_burned_not_yet_spent",
                     s.sweeper_funding.burned_not_yet_spent().as_f64(),
-                    "ckETH burned for sweeping but not yet spent, i.e. how far burn runs ahead of \
-                     spend: the burn of a funding still in flight, plus the fees earlier fundings \
-                     provisioned but never paid. Nothing draws it down -- the surplus stays as \
-                     ckETH backing -- so between fundings it only ratchets up.",
+                    "ckETH burned for sweeping and not yet spent, i.e. how far burn runs ahead of \
+                     spend. A funding that failed on chain leaves its whole undelivered amount \
+                     here, so this jumps alongside a failure.",
                 )?;
                 w.encode_gauge(
-                    "cketh_minter_sweeper_gas_balance",
+                    "cketh_minter_sweeper_funding_gas_balance",
                     s.sweeper_funding.sweeper_balance_lower_bound().as_f64(),
                     "Prepaid sweep gas: a lower bound on the sweeper address' ETH balance, from the \
-                     fundings the minter has recorded as finalized -- not an observation of the \
-                     chain, and never above the true balance.",
+                     fundings the minter recorded as finalized.",
                 )?;
-                // The alert for a wedged funding: nothing else here shows one, since the gas-balance
-                // gauge above tracks what the minter recorded rather than what it can spend now.
+                // Exported so that "the sweeper needs gas and is not getting it" can be alerted on
+                // as `gas_balance < low_water_mark`, without hardcoding a threshold that moves with
+                // the minimum withdrawal amount.
+                let funding_config = s.sweeper_funding_config();
                 w.encode_gauge(
-                    "cketh_minter_sweeper_in_flight_funding_age_seconds",
+                    "cketh_minter_sweeper_funding_low_water_mark",
+                    funding_config.low_water_mark.as_f64(),
+                    "Balance below which the sweeper address is topped up.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_target",
+                    funding_config.target.as_f64(),
+                    "Balance the sweeper address is topped up to.",
+                )?;
+                // The diagnostic for a wedged funding: nothing else here shows one, since the
+                // gas-balance gauge tracks what the minter recorded rather than what it can spend.
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_in_flight_age_seconds",
                     s.withdrawal_transactions
                         .outstanding_sweeper_funding()
-                        .map(|funding| match funding.created_at {
-                            Some(created_at_nanos) => {
-                                (ic_cdk::api::time().saturating_sub(created_at_nanos)
-                                    / 1_000_000_000) as f64
-                            }
-                            None => f64::NAN,
+                        .map(|funding| {
+                            (now_nanos.saturating_sub(funding.created_at.unwrap_or(now_nanos))
+                                / 1_000_000_000) as f64
                         })
                         .unwrap_or(0.0),
-                    "Age of the sweeper funding awaiting finalization; 0 if none is outstanding, \
-                     NaN if one is but its acceptance time is unknown.",
+                    "Age of the sweeper funding awaiting finalization; 0 if none is outstanding.",
                 )?;
 
                 w.encode_gauge(
