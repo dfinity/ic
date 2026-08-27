@@ -1,6 +1,59 @@
 {
-  "checksum": "ecab59e54cd3dfcb3d049bf925c4d1c1e1ab338ef237c40f066ef568f79e0321",
+  "checksum": "2b98253cb48434a78e81196999795cc3497088d811fadcbef25d0712d9fc5e20",
   "crates": {
+    "acl-sys 1.2.2": {
+      "name": "acl-sys",
+      "version": "1.2.2",
+      "package_url": "https://github.com/Stebalien/acl-sys",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/acl-sys/1.2.2/download",
+          "sha256": "bbc079f9bdd3124fd18df23c67f7e0f79d24751ae151dcffd095fcade07a3eb2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "acl_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "acl_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.186",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "extra_link_deps": {
+          "common": [
+            "@@//third_party:acl"
+          ],
+          "selects": {}
+        },
+        "version": "1.2.2"
+      },
+      "license": "LGPL-2.1",
+      "license_ids": [
+        "LGPL-2.1"
+      ],
+      "license_file": "LICENSE"
+    },
     "actix-codec 0.5.1": {
       "name": "actix-codec",
       "version": "0.5.1",
@@ -20154,6 +20207,10 @@
             {
               "id": "pkg-config 0.3.32",
               "target": "pkg_config"
+            },
+            {
+              "id": "posix-acl 1.2.0",
+              "target": "posix_acl"
             },
             {
               "id": "pprof 0.15.0",
@@ -53733,6 +53790,57 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "posix-acl 1.2.0": {
+      "name": "posix-acl",
+      "version": "1.2.0",
+      "package_url": "https://github.com/intgr/posix-acl",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/posix-acl/1.2.0/download",
+          "sha256": "9928b761309e4a4ca4f2d90eb03029142e3f7164107e18db4d46516515b87441"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "posix_acl",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "posix_acl",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "acl-sys 1.2.2",
+              "target": "acl_sys"
+            },
+            {
+              "id": "libc 0.2.186",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.2.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "postcard 1.1.3": {
       "name": "postcard",
@@ -91561,6 +91669,7 @@
     "ping 0.5.0",
     "pkcs8 0.10.2",
     "pkg-config 0.3.32",
+    "posix-acl 1.2.0",
     "pprof 0.15.0",
     "predicates 3.1.2",
     "pretty_assertions 1.4.0",

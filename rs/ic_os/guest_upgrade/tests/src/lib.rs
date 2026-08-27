@@ -8,8 +8,8 @@ use config_types::{
 };
 use futures::future::Either;
 use futures::{FutureExt, TryFutureExt};
-use guest_disk::sev::MockDiskCryptoOps;
 use guest_upgrade_client::DiskEncryptionKeyExchangeClientAgent;
+use guest_upgrade_client::MockDiskCryptoOps;
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
 use guest_upgrade_shared::DEFAULT_SERVER_PORT;
 use ic_protobuf::registry::replica_version::v1::{
@@ -94,13 +94,11 @@ struct DiskEncryptionKeyExchangeTestFixture {
     trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
     /// Guest OS configuration for the client
     client_guestos_config: GuestOSConfig,
-    /// Temporary file for storing previous key
-    previous_key: NamedTempFile,
-    /// Temporary file representing the server-side Store device
-    server_store: NamedTempFile,
+    /// Temporary file standing in for the shared Store partition block device
+    store_device: NamedTempFile,
     /// Temporary file containing the server-side Store LUKS header
     server_store_luks_header: NamedTempFile,
-    /// Temporary file for storing the client-side Store LUKS header
+    /// Temporary file for the client-side Store LUKS header
     client_store_luks_header: NamedTempFile,
     /// Server mock SEV firmware
     server_sev_firmware: MockSevGuestFirmwareBuilder,
@@ -165,8 +163,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             ..GuestOSConfig::default()
         };
 
-        let previous_key = NamedTempFile::new().unwrap();
-        let server_store = NamedTempFile::new().unwrap();
+        let store_device = NamedTempFile::new().unwrap();
         let server_store_luks_header = NamedTempFile::new().unwrap();
         let client_store_luks_header = NamedTempFile::new().unwrap();
         std::fs::write(server_store_luks_header.path(), sample_luks_header_bytes()).unwrap();
@@ -195,13 +192,25 @@ impl DiskEncryptionKeyExchangeTestFixture {
             registry_client,
             trusted_execution_environment_config,
             client_guestos_config,
-            previous_key,
-            server_store,
+            store_device,
             server_store_luks_header,
             client_store_luks_header,
             server_port,
             can_open_disk: config.can_open_disk,
         }
+    }
+
+    /// The Store key the old GuestOS serves during a simulated upgrade.
+    fn served_store_key(&self) -> Vec<u8> {
+        let mut firmware = self.server_sev_firmware.clone();
+        derive_key_from_sev_measurement(
+            &mut firmware,
+            Key::DiskEncryptionKey {
+                device_path: self.store_device.path(),
+            },
+        )
+        .expect("Failed to derive the served Store key")
+        .into_bytes()
     }
 
     /// Run the key exchange test and return (server status, client status).
@@ -255,7 +264,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             SevRootCertificateVerification::TestOnlySkipVerification,
             self.trusted_execution_environment_config.clone(),
             self.registry_client.clone(),
-            self.server_store.path().to_path_buf(),
+            self.store_device.path().to_path_buf(),
             self.server_store_luks_header.path().to_path_buf(),
             self.server_port,
             Duration::from_secs(2),
@@ -264,14 +273,24 @@ impl DiskEncryptionKeyExchangeTestFixture {
 
     fn create_client_agent(&self) -> DiskEncryptionKeyExchangeClientAgent {
         let can_open_disk = self.can_open_disk;
-        let store_device_path = self.server_store.path().to_path_buf();
-        let previous_key_path = self.previous_key.path().to_path_buf();
+        let store_device_path = self.store_device.path().to_path_buf();
         let store_luks_header_path = self.client_store_luks_header.path().to_path_buf();
         let mut crypto_ops = MockDiskCryptoOps::new();
 
         crypto_ops
-            .expect_can_open_store()
-            .returning(move |_, _, _, _| Ok(can_open_disk));
+            .expect_can_open()
+            .returning(move |_, _, _| Ok(can_open_disk));
+
+        if !can_open_disk {
+            // If the exchange succeeds, the client re-keys the copied header, passing the
+            // server's derived key as the old key.
+            let served_key = self.served_store_key();
+            crypto_ops
+                .expect_rekey()
+                .times(0..)
+                .withf(move |_, _, old_key, _| old_key == served_key)
+                .returning(|_, _, _, _| Ok(()));
+        }
 
         DiskEncryptionKeyExchangeClientAgent::new(
             self.client_guestos_config.clone(),
@@ -280,32 +299,13 @@ impl DiskEncryptionKeyExchangeTestFixture {
             self.registry_client.clone(),
             Box::new(crypto_ops),
             store_device_path,
-            previous_key_path,
             store_luks_header_path,
             self.server_port,
         )
     }
 
-    /// Check if the previous key file was populated correctly
-    fn verify_previous_key_populated(&self) {
-        let key_content =
-            std::fs::read_to_string(self.previous_key.path()).expect("Failed to read previous key");
-
-        let expected_key = derive_key_from_sev_measurement(
-            &mut self.server_sev_firmware.clone(),
-            Key::DiskEncryptionKey {
-                device_path: self.server_store.path(),
-            },
-        )
-        .unwrap();
-
-        assert_eq!(
-            key_content, expected_key,
-            "Previous key file content does not match expected derived key"
-        );
-    }
-
-    fn verify_luks_header_populated(&self) {
+    /// Checks that the client copied the server's Store LUKS header.
+    fn verify_store_artifacts_populated(&self) {
         let luks_header = std::fs::read(self.client_store_luks_header.path())
             .expect("Failed to read client Store LUKS header");
         assert_eq!(
@@ -316,10 +316,6 @@ impl DiskEncryptionKeyExchangeTestFixture {
     }
 
     fn verify_no_artifacts_persisted(&self) {
-        assert!(
-            std::fs::read(self.previous_key.path()).unwrap().is_empty(),
-            "Previous key file should be empty"
-        );
         assert!(
             std::fs::read(self.client_store_luks_header.path())
                 .unwrap()
@@ -380,8 +376,7 @@ async fn test_exchange_keys_successfully() {
     server_result.expect("Key exchange should succeed");
     client_result.expect("Key exchange should succeed");
 
-    fixture.verify_previous_key_populated();
-    fixture.verify_luks_header_populated();
+    fixture.verify_store_artifacts_populated();
 }
 
 #[tokio::test]
