@@ -8,8 +8,13 @@ description: |
   mainnet-revisions updater verify CDN downloads against something independent
   of the CDN: they fetch a directory's SHA256SUMS from the CDN, check it with
   `gh attestation verify --repo dfinity/ic --signer-workflow <this pipeline>
-  --source-digest <commit>` and then verify each artifact against the now
-  trusted sums.
+  --source-digest <commit> --format json`, require the verified attestation to
+  record the file's digest under the exact subject name
+  ic/<commit>/<directory>/SHA256SUMS — gh authenticates the digest only, and
+  this attestation covers every uploaded directory, so without the name check
+  a compromised CDN could serve another same-commit directory's attested
+  SHA256SUMS here — and then verify each artifact against the now trusted
+  sums.
 
   The manifest artifact is re-checked against the sha256 carried by ci-main's
   `manifest-sha256` output: an Actions artifact can be replaced mid-run by
