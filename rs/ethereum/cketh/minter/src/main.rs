@@ -1293,7 +1293,8 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_sweeper_funding_burned_not_yet_spent",
                     s.sweeper_funding.burned_not_yet_spent().as_f64(),
                     "ckETH burned for sweeping and not yet spent, i.e. how far burn runs ahead of \
-                     spend.",
+                     spend. A funding that failed on chain leaves its whole undelivered amount \
+                     here, so this jumps alongside a failure.",
                 )?;
                 w.encode_gauge(
                     "cketh_minter_sweeper_funding_gas_balance",
