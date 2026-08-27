@@ -35,8 +35,8 @@ use crate::{
     },
     sweeper_contract::{SweepItem, encode_sweep_erc20_batch},
     tx::{
-        Authorization, GasFeeEstimate, SignedAuthorization, TransactionSignature,
-        lazy_refresh_gas_fee_estimate,
+        Authorization, EcdsaSigner, GasFeeEstimate, IcEcdsaSigner, SignedAuthorization,
+        TransactionSignature, lazy_refresh_gas_fee_estimate,
     },
     withdraw::{
         fetch_finalized_receipts, finalized_transaction_count, latest_transaction_count,
@@ -347,6 +347,7 @@ pub async fn enqueue_batched_sweep() {
     };
 
     let context = SweepContext {
+        signer: IcEcdsaSigner,
         sweeper_contract,
         gas_fee_estimate,
         created_at: ic_cdk::api::time(),
@@ -356,12 +357,14 @@ pub async fn enqueue_batched_sweep() {
     }
 }
 
-/// What every sweep enqueued in one tick shares: the delegate they authorize and send to, what their
-/// gas costs, and the time they are decided at.
+/// What every sweep enqueued in one tick shares: the delegate they authorize and send to, the key
+/// that signs for them, what their gas costs, and the time they are decided at.
 ///
-/// The time is carried rather than read because reading it needs a canister, and every sweep of one
-/// tick is decided at the same instant anyway.
-struct SweepContext {
+/// Generic over the signer, and carrying the time rather than reading it, because those are the two
+/// things the enqueue path needs a canister for; everything else it does is arithmetic over state,
+/// so a test that supplies both drives the real code.
+struct SweepContext<S> {
+    signer: S,
     sweeper_contract: Address,
     gas_fee_estimate: GasFeeEstimate,
     created_at: u64,
@@ -398,9 +401,9 @@ fn sweep_batches_by_token(state: &State) -> BTreeMap<Address, Vec<SweepTarget>> 
 ///
 /// Skips the token — leaving its deposits queued for the next tick — when nothing could be signed
 /// for, or when the sweep would prepay more than [`max_sweep_transaction_fee`].
-async fn enqueue_token_sweep(
+async fn enqueue_token_sweep<S: EcdsaSigner>(
     (token, targets): (Address, Vec<SweepTarget>),
-    context: &SweepContext,
+    context: &SweepContext<S>,
 ) {
     let Some(requests) = attestation_requests(&targets) else {
         log!(
@@ -568,10 +571,10 @@ struct PreparedDeposit {
 /// Everything the queued `targets` need signed, in target order. Each threshold-ECDSA signature is
 /// an outcall, so the attestations are signed in one batch and the authorizations in another, one of
 /// each per deposit address rather than per queued token.
-async fn prepare_deposits(
+async fn prepare_deposits<S: EcdsaSigner>(
     targets: &[SweepTarget],
     requests: &BTreeMap<Account, AttestationRequest>,
-    context: &SweepContext,
+    context: &SweepContext<S>,
 ) -> Vec<PreparedDeposit> {
     let attestations = sign_attestations_batch(requests, context).await;
     // Only the attested accounts: a deposit that could not be attested drops out of the sweep
@@ -609,9 +612,9 @@ fn prepared_deposits(
 /// signed. An attestation is signed once per address and reused by every later sweep — it names the
 /// account and the helper, neither of which a sweep changes — so only the ones the minter does not
 /// have yet cost a signature, and each is recorded the moment it exists.
-async fn sign_attestations_batch(
+async fn sign_attestations_batch<S: EcdsaSigner>(
     requests: &BTreeMap<Account, AttestationRequest>,
-    context: &SweepContext,
+    context: &SweepContext<S>,
 ) -> BTreeMap<Account, TransactionSignature> {
     let mut attestations: BTreeMap<Account, TransactionSignature> = read_state(|s| {
         requests
@@ -627,7 +630,11 @@ async fn sign_attestations_batch(
             .iter()
             .filter(|(account, _request)| !attestations.contains_key(*account))
             .map(|(account, request)| async move {
-                (*account, request, sign_attestation(request).await)
+                (
+                    *account,
+                    request,
+                    sign_attestation(&context.signer, request).await,
+                )
             }),
     )
     .await;
@@ -675,9 +682,9 @@ fn attested_addresses(
 ///
 /// Every address is signed afresh: the tuple names the chain and the delegate, and its nonce is
 /// fixed at 0, so nothing a sweep does can invalidate it — see [`delegation_authorization`].
-async fn sign_authorizations_batch(
+async fn sign_authorizations_batch<S: EcdsaSigner>(
     addresses: &BTreeMap<Account, DepositAddress>,
-    context: &SweepContext,
+    context: &SweepContext<S>,
 ) -> BTreeMap<Account, SignedAuthorization> {
     let chain_id = read_state(State::ethereum_network).chain_id();
     let signed = join_all(addresses.keys().map(|account| {
@@ -687,10 +694,10 @@ async fn sign_authorizations_batch(
             (
                 account,
                 authorization
-                    .sign(deposit_derivation_path(
-                        DepositAddressSchema::CkErc20,
-                        &account,
-                    ))
+                    .sign(
+                        &context.signer,
+                        deposit_derivation_path(DepositAddressSchema::CkErc20, &account),
+                    )
                     .await,
             )
         }

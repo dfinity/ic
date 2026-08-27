@@ -1,6 +1,6 @@
 use super::{
-    AccessList, AccessListItem, SignableTransaction, Signed, StorageKey, TransactionPrice,
-    TransactionSignature, encode_u256,
+    AccessList, AccessListItem, EcdsaSigner, SignableTransaction, Signed, StorageKey,
+    TransactionPrice, TransactionSignature, encode_u256,
 };
 use crate::{
     checked_amount::CheckedAmountOf,
@@ -81,14 +81,18 @@ impl Authorization {
         Hash(ic_sha3::Keccak256::hash(bytes))
     }
 
-    pub async fn sign(self, derivation_path: Vec<ByteBuf>) -> Result<SignedAuthorization, String> {
+    pub(crate) async fn sign<S: EcdsaSigner>(
+        self,
+        signer: &S,
+        derivation_path: Vec<ByteBuf>,
+    ) -> Result<SignedAuthorization, String> {
         if self.chain_id == 0 {
             return Err(
                 "BUG: EIP-7702 authorization chain_id must be set explicitly and never 0"
                     .to_string(),
             );
         }
-        let signature = super::sign_digest(&self.hash(), &derivation_path).await?;
+        let signature = signer.sign_digest(&self.hash(), &derivation_path).await?;
         Ok(SignedAuthorization {
             chain_id: self.chain_id,
             delegate: self.delegate,

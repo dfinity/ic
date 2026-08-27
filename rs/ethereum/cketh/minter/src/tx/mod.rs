@@ -179,6 +179,38 @@ pub fn encode_u256<T: Into<u256>>(stream: &mut RlpStream, value: T) {
     stream.append(&value.to_be_bytes()[leading_empty_bytes..].as_ref());
 }
 
+/// The threshold-ECDSA signing the minter does, as a thin wrapper over the IC primitive that does
+/// it: [`IcEcdsaSigner`] forwards to [`sign_digest`] and nothing else.
+///
+/// Signing is the only part of deciding what to sign that leaves the canister, so this is the seam
+/// a unit test mocks. Deliberately nothing but the primitive lives behind it — no business logic and
+/// no state mutation — so that everything a caller does with a signature stays under test when the
+/// signature itself is faked.
+pub(crate) trait EcdsaSigner {
+    /// `digest` signed with the minter's ECDSA key under `derivation_path`.
+    ///
+    /// # Errors
+    /// * a description of why the threshold-ECDSA signature could not be produced.
+    async fn sign_digest(
+        &self,
+        digest: &Hash,
+        derivation_path: &[ByteBuf],
+    ) -> Result<TransactionSignature, String>;
+}
+
+/// The [`EcdsaSigner`] every signature the minter really makes goes through.
+pub(crate) struct IcEcdsaSigner;
+
+impl EcdsaSigner for IcEcdsaSigner {
+    async fn sign_digest(
+        &self,
+        digest: &Hash,
+        derivation_path: &[ByteBuf],
+    ) -> Result<TransactionSignature, String> {
+        sign_digest(digest, derivation_path).await
+    }
+}
+
 /// Sign `digest` with the minter's ECDSA key under `derivation_path`, resolving the signature's
 /// parity bit against the key that made it.
 pub(crate) async fn sign_digest(

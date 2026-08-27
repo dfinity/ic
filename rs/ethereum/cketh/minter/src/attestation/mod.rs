@@ -13,7 +13,7 @@ mod tests;
 use crate::deposit_address::{DepositAddressSchema, deposit_derivation_path};
 use crate::eth_logs::encode_principal;
 use crate::eth_rpc::Hash;
-use crate::tx::{TransactionSignature, sign_digest};
+use crate::tx::{EcdsaSigner, TransactionSignature};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use minicbor::{Decode, Encode};
@@ -96,12 +96,14 @@ impl AttestationRequest {
 ///
 /// # Errors
 /// * a description of why the threshold-ECDSA signature could not be produced.
-pub async fn sign_attestation(
+pub(crate) async fn sign_attestation<S: EcdsaSigner>(
+    signer: &S,
     request: &AttestationRequest,
 ) -> Result<TransactionSignature, String> {
-    sign_digest(
-        &request.digest(),
-        &deposit_derivation_path(DepositAddressSchema::CkErc20, &request.account),
-    )
-    .await
+    signer
+        .sign_digest(
+            &request.digest(),
+            &deposit_derivation_path(DepositAddressSchema::CkErc20, &request.account),
+        )
+        .await
 }
