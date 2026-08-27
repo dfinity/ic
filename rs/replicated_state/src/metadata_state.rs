@@ -676,8 +676,9 @@ impl SubnetMetrics {
     /// `consumed_cycles_by_deleted_canisters` and to the
     /// `consumed_cycles_by_use_case` map, and both are summed here. It is kept
     /// unchanged to preserve the certified state for certification versions up
-    /// to and including `V28`; [`Self::consumed_cycles_total`] fixes the double
-    /// counting starting with certification version `V29`.
+    /// to and including `V28`; from `V29` on the consumer reports
+    /// [`Self::consumed_cycles_total_including_canisters()`], which does not
+    /// double count.
     pub fn consumed_cycles_total_v28(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
