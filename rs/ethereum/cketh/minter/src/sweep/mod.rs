@@ -56,6 +56,14 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(_runtime: &R) {
             return;
         }
     };
+
+    let Some(_sweeper_contract) = read_state(|s| s.sweeper_contract_address) else {
+        log!(
+            DEBUG,
+            "[create_pending_sweeper_requests]: SKIPPING: no sweeper contract address is configured"
+        );
+        return;
+    };
 }
 
 pub async fn process_sweeper_transactions<R: CanisterRuntime>(runtime: R) {
