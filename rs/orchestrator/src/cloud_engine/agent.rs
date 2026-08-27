@@ -6,20 +6,15 @@ use crate::{
     registration::NodeRegistrationCrypto,
     registry_helper::RegistryHelper,
     signer::NodeSender,
-    utils::https_endpoint_to_url,
+    utils::nns_root_key_der_from_registry,
 };
 use ic_agent::{Agent, Identity, export::reqwest, identity::AnonymousIdentity};
-use ic_crypto_tls_interfaces::TlsConfig;
-use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_logger::{ReplicaLogger, warn};
-use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetTransportRegistry};
-use ic_types::{RegistryVersion, SubnetId, messages::MessageId};
+use ic_registry_client_helpers::{api_boundary_node::ApiBoundaryNodeRegistry, node::NodeRegistry};
+use ic_types::{RegistryVersion, messages::MessageId};
 use rand::prelude::*;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use url::Url;
-
-/// Matches the default timeout of `ic-agent`.
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(360);
 
 /// Builds the agents that [`super::CloudEngineManager`] talks to canisters with.
 ///
@@ -30,61 +25,94 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(360);
 /// diagnose than refusing to build the agent.
 pub(super) struct AgentFactory {
     registry: Arc<RegistryHelper>,
-    tls_config: Arc<dyn TlsConfig>,
     crypto: Arc<dyn NodeRegistrationCrypto>,
     replica_url: Url,
+    operator_agent: Option<Agent>,
     logger: ReplicaLogger,
 }
 
 impl AgentFactory {
     pub(super) fn new(
         registry: Arc<RegistryHelper>,
-        tls_config: Arc<dyn TlsConfig>,
         crypto: Arc<dyn NodeRegistrationCrypto>,
         replica_url: Url,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
             registry,
-            tls_config,
             crypto,
             replica_url,
+            operator_agent: None,
             logger,
         }
     }
 
-    /// An anonymous agent aimed at a randomly chosen node of `subnet_id`, using
-    /// node-to-node TLS. Used for the engine management canister, whose lookup
-    /// endpoint is a public query and lives on a different subnet.
-    pub(super) fn anonymous_to_subnet(
+    /// An anonymous agent aimed at a randomly chosen API boundary node. Used
+    /// for the engine management canister, whose lookup endpoint is a public
+    /// query and lives on a regular subnet: a cloud engine node has to go
+    /// through the public API as regular nodes do not whitelist them.
+    pub(super) fn anonymous_via_api_boundary_node(
         &self,
-        subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> OrchestratorResult<Agent> {
-        let (url, tls_config) = self.random_node_of_subnet(subnet_id, version)?;
-        let client = reqwest::ClientBuilder::default()
-            .use_preconfigured_tls(tls_config)
-            .timeout(REQUEST_TIMEOUT)
-            .build()
+        let url = self.random_api_boundary_node_url(version)?;
+
+        self.build(url, AnonymousIdentity, version, None)
+    }
+
+    fn random_api_boundary_node_url(&self, version: RegistryVersion) -> OrchestratorResult<Url> {
+        let registry_client = self.registry.get_registry_client();
+        let mut node_ids = registry_client
+            .get_api_boundary_node_ids(version)
             .map_err(|err| {
                 OrchestratorError::cloud_engine_error(format!(
-                    "could not build an HTTP client for subnet {subnet_id}: {err}"
+                    "could not list the API boundary nodes: {err:?}"
                 ))
             })?;
 
-        self.build(url, AnonymousIdentity, version, Some(client))
+        node_ids.shuffle(&mut thread_rng());
+        node_ids
+            .iter()
+            .find_map(|node_id| {
+                let domain = registry_client
+                    .get_node_record(*node_id, version)
+                    .ok()??
+                    .domain?;
+                Url::parse(&format!("https://{domain}/"))
+                    .inspect_err(|err| {
+                        warn!(
+                            self.logger,
+                            "Ignoring the malformed API boundary node domain '{}': {}", domain, err
+                        )
+                    })
+                    .ok()
+            })
+            .ok_or_else(|| {
+                OrchestratorError::cloud_engine_error(
+                    "no usable API boundary node found in the registry",
+                )
+            })
     }
 
     /// An agent aimed at this node's own replica and signing as this node. The
     /// operator canister only serves the nodes of its own engine, so the calls
     /// have to be authenticated with the node signing key.
+    ///
+    /// Built once and then reused: everything it depends on is stable.
     pub(super) fn node_signed_to_local_replica(
-        &self,
+        &mut self,
         version: RegistryVersion,
     ) -> OrchestratorResult<Agent> {
-        let public_key = self
-            .crypto
-            .current_node_public_keys()
+        if let Some(agent) = &self.operator_agent {
+            return Ok(agent.clone());
+        }
+
+        // Reading the public keys is an RPC to the CSP vault that blocks
+        // on `block_on` internally.
+        let crypto = Arc::clone(&self.crypto);
+        #[allow(clippy::disallowed_methods)]
+        let public_keys = tokio::task::block_in_place(|| crypto.current_node_public_keys());
+        let public_key = public_keys
             .map_err(|err| {
                 OrchestratorError::cloud_engine_error(format!(
                     "could not read the current node public keys: {err}"
@@ -110,7 +138,10 @@ impl AgentFactory {
         let identity = NodeSender::new(public_key, Arc::new(sign))
             .map_err(OrchestratorError::cloud_engine_error)?;
 
-        self.build(self.replica_url.clone(), identity, version, None)
+        let agent = self.build(self.replica_url.clone(), identity, version, None)?;
+        self.operator_agent = Some(agent.clone());
+
+        Ok(agent)
     }
 
     fn build<I: Identity + 'static>(
@@ -133,63 +164,10 @@ impl AgentFactory {
         let agent = builder.build().map_err(|err| {
             OrchestratorError::cloud_engine_error(format!("could not build an agent: {err}"))
         })?;
-        agent.set_root_key(self.nns_root_key_der(version)?);
+        let root_key = nns_root_key_der_from_registry(self.registry.get_registry_client(), version)
+            .map_err(OrchestratorError::cloud_engine_error)?;
+        agent.set_root_key(root_key);
 
         Ok(agent)
-    }
-
-    /// The NNS root key, in DER, as recorded in the registry.
-    fn nns_root_key_der(&self, version: RegistryVersion) -> OrchestratorResult<Vec<u8>> {
-        let root_subnet_id = self.registry.get_root_subnet_id(version)?;
-        let public_key = self
-            .registry
-            .get_registry_client()
-            .get_threshold_signing_public_key_for_subnet(root_subnet_id, version)?
-            .ok_or_else(|| {
-                OrchestratorError::cloud_engine_error("the NNS public key is not in the registry")
-            })?;
-
-        threshold_sig_public_key_to_der(public_key).map_err(|err| {
-            OrchestratorError::cloud_engine_error(format!(
-                "could not DER-encode the NNS public key: {err:?}"
-            ))
-        })
-    }
-
-    /// Picks a random node of `subnet_id` and returns its URL together with a
-    /// TLS configuration that authenticates it as that node.
-    fn random_node_of_subnet(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<(Url, rustls::ClientConfig)> {
-        let node_records = self
-            .registry
-            .get_registry_client()
-            .get_subnet_node_records(subnet_id, version)?
-            .ok_or_else(|| OrchestratorError::SubnetMissingError(subnet_id, version))?;
-
-        let mut candidates = node_records
-            .iter()
-            .filter_map(|(node_id, node_record)| {
-                let url = https_endpoint_to_url(node_record.http.as_ref()?)
-                    .inspect_err(|err| warn!(self.logger, "{}", err))
-                    .ok()?;
-                let tls_config = self
-                    .tls_config
-                    .client_config(*node_id, version)
-                    .inspect_err(|err| warn!(self.logger, "{}", err))
-                    .ok()?;
-
-                Some((url, tls_config))
-            })
-            .collect::<Vec<_>>();
-
-        candidates.shuffle(&mut thread_rng());
-        candidates.pop().ok_or_else(|| {
-            OrchestratorError::cloud_engine_error(format!(
-                "no reachable node found on subnet {subnet_id}"
-            ))
-        })
     }
 }

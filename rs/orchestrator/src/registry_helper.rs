@@ -24,8 +24,8 @@ use ic_registry_client_helpers::{
 use ic_registry_keys::FirewallRulesScope;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_types::{
-    CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
-    consensus::CatchUpPackage, hostos_version::HostosVersion,
+    NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
+    hostos_version::HostosVersion,
 };
 use std::{convert::TryFrom, net::IpAddr, sync::Arc};
 
@@ -455,23 +455,6 @@ impl RegistryHelper {
             .registry_client
             .get_subnet_canister_ranges(version, subnet_id)?
             .unwrap_or_default())
-    }
-
-    /// Return the subnet that hosts the given canister.
-    pub(crate) fn get_subnet_of_canister(
-        &self,
-        canister_id: CanisterId,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<SubnetId> {
-        self.registry_client
-            .get_routing_table(version)?
-            .and_then(|routing_table| routing_table.lookup_entry(canister_id))
-            .map(|(_, subnet_id)| subnet_id)
-            .ok_or_else(|| {
-                OrchestratorError::cloud_engine_error(format!(
-                    "canister {canister_id} is not in the routing table at version {version}"
-                ))
-            })
     }
 }
 

@@ -453,6 +453,14 @@ impl IcGatewayManager {
         // environment-only change would otherwise not take effect.
         if self.current_config.is_some() && self.current_config.as_ref() != Some(&gateway_config) {
             self.inner.stop()?;
+            // `stop` only signals the process. While the old process is still
+            // draining, neither start nor record the new config: the next call
+            // still sees the old config, signals the process again (in case it
+            // ignored the first SIGTERM), and starts the new one once the old
+            // one is gone.
+            if self.inner.process_runner.is_running() {
+                return Ok(());
+            }
         }
 
         self.inner
@@ -466,9 +474,12 @@ impl IcGatewayManager {
 
     pub(crate) fn stop(&mut self) -> OrchestratorResult<()> {
         self.inner.stop()?;
-        // Only forget the config if the process is really gone, so that a failed
-        // stop is retried before a new config is applied.
-        self.current_config = None;
+        // `stop` only signals the process: forget the config only once the
+        // process is actually gone, so that one still draining keeps being
+        // signalled by the calls that follow.
+        if !self.inner.process_runner.is_running() {
+            self.current_config = None;
+        }
         Ok(())
     }
 }
@@ -481,23 +492,12 @@ impl IcGatewayManager {
 // the node's configuration in the registry.
 // ---------------------------------------------------------------------------
 
-/// Whether the orchestrator is currently allowed to actually launch
-/// `ic-gateway`. CloudEngine nodes *should* run `ic-gateway`, but the launch
-/// is gated off for now while the rollout is being prepared. To trigger it
-/// later, flip this to `true` (and re-enable the `cloud_engine_ic_gateway_test`
-/// system test by removing its `manual` tag).
-const IC_GATEWAY_LAUNCH_ENABLED: bool = false;
-
 pub(crate) struct MultipleProcessesManager {
     replica_manager: ProcessManager<ReplicaProcess>,
     ic_gateway_manager: IcGatewayManager,
     /// Engine configuration published by [`crate::cloud_engine`].
     gateway_config: Arc<RwLock<Option<GatewayConfig>>>,
     registry: Arc<RegistryHelper>,
-    /// Whether this manager is allowed to actually launch `ic-gateway`.
-    /// Sourced from [`IC_GATEWAY_LAUNCH_ENABLED`] in production; injected by
-    /// tests so they can exercise both gate states.
-    ic_gateway_launch_enabled: bool,
 }
 
 impl MultipleProcessesManager {
@@ -507,14 +507,12 @@ impl MultipleProcessesManager {
         ic_gateway_manager: IcGatewayManager,
         gateway_config: Arc<RwLock<Option<GatewayConfig>>>,
         registry: Arc<RegistryHelper>,
-        ic_gateway_launch_enabled: bool,
     ) -> Self {
         Self {
             replica_manager,
             ic_gateway_manager,
             gateway_config,
             registry,
-            ic_gateway_launch_enabled,
         }
     }
 
@@ -535,7 +533,6 @@ impl MultipleProcessesManager {
             ic_gateway_manager,
             gateway_config,
             registry,
-            ic_gateway_launch_enabled: IC_GATEWAY_LAUNCH_ENABLED,
         }
     }
 
@@ -576,26 +573,19 @@ impl MultipleProcessesManager {
                 .ensure_running((replica_version.clone(), subnet_id)),
         );
 
-        // Cloud-engine nodes run ic-gateway as a sidecar, but only once the
-        // launch is enabled (see `IC_GATEWAY_LAUNCH_ENABLED`). Until then,
-        // ignore it.
-        if self.ic_gateway_launch_enabled {
-            result = result.and(
-                if self
-                    .registry
-                    .is_cloud_engine_subnet(subnet_id, registry_version)?
-                {
-                    let gateway_config = self.gateway_config.read().unwrap().clone();
-                    self.ic_gateway_manager
-                        .ensure_running_and_restarted_on_config_change(
-                            replica_version,
-                            gateway_config,
-                        )
-                } else {
-                    self.ic_gateway_manager.stop()
-                },
-            );
-        }
+        // Cloud-engine nodes run ic-gateway as a sidecar.
+        result = result.and(
+            if self
+                .registry
+                .is_cloud_engine_subnet(subnet_id, registry_version)?
+            {
+                let gateway_config = self.gateway_config.read().unwrap().clone();
+                self.ic_gateway_manager
+                    .ensure_running_and_restarted_on_config_change(replica_version, gateway_config)
+            } else {
+                self.ic_gateway_manager.stop()
+            },
+        );
 
         result
     }
@@ -609,9 +599,7 @@ impl MultipleProcessesManager {
     /// If a process fails to stop, continue stopping the others and return the first error.
     pub(crate) fn stop_all(&mut self) -> OrchestratorResult<()> {
         let mut result = Ok(());
-        if self.ic_gateway_launch_enabled {
-            result = result.and(self.ic_gateway_manager.stop());
-        }
+        result = result.and(self.ic_gateway_manager.stop());
         result = result.and(self.replica_manager.stop());
 
         result
@@ -660,6 +648,39 @@ mod tests {
             let mut log = self.log.lock().unwrap();
             log.running = false;
             log.stops += 1;
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            self.log.lock().unwrap().running
+        }
+
+        fn get_pid(&self) -> Option<Pid> {
+            self.log
+                .lock()
+                .unwrap()
+                .running
+                .then_some(Pid::from_raw(12345))
+        }
+    }
+
+    /// Like [`RecordingRunner`], but `stop` only records the signal and leaves
+    /// the process running, the way SIGTERM leaves a real process draining
+    /// until it actually exits. Tests simulate the exit by clearing `running`.
+    struct DrainingRunner {
+        log: Arc<Mutex<RunnerLog>>,
+    }
+
+    impl<P: Process> ProcessRunner<P> for DrainingRunner {
+        fn start(&mut self, _process: P) -> std::io::Result<()> {
+            let mut log = self.log.lock().unwrap();
+            log.running = true;
+            log.starts += 1;
+            Ok(())
+        }
+
+        fn stop(&mut self) -> std::io::Result<()> {
+            self.log.lock().unwrap().stops += 1;
             Ok(())
         }
 
@@ -734,6 +755,14 @@ mod tests {
     fn ic_gateway_manager_for_test(dir: &Path) -> (IcGatewayManager, Arc<Mutex<RunnerLog>>) {
         let log = Arc::new(Mutex::new(RunnerLog::default()));
         let runner = Box::new(RecordingRunner { log: log.clone() });
+        ic_gateway_manager_with_runner(dir, runner, log)
+    }
+
+    fn ic_gateway_manager_with_runner(
+        dir: &Path,
+        runner: Box<dyn ProcessRunner<IcGatewayProcess> + Sync>,
+        log: Arc<Mutex<RunnerLog>>,
+    ) -> (IcGatewayManager, Arc<Mutex<RunnerLog>>) {
         let env_file = dir.join("ic-gateway.env");
         std::fs::write(&env_file, b"LISTEN_PLAIN=[::]:80").unwrap();
         let config = IcGatewayProcessConfig {
@@ -828,6 +857,55 @@ mod tests {
         assert!(log.running);
         assert_eq!(log.starts, 2);
         assert_eq!(log.stops, 1);
+    }
+
+    #[test]
+    fn ic_gateway_config_change_waits_for_the_old_process_to_exit() {
+        let dir = tempdir().unwrap();
+        let log = Arc::new(Mutex::new(RunnerLog::default()));
+        let runner = Box::new(DrainingRunner { log: log.clone() });
+        let (mut manager, log) = ic_gateway_manager_with_runner(dir.path(), runner, log);
+
+        ensure_gateway(
+            &mut manager,
+            Some(GatewayConfig::for_test("one.example.com")),
+        )
+        .unwrap();
+        assert_eq!(log.lock().unwrap().starts, 1);
+
+        // The config changes, but the old process only gets signalled and keeps
+        // draining: the new one must not start (the port is still taken), and
+        // the new config must not count as applied.
+        ensure_gateway(
+            &mut manager,
+            Some(GatewayConfig::for_test("two.example.com")),
+        )
+        .unwrap();
+        {
+            let log = log.lock().unwrap();
+            assert_eq!(log.stops, 1);
+            assert_eq!(log.starts, 1);
+        }
+
+        // Still draining on the next call: it has to be signalled again, in
+        // case it ignored the first SIGTERM.
+        ensure_gateway(
+            &mut manager,
+            Some(GatewayConfig::for_test("two.example.com")),
+        )
+        .unwrap();
+        assert_eq!(log.lock().unwrap().stops, 2);
+
+        // Once the old process exited, the next call starts the new one.
+        log.lock().unwrap().running = false;
+        ensure_gateway(
+            &mut manager,
+            Some(GatewayConfig::for_test("two.example.com")),
+        )
+        .unwrap();
+        let log = log.lock().unwrap();
+        assert!(log.running);
+        assert_eq!(log.starts, 2);
     }
 
     #[test]

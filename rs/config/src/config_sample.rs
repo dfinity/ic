@@ -348,7 +348,7 @@ pub const SAMPLE_CONFIG: &str = r#"
       pkcs11_keycard_transport_pin: "358138",
     },
     // =================================
-    // Cloud engine nodes only.
+    // Cloud engine nodes.
     // =================================
     cloud_engine: {
       engine_management_canister_id: "q6cfj-fyaaa-aaaar-qb77q-cai",
@@ -385,6 +385,21 @@ mod tests {
     fn sample_config_is_deserializable() {
         let _ =
             json5::from_str::<Config>(SAMPLE_CONFIG).expect("sample config cannot be deserialized");
+    }
+
+    #[test]
+    fn sample_config_uses_the_mainnet_engine_management_canister_id() {
+        let config =
+            json5::from_str::<Config>(SAMPLE_CONFIG).expect("sample config cannot be deserialized");
+
+        assert_eq!(
+            config
+                .cloud_engine
+                .engine_management_canister_id
+                .expect("the sample config should set an engine management canister id")
+                .to_string(),
+            crate::cloud_engine::MAINNET_ENGINE_MANAGEMENT_CANISTER_ID
+        );
     }
 
     #[test]

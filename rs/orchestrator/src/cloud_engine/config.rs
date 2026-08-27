@@ -49,13 +49,15 @@ impl TryFrom<(HttpGatewayConfig, AcmeCredentials)> for GatewayConfig {
             .ok_or(ConfigError::Incomplete("base_domains"))?;
         // `ic-gateway` parses DOMAIN as a comma-separated list of FQDNs, so a
         // value it would reject must not reach it: it would exit at startup.
-        for domain in &base_domains {
-            if !domain_to_ascii_strict(domain).is_ok_and(|ascii| &ascii == domain) {
-                return Err(ConfigError::Invalid(format!(
+        let base_domains = base_domains
+            .iter()
+            .map(|domain| match domain_to_ascii_strict(domain) {
+                Ok(ascii) if !ascii.is_empty() => Ok(ascii),
+                _ => Err(ConfigError::Invalid(format!(
                     "{domain} is not a valid domain name"
-                )));
-            }
-        }
+                ))),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         let dns_api_url = gateway
             .dns_api_url
@@ -283,6 +285,31 @@ mod tests {
                 acme()
             ),
             Err(ConfigError::Incomplete("base_domains"))
+        );
+    }
+
+    #[test]
+    fn domains_are_normalized() {
+        // Mixed case and IDNs are serviceable after normalization to the
+        // lowercase ASCII form `ic-gateway` expects.
+        let config = parse(
+            HttpGatewayConfig {
+                base_domains: Some(vec![
+                    "Engine.Example.com".to_string(),
+                    "bücher.example".to_string(),
+                ]),
+                ..gateway()
+            },
+            acme(),
+        )
+        .expect("normalizable domains should be accepted");
+
+        assert_eq!(
+            config.base_domains,
+            vec![
+                "engine.example.com".to_string(),
+                "xn--bcher-kva.example".to_string()
+            ]
         );
     }
 

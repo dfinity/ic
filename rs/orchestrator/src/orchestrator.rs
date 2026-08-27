@@ -370,10 +370,8 @@ impl Orchestrator {
         let cloud_engine_manager = CloudEngineManager::new(
             Arc::clone(&registry),
             Arc::clone(&crypto) as _,
-            Arc::clone(&crypto) as _,
-            config.cloud_engine.engine_management_canister_id.as_deref(),
+            config.cloud_engine.engine_management_canister_id,
             config.http_handler.listen_addr,
-            &args.orchestrator_data_directory,
             gateway_config,
             Arc::clone(&metrics),
             logger.clone(),

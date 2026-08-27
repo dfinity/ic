@@ -126,9 +126,11 @@ system_test_nns(
 
 system_test(
     name = "cloud_engine_ic_gateway_test",
-    # Excluded from automatic runs while ic-gateway launching is gated off in the
-    # orchestrator (see IC_GATEWAY_LAUNCH_ENABLED in
-    # rs/orchestrator/src/processes.rs). Remove this tag when enabling the launch.
+    # Excluded from automatic runs: testnets do not deploy an engine management
+    # or operator canister yet (rs/tests/driver/src/driver/bootstrap.rs sets
+    # engine_management_canister_id to None), so ic-gateway never receives a
+    # configuration and cannot start. Remove this tag once system tests can
+    # provision the engine canisters and the test is updated for TLS on 443.
     tags = ["manual"],
     deps = [
         # Keep sorted.

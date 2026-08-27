@@ -18,14 +18,11 @@ use crate::{
 use config::ConfigError;
 pub(crate) use config::GatewayConfig;
 use discovery::Discovery;
-use ic_crypto_tls_interfaces::TlsConfig;
 use ic_logger::{ReplicaLogger, info, warn};
-use ic_types::{CanisterId, RegistryVersion};
+use ic_types::{CanisterId, RegistryVersion, SubnetId};
 use operator::{OperatorClient, OperatorError};
 use std::{
     net::SocketAddr,
-    path::Path,
-    str::FromStr,
     sync::{Arc, RwLock},
     time::SystemTime,
 };
@@ -37,6 +34,14 @@ const OUTCOME_INCOMPLETE: &str = "incomplete";
 const OUTCOME_NOT_READY: &str = "not_ready";
 const OUTCOME_ERROR: &str = "error";
 
+/// How many consecutive `NotReady` answers to tolerate before re-resolving the
+/// operator. A cold `isNode` cache resolves itself with the operator's next
+/// registry refetch, so a genuinely fresh operator recovers well within this
+/// budget; an operator that keeps not recognizing this node more likely is not
+/// (or no longer) our operator at all. At one check every 10 seconds this is
+/// about 5 minutes.
+const MAX_CONSECUTIVE_NOT_READY: u32 = 30;
+
 pub(crate) struct CloudEngineManager {
     registry: Arc<RegistryHelper>,
     agent_factory: agent::AgentFactory,
@@ -45,6 +50,7 @@ pub(crate) struct CloudEngineManager {
     /// that runs `ic-gateway`. Only ever replaced by another valid one, never
     /// cleared: a failed fetch must not take a running `ic-gateway` down.
     current_config: Arc<RwLock<Option<GatewayConfig>>>,
+    consecutive_not_ready: u32,
     metrics: Arc<OrchestratorMetrics>,
     logger: ReplicaLogger,
 }
@@ -55,30 +61,14 @@ impl CloudEngineManager {
     /// has nothing to do.
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
-        tls_config: Arc<dyn TlsConfig>,
         crypto: Arc<dyn NodeRegistrationCrypto>,
-        engine_management_canister_id: Option<&str>,
+        engine_management_canister_id: Option<CanisterId>,
         replica_listen_addr: SocketAddr,
-        data_directory: &Path,
         current_config: Arc<RwLock<Option<GatewayConfig>>>,
         metrics: Arc<OrchestratorMetrics>,
         logger: ReplicaLogger,
     ) -> Option<Self> {
         let engine_management_canister_id = engine_management_canister_id?;
-        let engine_management_canister_id =
-            match CanisterId::from_str(engine_management_canister_id) {
-                Ok(canister_id) => canister_id,
-                Err(err) => {
-                    warn!(
-                        logger,
-                        "Ignoring the malformed engine management canister id \
-                    '{}': {}",
-                        engine_management_canister_id,
-                        err
-                    );
-                    return None;
-                }
-            };
 
         // The replica listens on a wildcard address, so only its port is of
         // use here: the operator canister is on this node's own subnet and is
@@ -92,17 +82,11 @@ impl CloudEngineManager {
                 }
             };
 
-        let agent_factory = agent::AgentFactory::new(
-            Arc::clone(&registry),
-            tls_config,
-            crypto,
-            replica_url,
-            logger.clone(),
-        );
+        let agent_factory =
+            agent::AgentFactory::new(Arc::clone(&registry), crypto, replica_url, logger.clone());
         let discovery = Discovery::new(
             Arc::clone(&registry),
             engine_management_canister_id,
-            data_directory,
             logger.clone(),
         );
 
@@ -111,6 +95,7 @@ impl CloudEngineManager {
             agent_factory,
             discovery,
             current_config,
+            consecutive_not_ready: 0,
             metrics,
             logger,
         })
@@ -125,15 +110,27 @@ impl CloudEngineManager {
             Err(_) => return,
         };
         // Only all-in-one nodes have an engine operator to ask.
-        if !matches!(
-            self.registry.is_cloud_engine_subnet(subnet_id, version),
-            Ok(true)
-        ) {
-            return;
+        match self.registry.is_cloud_engine_subnet(subnet_id, version) {
+            Ok(true) => {}
+            Ok(false) => return,
+            // On an engine node a registry error would otherwise be invisible:
+            // it must not be conflated with "not a cloud engine".
+            Err(err) => {
+                self.metrics
+                    .cloud_engine_config_fetches
+                    .with_label_values(&[OUTCOME_ERROR])
+                    .inc();
+                warn!(
+                    every_n_seconds => 60,
+                    self.logger, "Could not determine the type of subnet {}: {}", subnet_id, err
+                );
+                return;
+            }
         }
 
-        match self.fetch(version).await {
+        match self.fetch(subnet_id, version).await {
             Ok(config) => {
+                self.consecutive_not_ready = 0;
                 self.metrics
                     .cloud_engine_config_fetches
                     .with_label_values(&[OUTCOME_OK])
@@ -149,6 +146,7 @@ impl CloudEngineManager {
                 }
             }
             Err(FetchError::Incomplete(err)) => {
+                self.consecutive_not_ready = 0;
                 self.metrics
                     .cloud_engine_config_fetches
                     .with_label_values(&[OUTCOME_INCOMPLETE])
@@ -168,8 +166,21 @@ impl CloudEngineManager {
                     self.logger,
                     "The engine operator does not recognize this node yet; retrying"
                 );
+
+                self.consecutive_not_ready += 1;
+                if self.consecutive_not_ready >= MAX_CONSECUTIVE_NOT_READY {
+                    warn!(
+                        self.logger,
+                        "The engine operator has not recognized this node for {} \
+                        consecutive attempts; re-resolving the operator",
+                        self.consecutive_not_ready
+                    );
+                    self.discovery.invalidate();
+                    self.consecutive_not_ready = 0;
+                }
             }
             Err(FetchError::Failed(err)) => {
+                self.consecutive_not_ready = 0;
                 self.metrics
                     .cloud_engine_config_fetches
                     .with_label_values(&[OUTCOME_ERROR])
@@ -182,23 +193,27 @@ impl CloudEngineManager {
         }
     }
 
-    async fn fetch(&mut self, version: RegistryVersion) -> Result<GatewayConfig, FetchError> {
-        let own_subnet = self.registry.get_subnet_id(version)?;
-
-        let management_subnet = self.discovery.management_subnet(version)?;
-        let management_agent = self
-            .agent_factory
-            .anonymous_to_subnet(management_subnet, version)?;
+    async fn fetch(
+        &mut self,
+        own_subnet: SubnetId,
+        version: RegistryVersion,
+    ) -> Result<GatewayConfig, FetchError> {
         let operator_id = self
             .discovery
-            .resolve(&management_agent, own_subnet, version)
+            .resolve(&self.agent_factory, own_subnet, version)
             .await?;
 
         let operator_agent = self.agent_factory.node_signed_to_local_replica(version)?;
         let operator = OperatorClient::new(&operator_agent, operator_id);
 
-        let gateway_config = match operator.http_gateway_config().await {
-            Ok(config) => config,
+        let result = async {
+            let gateway_config = operator.http_gateway_config().await?;
+            let acme_credentials = operator.acme_credentials().await?;
+            Ok::<_, OperatorError>((gateway_config, acme_credentials))
+        }
+        .await;
+        let (gateway_config, acme_credentials) = match result {
+            Ok(parts) => parts,
             Err(err) => {
                 // A cold `isNode` cache is expected; anything else suggests we
                 // resolved the wrong canister, so look it up again next time.
@@ -208,13 +223,11 @@ impl CloudEngineManager {
                 return Err(err.into());
             }
         };
-        let acme_credentials = operator.acme_credentials().await?;
 
         GatewayConfig::try_from((gateway_config, acme_credentials)).map_err(FetchError::from)
     }
 }
 
-/// Why [`CloudEngineManager::fetch`] did not produce a config.
 enum FetchError {
     /// The engine is not fully configured yet. Nothing to apply.
     Incomplete(String),
