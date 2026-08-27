@@ -20,11 +20,11 @@ use ic_test_utilities::artifact_pool_config::with_test_pool_config;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
-    ids::{node_test_id, subnet_test_id},
+    ids::{node_test_id, subnet_test_id, test_replica_version},
     messages::RequestBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NodeId, NumberOfNodes, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NodeId, NumberOfNodes, RegistryVersion,
     batch::{
         CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         ValidationContext,
@@ -498,7 +498,7 @@ fn response_and_metadata(
         content_hash: crypto_hash(&response),
         content_size: response.content.count_bytes() as u32,
         is_reject: response.content.is_reject(),
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     };
     (response, metadata)
 }

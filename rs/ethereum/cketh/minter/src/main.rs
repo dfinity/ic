@@ -30,6 +30,7 @@ use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::{self, BurnMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
+use ic_cketh_minter::state::automatic_deposits::DepositRequest;
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
@@ -39,6 +40,7 @@ use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
 use ic_cketh_minter::sweep::process_sweeper_transactions;
+use ic_cketh_minter::sweeper::fund_sweeper_address;
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
@@ -48,7 +50,7 @@ use ic_cketh_minter::withdraw::{
 use ic_cketh_minter::{
     BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
     PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL,
-    SCRAPING_ETH_LOGS_INTERVAL, state, storage,
+    SCRAPING_ETH_LOGS_INTERVAL, SWEEPER_FUNDING_INTERVAL, state, storage,
 };
 use ic_cketh_minter::{endpoints, erc20};
 use ic_ethereum_types::Address;
@@ -82,6 +84,10 @@ fn setup_timers() {
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
         // Initialize the minter's public key to make the address known.
         let _ = lazy_call_ecdsa_public_key().await;
+        // Sequenced after the key rather than scheduled on a delay: the sweeper address cannot be
+        // derived without it, and a delay only guesses at when it will be cached. Running here also
+        // keeps the two off separate tasks, since two concurrent `ecdsa_public_key` calls trap.
+        fund_sweeper_address().await;
     });
     // Start scraping logs immediately after the install, then repeat with the interval.
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
@@ -112,6 +118,9 @@ fn setup_timers() {
     });
     ic_cdk_timers::set_timer_interval(BALANCE_SCAN_INTERVAL, async || {
         balance_scan().await;
+    });
+    ic_cdk_timers::set_timer_interval(SWEEPER_FUNDING_INTERVAL, async || {
+        fund_sweeper_address().await;
     });
 }
 
@@ -212,10 +221,14 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
         owner: caller,
         subaccount,
     };
+    let request = DepositRequest::new(account, token);
+    let minimum_deposit_amount = min_deposit(&token);
     let now = Timestamp::from_nanos(ic_cdk::api::time());
 
-    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
-    {
+    if let Some(status) = read_state(|s| {
+        s.automatic_deposits
+            .deposit_status(now, &request, minimum_deposit_amount)
+    }) {
         return Ok(status);
     }
 
@@ -228,15 +241,18 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     // after an upgrade, before the key is cached). Returning its status here keeps `register_deposit_
     // address` from trying to re-arm an already-swept pair. From here on the call is synchronous, so
     // no further scan can interleave before the registration below.
-    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
-    {
+    if let Some(status) = read_state(|s| {
+        s.automatic_deposits
+            .deposit_status(now, &request, minimum_deposit_amount)
+    }) {
         return Ok(status);
     }
     mutate_state(|s| s.register_deposit_address(now, account, token))?;
-    Ok(
-        read_state(|s| s.automatic_deposits.deposit_status(now, &account, token))
-            .expect("BUG: a just-registered pair must report a Scanning status"),
-    )
+    Ok(read_state(|s| {
+        s.automatic_deposits
+            .deposit_status(now, &request, minimum_deposit_amount)
+    })
+    .expect("BUG: a just-registered pair must report a Scanning status"))
 }
 
 #[query]
@@ -950,6 +966,18 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id: withdrawal_id.get().into(),
                     transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
+                EventType::AttestedDepositAddress { request, signature } => {
+                    let account = request.account();
+                    EP::AttestedDepositAddress {
+                        chain_id: request.chain_id().into(),
+                        deposit_helper: request.deposit_helper().to_string(),
+                        owner: account.owner,
+                        subaccount: account.subaccount.map(ByteBuf::from),
+                        y_parity: signature.signature_y_parity,
+                        r: ByteBuf::from(signature.r.to_be_bytes()),
+                        s: ByteBuf::from(signature.s.to_be_bytes()),
+                    }
+                }
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,
@@ -1229,6 +1257,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_oldest_incomplete_eth_withdrawal_request_age_seconds",
                     (age_nanos / 1_000_000_000) as f64,
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
+                )?;
+
+                w.encode_gauge(
+                    "cketh_minter_stored_attestations",
+                    s.automatic_deposits.attestations_len() as f64,
+                    "Number of deposit address attestations the minter has signed and stored.",
                 )?;
 
                 w.encode_gauge(

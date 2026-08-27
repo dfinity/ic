@@ -4,6 +4,7 @@ use super::*;
 use crate::{
     ReplicaVersion,
     artifact::PbArtifact,
+    backwards_compatibility::BackwardsCompatible,
     crypto::threshold_sig::ni_dkg::{
         NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
         config::NiDkgConfig,
@@ -87,9 +88,9 @@ pub struct DealingContent {
 
 impl DealingContent {
     /// Create a new DealingContent
-    pub fn new(dealing: NiDkgDealing, dkg_id: NiDkgId) -> Self {
+    pub fn new(dealing: NiDkgDealing, dkg_id: NiDkgId, version: ReplicaVersion) -> Self {
         DealingContent {
-            version: ReplicaVersion::default(),
+            version,
             dealing,
             dkg_id,
         }
@@ -267,7 +268,7 @@ pub struct DkgSummary {
     #[serde_as(as = "Vec<(_, _)>")]
     next_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
     /// Transcripts that are computed for remote subnets.
-    pub transcripts_for_remote_subnets: Vec<RemoteTranscriptResult>,
+    pub transcripts_for_remote_subnets: BackwardsCompatible<Vec<RemoteTranscriptResult>, true>,
     /// The length of the current interval in rounds (following the start
     /// block).
     pub interval_length: Height,
@@ -292,6 +293,7 @@ impl DkgSummary {
         next_interval_length: Height,
         height: Height,
         remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
+        subnet_splitting_status: SubnetSplittingStatus,
     ) -> Self {
         Self {
             configs: configs
@@ -300,13 +302,13 @@ impl DkgSummary {
                 .collect(),
             current_transcripts,
             next_transcripts,
-            transcripts_for_remote_subnets: vec![],
+            transcripts_for_remote_subnets: BackwardsCompatible::new(vec![]),
             registry_version,
             interval_length,
             next_interval_length,
             height,
             remote_dkg_attempts,
-            subnet_splitting_status: SubnetSplittingStatus::NotScheduled,
+            subnet_splitting_status,
         }
     }
 
@@ -449,9 +451,21 @@ impl From<&DkgSummary> for pb::Summary {
             interval_length: summary.interval_length.get(),
             next_interval_length: summary.next_interval_length.get(),
             height: summary.height.get(),
-            transcripts_for_remote_subnets: build_callback_ided_transcripts_vec(
-                summary.transcripts_for_remote_subnets.as_slice(),
-            ),
+            transcripts_for_remote_subnets: summary
+                .transcripts_for_remote_subnets
+                .as_ref()
+                .map(|t| build_callback_ided_transcripts_vec(t.as_slice()))
+                // `None` -> empty vector
+                .unwrap_or_default(),
+            // Relay the marker instead of only ever setting it for our own summaries: `prost`
+            // drops unknown fields, so a replica version that decodes a summary coming from a
+            // version which no longer maintains the field and re-encodes it would otherwise strip
+            // the marker, turning `None` back into `Some(vec![])` downstream and thereby changing
+            // the hash of that summary.
+            transcripts_for_remote_subnets_removed: summary
+                .transcripts_for_remote_subnets
+                .as_ref()
+                .is_none(),
             remote_dkg_attempts: build_remote_dkg_attempts_vec(&summary.remote_dkg_attempts),
             subnet_splitting_status: Some(pb::summary::SubnetSplittingStatus::from(
                 summary.subnet_splitting_status,
@@ -609,10 +623,16 @@ impl TryFrom<pb::Summary> for DkgSummary {
             interval_length: Height::from(summary.interval_length),
             next_interval_length: Height::from(summary.next_interval_length),
             height: Height::from(summary.height),
-            transcripts_for_remote_subnets: build_transcripts_vec_from_pb(
-                summary.transcripts_for_remote_subnets,
-            )
-            .map_err(ProxyDecodeError::Other)?,
+            transcripts_for_remote_subnets: BackwardsCompatible::try_from_proto_with(
+                // A set marker means the summary was produced by a replica version that no longer
+                // maintains the field, in which case the repeated field must be ignored entirely,
+                // including for hashing. Without the marker the repeated field is authoritative,
+                // even when empty: an empty vector still contributes its length prefix to the hash
+                // preimage, exactly as it did before the field became `BackwardsCompatible`.
+                (!summary.transcripts_for_remote_subnets_removed)
+                    .then_some(summary.transcripts_for_remote_subnets),
+                |t| build_transcripts_vec_from_pb(t).map_err(ProxyDecodeError::Other),
+            )?,
             remote_dkg_attempts: build_remote_dkg_attempts_map(&summary.remote_dkg_attempts),
             subnet_splitting_status: try_from_option_field(
                 summary.subnet_splitting_status,
@@ -773,6 +793,7 @@ pub enum DkgPayloadCreationError {
     FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
     FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
     FailedToGetVetKdKeyList(RegistryClientError),
+    SubnetSplittingStatusError(String),
 }
 
 /// Reasons for why a dkg payload might be invalid.

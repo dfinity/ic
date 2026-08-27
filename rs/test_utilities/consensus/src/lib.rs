@@ -18,6 +18,7 @@ use ic_replicated_state::{
     },
 };
 use ic_test_utilities_state::ReplicatedStateBuilder;
+use ic_test_utilities_types::ids::test_replica_version;
 use ic_types::{
     Height, Time,
     batch::ValidationContext,
@@ -228,6 +229,7 @@ pub fn make_genesis(summary: DkgSummary) -> CatchUpPackage {
         .unwrap()
         .dkg_id
         .clone();
+    let replica_version = test_replica_version();
     let block = Block::new(
         Id::from(CryptoHash(Vec::new())),
         Payload::new(
@@ -244,9 +246,14 @@ pub fn make_genesis(summary: DkgSummary) -> CatchUpPackage {
             registry_version,
             time: UNIX_EPOCH,
         },
+        replica_version.clone(),
     );
     let random_beacon = Signed {
-        content: RandomBeaconContent::new(height, Id::from(CryptoHash(Vec::new()))),
+        content: RandomBeaconContent::new(
+            height,
+            Id::from(CryptoHash(Vec::new())),
+            replica_version,
+        ),
         signature: ThresholdSignature {
             signer: low_dkg_id,
             signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),

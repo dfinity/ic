@@ -1,4 +1,5 @@
 use crate::address::ecdsa_public_key_to_address;
+use crate::attestation::AttestationRequest;
 use crate::deposit_address::{DepositAddressSchema, deposit_address, sweeper_address};
 use crate::endpoints::{CandidBlockTag, DepositErc20Error};
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
@@ -17,6 +18,7 @@ use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConf
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::GasFeeEstimate;
+use crate::tx::TransactionSignature;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk_management_canister::EcdsaPublicKeyResult;
@@ -37,7 +39,7 @@ pub mod sweeper_funding;
 pub mod transactions;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 thread_local! {
     pub static STATE: RefCell<Option<State>> = RefCell::default();
@@ -249,10 +251,44 @@ impl State {
         Some(ecdsa_public_key_to_address(&pubkey))
     }
 
-    /// The minter's dedicated sweeper address, `None` until the ECDSA public key is cached.
+    /// The minter's dedicated sweeper address, or `None` while the master public key is still
+    /// unknown.
+    ///
+    /// Reads the cached key rather than fetching it: a second concurrent `ecdsa_public_key` call
+    /// traps the canister, so the first run is delayed until the install-time fetch has cached it.
     pub fn sweeper_address(&self) -> Option<Address> {
         let (master_public_key, chain_code) = self.public_key_and_chain_code()?;
         Some(sweeper_address(&master_public_key, &chain_code))
+    }
+
+    /// What a ckERC20 deposit address must attest to in order to be swept: the account it credits,
+    /// bound to the chain and the subaccount-aware deposit helper this minter runs against.
+    /// `None` while that helper is unknown.
+    ///
+    /// The only place an [`AttestationRequest`] is built outside its own module, so a caller cannot
+    /// attest under a chain or a helper the minter does not use.
+    pub fn attestation_request(&self, account: Account) -> Option<AttestationRequest> {
+        let deposit_helper = *self
+            .log_scrapings
+            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)?;
+        Some(AttestationRequest::new(
+            self.ethereum_network.chain_id(),
+            deposit_helper,
+            account,
+        ))
+    }
+
+    /// The attestation `account`'s ckERC20 deposit address has already signed for the configuration
+    /// this minter runs against, if any: signing another would cost a threshold-ECDSA signature for
+    /// the same digest.
+    pub fn attestation(&self, account: Account) -> Option<&TransactionSignature> {
+        self.automatic_deposits
+            .attestation(&self.attestation_request(account)?)
+    }
+
+    fn record_attestation(&mut self, request: AttestationRequest, signature: TransactionSignature) {
+        self.automatic_deposits
+            .record_attestation(request, signature);
     }
 
     pub fn is_ckerc20_feature_active(&self) -> bool {
@@ -952,5 +988,6 @@ pub enum TaskType {
     MintCkErc20,
     RefreshLatestBlockHeight,
     BalanceScan,
+    SweeperFunding,
     SweeperSend,
 }

@@ -432,6 +432,16 @@ type DepositMode = variant {
 type DepositErc20Response = record {
     // The Ethereum deposit address derived for the caller.
     address : text;
+    // Minimum balance, in the token's own units, that the deposit address must hold for the
+    // balance scan to detect it. The scan reads the address' whole balance for the token, so
+    // several smaller transfers count together; the funds stay undetected only while their
+    // total is below this.
+    //
+    // A supported token with no configured minimum reports 2^256 - 1, which no real balance can
+    // reach: a deposit of that token would never be detected. Frontends should treat such a value
+    // as "deposits unavailable for this token" and warn the user, rather than display it as an
+    // amount to send.
+    minimum_deposit_amount : nat;
     // Where the deposit stands in the detect-and-sweep pipeline.
     status : DepositStatus;
 };
@@ -765,6 +775,22 @@ type Event = record {
             scan_count : nat64;
             scanned_balance : nat;
         };
+        // A ckERC20 deposit address attested to the account it credits. Recorded
+        // on its own because signing costs a threshold-ECDSA signature: the
+        // attestation outlives the sweep that needed it and every later one
+        // reuses it.
+        AttestedDepositAddress : record {
+            chain_id : nat;
+            // The deposit helper the attestation names; it is only valid against
+            // this deployment.
+            deposit_helper : text;
+            owner : principal;
+            subaccount : opt blob;
+            y_parity : bool;
+            // 32-byte signature components.
+            r : blob;
+            s : blob;
+        };
     };
 };
 
@@ -896,7 +922,8 @@ service : (MinterArg) -> {
     // Derive and register the ckERC20 deposit address for the caller.
     // The account is derived from the caller's principal and the subaccount in the argument.
     // Returns the EIP-55 checksummed deposit address together with `valid_until`, the timestamp
-    // (nanoseconds since the Unix epoch) until which a deposit to it is guaranteed to be noticed.
+    // (nanoseconds since the Unix epoch) until which a deposit to it is guaranteed to be noticed,
+    // and the minimum balance of the requested token the address must hold to be noticed.
     deposit_erc20 : (DepositErc20Arg) -> (variant { Ok : DepositErc20Response; Err : DepositErc20Error });
 
     // Retrieve the status of a Eth withdrawal request.

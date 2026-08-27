@@ -249,6 +249,15 @@ pub enum DepositMode {
 pub struct DepositErc20Response {
     /// The Ethereum deposit address derived for the caller.
     pub address: String,
+    /// Minimum balance, in the token's own units, that the deposit address must hold for the
+    /// balance scan to detect it. The scan reads the address' whole balance for the token, so
+    /// several smaller transfers count together; the funds stay undetected only while their
+    /// total is below this.
+    ///
+    /// A supported token with no configured minimum reports `2^256 - 1`, which no real balance
+    /// can reach: a deposit of that token would never be detected. Treat such a value as
+    /// "deposits unavailable for this token" rather than as an amount to display.
+    pub minimum_deposit_amount: Nat,
     /// Where the deposit stands in the detect-and-sweep pipeline.
     pub status: DepositStatus,
 }
@@ -551,6 +560,18 @@ pub mod events {
         FinalizedTransaction {
             withdrawal_id: Nat,
             transaction_receipt: TransactionReceipt,
+        },
+        AttestedDepositAddress {
+            chain_id: Nat,
+            /// The deposit helper the attestation names; it is only valid against this deployment.
+            deposit_helper: String,
+            owner: Principal,
+            subaccount: Option<ByteBuf>,
+            y_parity: bool,
+            /// 32-byte signature component.
+            r: ByteBuf,
+            /// 32-byte signature component.
+            s: ByteBuf,
         },
         AcceptedSweepRequest {
             sweep_id: Nat,
