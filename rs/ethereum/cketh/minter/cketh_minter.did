@@ -578,16 +578,22 @@ type UnsignedTransaction = record {
     access_list : vec record { address : text; storage_keys : vec blob };
 };
 
+// A secp256k1 signature: the two 32-byte components and the parity recovering
+// the signing key from them.
+type TransactionSignature = record {
+    y_parity : bool;
+    // 32-byte signature components.
+    r : blob;
+    s : blob;
+};
+
 // An EIP-7702 authorization tuple: a deposit address' signed consent to delegate
 // its code to `delegate`, signed by the address itself.
 type SignedAuthorization = record {
     chain_id : nat;
     delegate : text;
     nonce : nat;
-    y_parity : bool;
-    // 32-byte signature components.
-    r : blob;
-    s : blob;
+    signature : TransactionSignature;
 };
 
 // One deposit a sweep moves: the address the funds sit at, the account they are
@@ -598,10 +604,7 @@ type AuthorizedSweepItem = record {
     owner : principal;
     subaccount : opt blob;
     // The attestation signed by the deposit address itself.
-    attestation_y_parity : bool;
-    // 32-byte signature components.
-    attestation_r : blob;
-    attestation_s : blob;
+    attestation : TransactionSignature;
     // The delegation installed on the way, absent if the address is already
     // delegated.
     authorization : opt SignedAuthorization;
@@ -801,10 +804,8 @@ type Event = record {
             deposit_helper : text;
             owner : principal;
             subaccount : opt blob;
-            y_parity : bool;
-            // 32-byte signature components.
-            r : blob;
-            s : blob;
+            // The attestation signed by the deposit address itself.
+            attestation : TransactionSignature;
         };
         AuthorizedDepositAddress : record {
             owner : principal;

@@ -3,7 +3,8 @@ use crate::checked_amount::CheckedAmountOf;
 use crate::deposit_address::DepositAddress;
 use crate::endpoints::events::{
     AuthorizedSweepItem as CandidAuthorizedSweepItem, Event as CandidEvent, EventPayload,
-    SignedAuthorization as CandidSignedAuthorization, UnsignedSweeperTransaction,
+    SignedAuthorization as CandidSignedAuthorization,
+    TransactionSignature as CandidTransactionSignature, UnsignedSweeperTransaction,
     UnsignedTransaction,
 };
 use crate::erc20::CkErc20Token;
@@ -292,13 +293,21 @@ impl GetEventsFile {
             )
         }
 
-        fn map_authorized_sweep_items(
-            items: Vec<CandidAuthorizedSweepItem>,
-        ) -> Vec<AuthorizedSweepItem> {
-            fn map_signature_component(bytes: &[u8]) -> ethnum::u256 {
+        fn map_candid_signature(signature: CandidTransactionSignature) -> TransactionSignature {
+            fn component(bytes: &[u8]) -> ethnum::u256 {
                 ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(bytes).unwrap())
             }
 
+            TransactionSignature {
+                signature_y_parity: signature.y_parity,
+                r: component(&signature.r),
+                s: component(&signature.s),
+            }
+        }
+
+        fn map_authorized_sweep_items(
+            items: Vec<CandidAuthorizedSweepItem>,
+        ) -> Vec<AuthorizedSweepItem> {
             items
                 .into_iter()
                 .map(|item| AuthorizedSweepItem {
@@ -310,11 +319,7 @@ impl GetEventsFile {
                                 .subaccount
                                 .map(|s| <[u8; 32]>::try_from(s.as_ref()).unwrap()),
                         },
-                        attestation: TransactionSignature {
-                            signature_y_parity: item.attestation_y_parity,
-                            r: map_signature_component(&item.attestation_r),
-                            s: map_signature_component(&item.attestation_s),
-                        },
+                        attestation: map_candid_signature(item.attestation),
                     },
                     authorization: item.authorization.map(|authorization| {
                         map_authorizations(vec![authorization])
@@ -328,19 +333,18 @@ impl GetEventsFile {
         fn map_authorizations(
             authorizations: Vec<CandidSignedAuthorization>,
         ) -> Vec<SignedAuthorization> {
-            fn map_signature_component(bytes: &[u8]) -> ethnum::u256 {
-                ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(bytes).unwrap())
-            }
-
             authorizations
                 .into_iter()
-                .map(|authorization| SignedAuthorization {
-                    chain_id: authorization.chain_id.0.to_u64().unwrap(),
-                    delegate: authorization.delegate.parse().unwrap(),
-                    nonce: authorization.nonce.try_into().unwrap(),
-                    y_parity: authorization.y_parity,
-                    r: map_signature_component(&authorization.r),
-                    s: map_signature_component(&authorization.s),
+                .map(|authorization| {
+                    let signature = map_candid_signature(authorization.signature);
+                    SignedAuthorization {
+                        chain_id: authorization.chain_id.0.to_u64().unwrap(),
+                        delegate: authorization.delegate.parse().unwrap(),
+                        nonce: authorization.nonce.try_into().unwrap(),
+                        y_parity: signature.signature_y_parity,
+                        r: signature.r,
+                        s: signature.s,
+                    }
                 })
                 .collect()
         }
@@ -471,9 +475,7 @@ impl GetEventsFile {
                     deposit_helper,
                     owner,
                     subaccount,
-                    y_parity,
-                    r,
-                    s,
+                    attestation,
                 } => ET::AttestedDepositAddress {
                     request: AttestationRequest::new(
                         chain_id.0.to_u64().unwrap(),
@@ -485,11 +487,7 @@ impl GetEventsFile {
                             }),
                         },
                     ),
-                    signature: TransactionSignature {
-                        signature_y_parity: y_parity,
-                        r: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(r.as_slice()).unwrap()),
-                        s: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(s.as_slice()).unwrap()),
-                    },
+                    signature: map_candid_signature(attestation),
                 },
                 EventPayload::AuthorizedDepositAddress {
                     owner,
