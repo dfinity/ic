@@ -204,7 +204,10 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 Ok(state_params) => {
                     if let Some(SubCommand::UpdateRegistryLocalStore) = subcmd {
                         player.update_registry_local_store();
-                        Ok(player.get_latest_state_params(None, Vec::new()))
+                        let mut params = player.get_latest_state_params(None, Vec::new());
+                        // The extra batches were delivered by the replay above.
+                        params.extra_batches = state_params.extra_batches;
+                        Ok(params)
                     } else {
                         Ok(state_params)
                     }

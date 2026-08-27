@@ -364,7 +364,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
 
             StepType::ValidateReplayOutput => Ok(Box::new(
                 self.recovery
-                    .get_validate_replay_step(self.params.subnet_id, 0),
+                    .get_validate_replay_step(self.params.subnet_id),
             )),
 
             StepType::UpdateRegistryLocalStore => Ok(Box::new(

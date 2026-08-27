@@ -96,6 +96,11 @@ pub struct StateParams {
     pub hash: String,
     pub registry_version: RegistryVersion,
     pub invalid_artifacts: Vec<InvalidArtifact>,
+    /// Number of batches delivered on top of the replayed blocks, i.e. the batches
+    /// carrying the extra ingress messages and the one creating the checkpoint. Zero
+    /// if the replayed blocks already ended in a checkpoint.
+    #[serde(default)]
+    pub extra_batches: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -428,11 +433,13 @@ impl Player {
             Default::default()
         };
 
-        let (latest_context_time, extra_batch_delivery) = self.deliver_extra_batch(
-            self.message_routing.as_ref(),
-            self.consensus_pool.as_ref(),
-            extra,
-        );
+        let message_routing = self.message_routing.as_ref();
+        let expected_batch_height = message_routing.expected_batch_height();
+        let (latest_context_time, extra_batch_delivery) =
+            self.deliver_extra_batch(message_routing, self.consensus_pool.as_ref(), extra);
+        // `ValidateReplayStep` in `ic-recovery` subtracts these from the reported height
+        // to compare the replayed blocks against the subnet's certification height.
+        let extra_batches = (message_routing.expected_batch_height() - expected_batch_height).get();
 
         if let Some((last_batch_height, msgs)) = extra_batch_delivery {
             self.wait_for_state(last_batch_height);
@@ -459,8 +466,9 @@ impl Player {
             }
         }
 
-        let state_params =
+        let mut state_params =
             self.get_latest_state_params(Some(latest_context_time), invalid_artifacts);
+        state_params.extra_batches = extra_batches;
         println!("Latest registry version: {}", state_params.registry_version);
 
         if inspection_required {
@@ -684,6 +692,7 @@ impl Player {
             hash,
             registry_version,
             invalid_artifacts,
+            extra_batches: 0,
         }
     }
 
@@ -803,6 +812,20 @@ impl Player {
                 println!(
                     "Skipping the extra batch: the latest state height {latest_state_height} \
                     is already above the replay target height {target_height}."
+                );
+                return (time, None);
+            }
+            // Nothing is left to persist if the state the extra batch would checkpoint is
+            // already checkpointed, which is the case whenever the last replayed block is
+            // a summary block: its batch requires a full state hash.
+            if self
+                .state_manager
+                .checkpoint_heights()
+                .contains(&latest_state_height)
+            {
+                println!(
+                    "Skipping the extra batch: the state at height {latest_state_height} \
+                    is already checkpointed."
                 );
                 return (time, None);
             }

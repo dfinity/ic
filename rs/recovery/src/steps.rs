@@ -530,7 +530,6 @@ pub(crate) struct ValidateReplayStep {
     pub subnet_id: SubnetId,
     pub registry_helper: RegistryHelper,
     pub work_dir: PathBuf,
-    pub extra_batches: u64,
 }
 
 impl Step for ValidateReplayStep {
@@ -539,8 +538,12 @@ impl Step for ValidateReplayStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let latest_height =
-            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?.height;
+        // `ic-replay` reports how many batches it delivered on top of the replayed
+        // blocks, so that the comparison below is against the last replayed block.
+        let state_params =
+            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?;
+        let latest_height = state_params.height;
+        let extra_batches = state_params.extra_batches;
 
         let heights = get_available_nodes_heights_from_metrics(
             &self.logger,
@@ -568,10 +571,10 @@ impl Step for ValidateReplayStep {
         );
         info!(self.logger, "Height after replay: {}", latest_height);
 
-        if self.extra_batches > 0 {
-            info!(self.logger, "Extra batches: {}", self.extra_batches);
+        if extra_batches > 0 {
+            info!(self.logger, "Extra batches: {}", extra_batches);
         }
-        if latest_height.get() - self.extra_batches < cert_height.get() {
+        if latest_height.get() - extra_batches < cert_height.get() {
             return Err(RecoveryError::invalid_output_error(
                 "Replay height smaller than certification height.",
             ));
