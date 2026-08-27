@@ -116,6 +116,7 @@ rust_test(
         "@crate_index//:flate2",
         "@crate_index//:ic-agent",
         "@crate_index//:maplit",
+        "@crate_index//:mockall",
         "@crate_index//:proptest",
         "@crate_index//:rand",
         "@crate_index//:tempfile",
