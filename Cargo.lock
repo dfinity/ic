@@ -7405,6 +7405,7 @@ dependencies = [
  "icrc-ledger-types",
  "maplit",
  "minicbor",
+ "mockall",
  "num-bigint 0.4.6",
  "num-traits",
  "phantom_newtype",

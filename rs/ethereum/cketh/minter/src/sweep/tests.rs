@@ -17,15 +17,16 @@ use crate::tx::{EcdsaSigner, GasFeeEstimate, SignedAuthorization, TransactionSig
 use candid::Principal;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
+use mockall::mock;
 use serde_bytes::ByteBuf;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 mod enqueue_token_sweep {
     use super::{
         CREATED_AT, MockSigner, account, attestation_of, authorization_of, context,
-        deposit_address, enqueue_token_sweep, enqueued_sweep, enqueued_sweeps, gas_fee_estimate,
-        install, queued_state, queued_targets_len, sweeper_contract, transaction_signature, usdc,
+        deposit_address, enqueue_token_sweep, enqueued_sweep, enqueued_sweeps, expect_once,
+        gas_fee_estimate, install, queued_state, queued_targets_len, refusing, signing_anything,
+        sweeper_contract, transaction_signature, usdc,
     };
     use crate::numeric::{Wei, WeiPerGas};
     use crate::state::audit::{EventType, apply_state_transition};
@@ -39,15 +40,12 @@ mod enqueue_token_sweep {
     #[tokio::test]
     async fn should_be_no_op_when_targets_empty() {
         install(queued_state(&[(0, usdc())]));
-        let context = context(MockSigner::default());
+        // An empty mock: a token with nothing queued must ask for no signature, and a request
+        // nothing expects fails the test.
+        let context = context(MockSigner::new());
 
         enqueue_token_sweep((usdc(), vec![]), &context).await;
 
-        assert_eq!(
-            context.signer.signed.borrow().clone(),
-            vec![],
-            "a token with nothing queued must cost no signature"
-        );
         assert_eq!(enqueued_sweeps(), vec![]);
         assert_eq!(read_state(|s| s.next_sweep_id), SweepId(0));
         assert_eq!(
@@ -63,15 +61,10 @@ mod enqueue_token_sweep {
         // Without the helper there is no attestation preimage, so no deposit address can prove which
         // account it credits and the delegate would refuse every item of the batch.
         init_state(initial_state());
-        let context = context(MockSigner::default());
+        let context = context(MockSigner::new());
 
         enqueue_token_sweep((usdc(), targets), &context).await;
 
-        assert_eq!(
-            context.signer.signed.borrow().clone(),
-            vec![],
-            "an unconfigured helper must cost no signature"
-        );
         assert_eq!(enqueued_sweeps(), vec![]);
         assert_eq!(read_state(|s| s.next_sweep_id), SweepId(0));
     }
@@ -80,7 +73,7 @@ mod enqueue_token_sweep {
     async fn should_sweep_every_queued_deposit_of_the_token() {
         let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
 
-        enqueue_token_sweep((usdc(), targets), &context(MockSigner::default())).await;
+        enqueue_token_sweep((usdc(), targets), &context(signing_anything())).await;
 
         let sweep = enqueued_sweep();
         assert_eq!(sweep.id, SweepId(0));
@@ -126,32 +119,32 @@ mod enqueue_token_sweep {
     #[tokio::test]
     async fn should_sign_over_the_attestation_and_the_authorization_of_every_address() {
         let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
-        let context = context(MockSigner::default());
-
-        enqueue_token_sweep((usdc(), targets), &context).await;
-
-        // What the signer is asked for is the sweep's whole cryptographic cost: one attestation
-        // digest per account, and one authorization tuple per deposit address.
-        let signed = context.signer.signed.borrow().clone();
-        assert_eq!(signed.len(), 4);
-        for expected in [
+        let mut signer = MockSigner::new();
+        // The sweep's whole cryptographic cost: one attestation digest per account, one
+        // authorization tuple per deposit address, and nothing else. Each must be asked for exactly
+        // once, and a request outside them has no expectation to match.
+        for signable in [
             attestation_of(0),
             attestation_of(1),
             authorization_of(0),
             authorization_of(1),
         ] {
-            assert!(
-                signed.contains(&expected),
-                "the signer was never asked for {expected:?}, only for {signed:?}"
-            );
+            expect_once(&mut signer, signable, Ok(transaction_signature()));
         }
+
+        enqueue_token_sweep((usdc(), targets), &context(signer)).await;
+
+        assert_eq!(
+            swept_accounts(&enqueued_sweep()),
+            vec![account(0), account(1)]
+        );
     }
 
     #[tokio::test]
     async fn should_record_the_attestation_it_signed() {
         let targets = install(queued_state(&[(0, usdc())]));
 
-        enqueue_token_sweep((usdc(), targets), &context(MockSigner::default())).await;
+        enqueue_token_sweep((usdc(), targets), &context(signing_anything())).await;
 
         // An attestation outlives the sweep that paid for it, so it is recorded rather than
         // recomputed: this is what lets the next sweep of the address skip the signature.
@@ -175,15 +168,18 @@ mod enqueue_token_sweep {
             },
         );
         let targets = install(state);
-        let context = context(MockSigner::default());
-
-        enqueue_token_sweep((usdc(), targets), &context).await;
-
-        assert_eq!(
-            context.signer.signed.borrow().clone(),
-            vec![authorization_of(0)],
-            "only the authorization should have cost a signature"
+        let mut signer = MockSigner::new();
+        // Only the authorization. Nothing expects the attestation, so asking for it fails the test:
+        // it names the account and the helper, neither of which a sweep changes, and the minter
+        // already holds a signature over that digest.
+        expect_once(
+            &mut signer,
+            authorization_of(0),
+            Ok(transaction_signature()),
         );
+
+        enqueue_token_sweep((usdc(), targets), &context(signer)).await;
+
         assert_eq!(swept_accounts(&enqueued_sweep()), vec![account(0)]);
     }
 
@@ -191,10 +187,10 @@ mod enqueue_token_sweep {
     async fn should_take_the_deposits_it_sweeps_out_of_the_queue() {
         let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
 
-        enqueue_token_sweep((usdc(), targets), &context(MockSigner::default())).await;
+        enqueue_token_sweep((usdc(), targets), &context(signing_anything())).await;
 
-        // A deposit gets one sweep and no more: taken by this one, it is no longer a target the
-        // next tick would sweep again. The entry itself stays, attributed to the sweep, so that its
+        // A deposit gets one sweep and no more: taken by this one, it is no longer a target the next
+        // tick would sweep again. The entry itself stays, attributed to the sweep, so that its
         // outcome can be applied to it.
         assert_eq!(queued_targets_len(), 0);
         assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 2);
@@ -204,7 +200,7 @@ mod enqueue_token_sweep {
     async fn should_advance_the_next_sweep_id() {
         let targets = install(queued_state(&[(0, usdc())]));
 
-        enqueue_token_sweep((usdc(), targets), &context(MockSigner::default())).await;
+        enqueue_token_sweep((usdc(), targets), &context(signing_anything())).await;
 
         // The next token's sweep in the same tick reads this, so it must not reuse the id.
         assert_eq!(read_state(|s| s.next_sweep_id), SweepId(1));
@@ -214,11 +210,7 @@ mod enqueue_token_sweep {
     async fn should_leave_out_a_deposit_whose_attestation_could_not_be_signed() {
         let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
 
-        enqueue_token_sweep(
-            (usdc(), targets),
-            &context(MockSigner::refusing(&[attestation_of(0)])),
-        )
-        .await;
+        enqueue_token_sweep((usdc(), targets), &context(refusing(&[attestation_of(0)]))).await;
 
         assert_eq!(swept_accounts(&enqueued_sweep()), vec![account(1)]);
     }
@@ -229,7 +221,7 @@ mod enqueue_token_sweep {
 
         enqueue_token_sweep(
             (usdc(), targets),
-            &context(MockSigner::refusing(&[authorization_of(0)])),
+            &context(refusing(&[authorization_of(0)])),
         )
         .await;
 
@@ -244,7 +236,7 @@ mod enqueue_token_sweep {
 
         enqueue_token_sweep(
             (usdc(), targets),
-            &context(MockSigner::refusing(&[authorization_of(0)])),
+            &context(refusing(&[authorization_of(0)])),
         )
         .await;
 
@@ -259,20 +251,24 @@ mod enqueue_token_sweep {
     #[tokio::test]
     async fn should_not_authorize_an_address_it_could_not_attest() {
         let targets = install(queued_state(&[(0, usdc()), (1, usdc())]));
-        let context = context(MockSigner::refusing(&[attestation_of(0)]));
-
-        enqueue_token_sweep((usdc(), targets), &context).await;
-
-        // Account 0 drops out of the sweep either way, so authorizing it would spend a
-        // threshold-ECDSA signature on nothing.
-        assert!(
-            !context
-                .signer
-                .signed
-                .borrow()
-                .contains(&authorization_of(0)),
-            "an unattested address must not cost an authorization"
+        let mut signer = MockSigner::new();
+        expect_once(
+            &mut signer,
+            attestation_of(0),
+            Err("no attestation".to_string()),
         );
+        expect_once(&mut signer, attestation_of(1), Ok(transaction_signature()));
+        expect_once(
+            &mut signer,
+            authorization_of(1),
+            Ok(transaction_signature()),
+        );
+        // Nothing expects account 0's authorization: it drops out of the sweep either way, so
+        // authorizing it would spend a threshold-ECDSA signature on nothing.
+
+        enqueue_token_sweep((usdc(), targets), &context(signer)).await;
+
+        assert_eq!(swept_accounts(&enqueued_sweep()), vec![account(1)]);
     }
 
     #[tokio::test]
@@ -281,10 +277,7 @@ mod enqueue_token_sweep {
 
         enqueue_token_sweep(
             (usdc(), targets),
-            &context(MockSigner::refusing(&[
-                attestation_of(0),
-                attestation_of(1),
-            ])),
+            &context(refusing(&[attestation_of(0), attestation_of(1)])),
         )
         .await;
 
@@ -294,7 +287,7 @@ mod enqueue_token_sweep {
     #[tokio::test]
     async fn should_skip_the_token_when_the_sweep_would_prepay_above_the_ceiling() {
         let targets = install(queued_state(&[(0, usdc())]));
-        let mut context = context(MockSigner::default());
+        let mut context = context(signing_anything());
         // A fee this high puts the prepayment far above the low-water mark the sweeper address is
         // kept above, so this is a sweep the minter could not pay for.
         context.gas_fee_estimate = GasFeeEstimate {
@@ -313,7 +306,7 @@ mod enqueue_token_sweep {
     async fn should_price_the_sweep_at_the_gas_estimate() {
         let targets = install(queued_state(&[(0, usdc())]));
 
-        enqueue_token_sweep((usdc(), targets), &context(MockSigner::default())).await;
+        enqueue_token_sweep((usdc(), targets), &context(signing_anything())).await;
 
         let sweep = enqueued_sweep();
         assert_eq!(
@@ -795,39 +788,61 @@ fn derivation_path(index: u8) -> Vec<ByteBuf> {
     deposit_derivation_path(DepositAddressSchema::CkErc20, &account(index))
 }
 
-/// A digest and the derivation path it is signed under: all an [`EcdsaSigner`] is told, and so all a
-/// [`MockSigner`] can decide on.
+/// A digest and the derivation path it is signed under: all an [`EcdsaSigner`] is told, and so all
+/// an expectation on [`MockSigner`] can match on.
 type Signable = (Hash, Vec<ByteBuf>);
 
-/// An [`EcdsaSigner`] that signs every digest as [`transaction_signature`], except the ones it is
-/// told to refuse, and records everything it was asked to sign.
-#[derive(Default)]
-struct MockSigner {
-    refused: Vec<Signable>,
-    signed: RefCell<Vec<Signable>>,
-}
+mock! {
+    pub Signer {}
 
-impl MockSigner {
-    /// A signer whose threshold-ECDSA call fails for exactly the given signables.
-    fn refusing(refused: &[Signable]) -> Self {
-        Self {
-            refused: refused.to_vec(),
-            signed: RefCell::default(),
-        }
+    impl EcdsaSigner for Signer {
+        async fn sign_digest(
+            &self,
+            digest: &Hash,
+            derivation_path: &[ByteBuf],
+        ) -> Result<TransactionSignature, String>;
     }
 }
 
-impl EcdsaSigner for MockSigner {
-    async fn sign_digest(
-        &self,
-        digest: &Hash,
-        derivation_path: &[ByteBuf],
-    ) -> Result<TransactionSignature, String> {
-        let signable = (*digest, derivation_path.to_vec());
-        self.signed.borrow_mut().push(signable.clone());
-        if self.refused.contains(&signable) {
-            return Err(format!("no signature for {signable:?}"));
-        }
-        Ok(transaction_signature())
-    }
+/// A signer that answers whatever it is asked with [`transaction_signature`].
+///
+/// For a test whose subject is not which signatures a sweep spends. Where that *is* the subject,
+/// name the signables one at a time with [`expect_once`] instead: a request nothing expects then
+/// fails the test, so what a sweep must not sign needs no assertion of its own.
+fn signing_anything() -> MockSigner {
+    let mut signer = MockSigner::new();
+    signer
+        .expect_sign_digest()
+        .returning(|_digest, _derivation_path| Ok(transaction_signature()));
+    signer
+}
+
+/// A signer that answers anything but `refused`, whose threshold-ECDSA call fails.
+fn refusing(refused: &[Signable]) -> MockSigner {
+    let refused = refused.to_vec();
+    let mut signer = MockSigner::new();
+    signer
+        .expect_sign_digest()
+        .withf(move |digest, derivation_path| {
+            refused.contains(&(*digest, derivation_path.to_vec()))
+        })
+        .returning(|_digest, _derivation_path| Err("no signature".to_string()));
+    signer
+        .expect_sign_digest()
+        .returning(|_digest, _derivation_path| Ok(transaction_signature()));
+    signer
+}
+
+/// Have `signer` answer `signable` with `answer`, exactly once — and require that it be asked, which
+/// the mock checks when it is dropped.
+fn expect_once(
+    signer: &mut MockSigner,
+    signable: Signable,
+    answer: Result<TransactionSignature, String>,
+) {
+    signer
+        .expect_sign_digest()
+        .withf(move |digest, derivation_path| (*digest, derivation_path.to_vec()) == signable)
+        .times(1)
+        .return_once(move |_digest, _derivation_path| answer);
 }
