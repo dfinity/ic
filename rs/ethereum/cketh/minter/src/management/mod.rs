@@ -15,6 +15,14 @@ pub struct CallError {
 }
 
 impl CallError {
+    /// An error from calling `method`, which failed for `reason`.
+    pub fn new(method: impl Into<String>, reason: Reason) -> Self {
+        Self {
+            method: method.into(),
+            reason,
+        }
+    }
+
     /// Returns the name of the method that resulted in this error.
     pub fn method(&self) -> &str {
         &self.method

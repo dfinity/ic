@@ -60,6 +60,14 @@ pub fn account() -> Account {
     }
 }
 
+/// A second account, for tests that need two deposit addresses in one sweep.
+pub fn another_account() -> Account {
+    Account {
+        owner: Principal::from_slice(&[5, 6, 7, 8]),
+        subaccount: Some([43_u8; 32]),
+    }
+}
+
 /// The deposit helper whose events name the account an address credits.
 pub fn deposit_helper() -> Address {
     "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38"
