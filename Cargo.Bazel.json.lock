@@ -1,5 +1,5 @@
 {
-  "checksum": "4f7560ce3b8a37d235222d5834d815a7b23f18528bcced08b5d6948aa84ec9b8",
+  "checksum": "e531f700af05e625c7c906ab208a0419f635c3db0421f1cebf7fd5c5ae874b46",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -20338,7 +20338,7 @@
               "target": "minicbor"
             },
             {
-              "id": "mockall 0.13.1",
+              "id": "mockall 0.15.0",
               "target": "mockall"
             },
             {
@@ -45702,14 +45702,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "mockall 0.13.1": {
+    "mockall 0.15.0": {
       "name": "mockall",
-      "version": "0.13.1",
+      "version": "0.15.0",
       "package_url": "https://github.com/asomers/mockall",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/mockall/0.13.1/download",
-          "sha256": "39a6bfcc6c8c7eed5ee98b9c3e33adc726054389233e201c95dab2d41a3839d2"
+          "url": "https://static.crates.io/crates/mockall/0.15.0/download",
+          "sha256": "1a6ceddfe3ce334925e96bf420fdb2dcee5bed6c632a168ece622676dadeaf8a"
         }
       },
       "targets": [
@@ -45717,6 +45717,18 @@
           "Library": {
             "crate_name": "mockall",
             "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -45746,6 +45758,10 @@
               "target": "fragile"
             },
             {
+              "id": "mockall 0.15.0",
+              "target": "build_script_build"
+            },
+            {
               "id": "predicates 3.1.2",
               "target": "predicates"
             },
@@ -45760,13 +45776,24 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "mockall_derive 0.13.1",
+              "id": "mockall_derive 0.15.0",
               "target": "mockall_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.13.1"
+        "version": "0.15.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -45775,14 +45802,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "mockall_derive 0.13.1": {
+    "mockall_derive 0.15.0": {
       "name": "mockall_derive",
-      "version": "0.13.1",
+      "version": "0.15.0",
       "package_url": "https://github.com/asomers/mockall",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/mockall_derive/0.13.1/download",
-          "sha256": "25ca3004c2efe9011bd4e461bd8256445052b9615405b4f7ea43fc8ca5c20898"
+          "url": "https://static.crates.io/crates/mockall_derive/0.15.0/download",
+          "sha256": "9cfe16fbe8a314aeec0b861ac24e60b1e123e97634bab045475b9d6a18416fd8"
         }
       },
       "targets": [
@@ -45823,7 +45850,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "mockall_derive 0.13.1",
+              "id": "mockall_derive 0.15.0",
               "target": "build_script_build"
             },
             {
@@ -45842,7 +45869,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.13.1"
+        "version": "0.15.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -92080,7 +92107,7 @@
     "memmap2 0.9.5",
     "minicbor 0.22.0",
     "minicbor-derive 0.14.0",
-    "mockall 0.13.1",
+    "mockall 0.15.0",
     "mockito 1.7.0",
     "moka 0.12.15",
     "more-asserts 0.3.1",
