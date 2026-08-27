@@ -249,6 +249,15 @@ pub enum DepositMode {
 pub struct DepositErc20Response {
     /// The Ethereum deposit address derived for the caller.
     pub address: String,
+    /// Minimum balance, in the token's own units, that the deposit address must hold for the
+    /// balance scan to detect it. The scan reads the address' whole balance for the token, so
+    /// several smaller transfers count together; the funds stay undetected only while their
+    /// total is below this.
+    ///
+    /// A supported token with no configured minimum reports `2^256 - 1`, which no real balance
+    /// can reach: a deposit of that token would never be detected. Treat such a value as
+    /// "deposits unavailable for this token" rather than as an amount to display.
+    pub minimum_deposit_amount: Nat,
     /// Where the deposit stands in the detect-and-sweep pipeline.
     pub status: DepositStatus,
 }
@@ -441,6 +450,29 @@ pub mod events {
         pub access_list: Vec<AccessListItem>,
     }
 
+    /// An [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) authorization tuple: a deposit
+    /// address' signed consent to delegate its code to `delegate`, signed by the address itself.
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub struct SignedAuthorization {
+        pub chain_id: Nat,
+        pub delegate: String,
+        pub nonce: Nat,
+        pub y_parity: bool,
+        /// 32-byte signature component.
+        pub r: ByteBuf,
+        /// 32-byte signature component.
+        pub s: ByteBuf,
+    }
+
+    /// A sweep transaction the minter has created but not yet signed: a transaction, plus the
+    /// delegations it installs on the way. With none it is sent as a plain EIP-1559 (`0x02`)
+    /// transaction, and otherwise as an EIP-7702 (`0x04`) one.
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub struct UnsignedSweeperTransaction {
+        pub transaction: UnsignedTransaction,
+        pub authorization_list: Vec<SignedAuthorization>,
+    }
+
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub enum TransactionStatus {
         Success,
@@ -529,6 +561,18 @@ pub mod events {
             withdrawal_id: Nat,
             transaction_receipt: TransactionReceipt,
         },
+        AttestedDepositAddress {
+            chain_id: Nat,
+            /// The deposit helper the attestation names; it is only valid against this deployment.
+            deposit_helper: String,
+            owner: Principal,
+            subaccount: Option<ByteBuf>,
+            y_parity: bool,
+            /// 32-byte signature component.
+            r: ByteBuf,
+            /// 32-byte signature component.
+            s: ByteBuf,
+        },
         AcceptedSweepRequest {
             sweep_id: Nat,
             destination: String,
@@ -537,10 +581,13 @@ pub mod events {
             data: ByteBuf,
             max_transaction_fee: Nat,
             created_at: u64,
+            /// Delegations the sweep installs on the way, empty if every address it touches is
+            /// already delegated.
+            authorizations: Vec<SignedAuthorization>,
         },
         CreatedSweeperTransaction {
             sweep_id: Nat,
-            transaction: UnsignedTransaction,
+            transaction: UnsignedSweeperTransaction,
         },
         SignedSweeperTransaction {
             sweep_id: Nat,
@@ -548,7 +595,7 @@ pub mod events {
         },
         ReplacedSweeperTransaction {
             sweep_id: Nat,
-            transaction: UnsignedTransaction,
+            transaction: UnsignedSweeperTransaction,
         },
         FinalizedSweeperTransaction {
             sweep_id: Nat,

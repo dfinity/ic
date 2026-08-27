@@ -342,7 +342,8 @@ fn canonical_encoding_subnet_metrics() {
         metrics.threshold_signature_agreements =
             BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
 
-        let consumed_cycles_by_canisters = NominalCycles::new(50_000_000_000);
+        // The canister-consumed part of the reported total, included from `V29` on.
+        metrics.consumed_cycles_by_canisters = NominalCycles::new(50_000_000_000);
 
         let expected = if certification_version >= CertificationVersion::V29 {
             "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 2E 90 ED D0 00 01 00 03 19 10 68"
@@ -352,11 +353,7 @@ fn canonical_encoding_subnet_metrics() {
 
         assert_eq!(
             expected,
-            as_hex(&encode_subnet_metrics(
-                &metrics,
-                consumed_cycles_by_canisters,
-                certification_version
-            ))
+            as_hex(&encode_subnet_metrics(&metrics, certification_version))
         );
     }
 }

@@ -1247,6 +1247,19 @@ mod tests {
         assert!(consumed_by_canisters > NominalCycles::zero());
         state.put_canister_state(canister_state);
 
+        // The tree reads the stored aggregate, which is zero until refreshed.
+        assert_eq!(
+            state.metadata.subnet_metrics.consumed_cycles_by_canisters,
+            NominalCycles::zero()
+        );
+
+        // The refresh publishes the fold into `SubnetMetrics`.
+        state.refresh_consumed_cycles_by_canisters();
+        assert_eq!(
+            state.metadata.subnet_metrics.consumed_cycles_by_canisters,
+            consumed_by_canisters
+        );
+
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
 
@@ -1263,25 +1276,18 @@ mod tests {
                 })
                 .expect("no metrics leaf in traversal");
 
-            // The tree must pass the sum of the non-deleted canisters' consumed
-            // cycles to `encode_subnet_metrics`; it is only reflected in the
-            // encoding starting with V29.
-            let expected_blob = encode_subnet_metrics(
-                &state.metadata.subnet_metrics,
-                consumed_by_canisters,
-                certification_version,
-            );
+            let expected_blob =
+                encode_subnet_metrics(&state.metadata.subnet_metrics, certification_version);
             assert_eq!(
                 metrics_blob, expected_blob,
                 "unexpected metrics leaf for certification_version: {certification_version:?}"
             );
 
             // The canister's consumed cycles are included only starting with V29.
-            let without_canisters = encode_subnet_metrics(
-                &state.metadata.subnet_metrics,
-                NominalCycles::zero(),
-                certification_version,
-            );
+            let mut metrics_without_canisters = state.metadata.subnet_metrics.clone();
+            metrics_without_canisters.consumed_cycles_by_canisters = NominalCycles::zero();
+            let without_canisters =
+                encode_subnet_metrics(&metrics_without_canisters, certification_version);
             if certification_version >= CertificationVersion::V29 {
                 assert_ne!(metrics_blob, without_canisters);
             } else {

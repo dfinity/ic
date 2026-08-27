@@ -15,7 +15,7 @@ use wasmtime::{
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
-use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_interfaces::execution_environment::{
     CanisterBacktrace, HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
@@ -647,8 +647,7 @@ impl WasmtimeEmbedder {
             memories,
             &mut *store,
             self.log.clone(),
-            self.config.feature_flags.deterministic_memory_tracker,
-            self.config.dirty_page_overhead,
+            self.config.page_overhead,
             subtract_instruction_counter,
         );
 
@@ -801,14 +800,9 @@ fn sigsegv_memory_tracker<S>(
     memories: HashMap<CanisterMemoryType, MemorySigSegvInfo>,
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
-    deterministic_memory_tracker: FlagStatus,
     page_overhead: NumInstructions,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
 ) -> HashMap<CanisterMemoryType, Arc<SignalMutex<SigsegvMemoryTracker>>> {
-    let maybe_missing_page_handler_kind = match deterministic_memory_tracker {
-        FlagStatus::Enabled => Some(MissingPageHandlerKind::Deterministic),
-        FlagStatus::Disabled => None,
-    };
     let mut tracked_memories = vec![];
     let mut result = HashMap::new();
     for (
@@ -846,7 +840,7 @@ fn sigsegv_memory_tracker<S>(
                     log.clone(),
                     dirty_page_tracking,
                     page_map,
-                    maybe_missing_page_handler_kind,
+                    Some(MissingPageHandlerKind::Deterministic),
                     memory_limits,
                     page_overhead.get(),
                     subtract_instruction_counter.clone(),
