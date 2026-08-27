@@ -49,6 +49,21 @@ use std::time::{Duration, Instant};
 /// Farm backend the real service resolves the same names to the same addresses.
 const NIP_IO_DOMAIN: &str = "ipv6.nip.io";
 
+/// The domain suffix under which the group's `dnsmasq` answers for names the
+/// driver registers explicitly with [`LocalBackend::add_dns_record`], as opposed
+/// to the addresses it synthesises under [`NIP_IO_DOMAIN`].
+///
+/// Resolvable only from inside a test group. Used for the API boundary nodes
+/// (`apibn-{idx}.ic.net`, see `InternetComputer::setup_api_bn_local_playnet`) and
+/// for the IC gateway (`<vm name>.ic.net`, see
+/// `IcGatewayVm::load_or_create_local_playnet`). On Farm those names are handed
+/// out without DNS records, or replaced by a playnet FQDN.
+///
+/// It must not be a `.local` name: both GuestOS and HostOS resolve through
+/// `systemd-resolved`, which routes `*.local` to mDNS and never to the unicast
+/// `DNS=` servers the group's `dnsmasq` answers on.
+pub const IN_GROUP_DOMAIN_SUFFIX: &str = "ic.net";
+
 /// Environment variables holding the runfiles paths of the split OVMF (UEFI)
 /// firmware images, provided by the `@ovmf` Bazel repo (extracted from the
 /// Ubuntu `ovmf-generic-hwe` package; see `bazel/ovmf.bzl`). The code image is
@@ -1813,9 +1828,9 @@ fn extract_image(src: &Path, dst: &Path, logger: &Logger) -> Result<()> {
 /// (`rs/tests/driver/assets/create-universal-vm-config-image.sh`), and prebuilt
 /// UVM config images need not be aligned either, so pad them here. They carry a
 /// FAT filesystem that records its own length and ignores trailing bytes, so the
-/// padding is inert. Only these extra (config) disks are padded; boot disks are
-/// already block aligned and may use a GPT backup header at the last sector,
-/// which padding would displace.
+/// padding is inert.
+///
+/// Unaligned GPT-partitioned images cannot be padded and return an error instead.
 fn pad_to_request_alignment(path: &Path) -> Result<()> {
     /// Upper bound on the host block size (covers 512- and 4096-byte sectors).
     const DISK_REQUEST_ALIGNMENT: u64 = 4096;
@@ -1823,18 +1838,51 @@ fn pad_to_request_alignment(path: &Path) -> Result<()> {
         .with_context(|| format!("stat {} for alignment padding", path.display()))?
         .len();
     let aligned = len.next_multiple_of(DISK_REQUEST_ALIGNMENT);
-    if aligned != len {
-        std::fs::OpenOptions::new()
-            .write(true)
-            .open(path)
-            .with_context(|| format!("opening {} to pad for alignment", path.display()))?
-            .set_len(aligned)
-            .with_context(|| {
-                format!(
-                    "padding {} from {len} to {aligned} bytes for request alignment",
-                    path.display()
-                )
-            })?;
+    if aligned == len {
+        return Ok(());
     }
+    if has_gpt_header(path)? {
+        bail!(
+            "{} is GPT-partitioned and its length ({len} bytes) is not a multiple of the \
+             {DISK_REQUEST_ALIGNMENT}-byte request alignment: it can neither be padded (that \
+             would displace the GPT backup header in the last sector) nor opened writable with \
+             `cache=none`",
+            path.display()
+        );
+    }
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)
+        .with_context(|| format!("opening {} to pad for alignment", path.display()))?
+        .set_len(aligned)
+        .with_context(|| {
+            format!(
+                "padding {} from {len} to {aligned} bytes for request alignment",
+                path.display()
+            )
+        })?;
     Ok(())
+}
+
+/// Whether the disk image at `path` carries a GPT: its primary header sits in
+/// LBA 1 and starts with the `EFI PART` signature (UEFI spec 5.3.2).
+fn has_gpt_header(path: &Path) -> Result<bool> {
+    use std::os::unix::fs::FileExt;
+
+    /// LBA size assumed by the GPT signature's location. Every image the backend
+    /// attaches uses 512-byte logical sectors.
+    const LBA_SIZE: u64 = 512;
+    const GPT_SIGNATURE: &[u8; 8] = b"EFI PART";
+
+    let file = std::fs::File::open(path)
+        .with_context(|| format!("opening {} to look for a GPT", path.display()))?;
+    let mut signature = [0_u8; GPT_SIGNATURE.len()];
+    match file.read_exact_at(&mut signature, LBA_SIZE) {
+        Ok(()) => Ok(&signature == GPT_SIGNATURE),
+        // An image shorter than two sectors cannot hold a GPT.
+        Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
+        Err(err) => {
+            Err(err).with_context(|| format!("reading the GPT signature of {}", path.display()))
+        }
+    }
 }

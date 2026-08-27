@@ -3655,10 +3655,10 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
 #[cfg(target_os = "linux")]
 fn run_wasm_and_get_instructions_used(
     wat: &str,
-    dirty_page_overhead: NumInstructions,
+    page_overhead: NumInstructions,
 ) -> NumInstructions {
     let config = Config {
-        dirty_page_overhead,
+        page_overhead,
         ..Default::default()
     };
     let mut instance = WasmtimeInstanceBuilder::new()

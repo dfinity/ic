@@ -39,7 +39,7 @@ pub mod sweeper_funding;
 pub mod transactions;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 thread_local! {
     pub static STATE: RefCell<Option<State>> = RefCell::default();
@@ -251,7 +251,11 @@ impl State {
         Some(ecdsa_public_key_to_address(&pubkey))
     }
 
-    /// The minter's dedicated sweeper address, `None` until the ECDSA public key is cached.
+    /// The minter's dedicated sweeper address, or `None` while the master public key is still
+    /// unknown.
+    ///
+    /// Reads the cached key rather than fetching it: a second concurrent `ecdsa_public_key` call
+    /// traps the canister, so the first run is delayed until the install-time fetch has cached it.
     pub fn sweeper_address(&self) -> Option<Address> {
         let (master_public_key, chain_code) = self.public_key_and_chain_code()?;
         Some(sweeper_address(&master_public_key, &chain_code))
@@ -984,5 +988,6 @@ pub enum TaskType {
     MintCkErc20,
     RefreshLatestBlockHeight,
     BalanceScan,
+    SweeperFunding,
     SweeperSend,
 }
