@@ -1,5 +1,11 @@
 name: Disclose Hotfix
 
+# The environment's required reviewers approve the run BEFORE any step
+# executes, and GitHub shows workflow_dispatch inputs neither in the run list
+# nor in the approval dialog — the run title is the only surface telling the
+# reviewer WHAT they are approving, so it must carry the inputs.
+run-name: "Disclose ${{ inputs.branch }} @ ${{ inputs.commit }} (confirm=${{ inputs.confirm }})"
+
 # Publish ("disclose") a security hotfix that was built and deployed from the
 # private dfinity/ic-private repository: push its exact elected commit to this
 # repository as the same hotfix-* branch. The push triggers the Release
