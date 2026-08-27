@@ -473,6 +473,23 @@ impl AutomaticDeposits {
                 },
             })
     }
+
+    pub fn requests_batch(
+        &self,
+        requested_batch_size: usize,
+    ) -> BTreeMap<Address, Vec<SweepTarget>> {
+        let mut batches = BTreeMap::new();
+        for (deposit_request, sweep_entry) in &self.sweep {
+            let batch: &mut Vec<_> = batches.entry(deposit_request.token).or_default();
+            if batch.len() < requested_batch_size {
+                batch.push(SweepTarget {
+                    account: deposit_request.account,
+                    address: sweep_entry.address,
+                });
+            }
+        }
+        batches
+    }
 }
 
 impl Default for AutomaticDeposits {
@@ -576,5 +593,29 @@ impl From<DepositAddress> for ScanProgress {
             last_scanned_block: None,
             scan_count: 0,
         }
+    }
+}
+
+/// A queued deposit a sweep can move: the account it credits and the address its funds sit at.
+/// The token is the key its batch is grouped under, so it is not repeated here.
+#[derive(Clone, Copy, Debug)]
+pub struct SweepTarget {
+    account: Account,
+    address: DepositAddress,
+}
+
+impl SweepTarget {
+    pub fn account(&self) -> Account {
+        self.account
+    }
+
+    pub fn address(&self) -> DepositAddress {
+        self.address
+    }
+}
+
+impl AsRef<Account> for SweepTarget {
+    fn as_ref(&self) -> &Account {
+        &self.account
     }
 }
