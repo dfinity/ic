@@ -4,6 +4,7 @@ use super::{
 };
 use crate::{
     checked_amount::CheckedAmountOf,
+    deposit_address::{DepositAddressSchema, deposit_derivation_path},
     eth_rpc::Hash,
     numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas},
     runtime::CanisterRuntime,
@@ -89,6 +90,10 @@ impl AuthorizationRequest {
 
     pub fn account(&self) -> Account {
         self.account
+    }
+
+    pub fn derivation_path(&self) -> Vec<ByteBuf> {
+        deposit_derivation_path(DepositAddressSchema::CkErc20, &self.account)
     }
 
     pub fn authorization(&self) -> Authorization {

@@ -18,6 +18,7 @@ use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::timed_sized_map::{Entry, Timestamp};
+use crate::tx::AuthorizationRequest;
 use crate::tx::GasFeeEstimate;
 use crate::tx::TransactionSignature;
 use candid::Principal;
@@ -291,6 +292,36 @@ impl State {
                         self.ethereum_network.chain_id(),
                         deposit_helper,
                         *account.as_ref(),
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    /// What every deposit address in `accounts` authorizes to let the configured sweeper contract
+    /// sweep it: the tuple naming this minter's chain, that contract, and nonce zero. `None` while
+    /// no sweeper contract is configured.
+    ///
+    /// The nonce is always zero, whatever the address actually holds. A deposit address is at
+    /// nonce zero exactly while it has never been delegated — applying an authorization spends it
+    /// — so the tuple either installs the delegation or is skipped, and both are correct in any
+    /// order the sweeps carrying them land. That is what lets a sweep authorize every address it
+    /// touches without tracking which ones are already delegated, at the price of the intrinsic
+    /// gas a skipped tuple still costs.
+    pub fn authorization_requests<T: AsRef<Account>>(
+        &self,
+        accounts: &[T],
+    ) -> Option<Vec<AuthorizationRequest>> {
+        let delegate = self.sweeper_contract_address?;
+        Some(
+            accounts
+                .iter()
+                .map(|account| {
+                    AuthorizationRequest::new(
+                        *account.as_ref(),
+                        self.ethereum_network.chain_id(),
+                        delegate,
+                        TransactionNonce::ZERO,
                     )
                 })
                 .collect(),

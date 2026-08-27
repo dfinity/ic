@@ -14,23 +14,19 @@ mod tests;
 
 use crate::attestation::{AttestationRequest, sign_attestation};
 use crate::{
-    deposit_address::{DepositAddressSchema, deposit_derivation_path, sweeper_derivation_path},
+    deposit_address::sweeper_derivation_path,
     guard::TimerGuard,
     logs::{DEBUG, INFO},
-    numeric::{GasAmount, TransactionCount, TransactionNonce},
+    numeric::{GasAmount, TransactionCount},
     runtime::CanisterRuntime,
     state::{
         State, TaskType,
         audit::{EventType, process_event},
-        automatic_deposits::SweepTarget,
         mutate_state, read_state,
         transactions::{CreateSweepTransactionError, PipelineRequest},
     },
     time::TimeProvider,
-    tx::{
-        AuthorizationRequest, GasFeeEstimate, SignedAuthorization, lazy_refresh_gas_fee_estimate,
-        sign_digest,
-    },
+    tx::{AuthorizationRequest, GasFeeEstimate, lazy_refresh_gas_fee_estimate, sign_digest},
     withdraw::{
         fetch_finalized_receipts, finalized_transaction_count, latest_transaction_count,
         send_signed_transactions,
@@ -39,8 +35,7 @@ use crate::{
 use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
-use icrc_ledger_types::icrc1::account::Account;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 /// Gas limit of a sweep transaction. A fixed, conservative bound; a per-request estimate arrives
 /// with the real delegate sweep call.
@@ -65,13 +60,13 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         }
     };
 
-    let Some(sweeper_contract) = read_state(|s| s.sweeper_contract_address) else {
+    if read_state(|s| s.sweeper_contract_address).is_none() {
         log!(
             DEBUG,
             "[create_pending_sweeper_requests]: SKIPPING: no sweeper contract address is configured"
         );
         return;
-    };
+    }
 
     let batch_per_token =
         read_state(|s| s.automatic_deposits.requests_batch(MAX_DEPOSITS_PER_SWEEP));
@@ -95,8 +90,16 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
             );
             return;
         };
+        let Some(authorization_requests) = read_state(|s| s.authorization_requests(&targets))
+        else {
+            log!(
+                DEBUG,
+                "[create_pending_sweeper_requests]: SKIPPING: the sweeper contract address was cleared while enqueueing"
+            );
+            return;
+        };
         sign_attestations_batch(attestation_requests, runtime).await;
-        let _authorizations = sign_authorizations_batch(&targets, sweeper_contract, runtime).await;
+        sign_authorizations_batch(authorization_requests, runtime).await;
     }
 }
 
@@ -140,49 +143,26 @@ async fn sign_attestations_batch<R: CanisterRuntime>(
     }
 }
 
-/// One authorization per attested deposit address, keyed by the account it delegates.
+/// Signs the authorizations in `requests` that the minter has not signed before, recording each so
+/// a later sweep of the same address reuses it.
 ///
-/// Only attested addresses are signed: a deposit that could not be attested drops out of the sweep
-/// anyway, so authorizing it would spend a signature on nothing. A tuple already recorded for the
-/// address is reused rather than signed again — it names nonce 0, so it stays applicable for every
-/// later sweep, see [`AuthorizationRequest`].
+/// A request names the chain, the delegate and the nonce it authorizes, so re-pointing the minter
+/// at another sweeper contract misses the recorded ones and signs afresh.
 async fn sign_authorizations_batch<R: CanisterRuntime>(
-    targets: &[SweepTarget],
-    sweeper_contract: Address,
+    requests: Vec<AuthorizationRequest>,
     runtime: &R,
-) -> BTreeMap<Account, SignedAuthorization> {
-    let chain_id = read_state(State::ethereum_network).chain_id();
-    let (mut authorizations, to_sign): (BTreeMap<Account, SignedAuthorization>, Vec<_>) =
-        read_state(|s| {
-            let mut stored = BTreeMap::new();
-            let mut to_sign = Vec::new();
-            for request in targets
-                .iter()
-                .map(SweepTarget::account)
-                .filter(|account| s.attestation(*account).is_some())
-                .map(|account| {
-                    AuthorizationRequest::new(
-                        account,
-                        chain_id,
-                        sweeper_contract,
-                        TransactionNonce::ZERO,
-                    )
-                })
-            {
-                match s.automatic_deposits.authorization(&request) {
-                    Some(signature) => {
-                        stored.insert(request.account(), request.signed_with(signature.clone()));
-                    }
-                    None => to_sign.push(request),
-                }
-            }
-            (stored, to_sign)
-        });
+) {
+    let requests_to_sign: BTreeSet<_> = read_state(|s| {
+        requests
+            .into_iter()
+            .filter(|request| s.automatic_deposits.authorization(request).is_none())
+            .collect()
+    });
 
-    let signing_results = join_all(to_sign.into_iter().map(|request| async move {
+    let signing_results = join_all(requests_to_sign.into_iter().map(|request| async move {
         let signature = sign_digest(
             &request.authorization().hash(),
-            &deposit_derivation_path(DepositAddressSchema::CkErc20, &request.account()),
+            &request.derivation_path(),
             runtime,
         )
         .await;
@@ -194,7 +174,6 @@ async fn sign_authorizations_batch<R: CanisterRuntime>(
     for (request, signing_result) in signing_results {
         match signing_result {
             Ok(signature) => {
-                authorizations.insert(request.account(), request.signed_with(signature.clone()));
                 mutate_state(|s| {
                     process_event(
                         s,
@@ -203,7 +182,7 @@ async fn sign_authorizations_batch<R: CanisterRuntime>(
                     )
                 });
             }
-            Err(e) => errors.push((request.account(), e)),
+            Err(e) => errors.push((request, e)),
         }
     }
 
@@ -213,7 +192,6 @@ async fn sign_authorizations_batch<R: CanisterRuntime>(
             "[create_pending_sweeper_requests]: leaving out the deposits this sweep could not authorize: {errors:?}"
         );
     }
-    authorizations
 }
 
 pub async fn process_sweeper_transactions<R: CanisterRuntime>(runtime: R) {
