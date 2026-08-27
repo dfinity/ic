@@ -714,10 +714,12 @@ impl ExecutionEnvironment {
 
         let mut msg = match msg {
             SubnetMessage::Response(response) => {
-                let context = state
-                    .metadata
-                    .subnet_call_context_manager
-                    .retrieve_context(response.originator_reply_callback, &self.log);
+                let time = state.time();
+                let context = state.metadata.subnet_call_context_manager.retrieve_context(
+                    response.originator_reply_callback,
+                    time,
+                    &self.log,
+                );
                 return match context {
                     None => (state, ExecuteSubnetMessageResultType::Finished),
                     Some(context) => {
@@ -1269,12 +1271,25 @@ impl ExecutionEnvironment {
                 // paying subnets flexible outcalls remain unavailable until the
                 // flag is enabled, since legacy pricing would overcharge them
                 // (it charges the maximum response size up front).
-                let http_outcalls_are_free =
-                    self.http_outcalls_are_free(state.get_own_cost_schedule());
-                let pricing_version = match self.config.flexible_http_requests {
-                    FlagStatus::Enabled => Some(PricingVersion::PayAsYouGo),
-                    FlagStatus::Disabled if http_outcalls_are_free => Some(PricingVersion::Legacy),
-                    FlagStatus::Disabled => None,
+                let cost_schedule = match self.own_subnet_type {
+                    SubnetType::System => CanisterCyclesCostSchedule::Free,
+                    SubnetType::Application
+                    | SubnetType::VerifiedApplication
+                    | SubnetType::CloudEngine => state.get_own_cost_schedule(),
+                };
+                // And, just like non-flexible outcalls, flexible outcalls are
+                // only offered on subnets where the `http_requests` subnet
+                // feature is enabled.
+                let pricing_version = if state.subnet_features().http_requests {
+                    match (self.config.flexible_http_requests, cost_schedule) {
+                        (FlagStatus::Enabled, _) => Some(PricingVersion::PayAsYouGo),
+                        (FlagStatus::Disabled, CanisterCyclesCostSchedule::Free) => {
+                            Some(PricingVersion::Legacy)
+                        }
+                        (FlagStatus::Disabled, CanisterCyclesCostSchedule::Normal) => None,
+                    }
+                } else {
+                    None
                 };
                 match pricing_version {
                     None => ExecuteSubnetMessageResult::Finished {
@@ -1292,12 +1307,6 @@ impl ExecutionEnvironment {
                                     refund: msg.take_cycles(),
                                 },
                                 Ok(args) => {
-                                    let cost_schedule = match self.own_subnet_type {
-                                        SubnetType::System => CanisterCyclesCostSchedule::Free,
-                                        SubnetType::Application
-                                        | SubnetType::VerifiedApplication
-                                        | SubnetType::CloudEngine => state.get_own_cost_schedule(),
-                                    };
                                     match CanisterHttpRequestContext::generate_from_flexible_args(
                                         state.time(),
                                         request.as_ref(),
@@ -2190,14 +2199,6 @@ impl ExecutionEnvironment {
         }
     }
 
-    /// Returns whether HTTP outcalls are free on this subnet, i.e. the subnet
-    /// charges nothing for them. This is true on a free cost schedule, and on
-    /// system subnets.
-    fn http_outcalls_are_free(&self, cost_schedule: CanisterCyclesCostSchedule) -> bool {
-        cost_schedule == CanisterCyclesCostSchedule::Free
-            || self.own_subnet_type == SubnetType::System
-    }
-
     fn try_add_http_context_to_replicated_state(
         &self,
         mut canister_http_request_context: CanisterHttpRequestContext,
@@ -2206,8 +2207,11 @@ impl ExecutionEnvironment {
         since: Instant,
     ) -> Result<(), UserError> {
         let variable_parts_size = canister_http_request_context.variable_parts_size();
-        let cycles_config = state.get_own_subnet_cycles_config();
-        let cost_schedule = cycles_config.cost_schedule;
+        // HTTP outcalls are also free on system subnets, despite their normal cost schedule.
+        let cost_schedule = canister_http_request_context.cost_schedule;
+        let mut cycles_config = state.get_own_subnet_cycles_config();
+        cycles_config.cost_schedule = cost_schedule;
+
         let legacy_fee = self.cycles_account_manager.http_request_fee(
             variable_parts_size,
             canister_http_request_context.max_response_bytes,
@@ -2267,7 +2271,7 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let http_outcalls_are_free = self.http_outcalls_are_free(cost_schedule);
+        let http_outcalls_are_free = cost_schedule == CanisterCyclesCostSchedule::Free;
 
         // The refundable payment is everything the payment covers beyond the
         // base fee; when the outcall is free nothing is charged, so nothing is
@@ -3937,7 +3941,7 @@ impl ExecutionEnvironment {
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = state.metadata.network_topology.route(request.sender.get());
         let nns_subnet_id = state.metadata.network_topology.nns_subnet_id;
-        if source_subnet != Some(nns_subnet_id) {
+        let signature_fee = if source_subnet != Some(nns_subnet_id) {
             let signature_fee =
                 self.calculate_signature_fee(&args, state.get_own_subnet_cycles_config());
             let real_signature_fee = signature_fee.real();
@@ -3949,27 +3953,11 @@ impl ExecutionEnvironment {
                         request.method_name, request.payment, real_signature_fee
                     ),
                 ));
-            } else {
-                // Charge for the request.
-                request.payment -= real_signature_fee;
-                let nominal_fee = signature_fee.nominal();
-                let use_case = match args {
-                    ThresholdArguments::Ecdsa(_) => {
-                        state
-                            .metadata
-                            .subnet_metrics
-                            .observe_consumed_cycles_ecdsa_outcalls(nominal_fee);
-                        CyclesUseCase::ECDSAOutcalls
-                    }
-                    ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
-                    ThresholdArguments::VetKd(_) => CyclesUseCase::VetKd,
-                };
-                state
-                    .metadata
-                    .subnet_metrics
-                    .observe_consumed_cycles_with_use_case(use_case, nominal_fee);
             }
-        }
+            Some(signature_fee)
+        } else {
+            None
+        };
 
         let threshold_key = args.key_id();
 
@@ -4009,6 +3997,26 @@ impl ExecutionEnvironment {
                     request.method_name, threshold_key
                 ),
             ));
+        }
+
+        if let Some(signature_fee) = signature_fee {
+            request.payment -= signature_fee.real();
+            let nominal_fee = signature_fee.nominal();
+            let use_case = match args {
+                ThresholdArguments::Ecdsa(_) => {
+                    state
+                        .metadata
+                        .subnet_metrics
+                        .observe_consumed_cycles_ecdsa_outcalls(nominal_fee);
+                    CyclesUseCase::ECDSAOutcalls
+                }
+                ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
+                ThresholdArguments::VetKd(_) => CyclesUseCase::VetKd,
+            };
+            state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(use_case, nominal_fee);
         }
 
         state.metadata.subnet_call_context_manager.push_context(

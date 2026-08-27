@@ -224,6 +224,7 @@ pub fn get_update_subnet_payload_with_keys(
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
+        cooling_down: None,
         features: None,
         resource_limits: None,
         chain_key_config: None,
