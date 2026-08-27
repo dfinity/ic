@@ -9,11 +9,15 @@
 //! `fetch_finalized_receipts`), but signing with the sweeper derivation path (`[3]`) and reading
 //! the sweeper address' own transaction count.
 
+#[cfg(test)]
+mod tests;
+
 use crate::{
     deposit_address::sweeper_derivation_path,
     guard::TimerGuard,
     logs::{DEBUG, INFO},
     numeric::{GasAmount, TransactionCount},
+    runtime::CanisterRuntime,
     state::{
         State, TaskType,
         audit::{EventType, process_event},
@@ -38,6 +42,21 @@ pub(crate) const SWEEP_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(100_000
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
+
+/// Turns the deposits the balance scan queued into the sweep requests that
+/// [`process_sweeper_transactions`] prices, signs, sends and finalizes.
+pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(_runtime: &R) {
+    let _guard = match TimerGuard::new(TaskType::SweeperEnqueue) {
+        Ok(guard) => guard,
+        Err(e) => {
+            log!(
+                DEBUG,
+                "Failed retrieving timer guard to create pending sweeper requests: {e:?}",
+            );
+            return;
+        }
+    };
+}
 
 pub async fn process_sweeper_transactions<T: TimeProvider>(time_provider: T) {
     let _guard = match TimerGuard::new(TaskType::SweeperSend) {

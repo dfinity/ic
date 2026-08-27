@@ -986,4 +986,5 @@ pub enum TaskType {
     BalanceScan,
     SweeperFunding,
     SweeperSend,
+    SweeperEnqueue,
 }

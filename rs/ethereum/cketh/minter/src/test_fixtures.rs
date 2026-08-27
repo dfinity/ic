@@ -1,9 +1,11 @@
 use crate::EVM_RPC_ID_STAGING;
+use crate::deposit_address::DepositAddress;
 use crate::eth_logs::LedgerSubaccount;
 use crate::lifecycle::init::InitArg;
-use crate::numeric::{LedgerBurnIndex, Wei};
+use crate::numeric::{BlockNumber, Erc20Value, LedgerBurnIndex, Wei};
 use crate::state::State;
 use crate::state::eth_logs_scraping::LogScrapingId;
+use crate::state::event::AutomaticDeposit;
 use crate::state::transactions::EthWithdrawalRequest;
 use crate::tx::TransactionSignature;
 use candid::{Nat, Principal};
@@ -89,6 +91,18 @@ pub fn sweeper_funding_request(withdrawal_amount: Wei) -> EthWithdrawalRequest {
             .unwrap(),
         from_subaccount: LedgerSubaccount::from_bytes(crate::CKETH_FEE_SUBACCOUNT),
         created_at: Some(1699527697000000000),
+    }
+}
+
+pub fn automatic_deposit() -> AutomaticDeposit {
+    AutomaticDeposit {
+        owner: account().owner,
+        subaccount: account().subaccount,
+        address: DepositAddress::new(Address::new([0xa1; 20])),
+        erc20_contract_address: Address::new([0x22; 20]),
+        last_scanned_block: BlockNumber::new(1_000),
+        scan_count: 1,
+        scanned_balance: Erc20Value::from(1_000_000_u64),
     }
 }
 
