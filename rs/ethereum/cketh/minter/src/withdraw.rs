@@ -9,6 +9,7 @@ use crate::{
     guard::TimerGuard,
     logs::{DEBUG, INFO},
     numeric::{GasAmount, LedgerMintIndex, TransactionCount},
+    runtime::CanisterRuntime,
     state::{
         State, TaskType,
         audit::{EventType, process_event},
@@ -157,7 +158,7 @@ pub async fn process_reimbursement<T: TimeProvider>(time_provider: &T) {
     }
 }
 
-pub async fn process_retrieve_eth_requests<T: TimeProvider>(time_provider: T) {
+pub async fn process_retrieve_eth_requests<R: CanisterRuntime>(runtime: R) {
     let _guard = match TimerGuard::new(TaskType::RetrieveEth) {
         Ok(guard) => guard,
         Err(e) => {
@@ -173,7 +174,7 @@ pub async fn process_retrieve_eth_requests<T: TimeProvider>(time_provider: T) {
         return;
     }
 
-    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate(&time_provider).await {
+    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate(&runtime).await {
         Some(gas_fee_estimate) => gas_fee_estimate,
         None => {
             log!(
@@ -184,18 +185,18 @@ pub async fn process_retrieve_eth_requests<T: TimeProvider>(time_provider: T) {
         }
     };
 
-    let sender = minter_address().await;
+    let sender = minter_address(&runtime).await;
     let latest_transaction_count = latest_transaction_count(sender).await;
-    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate, &time_provider).await;
-    create_transactions_batch(gas_fee_estimate, &time_provider);
-    sign_transactions_batch(&time_provider).await;
+    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate, &runtime).await;
+    create_transactions_batch(gas_fee_estimate, &runtime);
+    sign_transactions_batch(&runtime).await;
     send_transactions_batch(sender, latest_transaction_count).await;
-    finalize_transactions_batch(sender, &time_provider).await;
+    finalize_transactions_batch(sender, &runtime).await;
 
     if read_state(|s| s.withdrawal_transactions.has_pending_requests()) {
         ic_cdk_timers::set_timer(
             crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
-            async move { process_retrieve_eth_requests(time_provider).await },
+            async move { process_retrieve_eth_requests(runtime).await },
         );
     }
 }
@@ -323,7 +324,7 @@ pub fn estimate_gas_limit(withdrawal_request: &WithdrawalRequest) -> GasAmount {
     }
 }
 
-async fn sign_transactions_batch<T: TimeProvider>(time_provider: &T) {
+async fn sign_transactions_batch<R: CanisterRuntime>(runtime: &R) {
     let transactions_batch: Vec<_> = read_state(|s| {
         s.withdrawal_transactions
             .transactions_to_sign_batch(TRANSACTIONS_TO_SIGN_BATCH_SIZE)
@@ -335,7 +336,7 @@ async fn sign_transactions_batch<T: TimeProvider>(time_provider: &T) {
             .map(|(withdrawal_id, tx)| async move {
                 (
                     withdrawal_id,
-                    crate::tx::sign(tx, MAIN_DERIVATION_PATH).await,
+                    crate::tx::sign(tx, MAIN_DERIVATION_PATH, runtime).await,
                 )
             }),
     )
@@ -350,7 +351,7 @@ async fn sign_transactions_batch<T: TimeProvider>(time_provider: &T) {
                         withdrawal_id,
                         transaction,
                     },
-                    time_provider,
+                    runtime,
                 )
             }),
             Err(e) => errors.push(e),

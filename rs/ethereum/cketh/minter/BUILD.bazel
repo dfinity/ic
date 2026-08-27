@@ -30,6 +30,7 @@ filegroup(
         crate_name = "ic_cketh_minter",
         proc_macro_deps = [
             # Keep sorted.
+            "@crate_index//:async-trait",
             "@crate_index//:strum_macros",
         ],
         version = "0.1.0",

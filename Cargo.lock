@@ -7371,6 +7371,7 @@ version = "0.9.0"
 dependencies = [
  "askama",
  "assert_matches",
+ "async-trait",
  "canbench-rs",
  "candid",
  "candid_parser",

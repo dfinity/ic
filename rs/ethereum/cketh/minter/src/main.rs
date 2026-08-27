@@ -29,6 +29,7 @@ use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::{self, BurnMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
+use ic_cketh_minter::runtime::IC_CANISTER_RUNTIME;
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
 use ic_cketh_minter::state::automatic_deposits::DepositRequest;
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
@@ -39,7 +40,7 @@ use ic_cketh_minter::state::transactions::{
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
-use ic_cketh_minter::sweep::process_sweeper_transactions;
+use ic_cketh_minter::sweep::{create_pending_sweeper_requests, process_sweeper_transactions};
 use ic_cketh_minter::sweeper::fund_sweeper_address;
 use ic_cketh_minter::time::IC_TIME_PROVIDER;
 use ic_cketh_minter::timed_sized_map::Timestamp;
@@ -51,7 +52,7 @@ use ic_cketh_minter::withdraw::{
 use ic_cketh_minter::{
     BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
     PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL,
-    SCRAPING_ETH_LOGS_INTERVAL, SWEEPER_FUNDING_INTERVAL, state, storage,
+    SCRAPING_ETH_LOGS_INTERVAL, SWEEP_ENQUEUE_INTERVAL, SWEEPER_FUNDING_INTERVAL, state, storage,
 };
 use ic_cketh_minter::{endpoints, erc20};
 use ic_ethereum_types::Address;
@@ -84,7 +85,7 @@ fn validate_ckerc20_active() {
 fn setup_timers() {
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
         // Initialize the minter's public key to make the address known.
-        let _ = lazy_call_ecdsa_public_key().await;
+        let _ = lazy_call_ecdsa_public_key(&IC_CANISTER_RUNTIME).await;
         // Sequenced after the key rather than scheduled on a delay: the sweeper address cannot be
         // derived without it, and a delay only guesses at when it will be cached. Running here also
         // keeps the two off separate tasks, since two concurrent `ecdsa_public_key` calls trap.
@@ -106,10 +107,13 @@ fn setup_timers() {
         refresh_latest_block_height().await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
-        process_retrieve_eth_requests(IC_TIME_PROVIDER).await;
+        process_retrieve_eth_requests(IC_CANISTER_RUNTIME).await;
+    });
+    ic_cdk_timers::set_timer_interval(SWEEP_ENQUEUE_INTERVAL, async || {
+        create_pending_sweeper_requests(&IC_CANISTER_RUNTIME).await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, async || {
-        process_sweeper_transactions(IC_TIME_PROVIDER).await;
+        process_sweeper_transactions(IC_CANISTER_RUNTIME).await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, async || {
         process_reimbursement(&IC_TIME_PROVIDER).await;
@@ -193,7 +197,9 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
 
 #[update]
 async fn minter_address() -> String {
-    state::minter_address().await.to_string()
+    state::minter_address(&IC_CANISTER_RUNTIME)
+        .await
+        .to_string()
 }
 
 #[update]
@@ -240,7 +246,7 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
 
     // Not armed yet: register. Ensure the minter's ECDSA public key has been fetched and cached in
     // the state so that the (synchronous) registration below can derive the address.
-    state::lazy_call_ecdsa_public_key_with_chain_code().await;
+    state::lazy_call_ecdsa_public_key_with_chain_code(&IC_CANISTER_RUNTIME).await;
     let now = Timestamp::from_nanos(ic_cdk::api::time());
     // Re-check the status after the await: a concurrent balance scan may have detected a deposit and
     // moved this pair into the sweep queue while we waited for the ECDSA key (only possible right
