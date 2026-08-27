@@ -122,7 +122,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             );
             break;
         };
-        let replica_version = block.version().clone();
+        let replica_version = block.version();
         let mut block_stats = BlockStats::from(&block);
         debug!(
             every_n_seconds => 5,
@@ -131,7 +131,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             consensus => ConsensusLogEntry {
                 height: Some(height.get()),
                 hash: Some(block_stats.block_hash.clone()),
-                replica_version: Some(String::from(&replica_version))
+                replica_version: Some(replica_version.to_string())
             }
         );
 
@@ -163,6 +163,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                 registry_client,
                 subnet_id,
                 pool,
+                replica_version,
                 log,
             ) {
                 Some(Status::Halting | Status::Halted) => {
@@ -301,7 +302,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             registry_version: block.context.registry_version,
             time: block.context.time,
             blockmaker_metrics: Some(blockmaker_metrics),
-            replica_version,
+            replica_version: replica_version.clone(),
         };
 
         let result = message_routing.deliver_batch(batch);
@@ -336,10 +337,10 @@ fn generate_responses_to_subnet_calls(
                 "New DKG summary with config ids created: {:?}",
                 summary_payload.dkg.configs.keys().collect::<Vec<_>>()
             );
-            consensus_responses.append(&mut generate_responses_to_remote_dkgs(
-                &summary_payload.dkg.transcripts_for_remote_subnets,
-                log,
-            ));
+            if let Some(transcripts) = summary_payload.dkg.transcripts_for_remote_subnets.as_ref() {
+                consensus_responses
+                    .append(&mut generate_responses_to_remote_dkgs(transcripts, log));
+            }
             CanisterHttpSpent::default()
         }
         BlockPayload::Data(data_payload) => {
@@ -587,7 +588,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
     use ic_test_utilities::message_routing::FakeMessageRouting;
-    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
     use ic_types::{
         PrincipalId, RegistryVersion, SubnetId,
         batch::{BatchPayload, ValidationContext},
@@ -799,6 +800,7 @@ mod tests {
                 certified_height: Height::from(0),
                 time: UNIX_EPOCH,
             },
+            test_replica_version(),
         );
 
         let mut batch_stats = BatchStats::new(Height::from(1));

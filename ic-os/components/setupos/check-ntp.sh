@@ -39,7 +39,13 @@ function set_hwclock_utc() {
 
 main() {
     log_start "$(basename $0)"
-    check_ntp
+    if check_cmdline_var ic.setupos.run_checks; then
+        check_ntp
+    else
+        # NTP is not available in test environments; test VMs take their clock
+        # from the hypervisor.
+        echo "* NTP synchronization check skipped by request via kernel command line"
+    fi
     set_hwclock_utc
     log_end "$(basename $0)"
 }

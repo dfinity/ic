@@ -52,8 +52,9 @@ use ic_registry_transport::{
     serialize_get_value_request,
 };
 use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::test_replica_version;
 use ic_types::{
-    NodeId, ReplicaVersion,
+    NodeId,
     crypto::{
         CurrentNodePublicKeys, KeyPurpose,
         threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
@@ -347,7 +348,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
     };
     const MOCK_HASH: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
     let release_package_url = "http://release_package.tar.zst".to_string();
-    let replica_version_id = ReplicaVersion::default().to_string();
+    let replica_version_id = test_replica_version().to_string();
     let replica_version = ReplicaVersionRecord {
         replica_version_id: Some(replica_version_id.clone()),
         release_package_sha256_hex: MOCK_HASH.into(),
@@ -607,7 +608,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         add_node_mutations.append(&mut mutations);
     }
 
-    let replica_version_id = ReplicaVersion::default().to_string();
+    let replica_version_id = test_replica_version().to_string();
     const MOCK_HASH: &str = "abbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabba";
     let release_package_url = "http://release_package.tar.zst".to_string();
     let guest_launch_measurements = Some(GuestLaunchMeasurements {
@@ -750,11 +751,9 @@ pub fn prepare_registry_with_two_node_sets(
         num_nodes_in_subnet2,
     );
 
-    let replica_version = ReplicaVersion::default();
-
     // Subnet record 1
     let subnet_record = SubnetRecord {
-        replica_version_id: replica_version.to_string(),
+        replica_version_id: test_replica_version().to_string(),
         membership: node_ids_and_dkg_keys_subnet_1
             .keys()
             .map(|id| id.get().into_vec())
@@ -784,7 +783,7 @@ pub fn prepare_registry_with_two_node_sets(
     if assign_nodes_to_subnet2 {
         // Subnet record 2
         let subnet2_record = SubnetRecord {
-            replica_version_id: replica_version.to_string(),
+            replica_version_id: test_replica_version().to_string(),
             membership: node_ids_and_dkg_keys_subnet_2
                 .keys()
                 .map(|id| id.get().into_vec())

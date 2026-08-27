@@ -20,10 +20,9 @@ use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
-        LOG_MEMORY_STORE_FEATURE_ENABLED, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
-        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ENVIRONMENT_VARIABLES,
-        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
-        SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
+        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
+        MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
     subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
@@ -87,7 +86,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, MIN_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation,
-    NumBytes, NumInstructions, SubnetId, UserId,
+    NumBytes, NumInstructions, ReplicaVersion, SubnetId, UserId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CanisterCall, StopCanisterCallId, StopCanisterContext},
     time::UNIX_EPOCH,
@@ -110,6 +109,7 @@ use std::{
     io::Write,
     mem::size_of,
     path::Path,
+    str::FromStr,
     sync::Arc,
 };
 use wirm::wasmparser;
@@ -268,7 +268,7 @@ impl CanisterManagerBuilder {
             self.subnet_id,
             no_op_logger(),
             Arc::clone(&cycles_account_manager),
-            SchedulerConfig::application_subnet().dirty_page_overhead,
+            SchedulerConfig::application_subnet().page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             Arc::new(FakeStateManager::new()),
             Path::new("/tmp"),
@@ -321,6 +321,7 @@ fn canister_manager_config(
         ic_config::embedders::Config::default().wasm_max_size,
         SchedulerConfig::application_subnet().canister_snapshot_baseline_instructions,
         SchedulerConfig::application_subnet().canister_snapshot_data_baseline_instructions,
+        SchedulerConfig::application_subnet().canister_log_resize_instructions_per_byte,
         DEFAULT_WASM_MEMORY_LIMIT,
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
         MAX_ENVIRONMENT_VARIABLES,
@@ -537,11 +538,8 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
 
     // Try installing canister2, should fail due to insufficient memory capacity on the subnet.
     let err = test.install_canister(canister2, wasm).unwrap_err();
-    let msg = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet."
-    } else {
-        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
-    };
+    let msg =
+        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet.";
     err.assert_contains(ErrorCode::SubnetOversubscribed, msg);
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
@@ -2316,11 +2314,8 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
 
     // Try upgrading the canister, should fail because there is not enough memory capacity
     // on the subnet.
-    let msg = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet."
-    } else {
-        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
-    };
+    let msg =
+        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet.";
     test.upgrade_canister(canister2, wasm)
         .unwrap_err()
         .assert_contains(ErrorCode::SubnetOversubscribed, msg);
@@ -6286,6 +6281,7 @@ fn subnet_info_canister_call_succeeds() {
     let own_subnet_id = subnet_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet_id)
+        .with_replica_version(ReplicaVersion::from_str("foobar").unwrap())
         .build();
     let uni_canister = test
         .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
@@ -6310,10 +6306,7 @@ fn subnet_info_canister_call_succeeds() {
         replica_version,
         registry_version,
     } = Decode!(&bytes, SubnetInfoResponse).unwrap();
-    assert_eq!(
-        replica_version,
-        ic_types::ReplicaVersion::default().to_string()
-    );
+    assert_eq!(replica_version, "foobar");
     assert_eq!(registry_version, ic_types::RegistryVersion::default().get());
 }
 

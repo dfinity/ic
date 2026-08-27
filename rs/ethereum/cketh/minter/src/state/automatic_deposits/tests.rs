@@ -601,19 +601,27 @@ fn record_automatic_deposit_received_inserts_unconditionally_without_a_watchlist
 
 #[test]
 fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
+    const MINIMUM_DEPOSIT_AMOUNT: u128 = 10_000_000;
+
     let mut deposits = AutomaticDeposits::default();
+    let minimum = Erc20Value::new(MINIMUM_DEPOSIT_AMOUNT);
 
     // Unknown pair: neither armed nor funded.
-    assert_eq!(deposits.deposit_status(ts(0), &account(0), usdc()), None);
+    assert_eq!(
+        deposits.deposit_status(ts(0), &request(account(0), usdc()), minimum),
+        None
+    );
 
-    // Armed but not yet funded: Scanning until the window closes.
+    // Armed but not yet funded: Scanning until the window closes, with the token's minimum
+    // reported alongside it.
     deposits
         .watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)))
         .unwrap();
     assert_eq!(
-        deposits.deposit_status(ts(0), &account(0), usdc()),
+        deposits.deposit_status(ts(0), &request(account(0), usdc()), minimum),
         Some(DepositErc20Response {
             address: deposit_address(&account(0)).to_string(),
+            minimum_deposit_amount: Nat::from(MINIMUM_DEPOSIT_AMOUNT),
             status: DepositStatus::Scanning {
                 valid_until: window_nanos(),
                 last_scanned_block: None,
@@ -641,9 +649,10 @@ fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
     // Once funds are detected, AwaitingSweep takes precedence over Scanning, carrying the balance
     // and finding block for that one token.
     assert_eq!(
-        deposits.deposit_status(ts(0), &account(0), usdc()),
+        deposits.deposit_status(ts(0), &request(account(0), usdc()), minimum),
         Some(DepositErc20Response {
             address: deposit_address(&account(0)).to_string(),
+            minimum_deposit_amount: Nat::from(MINIMUM_DEPOSIT_AMOUNT),
             status: DepositStatus::AwaitingSweep(DetectedDeposit {
                 erc20_contract_address: usdc().to_string(),
                 scanned_balance: Nat::from(10_u8),
@@ -652,8 +661,14 @@ fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
         })
     );
     // A different token at the same account is still unknown.
-    assert_eq!(deposits.deposit_status(ts(0), &account(0), usdt()), None);
-    assert_eq!(deposits.deposit_status(ts(0), &account(2), usdc()), None);
+    assert_eq!(
+        deposits.deposit_status(ts(0), &request(account(0), usdt()), minimum),
+        None
+    );
+    assert_eq!(
+        deposits.deposit_status(ts(0), &request(account(2), usdc()), minimum),
+        None
+    );
 }
 
 fn ts(nanos: u64) -> Timestamp {
