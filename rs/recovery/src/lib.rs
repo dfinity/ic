@@ -662,6 +662,11 @@ impl Recovery {
         (replay_height / 1000 + Height::from(1)) * 1000
     }
 
+    /// Return a [ValidateReplayStep] comparing the height after replay to the
+    /// subnet's certification height. `extra_batches` is the number of batches the
+    /// recovery flow itself delivers on top of the replayed blocks, i.e. one per
+    /// additional `ic-replay` invocation such as the registry local store update
+    /// during an upgrade.
     pub fn get_validate_replay_step(
         &self,
         subnet_id: SubnetId,
@@ -672,7 +677,10 @@ impl Recovery {
             subnet_id,
             registry_helper: self.registry_helper.clone(),
             work_dir: self.work_dir.clone(),
-            extra_batches,
+            // Every `ic-replay` invocation delivers one extra batch at the end, to
+            // create the checkpoint the recovery uploads; the replayed height is
+            // therefore one above the height of the replayed blocks.
+            extra_batches: extra_batches + 1,
         }
     }
 
