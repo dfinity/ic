@@ -4378,10 +4378,6 @@ pub mod test {
 
             state_manager
                 .get_mut()
-                .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
-            state_manager
-                .get_mut()
                 .expect_latest_state_height()
                 .return_const(Height::new(1));
 
