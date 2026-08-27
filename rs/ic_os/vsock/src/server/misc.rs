@@ -1,27 +1,27 @@
 use std::fs::OpenOptions;
 use std::io::Write;
 
-use super::VSOCK_VERSION;
-use crate::protocol::{NotifyData, Payload, Response};
+use super::{VSOCK_VERSION, VsockServerError};
+use crate::protocol::{NotifyData, Payload};
 
 use tokio::time::sleep;
 
 const HOSTOS_VERSION_FILE_PATH: &str = "/opt/ic/share/version.txt";
 
-pub(crate) fn get_hostos_version() -> Response {
-    let version = std::fs::read_to_string(HOSTOS_VERSION_FILE_PATH)
-        .map_err(|_| "Could not read hostOS version".to_string())?;
-    let version = version.trim().to_string();
+pub(crate) fn get_hostos_version() -> Result<Payload, VsockServerError> {
+    let version = std::fs::read_to_string(HOSTOS_VERSION_FILE_PATH)?
+        .trim()
+        .to_string();
 
     Ok(Payload::HostOSVersion(version))
 }
 
 // HostOSVsockVersion command used for backwards compatibility
-pub(crate) fn get_hostos_vsock_version() -> Response {
+pub(crate) fn get_hostos_vsock_version() -> Result<Payload, VsockServerError> {
     Ok(Payload::HostOSVsockVersion(VSOCK_VERSION))
 }
 
-pub(crate) async fn notify(notify_data: &NotifyData) -> Response {
+pub(crate) async fn notify(notify_data: &NotifyData) -> Result<Payload, VsockServerError> {
     // Echo notify messages to the local GuestOS console so they are visible
     // in cloud environments where the host console is not accessible.
     for path in ["/dev/tty1", "/dev/ttyS0"] {
@@ -47,33 +47,21 @@ pub(crate) async fn notify(notify_data: &NotifyData) -> Response {
     let mut handles = Vec::new();
 
     for device_path in &["/dev/tty1", "/dev/ttyS0"] {
-        let mut terminal_device_file =
-            OpenOptions::new()
-                .write(true)
-                .open(device_path)
-                .map_err(|err| {
-                    println!(
-                        "Error opening terminal device file {}: {}",
-                        device_path, err
-                    );
-                    err.to_string()
-                })?;
+        let mut terminal_device_file = OpenOptions::new().write(true).open(device_path)?;
 
         let message_clone = message.clone();
         handles.push(tokio::spawn(async move {
             for _ in 0..message_output_count {
-                terminal_device_file
-                    .write_all(format!("\n{message_clone}\n").as_bytes())
-                    .map_err(|e| e.to_string())?;
+                terminal_device_file.write_all(format!("\n{message_clone}\n").as_bytes())?;
                 sleep(std::time::Duration::from_secs(2)).await;
             }
 
-            Ok::<(), String>(())
+            Ok::<(), VsockServerError>(())
         }));
     }
 
     for handle in handles {
-        handle.await.map_err(|err| err.to_string())??;
+        handle.await??;
     }
 
     Ok(Payload::NoPayload)

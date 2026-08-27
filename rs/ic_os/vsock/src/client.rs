@@ -1,10 +1,29 @@
-use crate::protocol::{Command, Response};
+use std::io;
+
+use crate::protocol::{Command, MAX_MESSAGE_SIZE, Request, Response};
 
 use mockall::automock;
+use thiserror::Error;
 
 #[automock]
 pub trait VsockClient {
-    fn send_command(&self, command: Command) -> Response;
+    fn send_command(&self, command: Command) -> Result<Response, VsockClientError>;
+}
+
+#[derive(Error, Debug)]
+pub enum VsockClientError {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error("unable to serialize request: {request:#?}")]
+    InvalidRequest {
+        request: Request,
+        source: serde_json::Error,
+    },
+    #[error("unable to parse server response: {response:?}")]
+    InvalidResponse {
+        response: String,
+        source: serde_json::Error,
+    },
 }
 
 #[cfg(target_os = "linux")]
@@ -39,37 +58,30 @@ mod linux {
     }
 
     impl VsockClient for LinuxVsockClient {
-        fn send_command(&self, command: Command) -> Response {
-            let guest_cid = vsock::get_local_cid().map_err(|e| e.to_string())?;
-
+        fn send_command(&self, command: Command) -> Result<Response, VsockClientError> {
+            let guest_cid = vsock::get_local_cid()?;
             let request = Request { guest_cid, command };
 
-            let mut stream = VsockStream::connect_with_cid_port(VMADDR_CID_HOST, self.port)
-                .map_err(|e| e.to_string())?;
-            stream
-                .set_write_timeout(Some(std::time::Duration::from_secs(5)))
-                .map_err(|e| e.to_string())?;
+            let mut stream = VsockStream::connect_with_cid_port(VMADDR_CID_HOST, self.port)?;
+            stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
             // Set a long timeout, so HostOS has enough time to upgrade.
-            stream
-                .set_read_timeout(Some(std::time::Duration::from_secs(60 * 5)))
-                .map_err(|e| e.to_string())?;
+            stream.set_read_timeout(Some(std::time::Duration::from_secs(60 * 5)))?;
 
-            let json_request = serde_json::to_string(&request).map_err(|e| e.to_string())?;
-            stream
-                .write_all(json_request.as_bytes())
-                .map_err(|e| e.to_string())?;
+            stream.write_all(
+                &serde_json::to_vec(&request)
+                    .map_err(|source| VsockClientError::InvalidRequest { request, source })?,
+            )?;
+            stream.shutdown(std::net::Shutdown::Write)?;
 
-            // 64 KiB - generous for current responses (typically <1 KiB) while
-            // preventing unbounded allocation from a misbehaving host.
-            const MAX_RESPONSE_SIZE: u64 = 64 * 1024;
-            let mut response_str = String::new();
-            stream
-                .take(MAX_RESPONSE_SIZE)
-                .read_to_string(&mut response_str)
-                .map_err(|e| e.to_string())?;
+            let mut buffer = Vec::new();
+            stream.take(MAX_MESSAGE_SIZE).read_to_end(&mut buffer)?;
 
-            serde_json::from_str::<Response>(&response_str)
-                .map_err(|_| format!("Unable to parse host response: {response_str}"))?
+            serde_json::from_slice::<Response>(&buffer).map_err(|source| {
+                VsockClientError::InvalidResponse {
+                    response: String::from_utf8_lossy(&buffer).into_owned(),
+                    source,
+                }
+            })
         }
     }
 }

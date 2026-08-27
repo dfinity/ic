@@ -2,6 +2,10 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+// 64 KiB - generous for current messages (typically <1 KiB) while
+// preventing unbounded allocation from a misbehaving host.
+pub const MAX_MESSAGE_SIZE: u64 = 64 * 1024;
+
 pub type Response = Result<Payload, String>;
 
 #[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]

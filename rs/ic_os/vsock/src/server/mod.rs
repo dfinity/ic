@@ -1,20 +1,22 @@
-use std::io;
 use std::time::Duration;
+use std::{io, string};
 
-mod command_utilities;
 mod hsm;
 mod misc;
 mod upgrade;
 
-use crate::protocol::{Command, HostOSVsockVersion, Request, Response};
+use crate::protocol::{Command, HostOSVsockVersion, MAX_MESSAGE_SIZE, Request, Response};
 use hsm::{attach_hsm, detach_hsm};
 use misc::{get_hostos_version, get_hostos_vsock_version, notify};
 use upgrade::{start_upgrade_guest_vm, upgrade_hostos};
 
+use ic_http_utils::file_downloader::FileDownloadError;
+
+use thiserror::Error;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     select,
-    time::{sleep, timeout},
+    time::{error::Elapsed, sleep, timeout},
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tokio_vsock::{VMADDR_CID_ANY, VsockAddr, VsockListener, VsockStream};
@@ -36,10 +38,46 @@ pub struct VsockServer {
     listener: VsockListener,
 }
 
+#[derive(Error, Debug)]
+pub enum VsockServerError {
+    #[error("unable to parse client request: {request:?}")]
+    InvalidRequest {
+        request: String,
+        source: serde_json::Error,
+    },
+    #[error("unable to parse host response: {response:#?}")]
+    InvalidResponse {
+        response: Response,
+        source: serde_json::Error,
+    },
+    #[error("a type4 host only accepts VSOCK connections from the first VM")]
+    ConnectionRefused,
+    #[error("the actual sender CID did not match the sender CID in the request object")]
+    InvalidCid,
+    #[error("command {command} failed: {stderr:?}")]
+    CommandFailed { command: String, stderr: String },
+    #[error("could not start guestos upgrader service, status: {0:?}")]
+    UpgraderService(String),
+    #[error("no HSM device found")]
+    HsmNotFound,
+    #[error(transparent)]
+    InvalidUtf8(#[from] string::FromUtf8Error),
+    #[error(transparent)]
+    FileDownload(#[from] FileDownloadError),
+    #[error(transparent)]
+    Usb(#[from] rusb::Error),
+    #[error(transparent)]
+    Timeout(#[from] Elapsed),
+    #[error(transparent)]
+    Join(#[from] tokio::task::JoinError),
+    #[error(transparent)]
+    Io(#[from] io::Error),
+}
+
 impl VsockServer {
     pub const DEFAULT_PORT: u32 = 19090;
 
-    pub fn with_port(port: u32) -> io::Result<Self> {
+    pub fn with_port(port: u32) -> Result<Self, VsockServerError> {
         let addr = VsockAddr::new(VMADDR_CID_ANY, port);
         let listener = VsockListener::bind(addr)?;
 
@@ -56,7 +94,7 @@ impl VsockServer {
             let (stream, peer) = match res {
                 Ok(v) => v,
                 Err(e) => {
-                    println!("unable to accept connection: {e:#}");
+                    println!("Unable to accept connection: {e:#}");
                     // Throttle a bit to avoid busy loop when accept() fails
                     sleep(Duration::from_millis(10)).await;
                     continue;
@@ -65,8 +103,8 @@ impl VsockServer {
 
             tracker.spawn(async move {
                 match timeout(REQUEST_TIMEOUT, process_connection(stream)).await {
-                    Err(e) => println!("{peer}: timed out {e:#}"),
-                    Ok(Err(e)) => println!("{peer}: failed {e:#}"),
+                    Err(e) => println!("Connection {peer} timed out: {e:#}"),
+                    Ok(Err(e)) => println!("Connection {peer} failed: {e:#}"),
                     Ok(Ok(())) => {}
                 }
             });
@@ -86,31 +124,25 @@ impl VsockServer {
     }
 }
 
-async fn process_connection(mut stream: VsockStream) -> io::Result<()> {
-    let mut buffer = [0; 4096];
-    let bytes_read = timeout(CONNECTION_TIMEOUT, stream.read(&mut buffer)).await??;
-    let json_request: String = match std::str::from_utf8(&buffer[..bytes_read]) {
-        Ok(json_str_request) => json_str_request.to_string(),
-        Err(error) => {
-            println!("Error converting bytes to string: {error}");
-            return Err(io::Error::new(io::ErrorKind::InvalidData, error));
-        }
-    };
-
-    let request = match serde_json::from_str::<Request>(&json_request) {
+async fn process_connection(mut stream: VsockStream) -> Result<(), VsockServerError> {
+    let mut buffer = Vec::new();
+    timeout(
+        CONNECTION_TIMEOUT,
+        (&mut stream)
+            .take(MAX_MESSAGE_SIZE)
+            .read_to_end(&mut buffer),
+    )
+    .await??;
+    let request = match serde_json::from_slice::<Request>(&buffer) {
         Ok(request) => request,
-        Err(err) => {
-            let error = io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Unable to parse guest request: {json_request}: {err}"),
-            );
-            timeout(
-                CONNECTION_TIMEOUT,
-                stream.write_all(
-                    serde_json::to_string::<Response>(&Err(error.to_string()))?.as_bytes(),
-                ),
-            )
-            .await??;
+        Err(source) => {
+            let error = VsockServerError::InvalidRequest {
+                request: String::from_utf8_lossy(&buffer).into_owned(),
+                source,
+            };
+
+            write_response(&mut stream, Err(error.to_string())).await?;
+
             return Err(error);
         }
     };
@@ -120,28 +152,20 @@ async fn process_connection(mut stream: VsockStream) -> io::Result<()> {
     // than one VM that uses VSOCK. We treat the first GuestOS as the leader in
     // charge of HostOS.
     if request.guest_cid != VIR_VSOCK_GUEST_CID_MIN {
-        let err = io::Error::new(
-            io::ErrorKind::ConnectionRefused,
-            "A type4 host only accepts VSOCK connections from the first VM.",
-        );
-        timeout(
-            CONNECTION_TIMEOUT,
-            stream.write_all(serde_json::to_string::<Response>(&Err(err.to_string()))?.as_bytes()),
-        )
-        .await??;
-        return Err(err);
+        let error = VsockServerError::ConnectionRefused;
+
+        write_response(&mut stream, Err(error.to_string())).await?;
+
+        return Err(error);
     };
 
-    if let Err(err) = verify_sender_cid(&mut stream, request.guest_cid) {
-        timeout(
-            CONNECTION_TIMEOUT,
-            stream.write_all(serde_json::to_string::<Response>(&Err(err.to_string()))?.as_bytes()),
-        )
-        .await??;
-        return Err(err);
+    if let Err(error) = verify_sender_cid(&mut stream, request.guest_cid) {
+        write_response(&mut stream, Err(error.to_string())).await?;
+
+        return Err(error);
     };
 
-    let response: Response = match &request.command {
+    let response = match &request.command {
         Command::AttachHSM => attach_hsm(),
         Command::DetachHSM => detach_hsm(),
         Command::Upgrade(upgrade_data) => upgrade_hostos(upgrade_data).await,
@@ -149,32 +173,38 @@ async fn process_connection(mut stream: VsockStream) -> io::Result<()> {
         Command::GetVsockProtocol => get_hostos_vsock_version(),
         Command::GetHostOSVersion => get_hostos_version(),
         Command::StartUpgradeGuestVM => start_upgrade_guest_vm(),
-    };
+    }
+    .map_err(|e| {
+        let error = e.to_string();
+        println!("{error}");
 
-    timeout(
+        error
+    });
+
+    write_response(&mut stream, response).await
+}
+
+async fn write_response(
+    stream: &mut VsockStream,
+    response: Response,
+) -> Result<(), VsockServerError> {
+    Ok(timeout(
         CONNECTION_TIMEOUT,
-        stream.write_all(serde_json::to_string::<Response>(&response)?.as_bytes()),
+        stream.write_all(
+            // Make sure we put the right type on the wire
+            &serde_json::to_vec::<Response>(&response)
+                .map_err(|source| VsockServerError::InvalidResponse { response, source })?,
+        ),
     )
-    .await?
+    .await??)
 }
 
 // As a sanity check, we request that the sender adds its own CID to the message, and that CID must match the CID in the stream peer address.
 // NOTE: The kernel vhost driver also enforces this. Any packet with a forged source is dropped.
-fn verify_sender_cid(stream: &mut VsockStream, guest_cid: u32) -> io::Result<()> {
-    let peer_address = match stream.peer_addr() {
-        Ok(peer_address) => peer_address,
-        Err(err) => {
-            let error = format!("Error: could not verify the sender_cid. {err}");
-            return Err(io::Error::new(io::ErrorKind::InvalidData, error));
-        }
-    };
-
-    if peer_address.cid() == guest_cid {
-        Ok(())
+fn verify_sender_cid(stream: &mut VsockStream, guest_cid: u32) -> Result<(), VsockServerError> {
+    if stream.peer_addr()?.cid() != guest_cid {
+        Err(VsockServerError::InvalidCid)
     } else {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "The actual sender CID did not match the sender CID in the request object",
-        ))
+        Ok(())
     }
 }

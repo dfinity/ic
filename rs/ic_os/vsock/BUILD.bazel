@@ -12,6 +12,7 @@ rust_library(
         "@crate_index//:mockall",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
+        "@crate_index//:thiserror",
     ] + select({
         "@platforms//os:linux": [
             "//rs/http_utils",
@@ -41,6 +42,7 @@ rust_binary(
     ],
     deps = [
         ":vsock_lib",
+        "@crate_index//:anyhow",
         "@crate_index//:clap",
     ],
 )
@@ -53,6 +55,7 @@ rust_binary(
     ],
     deps = [
         ":vsock_lib",
+        "@crate_index//:anyhow",
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",
     ],

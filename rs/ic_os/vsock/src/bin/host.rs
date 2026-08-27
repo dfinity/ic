@@ -1,11 +1,13 @@
 use vsock_lib::server::VsockServer;
 
+use anyhow::{Context, Result};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
-    let vsock_server = VsockServer::with_port(VsockServer::DEFAULT_PORT)?;
+async fn main() -> Result<()> {
+    let vsock_server =
+        VsockServer::with_port(VsockServer::DEFAULT_PORT).context("building server")?;
 
     println!("Listening for vsock connections...");
 
@@ -20,7 +22,8 @@ async fn main() -> std::io::Result<()> {
             join_handle.await
         },
         result = &mut join_handle => result,
-    }?;
+    }
+    .context("cleaning up task")?;
 
     Ok(())
 }

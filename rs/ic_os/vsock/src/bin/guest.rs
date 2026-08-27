@@ -1,6 +1,7 @@
 use vsock_lib::client::{LinuxVsockClient, VsockClient};
 use vsock_lib::protocol::{Command as ProtocolCommand, NotifyData, Payload, UpgradeData};
 
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
@@ -44,7 +45,7 @@ enum Command {
     },
 }
 
-fn main() -> Result<(), String> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let command = match cli.command {
@@ -60,13 +61,16 @@ fn main() -> Result<(), String> {
         }
     };
 
-    let payload = LinuxVsockClient::with_port(cli.port).send_command(command)?;
+    let response = LinuxVsockClient::with_port(cli.port)
+        .send_command(command)
+        .context("sending command")?;
 
     // Output the values directly
-    match payload {
-        Payload::HostOSVsockVersion(version) => println!("{version}"),
-        Payload::HostOSVersion(version) => println!("{version}"),
-        Payload::NoPayload => (),
+    match response {
+        Ok(Payload::HostOSVsockVersion(version)) => println!("{version}"),
+        Ok(Payload::HostOSVersion(version)) => println!("{version}"),
+        Err(error) => bail!("Server responded with error: '{error}'"),
+        _ => (),
     }
 
     Ok(())

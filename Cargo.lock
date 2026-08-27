@@ -24669,6 +24669,7 @@ dependencies = [
 name = "vsock_lib"
 version = "1.0.0"
 dependencies = [
+ "anyhow",
  "clap",
  "ic-http-utils",
  "mockall",
@@ -24677,6 +24678,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tokio-vsock",
