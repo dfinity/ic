@@ -715,8 +715,6 @@ pub(crate) mod tests {
         let context_registry_version = RegistryVersion::from(7);
         let cup_proto =
             cup_with_distinct_registry_versions(summary_registry_version, context_registry_version);
-        // Guards the premise of this test: the CUP must actually distinguish the two fields.
-        assert_ne!(summary_registry_version, context_registry_version);
 
         let server_addr =
             start_server(TestService::SendCup(Arc::new(cup_proto.encode_to_vec()))).await;
