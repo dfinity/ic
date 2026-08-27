@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- The endpoint `/instances/<instance_id>/auto_progress` (and creating an instance with automatic progress enabled)
+  only returns after the certified time of the PocketIC instance has been updated for the first time.
+
 
 
 ## 15.0.0 - 2026-06-26
