@@ -63,8 +63,8 @@ use std::collections::{BTreeMap, BTreeSet};
 /// batch of twenty: the second doubling saves ~2%, one transaction's intrinsic gas spread over the
 /// extra deposits. A wider batch does not pay for what it costs — `sweepErc20Batch` has no
 /// per-item error handling, so it doubles how many deposits one revert drops (see
-/// [`next_batch_of`]), and it doubles what a single sweep prepays against the sweeper's low-water
-/// mark (see [`max_sweep_transaction_fee`]).
+/// [`sweep_batches_by_token`]), and it doubles what a single sweep prepays against the sweeper's
+/// low-water mark (see [`max_sweep_transaction_fee`]).
 const MAX_DEPOSITS_PER_SWEEP: usize = 10;
 
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
@@ -351,8 +351,8 @@ pub async fn enqueue_batched_sweep() {
     }
 }
 
-/// The sweep queue folded into one batch per token, each holding at most
-/// [`MAX_DEPOSITS_PER_SWEEP`] of that token's queued deposits.
+/// The sweep queue folded into one batch per token, each holding that token's queued deposits in
+/// queue order, up to [`MAX_DEPOSITS_PER_SWEEP`] of them.
 ///
 /// One sweep per token, never a batch spanning several. The delegate's batch entry point runs its
 /// whole token list against every deposit address it touches, so a mixed batch pays a `balanceOf` at
@@ -362,26 +362,20 @@ pub async fn enqueue_batched_sweep() {
 /// [`MAX_DEPOSITS_PER_SWEEP`] bound a sweep's gas at all. It costs one transaction's 21'000
 /// intrinsic gas per token, which a multi-token sweep pays anyway in the cold storage write each
 /// token's balance at the minter needs.
-fn sweep_batches_by_token(state: &State) -> BTreeMap<Address, Vec<SweepTarget>> {
-    let mut queued: BTreeMap<Address, Vec<SweepTarget>> = BTreeMap::new();
-    for target in state.automatic_deposits.sweep_targets_iter() {
-        queued.entry(target.token()).or_default().push(target);
-    }
-    queued
-        .into_iter()
-        .map(|(token, queued)| (token, next_batch_of(queued)))
-        .collect()
-}
-
-/// Which of one token's queued deposits go into the next sweep of it: its deposits in queue order,
-/// up to [`MAX_DEPOSITS_PER_SWEEP`].
 ///
 /// Every deposit gets one sweep and no more. `sweepErc20Batch` has no per-item error handling, so
 /// whatever makes a sweep revert — one address blacklisted for the token, say — reverts every batch
 /// that deposit is in; a failed sweep therefore drops its whole batch from the queue rather than
 /// leaving anything behind to retry (DEFI-2981).
-fn next_batch_of(queued: Vec<SweepTarget>) -> Vec<SweepTarget> {
-    queued.into_iter().take(MAX_DEPOSITS_PER_SWEEP).collect()
+fn sweep_batches_by_token(state: &State) -> BTreeMap<Address, Vec<SweepTarget>> {
+    let mut batches: BTreeMap<Address, Vec<SweepTarget>> = BTreeMap::new();
+    for target in state.automatic_deposits.sweep_targets_iter() {
+        let batch = batches.entry(target.token()).or_default();
+        if batch.len() < MAX_DEPOSITS_PER_SWEEP {
+            batch.push(target);
+        }
+    }
+    batches
 }
 
 /// Enqueue one sweep of `token`, moving as many of `targets` as could be signed for.
