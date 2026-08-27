@@ -24,6 +24,7 @@ pub mod storage;
 pub mod sweep;
 pub mod sweeper;
 pub mod sweeper_contract;
+pub mod time;
 pub mod timed_sized_map;
 pub mod tx;
 pub mod withdraw;

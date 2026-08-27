@@ -41,6 +41,7 @@ use ic_cketh_minter::state::{
 };
 use ic_cketh_minter::sweep::process_sweeper_transactions;
 use ic_cketh_minter::sweeper::fund_sweeper_address;
+use ic_cketh_minter::time::IC_TIME_PROVIDER;
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
@@ -87,14 +88,14 @@ fn setup_timers() {
         // Sequenced after the key rather than scheduled on a delay: the sweeper address cannot be
         // derived without it, and a delay only guesses at when it will be cached. Running here also
         // keeps the two off separate tasks, since two concurrent `ecdsa_public_key` calls trap.
-        fund_sweeper_address().await;
+        fund_sweeper_address(&IC_TIME_PROVIDER).await;
     });
     // Start scraping logs immediately after the install, then repeat with the interval.
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
-        scrape_logs().await;
+        scrape_logs(&IC_TIME_PROVIDER).await;
     });
     ic_cdk_timers::set_timer_interval(SCRAPING_ETH_LOGS_INTERVAL, async || {
-        scrape_logs().await;
+        scrape_logs(&IC_TIME_PROVIDER).await;
     });
     // Refresh the latest block height immediately after the install, then repeat
     // with the interval.
@@ -105,22 +106,22 @@ fn setup_timers() {
         refresh_latest_block_height().await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
-        process_retrieve_eth_requests().await;
+        process_retrieve_eth_requests(&IC_TIME_PROVIDER).await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, async || {
-        process_sweeper_transactions().await;
+        process_sweeper_transactions(&IC_TIME_PROVIDER).await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, async || {
-        process_reimbursement().await;
+        process_reimbursement(&IC_TIME_PROVIDER).await;
     });
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
-        balance_scan().await;
+        balance_scan(&IC_TIME_PROVIDER).await;
     });
     ic_cdk_timers::set_timer_interval(BALANCE_SCAN_INTERVAL, async || {
-        balance_scan().await;
+        balance_scan(&IC_TIME_PROVIDER).await;
     });
     ic_cdk_timers::set_timer_interval(SWEEPER_FUNDING_INTERVAL, async || {
-        fund_sweeper_address().await;
+        fund_sweeper_address(&IC_TIME_PROVIDER).await;
     });
 }
 
@@ -130,7 +131,7 @@ fn init(arg: MinterArg) {
         MinterArg::InitArg(init_arg) => {
             log!(INFO, "[init]: initialized minter with arg: {:?}", init_arg);
             STATE.with(|cell| {
-                storage::record_event(EventType::Init(init_arg.clone()));
+                storage::record_event(EventType::Init(init_arg.clone()), &IC_TIME_PROVIDER);
                 *cell.borrow_mut() =
                     Some(State::try_from(init_arg).expect("BUG: failed to initialize minter"))
             });
@@ -157,13 +158,16 @@ fn emit_preupgrade_events() {
                     EventType::SyncedDepositWithSubaccountToBlock { block_number }
                 }
             };
-            storage::record_event(event);
+            storage::record_event(event, &IC_TIME_PROVIDER);
         }
     });
 
     let registry = read_state(|s| s.automatic_deposits.watchlist_snapshot());
     if !registry.registrations.is_empty() {
-        storage::record_event(EventType::RegisteredDepositAddresses(registry));
+        storage::record_event(
+            EventType::RegisteredDepositAddresses(registry),
+            &IC_TIME_PROVIDER,
+        );
     }
 }
 
@@ -179,8 +183,10 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
         Some(MinterArg::InitArg(_)) => {
             ic_cdk::trap("cannot upgrade canister state with init args");
         }
-        Some(MinterArg::UpgradeArg(upgrade_args)) => lifecycle::post_upgrade(Some(upgrade_args)),
-        None => lifecycle::post_upgrade(None),
+        Some(MinterArg::UpgradeArg(upgrade_args)) => {
+            lifecycle::post_upgrade(Some(upgrade_args), &IC_TIME_PROVIDER)
+        }
+        None => lifecycle::post_upgrade(None, &IC_TIME_PROVIDER),
     }
     setup_timers();
 }
@@ -444,6 +450,7 @@ async fn withdraw_eth(
                 process_event(
                     s,
                     EventType::AcceptedEthWithdrawalRequest(withdrawal_request.clone()),
+                    &IC_TIME_PROVIDER,
                 );
             });
             Ok(RetrieveEthRequest::from(withdrawal_request))
@@ -621,6 +628,7 @@ async fn withdraw_erc20(
                         process_event(
                             s,
                             EventType::AcceptedErc20WithdrawalRequest(withdrawal_request.clone()),
+                            &IC_TIME_PROVIDER,
                         );
                     });
                     Ok(RetrieveErc20Request::from(withdrawal_request))
@@ -648,6 +656,7 @@ async fn withdraw_erc20(
                             process_event(
                                 s,
                                 EventType::FailedErc20WithdrawalRequest(reimbursement_request),
+                                &IC_TIME_PROVIDER,
                             );
                         });
                     }
@@ -692,7 +701,13 @@ async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
     }
     let ckerc20_token = erc20::CkErc20Token::try_from(erc20_token)
         .unwrap_or_else(|e| ic_cdk::trap(format!("ERROR: {e}")));
-    mutate_state(|s| process_event(s, EventType::AddedCkErc20Token(ckerc20_token)));
+    mutate_state(|s| {
+        process_event(
+            s,
+            EventType::AddedCkErc20Token(ckerc20_token),
+            &IC_TIME_PROVIDER,
+        )
+    });
 }
 
 #[update]
