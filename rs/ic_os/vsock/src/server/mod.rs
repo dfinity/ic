@@ -144,8 +144,8 @@ async fn process_connection(mut stream: VsockStream) -> io::Result<()> {
     let response: Response = match &request.command {
         Command::AttachHSM => attach_hsm(),
         Command::DetachHSM => detach_hsm(),
-        Command::Upgrade(upgrade_data) => upgrade_hostos(upgrade_data),
-        Command::Notify(notify_data) => notify(notify_data),
+        Command::Upgrade(upgrade_data) => upgrade_hostos(upgrade_data).await,
+        Command::Notify(notify_data) => notify(notify_data).await,
         Command::GetVsockProtocol => get_hostos_vsock_version(),
         Command::GetHostOSVersion => get_hostos_version(),
         Command::StartUpgradeGuestVM => start_upgrade_guest_vm(),

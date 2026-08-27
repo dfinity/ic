@@ -4,6 +4,8 @@ use std::io::Write;
 use super::VSOCK_VERSION;
 use crate::protocol::{NotifyData, Payload, Response};
 
+use tokio::time::sleep;
+
 const HOSTOS_VERSION_FILE_PATH: &str = "/opt/ic/share/version.txt";
 
 pub(crate) fn get_hostos_version() -> Response {
@@ -19,7 +21,7 @@ pub(crate) fn get_hostos_vsock_version() -> Response {
     Ok(Payload::HostOSVsockVersion(VSOCK_VERSION))
 }
 
-pub(crate) fn notify(notify_data: &NotifyData) -> Response {
+pub(crate) async fn notify(notify_data: &NotifyData) -> Response {
     // Echo notify messages to the local GuestOS console so they are visible
     // in cloud environments where the host console is not accessible.
     for path in ["/dev/tty1", "/dev/ttyS0"] {
@@ -42,6 +44,7 @@ pub(crate) fn notify(notify_data: &NotifyData) -> Response {
 
     let message_output_count = std::cmp::min(notify_data.count, 10);
     let message = notify_data.message.clone();
+    let mut handles = Vec::new();
 
     for device_path in &["/dev/tty1", "/dev/ttyS0"] {
         let mut terminal_device_file =
@@ -57,17 +60,20 @@ pub(crate) fn notify(notify_data: &NotifyData) -> Response {
                 })?;
 
         let message_clone = message.clone();
-        let write_lambda = move || -> Result<(), String> {
+        handles.push(tokio::spawn(async move {
             for _ in 0..message_output_count {
-                match terminal_device_file.write_all(format!("\n{message_clone}\n").as_bytes()) {
-                    Ok(_) => std::thread::sleep(std::time::Duration::from_secs(2)),
-                    Err(err) => return Err(err.to_string()),
-                }
+                terminal_device_file
+                    .write_all(format!("\n{message_clone}\n").as_bytes())
+                    .map_err(|e| e.to_string())?;
+                sleep(std::time::Duration::from_secs(2)).await;
             }
-            Ok(())
-        };
 
-        std::thread::spawn(write_lambda);
+            Ok::<(), String>(())
+        }));
+    }
+
+    for handle in handles {
+        handle.await.map_err(|err| err.to_string())??;
     }
 
     Ok(Payload::NoPayload)

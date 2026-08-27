@@ -6,25 +6,23 @@ use crate::protocol::{Payload, Response, UpgradeData};
 
 use ic_http_utils::file_downloader::FileDownloader;
 
-use tokio::runtime::Runtime;
-
 const UPGRADE_FILE_PATH: &str = "/tmp/upgrade";
 const INSTALL_UPGRADE_FILE_PATH: &str = "/opt/ic/bin/install-upgrade.sh";
 
-pub(crate) fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
+pub(crate) async fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
     println!("Trying to fetch hostOS upgrade file from request: {upgrade_data:?}");
 
     println!("Starting download from: {}", upgrade_data.url);
     let file_downloader = FileDownloader::new_with_timeout(None, Duration::from_secs(120));
 
-    Runtime::new().map_err(|e| e.to_string()).and_then(|rt| {
-        rt.block_on(file_downloader.download_file(
+    file_downloader
+        .download_file(
             &upgrade_data.url,
             Path::new(UPGRADE_FILE_PATH),
             Some(upgrade_data.target_hash.to_string()),
-        ))
-        .map_err(|e| e.to_string())
-    })?;
+        )
+        .await
+        .map_err(|e| e.to_string())?;
 
     println!("Download completed, starting upgrade installation...");
     let command_output = std::process::Command::new(INSTALL_UPGRADE_FILE_PATH)
