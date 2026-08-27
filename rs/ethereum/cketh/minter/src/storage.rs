@@ -48,13 +48,16 @@ thread_local! {
 
 /// Appends the event to the event log.
 pub fn record_event(payload: EventType) {
+    record_event_at(ic_cdk::api::time(), payload);
+}
+
+/// [`record_event`] stamped at `timestamp` rather than at the current IC time.
+///
+/// For a caller that already holds the time of the message it is recording for — and for a unit
+/// test, which has no canister to ask for it.
+pub fn record_event_at(timestamp: u64, payload: EventType) {
     EVENTS
-        .with(|events| {
-            events.borrow().append(&Event {
-                timestamp: ic_cdk::api::time(),
-                payload,
-            })
-        })
+        .with(|events| events.borrow().append(&Event { timestamp, payload }))
         .expect("recording an event should succeed");
 }
 

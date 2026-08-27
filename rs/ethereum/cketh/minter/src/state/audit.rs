@@ -8,11 +8,12 @@ use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
 use crate::state::transactions::{Reimbursed, ReimbursementIndex, WithdrawalRequest};
-use crate::storage::{record_event, with_event_iter};
+use crate::storage::{record_event_at, with_event_iter};
 
 /// Updates the state to reflect the given state transition.
 // public because it's used in tests since process_event
 // requires canister infrastructure to retrieve time
+// (see also `process_event_at`, which takes the time as an argument)
 pub fn apply_state_transition(state: &mut State, payload: &EventType) {
     match payload {
         EventType::Init(init_arg) => {
@@ -237,8 +238,16 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
 
 /// Records the given event payload in the event log and updates the state to reflect the change.
 pub fn process_event(state: &mut State, payload: EventType) {
+    process_event_at(ic_cdk::api::time(), state, payload);
+}
+
+/// [`process_event`] stamped at `timestamp` rather than at the current IC time.
+///
+/// Retrieving the time is the one thing in recording an event that needs a canister, so taking it as
+/// an argument is what puts a code path that records events under unit test.
+pub fn process_event_at(timestamp: u64, state: &mut State, payload: EventType) {
     apply_state_transition(state, &payload);
-    record_event(payload);
+    record_event_at(timestamp, payload);
 }
 
 /// Recomputes the minter state from the event log.
