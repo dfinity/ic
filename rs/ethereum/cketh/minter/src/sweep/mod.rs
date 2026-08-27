@@ -28,7 +28,7 @@ use crate::{
     numeric::{TransactionCount, TransactionNonce, Wei},
     state::{
         State, TaskType,
-        audit::{EventType, process_event},
+        audit::{EventType, process_event, process_event_at},
         automatic_deposits::SweepTarget,
         mutate_state, read_state,
         transactions::{CreateSweepTransactionError, PipelineRequest, SweepRequest, SweptDeposit},
@@ -346,9 +346,25 @@ pub async fn enqueue_batched_sweep() {
         return;
     };
 
+    let context = SweepContext {
+        sweeper_contract,
+        gas_fee_estimate,
+        created_at: ic_cdk::api::time(),
+    };
     for batch in batches {
-        enqueue_token_sweep(batch, sweeper_contract, &gas_fee_estimate).await;
+        enqueue_token_sweep(batch, &context).await;
     }
+}
+
+/// What every sweep enqueued in one tick shares: the delegate they authorize and send to, what their
+/// gas costs, and the time they are decided at.
+///
+/// The time is carried rather than read because reading it needs a canister, and every sweep of one
+/// tick is decided at the same instant anyway.
+struct SweepContext {
+    sweeper_contract: Address,
+    gas_fee_estimate: GasFeeEstimate,
+    created_at: u64,
 }
 
 /// The sweep queue folded into one batch per token, each holding that token's queued deposits in
@@ -384,8 +400,7 @@ fn sweep_batches_by_token(state: &State) -> BTreeMap<Address, Vec<SweepTarget>> 
 /// for, or when the sweep would prepay more than [`max_sweep_transaction_fee`].
 async fn enqueue_token_sweep(
     (token, targets): (Address, Vec<SweepTarget>),
-    sweeper_contract: Address,
-    gas_fee_estimate: &GasFeeEstimate,
+    context: &SweepContext,
 ) {
     let Some(requests) = attestation_requests(&targets) else {
         log!(
@@ -395,7 +410,7 @@ async fn enqueue_token_sweep(
         return;
     };
 
-    let prepared = prepare_deposits(&targets, &requests, sweeper_contract).await;
+    let prepared = prepare_deposits(&targets, &requests, context).await;
     if prepared.is_empty() {
         log!(
             INFO,
@@ -407,15 +422,16 @@ async fn enqueue_token_sweep(
     let batch = SweepBatch::from(prepared);
     let mut request = SweepRequest {
         id: read_state(|s| s.next_sweep_id),
-        destination: sweeper_contract,
+        destination: context.sweeper_contract,
         amount: Wei::ZERO,
         data: encode_sweep_erc20_batch(&batch.items, &batch.tokens),
         max_transaction_fee: Wei::ZERO,
-        created_at: ic_cdk::api::time(),
+        created_at: context.created_at,
         authorizations: batch.authorizations,
         deposits: batch.deposits,
     };
-    request.max_transaction_fee = gas_fee_estimate
+    request.max_transaction_fee = context
+        .gas_fee_estimate
         .clone()
         .to_price(request.gas_limit())
         .max_transaction_fee();
@@ -431,11 +447,18 @@ async fn enqueue_token_sweep(
     }
     log!(
         INFO,
-        "[enqueue_batched_sweep]: sweeping {} deposits of {token} from {} addresses, via {sweeper_contract}",
+        "[enqueue_batched_sweep]: sweeping {} deposits of {token} from {} addresses, via {}",
         request.deposits.len(),
-        request.authorizations.len()
+        request.authorizations.len(),
+        context.sweeper_contract
     );
-    mutate_state(|s| process_event(s, EventType::AcceptedSweepRequest(request)));
+    mutate_state(|s| {
+        process_event_at(
+            context.created_at,
+            s,
+            EventType::AcceptedSweepRequest(request),
+        )
+    });
 }
 
 /// The most a single sweep may prepay: the balance the sweeper address is kept above, so that a
@@ -548,13 +571,13 @@ struct PreparedDeposit {
 async fn prepare_deposits(
     targets: &[SweepTarget],
     requests: &BTreeMap<Account, AttestationRequest>,
-    sweeper_contract: Address,
+    context: &SweepContext,
 ) -> Vec<PreparedDeposit> {
-    let attestations = sign_attestations_batch(requests).await;
+    let attestations = sign_attestations_batch(requests, context).await;
     // Only the attested accounts: a deposit that could not be attested drops out of the sweep
     // anyway, so authorizing it would spend a signature on nothing.
     let addresses = attested_addresses(targets, &attestations);
-    let authorizations = sign_authorizations_batch(&addresses, sweeper_contract).await;
+    let authorizations = sign_authorizations_batch(&addresses, context).await;
     prepared_deposits(targets, &attestations, &authorizations)
 }
 
@@ -588,6 +611,7 @@ fn prepared_deposits(
 /// have yet cost a signature, and each is recorded the moment it exists.
 async fn sign_attestations_batch(
     requests: &BTreeMap<Account, AttestationRequest>,
+    context: &SweepContext,
 ) -> BTreeMap<Account, TransactionSignature> {
     let mut attestations: BTreeMap<Account, TransactionSignature> = read_state(|s| {
         requests
@@ -612,7 +636,8 @@ async fn sign_attestations_batch(
         match result {
             Ok(attestation) => {
                 mutate_state(|s| {
-                    process_event(
+                    process_event_at(
+                        context.created_at,
                         s,
                         EventType::AttestedDepositAddress {
                             request: request.clone(),
@@ -652,12 +677,12 @@ fn attested_addresses(
 /// fixed at 0, so nothing a sweep does can invalidate it — see [`delegation_authorization`].
 async fn sign_authorizations_batch(
     addresses: &BTreeMap<Account, DepositAddress>,
-    sweeper_contract: Address,
+    context: &SweepContext,
 ) -> BTreeMap<Account, SignedAuthorization> {
     let chain_id = read_state(State::ethereum_network).chain_id();
     let signed = join_all(addresses.keys().map(|account| {
         let account = *account;
-        let authorization = delegation_authorization(chain_id, sweeper_contract);
+        let authorization = delegation_authorization(chain_id, context.sweeper_contract);
         async move {
             (
                 account,
