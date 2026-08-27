@@ -33,7 +33,7 @@
 #                      source git ref must match, e.g.
 #                        refs/heads/master
 #                          (master commits)
-#                        refs/heads/(rc--|hotfix-|public-hotfix-).+
+#                        refs/heads/(rc--|hotfix-)[^/]+
 #                          (release-qualification branches)
 #                      The signer-workflow pin alone fixes WHICH workflow
 #                      signed, not from which ref it ran: those workflows can

@@ -32,7 +32,7 @@ inputs:
     description: |
       Regex (anchored by the verifier) that the attestation's source git ref
       must match: "refs/heads/master" for master commits,
-      "refs/heads/(rc--|hotfix-|public-hotfix-).+" for release-qualification
+      "refs/heads/(rc--|hotfix-)[^/]+" for release-qualification
       branches. The signer-workflow pin alone fixes which workflow signed,
       not from which ref it ran — see ci/scripts/fetch-attested-sums.sh.
   files:
