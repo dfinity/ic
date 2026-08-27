@@ -342,8 +342,6 @@ fn canonical_encoding_subnet_metrics() {
         metrics.threshold_signature_agreements =
             BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
 
-        // From `V29` on the reported total is this stored aggregate: the subnet-level
-        // total plus the part consumed by the canisters that still exist.
         metrics.refresh_consumed_cycles(NominalCycles::new(50_000_000_000));
 
         let expected = if certification_version >= CertificationVersion::V29 {

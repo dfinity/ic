@@ -1265,7 +1265,6 @@ mod tests {
             NominalCycles::zero()
         );
 
-        // The refresh publishes the fold into `SubnetMetrics`.
         let subnet_level = state.metadata.subnet_metrics.consumed_cycles_total();
         assert!(subnet_level > NominalCycles::zero());
         state.refresh_consumed_cycles();

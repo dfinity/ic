@@ -2831,8 +2831,6 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         consumed_cycles_by_use_case,
         ..Default::default()
     };
-    // The stored aggregate the gauge reads: the subnet-level total plus the
-    // canisters' part (64).
     subnet_metrics.refresh_consumed_cycles(NominalCycles::new(64));
 
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
