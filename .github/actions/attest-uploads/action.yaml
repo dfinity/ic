@@ -1,13 +1,12 @@
 name: Attest Uploaded Artifacts
 description: |
   Generate a build-provenance attestation covering every file that this run's
-  ci-main.yml uploaded to the CDN (see ci-main's merge-upload-manifests job,
+  ci-main.yml uploaded to the CDN (see ci-main's upload-manifests job,
   which produces the upload manifest consumed here).
 
   The attestation is the integrity anchor that lets release workflows and the
   mainnet-revisions updater verify CDN downloads against something independent
-  of the CDN: they fetch a directory's SHA256SUMS
-  from the CDN, check it with
+  of the CDN: they fetch a directory's SHA256SUMS from the CDN, check it with
   `gh attestation verify --repo dfinity/ic --signer-workflow <this pipeline>
   --source-digest <commit>` and then verify each artifact against the now
   trusted sums.
@@ -16,7 +15,7 @@ description: |
   `manifest-sha256` output: an Actions artifact can be replaced mid-run by
   anything holding an `actions: write` token, but job outputs cannot be
   tampered with by other jobs. The same check anchors the merge that produced
-  the artifact: ci-main's merge-upload-manifests job verified each upload
+  the artifact: ci-main's upload-manifests job verified each upload
   job's manifest against that job's output before merging.
 
   The calling job needs `attestations: write` and `id-token: write` and must
@@ -49,11 +48,8 @@ runs:
         # empty output also fails here: sha256sum rejects the malformed line.
         echo "$MANIFEST_SHA256  upload-manifest.sha256sums" | sha256sum --check
 
-    # No continue-on-error: an unattested release upload is exactly the gap
-    # this anchor exists to close, so a failure here must fail the run.
     # With no predicate input, actions/attest emits a SLSA build-provenance
-    # attestation — the predicate type `gh attestation verify` expects by
-    # default.
+    # attestation — the predicate type `gh attestation verify` expects by default.
     - name: Attest
       uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
       with:

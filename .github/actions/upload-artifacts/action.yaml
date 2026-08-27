@@ -13,7 +13,7 @@ inputs:
       When set, the sha256sum-format manifest the upload command emits on
       stdout is uploaded as a GitHub Actions artifact with this name, and the
       manifest's own sha256 is exposed as the `manifest-sha256` output. The manifest is the build-time integrity
-      record that ci-main's merge-upload-manifests job merges into the single
+      record that ci-main's upload-manifests job merges into the single
       upload-manifest artifact, which the `attest-uploads` jobs (see
       ci-kickoff.yml and release-testing.yml) attest, so that release
       workflows can verify CDN downloads against an anchor independent of the
@@ -31,13 +31,6 @@ runs:
       with:
         run: |
           echo uploading artifacts to remote storage
-
-          # The upload manifest the uploader prints to stdout: sha256sum
-          # lines ("<hex>  <path>", path relative to
-          # https://download.dfinity.systems/), hashed by the uploader from
-          # its local copy of each file — never from anything served back by
-          # the CDN (see ci/src/artifacts/upload.sh). The steps below (gated
-          # on `manifest-name`) upload it for the attest-uploads jobs.
           upload_output="$RUNNER_TEMP/upload-manifest.sha256sums"
 
           ${{ inputs.upload-command }} >"$upload_output"
@@ -65,9 +58,7 @@ runs:
         manifest="$RUNNER_TEMP/upload-manifest.sha256sums"
 
         # Fail closed rather than attest garbage: the manifest must be
-        # non-empty and every line must be "<64-hex>  ic/<path>". A new
-        # artifact whose name falls outside this character set should extend
-        # the pattern here deliberately, not slip through.
+        # non-empty and every line must be "<64-hex>  ic/<path>".
         if ! [ -s "$manifest" ]; then
           echo "upload manifest is missing or empty: $manifest" >&2
           exit 1
