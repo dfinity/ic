@@ -1,6 +1,8 @@
 use crate::management::CallError;
-use crate::time::TimeProvider;
+use crate::time::{IC_TIME_PROVIDER, TimeProvider};
 use async_trait::async_trait;
+use ic_management_canister_types_private::DerivationPath;
+use serde_bytes::ByteBuf;
 
 /// The canister capabilities the minter needs from its environment.
 ///
@@ -14,4 +16,33 @@ pub trait CanisterRuntime: TimeProvider {
         derivation_path: Vec<Vec<u8>>,
         message_hash: [u8; 32],
     ) -> Result<[u8; 64], CallError>;
+}
+
+/// The [`CanisterRuntime`] used in production, backed by the Internet Computer system API.
+pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime;
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct IcCanisterRuntime;
+
+impl TimeProvider for IcCanisterRuntime {
+    fn time(&self) -> u64 {
+        IC_TIME_PROVIDER.time()
+    }
+}
+
+#[async_trait]
+impl CanisterRuntime for IcCanisterRuntime {
+    async fn sign_with_ecdsa(
+        &self,
+        key_name: String,
+        derivation_path: Vec<Vec<u8>>,
+        message_hash: [u8; 32],
+    ) -> Result<[u8; 64], CallError> {
+        crate::management::sign_with_ecdsa(
+            key_name,
+            DerivationPath::new(derivation_path.into_iter().map(ByteBuf::from).collect()),
+            message_hash,
+        )
+        .await
+    }
 }
