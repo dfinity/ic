@@ -29,7 +29,7 @@ ATTESTATION_SIGNER_WORKFLOW = "dfinity/ic/.github/workflows/release-testing.yml"
 # The signer pin fixes which workflow signed, not from which ref it ran
 # (release-testing.yml can be dispatched on arbitrary branches): only accept
 # attestations minted from release-qualification branches.
-ATTESTATION_SOURCE_REF_REGEX = r"refs/heads/(rc--|hotfix-|public-hotfix-).+"
+ATTESTATION_SOURCE_REF_REGEX = r"refs/heads/(rc--|hotfix-)[^/]+"
 FETCH_ATTESTED_SUMS_SCRIPT = pathlib.Path(__file__).resolve().parents[2] / "scripts" / "fetch-attested-sums.sh"
 
 # Release binaries (published on the CDN under `.../binaries/x86_64-linux/` as
@@ -575,16 +575,20 @@ class VersionArtifactSums:
 
     For a public commit the SHA256SUMS files MUST verify against the build's
     attestation: a failure aborts the update (no PR is created; the cron retries).
-    A version elected before the attestation rollout can be backfilled by re-running
-    release-testing.yml (workflow_dispatch) on its rc branch: the rebuild is checked
-    byte-for-byte against the CDN by rclone --immutable --checksum before the
-    attest-uploads job runs.
+    Versions recorded before the attestation rollout are never re-fetched here:
+    is_record_up_to_date() keeps complete records untouched, so this requirement
+    only bites for versions whose builds are expected to attest. (Dispatching
+    release-testing.yml on an old branch cannot backfill such versions: workflows
+    run from the dispatched ref's tree, which predates the attest-uploads job.)
 
     A version whose commit is NOT public yet (an undisclosed security patch, built
     in ic-private and not attested in this repository) falls back to trusting the
-    CDN with a loud warning -- the pre-attestation behavior, time-bounded until
-    disclosure. That fallback is not attacker-selectable within the finding's threat
-    model: CDN write access cannot remove a commit from the public repository.
+    CDN with a loud warning -- time-bounded until disclosure: the exact elected
+    commit is pushed to dfinity/ic as a hotfix-* branch, whose Release Testing run
+    re-builds it (rclone --immutable --checksum requires the rebuild to match the
+    CDN byte-for-byte) and mints the attestation. That fallback is not
+    attacker-selectable within the finding's threat model: CDN write access cannot
+    remove a commit from the public repository.
     """
 
     def __init__(self, version: str):
@@ -610,7 +614,9 @@ class VersionArtifactSums:
                 raise Exception(
                     f"No build-provenance attestation verifies ic/{self.version}/{subdir}/SHA256SUMS. "
                     f"Refusing to record CDN-served hashes for the public commit {self.version}; "
-                    "backfill the attestation by re-running release-testing.yml on its branch."
+                    "backfill the attestation by re-running release-testing.yml on its branch "
+                    "(for a hotfix without one: push its elected commit to dfinity/ic as a "
+                    "hotfix-* branch first)."
                 )
             self.logger.warning(
                 "Commit %s is not public (undisclosed security patch?): recording UNVERIFIED "
