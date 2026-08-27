@@ -119,7 +119,7 @@ pub const SWEEPER_ETH_SPENT: &str = "cketh_minter_sweeper_funding_eth_spent_tota
 /// How far the ckETH burned for sweeping runs ahead of the ETH spent.
 pub const SWEEPER_BURNED_NOT_YET_SPENT: &str = "cketh_minter_sweeper_funding_burned_not_yet_spent";
 /// The lower bound the minter tracks on the sweeper address' balance.
-pub const SWEEPER_GAS_BALANCE: &str = "cketh_minter_sweeper_gas_balance";
+pub const SWEEPER_GAS_BALANCE: &str = "cketh_minter_sweeper_funding_gas_balance";
 
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
 /// address, so the scan reads a real balance for that (address, token) pair.
