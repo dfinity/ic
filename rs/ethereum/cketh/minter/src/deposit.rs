@@ -26,7 +26,7 @@ use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
 use std::{collections::VecDeque, time::Duration};
 
-async fn mint<T: TimeProvider + Clone + 'static>(time_provider: &T) {
+async fn mint<T: TimeProvider>(time_provider: &T) {
     use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
     use icrc_ledger_types::icrc1::transfer::TransferArg;
 
@@ -143,7 +143,7 @@ async fn mint<T: TimeProvider + Clone + 'static>(time_provider: &T) {
     }
 }
 
-pub async fn scrape_logs<T: TimeProvider + Clone + 'static>(time_provider: &T) {
+pub async fn scrape_logs<T: TimeProvider>(time_provider: &T) {
     let _guard = match TimerGuard::new(TaskType::ScrapEthLogs) {
         Ok(guard) => guard,
         Err(_) => return,
@@ -250,7 +250,7 @@ async fn scrape_until_block<S, T>(
     time_provider: &T,
 ) where
     S: LogScraping,
-    T: TimeProvider + Clone + 'static,
+    T: TimeProvider,
 {
     let scrape = match read_state(S::next_scrape) {
         Some(s) => s,
@@ -308,7 +308,7 @@ async fn scrape_block_range<S, T>(
 ) -> Result<(), MultiCallError<Vec<LogEntry>>>
 where
     S: LogScraping,
-    T: TimeProvider + Clone + 'static,
+    T: TimeProvider,
 {
     let mut subranges = VecDeque::new();
     subranges.push_back(block_range);
@@ -378,7 +378,7 @@ where
     Ok(())
 }
 
-pub fn register_deposit_events<T: TimeProvider + Clone + 'static>(
+pub fn register_deposit_events<T: TimeProvider>(
     scraping_id: LogScrapingId,
     transaction_events: Vec<ReceivedEvent>,
     errors: Vec<ReceivedEventError>,

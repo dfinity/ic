@@ -157,7 +157,7 @@ pub async fn process_reimbursement<T: TimeProvider>(time_provider: &T) {
     }
 }
 
-pub async fn process_retrieve_eth_requests<T: TimeProvider + 'static>(time_provider: T) {
+pub async fn process_retrieve_eth_requests<T: TimeProvider>(time_provider: T) {
     let _guard = match TimerGuard::new(TaskType::RetrieveEth) {
         Ok(guard) => guard,
         Err(e) => {

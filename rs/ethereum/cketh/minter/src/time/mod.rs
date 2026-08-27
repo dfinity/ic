@@ -2,7 +2,7 @@
 ///
 /// Abstracting the system API away lets code that timestamps its actions be exercised without a
 /// canister environment.
-pub trait TimeProvider {
+pub trait TimeProvider: Clone + 'static {
     /// Returns the current time, in nanoseconds since the Unix epoch (1970-01-01).
     fn time(&self) -> u64;
 }

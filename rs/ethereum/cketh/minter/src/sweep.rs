@@ -39,7 +39,7 @@ const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
 
-pub async fn process_sweeper_transactions<T: TimeProvider + 'static>(time_provider: T) {
+pub async fn process_sweeper_transactions<T: TimeProvider>(time_provider: T) {
     let _guard = match TimerGuard::new(TaskType::SweeperSend) {
         Ok(guard) => guard,
         Err(e) => {
@@ -91,7 +91,7 @@ pub async fn process_sweeper_transactions<T: TimeProvider + 'static>(time_provid
     }
 }
 
-fn schedule_retry<T: TimeProvider + 'static>(time_provider: T) {
+fn schedule_retry<T: TimeProvider>(time_provider: T) {
     ic_cdk_timers::set_timer(
         crate::PROCESS_SWEEPER_TRANSACTIONS_RETRY_INTERVAL,
         async move { process_sweeper_transactions(time_provider).await },
