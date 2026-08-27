@@ -180,11 +180,17 @@ impl AutomaticDeposits {
     pub fn is_equivalent_to(&self, other: &Self) -> Result<(), String> {
         use ic_utils_ensure::ensure_eq;
 
-        ensure_eq!(self.watchlist, other.watchlist);
-        ensure_eq!(self.sweep, other.sweep);
-        ensure_eq!(self.attestations, other.attestations);
-        self.sweeper_transactions
-            .is_equivalent_to(&other.sweeper_transactions)
+        let Self {
+            watchlist,
+            sweep,
+            attestations,
+            sweeper_transactions,
+        } = self;
+
+        ensure_eq!(watchlist, &other.watchlist);
+        ensure_eq!(sweep, &other.sweep);
+        ensure_eq!(attestations, &other.attestations);
+        sweeper_transactions.is_equivalent_to(&other.sweeper_transactions)
     }
 
     /// The signature already stored for `request`, if any: signing another would cost a
