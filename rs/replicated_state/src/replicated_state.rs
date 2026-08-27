@@ -694,7 +694,7 @@ impl ReplicatedState {
     }
 
     /// Refreshes
-    /// [`crate::metadata_state::SubnetMetrics::consumed_cycles_total_including_canisters()`]
+    /// [`crate::metadata_state::SubnetMetrics::consumed_cycles_total_including_canisters`]
     /// from the current canister states. The total is derived, not persisted;
     /// [`Self::new_from_checkpoint`] derives it the same way.
     ///
