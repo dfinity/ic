@@ -44,48 +44,73 @@ use std::collections::BTreeMap;
 /// Deliver all finalized blocks from
 /// `message_routing.expected_batch_height` to `finalized_height` via
 /// `MessageRouting` and return the last delivered batch height.
-pub fn deliver_batches(
+///
+/// To be used exclusively by the ic-replay tool
+pub fn deliver_batches_for_ic_replay(
     message_routing: &dyn MessageRouting,
     membership: &Membership,
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
-    subnet_id: SubnetId,
     log: &ReplicaLogger,
-    // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
-    // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
-    // deliver all bathes up to the height `min(h, finalized_height)`.
+    subnet_id: SubnetId,
+    // If set to `None`, we will deliver all batches until the finalized height.
+    // If set to `Some(h)`, we will deliver all bathes up to the height `min(h, finalized_height)`.
     max_batch_height_to_deliver: Option<Height>,
 ) -> Result<Height, MessageRoutingError> {
-    deliver_batches_with_result_processor(
+    deliver_batches(
         message_routing,
         membership,
         pool,
         registry_client,
-        subnet_id,
-        /*maybe_node_id=*/ None,
         log,
+        /*maybe_node_id=*/ None,
+        subnet_id,
         max_batch_height_to_deliver,
-        /*result_processor=*/ None,
+        /*result_processor=*/ |_, _, _| {},
     )
 }
 
 /// Deliver all finalized blocks from
 /// `message_routing.expected_batch_height` to `finalized_height` via
 /// `MessageRouting` and return the last delivered batch height.
-#[allow(clippy::type_complexity)]
-pub(crate) fn deliver_batches_with_result_processor(
+///
+/// To be called by the finalizer.
+pub(crate) fn deliver_batches_for_finalizer(
     message_routing: &dyn MessageRouting,
     membership: &Membership,
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
-    subnet_id: SubnetId,
-    maybe_node_id: Option<NodeId>,
     log: &ReplicaLogger,
-    // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
-    // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
-    // deliver all bathes up to the height `min(h, finalized_height)`.
+    node_id: NodeId,
+    subnet_id: SubnetId,
+    result_processor: impl FnMut(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
+) -> Result<Height, MessageRoutingError> {
+    deliver_batches(
+        message_routing,
+        membership,
+        pool,
+        registry_client,
+        log,
+        Some(node_id),
+        subnet_id,
+        /*max_batch_height_to_deliver=*/ None,
+        result_processor,
+    )
+}
+
+/// Deliver all finalized blocks from
+/// `message_routing.expected_batch_height` to `finalized_height` via
+/// `MessageRouting` and return the last delivered batch height.
+fn deliver_batches(
+    message_routing: &dyn MessageRouting,
+    membership: &Membership,
+    pool: &PoolReader<'_>,
+    registry_client: &dyn RegistryClient,
+    log: &ReplicaLogger,
+    maybe_node_id: Option<NodeId>,
+    subnet_id: SubnetId,
     max_batch_height_to_deliver: Option<Height>,
-    result_processor: Option<&dyn Fn(&Result<(), MessageRoutingError>, BlockStats, BatchStats)>,
+    mut result_processor: impl FnMut(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
 ) -> Result<Height, MessageRoutingError> {
     let finalized_height = pool.get_finalized_height();
     // If `max_batch_height_to_deliver` is specified and smaller than
@@ -338,9 +363,7 @@ pub(crate) fn deliver_batches_with_result_processor(
         };
 
         let result = message_routing.deliver_batch(batch);
-        if let Some(f) = result_processor {
-            f(&result, block_stats, batch_stats);
-        }
+        result_processor(&result, block_stats, batch_stats);
         if let Err(err) = result {
             warn!(every_n_seconds => 5, log, "Batch delivery failed: {:?}", err);
             return Err(err);
@@ -904,16 +927,16 @@ mod tests {
             let message_routing = FakeMessageRouting::new();
             *message_routing.next_batch_height.write().unwrap() = summary_height;
 
-            let result = deliver_batches_with_result_processor(
+            let result = deliver_batches(
                 &message_routing,
                 &membership,
                 &PoolReader::new(&pool),
                 registry.as_ref(),
-                SOURCE_SUBNET_ID,
-                Some(node_id),
                 &no_op_logger(),
+                Some(node_id),
+                SOURCE_SUBNET_ID,
                 None,
-                None,
+                |_, _, _| {},
             );
 
             assert_eq!(result, Ok(summary_height));
