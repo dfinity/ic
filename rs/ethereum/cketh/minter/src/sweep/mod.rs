@@ -14,19 +14,20 @@ mod tests;
 
 use crate::attestation::{AttestationRequest, sign_attestation};
 use crate::{
-    deposit_address::sweeper_derivation_path,
+    deposit_address::{DepositAddressSchema, deposit_derivation_path, sweeper_derivation_path},
     guard::TimerGuard,
     logs::{DEBUG, INFO},
-    numeric::{GasAmount, TransactionCount},
+    numeric::{GasAmount, TransactionCount, TransactionNonce},
     runtime::CanisterRuntime,
     state::{
         State, TaskType,
         audit::{EventType, process_event},
+        automatic_deposits::SweepTarget,
         mutate_state, read_state,
         transactions::{CreateSweepTransactionError, PipelineRequest},
     },
     time::TimeProvider,
-    tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate},
+    tx::{Authorization, GasFeeEstimate, SignedAuthorization, lazy_refresh_gas_fee_estimate},
     withdraw::{
         fetch_finalized_receipts, finalized_transaction_count, latest_transaction_count,
         send_signed_transactions,
@@ -35,7 +36,8 @@ use crate::{
 use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
-use std::collections::BTreeSet;
+use icrc_ledger_types::icrc1::account::Account;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Gas limit of a sweep transaction. A fixed, conservative bound; a per-request estimate arrives
 /// with the real delegate sweep call.
@@ -60,7 +62,7 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         }
     };
 
-    let Some(_sweeper_contract) = read_state(|s| s.sweeper_contract_address) else {
+    let Some(sweeper_contract) = read_state(|s| s.sweeper_contract_address) else {
         log!(
             DEBUG,
             "[create_pending_sweeper_requests]: SKIPPING: no sweeper contract address is configured"
@@ -91,6 +93,7 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
             return;
         };
         sign_attestations_batch(attestation_requests, runtime).await;
+        let _authorizations = sign_authorizations_batch(&targets, sweeper_contract, runtime).await;
     }
 }
 
@@ -131,6 +134,87 @@ async fn sign_attestations_batch<R: CanisterRuntime>(
             INFO,
             "[create_pending_sweeper_requests]: leaving out the deposits this sweep could not attest: {errors:?}"
         );
+    }
+}
+
+/// One authorization per attested deposit address, keyed by the account it delegates.
+///
+/// Only attested addresses are signed: a deposit that could not be attested drops out of the sweep
+/// anyway, so authorizing it would spend a signature on nothing. Every address is signed afresh,
+/// since nothing a sweep does can invalidate the tuple — see [`delegation_authorization`].
+async fn sign_authorizations_batch<R: CanisterRuntime>(
+    targets: &[SweepTarget],
+    sweeper_contract: Address,
+    runtime: &R,
+) -> BTreeMap<Account, SignedAuthorization> {
+    let chain_id = read_state(State::ethereum_network).chain_id();
+    let attested: Vec<Account> = read_state(|s| {
+        targets
+            .iter()
+            .map(SweepTarget::account)
+            .filter(|account| s.attestation(*account).is_some())
+            .collect()
+    });
+
+    let signing_results = join_all(attested.into_iter().map(|account| async move {
+        (
+            account,
+            delegation_authorization(chain_id, sweeper_contract)
+                .sign(
+                    deposit_derivation_path(DepositAddressSchema::CkErc20, &account),
+                    runtime,
+                )
+                .await,
+        )
+    }))
+    .await;
+
+    let mut authorizations = BTreeMap::new();
+    let mut errors = Vec::new();
+    for (account, signing_result) in signing_results {
+        match signing_result {
+            Ok(authorization) => {
+                authorizations.insert(account, authorization);
+            }
+            Err(e) => errors.push((account, e)),
+        }
+    }
+
+    if !errors.is_empty() {
+        log!(
+            INFO,
+            "[create_pending_sweeper_requests]: leaving out the deposits this sweep could not authorize: {errors:?}"
+        );
+    }
+    authorizations
+}
+
+/// The tuple every deposit address signs to delegate its code to `sweeper_contract`: the minter's
+/// chain, that delegate, and **nonce 0**, whatever nonce the address actually holds.
+///
+/// Applying an EIP-7702 authorization increments the authority's nonce, and nothing else ever
+/// touches a deposit address' nonce — the minter never broadcasts a transaction from a deposit key,
+/// it only signs attestation digests and authorization tuples with it, and receiving an ERC-20
+/// transfer spends no nonce. So a deposit address holds nonce 0 exactly while it has never been
+/// delegated, and a tuple signed for nonce 0 either
+///
+/// * installs the delegation, the address never having had one; or
+/// * is skipped, the address already being delegated and its nonce no longer matching. The
+///   transaction stays valid, the delegation designator already in place is untouched, and the
+///   delegated call works.
+///
+/// Both outcomes are correct in every ordering of the sweeps that carry them, with nothing stored
+/// and nothing read from chain. That is what lets a sweep authorize every address it touches
+/// instead of tracking which ones are delegated.
+///
+/// The one thing this forecloses is **re-delegation**: an address delegated to an earlier sweeper
+/// contract holds nonce >= 1, so a nonce-0 tuple naming the new one is skipped and its code keeps
+/// pointing at the old contract.
+fn delegation_authorization(chain_id: u64, sweeper_contract: Address) -> Authorization {
+    Authorization {
+        chain_id,
+        delegate: sweeper_contract,
+        nonce: TransactionNonce::ZERO,
     }
 }
 

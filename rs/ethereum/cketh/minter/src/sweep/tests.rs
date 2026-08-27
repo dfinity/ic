@@ -1,5 +1,7 @@
 use crate::attestation::AttestationRequest;
-use crate::numeric::{BlockNumber, WeiPerGas};
+use crate::deposit_address::{DepositAddressSchema, deposit_derivation_path};
+use crate::management::CallError;
+use crate::numeric::{BlockNumber, TransactionNonce, WeiPerGas};
 use crate::state::audit::{EventType, apply_state_transition};
 use crate::state::eth_logs_scraping::LogScrapings;
 use crate::state::event::AutomaticDeposit;
@@ -11,7 +13,7 @@ use crate::test_fixtures::{
     account, automatic_deposit, deposit_address, init_state, initial_state,
     state_with_deposit_helper, usdc, usdt,
 };
-use crate::tx::{GasFeeEstimate, TransactionSignature};
+use crate::tx::{Authorization, GasFeeEstimate, TransactionSignature};
 use ethnum::u256;
 use ic_cdk_management_canister::EcdsaPublicKeyResult;
 use ic_ethereum_types::Address;
@@ -69,17 +71,9 @@ async fn should_sign_one_attestation_for_every_token_of_an_account() {
         (account(), usdt()),
     ]));
     let request = attestation_request(account());
-    let signature = sign_with_derived_key(&request);
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
-    runtime
-        .expect_ecdsa_public_key()
-        .times(1)
-        .return_once(move |_, _| Ok(master_public_key()));
-    runtime
-        .expect_sign_with_ecdsa()
-        .times(1)
-        .return_once(move |_, _, _| Ok(signature));
+    expect_signing(&mut runtime);
 
     create_pending_sweeper_requests(&runtime).await;
 
@@ -94,6 +88,77 @@ async fn should_sign_one_attestation_for_every_token_of_an_account() {
         read_state(|s| s.automatic_deposits.attestation(&request).cloned()),
         Some(expected_signature(&request))
     );
+}
+
+#[tokio::test]
+async fn should_sign_one_authorization_for_every_deposit_of_an_account() {
+    init_state(state_ready_to_sign(&[
+        (account(), usdc()),
+        (account(), usdt()),
+    ]));
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    expect_authorization_signing(&mut runtime, 2);
+    expect_signing(&mut runtime);
+
+    create_pending_sweeper_requests(&runtime).await;
+}
+
+/// Expects `times` signatures over the authorization tuple every deposit address delegates with:
+/// the minter's chain, the configured sweeper contract, and nonce 0, signed along the deposit
+/// address' own derivation path.
+fn expect_authorization_signing(runtime: &mut MockCanisterRuntime, times: usize) {
+    let digest = authorization_digest();
+    let path = derivation_path_bytes();
+    runtime
+        .expect_sign_with_ecdsa()
+        .withf(move |_, derivation_path, message_hash| {
+            *message_hash == digest && *derivation_path == path
+        })
+        .times(times)
+        .returning(sign_digest_with_derived_key);
+}
+
+/// Signs whatever it is handed with the key the given path derives, the way the subnet would.
+fn expect_signing(runtime: &mut MockCanisterRuntime) {
+    runtime
+        .expect_ecdsa_public_key()
+        .return_once(move |_, _| Ok(master_public_key()));
+    runtime
+        .expect_sign_with_ecdsa()
+        .returning(sign_digest_with_derived_key);
+}
+
+fn sign_digest_with_derived_key(
+    _key_name: String,
+    derivation_path: Vec<Vec<u8>>,
+    message_hash: [u8; 32],
+) -> Result<[u8; 64], CallError> {
+    let path = DerivationPath::new(derivation_path.into_iter().map(DerivationIndex).collect());
+    Ok(master_private_key()
+        .derive_subkey_with_chain_code(&path, &CHAIN_CODE)
+        .0
+        .sign_digest_with_ecdsa(&message_hash))
+}
+
+/// Spelled out rather than taken from `delegation_authorization`, so that changing the tuple the
+/// minter signs — its delegate, or the nonce 0 that makes a stale authorization skip harmlessly
+/// rather than sink the sweep — fails here.
+fn authorization_digest() -> [u8; 32] {
+    Authorization {
+        chain_id: initial_state().ethereum_network.chain_id(),
+        delegate: SWEEPER_CONTRACT,
+        nonce: TransactionNonce::ZERO,
+    }
+    .hash()
+    .0
+}
+
+fn derivation_path_bytes() -> Vec<Vec<u8>> {
+    deposit_derivation_path(DepositAddressSchema::CkErc20, &account())
+        .into_iter()
+        .map(|index| index.into_vec())
+        .collect()
 }
 
 fn state_ready_to_sign(deposits: &[(Account, Address)]) -> State {
