@@ -587,8 +587,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
     use ic_test_utilities::message_routing::FakeMessageRouting;
-    use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         PrincipalId, RegistryVersion, SubnetId,
         batch::{BatchPayload, ValidationContext},
@@ -617,15 +616,15 @@ mod tests {
     fn requires_full_state_hash_ignores_max_batch_height_to_deliver() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 9;
-            let node_ids = [node_test_id(0)];
-            let record = SubnetRecordBuilder::from(&node_ids)
+            let Dependencies {
+                registry,
+                mut pool,
+                replica_config,
+                ..
+            } = DependenciesBuilder::new(pool_config, 1)
                 .with_dkg_interval_length(dkg_interval_length)
                 .build();
-            let subnet_id = subnet_test_id(0);
-            let Dependencies {
-                registry, mut pool, ..
-            } = DependenciesBuilder::single_subnet(pool_config, subnet_id, vec![(1, record)])
-                .build();
+            let subnet_id = replica_config.subnet_id;
 
             // Summary blocks are at heights 0, 10, ...; finalize a few rounds and
             // stop short of the next summary height.

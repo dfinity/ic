@@ -770,13 +770,13 @@ impl Player {
         let extra_msgs = extra(self, time);
         let no_extra_msgs = extra_msgs.is_empty();
         if no_extra_msgs {
-            let Some(target_height) = target_height else {
-                // Without a consensus pool no batches were replayed, so the on-disk
-                // checkpoint is untouched and there is nothing to persist. Delivering a
-                // batch anyway would mutate the state based on the latest registry version and wall clock time from
-                // above, producing a non-deterministic state hash.
+            // Without a consensus pool no batches were replayed, so the on-disk
+            // checkpoint is untouched and there is nothing to persist. Delivering a
+            // batch anyway would mutate the state based on the latest registry version
+            // and wall clock time from above, producing a non-deterministic state hash.
+            if pool.is_none() {
                 return (time, None);
-            };
+            }
             // States above the replay target height can only come from the extra
             // batches of a previous invocation over the same data directory. In that
             // case the checkpoint to persist already exists and re-running the replay
@@ -785,7 +785,9 @@ impl Player {
             // making the hash depend on how many times the replay was run rather
             // than only on the replayed data.
             let latest_state_height = self.state_manager.latest_state_height();
-            if latest_state_height > target_height {
+            if let Some(target_height) = target_height
+                && latest_state_height > target_height
+            {
                 println!(
                     "Skipping the extra batch: the latest state height {latest_state_height} \
                     is already above the replay target height {target_height}."
@@ -1062,6 +1064,12 @@ impl Player {
             {
                 println!("Target height {height} reached.");
                 let state_params = self.get_latest_state_params(None, invalid_artifacts);
+                // The state at the target height has a full state hash only if the block
+                // at that height is a summary block: `deliver_batches()` never forces a
+                // checkpoint at the delivery bound and, unlike `replay()`, restoring from
+                // a backup delivers no extra batch to create one. Otherwise that state is
+                // in-memory only and `get_latest_state_params()` falls back to the latest
+                // CUP, i.e. the latest checkpoint at or below the target height.
                 if state_params.height < last_batch_height {
                     println!(
                         "No checkpoint was created at the target height because it is not \

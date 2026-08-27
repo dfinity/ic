@@ -1597,7 +1597,11 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         // Get only ingress out of the batch_messages
         let signed_ingress_msgs = match batch.content {
             BatchContent::Data { batch_messages, .. } => batch_messages.signed_ingress_msgs,
-            BatchContent::Checkpointing => Vec::new(),
+            // Only `ic-replay` delivers `Checkpointing` batches and it always uses the
+            // real batch processor.
+            BatchContent::Checkpointing => {
+                unimplemented!("Checkpointing batches are not expected here")
+            }
             BatchContent::Splitting { .. } => unimplemented!("Subnet splitting is not yet enabled"),
         };
 
