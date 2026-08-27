@@ -39,7 +39,7 @@ const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
 
-pub async fn process_sweeper_transactions<T: TimeProvider + Clone + 'static>(time_provider: &T) {
+pub async fn process_sweeper_transactions<T: TimeProvider + 'static>(time_provider: T) {
     let _guard = match TimerGuard::new(TaskType::SweeperSend) {
         Ok(guard) => guard,
         Err(e) => {
@@ -80,22 +80,21 @@ pub async fn process_sweeper_transactions<T: TimeProvider + Clone + 'static>(tim
     };
 
     let latest_transaction_count = latest_transaction_count(sender).await;
-    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate, time_provider).await;
-    create_transactions_batch(&gas_fee_estimate, time_provider);
-    sign_transactions_batch(time_provider).await;
+    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate, &time_provider).await;
+    create_transactions_batch(&gas_fee_estimate, &time_provider);
+    sign_transactions_batch(&time_provider).await;
     send_transactions_batch(sender, latest_transaction_count).await;
-    finalize_transactions_batch(sender, time_provider).await;
+    finalize_transactions_batch(sender, &time_provider).await;
 
     if read_state(|s| s.sweeper_transactions.has_pending_requests()) {
         schedule_retry(time_provider);
     }
 }
 
-fn schedule_retry<T: TimeProvider + Clone + 'static>(time_provider: &T) {
-    let time_provider = time_provider.clone();
+fn schedule_retry<T: TimeProvider + 'static>(time_provider: T) {
     ic_cdk_timers::set_timer(
         crate::PROCESS_SWEEPER_TRANSACTIONS_RETRY_INTERVAL,
-        async move { process_sweeper_transactions(&time_provider).await },
+        async move { process_sweeper_transactions(time_provider).await },
     );
 }
 

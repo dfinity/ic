@@ -157,7 +157,7 @@ pub async fn process_reimbursement<T: TimeProvider>(time_provider: &T) {
     }
 }
 
-pub async fn process_retrieve_eth_requests<T: TimeProvider + Clone + 'static>(time_provider: &T) {
+pub async fn process_retrieve_eth_requests<T: TimeProvider + 'static>(time_provider: T) {
     let _guard = match TimerGuard::new(TaskType::RetrieveEth) {
         Ok(guard) => guard,
         Err(e) => {
@@ -186,17 +186,16 @@ pub async fn process_retrieve_eth_requests<T: TimeProvider + Clone + 'static>(ti
 
     let sender = minter_address().await;
     let latest_transaction_count = latest_transaction_count(sender).await;
-    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate, time_provider).await;
-    create_transactions_batch(gas_fee_estimate, time_provider);
-    sign_transactions_batch(time_provider).await;
+    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate, &time_provider).await;
+    create_transactions_batch(gas_fee_estimate, &time_provider);
+    sign_transactions_batch(&time_provider).await;
     send_transactions_batch(sender, latest_transaction_count).await;
-    finalize_transactions_batch(sender, time_provider).await;
+    finalize_transactions_batch(sender, &time_provider).await;
 
     if read_state(|s| s.withdrawal_transactions.has_pending_requests()) {
-        let time_provider = time_provider.clone();
         ic_cdk_timers::set_timer(
             crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
-            async move { process_retrieve_eth_requests(&time_provider).await },
+            async move { process_retrieve_eth_requests(time_provider).await },
         );
     }
 }

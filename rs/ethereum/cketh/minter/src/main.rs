@@ -106,10 +106,10 @@ fn setup_timers() {
         refresh_latest_block_height().await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
-        process_retrieve_eth_requests(&IC_TIME_PROVIDER).await;
+        process_retrieve_eth_requests(IC_TIME_PROVIDER).await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, async || {
-        process_sweeper_transactions(&IC_TIME_PROVIDER).await;
+        process_sweeper_transactions(IC_TIME_PROVIDER).await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, async || {
         process_reimbursement(&IC_TIME_PROVIDER).await;
