@@ -29,6 +29,7 @@ use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::{self, BurnMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
+use ic_cketh_minter::runtime::IC_CANISTER_RUNTIME;
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
 use ic_cketh_minter::state::automatic_deposits::DepositRequest;
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
@@ -39,7 +40,7 @@ use ic_cketh_minter::state::transactions::{
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
-use ic_cketh_minter::sweep::process_sweeper_transactions;
+use ic_cketh_minter::sweep::{create_pending_sweeper_requests, process_sweeper_transactions};
 use ic_cketh_minter::sweeper::fund_sweeper_address;
 use ic_cketh_minter::time::IC_TIME_PROVIDER;
 use ic_cketh_minter::timed_sized_map::Timestamp;
@@ -51,7 +52,7 @@ use ic_cketh_minter::withdraw::{
 use ic_cketh_minter::{
     BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
     PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL,
-    SCRAPING_ETH_LOGS_INTERVAL, SWEEPER_FUNDING_INTERVAL, state, storage,
+    SCRAPING_ETH_LOGS_INTERVAL, SWEEP_ENQUEUE_INTERVAL, SWEEPER_FUNDING_INTERVAL, state, storage,
 };
 use ic_cketh_minter::{endpoints, erc20};
 use ic_ethereum_types::Address;
@@ -107,6 +108,9 @@ fn setup_timers() {
     });
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
         process_retrieve_eth_requests(IC_TIME_PROVIDER).await;
+    });
+    ic_cdk_timers::set_timer_interval(SWEEP_ENQUEUE_INTERVAL, async || {
+        create_pending_sweeper_requests(&IC_CANISTER_RUNTIME).await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, async || {
         process_sweeper_transactions(IC_TIME_PROVIDER).await;
