@@ -150,15 +150,11 @@ Modified memory pages are tracked for state persistence.
 - **THEN** the page is marked as dirty
 - **AND** the number of dirty pages contributes to the heap delta
 
-#### Scenario: Dirty page overhead charging
-- **WHEN** dirty pages are detected after execution
-- **THEN** additional instructions are charged: `dirty_page_count * dirty_page_overhead`
+#### Scenario: Page overhead charging
+- **WHEN** heap or stable memory pages are touched during execution
+- **THEN** `page_overhead` instructions are charged once for each page the first time it is accessed (read or written)
+- **AND** `page_overhead` instructions are charged again for each page the first time it is written to (making a dirty page cost `2 * page_overhead`)
 - **AND** this overhead is added to the total instructions used by the execution
-
-#### Scenario: Accessed page overhead charging
-- **WHEN** pages are accessed (read or written) during execution
-- **THEN** additional instructions are charged: `accessed_page_count * accessed_page_overhead`
-- **AND** this overhead is added alongside the dirty page overhead to the total instructions used
 
 #### Scenario: Heap delta accumulation
 - **WHEN** execution produces dirty pages

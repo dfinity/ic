@@ -173,4 +173,4 @@ Writing to memory pages incurs additional instruction costs.
 #### Scenario: Dirty page counting
 - **WHEN** a Wasm execution writes to heap or stable memory pages
 - **THEN** additional instructions are charged proportional to the number of dirty pages
-- **AND** the overhead per dirty page is configurable via `dirty_page_overhead`
+- **AND** the overhead per page touch is configurable via `page_overhead`, charged once when a page is first accessed and again when it is first written to
