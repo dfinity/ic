@@ -84,24 +84,19 @@ The `PageBitmap` tracks which pages have been accessed during execution.
 - **WHEN** `bitmap.mark_range(range)` is called
 - **THEN** all pages in the range are marked as accessed
 
-### Requirement: Missing Page Handler Variants
+### Requirement: Deterministic Missing Page Handling
 
-Multiple strategies exist for handling page faults.
+The `DeterministicMemoryTracker` is the sole missing-page (SIGSEGV/SIGBUS) handler; the earlier `MissingPageHandlerKind::Generic`/`Prefetching` variants and the `PrefetchingMemoryTracker` have been removed as unused.
 
-#### Scenario: Generic handler
-- **WHEN** `MissingPageHandlerKind::Generic` is selected
-- **THEN** a basic signal handler processes page faults without leveraging access kind information
+#### Scenario: Deterministic handler maps the surrounding Wasm page
+- **WHEN** a missing OS page signal is received
+- **THEN** the `DeterministicMemoryTracker` maps the Wasm page surrounding the faulting OS page into the process's address space, sourcing its data from the `PageMap`
+- **AND** the set of pages mapped and marked dirty is independent of the order in which signals are received
+- **AND** it works consistently across all platforms
 
-#### Scenario: Prefetching handler
-- **WHEN** `MissingPageHandlerKind::Prefetching` is selected
-- **THEN** the handler uses `AccessKind` information
-- **AND** prefetches adjacent pages to reduce future faults
-- **AND** the `PrefetchingMemoryTracker` provides the `basic_signal_handler` for benchmarking
-
-#### Scenario: Deterministic handler
-- **WHEN** `MissingPageHandlerKind::Deterministic` is selected
-- **THEN** the `DeterministicMemoryTracker` provides deterministic prefetching behavior
-- **AND** works consistently across all platforms
+#### Scenario: Access-kind-aware write handling
+- **WHEN** `AccessKind` information is available for a faulting access
+- **THEN** the tracker uses it to optimize the handling of write accesses
 
 ### Requirement: Memory Tracker Metrics
 
