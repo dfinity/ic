@@ -773,7 +773,7 @@ impl Player {
             let Some(target_height) = target_height else {
                 // Without a consensus pool no batches were replayed, so the on-disk
                 // checkpoint is untouched and there is nothing to persist. Delivering a
-                // batch anyway would mutate the state based on the wall clock time from
+                // batch anyway would mutate the state based on the latest registry version and wall clock time from
                 // above, producing a non-deterministic state hash.
                 return (time, None);
             };
