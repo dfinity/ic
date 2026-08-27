@@ -16,6 +16,7 @@ use crate::numeric::{
     CkTokenAmount, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
+use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch};
 use crate::tx::{
     Eip1559TransactionRequest, Finalized, FinalizedEip1559Transaction, GasFeeEstimate,
     Resubmittable, SignableTransaction, Signed, SignedAuthorization,
@@ -216,36 +217,72 @@ impl SweepId {
 /// sequence — the request type of the sweeper [`TransactionPipeline`]. It carries no ckETH burn
 /// and is never reimbursed.
 ///
-/// The sweep-queue-driven construction of the delegate call data is a follow-up.
+/// Like [`WithdrawalRequest`], this says *what* to sweep, not how the transaction carrying it
+/// looks: the nonce, the gas price and the call data are the pipeline's to decide in
+/// [`PipelineRequest::create_transaction`].
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct SweepRequest {
     /// This sweep's identity (the pipeline's alternate map key).
     #[n(0)]
     pub id: SweepId,
     /// Address the sweep transaction is sent to: the sweeper contract, whose batch entry point
-    /// sweeps every delegated deposit address named in `data`.
+    /// sweeps every delegated deposit address the sweep names.
     #[n(1)]
     pub destination: Address,
-    /// ETH value moved by the transaction (zero for an ERC-20 sweep, which moves tokens via calldata).
+    /// The single ERC-20 this sweep moves. One token per sweep: the delegate applies the token
+    /// list to every item it walks, so a sweep mixing tokens would check balances that cannot be
+    /// there. Holding it as one address rather than a list is what makes that an invariant of the
+    /// request instead of a property of how the batch happened to be picked.
     #[n(2)]
-    pub amount: Wei,
-    /// Transaction call data: the sweeper contract's batch call, naming the deposit addresses to
-    /// sweep, the IC account each is credited to, and the tokens to move. Its size is bounded by
-    /// the number of deposits the enqueuing side puts in one batch, which is where that limit
-    /// lives.
+    pub token: Address,
+    /// The deposits this sweep moves, one per account. A deposit address is derived per account,
+    /// so an account has one address, one attestation and one authorization however many tokens
+    /// it has queued.
     #[n(3)]
-    pub data: Vec<u8>,
+    pub items: Vec<AuthorizedSweepItem>,
     /// Ceiling on the transaction fee, used as the resubmission fee cap.
     #[n(4)]
     pub max_transaction_fee: Wei,
     /// The IC time at which the sweep was decided.
     #[n(5)]
     pub created_at: u64,
-    /// Delegations to install on the way, one signed by each deposit address the sweep touches
-    /// that is not yet delegated to the sweeper contract. Empty once they all are, and a sweep
-    /// with none is a plain EIP-1559 transaction.
-    #[n(6)]
-    pub authorizations: Vec<SignedAuthorization>,
+}
+
+/// A sweep item together with the delegation that lets the delegate code run at its address.
+///
+/// The two travel together but land in different parts of the transaction: the item is call data,
+/// the authorization is a transaction field. Pairing them here is what stops the two lists from
+/// drifting out of order against the account they describe.
+///
+/// The delegation is absent for an address already delegated to the sweeper contract, which needs
+/// no tuple to install one again. A sweep all of whose items are delegated carries no
+/// authorization at all, and is sent as a plain EIP-1559 transaction.
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+pub struct AuthorizedSweepItem {
+    #[n(0)]
+    pub item: SweepItem,
+    #[n(1)]
+    pub authorization: Option<SignedAuthorization>,
+}
+
+impl SweepRequest {
+    /// The delegate's batch call, naming every deposit address this sweep walks and the single
+    /// token it moves.
+    pub fn call_data(&self) -> Vec<u8> {
+        let items: Vec<_> = self.items.iter().map(|item| item.item.clone()).collect();
+        encode_sweep_erc20_batch(&items, &[self.token])
+    }
+
+    /// The delegations the sweep installs on the way, one per deposit address it still has to
+    /// delegate. Signed for nonce zero, so a tuple whose delegation is already installed is
+    /// skipped rather than sinking the sweep. Empty once every address the sweep touches is
+    /// delegated, which is what makes it a plain EIP-1559 transaction.
+    pub fn authorizations(&self) -> Vec<SignedAuthorization> {
+        self.items
+            .iter()
+            .filter_map(|item| item.authorization.clone())
+            .collect()
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]

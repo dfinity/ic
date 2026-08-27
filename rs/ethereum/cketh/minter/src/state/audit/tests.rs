@@ -1,8 +1,10 @@
 use crate::attestation::AttestationRequest;
 use crate::checked_amount::CheckedAmountOf;
+use crate::deposit_address::DepositAddress;
 use crate::endpoints::events::{
-    Event as CandidEvent, EventPayload, SignedAuthorization as CandidSignedAuthorization,
-    UnsignedSweeperTransaction, UnsignedTransaction,
+    AuthorizedSweepItem as CandidAuthorizedSweepItem, Event as CandidEvent, EventPayload,
+    SignedAuthorization as CandidSignedAuthorization, UnsignedSweeperTransaction,
+    UnsignedTransaction,
 };
 use crate::erc20::CkErc20Token;
 use crate::eth_logs::{LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent};
@@ -11,9 +13,10 @@ use crate::lifecycle::EthereumNetwork;
 use crate::numeric::Wei;
 use crate::state::audit::{Event, replay_events_internal};
 use crate::state::transactions::{
-    Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex, ReimbursementRequest, SweepId,
-    SweepRequest,
+    AuthorizedSweepItem, Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex,
+    ReimbursementRequest, SweepId, SweepRequest,
 };
+use crate::sweeper_contract::SweepItem;
 use crate::timed_sized_map::Timestamp;
 use crate::tx::{
     AccessList, AccessListItem, AuthorizationRequest, DelegatingSweep, Eip1559TransactionRequest,
@@ -289,6 +292,39 @@ impl GetEventsFile {
             )
         }
 
+        fn map_authorized_sweep_items(
+            items: Vec<CandidAuthorizedSweepItem>,
+        ) -> Vec<AuthorizedSweepItem> {
+            fn map_signature_component(bytes: &[u8]) -> ethnum::u256 {
+                ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(bytes).unwrap())
+            }
+
+            items
+                .into_iter()
+                .map(|item| AuthorizedSweepItem {
+                    item: SweepItem {
+                        deposit: DepositAddress::new(item.deposit.parse().unwrap()),
+                        account: Account {
+                            owner: item.owner,
+                            subaccount: item
+                                .subaccount
+                                .map(|s| <[u8; 32]>::try_from(s.as_ref()).unwrap()),
+                        },
+                        attestation: TransactionSignature {
+                            signature_y_parity: item.attestation_y_parity,
+                            r: map_signature_component(&item.attestation_r),
+                            s: map_signature_component(&item.attestation_s),
+                        },
+                    },
+                    authorization: item.authorization.map(|authorization| {
+                        map_authorizations(vec![authorization])
+                            .pop()
+                            .expect("BUG: one authorization in, one out")
+                    }),
+                })
+                .collect()
+        }
+
         fn map_authorizations(
             authorizations: Vec<CandidSignedAuthorization>,
         ) -> Vec<SignedAuthorization> {
@@ -486,19 +522,17 @@ impl GetEventsFile {
                 EventPayload::AcceptedSweepRequest {
                     sweep_id,
                     destination,
-                    amount,
-                    data,
+                    token,
+                    items,
                     max_transaction_fee,
                     created_at,
-                    authorizations,
                 } => ET::AcceptedSweepRequest(SweepRequest {
                     id: SweepId(sweep_id.0.to_u64().unwrap()),
                     destination: destination.parse().unwrap(),
-                    amount: amount.try_into().unwrap(),
-                    data: data.into_vec(),
+                    token: token.parse().unwrap(),
+                    items: map_authorized_sweep_items(items),
                     max_transaction_fee: max_transaction_fee.try_into().unwrap(),
                     created_at,
-                    authorizations: map_authorizations(authorizations),
                 }),
                 EventPayload::CreatedSweeperTransaction {
                     sweep_id,

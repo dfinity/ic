@@ -590,6 +590,23 @@ type SignedAuthorization = record {
     s : blob;
 };
 
+// One deposit a sweep moves: the address the funds sit at, the account they are
+// credited to, the attestation binding the two, and the delegation letting the
+// sweeper's code run there.
+type AuthorizedSweepItem = record {
+    deposit : text;
+    owner : principal;
+    subaccount : opt blob;
+    // The attestation signed by the deposit address itself.
+    attestation_y_parity : bool;
+    // 32-byte signature components.
+    attestation_r : blob;
+    attestation_s : blob;
+    // The delegation installed on the way, absent if the address is already
+    // delegated.
+    authorization : opt SignedAuthorization;
+};
+
 // A sweep transaction the minter has created but not yet signed: a transaction,
 // plus the delegations it installs on the way. With none it is sent as a plain
 // EIP-1559 (0x02) transaction, and otherwise as an EIP-7702 (0x04) one.
@@ -664,14 +681,12 @@ type Event = record {
         AcceptedSweepRequest : record {
             sweep_id : nat;
             destination : text;
-            amount : nat;
-            // Transaction call data (the delegate sweep call).
-            data : blob;
+            // The single ERC-20 contract this sweep moves.
+            token : text;
+            // The deposits the sweep moves, one per account.
+            items : vec AuthorizedSweepItem;
             max_transaction_fee : nat;
             created_at : nat64;
-            // Delegations the sweep installs on the way, empty if every address
-            // it touches is already delegated.
-            authorizations : vec SignedAuthorization;
         };
         CreatedSweeperTransaction : record {
             sweep_id : nat;
