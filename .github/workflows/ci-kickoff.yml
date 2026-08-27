@@ -53,8 +53,8 @@ jobs:
     needs: [ci-main]
     # Only release builds upload artifacts, and only the public repo has
     # attestations (they are the public integrity anchor: a build from
-    # ic-private gets attested when its branch is pushed to dfinity/ic and is
-    # re-built and re-uploaded byte-identically there).
+    # ic-private gets attested when its branch is pushed to dfinity/ic as a
+    # hotfix-* branch and is re-built and re-uploaded byte-identically there).
     if: needs.ci-main.outputs.release-build == 'true' && github.repository == 'dfinity/ic'
     permissions:
       attestations: write
