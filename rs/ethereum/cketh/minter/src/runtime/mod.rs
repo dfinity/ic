@@ -1,6 +1,7 @@
 use crate::management::CallError;
 use crate::time::{IC_TIME_PROVIDER, TimeProvider};
 use async_trait::async_trait;
+use ic_cdk_management_canister::EcdsaPublicKeyResult;
 use ic_management_canister_types_private::DerivationPath;
 use serde_bytes::ByteBuf;
 
@@ -16,6 +17,13 @@ pub trait CanisterRuntime: TimeProvider {
         derivation_path: Vec<Vec<u8>>,
         message_hash: [u8; 32],
     ) -> Result<[u8; 64], CallError>;
+
+    /// The tECDSA public key `key_name` derived along `derivation_path`, with its chain code.
+    async fn ecdsa_public_key(
+        &self,
+        key_name: String,
+        derivation_path: Vec<Vec<u8>>,
+    ) -> Result<EcdsaPublicKeyResult, CallError>;
 }
 
 /// The [`CanisterRuntime`] used in production, backed by the Internet Computer system API.
@@ -42,6 +50,18 @@ impl CanisterRuntime for IcCanisterRuntime {
             key_name,
             DerivationPath::new(derivation_path.into_iter().map(ByteBuf::from).collect()),
             message_hash,
+        )
+        .await
+    }
+
+    async fn ecdsa_public_key(
+        &self,
+        key_name: String,
+        derivation_path: Vec<Vec<u8>>,
+    ) -> Result<EcdsaPublicKeyResult, CallError> {
+        crate::management::ecdsa_public_key(
+            key_name,
+            DerivationPath::new(derivation_path.into_iter().map(ByteBuf::from).collect()),
         )
         .await
     }

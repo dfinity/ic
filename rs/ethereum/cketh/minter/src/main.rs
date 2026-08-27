@@ -85,7 +85,7 @@ fn validate_ckerc20_active() {
 fn setup_timers() {
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
         // Initialize the minter's public key to make the address known.
-        let _ = lazy_call_ecdsa_public_key().await;
+        let _ = lazy_call_ecdsa_public_key(&IC_CANISTER_RUNTIME).await;
         // Sequenced after the key rather than scheduled on a delay: the sweeper address cannot be
         // derived without it, and a delay only guesses at when it will be cached. Running here also
         // keeps the two off separate tasks, since two concurrent `ecdsa_public_key` calls trap.
@@ -197,7 +197,9 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
 
 #[update]
 async fn minter_address() -> String {
-    state::minter_address().await.to_string()
+    state::minter_address(&IC_CANISTER_RUNTIME)
+        .await
+        .to_string()
 }
 
 #[update]
@@ -244,7 +246,7 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
 
     // Not armed yet: register. Ensure the minter's ECDSA public key has been fetched and cached in
     // the state so that the (synchronous) registration below can derive the address.
-    state::lazy_call_ecdsa_public_key_with_chain_code().await;
+    state::lazy_call_ecdsa_public_key_with_chain_code(&IC_CANISTER_RUNTIME).await;
     let now = Timestamp::from_nanos(ic_cdk::api::time());
     // Re-check the status after the await: a concurrent balance scan may have detected a deposit and
     // moved this pair into the sweep queue while we waited for the ECDSA key (only possible right

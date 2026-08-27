@@ -134,6 +134,7 @@ pub mod mock {
     use crate::runtime::CanisterRuntime;
     use crate::time::TimeProvider;
     use async_trait::async_trait;
+    use ic_cdk_management_canister::EcdsaPublicKeyResult;
     use mockall::mock;
 
     mock! {
@@ -165,6 +166,12 @@ pub mod mock {
                 derivation_path: Vec<Vec<u8>>,
                 message_hash: [u8; 32],
             ) -> Result<[u8; 64], CallError>;
+
+            async fn ecdsa_public_key(
+                &self,
+                key_name: String,
+                derivation_path: Vec<Vec<u8>>,
+            ) -> Result<EcdsaPublicKeyResult, CallError>;
         }
 
         impl Clone for CanisterRuntime {

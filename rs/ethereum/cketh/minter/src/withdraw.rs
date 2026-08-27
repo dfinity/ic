@@ -185,7 +185,7 @@ pub async fn process_retrieve_eth_requests<R: CanisterRuntime>(runtime: R) {
         }
     };
 
-    let sender = minter_address().await;
+    let sender = minter_address(&runtime).await;
     let latest_transaction_count = latest_transaction_count(sender).await;
     resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate, &runtime).await;
     create_transactions_batch(gas_fee_estimate, &runtime);

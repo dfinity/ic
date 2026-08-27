@@ -197,7 +197,7 @@ pub(crate) async fn sign_digest<R: CanisterRuntime>(
         )
         .await
         .map_err(|e| format!("failed to sign digest: {e}"))?;
-    let recid = compute_recovery_id(digest, &signature, derivation_path).await;
+    let recid = compute_recovery_id(digest, &signature, derivation_path, runtime).await;
     if recid.is_x_reduced() {
         return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
     }
@@ -213,12 +213,13 @@ pub(crate) async fn sign_digest<R: CanisterRuntime>(
 ///
 /// Recovery only succeeds against the public key that produced the signature, so the master key is
 /// derived along the same path first.
-async fn compute_recovery_id(
+async fn compute_recovery_id<R: CanisterRuntime>(
     digest: &Hash,
     signature: &[u8],
     derivation_path: &[ByteBuf],
+    runtime: &R,
 ) -> RecoveryId {
-    let (master_public_key, chain_code) = lazy_call_ecdsa_public_key_with_chain_code().await;
+    let (master_public_key, chain_code) = lazy_call_ecdsa_public_key_with_chain_code(runtime).await;
     let ecdsa_public_key = derive_public_key(&master_public_key, &chain_code, derivation_path);
     debug_assert!(
         ecdsa_public_key.verify_signature_prehashed(&digest.0, signature),
