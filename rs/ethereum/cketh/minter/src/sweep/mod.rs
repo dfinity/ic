@@ -42,10 +42,11 @@ pub(crate) const SWEEP_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(100_000
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
+const MAX_DEPOSITS_PER_SWEEP: usize = 10;
 
 /// Turns the deposits the balance scan queued into the sweep requests that
 /// [`process_sweeper_transactions`] prices, signs, sends and finalizes.
-pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(_runtime: &R) {
+pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
     let _guard = match TimerGuard::new(TaskType::SweeperEnqueue) {
         Ok(guard) => guard,
         Err(e) => {
@@ -64,6 +65,30 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(_runtime: &R) {
         );
         return;
     };
+
+    let Some(_gas_fee_estimate) = lazy_refresh_gas_fee_estimate(runtime).await else {
+        log!(
+            INFO,
+            "[create_pending_sweeper_requests]: SKIPPING: failed retrieving gas fee estimate"
+        );
+        return;
+    };
+
+    let batch_per_token =
+        read_state(|s| s.automatic_deposits.requests_batch(MAX_DEPOSITS_PER_SWEEP));
+    if batch_per_token.is_empty() {
+        return;
+    }
+
+    for (_token, targets) in batch_per_token {
+        let Some(_attestation_requests) = read_state(|s| s.attestation_requests(&targets)) else {
+            log!(
+                DEBUG,
+                "[create_pending_sweeper_requests]: SKIPPING: no deposit helper with subaccount is configured"
+            );
+            return;
+        };
+    }
 }
 
 pub async fn process_sweeper_transactions<R: CanisterRuntime>(runtime: R) {
