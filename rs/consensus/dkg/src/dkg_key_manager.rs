@@ -23,6 +23,7 @@ use ic_types::{
 use prometheus::{HistogramVec, IntCounterVec, IntGauge, IntGaugeVec};
 use std::{
     collections::{HashMap, HashSet},
+    hash::Hash,
     sync::{
         Arc,
         mpsc::{Receiver, sync_channel},
@@ -529,7 +530,7 @@ impl DkgKeyManager {
                 .values()
                 .chain(summary.next_transcripts().values())
             {
-                transcripts_to_retain.insert(transcript.clone());
+                transcripts_to_retain.insert_by_cloning_if_not_present(transcript);
             }
 
             next_summary_block = pool_reader.get_finalized_block(next_summary_height);
@@ -537,13 +538,15 @@ impl DkgKeyManager {
 
         // The removal below runs concurrently with the loading of the `summaries_to_load`'s
         // transcripts, so they must be part of the retain set.
-        transcripts_to_retain.extend(summaries_to_load.iter().flat_map(|summary| {
-            summary
+        for summary in summaries_to_load {
+            for transcript in summary
                 .current_transcripts()
                 .values()
                 .chain(summary.next_transcripts().values())
-                .cloned()
-        }));
+            {
+                transcripts_to_retain.insert_by_cloning_if_not_present(transcript);
+            }
+        }
 
         let crypto = self.crypto.clone();
         let logger = self.logger.clone();
@@ -641,6 +644,39 @@ fn dkg_id_log_msg(id: &NiDkgId) -> String {
         "NiDkgId{{ start_height: {}, threshold: {}{} }}",
         id.start_block_height, tag, remote
     )
+}
+
+/// An extension trait for sets, allowing to insert a value the caller doesn't own without paying
+/// for a clone when the value is already in the set.
+///
+/// [`HashSet::insert`] takes the value by ownership, so inserting from a reference requires
+/// cloning up front — only to find out, after having paid for the clone, that an equal value was
+/// already present. This trait checks for presence first and clones only when the value is
+/// actually inserted.
+///
+/// This is useful when collecting the transcripts to retain in `delete_inactive_keys`: the next
+/// transcripts of a summary are always the current transcripts of the following summary, so the
+/// walk over the finalized summaries yields the (large) `NiDkgTranscript`s twice.
+///
+/// The price is that an actually inserted value is hashed twice: once by `contains` and once by
+/// `insert`.
+trait CloningInsertIfNotPresent<T> {
+    /// Inserts a clone of `value` into the set if no equal value is present, without cloning
+    /// otherwise. Returns `true` if the value was inserted.
+    fn insert_by_cloning_if_not_present(&mut self, value: &T) -> bool;
+}
+
+impl<T> CloningInsertIfNotPresent<T> for HashSet<T>
+where
+    T: Eq + Hash + Clone,
+{
+    fn insert_by_cloning_if_not_present(&mut self, value: &T) -> bool {
+        if self.contains(value) {
+            return false;
+        }
+
+        self.insert(value.clone())
+    }
 }
 
 #[cfg(test)]
@@ -1016,5 +1052,34 @@ mod tests {
                 }
             });
         });
+    }
+
+    #[test]
+    fn test_insert_by_cloning_if_not_present() {
+        let mut set = HashSet::new();
+
+        assert!(set.insert_by_cloning_if_not_present(&"a".to_string()));
+        assert!(set.insert_by_cloning_if_not_present(&"b".to_string()));
+        assert!(!set.insert_by_cloning_if_not_present(&"a".to_string()));
+
+        assert_eq!(set, HashSet::from(["a".to_string(), "b".to_string()]));
+    }
+
+    #[test]
+    fn test_insert_by_cloning_if_not_present_does_not_clone_present_values() {
+        #[derive(PartialEq, Eq, Hash)]
+        struct NoClone(u32);
+
+        impl Clone for NoClone {
+            fn clone(&self) -> Self {
+                panic!("An already present value should not be cloned");
+            }
+        }
+
+        let mut set = HashSet::from([NoClone(1)]);
+
+        // Must not clone (and hence not panic), since an equal value is already present.
+        assert!(!set.insert_by_cloning_if_not_present(&NoClone(1)));
+        assert_eq!(set.len(), 1);
     }
 }
