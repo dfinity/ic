@@ -3072,6 +3072,7 @@ mod tests {
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
+            canister_upgrade_options: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
         let text = validate_and_render_upgrade_sns_controlled_canister(
@@ -3113,6 +3114,7 @@ No upgrade argument."#
                 store_canister_id: Some(canister_test_id(111).get()),
                 chunk_hashes_list: vec![vec![1, 1, 1], vec![2, 2, 2], vec![3, 3, 3]],
             }),
+            canister_upgrade_options: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
         let text = validate_and_render_upgrade_sns_controlled_canister(
@@ -3160,6 +3162,7 @@ No upgrade argument."#
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
+            canister_upgrade_options: None,
         };
 
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
@@ -3196,6 +3199,7 @@ No upgrade argument."#
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
+            canister_upgrade_options: None,
         };
 
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
@@ -3234,6 +3238,7 @@ No upgrade argument."#
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
+            canister_upgrade_options: None,
         };
 
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
@@ -3268,6 +3273,7 @@ No upgrade argument."#
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
+            canister_upgrade_options: None,
         };
 
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
@@ -3297,6 +3303,7 @@ No upgrade argument."#
             canister_upgrade_arg: Some(vec![10, 20, 30, 40, 50, 60, 70, 80]),
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
+            canister_upgrade_options: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
         let text = validate_and_render_upgrade_sns_controlled_canister(
@@ -3334,6 +3341,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             canister_upgrade_arg: None,
             mode: Some(100), // 100 is not a valid mode
             chunked_canister_wasm: None,
+            canister_upgrade_options: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
         let text = validate_and_render_upgrade_sns_controlled_canister(
@@ -3353,6 +3361,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
+            canister_upgrade_options: None,
         };
         let result = validate_and_render_upgrade_sns_controlled_canister(
             &upgrade,
@@ -5459,6 +5468,7 @@ Payload rendering here"#
                         canister_upgrade_arg: Some(vec![4, 5, 6, 7]),
                         mode: Some(1),
                         chunked_canister_wasm: None,
+                        canister_upgrade_options: None,
                     },
                 )),
                 ..Default::default()
@@ -5480,6 +5490,7 @@ Payload rendering here"#
                             canister_upgrade_arg: Some(vec![4, 5, 6, 7]),
                             mode: Some(1),
                             chunked_canister_wasm: None,
+                            canister_upgrade_options: None,
                         },
                     )),
                     ..Default::default()

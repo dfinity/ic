@@ -53,6 +53,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_token_valuation::{Token, ValuationFactors};
 use ic_sns_test_utils::itest_helpers::UserInfo;
@@ -3049,6 +3050,7 @@ fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
+            canister_upgrade_options: None,
         });
 
         // Upgrade Proposal
