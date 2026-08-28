@@ -127,7 +127,10 @@ async fn sign_attestations_batch<R: CanisterRuntime>(
     }
 
     if !errors.is_empty() {
-        log!(INFO, "Errors encountered during signing: {errors:?}");
+        log!(
+            INFO,
+            "[create_pending_sweeper_requests]: leaving out the deposits this sweep could not attest: {errors:?}"
+        );
     }
 }
 
