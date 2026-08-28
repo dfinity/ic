@@ -39,13 +39,15 @@ use ic_replicated_state::{
 };
 use ic_types::batch::{Batch, BatchContent, BatchSummary};
 use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
+use ic_types::ingress::IngressStatus;
 use ic_types::malicious_flags::MaliciousFlags;
+use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::{StreamHeader, StreamIndex};
 use ic_types::{
-    ExecutionRound, Height, NodeId, PrincipalId, PrincipalIdBlobParseError, RegistryVersion,
-    SubnetId, Time,
+    ExecutionRound, Height, NodeId, NumBytes, PrincipalId, PrincipalIdBlobParseError,
+    RegistryVersion, SubnetId, Time,
 };
 use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_utils_thread::JoinOnDrop;
@@ -133,6 +135,8 @@ pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_ba
 pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
 pub const CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE: &str = "mr_illegal_engine_message";
 const CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS: &str = "mr_illegal_non_empty_subnet_admins";
+const CRITICAL_ERROR_UNEXPECTED_INGRESS_STATUS_AFTER_MERGE: &str =
+    "mr_unexpected_ingress_status_after_merge";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -355,6 +359,10 @@ pub(crate) struct MessageRoutingMetrics {
     pub critical_error_engine_message: IntCounter,
     /// Critical error: a non-rental subnet has a non-empty subnet admins list.
     critical_error_illegal_non_empty_subnet_admins: IntCounter,
+    /// Critical error: an in-progress ingress message had an ingress history entry
+    /// with a status other than `Processing` in the first round after a subnet
+    /// merge.
+    critical_error_unexpected_ingress_status_after_merge: IntCounter,
 
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
@@ -503,6 +511,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE),
             critical_error_illegal_non_empty_subnet_admins: metrics_registry
                 .error_counter(CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS),
+            critical_error_unexpected_ingress_status_after_merge: metrics_registry
+                .error_counter(CRITICAL_ERROR_UNEXPECTED_INGRESS_STATUS_AFTER_MERGE),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
 
@@ -540,6 +550,23 @@ impl MessageRoutingMetrics {
             batch_height,
             state_time,
             batch_time
+        );
+    }
+
+    pub fn observe_unexpected_ingress_status_after_merge(
+        &self,
+        log: &ReplicaLogger,
+        message_id: &MessageId,
+        status: &IngressStatus,
+    ) {
+        self.critical_error_unexpected_ingress_status_after_merge
+            .inc();
+        warn!(
+            log,
+            "{}: In-progress ingress message {} has unexpected status {} after a subnet merge.",
+            CRITICAL_ERROR_UNEXPECTED_INGRESS_STATUS_AFTER_MERGE,
+            message_id,
+            status.as_str()
         );
     }
 
@@ -594,6 +621,9 @@ struct BatchProcessorImpl<RegistryClient_: RegistryClient> {
     registry_reader: RegistryReader<RegistryClient_>,
     metrics: MessageRoutingMetrics,
     log: ReplicaLogger,
+    /// Soft limit on the memory footprint of the ingress history; used when
+    /// recording in-progress ingress messages after a subnet merge.
+    ingress_history_memory_capacity: NumBytes,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
 }
@@ -704,6 +734,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             metrics.clone(),
         ));
 
+        let ingress_history_memory_capacity = hypervisor_config.ingress_history_memory_capacity;
         let registry_reader = RegistryReader::new(
             registry,
             hypervisor_config.bitcoin,
@@ -717,6 +748,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             registry_reader,
             metrics,
             log,
+            ingress_history_memory_capacity,
             malicious_flags,
         }
     }
@@ -1420,6 +1452,23 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .with_label_values(&[&split_from.to_string()])
                 .set(batch.batch_number.get() as i64);
             state.metadata.subnet_split_from = None;
+        }
+        // If this is the first round after a subnet merge, reset the merge
+        // marker and record all in-progress ingress messages (i.e. all not yet
+        // responded ingress-induced canister call contexts) in the ingress history.
+        if state.metadata.subnet_merged {
+            info!(
+                self.log,
+                "State has resulted from a subnet merge, recording in-progress ingress messages"
+            );
+            state.after_merge(
+                self.ingress_history_memory_capacity,
+                |message_id, status| {
+                    self.metrics.observe_unexpected_ingress_status_after_merge(
+                        &self.log, message_id, status,
+                    )
+                },
+            );
         }
         load_state_timer.observe_duration();
 
