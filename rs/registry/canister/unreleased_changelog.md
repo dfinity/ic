@@ -21,6 +21,11 @@ on the process that this file is part of, see
   `StandardEngineReplicaVersionRecord` will now be rejected while a deployment of a new replica version is
   in progress. This guarantees that both subnets run the same replica version after the split.
 
+* Invariant requiring that every elected GuestOS and HostOS version ID is well-formed, i.e. that it consists
+  only of alphanumeric characters, dots, dashes and underscores.  Such IDs are what `ReplicaVersion` and
+  `HostosVersion` accept, so until now, it was possible to elect a version that consumers could not read
+  back out of the Registry.
+
 ## Changed
 
 ## Deprecated
