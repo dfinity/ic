@@ -8,7 +8,7 @@ use crate::{
     },
     governance::{
         NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER, TREASURY_SUBACCOUNT_NONCE, bytes_to_subaccount,
-        log_prefix,
+        log_prefix, valid_canister_upgrade_options,
     },
     logs::{ERROR, INFO},
     pb::v1::{
@@ -40,6 +40,7 @@ use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
+use ic_management_canister_types_private::CanisterInstallMode as RootCanisterInstallMode;
 use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS, denominations_to_tokens, i2d,
     ledger::compute_distribution_subaccount_bytes, ledger_validation,
@@ -1053,6 +1054,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
         canister_id,
         canister_upgrade_arg,
         mode,
+        canister_upgrade_options,
         // The WASM-related fields are extracted separately.
         chunked_canister_wasm: _,
         new_canister_wasm: _,
@@ -1066,6 +1068,21 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
     }
     // Assume mode is the default if it is not set
     let mode = upgrade.mode_or_upgrade();
+
+    // Inspect canister_upgrade_options.
+    match RootCanisterInstallMode::try_from(mode) {
+        Err(err) => {
+            // This would happen if mode was originally 0, Unspecified. Of
+            // course, if canister_upgrade_options is Some, that's also wrong
+            // here, but moot, so we do not add to defects for that.
+            defects.push(format!("Invalid mode: {err}"));
+        }
+        Ok(mode) => {
+            if let Err(err) = valid_canister_upgrade_options(mode, *canister_upgrade_options) {
+                defects.push(err);
+            }
+        }
+    }
 
     // Inspect canister_id.
     let canister_id = match validate_required_field("canister_id", canister_id) {

@@ -113,7 +113,6 @@ use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
-use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_protobuf::types::v1::WasmMemoryPersistence as WasmMemoryPersistenceProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use ic_sns_governance_token_valuation::Valuation;
@@ -2678,7 +2677,12 @@ impl Governance {
             ));
         }
 
-        let mode = upgrade.mode_or_upgrade() as i32;
+        let mode = upgrade.mode_or_upgrade();
+        let mode = CanisterInstallMode::try_from(mode)?;
+
+        let canister_upgrade_options =
+            valid_canister_upgrade_options(mode, upgrade.canister_upgrade_options)
+                .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
 
         let wasm = Wasm::try_from(&upgrade)
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
@@ -2689,7 +2693,8 @@ impl Governance {
             upgrade
                 .canister_upgrade_arg
                 .unwrap_or_else(|| Encode!().unwrap()),
-            CanisterInstallMode::try_from(CanisterInstallModeProto::try_from(mode)?)?,
+            mode,
+            canister_upgrade_options,
         )
         .await
     }
@@ -2700,6 +2705,7 @@ impl Governance {
         wasm: Wasm,
         arg: Vec<u8>,
         mode: CanisterInstallMode,
+        canister_upgrade_options: Option<CanisterUpgradeOptions>,
     ) -> Result<(), GovernanceError> {
         // Serialize upgrade.
         let payload = {
@@ -2710,7 +2716,7 @@ impl Governance {
             // For more details, please refer to the comments above the (definition of the)
             // stop_before_installing field in ChangeCanisterRequest.
             let stop_before_installing = true;
-            let mode = CanisterInstallModeV2::from(mode);
+            let mode = assemble_mode(mode, canister_upgrade_options);
 
             let mut change_canister_arg =
                 ChangeCanisterRequest::new(stop_before_installing, mode, canister_id)
@@ -2886,6 +2892,11 @@ impl Governance {
                     Wasm::Bytes(target_wasm.clone()),
                     Encode!().unwrap(),
                     CanisterInstallMode::Upgrade,
+                    // upgrade options. skip_pre_upgrade would be dangerous, and
+                    // wasm_memory_persistence is not needed either, because no
+                    // SNS framework canister is written in Motoko (as of
+                    // August, 2026).
+                    None,
                 )
                 .await?;
             }
@@ -2953,6 +2964,11 @@ impl Governance {
                     Wasm::Bytes(target_wasm.clone()),
                     Encode!().unwrap(),
                     CanisterInstallMode::Upgrade,
+                    // upgrade options. skip_pre_upgrade would be dangerous, and
+                    // wasm_memory_persistence is not needed either, because no
+                    // SNS framework canister is written in Motoko (as of
+                    // August, 2026).
+                    None,
                 )
                 .await?;
             }
@@ -3155,6 +3171,7 @@ impl Governance {
             Wasm::Bytes(ledger_wasm),
             ledger_upgrade_arg,
             CanisterInstallMode::Upgrade,
+            None, // upgrade options
         )
         .await?;
 
