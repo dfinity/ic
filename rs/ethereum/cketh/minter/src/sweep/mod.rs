@@ -26,7 +26,7 @@ use crate::{
         transactions::{CreateSweepTransactionError, PipelineRequest},
     },
     time::TimeProvider,
-    tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate},
+    tx::{AuthorizationRequest, GasFeeEstimate, lazy_refresh_gas_fee_estimate, sign_digest},
     withdraw::{
         fetch_finalized_receipts, finalized_transaction_count, latest_transaction_count,
         send_signed_transactions,
@@ -60,13 +60,13 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         }
     };
 
-    let Some(_sweeper_contract) = read_state(|s| s.sweeper_contract_address) else {
+    if read_state(|s| s.sweeper_contract_address).is_none() {
         log!(
             DEBUG,
             "[create_pending_sweeper_requests]: SKIPPING: no sweeper contract address is configured"
         );
         return;
-    };
+    }
 
     let batch_per_token =
         read_state(|s| s.automatic_deposits.requests_batch(MAX_DEPOSITS_PER_SWEEP));
@@ -90,7 +90,16 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
             );
             return;
         };
+        let Some(authorization_requests) = read_state(|s| s.authorization_requests(&targets))
+        else {
+            log!(
+                DEBUG,
+                "[create_pending_sweeper_requests]: SKIPPING: the sweeper contract address was cleared while enqueueing"
+            );
+            return;
+        };
         sign_attestations_batch(attestation_requests, runtime).await;
+        sign_authorizations_batch(authorization_requests, runtime).await;
     }
 }
 
@@ -130,6 +139,57 @@ async fn sign_attestations_batch<R: CanisterRuntime>(
         log!(
             INFO,
             "[create_pending_sweeper_requests]: leaving out the deposits this sweep could not attest: {errors:?}"
+        );
+    }
+}
+
+/// Signs the authorizations in `requests` that the minter has not signed before, recording each so
+/// a later sweep of the same address reuses it.
+///
+/// A request names the chain, the delegate and the nonce it authorizes, so re-pointing the minter
+/// at another sweeper contract misses the recorded ones and signs afresh.
+async fn sign_authorizations_batch<R: CanisterRuntime>(
+    requests: Vec<AuthorizationRequest>,
+    runtime: &R,
+) {
+    let requests_to_sign: BTreeSet<_> = read_state(|s| {
+        requests
+            .into_iter()
+            .filter(|request| s.automatic_deposits.authorization(request).is_none())
+            .collect()
+    });
+
+    let signing_results = join_all(requests_to_sign.into_iter().map(|request| async move {
+        let signature = sign_digest(
+            &request.authorization().hash(),
+            &request.derivation_path(),
+            runtime,
+        )
+        .await;
+        (request, signature)
+    }))
+    .await;
+
+    let mut errors = Vec::new();
+    for (request, signing_result) in signing_results {
+        match signing_result {
+            Ok(signature) => {
+                mutate_state(|s| {
+                    process_event(
+                        s,
+                        EventType::AuthorizedDepositAddress { request, signature },
+                        runtime,
+                    )
+                });
+            }
+            Err(e) => errors.push((request, e)),
+        }
+    }
+
+    if !errors.is_empty() {
+        log!(
+            INFO,
+            "[create_pending_sweeper_requests]: leaving out the deposits this sweep could not authorize: {errors:?}"
         );
     }
 }

@@ -25,9 +25,9 @@ use ic_cketh_minter::state::transactions::{
 };
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::{
-    AccessList, AccessListItem, DelegatingSweep, Eip1559TransactionRequest, SignedAuthorization,
-    SignedEip1559TransactionRequest, SignedEip7702TransactionRequest, SignedSweepTransaction,
-    SweepTransaction, TransactionSignature,
+    AccessList, AccessListItem, AuthorizationRequest, DelegatingSweep, Eip1559TransactionRequest,
+    SignedAuthorization, SignedEip1559TransactionRequest, SignedEip7702TransactionRequest,
+    SignedSweepTransaction, SweepTransaction, TransactionSignature,
 };
 use ic_stable_structures::Memory;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
@@ -401,6 +401,34 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                     s: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(s.as_slice()).unwrap()),
                 },
             },
+            EventPayload::AuthorizedDepositAddress {
+                owner,
+                subaccount,
+                authorization,
+            } => {
+                let account = Account {
+                    owner,
+                    subaccount: subaccount.map(|subaccount| {
+                        <[u8; 32]>::try_from(subaccount.into_vec().as_slice()).unwrap()
+                    }),
+                };
+                let authorization = map_authorizations(vec![authorization])
+                    .pop()
+                    .expect("BUG: one authorization in, one out");
+                ET::AuthorizedDepositAddress {
+                    request: AuthorizationRequest::new(
+                        account,
+                        authorization.chain_id,
+                        authorization.delegate,
+                        authorization.nonce,
+                    ),
+                    signature: TransactionSignature {
+                        signature_y_parity: authorization.y_parity,
+                        r: authorization.r,
+                        s: authorization.s,
+                    },
+                }
+            }
             EventPayload::AcceptedSweepRequest {
                 sweep_id,
                 destination,

@@ -12,7 +12,9 @@ use crate::state::transactions::{
     ResubmitTransactionError, SweepId, SweepRequest, SweeperTransactionPipeline,
 };
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
-use crate::tx::{Finalized, GasFeeEstimate, Signed, SweepTransaction, TransactionSignature};
+use crate::tx::{
+    AuthorizationRequest, Finalized, GasFeeEstimate, Signed, SweepTransaction, TransactionSignature,
+};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
@@ -71,6 +73,15 @@ pub struct AutomaticDeposits {
     /// entries naming a retired helper stay behind forever. [`Self::attestations_len`] is exported
     /// as a metric so that growth is visible before it needs bounding.
     attestations: BTreeMap<AttestationRequest, TransactionSignature>,
+    /// Delegation authorizations the minter has signed, keyed by exactly what each one signed. A
+    /// signature only delegates the chain, the sweeper contract and the nonce its request names, so
+    /// re-pointing the minter at another sweeper contract misses this map rather than reusing a
+    /// tuple that delegates the old one.
+    ///
+    /// Nothing prunes this map: it grows with the number of accounts that have ever been swept, and
+    /// entries naming a retired helper stay behind forever. [`Self::authorizations_len`] is exported
+    /// as a metric so that growth is visible before it needs bounding.
+    authorizations: BTreeMap<AuthorizationRequest, TransactionSignature>,
     /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
     /// its own nonce sequence, independent of the main-address withdrawal pipeline.
     sweeper_transactions: SweeperTransactionPipeline,
@@ -184,12 +195,14 @@ impl AutomaticDeposits {
             watchlist,
             sweep,
             attestations,
+            authorizations,
             sweeper_transactions,
         } = self;
 
         ensure_eq!(watchlist, &other.watchlist);
         ensure_eq!(sweep, &other.sweep);
         ensure_eq!(attestations, &other.attestations);
+        ensure_eq!(authorizations, &other.authorizations);
         sweeper_transactions.is_equivalent_to(&other.sweeper_transactions)
     }
 
@@ -205,6 +218,20 @@ impl AutomaticDeposits {
         signature: TransactionSignature,
     ) {
         self.attestations.insert(request, signature);
+    }
+
+    /// The authorization already stored for `account`, if any: signing another would cost a
+    /// threshold-ECDSA signature for the same tuple.
+    pub fn authorization(&self, request: &AuthorizationRequest) -> Option<&TransactionSignature> {
+        self.authorizations.get(request)
+    }
+
+    pub fn record_authorization(
+        &mut self,
+        request: AuthorizationRequest,
+        signature: TransactionSignature,
+    ) {
+        self.authorizations.insert(request, signature);
     }
 
     /// Arm the `(account, token)` pair, whose deposit `address` is derived for `account`.
@@ -439,6 +466,10 @@ impl AutomaticDeposits {
         self.attestations.len()
     }
 
+    pub fn authorizations_len(&self) -> usize {
+        self.authorizations.len()
+    }
+
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
     /// funds queued for sweeping (so it must be registered). Reports
     /// [`DepositStatus::AwaitingSweep`] once funds have been detected and queued, otherwise
@@ -498,6 +529,7 @@ impl Default for AutomaticDeposits {
             watchlist: TimedSizedMap::new(DEPOSIT_ADDRESS_SCAN_WINDOW, MAX_ACTIVE_DEPOSITS),
             sweep: BTreeMap::new(),
             attestations: BTreeMap::new(),
+            authorizations: BTreeMap::new(),
             sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
         }
     }

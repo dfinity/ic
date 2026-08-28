@@ -999,6 +999,16 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                         s: ByteBuf::from(signature.s.to_be_bytes()),
                     }
                 }
+                EventType::AuthorizedDepositAddress { request, signature } => {
+                    let account = request.account();
+                    EP::AuthorizedDepositAddress {
+                        owner: account.owner,
+                        subaccount: account.subaccount.map(ByteBuf::from),
+                        authorization: map_authorizations(&[request.signed_with(signature)])
+                            .pop()
+                            .expect("BUG: one authorization in, one out"),
+                    }
+                }
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,
@@ -1284,6 +1294,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_stored_attestations",
                     s.automatic_deposits.attestations_len() as f64,
                     "Number of deposit address attestations the minter has signed and stored.",
+                )?;
+
+                w.encode_gauge(
+                    "cketh_minter_stored_authorizations",
+                    s.automatic_deposits.authorizations_len() as f64,
+                    "Number of delegation authorizations the minter has signed and stored.",
                 )?;
 
                 w.encode_gauge(

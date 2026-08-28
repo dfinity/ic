@@ -114,6 +114,11 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::AttestedDepositAddress { request, signature } => {
             state.record_attestation(request.clone(), signature.clone());
         }
+        EventType::AuthorizedDepositAddress { request, signature } => {
+            state
+                .automatic_deposits
+                .record_authorization(request.clone(), signature.clone());
+        }
         EventType::AcceptedSweepRequest(request) => {
             state.next_sweep_id = request.id.next();
             state
