@@ -44,7 +44,7 @@ async fn try_run_exchange(guestos_config: GuestOSConfig) -> Result<()> {
         SevRootCertificateVerification::Verify,
         Box::new(sev_firmware),
         Arc::new(nns_registry_client),
-        Box::new(DefaultDiskCryptoOps),
+        Arc::new(DefaultDiskCryptoOps),
         PathBuf::from(STORE_DEVICE),
         PathBuf::from(DEFAULT_STORE_LUKS_HEADER_PATH),
         DEFAULT_SERVER_PORT,

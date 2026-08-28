@@ -107,8 +107,8 @@ struct DiskEncryptionKeyExchangeTestFixture {
     client_sev_firmware: MockSevGuestFirmwareBuilder,
     /// Port for the server to listen on
     server_port: u16,
-    /// True to assume that the disk can already be opened without key exchange
-    can_open_disk: bool,
+    /// The crypto-ops mock handed to the client agent
+    crypto_ops: Arc<MockDiskCryptoOps>,
 }
 
 impl DiskEncryptionKeyExchangeTestFixture {
@@ -171,6 +171,15 @@ impl DiskEncryptionKeyExchangeTestFixture {
         // Increment port for each test case so tests can run in parallel
         let server_port = FREE_PORT.fetch_add(1, Ordering::Relaxed);
 
+        // The crypto-ops mock with its default behavior; tests that care about the
+        // re-keying step add their own expectations on the fixture's field.
+        let mut crypto_ops = MockDiskCryptoOps::new();
+        crypto_ops
+            .expect_can_open()
+            .times(0..)
+            .returning(move |_, _, _| Ok(config.can_open_disk));
+        let crypto_ops = Arc::new(crypto_ops);
+
         Self {
             server_sev_firmware: MockSevGuestFirmwareBuilder::new()
                 .with_chip_id(config.server_chip_id)
@@ -197,7 +206,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             server_store_luks_header,
             client_store_luks_header,
             server_port,
-            can_open_disk: config.can_open_disk,
+            crypto_ops,
         }
     }
 
@@ -212,6 +221,12 @@ impl DiskEncryptionKeyExchangeTestFixture {
         )
         .expect("Failed to derive the served Store key")
         .into_bytes()
+    }
+
+    /// Mutable access to the crypto-ops mock, for tests that add their own expectations.
+    fn crypto_ops_mut(&mut self) -> &mut MockDiskCryptoOps {
+        Arc::get_mut(&mut self.crypto_ops)
+            .expect("the fixture holds the only reference to the crypto-ops mock")
     }
 
     /// Run the key exchange test and return (server status, client status).
@@ -273,32 +288,15 @@ impl DiskEncryptionKeyExchangeTestFixture {
     }
 
     fn create_client_agent(&self) -> DiskEncryptionKeyExchangeClientAgent {
-        let can_open_disk = self.can_open_disk;
         let store_device_path = self.store_device.path().to_path_buf();
         let store_luks_header_path = self.client_store_luks_header.path().to_path_buf();
-        let mut crypto_ops = MockDiskCryptoOps::new();
-
-        crypto_ops
-            .expect_can_open()
-            .returning(move |_, _, _| Ok(can_open_disk));
-
-        if !can_open_disk {
-            // If the exchange succeeds, the client re-keys the copied header, passing the
-            // server's derived key as the old key.
-            let served_key = self.served_store_key();
-            crypto_ops
-                .expect_rekey()
-                .times(0..)
-                .withf(move |_, _, old_key, _| old_key == served_key)
-                .returning(|_, _, _, _| Ok(()));
-        }
 
         DiskEncryptionKeyExchangeClientAgent::new(
             self.client_guestos_config.clone(),
             SevRootCertificateVerification::TestOnlySkipVerification,
             Box::new(self.client_sev_firmware.clone()),
             self.registry_client.clone(),
-            Box::new(crypto_ops),
+            self.crypto_ops.clone(),
             store_device_path,
             store_luks_header_path,
             self.server_port,
@@ -371,7 +369,18 @@ fn assert_statuses_contain_errors(
 
 #[tokio::test]
 async fn test_exchange_keys_successfully() {
-    let fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
+    let mut fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
+
+    // The client must re-key the copied header exactly once, passing the server's
+    // derived key as the old key.
+    let served_key = fixture.served_store_key();
+    fixture
+        .crypto_ops_mut()
+        .expect_rekey()
+        .once()
+        .withf(move |_, _, old_key, _| old_key == served_key)
+        .returning(|_, _, _, _| Ok(()));
+
     let (server_result, client_result) = fixture.run_key_exchange_test().await;
 
     server_result.expect("Key exchange should succeed");

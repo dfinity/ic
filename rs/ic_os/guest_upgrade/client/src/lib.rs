@@ -100,7 +100,7 @@ pub struct DiskEncryptionKeyExchangeClientAgent {
     store_luks_header_path: PathBuf,
     server_port: u16,
     sev_root_certificate_verification: SevRootCertificateVerification,
-    crypto_ops: Box<dyn DiskCryptoOps>,
+    crypto_ops: Arc<dyn DiskCryptoOps>,
 }
 
 // Allow 32MB ingress messages - we need 16MB for the LUKS header
@@ -112,7 +112,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         sev_root_certificate_verification: SevRootCertificateVerification,
         sev_firmware: Box<dyn SevGuestFirmware>,
         nns_registry_client: Arc<dyn RegistryClient>,
-        crypto_ops: Box<dyn DiskCryptoOps>,
+        crypto_ops: Arc<dyn DiskCryptoOps>,
         store_device_path: PathBuf,
         store_luks_header_path: PathBuf,
         server_port: u16,
