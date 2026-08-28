@@ -291,9 +291,9 @@ impl Registry {
             // upgrade are scheduled at the same time, so we enforce that the cloud engine
             // deployment is complete before allowing a split. In that case, it is guaranteed that
             // both subnets will be on the same replica version after the split.
-            if 0.0 < standard_engine_replica_version_record.deployment_progress
-                && standard_engine_replica_version_record.deployment_progress < 1.0
-            {
+            let fleet_is_split = 0.0 < standard_engine_replica_version_record.deployment_progress
+                && standard_engine_replica_version_record.deployment_progress < 1.0;
+            if fleet_is_split {
                 return Err(PayloadValidationError::CloudEngineDeploymentInProgress);
             }
         }
