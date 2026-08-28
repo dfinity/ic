@@ -540,22 +540,19 @@ mod tests {
                     )));
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
-                let replica_1 = node_test_id(1);
+                let replica_config_1 = ReplicaConfig {
+                    node_id: node_test_id(1),
+                    ..replica_config.clone()
+                };
                 let dkg_key_manager = new_dkg_key_manager(
                     crypto.clone(),
                     logger.clone(),
                     &PoolReader::new(&pool),
                     registry.clone(),
-                    ReplicaConfig {
-                        node_id: replica_1,
-                        ..replica_config.clone()
-                    },
+                    replica_config_1.clone(),
                 );
                 let dkg = DkgImpl::new(
-                    ReplicaConfig {
-                        node_id: replica_1,
-                        ..replica_config.clone()
-                    },
+                    replica_config_1.clone(),
                     registry.clone(),
                     state_manager.clone(),
                     crypto.clone(),
@@ -585,9 +582,13 @@ mod tests {
                 }
                 assert_eq!(dealings.messages.len(), 3);
                 for tag in tags_iter(&vet_key_ids) {
-                    assert!(dealings.messages.iter().any(
-                        |m| m.signature.signer == replica_1 && m.content.dkg_id.dkg_tag == tag
-                    ));
+                    assert!(
+                        dealings
+                            .messages
+                            .iter()
+                            .any(|m| m.signature.signer == replica_config_1.node_id
+                                && m.content.dkg_id.dkg_tag == tag)
+                    );
                 }
 
                 // Now make sure, the dealing from the same dealer will not be included in a new
@@ -620,22 +621,19 @@ mod tests {
 
                 // Create another dealer and add his dealings into the unvalidated pool of
                 // replica 1.
-                let replica_2 = node_test_id(2);
+                let replica_config_2 = ReplicaConfig {
+                    node_id: node_test_id(2),
+                    ..replica_config
+                };
                 let dkg_key_manager_2 = new_dkg_key_manager(
                     crypto.clone(),
                     logger.clone(),
                     &PoolReader::new(&pool),
                     registry.clone(),
-                    ReplicaConfig {
-                        node_id: replica_2,
-                        ..replica_config.clone()
-                    },
+                    replica_config_2.clone(),
                 );
                 let dkg_2 = DkgImpl::new(
-                    ReplicaConfig {
-                        node_id: replica_2,
-                        ..replica_config
-                    },
+                    replica_config_2.clone(),
                     registry,
                     state_manager,
                     crypto,
@@ -654,7 +652,7 @@ mod tests {
                         ChangeAction::AddToValidated(message) => {
                             dkg_pool.write().unwrap().insert(UnvalidatedArtifact {
                                 message: message.clone(),
-                                peer_id: replica_1,
+                                peer_id: replica_config_1.node_id,
                                 timestamp: UNIX_EPOCH,
                             })
                         }
@@ -689,9 +687,13 @@ mod tests {
                 }
                 assert_eq!(dealings.messages.len(), 3);
                 for tag in tags_iter(&vet_key_ids) {
-                    assert!(dealings.messages.iter().any(
-                        |m| m.signature.signer == replica_2 && m.content.dkg_id.dkg_tag == tag
-                    ));
+                    assert!(
+                        dealings
+                            .messages
+                            .iter()
+                            .any(|m| m.signature.signer == replica_config_2.node_id
+                                && m.content.dkg_id.dkg_tag == tag)
+                    );
                 }
             });
         });

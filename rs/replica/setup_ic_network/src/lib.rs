@@ -547,7 +547,7 @@ fn start_consensus(
     let replica_config = ReplicaConfig {
         node_id,
         subnet_id,
-        replica_version: replica_version.clone(),
+        replica_version,
     };
     let dkg_key_manager = Arc::new(Mutex::new(ic_consensus_dkg::DkgKeyManager::new(
         metrics_registry.clone(),
