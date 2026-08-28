@@ -77,6 +77,10 @@ pub struct AutomaticDeposits {
     /// signature only delegates the chain, the sweeper contract and the nonce its request names, so
     /// re-pointing the minter at another sweeper contract misses this map rather than reusing a
     /// tuple that delegates the old one.
+    ///
+    /// Nothing prunes this map: it grows with the number of accounts that have ever been swept, and
+    /// entries naming a retired helper stay behind forever. [`Self::authorizations_len`] is exported
+    /// as a metric so that growth is visible before it needs bounding.
     authorizations: BTreeMap<AuthorizationRequest, TransactionSignature>,
     /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
     /// its own nonce sequence, independent of the main-address withdrawal pipeline.
@@ -460,6 +464,10 @@ impl AutomaticDeposits {
 
     pub fn attestations_len(&self) -> usize {
         self.attestations.len()
+    }
+
+    pub fn authorizations_len(&self) -> usize {
+        self.authorizations.len()
     }
 
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has

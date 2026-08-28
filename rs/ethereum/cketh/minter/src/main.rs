@@ -1297,6 +1297,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
 
                 w.encode_gauge(
+                    "cketh_minter_stored_authorizations",
+                    s.automatic_deposits.authorizations_len() as f64,
+                    "Number of delegation authorizations the minter has signed and stored.",
+                )?;
+
+                w.encode_gauge(
                     "cketh_minter_last_max_fee_per_gas",
                     s.last_transaction_price_estimate
                         .clone()
