@@ -1110,8 +1110,6 @@ impl ReplicatedState {
     /// Message Routing routes the pooled refunds (via the loopback stream, if the
     /// recipient is local) and credits them on induction, accounting for them as
     /// lost if the recipient no longer exists.
-    ///
-    /// No-op if `amount` is zero.
     pub fn add_refund(&mut self, receiver: CanisterId, amount: Cycles) {
         self.refunds.add(receiver, amount);
     }
