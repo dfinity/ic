@@ -859,10 +859,12 @@ mod tests {
         "Canister migrations changed"
     )]
     #[case::routing_table_record(make_routing_table_record_key(), "Routing table changed")]
-    fn should_fail_when_a_guarded_record_changed(
+    fn check_if_registry_changed_across_versions_should_fail_when_a_guarded_record_changed(
         #[case] changed_record_key: String,
         #[case] expected_error: &str,
     ) {
+        // Step 1: Prepare the world.
+
         let _guard = temporarily_enable_subnet_splitting();
         // `set_up_registry` puts the source subnet at `SUBNET_1`, which is what the `#[case]`s
         // above derive the subnet specific keys from.
@@ -872,7 +874,7 @@ mod tests {
 
         let pre_call_registry_version = registry.latest_version();
 
-        // Nothing has changed yet.
+        // Nothing has changed yet, so the check must pass.
         assert_eq!(
             registry.check_if_registry_changed_across_versions(
                 source_subnet_id,
@@ -893,14 +895,15 @@ mod tests {
             .unwrap_or_default();
         registry.apply_mutations_for_test(vec![upsert(changed_record_key.as_bytes(), value)]);
 
-        assert_eq!(
-            registry.check_if_registry_changed_across_versions(
-                source_subnet_id,
-                pre_call_registry_version,
-                registry.latest_version(),
-            ),
-            Err(expected_error)
+        // Step 2: Run the code under test.
+        let check_result = registry.check_if_registry_changed_across_versions(
+            source_subnet_id,
+            pre_call_registry_version,
+            registry.latest_version(),
         );
+
+        // Step 3: Verify result(s).
+        assert_eq!(check_result, Err(expected_error));
     }
 
     #[derive(Debug)]
