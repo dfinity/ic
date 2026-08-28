@@ -120,6 +120,12 @@ class VersionInfo:
     # `binaries/x86_64-linux/`, read from that directory's SHA256SUMS. Consumed by
     # //bazel:mainnet-icos-binaries.bzl.
     binaries: dict
+    # True when the hashes above were taken from unverified CDN sums because the
+    # version's commit was not public yet (see VersionArtifactSums). Recorded as
+    # the "attestation_pending" marker so is_record_up_to_date() re-checks the
+    # record every run and forces attestation verification once the commit is
+    # disclosed.
+    attestation_pending: bool
 
     def __post_init__(self):
         """
@@ -138,6 +144,8 @@ class VersionInfo:
         for name, digest in self.binaries.items():
             check_artifact_name(name, "binaries key")
             check_sha256(digest, f"binaries[{name!r}]")
+        if not isinstance(self.attestation_pending, bool):
+            raise ValueError(f"attestation_pending must be a bool, got {self.attestation_pending!r}")
 
 
 def sync_main_branch_and_checkout_branch(
@@ -267,6 +275,7 @@ def guestos_version_info_from_payload(payload: dict) -> VersionInfo:
         setupos_hash,
         setupos_dev_hash,
         binaries,
+        attestation_pending=sums.attested is False,
     )
 
 
@@ -353,7 +362,34 @@ def hostos_version_info_from_payload(payload: dict, logger: logging.Logger) -> V
         replica_info.setupos_hash,
         replica_info.setupos_dev_hash,
         replica_info.binaries,
+        # The GuestOS info above is collected for the same commit, so a fallback
+        # on either side leaves the whole record pending re-verification.
+        attestation_pending=sums.attested is False or replica_info.attestation_pending,
     )
+
+
+def version_record(info: VersionInfo) -> dict:
+    """
+    The mainnet-icos-revisions.json record for `info`.
+
+    A record built from unverified CDN sums (the version's commit was not public
+    yet) carries the "attestation_pending" marker: is_record_up_to_date() then
+    keeps re-checking it and forces attestation verification -- rewriting the
+    record, without the marker -- once the commit is disclosed.
+    """
+    record = {
+        "version": info.version,
+        "update_img_hash": info.hash,
+        "update_img_hash_dev": info.dev_hash,
+        "setupos_disk_img_hash": info.setupos_hash,
+        "setupos_disk_img_hash_dev": info.setupos_dev_hash,
+        "binaries": info.binaries,
+        "launch_measurements": info.launch_measurements,
+        "launch_measurements_dev": info.dev_measurements,
+    }
+    if info.attestation_pending:
+        record["attestation_pending"] = True
+    return record
 
 
 def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, subnet: str):
@@ -377,16 +413,7 @@ def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger
 
     replica_info = get_replica_version_info(version)
 
-    data["guestos"]["subnets"][subnet] = {
-        "version": replica_info.version,
-        "update_img_hash": replica_info.hash,
-        "update_img_hash_dev": replica_info.dev_hash,
-        "setupos_disk_img_hash": replica_info.setupos_hash,
-        "setupos_disk_img_hash_dev": replica_info.setupos_dev_hash,
-        "binaries": replica_info.binaries,
-        "launch_measurements": replica_info.launch_measurements,
-        "launch_measurements_dev": replica_info.dev_measurements,
-    }
+    data["guestos"]["subnets"][subnet] = version_record(replica_info)
     with open(full_path, "w", encoding="utf-8") as f:
         contents = collapse_simple_lists(json.dumps(data, indent=2))
         f.write(contents)
@@ -418,16 +445,7 @@ def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logge
 
     replica_info = guestos_version_info_from_payload(payload)
 
-    data["guestos"]["latest_release"] = {
-        "version": replica_info.version,
-        "update_img_hash": replica_info.hash,
-        "update_img_hash_dev": replica_info.dev_hash,
-        "setupos_disk_img_hash": replica_info.setupos_hash,
-        "setupos_disk_img_hash_dev": replica_info.setupos_dev_hash,
-        "binaries": replica_info.binaries,
-        "launch_measurements": replica_info.launch_measurements,
-        "launch_measurements_dev": replica_info.dev_measurements,
-    }
+    data["guestos"]["latest_release"] = version_record(replica_info)
     with open(full_path, "w", encoding="utf-8") as f:
         contents = collapse_simple_lists(json.dumps(data, indent=2))
         f.write(contents)
@@ -457,18 +475,7 @@ def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger
 
     replica_info = hostos_version_info_from_payload(payload, logger)
 
-    data["hostos"] = {
-        "latest_release": {
-            "version": replica_info.version,
-            "update_img_hash": replica_info.hash,
-            "update_img_hash_dev": replica_info.dev_hash,
-            "setupos_disk_img_hash": replica_info.setupos_hash,
-            "setupos_disk_img_hash_dev": replica_info.setupos_dev_hash,
-            "binaries": replica_info.binaries,
-            "launch_measurements": replica_info.launch_measurements,
-            "launch_measurements_dev": replica_info.dev_measurements,
-        }
-    }
+    data["hostos"] = {"latest_release": version_record(replica_info)}
 
     with open(full_path, "w", encoding="utf-8") as f:
         contents = collapse_simple_lists(json.dumps(data, indent=2))
@@ -581,14 +588,17 @@ class VersionArtifactSums:
     release-testing.yml on an old branch cannot backfill such versions: workflows
     run from the dispatched ref's tree, which predates the attest-uploads job.)
 
-    A version whose commit is NOT public yet (an undisclosed security patch, built
+    A version whose commit is NOT public yet (an undisclosed hotfix built
     in ic-private and not attested in this repository) falls back to trusting the
     CDN with a loud warning -- time-bounded until disclosure: the exact elected
     commit is pushed to dfinity/ic as a hotfix-* branch, whose Release Testing run
     re-builds it (rclone --immutable --checksum requires the rebuild to match the
-    CDN byte-for-byte) and mints the attestation. That fallback is not
-    attacker-selectable within the finding's threat model: CDN write access cannot
-    remove a commit from the public repository.
+    CDN byte-for-byte) and mints the attestation. The fallback is recorded with
+    the "attestation_pending" marker, which makes is_record_up_to_date() treat
+    the record as stale as soon as the commit is disclosed, so the next cron run
+    re-verifies the hashes against the attestation and drops the marker. That
+    fallback is not attacker-selectable within the finding's threat model: CDN
+    write access cannot remove a commit from the public repository.
     """
 
     def __init__(self, version: str):
@@ -668,8 +678,25 @@ def get_binary_hashes(sums: VersionArtifactSums) -> dict:
 
 
 def is_record_up_to_date(existing: dict, version: str) -> bool:
-    """Whether `existing` is on `version` and already has every field we record."""
-    return existing.get("version", "") == version and all(f in existing for f in ("setupos_disk_img_hash", "binaries"))
+    """
+    Whether `existing` is on `version` and already has every field we record.
+
+    A record carrying the "attestation_pending" marker was written from
+    unverified CDN sums while its commit was still private (see version_record):
+    it stays up to date only while the commit remains private. Once the commit
+    is disclosed the record counts as stale, so the caller re-collects the
+    hashes -- now under mandatory attestation verification, since
+    VersionArtifactSums no longer sees a private commit -- and rewrites the
+    record without the marker. Records without the marker (attested, or
+    predating the attestation rollout) skip without the extra API call.
+    """
+    if existing.get("version", "") != version:
+        return False
+    if not all(f in existing for f in ("setupos_disk_img_hash", "binaries")):
+        return False
+    if existing.get("attestation_pending"):
+        return not commit_is_public(version)
+    return True
 
 
 def get_logger(level) -> logging.Logger:
