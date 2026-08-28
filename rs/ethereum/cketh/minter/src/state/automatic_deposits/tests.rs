@@ -6,10 +6,10 @@ use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
+use crate::test_fixtures::{deposit_address, usdc, usdt};
 use crate::timed_sized_map::{Entry, Timestamp};
 use candid::{Nat, Principal};
 use ic_ethereum_types::Address;
-use ic_sha3::Keccak256;
 use icrc_ledger_types::icrc1::account::Account;
 
 #[test]
@@ -679,14 +679,6 @@ fn token(byte: u8) -> Address {
     Address::new([byte; 20])
 }
 
-fn usdc() -> Address {
-    token(0xaa)
-}
-
-fn usdt() -> Address {
-    token(0xbb)
-}
-
 fn request(account: Account, token: Address) -> DepositRequest {
     DepositRequest::new(account, token)
 }
@@ -754,15 +746,6 @@ fn entry(account: &Account, expires_at: Timestamp) -> Entry<ScanProgress> {
 /// The deposit address is a deterministic function of the account, so a given
 /// account always maps to the same address (mirroring the production key
 /// derivation).
-fn deposit_address(account: &Account) -> DepositAddress {
-    let mut preimage = account.owner.as_slice().to_vec();
-    preimage.extend_from_slice(account.effective_subaccount());
-    let hash = Keccak256::hash(&preimage);
-    let mut bytes = [0_u8; 20];
-    bytes.copy_from_slice(&hash[12..32]);
-    DepositAddress::new(Address::new(bytes))
-}
-
 fn registration(
     account: Account,
     token: Address,
