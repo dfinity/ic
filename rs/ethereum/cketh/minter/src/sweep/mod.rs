@@ -12,6 +12,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::attestation::{AttestationRequest, sign_attestation};
 use crate::{
     deposit_address::sweeper_derivation_path,
     guard::TimerGuard,
@@ -25,7 +26,7 @@ use crate::{
         transactions::{CreateSweepTransactionError, PipelineRequest},
     },
     time::TimeProvider,
-    tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate},
+    tx::{AuthorizationRequest, GasFeeEstimate, lazy_refresh_gas_fee_estimate, sign_digest},
     withdraw::{
         fetch_finalized_receipts, finalized_transaction_count, latest_transaction_count,
         send_signed_transactions,
@@ -34,6 +35,7 @@ use crate::{
 use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
+use std::collections::BTreeSet;
 
 /// Gas limit of a sweep transaction. A fixed, conservative bound; a per-request estimate arrives
 /// with the real delegate sweep call.
@@ -42,10 +44,11 @@ pub(crate) const SWEEP_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(100_000
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
+const MAX_DEPOSITS_PER_SWEEP: usize = 10;
 
 /// Turns the deposits the balance scan queued into the sweep requests that
 /// [`process_sweeper_transactions`] prices, signs, sends and finalizes.
-pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(_runtime: &R) {
+pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
     let _guard = match TimerGuard::new(TaskType::SweeperEnqueue) {
         Ok(guard) => guard,
         Err(e) => {
@@ -56,6 +59,139 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(_runtime: &R) {
             return;
         }
     };
+
+    if read_state(|s| s.sweeper_contract_address).is_none() {
+        log!(
+            DEBUG,
+            "[create_pending_sweeper_requests]: SKIPPING: no sweeper contract address is configured"
+        );
+        return;
+    }
+
+    let batch_per_token =
+        read_state(|s| s.automatic_deposits.requests_batch(MAX_DEPOSITS_PER_SWEEP));
+    if batch_per_token.is_empty() {
+        return;
+    }
+
+    let Some(_gas_fee_estimate) = lazy_refresh_gas_fee_estimate(runtime).await else {
+        log!(
+            INFO,
+            "[create_pending_sweeper_requests]: SKIPPING: failed retrieving gas fee estimate"
+        );
+        return;
+    };
+
+    for (_token, targets) in batch_per_token {
+        let Some(attestation_requests) = read_state(|s| s.attestation_requests(&targets)) else {
+            log!(
+                DEBUG,
+                "[create_pending_sweeper_requests]: SKIPPING: no deposit helper with subaccount is configured"
+            );
+            return;
+        };
+        let Some(authorization_requests) = read_state(|s| s.authorization_requests(&targets))
+        else {
+            log!(
+                DEBUG,
+                "[create_pending_sweeper_requests]: SKIPPING: the sweeper contract address was cleared while enqueueing"
+            );
+            return;
+        };
+        sign_attestations_batch(attestation_requests, runtime).await;
+        sign_authorizations_batch(authorization_requests, runtime).await;
+    }
+}
+
+async fn sign_attestations_batch<R: CanisterRuntime>(
+    requests: Vec<AttestationRequest>,
+    runtime: &R,
+) {
+    let requests_to_sign: BTreeSet<_> = read_state(|s| {
+        requests
+            .into_iter()
+            .filter(|request| s.automatic_deposits.attestation(request).is_none())
+            .collect()
+    });
+
+    let signing_results = join_all(requests_to_sign.into_iter().map(|request| async move {
+        (request.clone(), sign_attestation(&request, runtime).await)
+    }))
+    .await;
+
+    let mut errors = Vec::new();
+    for (request, signing_result) in signing_results {
+        match signing_result {
+            Ok(signature) => {
+                mutate_state(|s| {
+                    process_event(
+                        s,
+                        EventType::AttestedDepositAddress { request, signature },
+                        runtime,
+                    )
+                });
+            }
+            Err(e) => errors.push((request, e)),
+        }
+    }
+
+    if !errors.is_empty() {
+        log!(
+            INFO,
+            "[create_pending_sweeper_requests]: leaving out the deposits this sweep could not attest: {errors:?}"
+        );
+    }
+}
+
+/// Signs the authorizations in `requests` that the minter has not signed before, recording each so
+/// a later sweep of the same address reuses it.
+///
+/// A request names the chain, the delegate and the nonce it authorizes, so re-pointing the minter
+/// at another sweeper contract misses the recorded ones and signs afresh.
+async fn sign_authorizations_batch<R: CanisterRuntime>(
+    requests: Vec<AuthorizationRequest>,
+    runtime: &R,
+) {
+    let requests_to_sign: BTreeSet<_> = read_state(|s| {
+        requests
+            .into_iter()
+            .filter(|request| s.automatic_deposits.authorization(request).is_none())
+            .collect()
+    });
+
+    let signing_results = join_all(requests_to_sign.into_iter().map(|request| async move {
+        let signature = sign_digest(
+            &request.authorization().hash(),
+            &request.derivation_path(),
+            runtime,
+        )
+        .await;
+        (request, signature)
+    }))
+    .await;
+
+    let mut errors = Vec::new();
+    for (request, signing_result) in signing_results {
+        match signing_result {
+            Ok(signature) => {
+                mutate_state(|s| {
+                    process_event(
+                        s,
+                        EventType::AuthorizedDepositAddress { request, signature },
+                        runtime,
+                    )
+                });
+            }
+            Err(e) => errors.push((request, e)),
+        }
+    }
+
+    if !errors.is_empty() {
+        log!(
+            INFO,
+            "[create_pending_sweeper_requests]: leaving out the deposits this sweep could not authorize: {errors:?}"
+        );
+    }
 }
 
 pub async fn process_sweeper_transactions<R: CanisterRuntime>(runtime: R) {

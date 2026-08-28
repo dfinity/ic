@@ -12,7 +12,8 @@ pub use eip_1559::{
     SignedTransactionRequest, TransactionRequest,
 };
 pub use eip_7702::{
-    Authorization, Eip7702TransactionRequest, SignedAuthorization, SignedEip7702TransactionRequest,
+    Authorization, AuthorizationRequest, Eip7702TransactionRequest, SignedAuthorization,
+    SignedEip7702TransactionRequest,
 };
 pub use finalized::Finalized;
 pub use signed::{SignableTransaction, Signed, TransactionSignature, sign};
