@@ -559,7 +559,7 @@ impl Hash for Response {
 
 /// XNet message type (like `Request` and `Response`) for guaranteed delivery of
 /// cycles that are refunded outside of a response: e.g. the payment of a dropped
-/// best-effort call; or the unspent part of an HTTP outcall's payment, which is
+/// best-effort call; or the unspent part of an HTTP outcall's payment that was
 /// only settled after the response was already delivered.
 ///
 /// Represents an _anonymous refund_.
