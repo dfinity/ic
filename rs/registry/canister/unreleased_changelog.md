@@ -9,8 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
-* Invariant requiring that SEV-enabled subnets may only run a GuestOS version that has
-  `guest_launch_measurements`.
+* `cooling_down` field in `SubnetRecord`, settable via `UpdateSubnetRecord` proposals. See
+  `ic_replicated_state::SubnetTopology::cooling_down` for the exact semantics. The field must not
+  be set on mainnet before the replica version rejecting ingress messages to cooling down subnets
+  has been rolled out to all subnets.
 
 * Invariant requiring that every elected GuestOS and HostOS version ID is well-formed,
   i.e. that it consists only of alphanumeric characters, dots, dashes and underscores.

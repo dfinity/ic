@@ -129,6 +129,13 @@ const CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT: &str =
 pub(crate) const CRITICAL_ERROR_TIP_CANISTERS_FILTERED: &str =
     "state_manager_tip_canisters_filtered";
 
+/// Critical error tracking snapshot directories unexpectedly removed from tip by
+/// `TipRequest::FilterTipCanisters`, which is only meant to be a safety net: every
+/// snapshot directory removal should be covered by an explicit
+/// `UnflushedCheckpointOp::DeleteSnapshot`.
+pub(crate) const CRITICAL_ERROR_TIP_SNAPSHOTS_FILTERED: &str =
+    "state_manager_tip_snapshots_filtered";
+
 /// How long to keep archived and diverged states.
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
@@ -244,6 +251,7 @@ pub struct CheckpointMetrics {
     load_checkpoint_soft_invariant_broken: IntCounter,
     replicated_state_altered_after_checkpoint: IntCounter,
     tip_canisters_filtered: IntCounter,
+    tip_snapshots_filtered: IntCounter,
     tip_handler_request_duration: HistogramVec,
     num_page_maps_by_load_status: IntGaugeVec,
     num_loaded_wasm_files_by_source: IntGaugeVec,
@@ -284,6 +292,9 @@ impl CheckpointMetrics {
         let tip_canisters_filtered =
             metrics_registry.error_counter(CRITICAL_ERROR_TIP_CANISTERS_FILTERED);
 
+        let tip_snapshots_filtered =
+            metrics_registry.error_counter(CRITICAL_ERROR_TIP_SNAPSHOTS_FILTERED);
+
         let tip_handler_request_duration = metrics_registry.histogram_vec(
             "state_manager_tip_handler_request_duration_seconds",
             "Duration to execute requests to Tip handling thread in seconds.",
@@ -310,6 +321,7 @@ impl CheckpointMetrics {
             load_checkpoint_soft_invariant_broken,
             replicated_state_altered_after_checkpoint,
             tip_canisters_filtered,
+            tip_snapshots_filtered,
             tip_handler_request_duration,
             num_page_maps_by_load_status,
             num_loaded_wasm_files_by_source,
@@ -3550,6 +3562,12 @@ impl StateManager for StateManagerImpl {
             .hot_canisters_count
             .observe(state.canister_states().hot_len() as f64);
         state.repartition_canister_states();
+
+        // Like the repartitioning above, this must stay unconditional: the aggregate
+        // is derived from the canisters at checkpoint load, so refreshing it here,
+        // right before the state is hashed, is what makes a replica that restarts
+        // from the checkpoint agree with one that keeps running.
+        state.refresh_consumed_cycles();
 
         let assert_tip_is_none = |states: &SharedState| {
             // The following assert validates that we don't have two clients

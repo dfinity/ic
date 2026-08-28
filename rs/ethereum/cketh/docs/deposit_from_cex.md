@@ -336,9 +336,10 @@ with an `icrc1_balance_of` of `1_762_128_000_000_000_000` wei ≈ 1.76 ckETH as 
    the optional fee arguments (step 1) transfers the caller-specified ckETH amount
    into the fee account (`icrc2_transfer_from`, see the variants below) — plus
    treasury top-ups and converted `deposit_fee` revenue (see Non-goals).
-1. **Daily funding task**: read the fee account's balance on the ckETH ledger and
-   the sweeper address' ETH balance (`eth_getBalance`); if the sweeper balance is
-   below its low-water mark, **withdraw ckETH from the fee account to the sweeper
+1. **Daily funding task**: compare the sweeper address' prepaid gas against its
+   low-water mark. The minter needs no chain read for this: it tracks a *lower
+   bound* on that balance from its own recorded events, and if the bound is below
+   the low-water mark it **withdraws ckETH from the fee account to the sweeper
    address** — an ordinary ckETH withdrawal through the existing pipeline (burn
    from the fee account, then send the ETH on the main address' nonce sequence).
    `R14` holds by construction, with no new burn path to audit; this pipeline is
@@ -348,8 +349,15 @@ with an `icrc1_balance_of` of `1_762_128_000_000_000_000` wei ≈ 1.76 ckETH as 
    funding is infrequent (batched to cover many sweeps) and uses the same
    resubmission machinery as withdrawals.
 
-* The sweeper address' balance *is* the `prepaid_sweep_gas` counter, reconcilable
-  on-chain with one `eth_getBalance`. Sweep gas draws it down; burned ckETH is
+* The sweeper address' balance is the `prepaid_sweep_gas` counter, and the minter
+  tracks a lower bound on it from its own events — what finalized fundings
+  delivered, less the gas submitted sweeps provisioned — and may reconcile that
+  bound against the chain whenever it chooses. The bound errs low: ETH anyone else
+  sends to the address only pushes the true balance above it. That is the safe
+  direction for both readers, in opposite ways — a funding may be triggered earlier
+  than strictly needed, never skipped; a sweep may be held back, never authorised
+  against gas that is not there.
+  Sweep gas draws it down; burned ckETH is
   **never re-minted**, so "cumulative burned ≥ cumulative spent" holds at every
   instant. Each funding round burns for its own transfer alone: the fee a previous
   funding provisioned but did not spend is left as backing rather than discounted

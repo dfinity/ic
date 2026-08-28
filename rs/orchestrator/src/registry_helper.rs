@@ -16,6 +16,7 @@ use ic_registry_client_helpers::{
     hostos_version::HostosRegistry,
     node::{NodeRecord, NodeRegistry},
     node_operator::NodeOperatorRegistry,
+    replica_version::ReplicaVersionRegistry,
     subnet::SubnetRegistry,
     unassigned_nodes::UnassignedNodeRegistry,
 };
@@ -137,7 +138,7 @@ impl RegistryHelper {
         version: RegistryVersion,
     ) -> OrchestratorResult<ReplicaVersionRecord> {
         self.registry_client
-            .get_replica_version_record_from_version_id(&replica_version_id, version)?
+            .get_replica_version_record(&replica_version_id, version)?
             .ok_or(OrchestratorError::ReplicaVersionMissingError(
                 replica_version_id,
                 version,

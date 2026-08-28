@@ -14,9 +14,9 @@ use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::event::{Event, EventType};
 use crate::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
+    Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex, SweepId,
 };
-use crate::state::{Erc20Balances, State};
+use crate::state::{Erc20Balances, EthBalance, State};
 use crate::test_fixtures::{
     arb::{arb_address, arb_checked_amount_of, arb_hash, arb_ledger_subaccount},
     initial_state,
@@ -680,6 +680,7 @@ prop_compose! {
         last_scraped_block_number in arb_nat(),
         evm_rpc_id in proptest::option::of(arb_principal()),
         sweeper_contract_address in proptest::option::of(arb_address()),
+        next_sweeper_transaction_nonce in proptest::option::of(arb_nat()),
     ) -> InitArg {
         InitArg {
             ethereum_network: EthereumNetwork::Sepolia,
@@ -692,6 +693,7 @@ prop_compose! {
             last_scraped_block_number,
             evm_rpc_id,
             ethereum_sweeper_contract_address: sweeper_contract_address.map(|addr| addr.to_string()),
+            next_sweeper_transaction_nonce,
         }
     }
 }
@@ -709,8 +711,10 @@ prop_compose! {
         deposit_with_subaccount_helper_contract_address in proptest::option::of(arb_address()),
         last_deposit_with_subaccount_scraped_block_number in proptest::option::of(arb_nat()),
         sweeper_contract_address in proptest::option::of(arb_address()),
+        next_sweeper_transaction_nonce in proptest::option::of(arb_nat()),
     ) -> UpgradeArg {
         UpgradeArg {
+            next_sweeper_transaction_nonce,
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
             ethereum_block_height,
             minimum_withdrawal_amount,
@@ -978,13 +982,13 @@ fn state_equivalence() {
         ledger_burn_index: LedgerBurnIndex::new(20),
         ..withdrawal_request1.clone()
     };
-    let pending_withdrawal_requests: VecDeque<WithdrawalRequest> = vec![
+    let pending_requests: VecDeque<WithdrawalRequest> = vec![
         withdrawal_request1.clone().into(),
         withdrawal_request2.clone().into(),
     ]
     .into_iter()
     .collect();
-    let processed_withdrawal_requests = btreemap! {
+    let processed_requests = btreemap! {
         LedgerBurnIndex::new(4) => EthWithdrawalRequest {
             withdrawal_amount: Wei::new(1_000_000_000_000),
             ledger_burn_index: LedgerBurnIndex::new(4),
@@ -1107,8 +1111,8 @@ fn state_equivalence() {
         }),
     };
     let builder = WithdrawalTransactionsBuilder::default()
-        .with_pending_withdrawal_requests(pending_withdrawal_requests)
-        .with_processed_withdrawal_requests(processed_withdrawal_requests)
+        .with_pending_requests(pending_requests)
+        .with_processed_requests(processed_requests)
         .with_created_tx(created_tx)
         .with_sent_tx(sent_tx)
         .with_finalized_tx(finalized_tx)
@@ -1165,6 +1169,7 @@ fn state_equivalence() {
     };
     let state = State {
         sweeper_funding: Default::default(),
+        next_sweep_id: SweepId(0),
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
         cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
@@ -1333,7 +1338,7 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             withdrawal_transactions: builder
                 .clone()
-                .with_pending_withdrawal_requests(
+                .with_pending_requests(
                     vec![
                         withdrawal_request2.clone().into(),
                         withdrawal_request1.clone().into()
@@ -1352,9 +1357,7 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             withdrawal_transactions: builder
                 .clone()
-                .with_pending_withdrawal_requests(
-                    vec![withdrawal_request1.into()].into_iter().collect()
-                )
+                .with_pending_requests(vec![withdrawal_request1.into()].into_iter().collect())
                 .build(),
             ..state.clone()
         }),
@@ -1479,6 +1482,15 @@ fn state_equivalence() {
     );
 }
 
+/// An [`EthBalance`] holding `eth_balance` of deposit-backed ETH, for tests that need the minter to
+/// have received something.
+pub(crate) fn eth_balance_of(eth_balance: Wei) -> EthBalance {
+    EthBalance {
+        eth_balance,
+        ..Default::default()
+    }
+}
+
 mod sweeper_funding {
     use super::*;
     use crate::eth_logs::LedgerSubaccount;
@@ -1511,7 +1523,7 @@ mod sweeper_funding {
 
         let request = state
             .withdrawal_transactions
-            .withdrawal_requests_iter()
+            .requests_iter()
             .next()
             .expect("BUG: the funding request was not recorded");
         assert_matches!(request, WithdrawalRequest::SweeperFunding(_));
@@ -1532,7 +1544,7 @@ mod eth_balance {
     use crate::state::audit::{EventType, apply_state_transition};
     use crate::state::tests::checked_sub;
     use crate::state::tests::{initial_state, received_eth_event};
-    use crate::state::transactions::{EthWithdrawalRequest, WithdrawalRequest, create_transaction};
+    use crate::state::transactions::{EthWithdrawalRequest, PipelineRequest, WithdrawalRequest};
     use crate::state::{EthBalance, State};
     use crate::test_fixtures::sweeper_funding_request;
     use crate::tx::{SignedEip1559TransactionRequest, TransactionSignature};
@@ -2008,20 +2020,19 @@ mod eth_balance {
         }
 
         fn apply(self, state: &mut State) -> TransactionReceipt {
-            let accepted_withdrawal_request_event = self
-                .withdrawal_request
-                .clone()
-                .into_accepted_withdrawal_request_event();
+            let accepted_withdrawal_request_event =
+                accepted_withdrawal_request_event(self.withdrawal_request.clone());
             apply_state_transition(state, &accepted_withdrawal_request_event);
 
-            let transaction = create_transaction(
-                &self.withdrawal_request,
-                self.nonce,
-                self.tx_fee,
-                self.gas_limit,
-                EthereumNetwork::Sepolia,
-            )
-            .expect("BUG: failed to create transaction");
+            let transaction = self
+                .withdrawal_request
+                .create_transaction(
+                    self.nonce,
+                    self.tx_fee,
+                    self.gas_limit,
+                    EthereumNetwork::Sepolia,
+                )
+                .expect("BUG: failed to create transaction");
             apply_state_transition(
                 state,
                 &EventType::CreatedTransaction {
@@ -2070,6 +2081,18 @@ mod eth_balance {
         let mut state = initial_state();
         add_erc20_token(&mut state);
         state
+    }
+
+    fn accepted_withdrawal_request_event(request: WithdrawalRequest) -> EventType {
+        match request {
+            WithdrawalRequest::CkEth(request) => EventType::AcceptedEthWithdrawalRequest(request),
+            WithdrawalRequest::CkErc20(request) => {
+                EventType::AcceptedErc20WithdrawalRequest(request)
+            }
+            WithdrawalRequest::SweeperFunding(request) => {
+                EventType::AcceptedSweeperFundingRequest(request)
+            }
+        }
     }
 
     fn add_erc20_token(state: &mut State) {

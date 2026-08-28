@@ -1,11 +1,18 @@
 #[cfg(test)]
 mod tests;
 
+use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
-use crate::numeric::{BlockNumber, Erc20Value};
+use crate::eth_rpc::Hash;
+use crate::eth_rpc_client::responses::TransactionReceipt;
+use crate::numeric::{BlockNumber, Erc20Value, TransactionCount, TransactionNonce};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
+use crate::state::transactions::{
+    ResubmitTransactionError, SweepId, SweepRequest, SweeperTransactionPipeline,
+};
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
+use crate::tx::{Finalized, GasFeeEstimate, Signed, SweepTransaction, TransactionSignature};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
@@ -55,9 +62,151 @@ pub struct AutomaticDeposits {
     /// Funded `(account, token)` pairs moved out of the watchlist, awaiting sweeping,
     /// keyed by the funded [`DepositRequest`]; each holds one [`SweepEntry`].
     sweep: BTreeMap<DepositRequest, SweepEntry>,
+    /// Attestations the minter has signed, keyed by exactly what each one signed. An attestation
+    /// binds an account to one chain and one helper deployment and never expires, so a later sweep
+    /// of the same address reuses it instead of paying for another threshold-ECDSA signature; a new
+    /// helper deployment yields a different key and simply misses.
+    ///
+    /// Nothing prunes this map: it grows with the number of accounts that have ever been swept, and
+    /// entries naming a retired helper stay behind forever. [`Self::attestations_len`] is exported
+    /// as a metric so that growth is visible before it needs bounding.
+    attestations: BTreeMap<AttestationRequest, TransactionSignature>,
+    /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
+    /// its own nonce sequence, independent of the main-address withdrawal pipeline.
+    sweeper_transactions: SweeperTransactionPipeline,
 }
 
 impl AutomaticDeposits {
+    pub fn new(initial_sweeper_nonce: TransactionNonce) -> Self {
+        Self {
+            sweeper_transactions: SweeperTransactionPipeline::new(initial_sweeper_nonce),
+            ..Default::default()
+        }
+    }
+
+    pub fn has_pending_sweeps(&self) -> bool {
+        self.sweeper_transactions.has_pending_requests()
+    }
+
+    pub fn is_sent_sweep_tx_empty(&self) -> bool {
+        self.sweeper_transactions.is_sent_tx_empty()
+    }
+
+    pub fn next_sweeper_transaction_nonce(&self) -> TransactionNonce {
+        self.sweeper_transactions.next_transaction_nonce()
+    }
+
+    pub fn update_next_sweeper_transaction_nonce(&mut self, new_nonce: TransactionNonce) {
+        self.sweeper_transactions
+            .update_next_transaction_nonce(new_nonce)
+    }
+
+    pub fn sweep_requests_batch(&self, requested_batch_size: usize) -> Vec<SweepRequest> {
+        self.sweeper_transactions
+            .requests_batch(requested_batch_size)
+    }
+
+    pub fn create_resubmit_sweep_transactions(
+        &self,
+        latest_transaction_count: TransactionCount,
+        current_gas_fee: GasFeeEstimate,
+    ) -> Vec<Result<(SweepId, SweepTransaction), ResubmitTransactionError<SweepId>>> {
+        self.sweeper_transactions
+            .create_resubmit_transactions(latest_transaction_count, current_gas_fee)
+    }
+
+    pub fn sweep_transactions_to_sign_batch(
+        &self,
+        batch_size: usize,
+    ) -> Vec<(SweepId, SweepTransaction)> {
+        self.sweeper_transactions
+            .transactions_to_sign_batch(batch_size)
+    }
+
+    pub fn sweep_transactions_to_send_batch(
+        &self,
+        latest_transaction_count: TransactionCount,
+        batch_size: usize,
+    ) -> Vec<Signed<SweepTransaction>> {
+        self.sweeper_transactions
+            .transactions_to_send_batch(latest_transaction_count, batch_size)
+    }
+
+    pub fn sent_sweep_transactions_to_finalize(
+        &self,
+        finalized_transaction_count: &TransactionCount,
+    ) -> BTreeMap<Hash, SweepId> {
+        self.sweeper_transactions
+            .sent_transactions_to_finalize(finalized_transaction_count)
+    }
+
+    pub fn record_sweep_request(&mut self, request: SweepRequest) {
+        self.sweeper_transactions.record_request(request)
+    }
+
+    pub fn reschedule_sweep_request(&mut self, id: SweepId) {
+        self.sweeper_transactions.reschedule_request(id)
+    }
+
+    pub fn record_created_sweep_transaction(&mut self, id: SweepId, transaction: SweepTransaction) {
+        self.sweeper_transactions
+            .record_created_transaction(id, transaction)
+    }
+
+    pub fn record_signed_sweep_transaction(
+        &mut self,
+        signed_transaction: Signed<SweepTransaction>,
+    ) {
+        self.sweeper_transactions
+            .record_signed_transaction(signed_transaction)
+    }
+
+    pub fn record_resubmit_sweep_transaction(&mut self, new_tx: SweepTransaction) {
+        self.sweeper_transactions
+            .record_resubmit_transaction(new_tx)
+    }
+
+    pub fn record_finalized_sweep_transaction(
+        &mut self,
+        id: SweepId,
+        receipt: &TransactionReceipt,
+    ) -> Finalized<SweepTransaction> {
+        self.sweeper_transactions
+            .record_finalized_transaction(id, receipt)
+    }
+
+    /// Equality as replay defines it: the sweeper pipeline reorders its queue without recording an
+    /// event, so it compares itself rather than being compared field by field.
+    pub fn is_equivalent_to(&self, other: &Self) -> Result<(), String> {
+        use ic_utils_ensure::ensure_eq;
+
+        let Self {
+            watchlist,
+            sweep,
+            attestations,
+            sweeper_transactions,
+        } = self;
+
+        ensure_eq!(watchlist, &other.watchlist);
+        ensure_eq!(sweep, &other.sweep);
+        ensure_eq!(attestations, &other.attestations);
+        sweeper_transactions.is_equivalent_to(&other.sweeper_transactions)
+    }
+
+    /// The signature already stored for `request`, if any: signing another would cost a
+    /// threshold-ECDSA signature for the same digest.
+    pub fn attestation(&self, request: &AttestationRequest) -> Option<&TransactionSignature> {
+        self.attestations.get(request)
+    }
+
+    pub fn record_attestation(
+        &mut self,
+        request: AttestationRequest,
+        signature: TransactionSignature,
+    ) {
+        self.attestations.insert(request, signature);
+    }
+
     /// Arm the `(account, token)` pair, whose deposit `address` is derived for `account`.
     ///
     /// Returns the watched pair together with the timestamp until which a deposit to it is
@@ -286,30 +435,37 @@ impl AutomaticDeposits {
         self.sweep.len()
     }
 
-    /// Where the `(account, token)` pair's deposit currently stands, or `None` if the pair is
-    /// neither armed nor has funds queued for sweeping (so it must be registered). Reports
+    pub fn attestations_len(&self) -> usize {
+        self.attestations.len()
+    }
+
+    /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
+    /// funds queued for sweeping (so it must be registered). Reports
     /// [`DepositStatus::AwaitingSweep`] once funds have been detected and queued, otherwise
     /// [`DepositStatus::Scanning`] while the address is armed and being scanned as of `now`.
+    /// `minimum_deposit_amount` is the balance the address must hold for the scan to detect it,
+    /// reported back to the caller alongside the status.
     pub fn deposit_status(
         &self,
         now: Timestamp,
-        account: &Account,
-        token: Address,
+        request: &DepositRequest,
+        minimum_deposit_amount: Erc20Value,
     ) -> Option<DepositErc20Response> {
-        let request = DepositRequest::new(*account, token);
-        if let Some(entry) = self.sweep.get(&request) {
+        if let Some(entry) = self.sweep.get(request) {
             return Some(DepositErc20Response {
                 address: entry.address.to_string(),
+                minimum_deposit_amount: minimum_deposit_amount.into(),
                 status: DepositStatus::AwaitingSweep(DetectedDeposit {
-                    erc20_contract_address: token.to_string(),
+                    erc20_contract_address: request.token().to_string(),
                     scanned_balance: entry.scanned_balance.into(),
                     detected_at_block: entry.last_scanned_block.into(),
                 }),
             });
         }
-        self.get_entry(now, &request)
+        self.get_entry(now, request)
             .map(|entry| DepositErc20Response {
                 address: entry.value.address.to_string(),
+                minimum_deposit_amount: minimum_deposit_amount.into(),
                 status: DepositStatus::Scanning {
                     valid_until: entry.expires_at.as_nanos(),
                     last_scanned_block: entry.value.last_scanned_block.map(Into::into),
@@ -324,6 +480,8 @@ impl Default for AutomaticDeposits {
         Self {
             watchlist: TimedSizedMap::new(DEPOSIT_ADDRESS_SCAN_WINDOW, MAX_ACTIVE_DEPOSITS),
             sweep: BTreeMap::new(),
+            attestations: BTreeMap::new(),
+            sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
         }
     }
 }

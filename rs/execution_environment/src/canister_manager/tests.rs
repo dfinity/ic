@@ -86,7 +86,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, MIN_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation,
-    NumBytes, NumInstructions, SubnetId, UserId,
+    NumBytes, NumInstructions, ReplicaVersion, SubnetId, UserId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CanisterCall, StopCanisterCallId, StopCanisterContext},
     time::UNIX_EPOCH,
@@ -109,6 +109,7 @@ use std::{
     io::Write,
     mem::size_of,
     path::Path,
+    str::FromStr,
     sync::Arc,
 };
 use wirm::wasmparser;
@@ -267,7 +268,7 @@ impl CanisterManagerBuilder {
             self.subnet_id,
             no_op_logger(),
             Arc::clone(&cycles_account_manager),
-            SchedulerConfig::application_subnet().dirty_page_overhead,
+            SchedulerConfig::application_subnet().page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             Arc::new(FakeStateManager::new()),
             Path::new("/tmp"),
@@ -6280,6 +6281,7 @@ fn subnet_info_canister_call_succeeds() {
     let own_subnet_id = subnet_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet_id)
+        .with_replica_version(ReplicaVersion::from_str("foobar").unwrap())
         .build();
     let uni_canister = test
         .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
@@ -6304,10 +6306,7 @@ fn subnet_info_canister_call_succeeds() {
         replica_version,
         registry_version,
     } = Decode!(&bytes, SubnetInfoResponse).unwrap();
-    assert_eq!(
-        replica_version,
-        ic_types::ReplicaVersion::default().to_string()
-    );
+    assert_eq!(replica_version, "foobar");
     assert_eq!(registry_version, ic_types::RegistryVersion::default().get());
 }
 

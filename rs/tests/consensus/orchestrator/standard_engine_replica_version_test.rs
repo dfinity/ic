@@ -97,7 +97,7 @@ use ic_canister_client::Sender;
 use ic_consensus_system_test_upgrade_common::elect_target_version;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_consensus_system_test_utils::upgrade::{
-    assert_assigned_replica_version, get_assigned_replica_version,
+    assert_assigned_replica_version_with_time, get_assigned_replica_version,
 };
 use ic_engine_controller::{CreateEngineArgs, NewSubnet};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -134,6 +134,41 @@ const ENGINE_NODE_COUNT: usize = 4;
 // More than 1 so that a `deployment_progress` between the two engines'
 // upgrade priorities can upgrade one, but not the other.
 const NUM_ENGINES: usize = 2;
+
+// How long to wait for one Cloud Engine node to come up on another replica
+// version, and how often to poll it in the meantime.
+//
+// Every such wait is a full GuestOS upgrade cycle: the orchestrator downloads
+// the ~580 MiB update image, `tar`-unpacks it into ~11 GiB of boot.img +
+// root.img, `dd`s those onto the inactive slot, reboots, and only then starts
+// the replica. There is no shortcut for a version that already sits on the
+// inactive slot (see `ImageUpgrader::execute_upgrade`), so the roll back in
+// [Step 7] and the roll forward in [Step 9] each pay for the cycle again.
+//
+// On Farm one cycle fits in the 600 s that `assert_assigned_replica_version`
+// defaults to. On the `local` backend it does not: all 8 engine nodes run the
+// cycle simultaneously on a single host that the 10 VMs of this test
+// oversubscribe (60 vCPUs and 40 GiB of guest RAM), and a measured cycle took
+// ~9 min there -- ~90 s to download, ~240 s to unpack, ~35 s to `dd`, ~150 s to
+// reboot -- leaving no room for the replica to start before the deadline.
+const REPLICA_VERSION_TIMEOUT_SECS: u64 = 20 * 60;
+const REPLICA_VERSION_BACKOFF_SECS: u64 = 10;
+
+/// Waits until `node` is healthy and running `expected_version`, panicking if
+/// that does not happen within [`REPLICA_VERSION_TIMEOUT_SECS`].
+fn assert_assigned_replica_version(
+    node: &IcNodeSnapshot,
+    expected_version: &ReplicaVersion,
+    logger: Logger,
+) {
+    assert_assigned_replica_version_with_time(
+        node,
+        expected_version,
+        logger,
+        REPLICA_VERSION_TIMEOUT_SECS,
+        REPLICA_VERSION_BACKOFF_SECS,
+    )
+}
 
 fn setup(env: TestEnv) {
     let logger = env.logger();
@@ -427,9 +462,13 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
-        // Give this test more time, because one successful run was observed
-        // to take about 20 minutes.
-        .with_timeout_per_test(Duration::from_secs(30 * 60))
+        // Give this test more time. One successful Farm run was observed to
+        // take about 20 minutes; on the `local` backend each of the three
+        // upgrade waves costs ~10 minutes on its own (see
+        // `REPLICA_VERSION_TIMEOUT_SECS`), so budget enough for that while
+        // staying under the `test_timeout = "eternal"` (1 hour) that the BUILD
+        // file gives the whole action.
+        .with_timeout_per_test(Duration::from_secs(50 * 60))
         .execute_from_args()?;
     Ok(())
 }

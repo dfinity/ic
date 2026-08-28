@@ -1,14 +1,16 @@
 //! A local [`Anvil`] node (foundry) with a small JSON-RPC client and the ABI/solc helpers used to
 //! drive it. Backs both the standalone batcher tests in `deposit_from_cex.rs` (which run against
-//! anvil with no IC) and the live balance-scan harness in [`crate::live_scan`].
+//! anvil with no IC) and the live balance-scan harness in [`crate::live`].
 //!
 //! Runs the `anvil` and `solc` binaries vendored via Bazel (`ANVIL_BIN`, `SOLC_BIN`).
 
+use candid::Principal;
 use ethers_core::abi::{ParamType, Token};
 use ethers_core::types::{Address as EthAddress, U256};
 use ethers_core::utils::keccak256;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
 use serde_json::Value;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -42,6 +44,18 @@ pub struct Anvil {
 
 impl Anvil {
     pub fn start() -> Self {
+        Self::start_with_args(&[])
+    }
+
+    /// Starts anvil impersonating Ethereum mainnet: chain id 1, so transactions the minter signs for
+    /// `EthereumNetwork::Mainnet` are accepted, with one slot per epoch so the `finalized` block tag
+    /// trails `latest` by two blocks instead of the default 64 (2 epochs x 32 slots) — which is what
+    /// lets a test drive the minter at its production `BlockTag::Finalized`.
+    pub fn start_mainnet_like() -> Self {
+        Self::start_with_args(&["--chain-id", "1", "--slots-in-an-epoch", "1"])
+    }
+
+    fn start_with_args(extra_args: &[&str]) -> Self {
         let bin = std::env::var("ANVIL_BIN").expect("ANVIL_BIN not set by Bazel");
         let port = {
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -52,6 +66,7 @@ impl Anvil {
             .arg("127.0.0.1")
             .arg("--port")
             .arg(port.to_string())
+            .args(extra_args)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -120,6 +135,23 @@ impl Anvil {
         );
     }
 
+    /// The native ETH balance of `address` at `block`, read straight from anvil, i.e. the ground
+    /// truth a test checks the minter's own figures against — the minter never reads it itself.
+    pub(crate) fn eth_balance(&self, address: &Address, block: &str) -> u128 {
+        let hex = self.rpc(
+            "eth_getBalance",
+            serde_json::json!([to_hex(address.as_ref()), block]),
+        );
+        let hex = hex.as_str().expect("eth_getBalance must return a string");
+        u128::from_str_radix(hex.trim_start_matches("0x"), 16)
+            .expect("eth_getBalance must return a hex quantity")
+    }
+
+    /// Mines `count` blocks (foundry's `anvil_mine`).
+    pub(crate) fn mine(&self, count: u64) {
+        self.rpc("anvil_mine", serde_json::json!([format!("0x{count:x}")]));
+    }
+
     /// A create-style `eth_call` (no `to`): anvil runs `data` as init code and returns whatever it
     /// `RETURN`s, exactly as the minter invokes the batcher.
     pub fn eth_call_create(&self, from: &Address, data: &[u8]) -> Result<Vec<u8>, String> {
@@ -163,9 +195,22 @@ impl Anvil {
     }
 
     fn send_transaction(&self, from: &Address, to: Option<&Address>, data: &[u8]) -> String {
+        self.send_transaction_with_value(from, to, data, 0)
+    }
+
+    fn send_transaction_with_value(
+        &self,
+        from: &Address,
+        to: Option<&Address>,
+        data: &[u8],
+        value: u128,
+    ) -> String {
         let mut tx = serde_json::json!({"from": to_hex(from.as_ref()), "input": to_hex(data)});
         if let Some(to) = to {
             tx["to"] = serde_json::json!(to_hex(to.as_ref()));
+        }
+        if value > 0 {
+            tx["value"] = serde_json::json!(format!("0x{value:x}"));
         }
         self.rpc("eth_sendTransaction", serde_json::json!([tx]))
             .as_str()
@@ -227,6 +272,61 @@ pub fn deploy_mock_erc20(anvil: &Anvil, holder: &Address) -> Address {
         &[address_token(holder), uint_token(TOKEN_SUPPLY)],
     );
     anvil.deploy(holder, &code)
+}
+
+/// Deploys the production ckETH deposit helper (`DepositHelperWithSubaccount.sol`), which forwards
+/// what it receives to `minter` and emits the `ReceivedEthOrErc20` event the minter scrapes.
+pub(crate) fn deploy_deposit_helper(
+    anvil: &Anvil,
+    deployer: &Address,
+    minter: &Address,
+) -> Address {
+    let code = deploy_code(
+        &compile("CKDEPOSIT_SOL", "CkDeposit"),
+        &[address_token(minter)],
+    );
+    anvil.deploy(deployer, &code)
+}
+
+/// Deposits `value` wei through `helper` for `beneficiary`, exactly as a depositor does on mainnet:
+/// the ETH lands at the minter's address and the event is mined for the minter to scrape.
+pub(crate) fn deposit_eth(
+    anvil: &Anvil,
+    helper: &Address,
+    depositor: &Address,
+    beneficiary: Account,
+    value: u128,
+) {
+    let data = [
+        &keccak256(b"depositEth(bytes32,bytes32)")[..4],
+        &ethers_core::abi::encode(&[
+            bytes32_token(principal_to_bytes32(&beneficiary.owner)),
+            bytes32_token(beneficiary.subaccount.unwrap_or([0; 32])),
+        ]),
+    ]
+    .concat();
+    let hash = anvil.send_transaction_with_value(depositor, Some(helper), &data, value);
+    assert!(
+        status_ok(&anvil.await_receipt(&hash)),
+        "the deposit reverted"
+    );
+    // The minter reads at `finalized`, which trails `latest`.
+    anvil.mine(3);
+}
+
+/// A principal as the helper contract's 32-byte word: length-prefixed and zero-padded, which is how
+/// the minter parses it back out of the event.
+fn principal_to_bytes32(principal: &Principal) -> [u8; 32] {
+    let bytes = principal.as_slice();
+    assert!(bytes.len() <= 29, "principal too long for one word");
+    let mut word = [0_u8; 32];
+    word[0] = bytes.len() as u8;
+    word[1..1 + bytes.len()].copy_from_slice(bytes);
+    word
+}
+
+fn bytes32_token(value: [u8; 32]) -> Token {
+    Token::FixedBytes(value.to_vec())
 }
 
 /// The storage slot of `balanceOf[holder]` for a Solidity `mapping(address => uint256)` declared at

@@ -9,7 +9,7 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_time::FastForwardTimeSource;
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
 use ic_types::{Height, batch::BatchContent, crypto::CryptoHash, replica_config::ReplicaConfig};
 use rand_chacha::{ChaChaRng, rand_core::SeedableRng};
 use std::{cell::RefCell, rc::Rc, sync::Arc};
@@ -85,6 +85,7 @@ impl TestRunner {
                     .map(|(index, _)| ReplicaConfig {
                         node_id: node_test_id(index as u64),
                         subnet_id,
+                        replica_version: test_replica_version(),
                     })
                     .collect();
                 let node_ids: Vec<_> = replica_configs
