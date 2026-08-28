@@ -207,3 +207,153 @@ mod config {
         }
     }
 }
+
+/// The sweeper's own spending, driven through the state transitions the sweep pipeline records, so
+/// that the wiring is covered and not only the arithmetic. The funding that delivers the ETH is a
+/// precondition here rather than the subject, so it is arranged directly.
+mod sweep_events {
+    use crate::eth_rpc::Hash;
+    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+    use crate::numeric::{BlockNumber, Wei};
+    use crate::state::State;
+    use crate::state::audit::{EventType, apply_state_transition};
+    use crate::state::transactions::{PipelineRequest, SweepRequest};
+    use crate::test_fixtures::{account, gas_fee_estimate, state_with_enqueued_sweep, usdc};
+    use crate::tx::{SignableTransaction, Signed, TransactionSignature};
+
+    /// What a funding is taken to have delivered to the sweeper, arranged directly: comfortably
+    /// above any fee a fixture sweep can be charged.
+    const DELIVERED: u128 = 1_000_000_000_000_000_000;
+
+    #[tokio::test]
+    async fn should_provision_an_accepted_sweep_before_it_has_spent_anything() {
+        let (mut state, request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
+
+        deliver(&mut state);
+
+        assert_eq!(
+            bound(&state),
+            Wei::new(DELIVERED)
+                .checked_sub(request.max_transaction_fee)
+                .unwrap(),
+            "the whole of what the sweep may cost stops counting as available gas"
+        );
+    }
+
+    /// The refund rule in full: gas is paid whether the sweep succeeded or reverted, and the part
+    /// of the ceiling it did not pay always returns. An ERC-20 sweep moves no ETH value, so there
+    /// is nothing else either outcome can leave behind.
+    #[tokio::test]
+    async fn should_settle_the_bound_on_what_a_finalized_sweep_actually_cost() {
+        for status in [TransactionStatus::Success, TransactionStatus::Failure] {
+            let (mut state, request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
+            deliver(&mut state);
+
+            let fee_paid = finalize(&mut state, &request, status);
+
+            assert!(
+                fee_paid < request.max_transaction_fee,
+                "the fixture must leave an unspent part to hand back"
+            );
+            assert_eq!(
+                bound(&state),
+                Wei::new(DELIVERED).checked_sub(fee_paid).unwrap(),
+                "a {status:?} sweep must cost the sweeper exactly the {fee_paid} of gas it paid"
+            );
+        }
+    }
+
+    /// Sweep spending is the sweeper's ETH, already counted as spent when the funding delivered it.
+    /// Counting it again here would make spend overtake burn and trip the invariant.
+    #[tokio::test]
+    async fn should_leave_the_burn_first_accounting_alone() {
+        let (mut state, request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
+        deliver(&mut state);
+        let burned = state.sweeper_funding.cumulative_burned();
+        let spent = state.sweeper_funding.cumulative_spent();
+
+        finalize(&mut state, &request, TransactionStatus::Success);
+
+        assert_eq!(state.sweeper_funding.cumulative_burned(), burned);
+        assert_eq!(state.sweeper_funding.cumulative_spent(), spent);
+    }
+
+    /// Provisioning beyond what the minter has recorded as delivered — an upgrade that starts the
+    /// counters from zero, or a sweeper funded before it was tracked — floors the bound rather than
+    /// trapping, which would take the replay of every later event with it.
+    #[tokio::test]
+    async fn should_floor_the_bound_at_zero_rather_than_trap() {
+        let (state, _request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
+
+        assert_eq!(bound(&state), Wei::ZERO);
+    }
+
+    fn bound(state: &State) -> Wei {
+        state.sweeper_funding.sweeper_balance_lower_bound()
+    }
+
+    /// Records a finalized funding that put [`DELIVERED`] at the sweeper address.
+    fn deliver(state: &mut State) {
+        state.sweeper_funding.record_burn(Wei::new(DELIVERED));
+        state
+            .sweeper_funding
+            .record_finalized_funding(Wei::new(DELIVERED), Wei::ZERO);
+    }
+
+    /// Drives the already-accepted `request` through the sweeper pipeline to a receipt of `status`,
+    /// priced below its ceiling so that part of the provision comes back, and returns the fee that
+    /// receipt charged.
+    fn finalize(state: &mut State, request: &SweepRequest, status: TransactionStatus) -> Wei {
+        let sweep_id = request.id;
+        let transaction = request
+            .create_transaction(
+                state.automatic_deposits.next_sweeper_transaction_nonce(),
+                gas_fee_estimate(),
+                request.gas_limit(),
+                state.ethereum_network,
+            )
+            .expect("BUG: the fixture prices the request with the estimate it creates with");
+        apply_state_transition(
+            state,
+            &EventType::CreatedSweeperTransaction {
+                sweep_id,
+                transaction: transaction.clone(),
+            },
+        );
+        let signed = Signed::from((
+            transaction,
+            TransactionSignature {
+                signature_y_parity: false,
+                r: Default::default(),
+                s: Default::default(),
+            },
+        ));
+        apply_state_transition(
+            state,
+            &EventType::SignedSweeperTransaction {
+                sweep_id,
+                transaction: signed.clone(),
+            },
+        );
+        let estimate = gas_fee_estimate();
+        let receipt = TransactionReceipt {
+            block_hash: Hash([0x11; 32]),
+            block_number: BlockNumber::new(4_190_269),
+            effective_gas_price: estimate
+                .base_fee_per_gas
+                .checked_add(estimate.max_priority_fee_per_gas)
+                .unwrap(),
+            gas_used: signed.transaction().gas_limit(),
+            status,
+            transaction_hash: signed.hash(),
+        };
+        apply_state_transition(
+            state,
+            &EventType::FinalizedSweeperTransaction {
+                sweep_id,
+                transaction_receipt: receipt.clone(),
+            },
+        );
+        receipt.effective_transaction_fee()
+    }
+}
