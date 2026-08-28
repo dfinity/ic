@@ -18,14 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is the number of responses `PocketIc::mock_flexible_canister_http_response` accepts.
 - The field `pricing_version` of type `CanisterHttpPricingVersion` on `CanisterHttpRequest`, reporting whether a pending
   canister HTTP outcall is priced with the `Legacy` or the `PayAsYouGo` pricing model.
-- Enabling beta features (`IcpConfig::beta_features` passed to `PocketIcBuilder::with_icp_config`) now also enables the
-  pay-as-you-go pricing model, which covers both the `flexible_http_request` management canister endpoint (whose outcalls are
-  always priced that way) and the `pricing_version` field of `http_request` (through which a fully replicated or non-replicated
-  outcall can select it).
+- Enabling beta features (`IcpConfig::beta_features` passed to `PocketIcBuilder::with_icp_config`) now enables the
+  `flexible_http_request` management canister endpoint on subnets that charge for HTTP outcalls; without beta features that
+  endpoint is only available on subnets where HTTP outcalls are free (system subnets and subnets created with a free cycles
+  cost schedule). Beta features also enable the pay-as-you-go pricing model, which flexible outcalls are always priced with
+  and which an `http_request` can select through its `pricing_version` field.
 
 ### Changed
 - Mocked canister HTTP responses report the cycles their node actually spent on the outcall, instead of reporting no spend at all.
   This applies to both `PocketIc::mock_canister_http_response` and `PocketIc::mock_flexible_canister_http_response`.
+- **Breaking:** the responses of `MockCanisterHttpResponse` and `MockFlexibleCanisterHttpResponse` are now of the new type
+  `MockCanisterHttpNodeResponse`, which pairs a `CanisterHttpResponse` with the cycles the responding node reports having spent
+  on the outcall. Leaving `spent_cycles` at `None` lets PocketIC derive the spend as before (`CanisterHttpResponse::into()`
+  does that); setting it reports an exact spend, which makes a test's cycles accounting fully deterministic — the derived spend
+  includes a term for how long the outcall took, which PocketIC measures in process. Reporting more than the per-replica cycles
+  allowance the outcall withheld fails, since no node could report that.
 - Mocking a canister HTTP response whose reject message exceeds 1 KiB now fails. Such a response is not one any node could have
   reported.
 - A node that cannot pay for gossiping its mocked reject reports an out-of-cycles reject instead of the mocked one, matching what

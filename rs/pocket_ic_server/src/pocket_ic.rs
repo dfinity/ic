@@ -148,9 +148,10 @@ use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod,
     CanisterHttpPricingVersion, CanisterHttpReplication, CanisterHttpRequest, CanisterHttpResponse,
     ExtendedSubnetConfigSet, IcpConfig, IcpConfigFlag, IcpFeatures, IcpFeaturesConfig,
-    IncompleteStateFlag, MockCanisterHttpResponse, MockFlexibleCanisterHttpResponse, RawAddCycles,
-    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSenderInfo,
-    RawSetStableMemory, SubnetInstructionConfig, SubnetKind, Topology,
+    IncompleteStateFlag, MockCanisterHttpNodeResponse, MockCanisterHttpResponse,
+    MockFlexibleCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterId,
+    RawEffectivePrincipal, RawMessageId, RawSenderInfo, RawSetStableMemory,
+    SubnetInstructionConfig, SubnetKind, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -3941,14 +3942,27 @@ async fn setup_adapter_mock(
 
 // END COPY
 
-/// Checks that every reject in `responses` is one a node could have produced, i.e.
-/// that its reject code is a valid one and that its message is within the size a
-/// node truncates its reject messages to.
-fn validate_mock_canister_http_rejects<'a>(
-    responses: impl Iterator<Item = &'a CanisterHttpResponse>,
+/// Checks that every mocked response in `responses` is one a node of the outcall's
+/// subnet could have produced: a reject's code must be a valid one and its message
+/// within the size a node truncates its reject messages to, and an explicitly
+/// reported spend must be within the outcall's per-replica cycles allowance.
+fn validate_mock_canister_http_responses<'a>(
+    context: &CanisterHttpRequestContext,
+    responses: impl Iterator<Item = &'a MockCanisterHttpNodeResponse>,
 ) -> Result<(), OpOut> {
-    for response in responses {
-        let CanisterHttpResponse::CanisterHttpReject(reject) = response else {
+    let max_spend = context.max_http_outcall_spend();
+    for node_response in responses {
+        // A node can never spend more than the allowance it was granted, so peers
+        // invalidate a response share claiming more (see the pool manager's
+        // `check_spent_within_limit`).
+        if let Some(spent_cycles) = node_response.spent_cycles
+            && spent_cycles > max_spend.get()
+        {
+            return Err(OpOut::Error(
+                PocketIcError::CanisterHttpSpentCyclesTooLarge((spent_cycles, max_spend.get())),
+            ));
+        }
+        let CanisterHttpResponse::CanisterHttpReject(reject) = &node_response.response else {
             continue;
         };
         if ic_error_types::RejectCode::try_from(reject.reject_code).is_err() {
@@ -3975,14 +3989,26 @@ fn validate_mock_canister_http_rejects<'a>(
 /// Turns one mocked response into the response content a node would have
 /// produced, together with the cycles that node reports having spent on the
 /// outcall.
+///
+/// The reported spend is [the one the caller asked
+/// for](MockCanisterHttpNodeResponse::spent_cycles); where the caller left it open, it
+/// is derived with the same pricing machinery a real node uses.
 fn mock_canister_http_response_content(
     pic: &PocketIc,
     subnet: &StateMachine,
     canister_http_request_id: CanisterHttpRequestId,
     context: &CanisterHttpRequestContext,
-    response: &CanisterHttpResponse,
+    node_response: &MockCanisterHttpNodeResponse,
 ) -> (CanisterHttpResponseContent, CanisterHttpPaymentReceipt) {
-    match response {
+    // An explicitly reported spend is honored verbatim; it was checked against the
+    // per-replica allowance by `validate_mock_canister_http_responses`, so the node
+    // is solvent by construction.
+    let explicit_receipt = node_response
+        .spent_cycles
+        .map(|spent| CanisterHttpPaymentReceipt {
+            spent: Cycles::new(spent),
+        });
+    match &node_response.response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
             let response = HttpsOutcallResponse {
                 status: reply.status.into(),
@@ -4034,7 +4060,10 @@ fn mock_canister_http_response_content(
                 match client.try_receive() {
                     Err(_) => std::thread::sleep(Duration::from_millis(10)),
                     Ok((response, payment_receipt)) => {
-                        break (response.content, payment_receipt);
+                        break (
+                            response.content,
+                            explicit_receipt.unwrap_or(payment_receipt),
+                        );
                     }
                 }
             }
@@ -4046,6 +4075,9 @@ fn mock_canister_http_response_content(
                 reject_code: ic_error_types::RejectCode::try_from(reject.reject_code).unwrap(),
                 message: reject.message.clone(),
             };
+            if let Some(receipt) = explicit_receipt {
+                return (CanisterHttpResponseContent::Reject(reject), receipt);
+            }
             let mut budget =
                 PricingFactory::new(&MetricsRegistry::new(), subnet.replica_logger.clone())
                     .new_tracker(context);
@@ -4112,12 +4144,6 @@ fn process_mock_canister_https_response(
     pic: &PocketIc,
     mock_canister_http_response: &MockCanisterHttpResponse,
 ) -> OpOut {
-    if let Err(err) = validate_mock_canister_http_rejects(
-        std::iter::once(&mock_canister_http_response.response)
-            .chain(mock_canister_http_response.additional_responses.iter()),
-    ) {
-        return err;
-    }
     let (subnet, canister_http_request_id, context) = match pending_canister_http_request(
         pic,
         mock_canister_http_response.subnet_id,
@@ -4126,6 +4152,13 @@ fn process_mock_canister_https_response(
         Ok(request) => request,
         Err(err) => return err,
     };
+    if let Err(err) = validate_mock_canister_http_responses(
+        &context,
+        std::iter::once(&mock_canister_http_response.response)
+            .chain(mock_canister_http_response.additional_responses.iter()),
+    ) {
+        return err;
+    }
 
     // The number of responses is checked before any of them is converted, so that a
     // mismatch does not run the transform function of the calling canister.
@@ -4141,7 +4174,7 @@ fn process_mock_canister_https_response(
         )));
     }
 
-    let response_to_content = |response: &CanisterHttpResponse| {
+    let response_to_content = |response: &MockCanisterHttpNodeResponse| {
         mock_canister_http_response_content(
             pic,
             &subnet,
@@ -4163,11 +4196,11 @@ fn process_mock_canister_https_response(
     contents.push(content);
     // Every node of the subnet answers, which is the contract of this
     // (non-flexible) mock. That is exactly what a fully replicated outcall needs,
-    // since its committee is the whole node set. For a non-replicated or flexible
-    // outcall the payload builder ignores the shares of the nodes outside the
-    // designated node / the committee, so the surplus responses are harmless (see
-    // `mock_flexible_canister_http_response` for mocking a flexible outcall
-    // committee by committee).
+    // since its committee is the whole node set; for a non-replicated one the
+    // payload builder only looks at the designated node's share and ignores the
+    // rest. A flexible outcall is not answered this way — its committee is answered
+    // node by node, by `process_mock_flexible_canister_https_response` — though
+    // nothing here has to reject one, since the surplus shares are simply ignored.
     let responses = std::iter::zip(subnet.nodes.iter(), contents)
         .map(|(node, content)| (node.node_id, content))
         .collect();
@@ -4179,11 +4212,6 @@ fn process_mock_flexible_canister_https_response(
     pic: &PocketIc,
     mock_flexible_canister_http_response: &MockFlexibleCanisterHttpResponse,
 ) -> OpOut {
-    if let Err(err) =
-        validate_mock_canister_http_rejects(mock_flexible_canister_http_response.responses.iter())
-    {
-        return err;
-    }
     let (subnet, canister_http_request_id, context) = match pending_canister_http_request(
         pic,
         mock_flexible_canister_http_response.subnet_id,
@@ -4192,6 +4220,12 @@ fn process_mock_flexible_canister_https_response(
         Ok(request) => request,
         Err(err) => return err,
     };
+    if let Err(err) = validate_mock_canister_http_responses(
+        &context,
+        mock_flexible_canister_http_response.responses.iter(),
+    ) {
+        return err;
+    }
     let Replication::Flexible { committee, .. } = &context.replication else {
         return OpOut::Error(PocketIcError::NotAFlexibleCanisterHttpRequest((
             subnet.get_subnet_id(),

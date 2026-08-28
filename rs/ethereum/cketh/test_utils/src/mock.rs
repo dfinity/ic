@@ -216,7 +216,7 @@ impl StubOnce {
         env.mock_canister_http_response(MockCanisterHttpResponse {
             subnet_id: request.subnet_id,
             request_id: request.request_id,
-            response,
+            response: response.into(),
             additional_responses: vec![],
         });
         env.tick();

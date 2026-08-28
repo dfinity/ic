@@ -2765,35 +2765,13 @@ impl StateMachine {
             .push(msg, self.get_time(), self.nodes[0].node_id);
     }
 
-    /// Injects one response share per node of the subnet, all reporting that the
-    /// node spent nothing on the outcall.
-    ///
-    /// For an outcall performed by only a subset of the nodes, or one whose nodes
-    /// report having spent cycles, see [`Self::mock_canister_http_response_for_nodes`].
-    pub fn mock_canister_http_response(
-        &self,
-        request_id: u64,
-        contents: Vec<CanisterHttpResponseContent>,
-    ) {
-        assert_eq!(contents.len(), self.nodes.len());
-        let responses = std::iter::zip(self.nodes.iter(), contents)
-            .map(|(node, content)| {
-                (
-                    node.node_id,
-                    (content, CanisterHttpPaymentReceipt::default()),
-                )
-            })
-            .collect();
-        self.mock_canister_http_response_for_nodes(request_id, responses);
-    }
-
     /// Injects one response share per entry of `responses`, signed by the node it
     /// is keyed by and carrying that node's payment receipt.
     ///
-    /// Unlike [`Self::mock_canister_http_response`], this does not require exactly
-    /// one response per subnet node, which is what non-fully-replicated outcalls
-    /// need: only the nodes of the outcall's committee produce a response, their
-    /// responses may differ, and some of them may not respond at all.
+    /// This does not require one response per subnet node, which is what
+    /// non-fully-replicated outcalls need: only the nodes of the outcall's committee
+    /// produce a response, their responses may differ, and some of them may not
+    /// respond at all.
     pub fn mock_canister_http_response_for_nodes(
         &self,
         request_id: u64,

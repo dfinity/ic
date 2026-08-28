@@ -5,13 +5,14 @@ use ic_agent::agent::EffectiveId;
 use ic_certification::Label;
 use ic_management_canister_types::{
     Bip341, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
-    HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
     SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
 use ic_management_canister_types_private::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload,
-    FlexibleCanisterHttpRequestArgs, FlexibleHttpGlobalError, FlexibleHttpRequestResult,
-    HttpMethod, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, TransformContext, TransformFunc,
+    FlexibleCanisterHttpRequestArgs, FlexibleHttpGlobalError, FlexibleHttpRequestErr,
+    FlexibleHttpRequestResult, HttpMethod, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts,
+    TransformContext, TransformFunc,
 };
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use ic_transport_types::{CallResponse, Envelope};
@@ -27,8 +28,8 @@ use pocket_ic::{
         CanisterHttpRequest, CanisterHttpResponse, CanisterIdRange, CreateInstanceResponse,
         ExtendedSubnetConfigSet, HttpGatewayDetails, HttpsConfig, IcpConfig, IcpConfigFlag,
         IcpFeatures, IcpFeaturesConfig, InitialTime, InstanceConfig, InstanceHttpGatewayConfig,
-        MockCanisterHttpResponse, MockFlexibleCanisterHttpResponse, RawEffectivePrincipal,
-        RawMessageId, SubnetConfigSet, SubnetKind, SubnetSpec,
+        MockCanisterHttpNodeResponse, MockCanisterHttpResponse, MockFlexibleCanisterHttpResponse,
+        RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind, SubnetSpec,
     },
     nonblocking::PocketIc as PocketIcAsync,
     query_candid, start_server, update_candid,
@@ -40,6 +41,7 @@ use serde::Serialize;
 use serde_bytes::ByteBuf;
 use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeMap,
     io::Read,
     sync::OnceLock,
     time::{Duration, SystemTime},
@@ -1416,49 +1418,22 @@ fn test_vetkd() {
     }
 }
 
+/// Makes an ordinary (fully replicated, legacy priced) outcall through
+/// `canister_id`, mocks a reply for it and checks that the reply arrives.
 fn test_canister_http(pic: &PocketIc, canister_id: Principal) {
-    // Submit an update call to the test canister making a canister http outcall
-    // and mock a canister http outcall response.
-    let call_id = pic
-        .submit_call(
-            canister_id,
-            Principal::anonymous(),
-            "canister_http",
-            encode_one("example.com").unwrap(),
-        )
-        .unwrap();
-
-    // We need a pair of ticks for the test canister method to make the http outcall
-    // and for the management canister to start processing the http outcall.
-    pic.tick();
-    pic.tick();
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 1);
-    let canister_http_request = &canister_http_requests[0];
+    let outcall = Outcall::FullyReplicated {
+        pay_as_you_go: false,
+    };
+    let (call_id, request) =
+        submit_outcall(pic, canister_id, &outcall, None, OUTCALL_CYCLES, false);
 
     let body = b"hello".to_vec();
-    let mock_canister_http_response = MockCanisterHttpResponse {
-        subnet_id: canister_http_request.subnet_id,
-        request_id: canister_http_request.request_id,
-        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-            status: 200,
-            headers: vec![],
-            body: body.clone(),
-        }),
-        additional_responses: vec![],
-    };
-    pic.mock_canister_http_response(mock_canister_http_response);
-
+    mock_uniform(pic, &request, reply(&body));
     // There should be no more pending canister http outcalls.
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 0);
+    assert!(pic.get_canister_http().is_empty());
 
-    // Now the test canister will receive the http outcall response
-    // and reply to the ingress message from the test driver.
-    let reply = pic.await_call(call_id).unwrap();
-    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
-        decode_one(&reply).unwrap();
-    assert_eq!(http_response.unwrap().body, body);
+    let outcome = await_outcome(pic, call_id, &outcall);
+    assert_eq!(outcome.bodies(&outcall.label()), vec![body]);
 }
 
 #[test]
@@ -1503,253 +1478,218 @@ fn test_canister_http_on_fresh_and_resumed_instance() {
     }
 }
 
-#[test]
-fn test_canister_http_with_transform() {
-    let pic = PocketIc::new();
-
-    // Create a canister and charge it with initial cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    // Install the test canister wasm file on the canister.
-    let test_wasm = test_canister_wasm();
-    pic.install_canister(canister_id, test_wasm, vec![], None);
-
-    // Submit an update call to the test canister making a canister http outcall
-    // with a transform function (clearing http response headers and setting
-    // the response body equal to the transform context fixed in the test canister)
-    // and mock a canister http outcall response.
-    let call_id = pic
-        .submit_call(
-            canister_id,
-            Principal::anonymous(),
-            "canister_http_with_transform",
-            encode_one("example.com").unwrap(),
-        )
-        .unwrap();
-    // We need a pair of ticks for the test canister method to make the http outcall
-    // and for the management canister to start processing the http outcall.
-    pic.tick();
-    pic.tick();
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 1);
-    let canister_http_request = &canister_http_requests[0];
-
-    let body = b"hello".to_vec();
-    let mock_canister_http_response = MockCanisterHttpResponse {
-        subnet_id: canister_http_request.subnet_id,
-        request_id: canister_http_request.request_id,
-        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-            status: 200,
-            headers: vec![],
-            body: body.clone(),
-        }),
-        additional_responses: vec![],
-    };
-    pic.mock_canister_http_response(mock_canister_http_response);
-
-    // There should be no more pending canister http outcalls.
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 0);
-
-    // Now the test canister will receive the http outcall response
-    // and reply to the ingress message from the test driver.
-    let reply = pic.await_call(call_id).unwrap();
-    let http_response: HttpRequestResult = decode_one(&reply).unwrap();
-    // http response headers are cleared by the transform function
-    assert!(http_response.headers.is_empty());
-    // mocked non-empty response body is transformed to the transform context
-    // by the transform function
-    assert_eq!(http_response.body, b"this is my transform context".to_vec());
-}
-
-#[test]
-fn test_canister_http_with_diverging_responses() {
-    let pic = PocketIc::new();
-
-    // Create a canister and charge it with initial cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    // Install the test canister wasm file on the canister.
-    let test_wasm = test_canister_wasm();
-    pic.install_canister(canister_id, test_wasm, vec![], None);
-
-    // Submit an update call to the test canister making a canister http outcall
-    // and mock diverging canister http outcall responses.
-    let call_id = pic
-        .submit_call(
-            canister_id,
-            Principal::anonymous(),
-            "canister_http",
-            encode_one("example.com").unwrap(),
-        )
-        .unwrap();
-
-    // We need a pair of ticks for the test canister method to make the http outcall
-    // and for the management canister to start processing the http outcall.
-    pic.tick();
-    pic.tick();
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 1);
-    let canister_http_request = &canister_http_requests[0];
-
-    let response = |i: u64| {
-        CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-            status: 200,
-            headers: vec![],
-            body: format!("hello{}", i / 2).as_bytes().to_vec(),
-        })
-    };
-    let mock_canister_http_response = MockCanisterHttpResponse {
-        subnet_id: canister_http_request.subnet_id,
-        request_id: canister_http_request.request_id,
-        response: response(0),
-        additional_responses: (1..13).map(response).collect(),
-    };
-    pic.mock_canister_http_response(mock_canister_http_response);
-
-    // There should be no more pending canister http outcalls.
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 0);
-
-    // Now the test canister will receive an error
-    // and reply to the ingress message from the test driver
-    // relaying the error.
-    let reply = pic.await_call(call_id).unwrap();
-    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
-        decode_one(&reply).unwrap();
-    let (reject_code, err) = http_response.unwrap_err();
-    assert!(matches!(reject_code, RejectionCode::SysTransient));
-    let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, hashes: [e254a598aa5bcf26e1e005d43592286d20aae878516406a8a4ff5c8d94462353: 2], [a7f217edef88e29acba3af7e11520ad31306ad59967b3fc1bf092984b8ac4239: 2], [9ea4ff851ba6e8f2c291dcdb4dbb89cb48526ee78ec88a0a6151e325988ed0dd: 2], [78a558c7325b3b8c080596aa9f7f9ca5a76fa47720de8cbf15c88f4ac4e7f589: 2], [60e97e80a834073f4e895a2a58f6ff35f2a22f75be0388ff7d241ed3d56dd513: 2], [08c21cdb50c0da7029246e3cf0a5a8556ac13032eb576b36d9c9a659c8bc51fb: 2], [7cd70d402bc453e8c0e09ccfdef9c00880585c25108da0efebd86c29d8372695: 1]";
-    assert_eq!(err, expected);
-}
-
-#[test]
-#[should_panic(expected = "InvalidMockCanisterHttpResponses((2, 13))")]
-fn test_canister_http_with_one_additional_response() {
-    let pic = PocketIc::new();
-
-    // Create a canister and charge it with initial cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    // Install the test canister wasm file on the canister.
-    let test_wasm = test_canister_wasm();
-    pic.install_canister(canister_id, test_wasm, vec![], None);
-
-    // Submit an update call to the test canister making a canister http outcall
-    // and mock diverging canister http outcall responses.
-    pic.submit_call(
-        canister_id,
-        Principal::anonymous(),
-        "canister_http",
-        encode_one("example.com").unwrap(),
-    )
-    .unwrap();
-
-    // We need a pair of ticks for the test canister method to make the http outcall
-    // and for the management canister to start processing the http outcall.
-    pic.tick();
-    pic.tick();
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 1);
-    let canister_http_request = &canister_http_requests[0];
-
-    let body = b"hello".to_vec();
-    let mock_canister_http_response = MockCanisterHttpResponse {
-        subnet_id: canister_http_request.subnet_id,
-        request_id: canister_http_request.request_id,
-        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-            status: 200,
-            headers: vec![],
-            body: body.clone(),
-        }),
-        additional_responses: vec![CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-            status: 200,
-            headers: vec![],
-            body: body.clone(),
-        })],
-    };
-    pic.mock_canister_http_response(mock_canister_http_response);
-}
-
-#[test]
-fn test_canister_http_timeout() {
-    let pic = PocketIc::new();
-
-    // Create a canister and charge it with initial cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    // Install the test canister wasm file on the canister.
-    let test_wasm = test_canister_wasm();
-    pic.install_canister(canister_id, test_wasm, vec![], None);
-
-    // Submit an update call to the test canister making a canister http outcall
-    // and mock a canister http outcall response.
-    let call_id = pic
-        .submit_call(
-            canister_id,
-            Principal::anonymous(),
-            "canister_http",
-            encode_one("example.com").unwrap(),
-        )
-        .unwrap();
-
-    // We need a pair of ticks for the test canister method to make the http outcall
-    // and for the management canister to start processing the http outcall.
-    pic.tick();
-    pic.tick();
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 1);
-
-    // Advance time so that the canister http outcall times out.
-    pic.advance_time(std::time::Duration::from_secs(180));
-    pic.tick();
-
-    // The canister http outcall should time out by now.
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 0);
-
-    // Now the test canister will receive the http outcall response
-    // and reply to the ingress message from the test driver.
-    let reply = pic.await_call(call_id).unwrap();
-    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
-        decode_one(&reply).unwrap();
-    let (reject_code, err) = http_response.unwrap_err();
-    match reject_code {
-        RejectionCode::SysTransient => (),
-        _ => panic!("Unexpected reject code {reject_code:?}"),
-    };
-    assert_eq!(err, "Canister http request timed out");
-}
-
 // ---------------------------------------------------------------------------
-// Flexible canister HTTP outcalls
+// Flexible canister HTTP outcalls and pay-as-you-go pricing
 // ---------------------------------------------------------------------------
 
-/// The cycles attached to a flexible outcall in these tests. Every cycle beyond
-/// the outcall's base fee and per-replica allowances is refunded immediately, so
-/// this only has to be comfortably above what the outcall can cost.
-const FLEXIBLE_OUTCALL_CYCLES: u128 = 1_000_000_000_000;
+/// The cycles attached to the outcalls in these tests, comfortably above anything
+/// an outcall can cost. Whatever the outcall does not spend is refunded when its
+/// response is delivered.
+const OUTCALL_CYCLES: u128 = 1_000_000_000_000;
 
-/// The arguments of a flexible HTTP outcall to `example.com` with the given
-/// replication.
-fn flexible_args(replication: Option<ReplicationCounts>) -> FlexibleCanisterHttpRequestArgs {
-    FlexibleCanisterHttpRequestArgs {
-        url: "example.com".to_string(),
-        max_response_bytes: None,
-        headers: BoundedHttpHeaders::new(vec![]),
-        body: None,
-        method: HttpMethod::GET,
-        transform: None,
-        replication,
+/// The number of nodes of a PocketIC application subnet.
+const SUBNET_NODES: u32 = 13;
+
+/// Every outcall below has `url = "example.com"` and no headers, body or
+/// transform, so the request size its fees are computed from is the URL's length.
+const REQUEST_BYTES: u128 = 11;
+
+/// The up-front base fee of a fully replicated outcall of `request_bytes` bytes,
+/// mirroring `base_fee` in `rs/https_outcalls/pricing/src/fees.rs`. 38_424_750
+/// cycles for these tests.
+const fn fully_replicated_base_fee(request_bytes: u128) -> u128 {
+    let n = SUBNET_NODES as u128;
+    n * (1_000_000 + 50 * request_bytes + 140_000 * n + 800 * n * n)
+}
+
+/// The up-front base fee of a flexible or non-replicated outcall of
+/// `request_bytes` bytes requiring `min_responses` responses (1 for a
+/// non-replicated one), mirroring `base_fee` in
+/// `rs/https_outcalls/pricing/src/fees.rs`.
+const fn gossipping_base_fee(request_bytes: u128, min_responses: u128) -> u128 {
+    let n = SUBNET_NODES as u128;
+    n * (1_000_000
+        + 50 * request_bytes
+        + 90_000 * n
+        + 2_000 * n * min_responses
+        + 100_000 * min_responses)
+}
+
+/// What putting `response_bytes` bytes of response into a block costs, mirroring
+/// `consensus_fee` in `rs/https_outcalls/pricing/src/fees.rs`. 9_490 cycles per
+/// byte on a 13-node subnet.
+const fn consensus_fee(response_bytes: u128) -> u128 {
+    let n = SUBNET_NODES as u128;
+    n * (10 * n + 600) * response_bytes
+}
+
+/// The per-response overhead the consensus fee of a flexible outcall is priced
+/// with (`FLEXIBLE_RESPONSE_SIZE_OVERHEAD` in
+/// `rs/https_outcalls/pricing/src/fees.rs`).
+const FLEXIBLE_RESPONSE_OVERHEAD: u128 = 181;
+
+/// A response is delivered Candid-encoded, which adds a body-independent header of
+/// well under 64 bytes, so `body.len() <= content_size <= body.len() + CANDID_SLACK`.
+const CANDID_SLACK: u128 = 64;
+
+/// Everything a scenario costs besides the outcall itself: inducting the ingress
+/// message, executing the two messages, transmitting request and response, and the
+/// idle burn of a few rounds. About 20M cycles in practice.
+const EXECUTION_SLACK: u128 = 100_000_000;
+
+/// The spend every mocked node reports in the tests that assert on cycles, so that
+/// their accounting is exact: PocketIC's own derivation includes a term for how
+/// long the outcall took, which it measures in process.
+const REPORTED_SPEND: u128 = 1_000_000;
+
+/// How the outcall under test is made.
+#[derive(Clone, Debug, PartialEq)]
+enum Outcall {
+    /// `http_request`, performed by every node of the subnet.
+    FullyReplicated { pay_as_you_go: bool },
+    /// `http_request` with `is_replicated = false`, performed by a single node.
+    NonReplicated { pay_as_you_go: bool },
+    /// `flexible_http_request` with the given replication counts (`None` asks for
+    /// the subnet's default). Always priced with the pay-as-you-go pricing model
+    /// where that model is enabled.
+    Flexible(Option<ReplicationCounts>),
+}
+
+impl Outcall {
+    /// Names this outcall in assertion messages, so that a failing cell of a
+    /// matrix test can be told apart from its siblings.
+    fn label(&self) -> String {
+        match self {
+            Self::FullyReplicated { pay_as_you_go } => {
+                format!("fully replicated, {}", pricing_label(*pay_as_you_go))
+            }
+            Self::NonReplicated { pay_as_you_go } => {
+                format!("non-replicated, {}", pricing_label(*pay_as_you_go))
+            }
+            Self::Flexible(None) => "flexible (default replication)".to_string(),
+            Self::Flexible(Some(counts)) => format!(
+                "flexible ({}/{}/{})",
+                counts.total_requests, counts.min_responses, counts.max_responses
+            ),
+        }
+    }
+
+    /// The replication `PocketIc::get_canister_http` must report for it.
+    fn expected_replication(&self) -> CanisterHttpReplication {
+        match self {
+            Self::FullyReplicated { .. } => CanisterHttpReplication::FullyReplicated,
+            Self::NonReplicated { .. } => CanisterHttpReplication::NonReplicated,
+            // Without explicit counts every node performs the outcall and
+            // `floor(2N/3) + 1` responses are required.
+            Self::Flexible(None) => CanisterHttpReplication::Flexible {
+                total_requests: SUBNET_NODES,
+                min_responses: 2 * SUBNET_NODES / 3 + 1,
+                max_responses: SUBNET_NODES,
+            },
+            Self::Flexible(Some(counts)) => CanisterHttpReplication::Flexible {
+                total_requests: counts.total_requests,
+                min_responses: counts.min_responses,
+                max_responses: counts.max_responses,
+            },
+        }
+    }
+
+    /// The pricing model `PocketIc::get_canister_http` must report for it on a
+    /// subnet where the pay-as-you-go pricing model is (or is not) enabled.
+    fn expected_pricing(&self, pay_as_you_go_enabled: bool) -> CanisterHttpPricingVersion {
+        let pay_as_you_go = match self {
+            Self::FullyReplicated { pay_as_you_go } | Self::NonReplicated { pay_as_you_go } => {
+                // An `http_request` asking for pay-as-you-go pricing where that
+                // model is not enabled falls back to the legacy pricing model.
+                *pay_as_you_go && pay_as_you_go_enabled
+            }
+            // A flexible outcall does not choose: it is priced with pay-as-you-go
+            // pricing where that model is enabled, and falls back to the legacy
+            // pricing model on the free subnets where it is offered without it.
+            Self::Flexible(_) => pay_as_you_go_enabled,
+        };
+        if pay_as_you_go {
+            CanisterHttpPricingVersion::PayAsYouGo
+        } else {
+            CanisterHttpPricingVersion::Legacy
+        }
+    }
+
+    /// The number of nodes that perform the outcall, i.e. the number of responses
+    /// `PocketIc::mock_flexible_canister_http_response` accepts.
+    fn committee_size(&self) -> u32 {
+        match self.expected_replication() {
+            CanisterHttpReplication::FullyReplicated => SUBNET_NODES,
+            CanisterHttpReplication::NonReplicated => 1,
+            CanisterHttpReplication::Flexible { total_requests, .. } => total_requests,
+        }
+    }
+
+    /// The base fee this outcall is charged up front under the pay-as-you-go
+    /// pricing model.
+    fn base_fee(&self) -> u128 {
+        match self.expected_replication() {
+            CanisterHttpReplication::FullyReplicated => fully_replicated_base_fee(REQUEST_BYTES),
+            CanisterHttpReplication::NonReplicated => gossipping_base_fee(REQUEST_BYTES, 1),
+            CanisterHttpReplication::Flexible { min_responses, .. } => {
+                gossipping_base_fee(REQUEST_BYTES, min_responses as u128)
+            }
+        }
+    }
+
+    /// The management canister endpoint that makes this outcall, and its
+    /// Candid-encoded arguments.
+    fn call(&self, transform: Option<&TransformContext>) -> (&'static str, Vec<u8>) {
+        match self {
+            Self::FullyReplicated { pay_as_you_go } | Self::NonReplicated { pay_as_you_go } => {
+                let args = CanisterHttpRequestArgs {
+                    url: OUTCALL_URL.to_string(),
+                    max_response_bytes: None,
+                    headers: BoundedHttpHeaders::new(vec![]),
+                    body: None,
+                    method: HttpMethod::GET,
+                    transform: transform.cloned(),
+                    is_replicated: matches!(self, Self::NonReplicated { .. }).then_some(false),
+                    pricing_version: pay_as_you_go.then_some(PRICING_VERSION_PAY_AS_YOU_GO),
+                };
+                ("http_request", Encode!(&args).unwrap())
+            }
+            Self::Flexible(replication) => {
+                let args = FlexibleCanisterHttpRequestArgs {
+                    url: OUTCALL_URL.to_string(),
+                    max_response_bytes: None,
+                    headers: BoundedHttpHeaders::new(vec![]),
+                    body: None,
+                    method: HttpMethod::GET,
+                    transform: transform.cloned(),
+                    replication: replication.clone(),
+                };
+                ("flexible_http_request", Encode!(&args).unwrap())
+            }
+        }
+    }
+
+    /// Whether the calling canister receives a `flexible_http_request_result`
+    /// rather than an `http_request_result`.
+    fn is_flexible(&self) -> bool {
+        matches!(self, Self::Flexible(_))
     }
 }
 
+fn pricing_label(pay_as_you_go: bool) -> &'static str {
+    if pay_as_you_go {
+        "pay-as-you-go"
+    } else {
+        "legacy"
+    }
+}
+
+/// The URL every outcall in these tests is made to. It is never dialed: PocketIC
+/// answers the outcall from the mocked response.
+const OUTCALL_URL: &str = "example.com";
+
 /// A PocketIC instance with a single application subnet on which flexible HTTP
-/// outcalls (and thus pay-as-you-go pricing) are enabled.
+/// outcalls and the pay-as-you-go pricing model are enabled.
 fn flexible_outcalls_pic() -> PocketIc {
     PocketIcBuilder::new()
         .with_application_subnet()
@@ -1767,38 +1707,39 @@ fn deploy_test_canister(pic: &PocketIc) -> Principal {
     canister_id
 }
 
-/// The argument of the test canister's `flexible_canister_http` method: the
-/// Candid-encoded outcall arguments and the cycles to attach.
-fn flexible_call_arg_with_cycles(args: FlexibleCanisterHttpRequestArgs, cycles: u128) -> Vec<u8> {
-    Encode!(&ByteBuf::from(Encode!(&args).unwrap()), &cycles).unwrap()
+/// The argument of the test canister's `proxy_call` endpoint: the callee, the
+/// method, the Candid-encoded arguments to pass on, and the cycles to attach.
+fn proxy_call_arg(method: &str, args: Vec<u8>, cycles: u128) -> Vec<u8> {
+    Encode!(
+        &Principal::management_canister(),
+        &method.to_string(),
+        &ByteBuf::from(args),
+        &cycles
+    )
+    .unwrap()
 }
 
-fn flexible_call_arg(args: FlexibleCanisterHttpRequestArgs) -> Vec<u8> {
-    flexible_call_arg_with_cycles(args, FLEXIBLE_OUTCALL_CYCLES)
-}
-
-/// Submits a flexible HTTP outcall through the test canister, returning the
-/// message ID of the pending update call and the pending outcall.
-fn submit_flexible_outcall(
+/// Submits `outcall` through the test canister and returns the message ID of the
+/// pending update call together with the pending outcall, having checked that
+/// PocketIC reports the outcall's replication and pricing model as expected.
+///
+/// This is the one place that knows how an outcall is submitted, for all three
+/// ways of making one.
+fn submit_outcall(
     pic: &PocketIc,
     canister_id: Principal,
-    args: FlexibleCanisterHttpRequestArgs,
-) -> (RawMessageId, CanisterHttpRequest) {
-    submit_flexible_outcall_with_cycles(pic, canister_id, args, FLEXIBLE_OUTCALL_CYCLES)
-}
-
-fn submit_flexible_outcall_with_cycles(
-    pic: &PocketIc,
-    canister_id: Principal,
-    args: FlexibleCanisterHttpRequestArgs,
+    outcall: &Outcall,
+    transform: Option<&TransformContext>,
     cycles: u128,
+    pay_as_you_go_enabled: bool,
 ) -> (RawMessageId, CanisterHttpRequest) {
+    let (method, args) = outcall.call(transform);
     let call_id = pic
         .submit_call(
             canister_id,
             Principal::anonymous(),
-            "flexible_canister_http",
-            flexible_call_arg_with_cycles(args, cycles),
+            "proxy_call",
+            proxy_call_arg(method, args, cycles),
         )
         .unwrap();
 
@@ -1807,371 +1748,743 @@ fn submit_flexible_outcall_with_cycles(
     pic.tick();
     pic.tick();
     let mut canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 1);
-    (call_id, canister_http_requests.pop().unwrap())
+    assert_eq!(
+        canister_http_requests.len(),
+        1,
+        "{}: expected exactly one pending outcall",
+        outcall.label()
+    );
+    let request = canister_http_requests.pop().unwrap();
+    assert_eq!(
+        request.replication,
+        outcall.expected_replication(),
+        "{}: unexpected replication",
+        outcall.label()
+    );
+    assert_eq!(
+        request.pricing_version,
+        outcall.expected_pricing(pay_as_you_go_enabled),
+        "{}: unexpected pricing version",
+        outcall.label()
+    );
+    (call_id, request)
 }
 
-fn reply(body: &[u8]) -> CanisterHttpResponse {
+/// Submits `outcall` on an instance where the pay-as-you-go pricing model is
+/// enabled, attaching [`OUTCALL_CYCLES`] and using no transform.
+fn submit(
+    pic: &PocketIc,
+    canister_id: Principal,
+    outcall: &Outcall,
+) -> (RawMessageId, CanisterHttpRequest) {
+    submit_outcall(pic, canister_id, outcall, None, OUTCALL_CYCLES, true)
+}
+
+fn reply(body: &[u8]) -> MockCanisterHttpNodeResponse {
     CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
         status: 200,
         headers: vec![],
         body: body.to_vec(),
     })
+    .into()
 }
 
-fn reject(message: &str) -> CanisterHttpResponse {
+fn reject(message: &str) -> MockCanisterHttpNodeResponse {
     CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
         // `SysTransient`, i.e. what a connection failure produces.
         reject_code: 2,
         message: message.to_string(),
     })
+    .into()
 }
 
-/// Decodes the reply of the test canister's `flexible_canister_http` method into
-/// the `flexible_http_request_result` the calling canister observed.
-fn decode_flexible_result(reply: &[u8]) -> FlexibleHttpRequestResult {
-    let result: Result<ByteBuf, (RejectionCode, String)> = decode_one(reply).unwrap();
-    let bytes = result.expect("the flexible outcall was rejected synchronously");
-    Decode!(&bytes, FlexibleHttpRequestResult).unwrap()
-}
-
-/// Submits a non-flexible HTTP outcall through the test canister that asks for the
-/// given `pricing_version`, returning the message ID of the pending update call and
-/// the pending outcall.
-fn submit_pay_as_you_go_outcall(
-    pic: &PocketIc,
-    canister_id: Principal,
-    pricing_version: u32,
+/// The same response, but reporting an exact spend rather than letting PocketIC
+/// derive one (which is not bit-exactly reproducible).
+fn spending(
+    mut response: MockCanisterHttpNodeResponse,
     cycles: u128,
-) -> (RawMessageId, CanisterHttpRequest) {
-    submit_raw_outcall(pic, canister_id, None, Some(pricing_version), cycles)
+) -> MockCanisterHttpNodeResponse {
+    response.spent_cycles = Some(cycles);
+    response
 }
 
-fn submit_raw_outcall(
+/// Mocks the same response for every node of the subnet, which is what an outcall
+/// made through `http_request` needs.
+fn mock_uniform(
     pic: &PocketIc,
-    canister_id: Principal,
-    is_replicated: Option<bool>,
-    pricing_version: Option<u32>,
-    cycles: u128,
-) -> (RawMessageId, CanisterHttpRequest) {
-    let args = CanisterHttpRequestArgs {
-        url: "example.com".to_string(),
-        max_response_bytes: None,
-        headers: BoundedHttpHeaders::new(vec![]),
-        body: None,
-        method: HttpMethod::GET,
-        transform: None,
-        is_replicated,
-        pricing_version,
-    };
-    let call_id = pic
-        .submit_call(
-            canister_id,
-            Principal::anonymous(),
-            "canister_http_raw",
-            Encode!(&ByteBuf::from(Encode!(&args).unwrap()), &cycles).unwrap(),
-        )
-        .unwrap();
-
-    // We need a pair of ticks for the test canister method to make the http outcall
-    // and for the management canister to start processing the http outcall.
-    pic.tick();
-    pic.tick();
-    let mut canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 1);
-    (call_id, canister_http_requests.pop().unwrap())
+    request: &CanisterHttpRequest,
+    response: MockCanisterHttpNodeResponse,
+) {
+    pic.mock_canister_http_response(MockCanisterHttpResponse {
+        subnet_id: request.subnet_id,
+        request_id: request.request_id,
+        response,
+        additional_responses: vec![],
+    });
 }
 
-/// Decodes the reply of the test canister's `canister_http_raw` method into the
-/// outcome the calling canister observed.
-fn decode_raw_http_result(
-    reply: &[u8],
-) -> Result<CanisterHttpResponsePayload, (RejectionCode, String)> {
-    let result: Result<ByteBuf, (RejectionCode, String)> = decode_one(reply).unwrap();
-    result.map(|bytes| Decode!(&bytes, CanisterHttpResponsePayload).unwrap())
+/// Mocks one response per node of the subnet, which is how the nodes of an outcall
+/// made through `http_request` are made to disagree.
+fn mock_per_node(
+    pic: &PocketIc,
+    request: &CanisterHttpRequest,
+    responses: Vec<MockCanisterHttpNodeResponse>,
+) {
+    let (response, additional_responses) = responses.split_first().unwrap();
+    pic.mock_canister_http_response(MockCanisterHttpResponse {
+        subnet_id: request.subnet_id,
+        request_id: request.request_id,
+        response: response.clone(),
+        additional_responses: additional_responses.to_vec(),
+    });
 }
 
-/// Decodes the reply of the test canister's `flexible_canister_http` method into
-/// the synchronous rejection the calling canister observed.
-fn decode_flexible_rejection(reply: &[u8]) -> (RejectionCode, String) {
-    let result: Result<ByteBuf, (RejectionCode, String)> = decode_one(reply).unwrap();
-    result.expect_err("the flexible outcall was not rejected")
-}
-
-/// With the default replication every node of the subnet performs the outcall and
-/// `floor(2N/3) + 1` responses suffice, so mocking all of them delivers between
-/// `min_responses` and `max_responses` payloads.
-#[test]
-fn test_flexible_canister_http() {
-    let pic = flexible_outcalls_pic();
-    let canister_id = deploy_test_canister(&pic);
-
-    let (call_id, request) = submit_flexible_outcall(&pic, canister_id, flexible_args(None));
-
-    // The subnet has 13 nodes, so the default replication is
-    // `total_requests = max_responses = 13`, `min_responses = floor(2*13/3) + 1 = 9`.
-    let CanisterHttpReplication::Flexible {
-        total_requests,
-        min_responses,
-        max_responses,
-    } = request.replication
-    else {
-        panic!("expected a flexible outcall, got {:?}", request.replication);
-    };
-    assert_eq!(total_requests, 13);
-    assert_eq!(min_responses, 9);
-    assert_eq!(max_responses, 13);
-
-    let body = b"hello".to_vec();
+/// Mocks one response per committee node of a flexible outcall.
+fn mock_committee(
+    pic: &PocketIc,
+    request: &CanisterHttpRequest,
+    responses: Vec<MockCanisterHttpNodeResponse>,
+) {
     pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
         subnet_id: request.subnet_id,
         request_id: request.request_id,
-        responses: vec![reply(&body); total_requests as usize],
+        responses,
     });
+}
 
-    // There should be no more pending canister http outcalls.
-    assert!(pic.get_canister_http().is_empty());
+/// What the calling canister observed, whichever endpoint it called.
+enum Outcome {
+    Http(Result<CanisterHttpResponsePayload, (RejectionCode, String)>),
+    Flexible(FlexibleHttpRequestResult),
+}
 
-    let reply = pic.await_call(call_id).unwrap();
-    let FlexibleHttpRequestResult::Ok(payloads) = decode_flexible_result(&reply) else {
-        panic!("expected a successful flexible outcall");
-    };
-    assert!(payloads.len() >= min_responses as usize);
-    assert!(payloads.len() <= max_responses as usize);
-    for payload in &payloads {
-        assert_eq!(payload.status, 200);
-        assert_eq!(payload.body, body);
+impl Outcome {
+    /// The response payloads delivered to the calling canister: one for an
+    /// `http_request`, between `min_responses` and `max_responses` for a flexible
+    /// outcall.
+    fn payloads(&self, label: &str) -> Vec<CanisterHttpResponsePayload> {
+        match self {
+            Self::Http(Ok(payload)) => vec![payload.clone()],
+            Self::Http(Err((code, message))) => {
+                panic!("{label}: expected a response, got a {code:?} rejection: {message}")
+            }
+            Self::Flexible(FlexibleHttpRequestResult::Ok(payloads)) => payloads.clone(),
+            Self::Flexible(FlexibleHttpRequestResult::Err(err)) => {
+                panic!("{label}: expected a response, got {:?}", err.global_error)
+            }
+        }
+    }
+
+    /// The bodies delivered to the calling canister, in the order they were
+    /// delivered in.
+    fn bodies(&self, label: &str) -> Vec<Vec<u8>> {
+        self.payloads(label)
+            .into_iter()
+            .map(|payload| payload.body)
+            .collect()
     }
 }
 
-/// A flexible outcall is answered as soon as `min_responses` of its committee have
-/// responded, and the responses need not agree.
+/// Awaits the calling canister's update call and decodes what it observed.
+fn await_outcome(pic: &PocketIc, call_id: RawMessageId, outcall: &Outcall) -> Outcome {
+    let reply = pic.await_call(call_id).unwrap();
+    let result: Result<ByteBuf, (RejectionCode, String)> = decode_one(&reply).unwrap();
+    if outcall.is_flexible() {
+        let bytes = result.expect("the flexible outcall was rejected synchronously");
+        Outcome::Flexible(Decode!(&bytes, FlexibleHttpRequestResult).unwrap())
+    } else {
+        Outcome::Http(result.map(|bytes| Decode!(&bytes, CanisterHttpResponsePayload).unwrap()))
+    }
+}
+
+/// The `flexible_http_request_result` error the calling canister observed.
+fn expect_flexible_error(outcome: Outcome, label: &str) -> FlexibleHttpRequestErr {
+    match outcome {
+        Outcome::Flexible(FlexibleHttpRequestResult::Err(err)) => err,
+        Outcome::Flexible(FlexibleHttpRequestResult::Ok(payloads)) => {
+            panic!(
+                "{label}: expected an error, got {} payloads",
+                payloads.len()
+            )
+        }
+        Outcome::Http(_) => panic!("{label}: not a flexible outcall"),
+    }
+}
+
+/// The rejection the calling canister observed for a non-flexible outcall.
+fn expect_http_rejection(outcome: Outcome, label: &str) -> (RejectionCode, String) {
+    match outcome {
+        Outcome::Http(Err(rejection)) => rejection,
+        Outcome::Http(Ok(payload)) => panic!(
+            "{label}: expected a rejection, got a {} response",
+            payload.status
+        ),
+        Outcome::Flexible(_) => panic!("{label}: not an `http_request` outcall"),
+    }
+}
+
+/// Decodes the synchronous rejection of the test canister's `proxy_call`.
+fn decode_sync_rejection(reply: &[u8]) -> (RejectionCode, String) {
+    let result: Result<ByteBuf, (RejectionCode, String)> = decode_one(reply).unwrap();
+    result.expect_err("the outcall was not rejected synchronously")
+}
+
+/// The cell set of a scenario that both pricing models can reach: each way of
+/// making an outcall, in each pricing model where that is a choice, with the
+/// flexible cell shaped as the scenario needs it.
+///
+/// Every such scenario should use this, so that the sets do not drift apart. A
+/// scenario that can only be reached under one pricing model spells its cells out
+/// instead, and says why.
+fn outcalls_with(flexible: ReplicationCounts) -> Vec<Outcall> {
+    vec![
+        Outcall::FullyReplicated {
+            pay_as_you_go: false,
+        },
+        Outcall::FullyReplicated {
+            pay_as_you_go: true,
+        },
+        Outcall::NonReplicated {
+            pay_as_you_go: false,
+        },
+        Outcall::NonReplicated {
+            pay_as_you_go: true,
+        },
+        Outcall::Flexible(Some(flexible)),
+    ]
+}
+
+/// Every way of making an outcall, with flexible cells covering the three orderings
+/// the replication counts can have: `max < total`, `min < max == total` at subnet
+/// scale, and `min == max == total`.
+fn all_outcalls() -> Vec<Outcall> {
+    let mut outcalls = outcalls_with(ReplicationCounts {
+        // `max_responses` caps the delivery below what the committee reported.
+        total_requests: 4,
+        min_responses: 1,
+        max_responses: 2,
+    });
+    outcalls.push(Outcall::Flexible(None));
+    // Every node must answer, and every answer is delivered.
+    outcalls.push(Outcall::Flexible(Some(ReplicationCounts {
+        total_requests: 3,
+        min_responses: 3,
+        max_responses: 3,
+    })));
+    outcalls
+}
+
+/// Every way of making an outcall delivers the mocked response, whichever pricing
+/// model it is priced with, and a flexible one delivers between `min_responses`
+/// and `max_responses` of them.
 #[test]
-fn test_flexible_canister_http_partial_diverging_responses() {
+fn test_canister_http_reply() {
+    let pic = flexible_outcalls_pic();
+    let canister_id = deploy_test_canister(&pic);
+    let body = b"hello".to_vec();
+
+    for outcall in all_outcalls() {
+        let label = outcall.label();
+        // Keep every cell's starting balance comparable.
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        let (call_id, request) = submit(&pic, canister_id, &outcall);
+
+        let committee_size = outcall.committee_size();
+        if outcall.is_flexible() {
+            mock_committee(&pic, &request, vec![reply(&body); committee_size as usize]);
+        } else {
+            mock_uniform(&pic, &request, reply(&body));
+        }
+        // Once any response to an outcall has been mocked it is no longer pending.
+        assert!(pic.get_canister_http().is_empty(), "{label}");
+
+        let outcome = await_outcome(&pic, call_id, &outcall);
+        let payloads = outcome.payloads(&label);
+        let delivered = match outcall.expected_replication() {
+            CanisterHttpReplication::Flexible {
+                min_responses,
+                max_responses,
+                ..
+            } => min_responses..=max_responses,
+            // An `http_request` delivers exactly one response.
+            _ => 1..=1,
+        };
+        assert!(
+            delivered.contains(&(payloads.len() as u32)),
+            "{label}: {} payloads delivered, expected {delivered:?}",
+            payloads.len()
+        );
+        for payload in &payloads {
+            assert_eq!(payload.status, 200, "{label}");
+            assert_eq!(payload.body, body, "{label}");
+        }
+    }
+}
+
+/// What differing responses mean depends on how the outcall is replicated: a fully
+/// replicated outcall fails because its nodes cannot reach consensus, a
+/// non-replicated one delivers the designated node's response and ignores the rest,
+/// and a flexible one delivers several of them, smallest first.
+#[test]
+fn test_canister_http_differing_responses() {
+    let pic = flexible_outcalls_pic();
+    let canister_id = deploy_test_canister(&pic);
+    // Distinct sizes, so that the order a flexible outcall delivers them in is
+    // determined.
+    let bodies = [
+        b"a".to_vec(),
+        b"bb".to_vec(),
+        b"ccc".to_vec(),
+        b"dddd".to_vec(),
+    ];
+
+    for outcall in outcalls_with(ReplicationCounts {
+        total_requests: 4,
+        min_responses: 4,
+        max_responses: 4,
+    }) {
+        let label = outcall.label();
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        let (call_id, request) = submit(&pic, canister_id, &outcall);
+
+        if outcall.is_flexible() {
+            mock_committee(
+                &pic,
+                &request,
+                bodies.iter().map(|body| reply(body)).collect(),
+            );
+        } else {
+            // One response per subnet node, cycling through the four bodies, so
+            // that at most four nodes agree — short of the `n - f` a fully
+            // replicated outcall needs.
+            mock_per_node(
+                &pic,
+                &request,
+                (0..SUBNET_NODES)
+                    .map(|i| reply(&bodies[i as usize % bodies.len()]))
+                    .collect(),
+            );
+        }
+
+        let outcome = await_outcome(&pic, call_id, &outcall);
+        match outcall {
+            Outcall::FullyReplicated { .. } => {
+                let (reject_code, message) = expect_http_rejection(outcome, &label);
+                assert!(
+                    matches!(reject_code, RejectionCode::SysTransient),
+                    "{label}: unexpected reject code {reject_code:?} ({message})"
+                );
+                assert!(
+                    message.starts_with(
+                        "No consensus could be reached. Replicas had different responses."
+                    ),
+                    "{label}: unexpected rejection message {message:?}"
+                );
+                // The message reports how many nodes reported each response: the
+                // 13 nodes cycle through the four bodies, so one group of four
+                // and three of three.
+                assert_eq!(message.matches(": 4]").count(), 1, "{label}: {message}");
+                assert_eq!(message.matches(": 3]").count(), 3, "{label}: {message}");
+            }
+            Outcall::NonReplicated { .. } => {
+                // Which node was delegated the outcall is not exposed, so only the
+                // fact that one of the mocked responses was delivered is determined.
+                let delivered = outcome.bodies(&label);
+                assert_eq!(delivered.len(), 1, "{label}");
+                assert!(bodies.contains(&delivered[0]), "{label}: {delivered:?}");
+            }
+            Outcall::Flexible(_) => {
+                // All four are delivered, smallest first.
+                assert_eq!(outcome.bodies(&label), bodies.to_vec(), "{label}");
+            }
+        }
+    }
+}
+
+/// An outcall whose nodes do not respond stays pending until it times out,
+/// whichever way it was made and whichever pricing model it is priced with.
+#[test]
+fn test_canister_http_timeout() {
     let pic = flexible_outcalls_pic();
     let canister_id = deploy_test_canister(&pic);
 
-    let replication = ReplicationCounts {
+    for outcall in outcalls_with(ReplicationCounts {
         total_requests: 4,
-        min_responses: 2,
+        min_responses: 3,
         max_responses: 4,
-    };
-    let (call_id, request) =
-        submit_flexible_outcall(&pic, canister_id, flexible_args(Some(replication)));
-    assert_eq!(
-        request.replication,
-        CanisterHttpReplication::Flexible {
-            total_requests: 4,
-            min_responses: 2,
-            max_responses: 4,
+    }) {
+        let label = outcall.label();
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        let (call_id, request) = submit(&pic, canister_id, &outcall);
+
+        // Leave the outcall undecided. A flexible outcall can be answered by only
+        // some of its committee — fewer than the `min_responses` it needs — while
+        // an `http_request` outcall is answered for every node of the subnet or not
+        // at all, so it is simply left unanswered.
+        if outcall.is_flexible() {
+            mock_committee(&pic, &request, vec![reply(b"hello")]);
         }
-    );
+        pic.tick();
 
-    // Only two of the four committee nodes respond, with differing bodies.
-    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        responses: vec![reply(b"aa"), reply(b"bb")],
-    });
+        // Advance the time past the outcall's 60 second timeout.
+        pic.advance_time(std::time::Duration::from_secs(180));
+        pic.tick();
 
-    assert!(pic.get_canister_http().is_empty());
-
-    let reply = pic.await_call(call_id).unwrap();
-    let FlexibleHttpRequestResult::Ok(payloads) = decode_flexible_result(&reply) else {
-        panic!("expected a successful flexible outcall");
-    };
-    // The payloads are delivered smallest first; both have the same size here, so
-    // only the set of bodies is determined.
-    let mut bodies: Vec<_> = payloads.iter().map(|p| p.body.clone()).collect();
-    bodies.sort();
-    assert_eq!(bodies, vec![b"aa".to_vec(), b"bb".to_vec()]);
+        let outcome = await_outcome(&pic, call_id, &outcall);
+        if outcall.is_flexible() {
+            let err = expect_flexible_error(outcome, &label);
+            assert_eq!(
+                err.global_error,
+                Some(FlexibleHttpGlobalError::Timeout(candid::Reserved)),
+                "{label}"
+            );
+        } else {
+            let (reject_code, message) = expect_http_rejection(outcome, &label);
+            assert!(
+                matches!(reject_code, RejectionCode::SysTransient),
+                "{label}: unexpected reject code {reject_code:?} ({message})"
+            );
+            assert_eq!(message, "Canister http request timed out", "{label}");
+        }
+    }
 }
 
-/// Once more nodes reject than the slack between `total_requests` and
-/// `min_responses` allows, the outcall fails with `TooManyRejects` and reports the
+/// A mocked reject is delivered to the calling canister for an `http_request`;
+/// for a flexible outcall, more rejects than the slack between `total_requests`
+/// and `min_responses` allows deliver a `too_many_rejects` error naming the
 /// rejecting nodes.
 #[test]
-fn test_flexible_canister_http_too_many_rejects() {
+fn test_canister_http_reject() {
     let pic = flexible_outcalls_pic();
     let canister_id = deploy_test_canister(&pic);
+    const MESSAGE: &str = "Connection refused";
 
-    let replication = ReplicationCounts {
+    for outcall in outcalls_with(ReplicationCounts {
         total_requests: 4,
         min_responses: 3,
         max_responses: 4,
-    };
-    let (call_id, request) =
-        submit_flexible_outcall(&pic, canister_id, flexible_args(Some(replication)));
+    }) {
+        let label = outcall.label();
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        let (call_id, request) = submit(&pic, canister_id, &outcall);
 
-    // The slack is `4 - 3 = 1`, so two rejects are one too many.
-    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        responses: vec![
-            reject("Connection refused"),
-            reject("Connection refused"),
-            reply(b"hello"),
-            reply(b"hello"),
-        ],
-    });
+        if outcall.is_flexible() {
+            // The slack is `4 - 3 = 1`, so two rejects are one too many.
+            mock_committee(
+                &pic,
+                &request,
+                vec![
+                    reject(MESSAGE),
+                    reject(MESSAGE),
+                    reply(b"hello"),
+                    reply(b"hello"),
+                ],
+            );
+        } else {
+            mock_uniform(&pic, &request, reject(MESSAGE));
+        }
 
-    assert!(pic.get_canister_http().is_empty());
-
-    let reply = pic.await_call(call_id).unwrap();
-    let FlexibleHttpRequestResult::Err(err) = decode_flexible_result(&reply) else {
-        panic!("expected the flexible outcall to fail");
-    };
-    assert_eq!(
-        err.global_error,
-        Some(FlexibleHttpGlobalError::TooManyRejects(candid::Reserved))
-    );
-    assert_eq!(err.node_details.len(), 2);
-    for detail in &err.node_details {
-        let node_error = detail.error.as_ref().expect("expected a per-node error");
-        assert_eq!(node_error.code, "SysTransient");
-        assert_eq!(node_error.message, "Connection refused");
+        let outcome = await_outcome(&pic, call_id, &outcall);
+        if outcall.is_flexible() {
+            let err = expect_flexible_error(outcome, &label);
+            assert_eq!(
+                err.global_error,
+                Some(FlexibleHttpGlobalError::TooManyRejects(candid::Reserved)),
+                "{label}"
+            );
+            assert_eq!(err.node_details.len(), 2, "{label}");
+            for detail in &err.node_details {
+                let node_error = detail.error.as_ref().expect("expected a per-node error");
+                assert_eq!(node_error.code, "SysTransient", "{label}");
+                assert_eq!(node_error.message, MESSAGE, "{label}");
+            }
+        } else {
+            let (reject_code, message) = expect_http_rejection(outcome, &label);
+            assert!(
+                matches!(reject_code, RejectionCode::SysTransient),
+                "{label}: unexpected reject code {reject_code:?} ({message})"
+            );
+            assert_eq!(message, MESSAGE, "{label}");
+        }
     }
 }
 
-/// Fewer than `min_responses` mocked responses leave the outcall pending until it
-/// times out.
+/// The calling canister's transform function is applied to every mocked response,
+/// however the outcall was made.
 #[test]
-fn test_flexible_canister_http_timeout() {
+fn test_canister_http_transform() {
     let pic = flexible_outcalls_pic();
     let canister_id = deploy_test_canister(&pic);
-
-    let replication = ReplicationCounts {
-        total_requests: 4,
-        min_responses: 3,
-        max_responses: 4,
-    };
-    let (call_id, request) =
-        submit_flexible_outcall(&pic, canister_id, flexible_args(Some(replication)));
-
-    // Only one of the three required responses arrives.
-    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        responses: vec![reply(b"hello")],
-    });
-    pic.tick();
-
-    // Advance time so that the canister http outcall times out.
-    pic.advance_time(std::time::Duration::from_secs(180));
-    pic.tick();
-
-    let reply = pic.await_call(call_id).unwrap();
-    let FlexibleHttpRequestResult::Err(err) = decode_flexible_result(&reply) else {
-        panic!("expected the flexible outcall to time out");
-    };
-    assert_eq!(
-        err.global_error,
-        Some(FlexibleHttpGlobalError::Timeout(candid::Reserved))
-    );
-}
-
-/// The calling canister's transform function is applied to every mocked response.
-#[test]
-fn test_flexible_canister_http_with_transform() {
-    let pic = flexible_outcalls_pic();
-    let canister_id = deploy_test_canister(&pic);
-
-    let replication = ReplicationCounts {
-        total_requests: 2,
-        min_responses: 2,
-        max_responses: 2,
-    };
     let context = b"this is my transform context".to_vec();
-    let mut args = flexible_args(Some(replication));
-    args.transform = Some(TransformContext {
+    let transform = TransformContext {
         function: TransformFunc(candid::Func {
             method: "transform".to_string(),
             principal: canister_id,
         }),
         context: context.clone(),
-    });
-    let (call_id, request) = submit_flexible_outcall(&pic, canister_id, args);
-
-    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        responses: vec![reply(b"hello"), reply(b"hello")],
-    });
-
-    let reply = pic.await_call(call_id).unwrap();
-    let FlexibleHttpRequestResult::Ok(payloads) = decode_flexible_result(&reply) else {
-        panic!("expected a successful flexible outcall");
     };
-    assert_eq!(payloads.len(), 2);
-    for payload in &payloads {
-        // The transform function clears the response headers and replaces the body
-        // with its transform context.
-        assert!(payload.headers.is_empty());
-        assert_eq!(payload.body, context);
+
+    for outcall in outcalls_with(ReplicationCounts {
+        total_requests: 2,
+        min_responses: 2,
+        max_responses: 2,
+    }) {
+        let label = outcall.label();
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        let (call_id, request) = submit_outcall(
+            &pic,
+            canister_id,
+            &outcall,
+            Some(&transform),
+            OUTCALL_CYCLES,
+            true,
+        );
+
+        if outcall.is_flexible() {
+            mock_committee(
+                &pic,
+                &request,
+                vec![reply(b"hello"); outcall.committee_size() as usize],
+            );
+        } else {
+            mock_uniform(&pic, &request, reply(b"hello"));
+        }
+
+        let outcome = await_outcome(&pic, call_id, &outcall);
+        for payload in outcome.payloads(&label) {
+            // The transform function clears the response headers and replaces the
+            // body with its transform context.
+            assert!(payload.headers.is_empty(), "{label}");
+            assert_eq!(payload.body, context, "{label}");
+        }
     }
 }
 
-/// A flexible outcall withholds a per-replica cycles allowance from its payment
-/// and refunds whatever the responding nodes did not spend.
+/// Under the pay-as-you-go pricing model an outcall is charged its base fee plus
+/// what the responding nodes report having spent plus the cost of putting the
+/// response into a block — and nothing else: the per-replica cycles allowances it
+/// withheld are refunded.
+///
+/// The reported spend is pinned with `MockCanisterHttpNodeResponse::spent_cycles`,
+/// so the charge is determined up to the Candid encoding of the response.
 #[test]
-fn test_flexible_canister_http_cycles_refund() {
+fn test_canister_http_pay_as_you_go_cycles() {
     let pic = flexible_outcalls_pic();
     let canister_id = deploy_test_canister(&pic);
+    let body = vec![b'x'; 1_000];
 
-    let balance_before = pic.cycle_balance(canister_id);
-    let replication = ReplicationCounts {
-        total_requests: 4,
-        min_responses: 4,
-        max_responses: 4,
+    // Pay-as-you-go cells only: the formula asserted below is the pay-as-you-go
+    // one, and the legacy pricing model charges its whole fee up front instead.
+    for outcall in [
+        Outcall::FullyReplicated {
+            pay_as_you_go: true,
+        },
+        // The only cell whose committee is smaller than the subnet, and so the only
+        // one that tells charging the one designated node's reported spend apart
+        // from charging all of the subnet's.
+        Outcall::NonReplicated {
+            pay_as_you_go: true,
+        },
+        Outcall::Flexible(Some(ReplicationCounts {
+            total_requests: 4,
+            min_responses: 4,
+            max_responses: 4,
+        })),
+    ] {
+        let label = outcall.label();
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        let balance_before = pic.cycle_balance(canister_id);
+        let (call_id, request) = submit(&pic, canister_id, &outcall);
+
+        // The whole attached payment leaves the canister while the outcall is in
+        // flight (along with what the call itself reserves for transmitting and
+        // executing the response); the unspent part comes back with the response.
+        let balance_in_flight = pic.cycle_balance(canister_id);
+        assert!(
+            balance_before - balance_in_flight >= OUTCALL_CYCLES,
+            "{label}: {} withheld, expected at least {OUTCALL_CYCLES}",
+            balance_before - balance_in_flight
+        );
+
+        let committee_size = outcall.committee_size() as u128;
+        let response = spending(reply(&body), REPORTED_SPEND);
+        if outcall.is_flexible() {
+            mock_committee(&pic, &request, vec![response; committee_size as usize]);
+        } else {
+            mock_uniform(&pic, &request, response);
+        }
+        let outcome = await_outcome(&pic, call_id, &outcall);
+        assert_eq!(outcome.bodies(&label)[0], body, "{label}");
+
+        // What the outcall is charged: the base fee, the spend every responding
+        // node reported, and the consensus cost of the delivered response(s). A
+        // flexible outcall delivers up to `max_responses` of them and prices each
+        // with a per-response overhead.
+        let response_bytes = body.len() as u128;
+        let per_response = if outcall.is_flexible() {
+            FLEXIBLE_RESPONSE_OVERHEAD + response_bytes
+        } else {
+            response_bytes
+        };
+        // The consensus fee is charged over the responses actually delivered, a
+        // count that walks down from `max_responses` towards `min_responses`
+        // depending on what the committee's unspent allowances cover and what fits
+        // the block (`select_flexible_responses` in
+        // `rs/https_outcalls/consensus/src/payload_builder/utils.rs`). Pinning it
+        // with `min_responses == max_responses` is also what zeroes the
+        // `flexible_extra_response_fee(delivered - min_responses)` term that the
+        // formula below leaves out.
+        let responses = match outcall.expected_replication() {
+            CanisterHttpReplication::Flexible {
+                min_responses,
+                max_responses,
+                ..
+            } => {
+                assert_eq!(
+                    min_responses, max_responses,
+                    "{label}: the formula below holds only for a pinned delivered response count"
+                );
+                max_responses as u128
+            }
+            _ => 1,
+        };
+        let fixed_fees = outcall.base_fee() + committee_size * REPORTED_SPEND;
+        // The two bounds are the same consensus fee, priced with the Candid header of
+        // every delivered response first left out, then counted in.
+        let floor = fixed_fees + consensus_fee(responses * per_response);
+        let ceiling =
+            fixed_fees + consensus_fee(responses * (per_response + CANDID_SLACK)) + EXECUTION_SLACK;
+
+        let charged = balance_before - pic.cycle_balance(canister_id);
+        assert!(
+            charged >= floor,
+            "{label}: charged {charged}, expected at least {floor}"
+        );
+        // Had the per-replica allowances not been refunded, `charged` would be tens
+        // of billions of cycles rather than tens of millions.
+        assert!(
+            charged < ceiling,
+            "{label}: charged {charged}, expected less than {ceiling}"
+        );
+    }
+}
+
+/// A mocked reject costs exactly the base fee plus the consensus cost of putting
+/// the reject into a block: a rejecting node downloads nothing, and a fully
+/// replicated outcall does not gossip its responses either, so it reports a zero
+/// spend.
+#[test]
+fn test_canister_http_pay_as_you_go_reject_cycles() {
+    let pic = flexible_outcalls_pic();
+    let canister_id = deploy_test_canister(&pic);
+    const MESSAGE: &str = "Connection refused";
+
+    let outcall = Outcall::FullyReplicated {
+        pay_as_you_go: true,
     };
-    let (call_id, request) =
-        submit_flexible_outcall(&pic, canister_id, flexible_args(Some(replication)));
-    // While the outcall is in flight, its base fee and the per-replica allowances
-    // are withheld from the canister.
-    let balance_in_flight = pic.cycle_balance(canister_id);
-    assert!(balance_in_flight < balance_before);
+    let label = outcall.label();
+    let balance_before = pic.cycle_balance(canister_id);
+    let (call_id, request) = submit(&pic, canister_id, &outcall);
+    mock_uniform(&pic, &request, spending(reject(MESSAGE), 0));
 
-    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        responses: vec![reply(b"hello"); 4],
-    });
+    let outcome = await_outcome(&pic, call_id, &outcall);
+    let (_, message) = expect_http_rejection(outcome, &label);
+    assert_eq!(message, MESSAGE);
 
-    let reply = pic.await_call(call_id).unwrap();
-    assert!(matches!(
-        decode_flexible_result(&reply),
-        FlexibleHttpRequestResult::Ok(_)
-    ));
-
-    // The unspent part of the allowances is refunded, so the canister ends up with
-    // more than it had while the outcall was in flight, but with less than it
-    // started with: the base fee, the nodes' reported spend and the cost of
-    // putting the responses into a block are not refunded.
-    let balance_after = pic.cycle_balance(canister_id);
+    // A reject's size is its reject code plus its message.
+    let http_cost =
+        fully_replicated_base_fee(REQUEST_BYTES) + consensus_fee(1 + MESSAGE.len() as u128);
+    let charged = balance_before - pic.cycle_balance(canister_id);
     assert!(
-        balance_after > balance_in_flight,
-        "expected a refund: {balance_in_flight} -> {balance_after}"
+        charged >= http_cost,
+        "charged {charged}, expected at least {http_cost}"
     );
     assert!(
-        balance_after < balance_before,
-        "expected the outcall to cost something: {balance_after} >= {balance_before}"
+        charged < http_cost + EXECUTION_SLACK,
+        "charged {charged}, expected less than {}",
+        http_cost + EXECUTION_SLACK
     );
 }
 
+/// Pay-as-you-go pricing charges for the response actually received, so a small
+/// response costs materially less than under the legacy pricing model, which
+/// charges for the largest response the outcall could have received.
+#[test]
+fn test_canister_http_pay_as_you_go_is_cheaper_for_a_small_response() {
+    let pic = flexible_outcalls_pic();
+    let canister_id = deploy_test_canister(&pic);
+    let body = b"hello".to_vec();
+
+    let mut charged = BTreeMap::new();
+    for pay_as_you_go in [false, true] {
+        let outcall = Outcall::FullyReplicated { pay_as_you_go };
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        let balance_before = pic.cycle_balance(canister_id);
+        let (call_id, request) = submit(&pic, canister_id, &outcall);
+        mock_uniform(&pic, &request, spending(reply(&body), REPORTED_SPEND));
+        let outcome = await_outcome(&pic, call_id, &outcall);
+        assert_eq!(outcome.bodies(&outcall.label())[0], body);
+        charged.insert(
+            pay_as_you_go,
+            balance_before - pic.cycle_balance(canister_id),
+        );
+    }
+
+    assert!(
+        charged[&true] < charged[&false],
+        "pay-as-you-go charged {}, legacy charged {}",
+        charged[&true],
+        charged[&false]
+    );
+}
+
+/// A "fire and forget" flexible outcall — `min_responses = max_responses = 0`, which
+/// the replication counts allow — is answered as soon as any one of its committee
+/// has responded, and delivers no payloads at all.
+///
+/// It cannot fail with `too_many_rejects` either: needing zero replies never becomes
+/// impossible, however many nodes reject.
+#[test]
+fn test_flexible_canister_http_fire_and_forget() {
+    let pic = flexible_outcalls_pic();
+    let canister_id = deploy_test_canister(&pic);
+
+    let outcall = Outcall::Flexible(Some(ReplicationCounts {
+        total_requests: 4,
+        min_responses: 0,
+        max_responses: 0,
+    }));
+    let label = outcall.label();
+
+    for response in [reply(b"hello"), reject("Connection refused")] {
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        let (call_id, request) = submit(&pic, canister_id, &outcall);
+        // One response from one of the four committee nodes is enough to decide it.
+        mock_committee(&pic, &request, vec![response]);
+
+        let outcome = await_outcome(&pic, call_id, &outcall);
+        let payloads = outcome.payloads(&label);
+        assert!(
+            payloads.is_empty(),
+            "{label}: expected no payloads, got {}",
+            payloads.len()
+        );
+    }
+}
+
 /// Once the responses that would have to be delivered no longer fit into a block,
-/// the outcall fails with `ResponsesTooLarge`.
+/// a flexible outcall fails with `ResponsesTooLarge`.
 #[test]
 fn test_flexible_canister_http_responses_too_large() {
     let pic = flexible_outcalls_pic();
     let canister_id = deploy_test_canister(&pic);
 
-    let replication = ReplicationCounts {
+    let outcall = Outcall::Flexible(Some(ReplicationCounts {
         total_requests: 2,
         min_responses: 2,
         max_responses: 2,
-    };
-    let (call_id, request) =
-        submit_flexible_outcall(&pic, canister_id, flexible_args(Some(replication)));
+    }));
+    let (call_id, request) = submit(&pic, canister_id, &outcall);
 
     // Both responses are well below the 2 MB cap on a single response
     // (`MAX_CANISTER_HTTP_RESPONSE_BYTES`), but the two of them together exceed the
@@ -2179,463 +2492,545 @@ fn test_flexible_canister_http_responses_too_large() {
     // (`MAX_CANISTER_HTTP_PAYLOAD_SIZE`), and both of them have to be delivered
     // (`min_responses == 2`).
     let body = vec![b'x'; 1_100_000];
-    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        responses: vec![reply(&body); 2],
-    });
+    mock_committee(&pic, &request, vec![reply(&body); 2]);
 
-    let reply = pic.await_call(call_id).unwrap();
-    let FlexibleHttpRequestResult::Err(err) = decode_flexible_result(&reply) else {
-        panic!("expected the flexible outcall to fail");
-    };
+    let err = expect_flexible_error(await_outcome(&pic, call_id, &outcall), &outcall.label());
     assert_eq!(
         err.global_error,
         Some(FlexibleHttpGlobalError::ResponsesTooLarge(candid::Reserved))
     );
 }
 
-/// If the cycles attached to the outcall do not cover the cost of delivering its
-/// responses, the outcall fails with `OutOfCycles`.
+/// How an outcall is made to run out of cycles: what the nodes report having spent
+/// is what decides it, so a test can either report the spend outright or let
+/// PocketIC derive it from a large response.
+#[derive(Clone, Copy, Debug)]
+enum OutOfCyclesTrigger {
+    /// Every responding node reports having spent its whole per-replica cycles
+    /// allowance.
+    ReportedSpend,
+    /// The nodes download a response large enough that what they spend on it
+    /// leaves too little to deliver it.
+    LargeResponse,
+}
+
+/// An outcall fails with out-of-cycles once what its nodes leave unspent of their
+/// per-replica cycles allowances no longer covers putting a response into a block.
 #[test]
-fn test_flexible_canister_http_out_of_cycles() {
+fn test_canister_http_out_of_cycles() {
     let pic = flexible_outcalls_pic();
     let canister_id = deploy_test_canister(&pic);
+    /// What each node reports having spent under `ReportedSpend`, and hence — by
+    /// the payment the cell attaches — its whole per-replica allowance.
+    const SPENT_PER_NODE: u128 = 10_000_000;
 
-    // Enough to cover the outcall's base fee (~50M cycles on a 13-node subnet with
-    // this replication) and to let every node perform the outcall, but nowhere near
-    // enough to also cover the cost of putting 13 responses into a block. Revisit
-    // if the fees in `rs/https_outcalls/pricing/src/fees.rs` change.
-    const CYCLES: u128 = 100_000_000;
-    let replication = ReplicationCounts {
-        total_requests: 13,
-        min_responses: 13,
-        max_responses: 13,
-    };
-    let (call_id, request) = submit_flexible_outcall_with_cycles(
+    // Pay-as-you-go cells only: out-of-cycles is a pay-as-you-go outcome, since the
+    // legacy pricing model does not hold the delivery against what the nodes spent.
+    for (outcall, trigger) in [
+        (
+            Outcall::FullyReplicated {
+                pay_as_you_go: true,
+            },
+            OutOfCyclesTrigger::ReportedSpend,
+        ),
+        (
+            Outcall::Flexible(Some(ReplicationCounts {
+                total_requests: 4,
+                min_responses: 4,
+                max_responses: 4,
+            })),
+            OutOfCyclesTrigger::ReportedSpend,
+        ),
+        (
+            Outcall::FullyReplicated {
+                pay_as_you_go: true,
+            },
+            OutOfCyclesTrigger::LargeResponse,
+        ),
+    ] {
+        let label = format!("{} via {trigger:?}", outcall.label());
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        let committee_size = outcall.committee_size() as u128;
+
+        let (cycles, response) = match trigger {
+            // Attaching `base_fee + committee_size * SPENT_PER_NODE` makes the
+            // per-replica allowance exactly `SPENT_PER_NODE`: the payment, not the
+            // worst-case usage fee, is what bounds it (see
+            // `try_add_http_context_to_replicated_state`). Reporting that whole
+            // allowance as spent leaves nothing to deliver a response with,
+            // whatever its size.
+            OutOfCyclesTrigger::ReportedSpend => (
+                outcall.base_fee() + committee_size * SPENT_PER_NODE,
+                spending(reply(b"hello"), SPENT_PER_NODE),
+            ),
+            // Enough to let every node download the response out of its own
+            // allowance (roughly twice its `50 * body.len()` download fee), but an
+            // order of magnitude short of the `9_490 * body.len()` a delivery costs
+            // (see `rs/https_outcalls/pricing/src/fees.rs`).
+            OutOfCyclesTrigger::LargeResponse => (170_000_000, reply(&vec![b'x'; 100_000])),
+        };
+
+        let (call_id, request) = submit_outcall(&pic, canister_id, &outcall, None, cycles, true);
+        if outcall.is_flexible() {
+            mock_committee(&pic, &request, vec![response; committee_size as usize]);
+        } else {
+            mock_uniform(&pic, &request, response);
+        }
+
+        let outcome = await_outcome(&pic, call_id, &outcall);
+        if outcall.is_flexible() {
+            let err = expect_flexible_error(outcome, &label);
+            assert_eq!(
+                err.global_error,
+                Some(FlexibleHttpGlobalError::OutOfCycles(candid::Reserved)),
+                "{label}"
+            );
+        } else {
+            let (reject_code, message) = expect_http_rejection(outcome, &label);
+            assert!(
+                matches!(reject_code, RejectionCode::SysTransient),
+                "{label}: unexpected reject code {reject_code:?} ({message})"
+            );
+            assert!(
+                message.contains("Out of cycles:"),
+                "{label}: unexpected rejection message {message:?}"
+            );
+        }
+    }
+}
+
+/// A committee that has run out of cycles reports `out_of_cycles` even when enough
+/// of its nodes rejected to make the outcall fail with `too_many_rejects`: what the
+/// nodes left unspent is checked after the rejects have been found undeliverable.
+#[test]
+fn test_canister_http_out_of_cycles_preempts_too_many_rejects() {
+    let pic = flexible_outcalls_pic();
+    let canister_id = deploy_test_canister(&pic);
+    const SPENT_PER_NODE: u128 = 10_000_000;
+
+    // The slack is `4 - 3 = 1`, so the two rejects below are one too many and would
+    // deliver `too_many_rejects` if the committee could pay for it.
+    let outcall = Outcall::Flexible(Some(ReplicationCounts {
+        total_requests: 4,
+        min_responses: 3,
+        max_responses: 4,
+    }));
+    let label = outcall.label();
+    let cycles = outcall.base_fee() + outcall.committee_size() as u128 * SPENT_PER_NODE;
+    let (call_id, request) = submit_outcall(&pic, canister_id, &outcall, None, cycles, true);
+
+    // Every node reports its whole per-replica allowance as spent, leaving nothing
+    // to deliver either the rejects or the replies with.
+    mock_committee(
         &pic,
-        canister_id,
-        flexible_args(Some(replication)),
-        CYCLES,
+        &request,
+        vec![
+            spending(reject("Connection refused"), SPENT_PER_NODE),
+            spending(reject("Connection refused"), SPENT_PER_NODE),
+            spending(reply(b"hello"), SPENT_PER_NODE),
+            spending(reply(b"hello"), SPENT_PER_NODE),
+        ],
     );
 
-    let body = vec![b'x'; 1_000];
-    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        responses: vec![reply(&body); 13],
-    });
-
-    let reply = pic.await_call(call_id).unwrap();
-    let FlexibleHttpRequestResult::Err(err) = decode_flexible_result(&reply) else {
-        panic!("expected the flexible outcall to fail");
-    };
+    let err = expect_flexible_error(await_outcome(&pic, call_id, &outcall), &label);
     assert_eq!(
         err.global_error,
-        Some(FlexibleHttpGlobalError::OutOfCycles(candid::Reserved))
+        Some(FlexibleHttpGlobalError::OutOfCycles(candid::Reserved)),
+        "{label}"
     );
 }
 
-/// A non-flexible outcall can select the pay-as-you-go pricing model through its
-/// `pricing_version`, and is then refunded whatever the responding nodes did not
-/// spend.
+/// The reported spend is what the pay-as-you-go pricing model charges for, and what
+/// the legacy pricing model ignores: reporting a large spend costs the calling
+/// canister more under the former and nothing at all under the latter.
 #[test]
-fn test_canister_http_pay_as_you_go() {
+fn test_canister_http_reported_spend_is_only_charged_under_pay_as_you_go() {
     let pic = flexible_outcalls_pic();
     let canister_id = deploy_test_canister(&pic);
-
-    let balance_before = pic.cycle_balance(canister_id);
-    let (call_id, request) = submit_pay_as_you_go_outcall(
-        &pic,
-        canister_id,
-        PRICING_VERSION_PAY_AS_YOU_GO,
-        FLEXIBLE_OUTCALL_CYCLES,
-    );
-    assert_eq!(
-        request.replication,
-        CanisterHttpReplication::FullyReplicated
-    );
-    assert_eq!(
-        request.pricing_version,
-        CanisterHttpPricingVersion::PayAsYouGo
-    );
-    let balance_in_flight = pic.cycle_balance(canister_id);
-    assert!(balance_in_flight < balance_before);
-
-    // A fully replicated outcall is mocked as usual: one response per subnet node.
+    /// Well below the per-replica allowance `OUTCALL_CYCLES` buys, so that the
+    /// outcall stays deliverable, and well above what executing a message costs.
+    const SPENT_PER_NODE: u128 = 1_000_000_000;
     let body = b"hello".to_vec();
-    pic.mock_canister_http_response(MockCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        response: reply(&body),
-        additional_responses: vec![],
-    });
 
-    let reply = pic.await_call(call_id).unwrap();
-    let payload = decode_raw_http_result(&reply).expect("the outcall was rejected");
-    assert_eq!(payload.body, body);
+    // No flexible cell: a flexible outcall is always priced pay-as-you-go, so there
+    // is no legacy counterpart to difference it against.
+    for outcall in [
+        Outcall::FullyReplicated {
+            pay_as_you_go: false,
+        },
+        Outcall::FullyReplicated {
+            pay_as_you_go: true,
+        },
+        Outcall::NonReplicated {
+            pay_as_you_go: false,
+        },
+        Outcall::NonReplicated {
+            pay_as_you_go: true,
+        },
+    ] {
+        let label = outcall.label();
+        let committee_size = outcall.committee_size() as u128;
+        let pay_as_you_go = match &outcall {
+            Outcall::FullyReplicated { pay_as_you_go }
+            | Outcall::NonReplicated { pay_as_you_go } => *pay_as_you_go,
+            Outcall::Flexible(_) => unreachable!("a flexible outcall is always pay-as-you-go"),
+        };
 
-    // The unspent part of the per-replica allowances is refunded.
-    let balance_after = pic.cycle_balance(canister_id);
-    assert!(
-        balance_after > balance_in_flight,
-        "expected a refund: {balance_in_flight} -> {balance_after}"
-    );
-    assert!(
-        balance_after < balance_before,
-        "expected the outcall to cost something: {balance_after} >= {balance_before}"
-    );
+        let mut charged = vec![];
+        for spent_cycles in [0, SPENT_PER_NODE] {
+            pic.add_cycles(canister_id, INIT_CYCLES);
+            let balance_before = pic.cycle_balance(canister_id);
+            let (call_id, request) = submit(&pic, canister_id, &outcall);
+            mock_uniform(&pic, &request, spending(reply(&body), spent_cycles));
+            let outcome = await_outcome(&pic, call_id, &outcall);
+            assert_eq!(outcome.bodies(&label)[0], body, "{label}");
+            charged.push(balance_before - pic.cycle_balance(canister_id));
+        }
+        let [with_no_spend, with_spend] = charged[..] else {
+            unreachable!()
+        };
+
+        if pay_as_you_go {
+            let added = with_spend - with_no_spend;
+            // Only the nodes of the outcall's own committee are charged for what
+            // they reported: all of the subnet's nodes for a fully replicated
+            // outcall, but just the one undisclosed node for a non-replicated one —
+            // even though PocketIC has to mock a receipt for every node either way.
+            let expected = committee_size * SPENT_PER_NODE;
+            if committee_size == 1 {
+                // Only the designated node's receipt enters the proof, and no other
+                // node's can straggle into a later block, so this is exact.
+                assert!(
+                    added.abs_diff(expected) < EXECUTION_SLACK,
+                    "{label}: reporting a spend added {added}, expected about {expected}"
+                );
+            } else {
+                // An asynchronously reported receipt can still be a round behind, so
+                // only the lower bound is determined here.
+                let floor = expected - SPENT_PER_NODE;
+                assert!(
+                    added >= floor,
+                    "{label}: reporting a spend added only {added}, expected at least {floor}"
+                );
+            }
+        } else {
+            // Legacy pricing charges the whole fee up front and never looks at what
+            // the nodes report, so the two are the same but for execution costs.
+            // Both legacy cells discard the receipts the same way; the non-replicated
+            // one is here to keep the cell set symmetric.
+            assert!(
+                with_spend.abs_diff(with_no_spend) < SPENT_PER_NODE,
+                "{label}: reporting a spend changed the charge by {}",
+                with_spend.abs_diff(with_no_spend)
+            );
+        }
+    }
 }
 
-/// A non-replicated outcall (`is_replicated = false`) can select the pay-as-you-go
-/// pricing model too, and is answered by the single node it was delegated to.
+/// Which outcalls are available, and which pricing model they end up with, on the
+/// three kinds of instance a test can build: one with beta features, a plain one,
+/// and one whose subnet does not charge for HTTP outcalls.
 #[test]
-fn test_canister_http_non_replicated_pay_as_you_go() {
-    let pic = flexible_outcalls_pic();
-    let canister_id = deploy_test_canister(&pic);
+fn test_canister_http_availability_and_pricing() {
+    // (label, instance, canister, whether the pay-as-you-go pricing model is
+    // enabled, whether HTTP outcalls are free)
+    let beta = flexible_outcalls_pic();
+    let beta_canister = deploy_test_canister(&beta);
+    let default = PocketIc::new();
+    let default_canister = deploy_test_canister(&default);
+    let system = PocketIcBuilder::new().with_system_subnet().build();
+    let system_subnet = system.topology().get_system_subnets()[0];
+    let system_canister = system.create_canister_on_subnet(None, None, system_subnet);
+    system.add_cycles(system_canister, INIT_CYCLES);
+    system.install_canister(system_canister, test_canister_wasm(), vec![], None);
 
-    let (call_id, request) = submit_raw_outcall(
-        &pic,
-        canister_id,
-        Some(false),
-        Some(PRICING_VERSION_PAY_AS_YOU_GO),
-        FLEXIBLE_OUTCALL_CYCLES,
-    );
-    assert_eq!(request.replication, CanisterHttpReplication::NonReplicated);
-    assert_eq!(
-        request.pricing_version,
-        CanisterHttpPricingVersion::PayAsYouGo
-    );
-
-    // Only the delegated node's response is delivered, but which node that is is
-    // not exposed, so the same response is mocked for every node of the subnet.
-    let body = b"hello".to_vec();
-    pic.mock_canister_http_response(MockCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        response: reply(&body),
-        additional_responses: vec![],
-    });
-
-    let reply = pic.await_call(call_id).unwrap();
-    let payload = decode_raw_http_result(&reply).expect("the outcall was rejected");
-    assert_eq!(payload.body, body);
+    for (env, pic, canister_id, pay_as_you_go_enabled, outcalls_are_free) in [
+        ("beta features", &beta, beta_canister, true, false),
+        ("default instance", &default, default_canister, false, false),
+        ("system subnet", &system, system_canister, false, true),
+    ] {
+        for outcall in [
+            Outcall::FullyReplicated {
+                pay_as_you_go: true,
+            },
+            Outcall::NonReplicated {
+                pay_as_you_go: true,
+            },
+            // A flexible outcall does not fit the subnet's default replication on
+            // a 1-node system subnet, so ask for a single node explicitly.
+            Outcall::Flexible(Some(ReplicationCounts {
+                total_requests: 1,
+                min_responses: 1,
+                max_responses: 1,
+            })),
+        ] {
+            let label = format!("{env}, {}", outcall.label());
+            // A flexible outcall is only offered where the pay-as-you-go pricing
+            // model is enabled or where HTTP outcalls are free.
+            if outcall.is_flexible() && !pay_as_you_go_enabled && !outcalls_are_free {
+                let (method, args) = outcall.call(None);
+                let reply = pic
+                    .update_call(
+                        canister_id,
+                        Principal::anonymous(),
+                        "proxy_call",
+                        proxy_call_arg(method, args, OUTCALL_CYCLES),
+                    )
+                    .unwrap();
+                let (reject_code, message) = decode_sync_rejection(&reply);
+                assert!(
+                    matches!(reject_code, RejectionCode::CanisterError),
+                    "{label}: unexpected reject code {reject_code:?} ({message})"
+                );
+                assert!(
+                    message.contains("This API is not enabled on this subnet"),
+                    "{label}: unexpected rejection message {message:?}"
+                );
+                continue;
+            }
+            // `submit_outcall` asserts the reported replication and pricing model.
+            let (call_id, request) = submit_outcall(
+                pic,
+                canister_id,
+                &outcall,
+                None,
+                OUTCALL_CYCLES,
+                pay_as_you_go_enabled,
+            );
+            let body = b"hello".to_vec();
+            if outcall.is_flexible() {
+                mock_committee(
+                    pic,
+                    &request,
+                    vec![reply(&body); outcall.committee_size() as usize],
+                );
+            } else {
+                mock_uniform(pic, &request, reply(&body));
+            }
+            let outcome = await_outcome(pic, call_id, &outcall);
+            for delivered in outcome.bodies(&label) {
+                assert_eq!(delivered, body, "{label}");
+            }
+        }
+    }
 }
 
-/// Without the pay-as-you-go pricing model enabled, a non-flexible outcall asking
-/// for it silently falls back to the legacy pricing model.
-#[test]
-fn test_canister_http_pay_as_you_go_disabled() {
-    let pic = PocketIc::new();
-    let canister_id = deploy_test_canister(&pic);
-
-    let (_call_id, request) = submit_pay_as_you_go_outcall(
-        &pic,
-        canister_id,
-        PRICING_VERSION_PAY_AS_YOU_GO,
-        FLEXIBLE_OUTCALL_CYCLES,
-    );
-    assert_eq!(request.pricing_version, CanisterHttpPricingVersion::Legacy);
-}
-
-/// A pay-as-you-go outcall whose attached cycles do not cover the cost of
-/// delivering a response is rejected once the nodes have reported their spend.
-#[test]
-fn test_canister_http_pay_as_you_go_out_of_cycles() {
-    let pic = flexible_outcalls_pic();
-    let canister_id = deploy_test_canister(&pic);
-
-    // Enough to cover the outcall's base fee (~38M cycles on a 13-node subnet) and
-    // to let every node perform the outcall, but nowhere near enough to also cover
-    // the cost of putting a 10 KB response into a block. Revisit if the fees in
-    // `rs/https_outcalls/pricing/src/fees.rs` change.
-    const CYCLES: u128 = 80_000_000;
-    let (call_id, request) =
-        submit_pay_as_you_go_outcall(&pic, canister_id, PRICING_VERSION_PAY_AS_YOU_GO, CYCLES);
-    assert_eq!(
-        request.pricing_version,
-        CanisterHttpPricingVersion::PayAsYouGo
-    );
-
-    let body = vec![b'x'; 10_000];
-    pic.mock_canister_http_response(MockCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        response: reply(&body),
-        additional_responses: vec![],
-    });
-
-    let reply = pic.await_call(call_id).unwrap();
-    let (reject_code, message) =
-        decode_raw_http_result(&reply).expect_err("expected the outcall to be rejected");
-    assert!(
-        matches!(reject_code, RejectionCode::SysTransient),
-        "unexpected reject code {reject_code:?} (message: {message})"
-    );
-    assert!(
-        message.contains("Out of cycles:"),
-        "unexpected rejection message {message:?}"
-    );
-}
-
-/// Invalid replication counts are rejected synchronously.
+/// Invalid replication counts are rejected synchronously, so the outcall never
+/// becomes a pending one. (Which counts are invalid, and the exact messages, are
+/// covered by the unit tests of `CanisterHttpRequestContext` in `ic-types`.)
 #[test]
 fn test_flexible_canister_http_invalid_replication_counts() {
     let pic = flexible_outcalls_pic();
     let canister_id = deploy_test_canister(&pic);
 
-    for (replication, expected) in [
-        (
-            ReplicationCounts {
-                total_requests: 0,
-                min_responses: 0,
-                max_responses: 0,
-            },
-            "total_requests (0) must be at least 1",
-        ),
-        (
-            ReplicationCounts {
-                total_requests: 14,
-                min_responses: 1,
-                max_responses: 1,
-            },
-            "total_requests (14) must not exceed the number of available nodes (13)",
-        ),
-        (
-            ReplicationCounts {
-                total_requests: 4,
-                min_responses: 3,
-                max_responses: 2,
-            },
-            "min_responses (3) must not exceed max_responses (2)",
-        ),
-        (
-            ReplicationCounts {
-                total_requests: 2,
-                min_responses: 1,
-                max_responses: 3,
-            },
-            "max_responses (3) must not exceed total_requests (2)",
-        ),
-    ] {
-        let reply = pic
-            .update_call(
-                canister_id,
-                Principal::anonymous(),
-                "flexible_canister_http",
-                flexible_call_arg(flexible_args(Some(replication))),
-            )
-            .unwrap();
-        let (reject_code, message) = decode_flexible_rejection(&reply);
-        assert!(
-            matches!(reject_code, RejectionCode::CanisterReject),
-            "unexpected reject code {reject_code:?} (message: {message})"
-        );
-        assert!(
-            message.contains(expected),
-            "rejection message {message:?} does not contain {expected:?}"
-        );
-    }
-}
-
-/// Without the beta features enabled, flexible outcalls are still available on a
-/// subnet where HTTP outcalls are free, falling back to the legacy pricing model.
-#[test]
-fn test_flexible_canister_http_on_system_subnet() {
-    let pic = PocketIcBuilder::new().with_system_subnet().build();
-    let system_subnet = pic.topology().get_system_subnets()[0];
-    let canister_id = pic.create_canister_on_subnet(None, None, system_subnet);
-    pic.add_cycles(canister_id, INIT_CYCLES);
-    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
-
-    let replication = ReplicationCounts {
-        total_requests: 3,
-        min_responses: 2,
-        max_responses: 3,
-    };
-    let (call_id, request) =
-        submit_flexible_outcall(&pic, canister_id, flexible_args(Some(replication)));
-
-    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        responses: vec![reply(b"hello"); 3],
-    });
-
-    let reply = pic.await_call(call_id).unwrap();
-    let FlexibleHttpRequestResult::Ok(payloads) = decode_flexible_result(&reply) else {
-        panic!("expected a successful flexible outcall");
-    };
-    assert_eq!(payloads.len(), 3);
-    for payload in &payloads {
-        assert_eq!(payload.body, b"hello".to_vec());
-    }
-}
-
-/// Without the beta features enabled, flexible outcalls are unavailable on a
-/// subnet that charges for HTTP outcalls.
-#[test]
-fn test_flexible_canister_http_disabled() {
-    let pic = PocketIc::new();
-    let canister_id = deploy_test_canister(&pic);
-
+    let outcall = Outcall::Flexible(Some(ReplicationCounts {
+        total_requests: 4,
+        min_responses: 3,
+        max_responses: 2,
+    }));
+    let (method, args) = outcall.call(None);
     let reply = pic
         .update_call(
             canister_id,
             Principal::anonymous(),
-            "flexible_canister_http",
-            flexible_call_arg(flexible_args(None)),
+            "proxy_call",
+            proxy_call_arg(method, args, OUTCALL_CYCLES),
         )
         .unwrap();
-    let (reject_code, message) = decode_flexible_rejection(&reply);
+    let (reject_code, message) = decode_sync_rejection(&reply);
     assert!(
-        matches!(reject_code, RejectionCode::CanisterError),
+        matches!(reject_code, RejectionCode::CanisterReject),
         "unexpected reject code {reject_code:?} (message: {message})"
     );
     assert!(
-        message.contains("This API is not enabled on this subnet"),
+        message.contains("min_responses (3) must not exceed max_responses (2)"),
         "unexpected rejection message {message:?}"
     );
+    assert!(pic.get_canister_http().is_empty());
 }
 
-/// Mocking more responses than the outcall's committee has nodes is an error.
-#[test]
-#[should_panic(expected = "TooManyMockCanisterHttpResponses((3, 2))")]
-fn test_flexible_canister_http_too_many_responses() {
+/// Submits an outcall and mocks a response for it that no node of its subnet could
+/// have produced. Panics with the error PocketIC reports.
+fn mock_invalid_response(outcall: Outcall, invalid: InvalidMock) {
     let pic = flexible_outcalls_pic();
     let canister_id = deploy_test_canister(&pic);
+    let (_call_id, request) = submit(&pic, canister_id, &outcall);
+    let committee_size = outcall.committee_size() as usize;
 
-    let replication = ReplicationCounts {
-        total_requests: 2,
-        min_responses: 1,
-        max_responses: 2,
-    };
-    let (_call_id, request) =
-        submit_flexible_outcall(&pic, canister_id, flexible_args(Some(replication)));
-
-    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        responses: vec![reply(b"hello"); 3],
-    });
+    match invalid {
+        InvalidMock::RejectMessageTooLong => {
+            let response = reject(&"x".repeat(1025));
+            if outcall.is_flexible() {
+                mock_committee(&pic, &request, vec![response]);
+            } else {
+                mock_uniform(&pic, &request, response);
+            }
+        }
+        InvalidMock::SpentCyclesTooLarge => {
+            // Every cycle the outcall attached beyond its base fee, i.e. more than
+            // any single node was granted.
+            let response = spending(reply(b"hello"), OUTCALL_CYCLES);
+            if outcall.is_flexible() {
+                mock_committee(&pic, &request, vec![response]);
+            } else {
+                mock_uniform(&pic, &request, response);
+            }
+        }
+        InvalidMock::TooManyResponses => {
+            mock_committee(&pic, &request, vec![reply(b"hello"); committee_size + 1]);
+        }
+        InvalidMock::WrongNumberOfResponses => {
+            mock_per_node(&pic, &request, vec![reply(b"hello"); 2]);
+        }
+        InvalidMock::FlexibleMockOfNonFlexibleOutcall => {
+            mock_committee(&pic, &request, vec![reply(b"hello")]);
+        }
+        InvalidMock::InvalidRejectCode => {
+            // `RejectCode` only goes up to `SysUnknown == 6`, so there is no reject
+            // a node could have reported with code 0.
+            let response = MockCanisterHttpNodeResponse::from(
+                CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
+                    reject_code: 0,
+                    message: "Connection refused".to_string(),
+                }),
+            );
+            if outcall.is_flexible() {
+                mock_committee(&pic, &request, vec![response]);
+            } else {
+                mock_uniform(&pic, &request, response);
+            }
+        }
+        InvalidMock::UnknownRequestId => {
+            // The outcall submitted above is the only pending one, so no context
+            // can be found for any other request id.
+            let request_id = request.request_id + 1;
+            if outcall.is_flexible() {
+                pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
+                    subnet_id: request.subnet_id,
+                    request_id,
+                    responses: vec![reply(b"hello")],
+                });
+            } else {
+                pic.mock_canister_http_response(MockCanisterHttpResponse {
+                    subnet_id: request.subnet_id,
+                    request_id,
+                    response: reply(b"hello"),
+                    additional_responses: vec![],
+                });
+            }
+        }
+    }
 }
 
-/// A fully replicated outcall cannot be mocked through the flexible endpoint.
-#[test]
-#[should_panic(expected = "NotAFlexibleCanisterHttpRequest")]
-fn test_flexible_mock_of_fully_replicated_outcall() {
-    let pic = flexible_outcalls_pic();
-    let canister_id = deploy_test_canister(&pic);
-
-    pic.submit_call(
-        canister_id,
-        Principal::anonymous(),
-        "canister_http",
-        encode_one("example.com").unwrap(),
-    )
-    .unwrap();
-    pic.tick();
-    pic.tick();
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 1);
-    let request = &canister_http_requests[0];
-    assert_eq!(
-        request.replication,
-        CanisterHttpReplication::FullyReplicated
-    );
-
-    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        responses: vec![reply(b"hello")],
-    });
+enum InvalidMock {
+    RejectMessageTooLong,
+    SpentCyclesTooLarge,
+    TooManyResponses,
+    WrongNumberOfResponses,
+    FlexibleMockOfNonFlexibleOutcall,
+    InvalidRejectCode,
+    UnknownRequestId,
 }
 
-/// A mocked reject is priced too: a rejecting node reports having downloaded
-/// nothing, and a fully replicated outcall does not gossip its responses either,
-/// so nothing beyond the base fee and the consensus cost of putting the reject
-/// into a block is charged.
-#[test]
-fn test_canister_http_pay_as_you_go_reject() {
-    let pic = flexible_outcalls_pic();
-    let canister_id = deploy_test_canister(&pic);
-
-    let balance_before = pic.cycle_balance(canister_id);
-    let (call_id, request) = submit_pay_as_you_go_outcall(
-        &pic,
-        canister_id,
-        PRICING_VERSION_PAY_AS_YOU_GO,
-        FLEXIBLE_OUTCALL_CYCLES,
-    );
-    let balance_in_flight = pic.cycle_balance(canister_id);
-    assert!(balance_in_flight < balance_before);
-
-    pic.mock_canister_http_response(MockCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        response: reject("Connection refused"),
-        additional_responses: vec![],
-    });
-
-    let reply = pic.await_call(call_id).unwrap();
-    let (reject_code, message) =
-        decode_raw_http_result(&reply).expect_err("expected the outcall to be rejected");
-    assert!(
-        matches!(reject_code, RejectionCode::SysTransient),
-        "unexpected reject code {reject_code:?} (message: {message})"
-    );
-    assert_eq!(message, "Connection refused");
-
-    let balance_after = pic.cycle_balance(canister_id);
-    assert!(
-        balance_after > balance_in_flight,
-        "expected a refund: {balance_in_flight} -> {balance_after}"
-    );
-    assert!(
-        balance_after < balance_before,
-        "expected the outcall to cost something: {balance_after} >= {balance_before}"
-    );
-}
+const FLEXIBLE_2_1_2: Outcall = Outcall::Flexible(Some(ReplicationCounts {
+    total_requests: 2,
+    min_responses: 1,
+    max_responses: 2,
+}));
+const FULLY_REPLICATED: Outcall = Outcall::FullyReplicated {
+    pay_as_you_go: true,
+};
 
 /// A reject message longer than the 1 KiB a node truncates its reject messages to
-/// is not one any node could have reported, so mocking it is an error.
+/// is not one any node could have reported, so mocking it is an error — through
+/// either mock endpoint.
 #[test]
 #[should_panic(expected = "CanisterHttpRejectMessageTooLong((1025, 1024))")]
 fn test_canister_http_reject_message_too_long() {
-    let pic = flexible_outcalls_pic();
-    let canister_id = deploy_test_canister(&pic);
-
-    let (_call_id, request) =
-        submit_raw_outcall(&pic, canister_id, None, None, FLEXIBLE_OUTCALL_CYCLES);
-
-    pic.mock_canister_http_response(MockCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        response: reject(&"x".repeat(1025)),
-        additional_responses: vec![],
-    });
+    mock_invalid_response(FULLY_REPLICATED, InvalidMock::RejectMessageTooLong);
 }
 
-/// The same holds for the flexible mock.
 #[test]
 #[should_panic(expected = "CanisterHttpRejectMessageTooLong((1025, 1024))")]
 fn test_flexible_canister_http_reject_message_too_long() {
-    let pic = flexible_outcalls_pic();
-    let canister_id = deploy_test_canister(&pic);
+    mock_invalid_response(FLEXIBLE_2_1_2, InvalidMock::RejectMessageTooLong);
+}
 
-    let replication = ReplicationCounts {
-        total_requests: 2,
-        min_responses: 1,
-        max_responses: 2,
-    };
-    let (_call_id, request) =
-        submit_flexible_outcall(&pic, canister_id, flexible_args(Some(replication)));
+/// A node cannot report having spent more than the per-replica cycles allowance
+/// the outcall withheld for it — through either mock endpoint.
+#[test]
+#[should_panic(expected = "CanisterHttpSpentCyclesTooLarge")]
+fn test_canister_http_spent_cycles_too_large() {
+    mock_invalid_response(FULLY_REPLICATED, InvalidMock::SpentCyclesTooLarge);
+}
 
-    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
-        subnet_id: request.subnet_id,
-        request_id: request.request_id,
-        responses: vec![reject(&"x".repeat(1025))],
-    });
+#[test]
+#[should_panic(expected = "CanisterHttpSpentCyclesTooLarge")]
+fn test_flexible_canister_http_spent_cycles_too_large() {
+    mock_invalid_response(FLEXIBLE_2_1_2, InvalidMock::SpentCyclesTooLarge);
+}
+
+/// The flexible mock takes at most one response per committee node.
+#[test]
+#[should_panic(expected = "TooManyMockCanisterHttpResponses((3, 2))")]
+fn test_flexible_canister_http_too_many_responses() {
+    mock_invalid_response(FLEXIBLE_2_1_2, InvalidMock::TooManyResponses);
+}
+
+/// The non-flexible mock takes either one response or exactly one per subnet node.
+#[test]
+#[should_panic(expected = "InvalidMockCanisterHttpResponses((2, 13))")]
+fn test_canister_http_wrong_number_of_responses() {
+    mock_invalid_response(FULLY_REPLICATED, InvalidMock::WrongNumberOfResponses);
+}
+
+/// An outcall that is not flexible cannot be mocked through the flexible endpoint.
+#[test]
+#[should_panic(expected = "NotAFlexibleCanisterHttpRequest")]
+fn test_flexible_mock_of_fully_replicated_outcall() {
+    mock_invalid_response(
+        FULLY_REPLICATED,
+        InvalidMock::FlexibleMockOfNonFlexibleOutcall,
+    );
+}
+
+#[test]
+#[should_panic(expected = "NotAFlexibleCanisterHttpRequest")]
+fn test_flexible_mock_of_non_replicated_outcall() {
+    mock_invalid_response(
+        Outcall::NonReplicated {
+            pay_as_you_go: true,
+        },
+        InvalidMock::FlexibleMockOfNonFlexibleOutcall,
+    );
+}
+
+/// A reject code outside `RejectCode` is not one any node could have reported —
+/// through either mock endpoint.
+#[test]
+#[should_panic(expected = "InvalidRejectCode(0)")]
+fn test_canister_http_invalid_reject_code() {
+    mock_invalid_response(FULLY_REPLICATED, InvalidMock::InvalidRejectCode);
+}
+
+#[test]
+#[should_panic(expected = "InvalidRejectCode(0)")]
+fn test_flexible_canister_http_invalid_reject_code() {
+    mock_invalid_response(FLEXIBLE_2_1_2, InvalidMock::InvalidRejectCode);
+}
+
+/// A response can only be mocked for an outcall that is actually pending — through
+/// either mock endpoint.
+#[test]
+#[should_panic(expected = "InvalidCanisterHttpRequestId")]
+fn test_canister_http_unknown_request_id() {
+    mock_invalid_response(FULLY_REPLICATED, InvalidMock::UnknownRequestId);
+}
+
+#[test]
+#[should_panic(expected = "InvalidCanisterHttpRequestId")]
+fn test_flexible_canister_http_unknown_request_id() {
+    mock_invalid_response(FLEXIBLE_2_1_2, InvalidMock::UnknownRequestId);
 }
 
 #[test]
