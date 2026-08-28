@@ -113,9 +113,11 @@ impl SweeperFundingAccounting {
     ///
     /// Provisioning at acceptance rather than at spend is what keeps this a bound while sweeps are in
     /// flight: gas a committed sweep will pay stops counting as available immediately, and a sweep
-    /// whose finalization is never observed leaves the bound too *low* — which delays a funding —
-    /// rather than too high, which would let the minter believe in gas that is gone. ETH sent to the
-    /// address by anyone else only pushes the true balance further above the bound.
+    /// whose finalization is never observed leaves the bound too *low* — which brings a funding
+    /// forward and makes it larger, since [`SweeperFundingConfig::amount_due`] tops up to the target
+    /// from wherever the bound sits — rather than too high, which would let the minter believe in
+    /// gas that is gone. ETH sent to the address by anyone else only pushes the true balance further
+    /// above the bound.
     ///
     /// Saturating rather than checked: these counters are the minter's own record, and after an
     /// upgrade that starts them from zero — or a sweeper address funded before the minter tracked it
