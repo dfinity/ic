@@ -11,6 +11,18 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-08-28: Proposal 143737
+
+http://dashboard.internetcomputer.org/proposal/143737
+
+## Added
+
+* `cooling_down` field in `SubnetRecord`, settable via `UpdateSubnetRecord` proposals. See
+  `ic_replicated_state::SubnetTopology::cooling_down` for the exact semantics. The field must not
+  be set on mainnet before the replica version rejecting ingress messages to cooling down subnets
+  has been rolled out to all subnets.
+
+
 # 2026-08-21: Proposal 143659
 
 http://dashboard.internetcomputer.org/proposal/143659
