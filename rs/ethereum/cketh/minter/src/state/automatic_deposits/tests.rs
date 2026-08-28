@@ -10,7 +10,6 @@ use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, Erc20Value, Wei, WeiPerGas};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
 use crate::state::transactions::{AuthorizedSweepItem, PipelineRequest, SweepId, SweepRequest};
-use crate::sweep::SWEEP_TRANSACTION_GAS_LIMIT;
 use crate::sweeper_contract::SweepItem;
 use crate::test_fixtures::{deposit_address, usdc, usdt};
 use crate::timed_sized_map::{Entry, Timestamp};
@@ -839,7 +838,7 @@ fn finalize_sweep(
                 base_fee_per_gas: WeiPerGas::new(10),
                 max_priority_fee_per_gas: WeiPerGas::new(1),
             },
-            SWEEP_TRANSACTION_GAS_LIMIT,
+            request.gas_limit(),
             EthereumNetwork::Sepolia,
         )
         .expect("BUG: the fixture allowance covers the fixture fee");

@@ -2972,12 +2972,14 @@ mod sweep_lane {
     use crate::deposit_address::DepositAddress;
     use crate::eth_rpc_client::responses::TransactionStatus;
     use crate::lifecycle::EthereumNetwork;
+    use crate::numeric::GasAmount;
     use crate::numeric::{TransactionCount, TransactionNonce, Wei, WeiPerGas};
     use crate::state::transactions::{
         AuthorizedSweepItem, CreateSweepTransactionError, PipelineRequest,
         ResubmitTransactionError, SweepId, SweepRequest, TransactionPipeline,
     };
-    use crate::sweep::SWEEP_TRANSACTION_GAS_LIMIT;
+
+    const SWEEP_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
     use crate::sweeper_contract::SweepItem;
     use crate::tx::{
         DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate,

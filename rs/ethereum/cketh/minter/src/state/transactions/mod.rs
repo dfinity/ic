@@ -13,7 +13,7 @@ use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::logs::INFO;
 use crate::map::MultiKeyMap;
 use crate::numeric::{
-    CkTokenAmount, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
+    CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
 use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch};
@@ -265,7 +265,72 @@ pub struct AuthorizedSweepItem {
     pub authorization: Option<SignedAuthorization>,
 }
 
+/// This and the constants below are derived from the EVM's own costs rather than from the ~42'000
+/// per deposit measured for a batch of 20, which does not record how many distinct tokens that
+/// batch covered and so cannot separate the work that grows with the pairs from the work that grows
+/// with the transfers. Each is deliberately generous: unspent gas is refunded, whereas an
+/// underestimate wastes the whole transaction.
+const SWEEP_BASE_GAS: GasAmount = GasAmount::new(60_000);
+
+/// Gas each `balanceOf` the delegate makes costs. `sweepErc20Batch` hands the whole token array to
+/// every item and `sweepErc20` loops over it, so a sweep pays one balance check per
+/// `(address, token)` pair whether or not the pair holds anything — and therefore at least one per
+/// address, which is where that address' calldata, `ecrecover` and delegated call are accounted
+/// for. A cold `balanceOf` is ~5'000 (2'600 account access, 2'100 cold slot, call overhead) and the
+/// per-address dispatch ~10'000.
+const SWEEP_GAS_PER_BALANCE_CHECK: GasAmount = GasAmount::new(15_000);
+
+/// Gas moving one pair costs beyond its balance check: the `approve` (a 20'000 slot write), the
+/// helper's `depositErc20` and the `transferFrom` it makes (two slot writes and two logs), ~55'000
+/// in the worst case, doubled.
+///
+/// Budgeted for every pair the batch touches rather than only for the deposits the queue named:
+/// `sweepErc20` moves whatever balance it finds, and a deposit address accumulates residue — a pair
+/// armed but not yet scanned, a pair whose watchlist window closed before the funds arrived, a token
+/// the sender was never asked for. A pair therefore costs a balance check and, on top of it,
+/// possibly a transfer.
+const SWEEP_GAS_PER_TRANSFER: GasAmount = GasAmount::new(110_000);
+
+/// Gas one EIP-7702 authorization costs: 12'500 (`PER_AUTH_BASE_COST`) plus the 25'000
+/// (`PER_EMPTY_ACCOUNT_COST`) a deposit EOA pays, its account holding no ETH and no code yet.
+///
+/// Budgeted for every address the sweep touches, since every one of them carries a tuple. A tuple
+/// the EVM skips — the address is already delegated, so the nonce it was signed for no longer
+/// matches — still pays `PER_AUTH_BASE_COST`, and pays no `PER_EMPTY_ACCOUNT_COST` because such an
+/// account exists, so this is the worst case either way.
+const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
+
+pub fn sweep_gas_limit(items: &[AuthorizedSweepItem]) -> GasAmount {
+    let addresses = u64::try_from(
+        items
+            .iter()
+            .map(|authorized| authorized.item.deposit)
+            .collect::<BTreeSet<_>>()
+            .len(),
+    )
+    .unwrap_or(u64::MAX);
+    [
+        SWEEP_GAS_PER_BALANCE_CHECK,
+        SWEEP_GAS_PER_TRANSFER,
+        SWEEP_GAS_PER_AUTHORIZATION,
+    ]
+    .into_iter()
+    .fold(SWEEP_BASE_GAS, |total, gas_per_address| {
+        total
+            .checked_add(
+                gas_per_address
+                    .checked_mul(addresses)
+                    .unwrap_or(GasAmount::MAX),
+            )
+            .unwrap_or(GasAmount::MAX)
+    })
+}
+
 impl SweepRequest {
+    pub fn gas_limit(&self) -> GasAmount {
+        sweep_gas_limit(&self.items)
+    }
+
     /// The delegate's batch call, naming every deposit address this sweep walks and the single
     /// token it moves.
     pub fn call_data(&self) -> Vec<u8> {
