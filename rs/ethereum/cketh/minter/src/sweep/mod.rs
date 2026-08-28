@@ -126,6 +126,9 @@ fn enqueue_sweep<R: CanisterRuntime>(
             return;
         };
 
+        assert_eq!(targets.len(), attestation_requests.len());
+        assert_eq!(targets.len(), authorization_requests.len());
+
         let items: Vec<_> = targets
             .iter()
             .zip(attestation_requests)
