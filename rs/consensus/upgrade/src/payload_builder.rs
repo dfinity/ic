@@ -3,7 +3,7 @@
 //! the share signer (membership views, share validation) is in the crate
 //! root.
 
-use crate::{permit_limits, subnet_membership, validate_share};
+use crate::{fold_upgrade_state, permit_limits, subnet_membership, valid_signers};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext};
@@ -55,7 +55,7 @@ impl UpgradePayloadBuilder {
         }
     }
 
-    /// The upgrade state at `height`: the committed anchor folded with the
+    /// The upgrade state at `height`: the certified anchor folded with the
     /// certification-gap payloads.
     fn upgrade_state_at(
         &self,
@@ -63,18 +63,17 @@ impl UpgradePayloadBuilder {
         members: &BTreeSet<NodeId>,
         height: Height,
     ) -> UpgradeState {
-        let mut state = self
-            .state_reader
-            .get_latest_certified_state()
-            .map(|s| s.get_ref().system_metadata().upgrade_state.clone())
-            .unwrap_or_default();
-        for pp in past_payloads {
-            if let Ok(actions) = bytes_to_upgrade_payload(pp.payload) {
-                state.apply(&actions, pp.height, members);
-            }
-        }
-        state.apply(&[], height, members);
-        state
+        fold_upgrade_state(
+            self.state_reader.as_ref(),
+            past_payloads
+                .iter()
+                .map(|pp| {
+                    let bytes = pp.payload;
+                    (pp.height, bytes_to_upgrade_payload(bytes).unwrap_or_default())
+                }),
+            height,
+            members,
+        )
     }
 }
 
@@ -119,17 +118,12 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
             });
         }
 
-        // Authorize every request with enough shares
+        // Authorize every request with enough valid shares.
         let mut collected: BTreeMap<(NodeId, Height), Vec<UpgradePermitAuthorizationShare>> =
             BTreeMap::new();
         {
             let pool = self.pool.read().unwrap();
             for share in pool.get_validated_shares() {
-                // Perhaps a node signed a permit before it knew that it was
-                // going to leave, ignore its permit.
-                if !membership.staying(&share.signature.signer) {
-                    continue;
-                }
                 collected
                     .entry((share.content.requestor_node, share.content.request_height))
                     .or_default()
@@ -140,14 +134,30 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
             if upgrade_state.authorized.contains(&req_node) {
                 continue;
             }
-            if let Some(shares) = collected.get(&(req_node, req_height)) {
-                if shares.len() >= limits.authorization_threshold {
-                    actions.push(UpgradePermitAction::Authorize(UpgradePermitShares {
-                        node: req_node,
-                        shares: shares.clone(),
-                    }));
-                }
+            let Some(shares) = collected.get(&(req_node, req_height)) else {
+                continue;
+            };
+            let signers = valid_signers(
+                shares,
+                req_node,
+                req_height,
+                &membership,
+                &upgrade_state,
+                context.registry_version,
+                self.crypto.as_ref(),
+            );
+            if signers.len() < limits.authorization_threshold {
+                continue;
             }
+            let shares: Vec<_> = shares
+                .iter()
+                .filter(|s| signers.contains(&s.signature.signer))
+                .cloned()
+                .collect();
+            actions.push(UpgradePermitAction::Authorize(UpgradePermitShares {
+                node: req_node,
+                shares,
+            }));
         }
 
         upgrade_payload_to_bytes(actions, max_size)
@@ -218,19 +228,15 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
                             },
                         ));
                     };
-                    let mut signers = BTreeSet::new();
-                    for share in &shares.shares {
-                        let signer = validate_share(
-                            share,
-                            shares.node,
-                            request_height,
-                            &membership.staying_members,
-                            registry_version,
-                            self.crypto.as_ref(),
-                        )
-                        .map_err(invalid_upgrade)?;
-                        signers.insert(signer);
-                    }
+                    let signers = valid_signers(
+                        &shares.shares,
+                        shares.node,
+                        request_height,
+                        &membership,
+                        &upgrade_state,
+                        registry_version,
+                        self.crypto.as_ref(),
+                    );
                     if signers.len() < limits.authorization_threshold {
                         return Err(invalid_upgrade(
                             InvalidUpgradePayloadReason::AuthorizeInsufficientShares {

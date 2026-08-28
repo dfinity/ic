@@ -17,17 +17,21 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::{SubnetMembership, subnet_membership, validate_share};
+use crate::{
+    SubnetMembership, block_upgrade_actions, subnet_membership, upgrade_state_at_tip,
+    validate_share,
+};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
-use ic_interfaces::consensus_pool::ConsensusBlockCache;
+use ic_interfaces::consensus_pool::{ConsensusBlockCache, ConsensusBlockChain};
 use ic_interfaces::p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer};
 use ic_interfaces::upgrade_permit_auth::{
     UpgradePermitAuthChangeAction, UpgradePermitAuthChangeSet, UpgradePermitAuthPool,
 };
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, info, warn};
-use ic_replicated_state::metadata_state::REQUEST_TIMEOUT_BLOCKS;
-use ic_types::batch::bytes_to_upgrade_payload;
+use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::metadata_state::{REQUEST_TIMEOUT_BLOCKS, UpgradeState};
 use ic_types::consensus::{
     Block, UpgradePermitAuthorizationContent, UpgradePermitAuthorizationShare,
     upgrade::UpgradePermitAction,
@@ -42,6 +46,7 @@ pub struct UpgradePermitAuthPoolManager {
     crypto: Arc<dyn ConsensusCrypto>,
     consensus_pool_cache: Arc<dyn ConsensusBlockCache>,
     membership: Arc<Membership>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     /// Requests we've already signed (node, request_height).
     signed_requests: Mutex<BTreeSet<(NodeId, Height)>>,
     /// Last finalized height we scanned for requests.
@@ -56,6 +61,7 @@ impl UpgradePermitAuthPoolManager {
         crypto: Arc<dyn ConsensusCrypto>,
         consensus_pool_cache: Arc<dyn ConsensusBlockCache>,
         membership: Arc<Membership>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
@@ -63,6 +69,7 @@ impl UpgradePermitAuthPoolManager {
             crypto,
             consensus_pool_cache,
             membership,
+            state_reader,
             signed_requests: Mutex::new(BTreeSet::new()),
             last_scanned: Mutex::new(Height::from(0)),
             logger,
@@ -79,9 +86,20 @@ impl UpgradePermitAuthPoolManager {
         )
     }
 
+    /// The upgrade state at the finalized tip.
+    fn tip_upgrade_state(&self) -> UpgradeState {
+        let chain = self.consensus_pool_cache.finalized_chain();
+        upgrade_state_at_tip(
+            self.state_reader.as_ref(),
+            &self.membership,
+            chain.as_ref(),
+            &self.logger,
+        )
+    }
+
     /// Scan finalized blocks for new `Request` actions and sign an auth share
     /// for each one we haven't signed yet.
-    fn sign_shares_for_new_requests(&self) -> UpgradePermitAuthChangeSet {
+    fn sign_shares_for_new_requests(&self, upgrade_state: &UpgradeState) -> UpgradePermitAuthChangeSet {
         let chain = self.consensus_pool_cache.finalized_chain();
         let tip = chain.tip().height;
         let mut last = self.last_scanned.lock().unwrap();
@@ -91,6 +109,11 @@ impl UpgradePermitAuthPoolManager {
         }
         *last = tip;
 
+        // Don't authorize others while our own request is outstanding.
+        if upgrade_state.requested.contains_key(&self.node_id) {
+            return vec![];
+        }
+
         let mut signed = self.signed_requests.lock().unwrap();
         let mut change_set = vec![];
 
@@ -99,17 +122,10 @@ impl UpgradePermitAuthPoolManager {
             let Ok(block) = chain.get_block_by_height(height) else {
                 continue;
             };
-            let payload = block.payload.as_ref();
-            if payload.is_summary() {
+            let actions = block_upgrade_actions(block);
+            if actions.is_empty() {
                 continue;
             }
-            let upgrade_bytes = &payload.as_data().batch.upgrade;
-            if upgrade_bytes.is_empty() {
-                continue;
-            }
-            let Ok(actions) = bytes_to_upgrade_payload(upgrade_bytes) else {
-                continue;
-            };
             // Membership at the request block's own height and registry
             // version, the pair under which the request was validated.
             let membership = self.block_membership(block);
@@ -134,8 +150,7 @@ impl UpgradePermitAuthPoolManager {
                     requestor_node,
                     request_height,
                 };
-                let registry_version = block.context.registry_version;
-                match self.crypto.sign(&content, self.node_id, registry_version) {
+                match self.crypto.sign(&content, self.node_id, block.context.registry_version) {
                     Ok(signature) => {
                         signed.insert(key);
                         info!(
@@ -164,6 +179,7 @@ impl UpgradePermitAuthPoolManager {
     fn validate_gossiped_shares(
         &self,
         pool: &dyn UpgradePermitAuthPool,
+        upgrade_state: &UpgradeState,
     ) -> UpgradePermitAuthChangeSet {
         let chain = self.consensus_pool_cache.finalized_chain();
         let unvalidated: Vec<UpgradePermitAuthorizationShare> =
@@ -189,7 +205,8 @@ impl UpgradePermitAuthPoolManager {
                 &share,
                 share.content.requestor_node,
                 share.content.request_height,
-                &membership.staying_members,
+                &membership,
+                upgrade_state,
                 block.context.registry_version,
                 self.crypto.as_ref(),
             ) {
@@ -238,8 +255,9 @@ impl<T: UpgradePermitAuthPool> PoolMutationsProducer<T> for UpgradePermitAuthPoo
     type Mutations = UpgradePermitAuthChangeSet;
 
     fn on_state_change(&self, pool: &T) -> Self::Mutations {
-        let mut change_set = self.sign_shares_for_new_requests();
-        change_set.extend(self.validate_gossiped_shares(pool));
+        let upgrade_state = self.tip_upgrade_state();
+        let mut change_set = self.sign_shares_for_new_requests(&upgrade_state);
+        change_set.extend(self.validate_gossiped_shares(pool, &upgrade_state));
         change_set.extend(self.purge_expired_shares(pool));
         change_set
     }

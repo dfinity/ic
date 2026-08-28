@@ -123,6 +123,7 @@ impl TestFixture {
                     crypto.clone(),
                     block_cache.clone(),
                     membership.clone(),
+                    state_manager.clone(),
                     no_op_logger(),
                 )
             })
@@ -521,9 +522,9 @@ fn test_permit_lifecycle() {
         fx.finalize(actions);
 
         // The shares reach the other nodes; the next block maker now holds
-        // all seven (threshold is 6).
+        // the six shares from the non-requesters (threshold is 6).
         fx.gossip_shares();
-        assert_eq!(fx.validated_shares(2), 7);
+        assert_eq!(fx.validated_shares(2), 6);
         // Block 3 (maker: node 2): authorizes node 0's request; node 1
         // (cross-node) validates the block.
         let actions = fx.build(2, fx.rebooted.clone());
@@ -632,10 +633,10 @@ fn test_block_registry_version_pins_membership() {
         fx.validates_all(0, &authorize, RegistryVersion::new(1))
             .expect("all nodes must validate the authorize at V1");
         // At V2 node 6 is not staying even though the committee still
-        // contains it: everyone rejects.
+        // contains it: its share doesn't count, the rest fall short.
         assert_invalid_upgrade!(
             fx.validates_all(0, &authorize, RegistryVersion::new(2)),
-            InvalidUpgradePayloadReason::AuthorizeInvalidShare { .. }
+            InvalidUpgradePayloadReason::AuthorizeInsufficientShares { .. }
         );
     });
 }
@@ -833,9 +834,8 @@ fn test_leaving_node_may_be_authorized_but_cannot_vote() {
         }
         assert_eq!(fx.validated_shares(12), 0, "the leaving node signs nothing");
 
-        // A share signed by the leaving node doesn't count: including one
-        // invalidates the whole Authorize action, even with enough other
-        // signers.
+        // A share signed by the leaving node doesn't count toward the
+        // threshold: with two valid signers the authorization falls short.
         fx.gossip_shares();
         let authorize = vec![UpgradePermitAction::Authorize(UpgradePermitShares {
             node: fx.node(12),
@@ -843,8 +843,18 @@ fn test_leaving_node_may_be_authorized_but_cannot_vote() {
         })];
         assert_invalid_upgrade!(
             fx.validates_all(1, &authorize, RegistryVersion::new(2)),
-            InvalidUpgradePayloadReason::AuthorizeInvalidShare { .. }
+            InvalidUpgradePayloadReason::AuthorizeInsufficientShares { .. }
         );
+        // Eleven valid signers carry the threshold even with the leaver's
+        // share mixed in.
+        let mut shares: Vec<_> = (0..11).map(|s| share(s, 12, h12)).collect();
+        shares.push(share(12, 12, h12));
+        let authorize = vec![UpgradePermitAction::Authorize(UpgradePermitShares {
+            node: fx.node(12),
+            shares,
+        })];
+        fx.validates_all(1, &authorize, RegistryVersion::new(2))
+            .expect("the leaver's share is excluded, not the whole action");
 
         // Without the leaving node's share, the leaving node is authorized —
         // and its permit consumes the only slot.
@@ -882,11 +892,62 @@ fn test_leaving_node_may_be_authorized_but_cannot_vote() {
         fx.run_managers();
         fx.gossip_shares();
         let actions = fx.build(1, fx.rebooted.clone());
-        assert_authorize(&actions, fx.node(0), 12);
+        assert_authorize(&actions, fx.node(0), 11);
         fx.validates_all(1, &actions, RegistryVersion::new(2))
             .expect("the staying node may be authorized after the return");
         fx.finalize(actions);
         assert!(fx.committed().authorized.contains(&fx.node(0)));
+    });
+}
+
+/// A node with an outstanding request must not authorize others: the
+/// builder excludes its share, and an Authorize carrying one is rejected.
+#[test]
+fn test_requester_cannot_authorize() {
+    with_test_pool_config(|pool_config| {
+        let mut fx = TestFixture::new(13, pool_config);
+
+        let actions = fx.build(0, fx.needs_reboot.clone());
+        assert_request(&actions, fx.node(0));
+        fx.finalize(actions);
+        let h0 = Height::new(1);
+
+        let actions = fx.build(1, fx.needs_reboot.clone());
+        assert_request(&actions, fx.node(1));
+        fx.finalize(actions);
+
+        // Node 1's manager signs nothing while its own request is
+        // outstanding (nor does node 0's for its own request); node 2's
+        // signs for both.
+        fx.run_managers();
+        assert_eq!(fx.validated_shares(0), 0);
+        assert_eq!(fx.validated_shares(1), 0);
+        assert_eq!(fx.validated_shares(2), 2);
+        fx.gossip_shares();
+
+        // An Authorize carrying node 1's share falls short: the share of a
+        // requester doesn't count.
+        let authorize = vec![UpgradePermitAction::Authorize(UpgradePermitShares {
+            node: fx.node(0),
+            shares: vec![share(1, 0, h0), share(2, 0, h0)],
+        })];
+        assert_invalid_upgrade!(
+            fx.validates_all(2, &authorize, RegistryVersion::new(1)),
+            InvalidUpgradePayloadReason::AuthorizeInsufficientShares { .. }
+        );
+
+        // The builder's authorize for node 0 carries no share from node 1.
+        let actions = fx.build(2, fx.rebooted.clone());
+        for action in &actions {
+            if let UpgradePermitAction::Authorize(shares) = action {
+                if shares.node == fx.node(0) {
+                    assert!(!shares
+                        .shares
+                        .iter()
+                        .any(|s| s.signature.signer == fx.node(1)));
+                }
+            }
+        }
     });
 }
 
@@ -935,12 +996,12 @@ fn test_leaving_node_reduces_permits() {
             InvalidUpgradePayloadReason::SlotsExhausted { .. }
         );
 
-        // The one upgrade completes (12 staying signers, threshold 11; the
-        // leaving node's manager signs nothing).
+        // The one upgrade completes (11 staying signers — the requestor and
+        // the leaving node sign nothing; threshold 11).
         fx.run_managers();
         fx.gossip_shares();
         let actions = fx.build(2, fx.rebooted.clone());
-        assert_authorize(&actions, fx.node(0), 12);
+        assert_authorize(&actions, fx.node(0), 11);
         fx.validates_all(2, &actions, RegistryVersion::new(2))
             .expect("the single upgrade completes");
         fx.finalize(actions);
@@ -972,29 +1033,30 @@ fn test_stale_share_from_leaving_signer_is_excluded() {
     with_test_pool_config(|pool_config| {
         let mut fx = TestFixture::new(13, pool_config);
 
-        // Node 0 requests while everyone is still staying, and all thirteen
-        // shares — including node 12's — are collected.
+        // Node 0 requests while everyone is still staying, and the twelve
+        // shares from the non-requesters — including node 12's — are
+        // collected.
         let actions = fx.build(0, fx.needs_reboot.clone());
         assert_request(&actions, fx.node(0));
         fx.finalize(actions);
         fx.run_managers();
         fx.gossip_shares();
         for node in 0..13 {
-            assert_eq!(fx.validated_shares(node), 13, "node {}", node);
+            assert_eq!(fx.validated_shares(node), 12, "node {}", node);
         }
 
         // Now node 12 is removed from the registry.
         fx.apply_membership_delta(2, (0..12).map(node_test_id).collect());
 
         // The builder excludes node 12's stale share: the authorize carries
-        // the twelve staying signers — one above the threshold — and
+        // the eleven staying signers — exactly the threshold — and
         // validates unanimously.
         let actions = fx.build_at(1, fx.rebooted.clone(), RegistryVersion::new(2));
         match &actions[..] {
             [UpgradePermitAction::Authorize(shares)] => {
                 assert_eq!(shares.node, fx.node(0));
                 let signers: BTreeSet<_> = shares.shares.iter().map(|s| s.signature.signer).collect();
-                assert_eq!(signers.len(), 12);
+                assert_eq!(signers.len(), 11);
                 assert!(!signers.contains(&fx.node(12)), "stale share included");
             }
             other => panic!("expected a single Authorize, got {:?}", other),

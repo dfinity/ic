@@ -710,6 +710,7 @@ fn start_consensus(
                 Arc::clone(&registry_client),
                 subnet_id,
             )),
+            Arc::clone(&state_reader),
             log.clone(),
         ),
         Arc::clone(&time_source) as Arc<_>,

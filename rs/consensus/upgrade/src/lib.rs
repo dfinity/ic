@@ -12,9 +12,15 @@
 
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
+use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::upgrade::InvalidUpgradePayloadReason;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, warn};
-use ic_types::consensus::UpgradePermitAuthorizationShare;
+use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::metadata_state::UpgradeState;
+use ic_types::batch::bytes_to_upgrade_payload;
+use ic_types::consensus::upgrade::UpgradePermitAction;
+use ic_types::consensus::{Block, BlockPayload, UpgradePermitAuthorizationShare};
 use ic_types::{Height, NodeId, RegistryVersion};
 use std::collections::BTreeSet;
 
@@ -102,13 +108,68 @@ pub fn subnet_membership(
     }
 }
 
-/// Check a share's content, staying signer, and signature. Returns the
-/// signer.
+/// The upgrade actions of a finalized block, empty if it carries none.
+pub fn block_upgrade_actions(block: &Block) -> Vec<UpgradePermitAction> {
+    match block.payload.as_ref() {
+        BlockPayload::Data(data) => {
+            bytes_to_upgrade_payload(&data.batch.upgrade).unwrap_or_default()
+        }
+        BlockPayload::Summary(_) => vec![],
+    }
+}
+
+/// The certified upgrade state after applying `actions_by_height`
+/// (each tagged with its block height), evaluated at `at_height`.
+pub fn fold_upgrade_state(
+    state_reader: &dyn StateReader<State = ReplicatedState>,
+    actions_by_height: impl IntoIterator<Item = (Height, Vec<UpgradePermitAction>)>,
+    at_height: Height,
+    current_members: &BTreeSet<NodeId>,
+) -> UpgradeState {
+    let mut state = state_reader
+        .get_latest_certified_state()
+        .map(|s| s.get_ref().system_metadata().upgrade_state.clone())
+        .unwrap_or_default();
+    for (height, actions) in actions_by_height {
+        state.apply(&actions, height, current_members);
+    }
+    state.apply(&[], at_height, current_members);
+    state
+}
+
+/// The upgrade state at the finalized tip: the certified state folded with
+/// the finalized blocks above the certified height.
+pub fn upgrade_state_at_tip(
+    state_reader: &dyn StateReader<State = ReplicatedState>,
+    membership: &Membership,
+    chain: &dyn ConsensusBlockChain,
+    logger: &ReplicaLogger,
+) -> UpgradeState {
+    let anchor_height = state_reader
+        .get_latest_certified_state()
+        .map_or(Height::from(0), |s| s.height());
+    let tip = chain.tip();
+    let members =
+        subnet_membership(membership, tip.height, tip.context.registry_version, logger)
+            .current_members;
+    fold_upgrade_state(
+        state_reader,
+        chain
+            .iter_above(anchor_height)
+            .map(|b| (b.height, block_upgrade_actions(b))),
+        tip.height,
+        &members,
+    )
+}
+
+/// Check a share's content, staying signer, signer without an outstanding
+/// request, and signature. Returns the signer.
 pub fn validate_share(
     share: &UpgradePermitAuthorizationShare,
     requestor_node: NodeId,
     request_height: Height,
-    staying: &BTreeSet<NodeId>,
+    membership: &SubnetMembership,
+    upgrade_state: &UpgradeState,
     registry_version: RegistryVersion,
     crypto: &dyn ConsensusCrypto,
 ) -> Result<NodeId, InvalidUpgradePayloadReason> {
@@ -118,7 +179,10 @@ pub fn validate_share(
     {
         return Err(InvalidUpgradePayloadReason::AuthorizeInvalidShare { signer });
     }
-    if !staying.contains(&signer) {
+    if !membership.staying(&signer) {
+        return Err(InvalidUpgradePayloadReason::AuthorizeInvalidShare { signer });
+    }
+    if upgrade_state.requested.contains_key(&signer) {
         return Err(InvalidUpgradePayloadReason::AuthorizeInvalidShare { signer });
     }
     crypto
@@ -130,6 +194,33 @@ pub fn validate_share(
         )
         .map_err(|_| InvalidUpgradePayloadReason::AuthorizeInvalidShare { signer })?;
     Ok(signer)
+}
+
+/// The distinct valid signers among `shares` for the given request.
+pub fn valid_signers(
+    shares: &[UpgradePermitAuthorizationShare],
+    requestor_node: NodeId,
+    request_height: Height,
+    membership: &SubnetMembership,
+    upgrade_state: &UpgradeState,
+    registry_version: RegistryVersion,
+    crypto: &dyn ConsensusCrypto,
+) -> BTreeSet<NodeId> {
+    shares
+        .iter()
+        .filter_map(|share| {
+            validate_share(
+                share,
+                requestor_node,
+                request_height,
+                membership,
+                upgrade_state,
+                registry_version,
+                crypto,
+            )
+            .ok()
+        })
+        .collect()
 }
 
 #[cfg(test)]
