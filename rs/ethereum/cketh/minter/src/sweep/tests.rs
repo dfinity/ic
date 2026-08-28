@@ -138,7 +138,7 @@ async fn should_reuse_the_recorded_authorization_on_a_later_sweep() {
 }
 
 #[tokio::test]
-async fn should_resign_the_authorization_when_the_sweeper_contract_changes() {
+async fn should_sign_a_fresh_authorization_when_the_sweeper_contract_changes() {
     init_state(state_ready_to_sign(&[(account(), usdc())]));
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
