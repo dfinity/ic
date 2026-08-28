@@ -171,13 +171,17 @@ impl DiskEncryptionKeyExchangeTestFixture {
         // Increment port for each test case so tests can run in parallel
         let server_port = FREE_PORT.fetch_add(1, Ordering::Relaxed);
 
-        // The crypto-ops mock with its default behavior; tests that care about the
-        // re-keying step add their own expectations on the fixture's field.
+        let can_open_disk = config.can_open_disk;
+        let store_device_path = store_device.path().to_path_buf();
+        let client_luks_header_path = client_store_luks_header.path().to_path_buf();
         let mut crypto_ops = MockDiskCryptoOps::new();
         crypto_ops
             .expect_can_open()
             .times(0..)
-            .returning(move |_, _, _| Ok(config.can_open_disk));
+            .withf(move |device_path, luks_header_path, _| {
+                device_path == store_device_path && luks_header_path == client_luks_header_path
+            })
+            .returning(move |_, _, _| Ok(can_open_disk));
         let crypto_ops = Arc::new(crypto_ops);
 
         Self {
@@ -371,14 +375,18 @@ fn assert_statuses_contain_errors(
 async fn test_exchange_keys_successfully() {
     let mut fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
 
-    // The client must re-key the copied header exactly once, passing the server's
-    // derived key as the old key.
     let served_key = fixture.served_store_key();
+    let store_device_path = fixture.store_device.path().to_path_buf();
+    let client_luks_header_path = fixture.client_store_luks_header.path().to_path_buf();
     fixture
         .crypto_ops_mut()
         .expect_rekey()
         .once()
-        .withf(move |_, _, old_key, _| old_key == served_key)
+        .withf(move |device_path, luks_header_path, old_key, _| {
+            device_path == store_device_path
+                && luks_header_path == client_luks_header_path
+                && old_key == served_key
+        })
         .returning(|_, _, _, _| Ok(()));
 
     let (server_result, client_result) = fixture.run_key_exchange_test().await;
