@@ -85,9 +85,10 @@ mod tests {
         vec![insert(
             make_hostos_version_key(hostos_version_id).as_bytes(),
             HostosVersionRecord {
+                hostos_version_id: hostos_version_id.to_string(),
+
                 release_package_urls: vec![],
                 release_package_sha256_hex: "".to_string(),
-                hostos_version_id: hostos_version_id.to_string(),
             }
             .encode_to_vec(),
         )]
