@@ -27,10 +27,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+      # `required: true` is only enforced by the web UI; an API-triggered
+      # dispatch can omit the input, and the empty tag name would fall
+      # through to checking out the dispatched branch below.
+      - name: Require a tag name on manual dispatch
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag-name == '' }}
+        run: |
+          echo "The tag-name input must not be empty" >&2
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.inputs.tag-name || github.ref }}
+          # Qualify the dispatched tag name as a tag ref: a tag that doesn't
+          # exist fails the checkout, and a branch sharing the tag's name can
+          # no longer shadow it, so HEAD is always the commit of the tag the
+          # release is attached to.
+          ref: ${{ github.event.inputs.tag-name && format('refs/tags/{0}', github.event.inputs.tag-name) || github.ref }}
 
       - name: Determine release commit
         id: commit
