@@ -916,20 +916,26 @@ fn test_open_store_multiple_times_with_different_keys() {
 
 /// A legacy header carrying an extra (stale) keyslot converges back to the single first
 /// keyslot on the next upgrade.
+// TODO: remove when we clean up destroy_keyslots_except_first (see comment on that function)
 #[test]
 fn test_upgrade_removes_stale_keyslots() {
+    const STALE_KEY: &[u8] = b"stale previous key";
+
     let mut fixture = TestFixture::new_sev();
 
-    fixture.store_partition().format().unwrap();
-
-    // Add a second keyslot, simulating a header written by a GuestOS that kept two
-    // keyslots.
-    let key = fixture.derive_sev_key(Partition::Store);
-    let mut crypt_device = fixture.store_partition().open_crypt_device();
+    // Build the legacy layout: the previous GuestOS's key in the first keyslot, the
+    // current GuestOS's (served) key in a later one.
+    let served_key = fixture.derive_sev_key(Partition::Store);
+    let (mut crypt_device, _) = format_crypt_device(
+        fixture.store_device_path(),
+        LuksHeaderLocation::Detached(&fixture.store_header_path()),
+        STALE_KEY,
+    )
+    .unwrap();
     crypt_device
         .keyslot_handle()
-        .add_by_passphrase(None, &key, b"stale key")
-        .expect("Failed to add stale keyslot");
+        .add_by_passphrase(None, STALE_KEY, &served_key)
+        .expect("Failed to add the current GuestOS's keyslot");
     drop(crypt_device);
     assert_eq!(fixture.store_partition().active_keyslot_count(), 2);
 

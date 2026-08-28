@@ -76,7 +76,8 @@ pub(crate) struct LuksParameters {
     pub(crate) cipher_mode: String,
     pub(crate) volume_key_size: usize,
     pub(crate) keyslots: Vec<KeyslotParameters>,
-    /// Number of LUKS2 tokens present in the header (expected to be 1).
+    /// Number of LUKS2 tokens present in the header: SEV headers carry one IC key
+    /// metadata token, the generated-key path writes none.
     pub(crate) num_tokens: usize,
 }
 
