@@ -189,7 +189,7 @@ http://dashboard.internetcomputer.org/proposal/142453
 
 # 2026-06-12 : Proposal 142265
 
-https://dashboard.internetcomputer.org/proposal/142265
+http://dashboard.internetcomputer.org/proposal/142265
 
 ## Changed
 
@@ -204,7 +204,7 @@ https://dashboard.internetcomputer.org/proposal/142265
 
 # 2026-06-05: Proposal 142129
 
-https://dashboard.internetcomputer.org/proposal/142129
+http://dashboard.internetcomputer.org/proposal/142129
 
 ## Added
 
@@ -501,7 +501,7 @@ http://dashboard.internetcomputer.org/proposal/139085
 
 # 2025-10-17: Proposal 138992
 
-https://dashboard.internetcomputer.org/proposal/138992
+http://dashboard.internetcomputer.org/proposal/138992
 
 ## Changed
 
@@ -569,7 +569,7 @@ http://dashboard.internetcomputer.org/proposal/137917
 
 # 2025-07-18: Proposal 137500
 
-https://dashboard.internetcomputer.org/proposal/137500
+http://dashboard.internetcomputer.org/proposal/137500
 
 Back fill some node records with reward type.
 
@@ -595,7 +595,7 @@ http://dashboard.internetcomputer.org/proposal/137254
 
 # 2025-06-20: Proposal 137081
 
-https://dashboard.internetcomputer.org/proposal/137081
+http://dashboard.internetcomputer.org/proposal/137081
 
 ### Changed
 
@@ -667,7 +667,7 @@ http://dashboard.internetcomputer.org/proposal/136581
 
 # 2025-05-02: Proposal 136428
 
-https://dashboard.internetcomputer.org/proposal/136428
+http://dashboard.internetcomputer.org/proposal/136428
 
 No behavior changes. When there are large registry records, then, the new code
 here will behave differently (per [this forum post]), but there is currently no
@@ -686,13 +686,13 @@ http://dashboard.internetcomputer.org/proposal/136371
 
 # 2025-03-28: Proposal 136007
 
-https://dashboard.internetcomputer.org/proposal/136007
+http://dashboard.internetcomputer.org/proposal/136007
 
 This is a maintenance upgrade.
 
 # 2025-03-21: Proposal 135934
 
-https://dashboard.internetcomputer.org/proposal/135934
+http://dashboard.internetcomputer.org/proposal/135934
 
 No "real" behavior changes. This is just a maintenance upgrade.
 
@@ -700,7 +700,7 @@ Technically, there is a new get_chunk method, but it does not actually do anythi
 
 # 2025-02-13: Proposal 135300
 
-https://dashboard.internetcomputer.org/proposal/135300
+http://dashboard.internetcomputer.org/proposal/135300
 
 ## Fixed
 

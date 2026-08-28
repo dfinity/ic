@@ -20,7 +20,7 @@ This just keeps code in production fresh. No new features or fixes.
 
 # 2026-07-17: Proposal 142938
 
-https://dashboard.internetcomputer.org/proposal/142938
+http://dashboard.internetcomputer.org/proposal/142938
 
 Just a maintenance release, i.e. no new features or fixes. This upgrade just
 makes sure that the code we have in production is not too far behind what's in
@@ -79,7 +79,7 @@ piling up in for the next "real" upgrade.
 
 # 2025-10-17: Proposal 138993
 
-https://dashboard.internetcomputer.org/proposal/138993
+http://dashboard.internetcomputer.org/proposal/138993
 
 ## Added
 
