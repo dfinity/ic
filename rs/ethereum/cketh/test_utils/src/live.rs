@@ -116,6 +116,8 @@ const AWAIT_DEADLINE: Duration = Duration::from_secs(60);
 /// is slower to come round, so it gets its own budget.
 const SCAN_DEADLINE: Duration = Duration::from_secs(180);
 
+const SCAN_TICKS: u32 = 2;
+
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
 /// address, so the scan reads a real balance for that (address, token) pair.
 pub struct Holding<'a> {
@@ -306,6 +308,27 @@ impl LiveSetup<CkErc20Setup> {
                 scanned.then_some(progress)
             },
         )
+    }
+
+    /// [`Self::await_scan`], but jumping the minter's clock to the next scan instead of waiting for
+    /// it in real time. Kept apart from `await_scan`: a test that leaves its instance advanced far
+    /// ahead starves whatever runs after it in the same binary, so only a test that owns its target
+    /// may drive the clock this way.
+    pub fn drive_scan(
+        &self,
+        caller: Principal,
+        subaccount: [u8; 32],
+        token: &Erc20Token,
+    ) -> DepositErc20Response {
+        self.drive_until(
+            SCAN_TICKS,
+            |_| "the deposit address was not scanned".to_string(),
+            |setup| match &setup.deposit_erc20(caller, subaccount, token).status {
+                DepositStatus::Scanning { scan_count, .. } => *scan_count >= 1,
+                DepositStatus::AwaitingSweep(_) => true,
+            },
+        );
+        self.deposit_erc20(caller, subaccount, token)
     }
 }
 
