@@ -217,7 +217,10 @@ mod sweep_events {
     use crate::numeric::{BlockNumber, Wei};
     use crate::state::State;
     use crate::state::audit::{EventType, apply_state_transition};
+    use crate::state::sweeper_funding::SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS;
+    use crate::state::tests::eth_balance_of;
     use crate::state::transactions::{PipelineRequest, SweepRequest};
+    use crate::sweeper::{FundingDecision, plan_funding};
     use crate::test_fixtures::{account, gas_fee_estimate, state_with_enqueued_sweep, usdc};
     use crate::tx::{SignableTransaction, Signed, TransactionSignature};
 
@@ -260,6 +263,35 @@ mod sweep_events {
                 Wei::new(DELIVERED).checked_sub(fee_paid).unwrap(),
                 "a {status:?} sweep must cost the sweeper exactly the {fee_paid} of gas it paid"
             );
+        }
+    }
+
+    #[tokio::test]
+    async fn should_fund_again_once_accepted_sweeps_consume_the_prepaid_gas() {
+        let (mut state, request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
+        deliver(&mut state);
+        state.cketh_minimum_withdrawal_amount = bound(&state)
+            .checked_div_floor(SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS / 2)
+            .expect("test setup: dividing by a non-zero constant");
+        state.eth_balance = eth_balance_of(state.sweeper_funding_config().target);
+        assert_eq!(
+            plan_funding(&state),
+            FundingDecision::NotDue,
+            "the gas already delivered must hold the sweeper at its low-water mark"
+        );
+
+        state.update_sweeper_balance_upon_accepted_sweep(&request);
+
+        let target = state.sweeper_funding_config().target;
+        match plan_funding(&state) {
+            FundingDecision::Fund(amount) => assert_eq!(
+                amount.checked_add(bound(&state)),
+                Some(target),
+                "the funding must top the sweeper back up to the target"
+            ),
+            other => panic!(
+                "gas a committed sweep will spend must bring a funding forward, got {other:?}"
+            ),
         }
     }
 
