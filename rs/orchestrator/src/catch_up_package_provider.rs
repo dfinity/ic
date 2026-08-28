@@ -743,10 +743,9 @@ pub(crate) mod tests {
             .expect("failed to fetch and verify the CUP")
             .expect("expected a CUP to be served");
 
-        assert_eq!(
-            *crypto.verified_at.lock().unwrap(),
-            Some(summary_registry_version)
-        );
+        let verified_at = *crypto.verified_at.lock().unwrap();
+        assert_eq!(verified_at, Some(summary_registry_version));
+        assert_ne!(verified_at, Some(context_registry_version));
         assert_eq!(
             CatchUpPackageParam::from(&cup),
             CatchUpPackageParam::from(&CatchUpPackage::try_from(&cup_proto).unwrap()),
