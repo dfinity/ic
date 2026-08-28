@@ -14,6 +14,13 @@ on the process that this file is part of, see
   be set on mainnet before the replica version rejecting ingress messages to cooling down subnets
   has been rolled out to all subnets.
 
+* A subnet-split request will now fail if a concurrent call modified the `StandardEngineReplicaVersionRecord`
+  while the fresh key material was being generated for the splitting subnet.
+
+* A subnet-split request whose source subnet is a cloud engine that derives its replica version from the
+  `StandardEngineReplicaVersionRecord` will now be rejected while a deployment of a new replica version is
+  in progress. This guarantees that both subnets run the same replica version after the split.
+
 ## Changed
 
 ## Deprecated

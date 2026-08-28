@@ -12,7 +12,8 @@ use ic_protobuf::registry::subnet::v1::{
 use ic_registry_keys::{
     make_canister_migrations_record_key, make_catch_up_package_contents_key,
     make_crypto_threshold_signing_pubkey_key, make_routing_table_record_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_standard_engine_replica_version_record_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, WellFormedError, is_subset_of};
 use ic_registry_subnet_type::SubnetType;
@@ -33,6 +34,7 @@ enum PayloadValidationError {
         pre_split_source_subnet_size: usize,
     },
     DisallowedSourceSubnetType(SubnetType),
+    CloudEngineFleetIsSplit,
     SourceSubnetIsSigningSubnet,
     UnhostedCanisterIds,
     SplitAlreadyInProgress,
@@ -276,6 +278,27 @@ impl Registry {
             ));
         }
 
+        if source_subnet_type == SubnetType::CloudEngine
+            && source_subnet_record.replica_version_id.is_empty()
+        {
+            let standard_engine_replica_version_record =
+                self.get_standard_engine_replica_version_record()
+                .expect("StandardEngineReplicaVersionRecord should exist if the subnet has no replica version");
+
+            // We want to reject a split if the source subnet is a cloud engine and a deployment of
+            // a new replica version is in progress. This is because the new destination subnet will
+            // have a new subnet ID which we do not know yet and could end up upgrading to a
+            // different version. We would like to avoid weird situations where both a split and an
+            // upgrade are scheduled at the same time, so we enforce that the cloud engine
+            // deployment is complete before allowing a split. In that case, it is guaranteed that
+            // both subnets will be on the same replica version after the split.
+            let fleet_is_split = 0.0 < standard_engine_replica_version_record.deployment_progress
+                && standard_engine_replica_version_record.deployment_progress < 1.0;
+            if fleet_is_split {
+                return Err(PayloadValidationError::CloudEngineFleetIsSplit);
+            }
+        }
+
         let pre_split_source_nodes: HashSet<NodeId> = source_subnet_record
             .membership
             .iter()
@@ -385,6 +408,12 @@ impl Registry {
             return Err("Subnet changed");
         }
 
+        // The replica version that the newly created subnet is going to run may be derived from
+        // this record, so it must not change under our feet either.
+        if record_changed_across_versions(make_standard_engine_replica_version_record_key()) {
+            return Err("Standard engine replica version changed");
+        }
+
         if record_changed_across_versions(make_crypto_threshold_signing_pubkey_key(
             source_subnet_id,
         )) {
@@ -448,6 +477,13 @@ impl std::fmt::Display for PayloadValidationError {
             ),
             PayloadValidationError::DisallowedSourceSubnetType(subnet_type) => {
                 write!(f, "Subnets of type {subnet_type:?} may not be split")
+            }
+            PayloadValidationError::CloudEngineFleetIsSplit => {
+                write!(
+                    f,
+                    "The source subnet is a Cloud Engine subnet and the cloud engine \
+                    fleet is currently split between two replica versions"
+                )
             }
             PayloadValidationError::SourceSubnetIsSigningSubnet => {
                 write!(f, "Signing subnets may not be split")
@@ -519,6 +555,7 @@ mod tests {
     use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
     use ic_registry_routing_table::RoutingTable;
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
+    use ic_registry_transport::upsert;
     use ic_types_test_utils::ids::{
         NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5,
         canister_test_id,
@@ -802,6 +839,72 @@ mod tests {
             .validate_subnet_splitting_payload(&payload, registry.latest_version())
             .map(|_| ());
         assert_eq!(validation_result, expected_result);
+    }
+
+    /// Every record that `check_if_registry_changed_across_versions` guards, and the error that
+    /// it is expected to produce when it changes while the `setup_initial_dkg` calls are in
+    /// flight.
+    #[rstest]
+    #[case::source_subnet_record(make_subnet_record_key(SUBNET_1), "Subnet changed")]
+    #[case::standard_engine_replica_version_record(
+        make_standard_engine_replica_version_record_key(),
+        "Standard engine replica version changed"
+    )]
+    #[case::source_subnet_threshold_signing_public_key(
+        make_crypto_threshold_signing_pubkey_key(SUBNET_1),
+        "Threshold signing public key changed"
+    )]
+    #[case::source_subnet_cup_contents(make_catch_up_package_contents_key(SUBNET_1), "CUP changed")]
+    #[case::canister_migrations_record(
+        make_canister_migrations_record_key(),
+        "Canister migrations changed"
+    )]
+    #[case::routing_table_record(make_routing_table_record_key(), "Routing table changed")]
+    fn check_if_registry_changed_across_versions_should_fail_when_a_guarded_record_changed(
+        #[case] changed_record_key: String,
+        #[case] expected_error: &str,
+    ) {
+        // Step 1: Prepare the world.
+
+        let _guard = temporarily_enable_subnet_splitting();
+        // `set_up_registry` puts the source subnet at `SUBNET_1`, which is what the `#[case]`s
+        // above derive the subnet specific keys from.
+        let source_subnet_id = invariants_compliant_payload().source_subnet_id;
+        assert_eq!(source_subnet_id, SUBNET_1);
+        let (mut registry, _node_infos) = set_up_registry(invariants_compliant_subnet_info());
+
+        let pre_call_registry_version = registry.latest_version();
+
+        // Nothing has changed yet, so the check must pass.
+        assert_eq!(
+            registry.check_if_registry_changed_across_versions(
+                source_subnet_id,
+                pre_call_registry_version,
+                registry.latest_version(),
+            ),
+            Ok(())
+        );
+
+        // Simulate another proposal touching the record while the `setup_initial_dkg` calls are
+        // in flight. Rewriting the record as is (or creating it, if it isn't in the registry yet)
+        // is enough to bump its version, which is all that the check under test looks at. Note
+        // that we skip the invariant checks, since a record such as the standard engine replica
+        // version one cannot be created here without a lot of unrelated setup.
+        let value = registry
+            .get(changed_record_key.as_bytes(), pre_call_registry_version)
+            .map(|record| record.value)
+            .unwrap_or_default();
+        registry.apply_mutations_for_test(vec![upsert(changed_record_key.as_bytes(), value)]);
+
+        // Step 2: Run the code under test.
+        let check_result = registry.check_if_registry_changed_across_versions(
+            source_subnet_id,
+            pre_call_registry_version,
+            registry.latest_version(),
+        );
+
+        // Step 3: Verify result(s).
+        assert_eq!(check_result, Err(expected_error));
     }
 
     #[derive(Debug)]
