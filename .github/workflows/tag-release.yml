@@ -1,8 +1,6 @@
 name: Publish Release
 
 permissions:
-  # `gh attestation verify` reads the attestations API with this workflow's
-  # GITHUB_TOKEN; an explicit permissions map zeroes everything unlisted.
   attestations: read
   contents: write
 
