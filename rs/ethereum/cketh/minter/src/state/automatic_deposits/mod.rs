@@ -216,7 +216,7 @@ impl AutomaticDeposits {
             if receipt.status == TransactionStatus::Failure {
                 log!(
                     INFO,
-                    "[record_finalized_sweep_transaction]: DROPPING {request:?} from the sweep                      queue: {id:?} failed and the minter does not retry. Its {:?} stays at {}, and                      reaching it again needs the pair armed afresh.",
+                    "[record_finalized_sweep_transaction]: DROPPING {request:?} from the sweep queue: {id:?} failed and the minter does not retry. Its {:?} stays at {}, and reaching it again needs the pair armed afresh.",
                     entry.scanned_balance,
                     entry.address
                 );

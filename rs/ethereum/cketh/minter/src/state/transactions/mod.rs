@@ -291,13 +291,14 @@ const SWEEP_GAS_PER_BALANCE_CHECK: GasAmount = GasAmount::new(15_000);
 /// possibly a transfer.
 const SWEEP_GAS_PER_TRANSFER: GasAmount = GasAmount::new(110_000);
 
-/// Gas one EIP-7702 authorization costs: 12'500 (`PER_AUTH_BASE_COST`) plus the 25'000
-/// (`PER_EMPTY_ACCOUNT_COST`) a deposit EOA pays, its account holding no ETH and no code yet.
+/// Gas one EIP-7702 authorization costs: 25'000 (`PER_EMPTY_ACCOUNT_COST`) charged upfront for
+/// every tuple, before any of them is looked at.
 ///
 /// Budgeted for every address the sweep touches, since every one of them carries a tuple. A tuple
 /// the EVM skips — the address is already delegated, so the nonce it was signed for no longer
-/// matches — still pays `PER_AUTH_BASE_COST`, and pays no `PER_EMPTY_ACCOUNT_COST` because such an
-/// account exists, so this is the worst case either way.
+/// matches — is charged the same 25'000 and refunded 12'500 for an authority the state trie
+/// already holds. That refund lands after execution and so cannot shrink the limit the transaction
+/// had to declare, leaving 25'000 the figure to budget either way. Rounded up as its siblings are.
 const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
 
 pub fn sweep_gas_limit(items: &[AuthorizedSweepItem]) -> GasAmount {
