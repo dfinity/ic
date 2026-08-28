@@ -10,12 +10,16 @@ reach a PR (F-051).
 Also tests VersionArtifactSums, the choke point that verifies CDN-served SHA256SUMS
 against the build's provenance attestation before any hash is recorded:
 attested for public commits (hard requirement), CDN fallback with a loud
-warning only for versions whose commit is not public yet.
+warning only for versions whose commit is not public yet. Fallback records carry
+the "attestation_pending" marker so they are re-verified -- and rewritten,
+without the marker -- on the first run after their commit is disclosed.
 """
 
 import hashlib
 import io
+import json
 import logging
+import pathlib
 import subprocess
 import urllib.error
 import urllib.request
@@ -27,7 +31,9 @@ from mainnet_revisions import (
     VersionInfo,
     check_elected_hash_against_build,
     get_binary_hashes,
+    is_record_up_to_date,
     parse_sha256sums,
+    version_record,
 )
 
 VERSION = "79c01052b5f7f49d3cf53d04d696cb2893294cd3"
@@ -48,6 +54,7 @@ def version_info(**overrides) -> VersionInfo:
         setupos_hash=HASH,
         setupos_dev_hash=HASH,
         binaries=dict(BINARIES),
+        attestation_pending=False,
     )
     fields.update(overrides)
     return VersionInfo(**fields)
@@ -81,6 +88,8 @@ def test_accepts_arbitrary_launch_measurements():
         pytest.param({"binaries": {'ic-replay"]) load("@evil//:evil.bzl", "evil")': HASH}}, id="injecting binary name"),
         pytest.param({"binaries": {"ic-replay": ""}}, id="empty binary hash"),
         pytest.param({"binaries": ["ic-replay"]}, id="non-dict binaries"),
+        # Anything but a bool would end up verbatim in the auto-merged JSON.
+        pytest.param({"attestation_pending": "true"}, id="non-bool attestation_pending"),
     ],
 )
 def test_rejects_poisoned_values(overrides):
@@ -196,12 +205,10 @@ def test_verified_json_rejects_tampered_bytes(monkeypatch):
 
 
 def test_elected_hash_must_match_build(monkeypatch):
-    built = dict(BINARIES)
     sums = sums_with(monkeypatch, attested={"guest-os/update-img": {"update-img.tar.zst": HASH}})
     check_elected_hash_against_build(sums, "guest-os", HASH)
     with pytest.raises(Exception, match="does not match the build-time hash"):
         check_elected_hash_against_build(sums, "guest-os", HASH[:-1] + "0")
-    assert built == BINARIES  # sums_with must not mutate its inputs
 
 
 def test_get_binary_hashes_requires_every_binary(monkeypatch):
@@ -257,3 +264,172 @@ def test_commit_is_public(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", urlopen_returning(http_error(403, '{"message":"rate limited"}')))
     with pytest.raises(urllib.error.HTTPError):
         mainnet_revisions.commit_is_public(VERSION)
+
+
+def test_version_record_marks_pending_fallback():
+    record = version_record(version_info(attestation_pending=True))
+    assert record["attestation_pending"] is True
+    assert record["version"] == VERSION
+
+    # A verified record must not carry the marker at all, so that a pending
+    # record rewritten after disclosure sheds it.
+    assert "attestation_pending" not in version_record(version_info())
+
+
+def test_version_record_field_mapping():
+    # version_record() now feeds all three record types, so a swapped mapping
+    # would corrupt the auto-merged JSON for every one of them. The one-HASH
+    # version_info() fixture cannot see such a swap: assert the full record
+    # against a literal, with a distinct sentinel in every field.
+    def sha(i: int) -> str:
+        return f"{i:064x}"
+
+    info = VersionInfo(
+        version=VERSION,
+        hash=sha(1),
+        dev_hash=sha(2),
+        launch_measurements={"guest_launch_measurements": [1]},
+        dev_measurements={"guest_launch_measurements": [2]},
+        setupos_hash=sha(3),
+        setupos_dev_hash=sha(4),
+        binaries={"ic-replay": sha(5)},
+        attestation_pending=False,
+    )
+    assert version_record(info) == {
+        "version": VERSION,
+        "update_img_hash": sha(1),
+        "update_img_hash_dev": sha(2),
+        "setupos_disk_img_hash": sha(3),
+        "setupos_disk_img_hash_dev": sha(4),
+        "binaries": {"ic-replay": sha(5)},
+        "launch_measurements": {"guest_launch_measurements": [1]},
+        "launch_measurements_dev": {"guest_launch_measurements": [2]},
+    }
+
+
+def test_is_record_up_to_date(monkeypatch):
+    record = version_record(version_info())
+
+    def forbid_commit_check(version):
+        raise AssertionError("records without the marker must not trigger a GitHub API call")
+
+    # Complete records without the marker are up to date without asking GitHub:
+    # the check must stay cheap and must keep working for records that predate
+    # the attestation rollout.
+    monkeypatch.setattr(mainnet_revisions, "commit_is_public", forbid_commit_check)
+    assert is_record_up_to_date(record, VERSION) is True
+    assert is_record_up_to_date(record, "f" * 40) is False
+    assert is_record_up_to_date({}, VERSION) is False
+    assert is_record_up_to_date({k: v for k, v in record.items() if k != "binaries"}, VERSION) is False
+
+
+def test_pending_record_goes_stale_on_disclosure(monkeypatch):
+    # An "attestation_pending" record stays up to date only while its commit
+    # remains private; disclosure makes it stale so the caller re-verifies.
+    pending = version_record(version_info(attestation_pending=True))
+
+    monkeypatch.setattr(mainnet_revisions, "commit_is_public", lambda version: False)
+    assert is_record_up_to_date(pending, VERSION) is True
+
+    monkeypatch.setattr(mainnet_revisions, "commit_is_public", lambda version: True)
+    assert is_record_up_to_date(pending, VERSION) is False
+
+
+def test_guestos_info_from_private_commit_is_attestation_pending(monkeypatch):
+    measurements = b'{"guest_launch_measurements": []}'
+    sums = {
+        "guest-os/update-img": {"update-img.tar.zst": HASH},
+        "guest-os/update-img-dev": {
+            "update-img.tar.zst": HASH,
+            "launch-measurements.json": hashlib.sha256(measurements).hexdigest(),
+        },
+        "setup-os/disk-img": {"disk-img.tar.zst": HASH},
+        "setup-os/disk-img-dev": {"disk-img.tar.zst": HASH},
+        "binaries/x86_64-linux": {f"{name}.gz": HASH for name in mainnet_revisions.MAINNET_BINARIES},
+    }
+    payload = {
+        "replica_version_to_elect": VERSION,
+        "release_package_sha256_hex": HASH,
+        "guest_launch_measurements": {"guest_launch_measurements": []},
+    }
+    monkeypatch.setattr(mainnet_revisions, "download_bytes", lambda url: measurements)
+
+    # sums_with is called for its module-level patches; the instance it returns
+    # is unused because guestos_version_info_from_payload builds its own.
+    sums_with(monkeypatch, attested=None, cdn=sums, public=False)
+    assert mainnet_revisions.guestos_version_info_from_payload(payload).attestation_pending is True
+
+    sums_with(monkeypatch, attested=sums)
+    assert mainnet_revisions.guestos_version_info_from_payload(payload).attestation_pending is False
+
+
+def test_hostos_record_pending_when_either_side_falls_back(monkeypatch):
+    # HostOS reuses the GuestOS info collected for the same commit: a fallback
+    # on either side must leave the whole record pending re-verification, and
+    # only a record with both sides verified may go without the marker.
+    hostos_sums = {
+        "host-os/update-img": {"update-img.tar.zst": HASH},
+        "host-os/update-img-dev": {"update-img.tar.zst": HASH},
+    }
+    payload = {"hostos_version_to_elect": VERSION, "release_package_sha256_hex": HASH}
+    logger = logging.getLogger("logger")
+
+    def hostos_info():
+        return mainnet_revisions.hostos_version_info_from_payload(payload, logger)
+
+    # Both sides verified: nothing pending.
+    sums_with(monkeypatch, attested=hostos_sums)
+    monkeypatch.setattr(mainnet_revisions, "get_replica_version_info", lambda version: version_info())
+    assert hostos_info().attestation_pending is False
+
+    # A pending GuestOS side taints the record even though the HostOS sums verified.
+    monkeypatch.setattr(
+        mainnet_revisions, "get_replica_version_info", lambda version: version_info(attestation_pending=True)
+    )
+    assert hostos_info().attestation_pending is True
+
+    # A HostOS-side CDN fallback taints it even with a verified GuestOS side.
+    sums_with(monkeypatch, attested=None, cdn=hostos_sums, public=False)
+    monkeypatch.setattr(mainnet_revisions, "get_replica_version_info", lambda version: version_info())
+    assert hostos_info().attestation_pending is True
+
+
+def test_disclosed_pending_record_is_reverified_and_rewritten(tmp_path, monkeypatch):
+    # The cron flow the marker exists for: a record written from unverified CDN
+    # sums while the commit was private must be re-collected -- now under
+    # mandatory attestation verification -- on the first run after the commit
+    # becomes public, and the rewritten record sheds the marker.
+    subnet = "some-subnet"
+    pending = version_record(version_info(attestation_pending=True))
+    path = tmp_path / "revisions.json"
+    path.write_text(json.dumps({"guestos": {"subnets": {subnet: pending}}}))
+
+    monkeypatch.setattr(mainnet_revisions, "get_subnet_latest_replica_version", lambda s: VERSION)
+    monkeypatch.setattr(mainnet_revisions, "commit_is_public", lambda version: True)
+    monkeypatch.setattr(mainnet_revisions, "get_replica_version_info", lambda version: version_info())
+    mainnet_revisions.update_saved_subnet_revision(
+        tmp_path, logging.getLogger("logger"), pathlib.Path("revisions.json"), subnet
+    )
+
+    written = json.loads(path.read_text())["guestos"]["subnets"][subnet]
+    assert written == version_record(version_info())
+    assert "attestation_pending" not in written
+
+
+def test_pending_record_is_skipped_while_commit_is_private(tmp_path, monkeypatch):
+    subnet = "some-subnet"
+    pending = version_record(version_info(attestation_pending=True))
+    path = tmp_path / "revisions.json"
+    path.write_text(json.dumps({"guestos": {"subnets": {subnet: pending}}}))
+
+    def no_refetch(version):
+        raise AssertionError("a pending record must be skipped while its commit stays private")
+
+    monkeypatch.setattr(mainnet_revisions, "get_subnet_latest_replica_version", lambda s: VERSION)
+    monkeypatch.setattr(mainnet_revisions, "commit_is_public", lambda version: False)
+    monkeypatch.setattr(mainnet_revisions, "get_replica_version_info", no_refetch)
+    mainnet_revisions.update_saved_subnet_revision(
+        tmp_path, logging.getLogger("logger"), pathlib.Path("revisions.json"), subnet
+    )
+
+    assert json.loads(path.read_text())["guestos"]["subnets"][subnet] == pending
