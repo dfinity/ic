@@ -313,7 +313,7 @@ impl Anvil {
             let Some(transactions) = block["transactions"].as_array() else {
                 continue;
             };
-            for transaction in transactions {
+            for transaction in transactions.iter().rev() {
                 if transaction["from"].as_str() != Some(&to_hex(sender.as_ref())) {
                     continue;
                 }

@@ -195,6 +195,12 @@ impl LiveSetup<CkErc20Setup> {
             .add_supported_erc20_tokens()
             .add_support_for_subaccount_helper(contracts.helper);
         let mut setup = Self::go_live(ckerc20, anvil);
+        assert_eq!(
+            setup.minter_address,
+            address_from_hex(MINTER_ADDRESS),
+            "BUG: the helper was deployed paying out to an address the installed minter does not \
+             control, so a sweep would move every balance out of reach while still minting"
+        );
         setup.sweep_contracts = Some(contracts);
         setup.anvil.set_balance(sweeper, sweeper_gas_wei);
         setup

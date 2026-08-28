@@ -31,6 +31,7 @@ use ic_cketh_minter::balance_scan::batcher::{
 };
 use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
+use ic_cketh_minter::endpoints::events::EventPayload;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{
     Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
@@ -41,6 +42,7 @@ use ic_cketh_test_utils::{MINTER_ADDRESS, SWEEPER_ADDRESS};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeSet;
+use std::str::FromStr;
 
 #[test]
 fn should_read_erc20_balances_across_tokens_and_holders() {
@@ -397,6 +399,30 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
         assert!(sweep.succeeded, "the sweep reverted: {sweep:?}");
     }
     report_gas(&sweeps, DEPOSITORS_PER_TOKEN);
+
+    // What each sweep actually batched, so that two transactions cannot pass as one per token.
+    let mut batched: Vec<(Address, usize)> = setup
+        .minter_events()
+        .into_iter()
+        .filter_map(|event| match event.payload {
+            EventPayload::AcceptedSweepRequest { token, items, .. } => Some((
+                Address::from_str(&token).expect("BUG: the sweep names an invalid token"),
+                items.len(),
+            )),
+            _ => None,
+        })
+        .collect();
+    batched.sort();
+    let per_token = usize::try_from(DEPOSITORS_PER_TOKEN).unwrap();
+    let mut expected = vec![
+        (contract_address(usdc), per_token),
+        (contract_address(usdt), per_token),
+    ];
+    expected.sort();
+    assert_eq!(
+        batched, expected,
+        "each sweep must batch one token's ten deposits, not a mixed batch and a redundant one"
+    );
 
     // The funds left every deposit address and landed at the minter's main address.
     let minter = address_from_hex(MINTER_ADDRESS);
