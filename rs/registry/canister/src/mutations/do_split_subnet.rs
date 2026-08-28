@@ -34,7 +34,7 @@ enum PayloadValidationError {
         pre_split_source_subnet_size: usize,
     },
     DisallowedSourceSubnetType(SubnetType),
-    CloudEngineDeploymentInProgress,
+    CloudEngineFleetIsSplit,
     SourceSubnetIsSigningSubnet,
     UnhostedCanisterIds,
     SplitAlreadyInProgress,
@@ -294,7 +294,7 @@ impl Registry {
             let fleet_is_split = 0.0 < standard_engine_replica_version_record.deployment_progress
                 && standard_engine_replica_version_record.deployment_progress < 1.0;
             if fleet_is_split {
-                return Err(PayloadValidationError::CloudEngineDeploymentInProgress);
+                return Err(PayloadValidationError::CloudEngineFleetIsSplit);
             }
         }
 
@@ -477,11 +477,11 @@ impl std::fmt::Display for PayloadValidationError {
             PayloadValidationError::DisallowedSourceSubnetType(subnet_type) => {
                 write!(f, "Subnets of type {subnet_type:?} may not be split")
             }
-            PayloadValidationError::CloudEngineDeploymentInProgress => {
+            PayloadValidationError::CloudEngineFleetIsSplit => {
                 write!(
                     f,
-                    "The source subnet is a Cloud Engine subnet and the deployment \
-                    of a new replica version is still in progress"
+                    "The source subnet is a Cloud Engine subnet and the cloud engine \
+                    fleet is currently split between two replica versions"
                 )
             }
             PayloadValidationError::SourceSubnetIsSigningSubnet => {
