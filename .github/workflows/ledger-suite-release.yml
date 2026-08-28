@@ -43,10 +43,6 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      # An explicit permissions map zeroes everything unlisted, and
-      # `gh attestation verify` reads the attestations API with this job's
-      # GITHUB_TOKEN — grant that read explicitly rather than relying on the
-      # integration token's implicit access to public data.
       attestations: read
       contents: write
 

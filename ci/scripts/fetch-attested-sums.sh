@@ -112,8 +112,8 @@ if [ -z "$source_ref_regex" ]; then
     exit 1
 fi
 
-url="https://download.dfinity.systems/ic/${commit}/${subdir}/SHA256SUMS"
 expected_subject="ic/${commit}/${subdir}/SHA256SUMS"
+url="https://download.dfinity.systems/${expected_subject}"
 
 # Download to the target file, then verify BEFORE anything reads it. --fail
 # ensures an HTTP error page fails here rather than as a verification error.
