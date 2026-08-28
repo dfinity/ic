@@ -377,14 +377,20 @@ async fn test_exchange_keys_successfully() {
 
     let served_key = fixture.served_store_key();
     let store_device_path = fixture.store_device.path().to_path_buf();
-    let client_luks_header_path = fixture.client_store_luks_header.path().to_path_buf();
+    // The staged header is a random file name in the final header's directory.
+    let header_dir = fixture
+        .client_store_luks_header
+        .path()
+        .parent()
+        .unwrap()
+        .to_path_buf();
     fixture
         .crypto_ops_mut()
         .expect_rekey()
         .once()
         .withf(move |device_path, luks_header_path, old_key, _| {
             device_path == store_device_path
-                && luks_header_path == client_luks_header_path
+                && luks_header_path.parent() == Some(header_dir.as_path())
                 && old_key == served_key
         })
         .returning(|_, _, _, _| Ok(()));
@@ -395,6 +401,29 @@ async fn test_exchange_keys_successfully() {
     client_result.expect("Key exchange should succeed");
 
     fixture.verify_store_artifacts_populated();
+}
+
+/// A failed re-key must leave the previous header in place.
+#[tokio::test]
+async fn test_failed_rekey_leaves_previous_header_unchanged() {
+    let mut fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
+
+    std::fs::write(fixture.client_store_luks_header.path(), b"previous header")
+        .expect("Failed to write previous header");
+    fixture
+        .crypto_ops_mut()
+        .expect_rekey()
+        .once()
+        .returning(|_, _, _, _| bail!("rekey boom"));
+
+    let (server_result, client_result) = fixture.run_key_exchange_test().await;
+
+    assert_statuses_contain_errors((server_result, client_result), "rekey boom");
+    assert_eq!(
+        std::fs::read(fixture.client_store_luks_header.path()).unwrap(),
+        b"previous header",
+        "a failed re-key must not modify the previous header"
+    );
 }
 
 #[tokio::test]

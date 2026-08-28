@@ -23,6 +23,8 @@ use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
+use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpStream;
@@ -252,8 +254,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .luks_header
             .context("Server did not send a Store LUKS header")?;
 
-        self.adopt_store_artifacts(disk_encryption_key, luks_header)
-            .await?;
+        self.adopt_store_artifacts(disk_encryption_key, luks_header)?;
 
         Ok(())
     }
@@ -261,26 +262,32 @@ impl DiskEncryptionKeyExchangeClientAgent {
     /// Copies the received Store LUKS header to our Var partition and re-keys it: the old
     /// GuestOS's key (received above) is replaced with our own SEV-derived key, which the
     /// default VM we become after the reboot can re-derive.
-    async fn adopt_store_artifacts(
-        &mut self,
-        old_key: Vec<u8>,
-        luks_header: Vec<u8>,
-    ) -> Result<()> {
-        tokio::fs::write(&self.store_luks_header_path, &luks_header)
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to write Store LUKS header to {}",
-                    self.store_luks_header_path.display()
-                )
-            })?;
+    fn adopt_store_artifacts(&mut self, old_key: Vec<u8>, luks_header: Vec<u8>) -> Result<()> {
+        // Staged next to the final path, so moving it into place stays on the same
+        // filesystem. The permissions must allow the orchestrator (running as
+        // ic-replica) to read the header.
+        let mut staged_header = tempfile::Builder::new()
+            .permissions(std::fs::Permissions::from_mode(0o644))
+            .tempfile_in(
+                self.store_luks_header_path
+                    .parent()
+                    .context("Store LUKS header path has no parent directory")?,
+            )
+            .context("Failed to create staged Store LUKS header")?;
+        staged_header
+            .write_all(&luks_header)
+            .context("Failed to write staged Store LUKS header")?;
 
         self.crypto_ops.rekey(
             &self.store_device_path,
-            &self.store_luks_header_path,
+            staged_header.path(),
             &old_key,
             self.sev_firmware.as_mut(),
         )?;
+
+        staged_header
+            .persist(&self.store_luks_header_path)
+            .context("Failed to move the staged Store LUKS header into place")?;
 
         Ok(())
     }

@@ -16,16 +16,17 @@ The key exchange involves two GuestOS VMs running simultaneously on the same phy
 │  ┌──────────────────────┐   ┌────────────────────────┐  │
 │  │ Active GuestOS       │   │ Upgrade VM (new)       │  │
 │  │                      │   │                        │  │
-│  │  Orchestrator        │   │  guest_upgrade_client   │  │
-│  │    │                 │   │    │                    │  │
-│  │    ▼                 │   │    │                    │  │
-│  │  guest_upgrade_server│◄──┼────┘                    │  │
-│  │    │                 │   │  copies header to       │  │
-│  │    │ derive_key()    │   │  own Var partition,     │  │
-│  │    │ from SEV        │   │  re-keys it to own      │  │
-│  │    │ measurement     │   │  SEV-derived key        │  │
+│  │  Orchestrator        │   │  guest_upgrade_client  │  │
+│  │    │                 │   │    │                   │  │
+│  │    ▼                 │   │    │                   │  │
+│  │  guest_upgrade_server│◄──┼────┘                   │  │
+│  │    │                 │   │  copies header to      │  │
+│  │    │ derive_key()    │   │  own Var partition,    │  │
+│  │    │ from SEV        │   │  re-keys it to own     │  │
+│  │    │ measurement     │   │  SEV-derived key       │  │
 │  │    ▼                 │   │                        │  │
-│  │  sends key ─────────►│───┼──► receives key         │  │
+│  │  sends key + ───────►│───┼──► receives key +      │  │
+│  │  header              │   │    header              │  │
 │  └──────────────────────┘   └────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```
