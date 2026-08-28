@@ -35,18 +35,18 @@
 //! anvil reject anything it sends. The same flag gives one slot per epoch, so `finalized` trails
 //! `latest` by 2 blocks instead of 64.
 //!
-//! Sweeper funding also needs minter *time*, which the balance scan never does: its transfer is only
-//! sent by the withdrawal timer, six minutes after the funding task queued the request. Rather than
-//! wait that out, a test *buys* the tick: live mode keeps adding wall-clock deltas to whatever the
-//! instance's time already is, so pushing it forward with [`pocket_ic::PocketIc::advance_time`] is
-//! additive and never undone — the instance simply runs that far ahead of the host from then on, and
-//! every timer that has come due fires on the next round. That makes two rules, both explained on
+//! Every flow past the setup needs minter *time*: the balance scan runs on its own thirty-second
+//! timer, and a sweeper funding's transfer is only sent by the withdrawal timer, six minutes after
+//! the funding task queued the request. Rather than wait that out, a test *buys* the tick: live mode
+//! keeps adding wall-clock deltas to whatever the instance's time already is, so pushing it forward
+//! with [`pocket_ic::PocketIc::advance_time`] is additive and never undone — the instance simply
+//! runs that far ahead of the host from then on, and every timer that has come due fires on the
+//! next round. That makes two rules, both explained on
 //! [`LiveSetup::settle`]: ticks are bought one at a time, and each one is paid for in real seconds
 //! rather than instance time.
 
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_cketh_minter::PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL;
 use ic_cketh_minter::endpoints::events::Event;
 use ic_cketh_minter::endpoints::{
     CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
@@ -55,6 +55,7 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::numeric::Erc20Value;
+use ic_cketh_minter::{BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::PocketIc;
@@ -112,11 +113,14 @@ const POLL_INTERVAL: Duration = Duration::from_secs(1);
 /// doing rather than being killed with nothing to show.
 const AWAIT_DEADLINE: Duration = Duration::from_secs(60);
 
-/// The balance scan waits on a periodic scan of its own rather than on a minter timer, and that scan
-/// is slower to come round, so it gets its own budget.
-const SCAN_DEADLINE: Duration = Duration::from_secs(180);
+/// One balance-scan interval, plus slack so the scan is unambiguously due. Also long enough for the
+/// latest-block refresh the scan reads, which shares the interval, and short enough that an outcall
+/// in flight across the jump stays inside `CANISTER_HTTP_TIMEOUT_INTERVAL`.
+const SCAN_TICK: Duration = Duration::from_secs(BALANCE_SCAN_INTERVAL.as_secs() + 5);
 
-const SCAN_TICKS: u32 = 2;
+/// A budget, not a cost: one tick refreshes the latest block height the scan needs, the next scans;
+/// the spares cover a tick lost to an outcall the jump timed out.
+const SCAN_TICKS: u32 = 4;
 
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
 /// address, so the scan reads a real balance for that (address, token) pair.
@@ -289,46 +293,32 @@ impl LiveSetup<CkErc20Setup> {
     /// as scanned once its status is `Scanning` with `scan_count >= 1` (a below-minimum address,
     /// advanced in place) or `AwaitingSweep` (a funded address, detected and queued). Either proves
     /// the `eth_call` against anvil succeeded and decoded, since a failing batch never advances or
-    /// queues an address. Panics if no scan completes within `deadline`.
+    /// queues an address. Buys balance-scan ticks rather than waiting the interval out, and panics
+    /// if no scan completes within [`SCAN_TICKS`] of them.
     pub fn await_scan(
         &self,
         caller: Principal,
         subaccount: [u8; 32],
         token: &Erc20Token,
     ) -> DepositErc20Response {
-        self.poll_until(
-            SCAN_DEADLINE,
+        let mut scanned = None;
+        self.drive_until_with(
+            SCAN_TICK,
+            SCAN_TICKS,
             |_| "the deposit address was not scanned".to_string(),
             |setup| {
                 let progress = setup.deposit_erc20(caller, subaccount, token);
-                let scanned = match &progress.status {
+                let is_scanned = match &progress.status {
                     DepositStatus::Scanning { scan_count, .. } => *scan_count >= 1,
                     DepositStatus::AwaitingSweep(_) => true,
                 };
-                scanned.then_some(progress)
-            },
-        )
-    }
-
-    /// [`Self::await_scan`], but jumping the minter's clock to the next scan instead of waiting for
-    /// it in real time. Kept apart from `await_scan`: a test that leaves its instance advanced far
-    /// ahead starves whatever runs after it in the same binary, so only a test that owns its target
-    /// may drive the clock this way.
-    pub fn drive_scan(
-        &self,
-        caller: Principal,
-        subaccount: [u8; 32],
-        token: &Erc20Token,
-    ) -> DepositErc20Response {
-        self.drive_until(
-            SCAN_TICKS,
-            |_| "the deposit address was not scanned".to_string(),
-            |setup| match &setup.deposit_erc20(caller, subaccount, token).status {
-                DepositStatus::Scanning { scan_count, .. } => *scan_count >= 1,
-                DepositStatus::AwaitingSweep(_) => true,
+                if is_scanned {
+                    scanned = Some(progress);
+                }
+                is_scanned
             },
         );
-        self.deposit_erc20(caller, subaccount, token)
+        scanned.expect("drive_until_with returns only once observe held")
     }
 }
 
@@ -552,20 +542,29 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         &self,
         max_ticks: u32,
         what: impl Fn(&Self) -> String,
+        observe: impl FnMut(&Self) -> bool,
+    ) {
+        self.drive_until_with(WITHDRAWAL_TICK, max_ticks, what, observe)
+    }
+
+    fn drive_until_with(
+        &self,
+        tick: Duration,
+        max_ticks: u32,
+        what: impl Fn(&Self) -> String,
         mut observe: impl FnMut(&Self) -> bool,
     ) {
         let mut spent = 0;
         while !self.settle(&mut observe) {
             assert!(
                 spent < max_ticks,
-                "{} within {max_ticks} withdrawal-timer ticks ({:?} of minter time); \
-                 minter logs:\n{}",
+                "{} within {max_ticks} ticks of {tick:?} ({:?} of minter time); minter logs:\n{}",
                 what(self),
-                WITHDRAWAL_TICK * max_ticks,
+                tick * max_ticks,
                 self.minter_logs().join("\n")
             );
             spent += 1;
-            self.env().advance_time(WITHDRAWAL_TICK);
+            self.env().advance_time(tick);
         }
     }
 

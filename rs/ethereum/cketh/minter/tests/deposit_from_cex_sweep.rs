@@ -97,7 +97,7 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
 
     for deposit in &deposits {
         assert_matches!(
-            setup.drive_scan(deposit.owner, deposit.subaccount, deposit.token).status,
+            setup.await_scan(deposit.owner, deposit.subaccount, deposit.token).status,
             DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == deposit.amount
         );
     }
