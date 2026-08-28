@@ -368,7 +368,7 @@ pub(crate) fn extract_luks_parameters(crypt_device: &mut CryptDevice) -> Result<
         .filter(|&token_id| {
             !matches!(
                 crypt_device.token_handle().status(token_id),
-                Ok(CryptTokenInfo::Invalid) | Ok(CryptTokenInfo::Inactive)
+                Ok(CryptTokenInfo::Invalid) | Ok(CryptTokenInfo::Inactive) | Err(_)
             )
         })
         .count();
