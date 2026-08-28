@@ -257,7 +257,7 @@ mod scraping {
         use crate::lifecycle::EthereumNetwork;
         use crate::numeric::BlockNumber;
         use crate::state::eth_logs_scraping::LogScrapingId;
-        use crate::test_fixtures::initial_state;
+        use crate::test_fixtures::{initial_state, state_with_deposit_helper};
         use evm_rpc_types::Hex32;
         use hex_literal::hex;
         use ic_ethereum_types::Address;
@@ -276,11 +276,7 @@ mod scraping {
         fn should_always_contain_the_zero_address_in_second_topic() {
             let last_scraped_block_number = BlockNumber::from(6_970_446_u32);
             let state = {
-                let mut state = initial_state();
-                state.log_scrapings.set_contract_address(
-                    LogScrapingId::EthOrErc20DepositWithSubaccount,
-                    CONTRACT_ADDRESS,
-                );
+                let mut state = state_with_deposit_helper(CONTRACT_ADDRESS);
                 state.log_scrapings.set_last_scraped_block_number(
                     LogScrapingId::EthOrErc20DepositWithSubaccount,
                     last_scraped_block_number,
@@ -520,5 +516,44 @@ mod subaccount {
         pub from_subaccount: Option<LedgerSubaccount>,
         #[n(2)]
         pub field_after: u64,
+    }
+}
+
+mod encode_principal {
+    use crate::eth_logs::{encode_principal, parse_principal_from_slice};
+    use crate::test_fixtures::arb::arb_principal;
+    use candid::Principal;
+    use proptest::prelude::{Strategy, prop_assert_eq, proptest};
+
+    proptest! {
+        /// Every principal the helper can carry survives the round trip. The two it refuses are
+        /// pinned by `should_reject_what_the_helper_never_carries` instead.
+        #[test]
+        fn should_round_trip_through_the_helper_encoding(
+            principal in arb_principal().prop_filter(
+                "the helper carries neither the management nor the anonymous principal",
+                |principal| {
+                    *principal != Principal::management_canister()
+                        && *principal != Principal::anonymous()
+                },
+            ),
+        ) {
+            prop_assert_eq!(
+                parse_principal_from_slice(&encode_principal(&principal)),
+                Ok(principal)
+            );
+        }
+    }
+
+    #[test]
+    fn should_reject_what_the_helper_never_carries() {
+        assert_eq!(
+            parse_principal_from_slice(&encode_principal(&Principal::management_canister())),
+            Err("management canister principal is not allowed".to_string())
+        );
+        assert_eq!(
+            parse_principal_from_slice(&encode_principal(&Principal::anonymous())),
+            Err("anonymous principal is not allowed".to_string())
+        );
     }
 }

@@ -17,7 +17,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
     InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs,
-    TakeCanisterSnapshotArgs, UploadChunkArgs,
+    TakeCanisterSnapshotArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
@@ -26,13 +26,13 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
-    canister_state::canister_snapshots::CanisterSnapshot,
+    canister_state::canister_snapshots::{CanisterSnapshot, ValidatedSnapshotMetadata},
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::{
-        ApiBoundaryNodeEntry, UnflushedCheckpointOp,
+        ApiBoundaryNodeEntry, UnflushedCheckpointOp, UnflushedCheckpointOps,
         testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
-    page_map::{PageIndex, Shard, StorageLayout},
+    page_map::{PageIndex, Shard, StorageLayout, TestPageAllocatorFileDescriptorImpl},
     testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
 use ic_state_layout::{
@@ -290,6 +290,23 @@ fn take_canister_snapshot(
         .metadata
         .unflushed_checkpoint_ops
         .take_snapshot(canister_id, snapshot_id);
+    state.put_canister_state(canister_arc);
+}
+
+/// Deletes the given snapshot from the state, recording the deletion as an unflushed
+/// checkpoint operation (as `CanisterManager::delete_canister_snapshot()` does).
+fn delete_canister_snapshot(state: &mut ReplicatedState, snapshot_id: SnapshotId) {
+    let canister_id = snapshot_id.get_canister_id();
+    let mut canister_arc = state.take_canister_state(&canister_id).unwrap();
+    let canister = Arc::make_mut(&mut canister_arc);
+    let mut unflushed_checkpoint_ops = UnflushedCheckpointOps::default();
+    canister
+        .canister_snapshots
+        .remove(snapshot_id, &mut unflushed_checkpoint_ops);
+    state
+        .metadata
+        .unflushed_checkpoint_ops
+        .extend(unflushed_checkpoint_ops);
     state.put_canister_state(canister_arc);
 }
 
@@ -7606,10 +7623,7 @@ fn can_create_and_delete_canister_snapshot() {
 
         let (_height, mut state) = state_manager.take_tip();
 
-        let canister = state
-            .canister_state_make_mut(&canister_test_id(100))
-            .unwrap();
-        canister.canister_snapshots.remove(snapshot_id);
+        delete_canister_snapshot(&mut state, snapshot_id);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -8626,6 +8640,243 @@ fn deleted_canister_is_removed_from_tip() {
     deleted_canister_is_removed_from_tip_impl(CertificationScope::Full);
 }
 
+/// Tests that a deleted snapshot is removed from the tip by the flush of the recorded
+/// `UnflushedCheckpointOp::DeleteSnapshot`, i.e. without relying on
+/// `FilterTipCanisters`.
+#[test]
+fn deleted_snapshot_is_removed_from_tip() {
+    fn deleted_snapshot_is_removed_from_tip_impl(certification_scope: CertificationScope) {
+        state_manager_test(|_metrics, state_manager| {
+            let canister_id = canister_test_id(100);
+            let snapshot_id = SnapshotId::from((canister_id, 0));
+
+            // Install a canister, take a snapshot of it and checkpoint the state, so
+            // that the snapshot has a directory in the tip.
+            let (_height, mut state) = state_manager.take_tip();
+            insert_dummy_canister(&mut state, canister_id);
+            let snapshot = CanisterSnapshot::from_canister(
+                state.canister_state(&canister_id).unwrap(),
+                state.time(),
+            )
+            .unwrap();
+            take_canister_snapshot(&mut state, canister_id, snapshot_id, snapshot);
+            state_manager.commit_and_certify(state, CertificationScope::Full, None);
+            state_manager.flush_tip_channel();
+
+            let (height, mut state) = state_manager.take_tip();
+            let tip = CheckpointLayout::<ReadOnly>::new_untracked(
+                state_manager.state_layout().raw_path().join("tip"),
+                height,
+            )
+            .unwrap();
+            assert_eq!(tip.snapshot_ids().unwrap(), vec![snapshot_id]);
+
+            delete_canister_snapshot(&mut state, snapshot_id);
+            assert_eq!(
+                state
+                    .system_metadata()
+                    .unflushed_checkpoint_ops
+                    .clone()
+                    .take(),
+                vec![UnflushedCheckpointOp::DeleteSnapshot(snapshot_id)]
+            );
+
+            // Trigger a flush either at the checkpoint or by committing exactly
+            // `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before the checkpoint.
+            if certification_scope == CertificationScope::Full {
+                state_manager.commit_and_certify(state, certification_scope.clone(), None);
+            } else {
+                state_manager.commit_and_certify(
+                    state,
+                    certification_scope.clone(),
+                    Some(BatchSummary {
+                        next_checkpoint_height: Height(
+                            2 + NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
+                        ),
+                        current_interval_length: Height(500),
+                    }),
+                );
+            }
+            state_manager.flush_tip_channel();
+
+            // The snapshot directory is gone from the tip, even without a checkpoint;
+            // and so is the canister's directory under `snapshots`.
+            assert!(tip.snapshot_ids().unwrap().is_empty());
+            // But the canister itself is still there.
+            assert_eq!(tip.canister_ids().unwrap(), vec![canister_id]);
+            // And the checkpoint op has been flushed.
+            let (_height, state) = state_manager.take_tip();
+            assert!(state.system_metadata().unflushed_checkpoint_ops.is_empty());
+        });
+    }
+    deleted_snapshot_is_removed_from_tip_impl(CertificationScope::Metadata);
+    deleted_snapshot_is_removed_from_tip_impl(CertificationScope::Full);
+}
+
+/// Tests that the flush of `UnflushedCheckpointOp::DeleteSnapshot` is idempotent, i.e.
+/// that it does not fail with an I/O error if the snapshot has no directory in the tip.
+///
+/// This is the case for a snapshot created from uploaded metadata (see
+/// `CanisterManager::create_snapshot_from_metadata()`, which records no
+/// `UnflushedCheckpointOp::TakeSnapshot` as there is nothing to copy from the canister)
+/// and deleted before the first `TipRequest::FlushPageMapDelta` that still sees it in
+/// the state, which is what would have created its directory: the snapshot's `PageMap`s
+/// start out with no files in tip, so they are always flushed (and hence their layout,
+/// and with it the snapshot's directory, created) even though they hold no data.
+#[test]
+fn deleting_snapshot_without_tip_directory_is_a_noop() {
+    state_manager_test(|metrics, state_manager| {
+        let canister_id = canister_test_id(100);
+        let snapshot_id = SnapshotId::from((canister_id, 0));
+
+        // Install a canister and checkpoint the state.
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_id);
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        let (height, mut state) = state_manager.take_tip();
+        let tip = CheckpointLayout::<ReadOnly>::new_untracked(
+            state_manager.state_layout().raw_path().join("tip"),
+            height,
+        )
+        .unwrap();
+        assert!(tip.snapshot_ids().unwrap().is_empty());
+
+        // Create a snapshot from uploaded metadata, as
+        // `CanisterManager::create_snapshot_from_metadata()` does: its `PageMap`s are
+        // brand new (as opposed to a snapshot taken from a canister, whose `PageMap`s
+        // are clones of the canister's), so they hold no data and have no files in tip.
+        // Add it without recording an `UnflushedCheckpointOp::TakeSnapshot`, and delete
+        // it again within the same round, i.e. before any flush sees it in the state.
+        // Its directory is therefore never created in the tip.
+        let metadata =
+            ValidatedSnapshotMetadata::validate(UploadCanisterSnapshotMetadataArgs::new(
+                canister_id,
+                None,
+                4, // wasm_module_size
+                vec![],
+                0, // wasm_memory_size
+                0, // stable_memory_size
+                vec![],
+                None,
+                None,
+            ))
+            .unwrap();
+        let snapshot = CanisterSnapshot::from_metadata(
+            &metadata,
+            state.time(),
+            state
+                .canister_state(&canister_id)
+                .unwrap()
+                .system_state
+                .canister_version(),
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        );
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
+        canister
+            .canister_snapshots
+            .push(snapshot_id, Arc::new(snapshot));
+        delete_canister_snapshot(&mut state, snapshot_id);
+        assert_eq!(
+            state
+                .system_metadata()
+                .unflushed_checkpoint_ops
+                .clone()
+                .take(),
+            vec![UnflushedCheckpointOp::DeleteSnapshot(snapshot_id)]
+        );
+
+        // Flushing the delete operation for the snapshot without a directory in the tip
+        // must not fail (it would `fatal!` the tip thread, killing the test).
+        state_manager.commit_and_certify(
+            state,
+            CertificationScope::Metadata,
+            Some(BatchSummary {
+                next_checkpoint_height: Height(2 + NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY),
+                current_interval_length: Height(500),
+            }),
+        );
+        state_manager.flush_tip_channel();
+
+        assert!(tip.snapshot_ids().unwrap().is_empty());
+        let (_height, state) = state_manager.take_tip();
+        assert!(state.system_metadata().unflushed_checkpoint_ops.is_empty());
+
+        // And the subsequent checkpoint succeeds, without raising a critical error.
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+        assert!(tip.snapshot_ids().unwrap().is_empty());
+        assert_error_counters(metrics);
+    });
+}
+
+/// Tests that the snapshots of a deleted canister are removed from the tip by the flush
+/// of the recorded `UnflushedCheckpointOp::DeleteSnapshot`s, i.e. without relying on
+/// `FilterTipCanisters`.
+#[test]
+fn snapshots_of_deleted_canister_are_removed_from_tip() {
+    state_manager_test(|_metrics, state_manager| {
+        let canister_id = canister_test_id(100);
+        let snapshot_id = SnapshotId::from((canister_id, 0));
+
+        // Install a canister, take a snapshot of it and checkpoint the state, so that
+        // both have a directory in the tip.
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_id);
+        let snapshot = CanisterSnapshot::from_canister(
+            state.canister_state(&canister_id).unwrap(),
+            state.time(),
+        )
+        .unwrap();
+        take_canister_snapshot(&mut state, canister_id, snapshot_id, snapshot);
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        let (height, mut state) = state_manager.take_tip();
+        let tip = CheckpointLayout::<ReadOnly>::new_untracked(
+            state_manager.state_layout().raw_path().join("tip"),
+            height,
+        )
+        .unwrap();
+        assert_eq!(tip.canister_ids().unwrap(), vec![canister_id]);
+        assert_eq!(tip.snapshot_ids().unwrap(), vec![snapshot_id]);
+
+        // Deleting the canister records the deletion of its snapshot, too.
+        state.remove_canister(&canister_id).unwrap();
+        assert_eq!(
+            state
+                .system_metadata()
+                .unflushed_checkpoint_ops
+                .clone()
+                .take(),
+            vec![
+                UnflushedCheckpointOp::DeleteSnapshot(snapshot_id),
+                UnflushedCheckpointOp::DeleteCanister(canister_id),
+            ]
+        );
+
+        // Commit without a checkpoint, but flush the operations by committing exactly
+        // `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before the checkpoint.
+        state_manager.commit_and_certify(
+            state,
+            CertificationScope::Metadata,
+            Some(BatchSummary {
+                next_checkpoint_height: Height(2 + NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY),
+                current_interval_length: Height(500),
+            }),
+        );
+        state_manager.flush_tip_channel();
+
+        // Both directories are gone from the tip, even without a checkpoint.
+        assert!(tip.canister_ids().unwrap().is_empty());
+        assert!(tip.snapshot_ids().unwrap().is_empty());
+        // And the checkpoint ops have been flushed.
+        let (_height, state) = state_manager.take_tip();
+        assert!(state.system_metadata().unflushed_checkpoint_ops.is_empty());
+    });
+}
+
 /// Tests that `FilterTipCanisters` raises a critical error if it actually removes a
 /// canister directory from tip: every such removal is expected to be covered by an
 /// explicit `UnflushedCheckpointOp::DeleteCanister`, so filtering is only a safety net.
@@ -8664,6 +8915,58 @@ fn filtering_canister_from_tip_raises_critical_error() {
         assert!(tip.canister_ids().unwrap().is_empty());
         assert_eq!(
             metric_vec(&[(&[("error", "state_manager_tip_canisters_filtered")], 1)]),
+            nonzero_values(fetch_int_counter_vec(metrics, "critical_errors"))
+        );
+    });
+}
+
+/// Tests that `FilterTipCanisters` raises a critical error if it actually removes a
+/// snapshot directory from tip: every such removal is expected to be covered by an
+/// explicit `UnflushedCheckpointOp::DeleteSnapshot`, so filtering is only a safety net.
+#[test]
+fn filtering_snapshot_from_tip_raises_critical_error() {
+    state_manager_test(|metrics, state_manager| {
+        let canister_id = canister_test_id(100);
+        let snapshot_id = SnapshotId::from((canister_id, 0));
+
+        // Install a canister, take a snapshot of it and checkpoint the state, so that
+        // the snapshot has a directory in the tip.
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_id);
+        let snapshot = CanisterSnapshot::from_canister(
+            state.canister_state(&canister_id).unwrap(),
+            state.time(),
+        )
+        .unwrap();
+        take_canister_snapshot(&mut state, canister_id, snapshot_id, snapshot);
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        let (height, mut state) = state_manager.take_tip();
+        let tip = CheckpointLayout::<ReadOnly>::new_untracked(
+            state_manager.state_layout().raw_path().join("tip"),
+            height,
+        )
+        .unwrap();
+        assert_eq!(tip.snapshot_ids().unwrap(), vec![snapshot_id]);
+        assert_error_counters(metrics);
+
+        // Drop the snapshot from the state without recording a `DeleteSnapshot`
+        // operation (by discarding the operations recorded by `remove()`), so that its
+        // directory is only removed by `FilterTipCanisters`.
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
+        canister
+            .canister_snapshots
+            .remove(snapshot_id, &mut UnflushedCheckpointOps::default());
+        assert!(state.system_metadata().unflushed_checkpoint_ops.is_empty());
+
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        // The snapshot directory is gone from the tip, but a critical error was raised.
+        assert!(tip.snapshot_ids().unwrap().is_empty());
+        assert_eq!(
+            metric_vec(&[(&[("error", "state_manager_tip_snapshots_filtered")], 1)]),
             nonzero_values(fetch_int_counter_vec(metrics, "critical_errors"))
         );
     });

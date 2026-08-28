@@ -146,7 +146,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
         SubnetConfig::new(
             SUBNET_ID,
             subnet_nodes,
-            ReplicaVersion::default(),
+            ReplicaVersion::try_from("test_replica_version").unwrap(),
             None,
             /*max_ingress_bytes_per_block=*/ None,
             None,
@@ -175,7 +175,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
     let ic_config = IcConfig::new(
         /* target_dir= */ temp_dir.path(),
         topology_config,
-        ReplicaVersion::default(),
+        ReplicaVersion::try_from("test_replica_version").unwrap(),
         /* generate_subnet_records= */ true, // see note above
         /* nns_subnet_index= */ Some(0),
         /* release_package_url= */ None,

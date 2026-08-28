@@ -10,10 +10,10 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterStatusResultV2,
     CanisterStatusType, CreateCanisterArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, HttpMethod, IC_00, LogVisibilityV2,
-    MasterPublicKeyId, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, ReplicationCounts, SchnorrAlgorithm, SchnorrKeyId,
-    TakeCanisterSnapshotArgs, TransformContext, TransformFunc, UploadChunkArgs, VetKdCurve,
-    VetKdKeyId,
+    MasterPublicKeyId, Method, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    ReplicationCounts, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext,
+    TransformFunc, UploadChunkArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_u64};
 use ic_registry_subnet_type::SubnetType;
@@ -3425,6 +3425,110 @@ fn execute_canister_http_request_disabled() {
     assert_eq!(canister_http_request_contexts.len(), 0);
 }
 
+/// The two ways HTTP outcalls come for free: a free cost schedule, and a system
+/// subnet, which charges nothing for outcalls despite its normal schedule.
+#[derive(Copy, Clone, Debug)]
+enum FreeOutcalls {
+    FreeCostSchedule,
+    SystemSubnet,
+}
+
+#[test]
+fn execute_canister_http_request_free_subnet_accepts_zero_cycles() {
+    // Where HTTP outcalls are free nothing is charged for them, so a caller must
+    // not have to attach any cycles — under pay-as-you-go just as under legacy
+    // pricing, and for flexible outcalls (always pay-as-you-go) just as for
+    // fully replicated ones.
+    //
+    // Both flavours of free are covered because they used to differ: outcalls are
+    // priced off the cost schedule pinned in the request context, and a system
+    // subnet reaches that through a mapping (normal schedule, free outcalls)
+    // rather than by carrying a free schedule to begin with.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let build_test = |free: FreeOutcalls| {
+        let builder = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_caller(own_subnet, caller_canister);
+        match free {
+            FreeOutcalls::FreeCostSchedule => {
+                builder.with_cost_schedule(CanisterCyclesCostSchedule::Free)
+            }
+            FreeOutcalls::SystemSubnet => builder.with_subnet_type(SubnetType::System),
+        }
+        .build()
+    };
+    let http_request_args = |pricing_version| CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes: Some(1_000_000),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        is_replicated: None,
+        pricing_version,
+    };
+
+    for free in [FreeOutcalls::FreeCostSchedule, FreeOutcalls::SystemSubnet] {
+        let calls: [(&str, Method, Vec<u8>); 3] = [
+            (
+                "legacy",
+                Method::HttpRequest,
+                http_request_args(Some(PRICING_VERSION_LEGACY)).encode(),
+            ),
+            (
+                "pay-as-you-go",
+                Method::HttpRequest,
+                http_request_args(Some(PRICING_VERSION_PAY_AS_YOU_GO)).encode(),
+            ),
+            (
+                "flexible",
+                Method::FlexibleHttpRequest,
+                flexible_http_request_args(caller_canister).encode(),
+            ),
+        ];
+        for (label, method, payload) in calls {
+            let mut test = build_test(free);
+            test.inject_call_to_ic00(method, payload, Cycles::zero());
+            test.execute_all();
+
+            let contexts = &test
+                .state()
+                .metadata
+                .subnet_call_context_manager
+                .canister_http_request_contexts;
+            assert_eq!(
+                contexts.len(),
+                1,
+                "a {label} outcall with no cycles attached was not accepted on {free:?}: {:?}",
+                test.xnet_messages()
+                    .first()
+                    .cloned()
+                    .map(get_reject_message),
+            );
+            // Nothing is charged, so nothing is withheld as an allowance and the
+            // whole (empty) payment is left to be refunded with the response.
+            let context = contexts.get(&CallbackId::from(0)).unwrap();
+            assert_eq!(
+                context.request.payment,
+                Cycles::zero(),
+                "a {label} outcall on {free:?} charged something out of an empty payment",
+            );
+            assert_eq!(
+                context.refund_status.per_replica_allowance,
+                Cycles::zero(),
+                "a {label} outcall on {free:?} withheld an allowance out of an empty payment",
+            );
+        }
+    }
+}
+
 #[test]
 fn execute_canister_http_request_insufficient_payment() {
     // Under legacy pricing the *full* request fee is charged upfront, not just
@@ -4071,6 +4175,75 @@ fn execute_flexible_canister_http_request_disabled() {
         get_reject_message(test.xnet_messages()[0].clone()),
         "This API is not enabled on this subnet"
     );
+}
+
+#[test]
+fn execute_flexible_canister_http_request_disabled_by_subnet_feature() {
+    /// The configurations in which flexible outcalls would be available if the
+    /// `http_requests` subnet feature were enabled.
+    #[derive(Copy, Clone, Debug)]
+    enum Available {
+        /// The `flexible_http_requests` feature flag is enabled.
+        FeatureFlag,
+        /// The subnet is on a free cost schedule, so pricing is moot.
+        FreeCostSchedule,
+        /// A system subnet charges nothing for outcalls despite a normal
+        /// cost schedule.
+        SystemSubnet,
+    }
+
+    // Just like non-flexible outcalls, flexible outcalls are unavailable on a
+    // subnet where the `http_requests` subnet feature is disabled — in every
+    // configuration that would otherwise offer them.
+    for available in [
+        Available::FeatureFlag,
+        Available::FreeCostSchedule,
+        Available::SystemSubnet,
+    ] {
+        let own_subnet = subnet_test_id(1);
+        let caller_canister = canister_test_id(10);
+        let builder = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_caller(own_subnet, caller_canister);
+        let mut test = match available {
+            Available::FeatureFlag => builder.with_flexible_http_requests_enabled(),
+            Available::FreeCostSchedule => {
+                builder.with_cost_schedule(CanisterCyclesCostSchedule::Free)
+            }
+            Available::SystemSubnet => builder.with_subnet_type(SubnetType::System),
+        }
+        .build();
+        std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+            .subnet_features
+            .http_requests = false;
+
+        let args = flexible_http_request_args(caller_canister);
+        test.inject_call_to_ic00(
+            Method::FlexibleHttpRequest,
+            args.encode(),
+            Cycles::new(1_000_000_000),
+        );
+        test.execute_all();
+
+        // No context is added and the request is rejected specifically because
+        // the feature is not available on this subnet (as opposed to any other
+        // rejection reason).
+        let canister_http_request_contexts = &test
+            .state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+        assert_eq!(
+            canister_http_request_contexts.len(),
+            0,
+            "unexpected context for {available:?}"
+        );
+        assert_eq!(
+            get_reject_message(test.xnet_messages()[0].clone()),
+            "This API is not enabled on this subnet",
+            "unexpected rejection message for {available:?}"
+        );
+    }
 }
 
 fn get_reject_message(response: RequestOrResponse) -> String {

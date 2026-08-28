@@ -112,6 +112,7 @@ impl Registry {
             start_as_nns: false,
             is_halted: false,
             halt_at_cup_height: false,
+            cooling_down: false,
             // We don't support splitting signing subnets (yet). If we are here then we know that
             // the source subnet being split is not signing (see the
             // `validate_subnet_splitting_payload`) method.

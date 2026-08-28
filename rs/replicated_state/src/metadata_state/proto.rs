@@ -52,20 +52,6 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                     }
                 })
                 .collect(),
-            full_topology: item
-                .full_topology
-                .as_ref()
-                .map(|ft| pb_metadata::FullTopology {
-                    subnets: ft
-                        .subnets
-                        .iter()
-                        .map(|(subnet_id, subnet_topology)| pb_metadata::SubnetsEntry {
-                            subnet_id: Some(subnet_id_into_protobuf(*subnet_id)),
-                            subnet_topology: Some(subnet_topology.into()),
-                        })
-                        .collect(),
-                    routing_table: Some(ft.routing_table.as_ref().into()),
-                }),
             default_initial_dkg_subnet_id: item
                 .default_initial_dkg_subnet_id
                 .map(subnet_id_into_protobuf),
@@ -158,28 +144,6 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
-            full_topology: match item.full_topology {
-                None => None,
-                Some(ft) => {
-                    let mut ft_subnets = BTreeMap::new();
-                    for entry in ft.subnets {
-                        ft_subnets.insert(
-                            subnet_id_try_from_option(entry.subnet_id, "FullTopology::subnets::K")?,
-                            try_from_option_field(
-                                entry.subnet_topology,
-                                "FullTopology::subnets::V",
-                            )?,
-                        );
-                    }
-                    let ft_routing_table: Arc<RoutingTable> =
-                        try_from_option_field(ft.routing_table, "FullTopology::routing_table")
-                            .map(Arc::new)?;
-                    Some(FullTopology {
-                        subnets: ft_subnets,
-                        routing_table: ft_routing_table,
-                    })
-                }
-            },
             default_initial_dkg_subnet_id,
             api_boundary_nodes,
         })
@@ -386,6 +350,10 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
             consumed_cycles_by_use_case_as_counters,
+            // Transient, with no corresponding proto field:
+            // `ReplicatedState::new_from_checkpoint` derives it from the canisters
+            // it loads.
+            consumed_cycles_total_including_canisters: NominalCycles::zero(),
             num_canisters: try_from_option_field(
                 item.num_canisters,
                 "SubnetMetrics::num_canisters",
@@ -776,12 +744,8 @@ impl From<&IngressHistoryState> for pb_ingress::IngressHistoryState {
             .collect();
 
         debug_assert_eq!(
-            IngressHistoryState::compute_memory_usage(&item.statuses),
-            item.memory_usage
-        );
-        debug_assert_eq!(
-            IngressHistoryState::compute_state_counts(&item.statuses),
-            item.state_counts
+            IngressHistoryState::compute_stats(&item.statuses),
+            item.stats
         );
 
         pb_ingress::IngressHistoryState {
@@ -816,15 +780,13 @@ impl TryFrom<pb_ingress::IngressHistoryState> for IngressHistoryState {
             pruning_times.insert(time, messages);
         }
 
-        let memory_usage = IngressHistoryState::compute_memory_usage(&statuses);
-        let state_counts = IngressHistoryState::compute_state_counts(&statuses);
+        let stats = IngressHistoryState::compute_stats(&statuses);
 
         Ok(IngressHistoryState {
             statuses: Arc::new(statuses),
             pruning_times: Arc::new(pruning_times),
             next_terminal_time: Time::from_nanos_since_unix_epoch(item.next_terminal_time),
-            memory_usage,
-            state_counts,
+            stats,
         })
     }
 }

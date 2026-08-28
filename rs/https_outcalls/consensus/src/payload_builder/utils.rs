@@ -852,7 +852,7 @@ pub(crate) fn find_flexible_result(
 
     // 3. Even the smallest OK responses exceed the absolute payload limit?
     // Unseen responses could still submit small OK responses, so we account for them.
-    let num_unseen = committee.len().saturating_sub(seen_signers.len());
+    let num_unseen = committee.len().saturating_sub(all_shares.len());
     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
     if ok_candidates.len() >= min_known_ok_needed {
         let smallest_content_sum: usize = ok_candidates
@@ -1039,8 +1039,9 @@ fn fund_flexible_selection<'a>(
 mod tests {
     use super::*;
     use ic_error_types::RejectCode;
+    use ic_test_utilities_types::ids::test_replica_version;
     use ic_types::{
-        CanisterId, NumberOfNodes, ReplicaVersion,
+        CanisterId, NumberOfNodes,
         canister_http::{
             CANDID_OVERHEAD_RESERVE_BYTES, CanisterHttpMethod, CanisterHttpReject,
             MAX_CANISTER_HTTP_RESPONSE_BYTES, MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
@@ -1167,7 +1168,7 @@ mod tests {
             content_hash: CryptoHashOf::new(CryptoHash(vec![])),
             content_size,
             is_reject,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         };
         check_content_size_within_limit(&metadata, callback_id, context)
     }

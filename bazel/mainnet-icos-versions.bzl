@@ -4,6 +4,41 @@ This creates a Bazel repository which exports 'mainnet_icos_versions'. This macr
 called to create one Bazel repository for the entire mainnet ICOS versions list.
 """
 
+load("//bazel:mainnet-artifact-refs.bzl", "check", "icos_record_error")
+
+def _validate(json_path, versions):
+    """Validates every record of the mainnet ICOS revisions JSON.
+
+    This is the choke point for the MAINNET_* dicts generated below: besides the
+    download URLs built from them by //bazel:mainnet-icos-images.bzl, they end up in
+    the `ENV_DEPS__*_IMG_URL` and `ENV_DEPS__*_IMG_HASH` env vars of system tests (see
+    rs/tests/configure_icos.bzl), which the Farm backend uses to fetch and verify
+    images itself -- a path that never passes through repository_ctx.download. The
+    JSON reaches master without human review, so none of it is trusted input.
+
+    Args:
+      json_path: the label of the JSON file, for error messages.
+      versions: the decoded JSON.
+    """
+    if type(versions) != "dict":
+        fail("%s: expected a JSON object, got %r" % (json_path, versions))
+    for variant in sorted(versions.keys()):
+        records = versions[variant]
+        if type(records) != "dict":
+            fail("%s: %s: expected a JSON object, got %r" % (json_path, variant, records))
+        for key in sorted(records.keys()):
+            record = records[key]
+
+            # "subnets" holds one record per subnet id, everything else (e.g.
+            # "latest_release") is a record itself.
+            if key == "subnets":
+                if type(record) != "dict":
+                    fail("%s: %s/subnets: expected a JSON object, got %r" % (json_path, variant, record))
+                for subnet in sorted(record.keys()):
+                    check(icos_record_error(record[subnet]), "%s: %s/subnets/%s" % (json_path, variant, subnet))
+            else:
+                check(icos_record_error(record), "%s: %s/%s" % (json_path, variant, key))
+
 def _mainnet_icos_versions_impl(repository_ctx):
     # The path to the mainnet icos info
     json_path = repository_ctx.attr.path
@@ -11,6 +46,8 @@ def _mainnet_icos_versions_impl(repository_ctx):
 
     # Read and decode mainnet version data
     versions = json.decode(repository_ctx.read(json_path))
+
+    _validate(json_path, versions)
 
     # Create a minimal BUILD.bazel file (Bazel requires it)
     repository_ctx.file("BUILD.bazel", content = "\n")

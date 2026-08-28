@@ -147,6 +147,7 @@ rust_test(
         "//rs/registry/helpers",
         "//rs/registry/proto_data_provider",
         "//rs/registry/transport",
+        "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/types",
         "//rs/universal_canister/lib",
