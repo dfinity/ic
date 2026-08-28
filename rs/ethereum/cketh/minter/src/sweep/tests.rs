@@ -118,6 +118,26 @@ async fn should_sign_and_record_one_authorization_for_every_account() {
 }
 
 #[tokio::test]
+async fn should_reuse_the_recorded_authorization_on_a_later_sweep() {
+    init_state(state_ready_to_sign(&[(account(), usdc())]));
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
+    expect_signing(&mut runtime);
+
+    create_pending_sweeper_requests(&runtime).await;
+    create_pending_sweeper_requests(&runtime).await;
+
+    assert_eq!(
+        recorded_events()
+            .into_iter()
+            .filter(|event| matches!(event, EventType::AuthorizedDepositAddress { .. }))
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
 async fn should_resign_the_authorization_when_the_sweeper_contract_changes() {
     init_state(state_ready_to_sign(&[(account(), usdc())]));
     let mut runtime = mock();
