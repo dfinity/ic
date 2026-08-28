@@ -391,9 +391,9 @@ impl LiveSetup<CkErc20Setup> {
                 EventPayload::SignedSweeperTransaction { .. } => "signed",
                 EventPayload::ReplacedSweeperTransaction { .. } => "replaced",
                 EventPayload::FinalizedSweeperTransaction { .. } => "finalized",
-                EventPayload::AcceptedDeposit { .. } | EventPayload::MintedCkErc20 { .. } => {
-                    "minted"
-                }
+                EventPayload::AcceptedDeposit { .. }
+                | EventPayload::AcceptedErc20Deposit { .. } => "scraped",
+                EventPayload::MintedCkErc20 { .. } => "minted",
                 _ => continue,
             };
             *counts.entry(stage).or_default() += 1;
