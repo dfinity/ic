@@ -1200,6 +1200,23 @@ mod tests {
                 let expected_block = post_split_block(expected_new_subnet_id);
                 let other_block = post_split_block(other_subnet_id);
 
+                // Like a genesis or recovery CUP block, a post-split block is built from registry
+                // CUP contents, and records the same registry version in its DKG summary and in
+                // its validation context.
+                assert_eq!(
+                    expected_block
+                        .payload
+                        .as_ref()
+                        .as_summary()
+                        .dkg
+                        .registry_version,
+                    expected_block.context.registry_version,
+                );
+                assert_eq!(
+                    expected_block.context.registry_version,
+                    SPLITTING_REGISTRY_VERSION,
+                );
+
                 // The DKG transcripts of the post-split block are the ones of the subnet the node
                 // lands on, i.e. their committee is that subnet's membership ...
                 let expected_committee =
