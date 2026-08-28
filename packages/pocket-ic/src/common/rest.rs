@@ -1313,47 +1313,12 @@ pub enum CanisterHttpResponse {
     CanisterHttpReject(CanisterHttpReject),
 }
 
-/// One node's mocked response to a pending canister HTTP outcall, together with the
-/// cycles that node reports having spent on it.
-///
-/// Constructible from a bare [`CanisterHttpResponse`] with `.into()`, which leaves
-/// the spend to PocketIC.
-#[derive(
-    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
-)]
-pub struct MockCanisterHttpNodeResponse {
-    pub response: CanisterHttpResponse,
-    /// The cycles the node reports having spent on the outcall.
-    ///
-    /// `None` lets PocketIC derive the spend with the same pricing machinery a real
-    /// node uses. That derivation includes a term for how long the outcall took,
-    /// which PocketIC measures in process, so set this explicitly to make a test's
-    /// cycles accounting fully deterministic.
-    ///
-    /// Only the pay-as-you-go pricing model looks at the reported spend; the legacy
-    /// pricing model ignores it. Reporting more than the per-replica cycles
-    /// allowance the outcall withheld always fails, since no node could report that.
-    /// Spending most of the allowance risks making the outcall fail with an out-of-cycles
-    /// error, because what the nodes leave unspent is what has to pay for delivering a
-    /// response.
-    pub spent_cycles: Option<u128>,
-}
-
-impl From<CanisterHttpResponse> for MockCanisterHttpNodeResponse {
-    fn from(response: CanisterHttpResponse) -> Self {
-        Self {
-            response,
-            spent_cycles: None,
-        }
-    }
-}
-
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawMockCanisterHttpResponse {
     pub subnet_id: RawSubnetId,
     pub request_id: u64,
-    pub response: MockCanisterHttpNodeResponse,
-    pub additional_responses: Vec<MockCanisterHttpNodeResponse>,
+    pub response: CanisterHttpResponse,
+    pub additional_responses: Vec<CanisterHttpResponse>,
 }
 
 /// Mocked responses to a pending canister HTTP outcall made through the
@@ -1375,7 +1340,7 @@ pub struct RawMockCanisterHttpResponse {
 ///   delivers its designated node's response);
 /// - `SysTransient` and "Out of cycles" if what the nodes left unspent of their
 ///   per-replica cycles allowances no longer covers putting a response into a
-///   block, see [`MockCanisterHttpNodeResponse::spent_cycles`];
+///   block;
 /// - `SysTransient` and "Canister http request timed out" once the outcall is
 ///   older than its 60 second timeout.
 #[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -1388,7 +1353,7 @@ pub struct MockCanisterHttpResponse {
     ///
     /// With this response alone, all nodes agree, so a fully replicated outcall
     /// delivers it (see [`CanisterHttpReplication::FullyReplicated`]).
-    pub response: MockCanisterHttpNodeResponse,
+    pub response: CanisterHttpResponse,
     /// The responses of the remaining nodes of the subnet. Either empty — then
     /// `response` is used for every node — or exactly one short of the subnet size,
     /// so that together with `response` there is one response per node.
@@ -1402,7 +1367,7 @@ pub struct MockCanisterHttpResponse {
     /// node that is — so differing responses merely make the delivered one
     /// unpredictable. Leave this empty unless the disagreement is what is under
     /// test.
-    pub additional_responses: Vec<MockCanisterHttpNodeResponse>,
+    pub additional_responses: Vec<CanisterHttpResponse>,
 }
 
 impl From<RawMockCanisterHttpResponse> for MockCanisterHttpResponse {
@@ -1435,7 +1400,7 @@ impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
 pub struct RawMockFlexibleCanisterHttpResponse {
     pub subnet_id: RawSubnetId,
     pub request_id: u64,
-    pub responses: Vec<MockCanisterHttpNodeResponse>,
+    pub responses: Vec<CanisterHttpResponse>,
 }
 
 /// Mocked responses to a pending *flexible* canister HTTP outcall, i.e. one made
@@ -1467,14 +1432,13 @@ pub struct MockFlexibleCanisterHttpResponse {
     ///   `responses_too_large` error (each response may still be within the 2 MB
     ///   cap on a single one);
     /// - if what the nodes left unspent of their per-replica cycles allowances no
-    ///   longer covers putting a response into a block, an `out_of_cycles`,
-    ///   see [`MockCanisterHttpNodeResponse::spent_cycles`];
+    ///   longer covers putting a response into a block, an `out_of_cycles`;
     /// - anything else leaves the outcall pending, so that advancing the time past
     ///   its timeout delivers a `timeout` error.
     ///
     /// All of these are replies to the calling canister, not rejections of its
     /// call.
-    pub responses: Vec<MockCanisterHttpNodeResponse>,
+    pub responses: Vec<CanisterHttpResponse>,
 }
 
 impl From<RawMockFlexibleCanisterHttpResponse> for MockFlexibleCanisterHttpResponse {

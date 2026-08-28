@@ -467,8 +467,7 @@ fn mock_fetch_txids_responses(env: &PocketIc) {
             status: 200,
             headers: vec![],
             body,
-        })
-        .into(),
+        }),
         additional_responses: vec![],
     });
 
@@ -492,8 +491,7 @@ fn mock_fetch_txids_responses(env: &PocketIc) {
             status: 200,
             headers: vec![],
             body: body.clone(),
-        })
-        .into(),
+        }),
         // Fill additional responses with different headers to test if the transform
         // function does its job by clearing the headers.
         additional_responses: (1..13)
@@ -506,7 +504,6 @@ fn mock_fetch_txids_responses(env: &PocketIc) {
                     }],
                     body: body.clone(),
                 })
-                .into()
             })
             .collect(),
     });
@@ -581,8 +578,7 @@ fn test_check_transaction_error() {
                 status: 500,
                 headers: vec![],
                 body: vec![],
-            })
-            .into(),
+            }),
             additional_responses: vec![],
         });
     let result = setup
@@ -622,8 +618,7 @@ fn test_check_transaction_error() {
                 status: 404,
                 headers: vec![],
                 body: vec![],
-            })
-            .into(),
+            }),
             additional_responses: vec![],
         });
     let result = setup
@@ -662,8 +657,7 @@ fn test_check_transaction_error() {
             response: CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
                 reject_code: 2, //SYS_TRANSIENT
                 message: "Failed to directly connect".to_string(),
-            })
-            .into(),
+            }),
             additional_responses: vec![],
         });
     let result = setup
@@ -703,8 +697,7 @@ fn test_check_transaction_error() {
                 status: 200,
                 headers: vec![],
                 body: vec![2, 0, 0, 0],
-            })
-            .into(),
+            }),
             additional_responses: vec![],
         });
     let result = setup

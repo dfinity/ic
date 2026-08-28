@@ -289,7 +289,6 @@ pub enum PocketIcError {
     TooManyMockCanisterHttpResponses((usize, usize)),
     InvalidRejectCode(u64),
     CanisterHttpRejectMessageTooLong((usize, usize)),
-    CanisterHttpSpentCyclesTooLarge((u128, u128)),
     SettingTimeIntoPast((u64, u64)),
     Forbidden(String),
     BlockmakerNotFound(NodeId),
@@ -374,12 +373,6 @@ impl std::fmt::Debug for OpOut {
                 write!(
                     f,
                     "CanisterHttpRejectMessageTooLong(actual={actual},max={max})"
-                )
-            }
-            OpOut::Error(PocketIcError::CanisterHttpSpentCyclesTooLarge((actual, max))) => {
-                write!(
-                    f,
-                    "CanisterHttpSpentCyclesTooLarge(actual={actual},max={max})"
                 )
             }
             OpOut::Error(PocketIcError::SettingTimeIntoPast((current, set))) => {

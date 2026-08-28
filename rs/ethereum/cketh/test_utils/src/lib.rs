@@ -941,8 +941,7 @@ fn fail_as_timed_out(env: &PocketIc, request: &CanisterHttpRequest) {
         response: CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
             reject_code: REJECT_CODE_SYS_TRANSIENT,
             message: "Canister http request timed out".to_string(),
-        })
-        .into(),
+        }),
         additional_responses: vec![],
     });
 }
@@ -955,8 +954,7 @@ fn reply_500(env: &PocketIc, request: &CanisterHttpRequest) {
             status: 500,
             headers: vec![],
             body: vec![],
-        })
-        .into(),
+        }),
         additional_responses: vec![],
     });
 }

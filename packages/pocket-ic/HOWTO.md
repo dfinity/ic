@@ -367,13 +367,11 @@ e.g., 13 for a regular application subnet.
 
 ```rust
     let response = |i: u64| {
-        MockCanisterHttpNodeResponse::from(CanisterHttpResponse::CanisterHttpReply(
-            CanisterHttpReply {
-                status: 200,
-                headers: vec![],
-                body: format!("hello{}", i / 2).as_bytes().to_vec(),
-            },
-        ))
+        CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: format!("hello{}", i / 2).as_bytes().to_vec(),
+        })
     };
     let mock_canister_http_response = MockCanisterHttpResponse {
         subnet_id: canister_http_request.subnet_id,
@@ -442,13 +440,11 @@ of its committee can be read, and its responses are mocked with `PocketIc::mock_
     };
 
     let http_reply = |body: &[u8]| {
-        MockCanisterHttpNodeResponse::from(CanisterHttpResponse::CanisterHttpReply(
-            CanisterHttpReply {
-                status: 200,
-                headers: vec![],
-                body: body.to_vec(),
-            },
-        ))
+        CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: body.to_vec(),
+        })
     };
     pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
         subnet_id: canister_http_request.subnet_id,
@@ -491,25 +487,12 @@ Note that a flexible outcall never rejects the calling canister's call: every ou
 errors, is delivered as a `flexible_http_request_result` reply. Only a synchronous failure (invalid arguments,
 insufficient cycles attached, or the endpoint not being enabled on the subnet) rejects the call.
 
-By default PocketIC derives what each node reports having spent on a mocked outcall with the same pricing
-machinery a real node uses. That derivation includes a term for how long the outcall took, which PocketIC
-measures in process, so it is not bit-exactly reproducible. Set `MockCanisterHttpNodeResponse::spent_cycles` to
-report an exact spend instead, which makes a test's cycles accounting fully deterministic:
-
-```rust
-    let http_reply = |body: &[u8], spent_cycles: u128| MockCanisterHttpNodeResponse {
-        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-            status: 200,
-            headers: vec![],
-            body: body.to_vec(),
-        }),
-        spent_cycles: Some(spent_cycles),
-    };
-```
-
-Reporting more than the per-replica cycles allowance the outcall withheld fails, since no node could report
-that. Only the pay-as-you-go pricing model looks at the reported spend at all; the legacy pricing model ignores
-it.
+*Note.* PocketIC derives what each node reports having spent on a mocked outcall with the same pricing machinery
+a real node uses, except that it charges no response time: what a real node is charged for the time an outcall
+took is wall-clock time, which would make the cost of a mocked outcall depend on how fast and how loaded the
+machine running the test is. What a mocked outcall costs therefore follows from the size of the mocked response,
+and is reproducible. Only the pay-as-you-go pricing model charges for what the nodes spent at all; the legacy
+pricing model charges its whole fee up front instead.
 
 ### Live mode
 
