@@ -25,24 +25,22 @@
 //! (`ANVIL_BIN`, `SOLC_BIN`); see BUILD.bazel.
 
 use assert_matches::assert_matches;
-use candid::{Nat, Principal};
+use candid::Principal;
 use ic_cketh_minter::balance_scan::batcher::{
     BalanceOfCall, decode_balance_batch, encode_balance_batch,
 };
 use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
-use ic_cketh_minter::endpoints::events::EventPayload;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{
     Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
 };
-use ic_cketh_test_utils::ckerc20::{CkErc20Setup, Erc20Token};
-use ic_cketh_test_utils::live::{Holding, LiveSetup};
+use ic_cketh_test_utils::ckerc20::Erc20Token;
+use ic_cketh_test_utils::live::{Holding, LiveSetup, contract_address};
 use ic_cketh_test_utils::{MINTER_ADDRESS, SWEEPER_ADDRESS};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
-use std::collections::{BTreeMap, BTreeSet};
-use std::str::FromStr;
+use std::collections::BTreeSet;
 
 #[test]
 fn should_read_erc20_balances_across_tokens_and_holders() {
@@ -390,7 +388,7 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
     }
 
     // One sweep per token, and nothing more.
-    let sweeps = await_sweeps(&setup, &sweeper, 2);
+    let sweeps = setup.await_sweeps(&sweeper, 2);
     for sweep in &sweeps {
         assert_eq!(
             sweep.transaction_type, 4,
@@ -451,12 +449,11 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
             .iter()
             .find(|(token, _)| token.contract.address == deposit.token.contract.address)
             .expect("every deposited token has a ledger");
-        await_credited(
-            &setup,
-            *ledger_id,
-            account(deposit.owner, deposit.subaccount),
-            deposit.amount,
-        );
+        let account = Account {
+            owner: deposit.owner,
+            subaccount: Some(deposit.subaccount),
+        };
+        setup.await_credited(*ledger_id, account, deposit.amount);
     }
 }
 
@@ -468,13 +465,6 @@ struct Deposit<'a> {
     amount: u128,
     address: Address,
 }
-
-/// A budget, not a cost: the sweep path crosses the enqueue, send, and finalization timers, and
-/// driving stops the moment the expected transactions are on chain.
-const SWEEP_TICKS: u32 = 8;
-
-/// The mint follows the sweep through the log scrape, one more timer downstream.
-const CREDIT_TICKS: u32 = 6;
 
 /// Prints what each sweep cost next to `deposit_from_cex_demo`'s measurements for the same delegate,
 /// so a change in either shows up as a difference rather than having to be recomputed by hand.
@@ -494,89 +484,6 @@ fn report_gas(sweeps: &[SentTransaction], deposits_per_sweep: u64) {
             DEMO_TEN_DEPOSITS / 10,
         );
     }
-}
-
-/// Waits for the sweeper address to send exactly `expected` transactions, returning what each did.
-/// An extra sweep is caught rather than ignored: sending more than `expected` fails immediately.
-fn await_sweeps(
-    setup: &LiveSetup<CkErc20Setup>,
-    sweeper: &Address,
-    expected: u64,
-) -> Vec<SentTransaction> {
-    setup.drive_until(
-        SWEEP_TICKS,
-        |setup| {
-            format!(
-                "the sweeper {sweeper} sent {} of {expected} transactions (stages: {})",
-                setup.anvil().transaction_count(sweeper),
-                sweep_stages(setup),
-            )
-        },
-        |setup| {
-            let sent = setup.anvil().transaction_count(sweeper);
-            assert!(
-                sent <= expected,
-                "the sweeper sent {sent} transactions, more than the {expected} expected"
-            );
-            sent == expected
-        },
-    );
-    setup.anvil().transactions_of(sweeper)
-}
-
-/// How far the sweep pipeline has got, counted off the minter's audit events. Unlike its canister
-/// log, which is a rolling buffer the EVM RPC canister's tracing evicts within minutes, the event
-/// log is durable — so this says which stage stalled even late in a run.
-fn sweep_stages(setup: &LiveSetup<CkErc20Setup>) -> String {
-    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
-    for event in setup.minter_events() {
-        let stage = match event.payload {
-            EventPayload::AutomaticDepositReceived { .. } => "detected",
-            EventPayload::AcceptedSweepRequest { .. } => "accepted",
-            EventPayload::CreatedSweeperTransaction { .. } => "created",
-            EventPayload::SignedSweeperTransaction { .. } => "signed",
-            EventPayload::ReplacedSweeperTransaction { .. } => "replaced",
-            EventPayload::FinalizedSweeperTransaction { .. } => "finalized",
-            EventPayload::AcceptedDeposit { .. } | EventPayload::MintedCkErc20 { .. } => "minted",
-            _ => continue,
-        };
-        *counts.entry(stage).or_default() += 1;
-    }
-    format!("{counts:?}")
-}
-
-/// Waits until `account` holds exactly `expected` on `ledger_id`. The mint follows the sweep's own
-/// finalized helper event through the minter's unchanged deposit pipeline, so this is what proves
-/// the whole chain ran.
-fn await_credited(
-    setup: &LiveSetup<CkErc20Setup>,
-    ledger_id: Principal,
-    account: Account,
-    expected: u128,
-) {
-    let credited = Nat::from(expected);
-    setup.drive_until(
-        CREDIT_TICKS,
-        |setup| {
-            format!(
-                "{account:?} was credited {} instead of {expected} (stages: {})",
-                setup.balance_of_ledger(ledger_id, account),
-                sweep_stages(setup),
-            )
-        },
-        |setup| setup.balance_of_ledger(ledger_id, account) == credited,
-    );
-}
-
-fn account(owner: Principal, subaccount: [u8; 32]) -> Account {
-    Account {
-        owner,
-        subaccount: Some(subaccount),
-    }
-}
-
-fn contract_address(token: &Erc20Token) -> Address {
-    Address::from_str(&token.contract.address).unwrap()
 }
 
 fn holder_at(index: u64) -> Address {

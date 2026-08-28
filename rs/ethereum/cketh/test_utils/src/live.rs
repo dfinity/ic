@@ -47,7 +47,7 @@
 
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_cketh_minter::endpoints::events::Event;
+use ic_cketh_minter::endpoints::events::{Event, EventPayload};
 use ic_cketh_minter::endpoints::{
     CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
     DepositStatus,
@@ -59,13 +59,14 @@ use ic_cketh_minter::{BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_I
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::PocketIc;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::anvil::{
-    Anvil, DEV_ACCOUNT, SweepContracts, address_from_hex, deploy_deposit_helper, deploy_mock_erc20,
-    deploy_sweep_contracts, deposit_eth, erc20_balance_slot, u256_be,
+    Anvil, DEV_ACCOUNT, SentTransaction, SweepContracts, address_from_hex, deploy_deposit_helper,
+    deploy_mock_erc20, deploy_sweep_contracts, deposit_eth, erc20_balance_slot, u256_be,
 };
 use crate::ckerc20::{CkErc20Setup, Erc20Token};
 use crate::{CkEthSetup, EthereumBackend, MINTER_ADDRESS, minter_wasm, switch_to_live};
@@ -122,6 +123,13 @@ const SCAN_TICK: Duration = Duration::from_secs(BALANCE_SCAN_INTERVAL.as_secs() 
 /// the spares cover a tick lost to an outcall the jump timed out.
 const SCAN_TICKS: u32 = 4;
 
+/// A budget, not a cost: the sweep path crosses the enqueue, send, and finalization timers, and
+/// driving stops the moment the expected transactions are on chain.
+const SWEEP_TICKS: u32 = 8;
+
+/// The mint follows the sweep through the log scrape, one more timer downstream.
+const CREDIT_TICKS: u32 = 6;
+
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
 /// address, so the scan reads a real balance for that (address, token) pair.
 pub struct Holding<'a> {
@@ -132,7 +140,7 @@ pub struct Holding<'a> {
 
 /// `token.contract.address`, parsed: every canister and anvil call the harness makes needs an
 /// [`Address`], not the raw string the orchestrator registered the token with.
-fn contract_address(token: &Erc20Token) -> Address {
+pub fn contract_address(token: &Erc20Token) -> Address {
     Address::from_str(&token.contract.address)
         .expect("BUG: registered token has an invalid contract address")
 }
@@ -319,6 +327,72 @@ impl LiveSetup<CkErc20Setup> {
             },
         );
         scanned.expect("drive_until_with returns only once observe held")
+    }
+
+    /// Waits for the sweeper address to send exactly `expected` transactions, returning what each
+    /// did. An extra sweep is caught rather than ignored: sending more than `expected` fails
+    /// immediately.
+    pub fn await_sweeps(&self, sweeper: &Address, expected: u64) -> Vec<SentTransaction> {
+        self.drive_until(
+            SWEEP_TICKS,
+            |setup| {
+                format!(
+                    "the sweeper {sweeper} sent {} of {expected} transactions (stages: {})",
+                    setup.anvil.transaction_count(sweeper),
+                    setup.sweep_stages(),
+                )
+            },
+            |setup| {
+                let sent = setup.anvil.transaction_count(sweeper);
+                assert!(
+                    sent <= expected,
+                    "the sweeper sent {sent} transactions, more than the {expected} expected"
+                );
+                sent == expected
+            },
+        );
+        self.anvil.transactions_of(sweeper)
+    }
+
+    /// Waits until `account` holds exactly `expected` on `ledger_id`. The mint follows the sweep's
+    /// own finalized helper event through the minter's unchanged deposit pipeline, so this is what
+    /// proves the whole chain ran.
+    pub fn await_credited(&self, ledger_id: Principal, account: Account, expected: u128) {
+        let credited = Nat::from(expected);
+        self.drive_until(
+            CREDIT_TICKS,
+            |setup| {
+                format!(
+                    "{account:?} was credited {} instead of {expected} (stages: {})",
+                    setup.balance_of_ledger(ledger_id, account),
+                    setup.sweep_stages(),
+                )
+            },
+            |setup| setup.balance_of_ledger(ledger_id, account) == credited,
+        );
+    }
+
+    /// How far the sweep pipeline has got, counted off the minter's audit events. Unlike its
+    /// canister log, which is a rolling buffer the EVM RPC canister's tracing evicts within
+    /// minutes, the event log is durable — so this says which stage stalled even late in a run.
+    fn sweep_stages(&self) -> String {
+        let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+        for event in self.minter_events() {
+            let stage = match event.payload {
+                EventPayload::AutomaticDepositReceived { .. } => "detected",
+                EventPayload::AcceptedSweepRequest { .. } => "accepted",
+                EventPayload::CreatedSweeperTransaction { .. } => "created",
+                EventPayload::SignedSweeperTransaction { .. } => "signed",
+                EventPayload::ReplacedSweeperTransaction { .. } => "replaced",
+                EventPayload::FinalizedSweeperTransaction { .. } => "finalized",
+                EventPayload::AcceptedDeposit { .. } | EventPayload::MintedCkErc20 { .. } => {
+                    "minted"
+                }
+                _ => continue,
+            };
+            *counts.entry(stage).or_default() += 1;
+        }
+        format!("{counts:?}")
     }
 }
 
