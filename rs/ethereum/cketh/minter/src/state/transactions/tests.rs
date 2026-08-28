@@ -2976,7 +2976,7 @@ mod sweep_lane {
     use crate::numeric::{TransactionCount, TransactionNonce, Wei, WeiPerGas};
     use crate::state::transactions::{
         AuthorizedSweepItem, CreateSweepTransactionError, PipelineRequest,
-        ResubmitTransactionError, SweepId, SweepRequest, TransactionPipeline,
+        ResubmitTransactionError, SweepId, SweepRequest, TransactionPipeline, sweep_gas_limit,
     };
 
     const SWEEP_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
@@ -3074,6 +3074,41 @@ mod sweep_lane {
             .expect("BUG: the fixture allowance covers the fixture fee");
         pipeline.record_created_transaction(id, tx);
         pipeline.created_tx.get_alt(&id).unwrap().as_ref().clone()
+    }
+
+    #[test]
+    fn should_scale_the_sweep_gas_limit_with_the_distinct_addresses_walked() {
+        const MEASURED_TEN_DEPOSIT_SWEEP_GAS: u128 = 609_431;
+
+        let items_for = |addresses: u8| -> Vec<AuthorizedSweepItem> {
+            (1..=addresses).map(|seed| sweep_item(seed, None)).collect()
+        };
+
+        assert_eq!(sweep_gas_limit(&items_for(1)), GasAmount::new(225_000));
+        assert_eq!(sweep_gas_limit(&items_for(10)), GasAmount::new(1_710_000));
+        assert!(sweep_gas_limit(&items_for(10)) > GasAmount::new(MEASURED_TEN_DEPOSIT_SWEEP_GAS));
+
+        let one_address_ten_times: Vec<_> = (0..10).map(|_| sweep_item(1, None)).collect();
+        assert_eq!(
+            sweep_gas_limit(&one_address_ten_times),
+            sweep_gas_limit(&items_for(1))
+        );
+    }
+
+    #[test]
+    fn should_price_and_create_a_sweep_transaction_with_the_same_gas_limit() {
+        let request = delegating_sweep_request(1);
+        let transaction = request
+            .create_transaction(
+                TransactionNonce::ZERO,
+                gas_fee_estimate(),
+                request.gas_limit(),
+                EthereumNetwork::Sepolia,
+            )
+            .expect("BUG: the fixture allowance covers the fixture fee");
+
+        assert_eq!(request.gas_limit(), sweep_gas_limit(&request.items));
+        assert_eq!(transaction.gas_limit(), sweep_gas_limit(&request.items));
     }
 
     #[test]
