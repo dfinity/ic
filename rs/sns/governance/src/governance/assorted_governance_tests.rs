@@ -2,17 +2,15 @@
 //! here, so that Bazel does not recompile the whole production crate each time the tests are run.
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
+use super::*;
 use crate::{
     extensions::{ExtensionSpec, ExtensionType, ExtensionVersion},
-    governance::{
-        test_helpers::{
-            A_MOTION_PROPOSAL, A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, DoNothingLedger,
-            TEST_ARCHIVES_CANISTER_IDS, TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID,
-            TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
-            TEST_SWAP_CANISTER_ID, basic_governance_proto, canister_status_for_test,
-            canister_status_from_management_canister_for_test,
-        },
-        *,
+    governance::test_helpers::{
+        A_MOTION_PROPOSAL, A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, DoNothingLedger,
+        TEST_ARCHIVES_CANISTER_IDS, TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID,
+        TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
+        TEST_SWAP_CANISTER_ID, basic_governance_proto, canister_status_for_test,
+        canister_status_from_management_canister_for_test,
     },
     pb::v1::{
         Account as AccountProto, Motion, NervousSystemFunction, NeuronPermissionType, ProposalData,
