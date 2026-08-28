@@ -22,7 +22,6 @@ use ic_types::{
 };
 use prometheus::{HistogramVec, IntCounterVec, IntGauge, IntGaugeVec};
 use std::{
-    borrow::Cow,
     collections::{HashMap, HashSet},
     sync::{
         Arc,
@@ -231,12 +230,14 @@ impl DkgKeyManager {
         // last seen height.
         let summary_block = cache.summary_block();
         if self.last_dkg_summary_height < Some(summary_block.height) {
-            let summary = if let Some(scheduled) =
-                subnet_splitting::is_split_scheduled(&summary_block)
-            {
-                // If a subnet split is in progress, we can skip the `Scheduled` summary's
-                // transcripts (as the interval is skipped) and instead load the post-split one's.
-                match self.get_post_split_summary(&summary_block, scheduled) {
+            let summary = &summary_block.payload.as_ref().as_summary().dkg;
+
+            // If a subnet split is in progress, we load the post-split summary's transcripts in
+            // addition to the regular summary's below: they are needed to sign the post-split
+            // CUP shares.
+            let post_split_summary = match subnet_splitting::is_split_scheduled(&summary_block) {
+                None => None,
+                Some(scheduled) => match self.get_post_split_summary(&summary_block, scheduled) {
                     Ok(post_split_summary) => {
                         info!(
                             self.logger,
@@ -244,21 +245,26 @@ impl DkgKeyManager {
                             post_split_summary.height
                         );
 
-                        Cow::Owned(post_split_summary)
+                        Some(post_split_summary)
                     }
                     Err(err) => {
-                        error!(
+                        warn!(
+                            every_n_seconds => 5,
                             self.logger,
                             "Couldn't get the next DKG summary for the new subnet after the split: {err:?}"
                         );
                         return;
                     }
-                }
-            } else {
-                Cow::Borrowed(&summary_block.payload.as_ref().as_summary().dkg)
+                },
             };
 
-            self.update_dkg_metrics(&summary);
+            let mut summaries_to_load = vec![summary];
+            if let Some(post_split_summary) = &post_split_summary {
+                summaries_to_load.push(post_split_summary);
+            }
+
+            self.update_dkg_metrics(summary);
+
             // Note that the order of these two calls is critical. We remove DKG keys that
             // are no longer relevant by telling the CSP which transcripts are still
             // relevant. However, over time, we may load new transcripts that are relevant.
@@ -273,12 +279,19 @@ impl DkgKeyManager {
             //
             // Note that the removal we trigger here still runs in parallel with the loads
             // below, so it is only harmless as long as the set of transcripts it retains is a
-            // superset of the ones we are about to load. This is why we hand `summary` to
-            // `delete_inactive_keys`: for a regular summary it is redundant, but the post-split
-            // summary is computed locally and thus invisible to the removal otherwise.
-            self.delete_inactive_keys(pool_reader, &summary);
-            self.load_transcripts_from_summary(&summary);
-            self.last_dkg_summary_height = Some(summary.height);
+            // superset of the ones we are about to load. This is why we hand `summaries_to_load`
+            // to `delete_inactive_keys`: for a regular summary it is redundant, but the
+            // post-split summary is computed locally and thus invisible to the removal
+            // otherwise.
+            self.delete_inactive_keys(pool_reader, &summaries_to_load);
+            for summary in &summaries_to_load {
+                self.load_transcripts_from_summary(summary);
+            }
+
+            // Even though we might have actually loaded a summary with higher height (the
+            // post-split summary), we still drive the state machine consistently with the if-guard
+            // above.
+            self.last_dkg_summary_height = Some(summary_block.height);
         }
     }
 
@@ -476,9 +489,13 @@ impl DkgKeyManager {
     /// Ask the CSP to drop DKG key material related to transcripts that are no
     /// longer relevant.
     ///
-    /// The transcripts of `summary_to_load`, i.e. the summary whose transcripts the caller is
-    /// about to load, are always retained. See the comment at the call site.
-    fn delete_inactive_keys(&mut self, pool_reader: &PoolReader<'_>, summary_to_load: &DkgSummary) {
+    /// The transcripts of `summaries_to_load`, i.e. the summaries whose transcripts the caller
+    /// is about to load, are always retained.
+    fn delete_inactive_keys(
+        &mut self,
+        pool_reader: &PoolReader<'_>,
+        summaries_to_load: &[&DkgSummary],
+    ) {
         if let Some(handle) = self.pending_key_removal.take() {
             // To make sure we delete all keys sequentially, we check if another key removal
             // is ongoing and if yes, we block until this thread is done. This
@@ -518,18 +535,15 @@ impl DkgKeyManager {
             next_summary_block = pool_reader.get_finalized_block(next_summary_height);
         }
 
-        // The removal below runs concurrently with the loading of `summary_to_load`'s
-        // transcripts, so they must be part of the retain set. For a regular summary this is a
-        // no-op, as it is the latest finalized summary and hence already covered by the walk
-        // above. The post-split summary however is computed locally from the registry and never
-        // enters the pool, so this is the only place where it can be picked up.
-        transcripts_to_retain.extend(
-            summary_to_load
+        // The removal below runs concurrently with the loading of the `summaries_to_load`'s
+        // transcripts, so they must be part of the retain set.
+        transcripts_to_retain.extend(summaries_to_load.iter().flat_map(|summary| {
+            summary
                 .current_transcripts()
                 .values()
-                .chain(summary_to_load.next_transcripts().values())
-                .cloned(),
-        );
+                .chain(summary.next_transcripts().values())
+                .cloned()
+        }));
 
         let crypto = self.crypto.clone();
         let logger = self.logger.clone();
@@ -778,13 +792,15 @@ mod tests {
     const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
 
     /// Verifies that when a subnet split is in progress, the key manager loads the transcripts from
-    /// the post-split DKG summary instead of the current summary's.
+    /// the post-split DKG summary in addition to the current summary's.
     #[rstest]
     // Run the test twice, once with the local node in the source subnet and once with it in the
     // destination subnet.
     #[case::source(true)]
     #[case::destination(false)]
-    fn test_subnet_splitting_loads_post_split_transcripts_instead(#[case] is_source_subnet: bool) {
+    fn test_subnet_splitting_loads_post_split_transcripts_in_addition(
+        #[case] is_source_subnet: bool,
+    ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let source_subnet_id = subnet_test_id(1);
@@ -890,9 +906,9 @@ mod tests {
                 let mut splitting_summary = splitting_block.payload.as_ref().as_summary().clone();
                 // The current transcripts of this first summary are still the initial ones taken
                 // from the registry, which are also the ones the key manager loads from the genesis
-                // CUP. Give them a `NiDkgId` of their own, so that we can tell whether the key
-                // manager loaded this summary or the post-split one. The next transcripts are
-                // locally created, so their ids are distinct already.
+                // CUP. Give them a `NiDkgId` of their own, so that we can tell apart which of the
+                // summaries the key manager loaded. The next transcripts are locally created, so
+                // their ids are distinct already.
                 let current_transcripts = splitting_summary
                     .dkg
                     .current_transcripts()
@@ -969,41 +985,33 @@ mod tests {
                 );
                 key_manager.sync();
 
-                // The key manager should skip the transcripts from the splitting summary, but
-                // instead load the transcripts from the post split one, which is expected to be one
-                // interval later.
-                assert_eq!(
-                    key_manager.last_dkg_summary_height,
-                    Some(splitting_height + (dkg_interval_len + 1).into())
-                );
-                for (ids, expected_loaded) in [
-                    (genesis_ids, true),
-                    (splitting_ids, false),
-                    (post_split_ids.clone(), true),
-                ] {
+                // The key manager should set its last seen summary height to the splitting one
+                assert_eq!(key_manager.last_dkg_summary_height, Some(splitting_height));
+
+                // The key manager should load the transcripts from the splitting summary as
+                // usual, and additionally the transcripts from the post-split one.
+                for ids in [&genesis_ids, &splitting_ids, &post_split_ids] {
                     for id in ids {
-                        assert_eq!(
-                            csp.loaded_transcripts.read().unwrap().contains(&id),
-                            expected_loaded,
-                            "Transcript {} should {}have been loaded",
-                            dkg_id_log_msg(&id),
-                            if expected_loaded { "" } else { "not " }
+                        assert!(
+                            csp.loaded_transcripts.read().unwrap().contains(id),
+                            "Transcript {} should have been loaded",
+                            dkg_id_log_msg(id),
                         );
                     }
                 }
 
-                // The key removal runs in parallel with the loading, so the post-split
-                // transcripts must be retained as well, otherwise the keys we just loaded could
-                // be deleted right away.
+                // The key removal runs in parallel with the loading, so the transcripts of both
+                // loaded summaries must be retained as well, otherwise the keys we just loaded
+                // could be deleted right away.
                 let retained_transcripts = csp.retained_transcripts.read().unwrap();
                 let last_retained = retained_transcripts
                     .last()
                     .expect("The key manager should have asked for a key removal");
-                for id in post_split_ids {
+                for id in splitting_ids.iter().chain(post_split_ids.iter()) {
                     assert!(
-                        last_retained.contains(&id),
+                        last_retained.contains(id),
                         "Transcript {} should have been retained",
-                        dkg_id_log_msg(&id),
+                        dkg_id_log_msg(id),
                     );
                 }
             });
