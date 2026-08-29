@@ -71,8 +71,11 @@ impl RandomBeaconMaker {
                         .get_random_beacon_shares(next_height)
                         .any(|s| s.signature.signer == my_node_id) =>
             {
-                let content =
-                    RandomBeaconContent::new(next_height, ic_types::crypto::crypto_hash(&beacon));
+                let content = RandomBeaconContent::new(
+                    next_height,
+                    ic_types::crypto::crypto_hash(&beacon),
+                    self.replica_config.replica_version.clone(),
+                );
                 // One might wonder whether it is appropriate to use the
                 // dkg_id from the start_block at h to generate the
                 // random beacon at height h. The reason this is
@@ -105,7 +108,7 @@ impl RandomBeaconMaker {
 mod tests {
     //! BeaconMaker unit tests
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
 
@@ -118,7 +121,7 @@ mod tests {
                 replica_config,
                 crypto,
                 ..
-            } = dependencies(pool_config, 1);
+            } = DependenciesBuilder::new(pool_config, 1).build();
 
             let beacon_maker =
                 RandomBeaconMaker::new(replica_config, membership, crypto, no_op_logger());

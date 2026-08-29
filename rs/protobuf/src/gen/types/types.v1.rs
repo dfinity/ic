@@ -381,7 +381,7 @@ pub struct PostSplitArgs {
     #[prost(message, optional, tag = "1")]
     pub new_subnet_id: ::core::option::Option<SubnetId>,
 }
-/// next id: 16
+/// next id: 17
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Summary {
     #[prost(uint64, tag = "1")]
@@ -402,6 +402,15 @@ pub struct Summary {
     pub current_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
     #[prost(message, repeated, tag = "12")]
     pub next_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
+    /// Set by replica versions that no longer maintain `transcripts_for_remote_subnets` (field 10).
+    ///
+    /// When set, field 10 must be ignored entirely, including when hashing the summary. This is what
+    /// allows the field to be removed without changing the hash of a summary: replica versions that
+    /// still maintain the field and versions that have dropped it derive the same hash from the same
+    /// wire bytes, because both read this marker. `repeated` fields cannot express the difference
+    /// between "absent" and "empty" on the wire, hence the separate marker.
+    #[prost(bool, tag = "16")]
+    pub transcripts_for_remote_subnets_removed: bool,
     #[prost(oneof = "summary::SubnetSplittingStatus", tags = "13, 14, 15")]
     pub subnet_splitting_status: ::core::option::Option<summary::SubnetSplittingStatus>,
 }
@@ -569,8 +578,6 @@ pub struct CanisterHttpRequest {
 pub struct CanisterHttpResponse {
     #[prost(uint64, tag = "1")]
     pub id: u64,
-    #[prost(message, optional, tag = "4")]
-    pub canister_id: ::core::option::Option<CanisterId>,
     #[prost(message, optional, tag = "3")]
     pub content: ::core::option::Option<CanisterHttpResponseContent>,
 }
@@ -647,6 +654,17 @@ pub struct CanisterHttpResponseDivergence {
     #[prost(message, repeated, tag = "1")]
     pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpOutOfCycles {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    #[prost(message, optional, tag = "3")]
+    pub min_cost: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "4")]
+    pub unspent_allowance: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FlexibleCanisterHttpResponseWithProof {
     #[prost(message, optional, tag = "1")]
@@ -662,6 +680,8 @@ pub struct FlexibleCanisterHttpResponses {
     pub responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
     #[prost(message, optional, tag = "3")]
     pub initial_spent: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(message, repeated, tag = "4")]
+    pub extra_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FlexibleCanisterHttpTimeout {}
@@ -680,12 +700,26 @@ pub struct FlexibleCanisterHttpTooManyRejects {
     pub reject_responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
     #[prost(message, optional, tag = "2")]
     pub initial_spent: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(message, repeated, tag = "3")]
+    pub extra_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpOutOfCycles {
+    #[prost(message, repeated, tag = "1")]
+    pub all_seen_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    #[prost(message, optional, tag = "2")]
+    pub min_cost: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "3")]
+    pub unspent_allowance: ::core::option::Option<super::super::state::queues::v1::Cycles>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlexibleCanisterHttpError {
     #[prost(uint64, tag = "1")]
     pub callback_id: u64,
-    #[prost(oneof = "flexible_canister_http_error::ErrorDetails", tags = "2, 3, 4")]
+    #[prost(
+        oneof = "flexible_canister_http_error::ErrorDetails",
+        tags = "2, 3, 4, 5"
+    )]
     pub error_details: ::core::option::Option<flexible_canister_http_error::ErrorDetails>,
 }
 /// Nested message and enum types in `FlexibleCanisterHttpError`.
@@ -698,13 +732,15 @@ pub mod flexible_canister_http_error {
         ResponsesTooLarge(super::FlexibleCanisterHttpResponsesTooLarge),
         #[prost(message, tag = "4")]
         TooManyRejects(super::FlexibleCanisterHttpTooManyRejects),
+        #[prost(message, tag = "5")]
+        OutOfCycles(super::FlexibleCanisterHttpOutOfCycles),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseMessage {
     #[prost(
         oneof = "canister_http_response_message::MessageType",
-        tags = "1, 2, 3, 4, 5"
+        tags = "1, 2, 3, 4, 5, 6, 7"
     )]
     pub message_type: ::core::option::Option<canister_http_response_message::MessageType>,
 }
@@ -722,6 +758,10 @@ pub mod canister_http_response_message {
         FlexibleResponses(super::FlexibleCanisterHttpResponses),
         #[prost(message, tag = "5")]
         FlexibleError(super::FlexibleCanisterHttpError),
+        #[prost(message, tag = "6")]
+        OutOfCycles(super::CanisterHttpOutOfCycles),
+        #[prost(message, tag = "7")]
+        AsyncReceipt(super::CanisterHttpShare),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

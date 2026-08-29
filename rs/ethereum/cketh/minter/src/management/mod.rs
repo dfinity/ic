@@ -1,5 +1,5 @@
-use ic_cdk::call::{CallFailed, RejectCode};
-use ic_cdk::management_canister::SignCallError;
+use ic_cdk::call::{CallFailed, Error as CdkCallError, RejectCode};
+use ic_cdk_management_canister::SignCallError;
 use ic_management_canister_types_private::DerivationPath;
 use std::fmt;
 
@@ -79,6 +79,17 @@ impl Reason {
         }
     }
 
+    fn from_cdk_call_error(error: CdkCallError) -> Self {
+        match error {
+            CdkCallError::CandidDecodeFailed(e) => {
+                Self::InternalError(format!("candid decode failed: {e}"))
+            }
+            CdkCallError::CallRejected(rejected) => Self::from_call_failed(rejected.into()),
+            CdkCallError::InsufficientLiquidCycleBalance(e) => Self::from_call_failed(e.into()),
+            CdkCallError::CallPerformFailed(e) => Self::from_call_failed(e.into()),
+        }
+    }
+
     fn from_call_failed(failed: CallFailed) -> Self {
         match failed {
             CallFailed::CallRejected(rejected) => {
@@ -104,13 +115,35 @@ impl Reason {
     }
 }
 
+/// Fetches the canister's tECDSA public key and chain code from the management canister.
+pub async fn ecdsa_public_key(
+    key_name: String,
+    derivation_path: DerivationPath,
+) -> Result<ic_cdk_management_canister::EcdsaPublicKeyResult, CallError> {
+    use ic_cdk_management_canister::{EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs};
+
+    ic_cdk_management_canister::ecdsa_public_key(&EcdsaPublicKeyArgs {
+        canister_id: None,
+        derivation_path: derivation_path.into_inner(),
+        key_id: EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: key_name,
+        },
+    })
+    .await
+    .map_err(|error| CallError {
+        method: "ecdsa_public_key".to_string(),
+        reason: Reason::from_cdk_call_error(error),
+    })
+}
+
 /// Signs a message hash using the tECDSA API.
 pub async fn sign_with_ecdsa(
     key_name: String,
     derivation_path: DerivationPath,
     message_hash: [u8; 32],
 ) -> Result<[u8; 64], CallError> {
-    use ic_cdk::management_canister::{EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgs, sign_with_ecdsa};
+    use ic_cdk_management_canister::{EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgs, sign_with_ecdsa};
 
     let result = sign_with_ecdsa(&SignWithEcdsaArgs {
         message_hash: message_hash.to_vec(),

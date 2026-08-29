@@ -16,6 +16,7 @@ path = "bin/principal_to_hex.rs"
 
 [dependencies]
 askama = { workspace = true }
+async-trait = { workspace = true }
 canbench-rs = { workspace = true, optional = true }
 candid = { workspace = true }
 ethnum = { workspace = true }
@@ -27,6 +28,7 @@ hex-literal = { workspace = true }
 ic-canister-log = { workspace = true }
 ic-canister-runtime = { workspace = true }
 ic-cdk = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }
@@ -66,8 +68,10 @@ ic-cketh-test-utils = { path = "../test_utils" }
 ic-config = { path = "../../../config" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-management-canister-types = { workspace = true }
 maplit = { workspace = true }
+mockall = { workspace = true }
+pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }

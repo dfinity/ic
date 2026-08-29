@@ -7,14 +7,17 @@ use crate::eth_rpc_client::{AnyOf, MIN_ATTACHED_CYCLES, ToReducedWithStrategy, r
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value};
+use crate::state::audit::process_event;
+use crate::state::automatic_deposits::{DepositRequest, ScanTarget};
+use crate::state::event::{AutomaticDeposit, EventType};
 use crate::state::{TaskType, mutate_state, read_state};
+use crate::time::TimeProvider;
 use crate::timed_sized_map::Timestamp;
 use batcher::BalanceOfCall;
 use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
 use ic_canister_log::log;
 use ic_canister_runtime::Runtime;
 use ic_ethereum_types::Address;
-use icrc_ledger_types::icrc1::account::Account;
 
 /// Maximum number of `balanceOf` sub-calls in a single deployless-batcher `eth_call`.
 ///
@@ -27,24 +30,25 @@ use icrc_ledger_types::icrc1::account::Account;
 /// cap. Payloads stay small — 64 bytes of calldata and 32 bytes of return per call, so 1_000 calls
 /// is ~64 KiB in / ~32 KiB out, far below the 2 MiB HTTPS-outcall limit.
 ///
-/// Not set arbitrarily high: a batch advances all-or-nothing (see [`balance_scan`]), so a
-/// whole-call failure re-does the entire chunk on the next tick — and a batch that ever exceeds a
-/// provider's gas cap fails *every* time, permanently stalling its addresses. 1_000 keeps a
-/// comfortable margin against that for the current token set; re-measure (and lower if needed) if
-/// the supported tokens grow or skew more gas-heavy.
+/// Not set arbitrarily high: [`scan_balances`] splits the registered pairs into chunks of this size
+/// and advances each chunk all-or-nothing, so a whole-call failure re-does that chunk on the next
+/// tick — and a chunk that ever exceeds a provider's gas cap fails *every* time, permanently
+/// stalling its pairs. 1_000 keeps a comfortable margin against that for the current token set;
+/// re-measure (and lower if needed) if the supported tokens grow or skew more gas-heavy.
 const MAX_CALLS_PER_BATCH: usize = 1_000;
 
-pub async fn balance_scan() {
-    let now = Timestamp::from_nanos(ic_cdk::api::time());
+pub async fn balance_scan<T: TimeProvider>(time_provider: &T) {
+    let now = Timestamp::from_nanos(time_provider.time());
     // TODO DEFI-2923: use a lower threshold rpc client, e.g. 2-out-of-3 since we use latest block height
     // and only to notify the sweeper (no minting)
     let client = read_state(rpc_client);
-    scan(now, client).await;
+    scan(now, client, time_provider).await;
 }
 
-async fn scan<R: Runtime>(
+async fn scan<R: Runtime, T: TimeProvider>(
     now: Timestamp,
     client: EvmRpcClient<R, CandidResponseConverter, DoubleCycles>,
+    time_provider: &T,
 ) {
     let _guard = match TimerGuard::new(TaskType::BalanceScan) {
         Ok(guard) => guard,
@@ -60,41 +64,82 @@ async fn scan<R: Runtime>(
             return;
         }
     };
-    let erc20_tokens: Vec<_> = read_state(|s| {
-        s.supported_ck_erc20_tokens()
-            .map(|t| t.erc20_contract_address)
-            .collect()
-    });
-    if erc20_tokens.is_empty() {
-        log!(
-            DEBUG,
-            "[balance_scan] SKIPPING: no ERC-20 contracts supported"
-        );
-        return;
-    }
-    let (addresses_to_scan, watchlist_len) = read_state(|s| {
+    let (targets, watchlist_len) = read_state(|s| {
         (
             s.automatic_deposits
-                .addresses_to_scan_iter(now, latest_block)
+                .scan_targets_iter(now, latest_block)
                 .collect::<Vec<_>>(),
             s.automatic_deposits.watchlist_len(),
         )
     });
-    if addresses_to_scan.is_empty() {
+    if targets.is_empty() {
         log!(
             DEBUG,
-            "[balance_scan] SKIPPING: 0/{watchlist_len} user addresses ready to be scanned"
+            "[balance_scan] SKIPPING: 0/{watchlist_len} deposits ready to be scanned"
         );
         return;
     }
 
-    let mut candidates = 0_usize;
+    // Await every balance read first, then apply the outcomes in a single `mutate_state`: the state
+    // borrow must never span an await, and re-reading the watchlist after the outcalls is what this
+    // scan deliberately avoids (a concurrent `deposit_erc20` can evict a pair whose window closed
+    // mid-scan, which would drop funds already observed on-chain). See `scan_balances`.
+    let outcomes = scan_balances(&targets, latest_block, client).await;
+
+    mutate_state(|s| {
+        for outcome in outcomes {
+            match outcome {
+                ScanOutcome::Detected(deposit) => process_event(
+                    s,
+                    EventType::AutomaticDepositReceived(deposit),
+                    time_provider,
+                ),
+                ScanOutcome::NothingFound(request) => {
+                    s.automatic_deposits
+                        .record_scan(now, &request, latest_block)
+                }
+            }
+        }
+    });
+}
+
+/// What a completed scan of one `(address, token)` pair implies, deliberately computed without
+/// reading any state: the [`ScanTarget`]s read before the outcalls are the only source of a pair's
+/// derived address and scan count, so a watchlist evicted mid-scan cannot affect the result.
+#[derive(Clone, PartialEq, Debug)]
+enum ScanOutcome {
+    /// Funds at or above the token's minimum were found, to be event-sourced into the sweep queue.
+    Detected(AutomaticDeposit),
+    /// The pair was scanned and holds nothing at or above its minimum, so it advances along the
+    /// backoff schedule.
+    NothingFound(DepositRequest),
+}
+
+/// Read the balance of every `due` `(address, token)` pair at `latest_block` and turn each finding
+/// into one [`ScanOutcome`].
+///
+/// Pairs whose chunk failed yield no outcome at all, so a failed chunk is retried next tick rather
+/// than silently advanced until its next scheduled slot.
+async fn scan_balances<R: Runtime>(
+    due: &[ScanTarget],
+    latest_block: BlockNumber,
+    client: EvmRpcClient<R, CandidResponseConverter, DoubleCycles>,
+) -> Vec<ScanOutcome> {
+    let mut outcomes = Vec::new();
     let mut decode_errors = 0_usize;
     let mut call_errors = 0_usize;
-    let mut scanned: Vec<Account> = Vec::new();
 
-    for batch in plan_batches(&addresses_to_scan, &erc20_tokens) {
-        let input = batcher::encode_balance_batch(&batch.calls);
+    // Each pair is one `balanceOf` call, so chunks split at any pair boundary; a chunk yields its
+    // outcomes together once it succeeds.
+    for chunk in due.chunks(MAX_CALLS_PER_BATCH) {
+        let calls: Vec<BalanceOfCall> = chunk
+            .iter()
+            .map(|target| BalanceOfCall {
+                token: target.token(),
+                holder: target.address(),
+            })
+            .collect();
+        let input = batcher::encode_balance_batch(&calls);
         match client
             .call(call_args(input, latest_block))
             .with_cycles(MIN_ATTACHED_CYCLES)
@@ -102,10 +147,11 @@ async fn scan<R: Runtime>(
             .await
             .reduce_with_strategy(AnyOf)
         {
-            Ok(hex) => match batcher::decode_balance_batch(hex.as_ref(), batch.calls.len()) {
+            Ok(hex) => match batcher::decode_balance_batch(hex.as_ref(), calls.len()) {
                 Ok(balances) => {
-                    candidates += count_candidates(&batch.calls, &balances);
-                    scanned.extend(batch.addresses.iter().map(|(account, _)| *account));
+                    for (target, balance) in chunk.iter().zip(balances) {
+                        outcomes.push(scan_outcome(target, balance, latest_block));
+                    }
                 }
                 Err(e) => {
                     decode_errors += 1;
@@ -119,79 +165,43 @@ async fn scan<R: Runtime>(
         }
     }
 
-    // Advance only the addresses actually scanned, so a failed chunk is retried next tick rather
-    // than silently skipped until its next scheduled slot.
-    let addresses_scanned = scanned.len();
-    mutate_state(|s| {
-        for account in &scanned {
-            s.automatic_deposits.record_scan(now, account, latest_block);
-        }
-    });
-
+    let candidates_found = outcomes
+        .iter()
+        .filter(|o| matches!(o, ScanOutcome::Detected(_)))
+        .count();
     log!(
         INFO,
-        "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates} candidate(s), {decode_errors} decode error(s), {call_errors} call error(s)",
+        "[balance_scan]: scanned {} (address, token) pair(s), found {candidates_found} candidate(s), {decode_errors} decode error(s), {call_errors} call error(s)",
+        outcomes.len(),
     );
+    outcomes
 }
 
-/// One balance-scan batch: the deposit addresses whose balances are read together in a single
-/// `eth_call`, and the flat `(token, holder)` calls for exactly those addresses.
-struct ScanBatch<'a> {
-    addresses: &'a [(Account, Address)],
-    calls: Vec<BalanceOfCall>,
-}
-
-/// Split the due addresses into `eth_call`-sized batches, chunking *by address* so an address'
-/// per-token calls never straddle a batch boundary. This keeps the per-address scan-state advance
-/// all-or-nothing per batch: were an address split, a failing batch could advance it with only
-/// part of its balances read. The supported token set is a handful (far below
-/// `MAX_CALLS_PER_BATCH`), so a batch holds many addresses; if the set ever grew past the cap, a
-/// single address' calls would still be sent together (the batcher response is only 32 bytes per
-/// call, so an oversized batch stays cheap).
-fn plan_batches<'a>(addresses: &'a [(Account, Address)], tokens: &[Address]) -> Vec<ScanBatch<'a>> {
-    addresses
-        .chunks(addresses_per_chunk(tokens.len()))
-        .map(|chunk| {
-            let holders: Vec<Address> = chunk.iter().map(|(_account, holder)| *holder).collect();
-            ScanBatch {
-                addresses: chunk,
-                calls: balance_of_calls(&holders, tokens),
-            }
-        })
-        .collect()
-}
-
-/// How many deposit addresses fit in one `MAX_CALLS_PER_BATCH`-bounded batch, given the number of
-/// supported tokens (one `balanceOf` sub-call per address-token pair). At least one address per
-/// batch even if the token set alone exceeds the cap.
-fn addresses_per_chunk(num_tokens: usize) -> usize {
-    (MAX_CALLS_PER_BATCH / num_tokens.max(1)).max(1)
-}
-
-fn balance_of_calls(holders: &[Address], tokens: &[Address]) -> Vec<BalanceOfCall> {
-    let mut calls = Vec::with_capacity(holders.len() * tokens.len());
-    for holder in holders {
-        for token in tokens {
-            calls.push(BalanceOfCall {
-                token: *token,
-                holder: *holder,
-            });
-        }
+/// Classify one pair's scanned `balance`: a [`ScanOutcome::Detected`] built entirely from the
+/// pre-scan `target` when the balance is at or above the token's minimum, otherwise
+/// [`ScanOutcome::NothingFound`].
+fn scan_outcome(
+    target: &ScanTarget,
+    balance: Erc20Value,
+    latest_block: BlockNumber,
+) -> ScanOutcome {
+    if balance < min_deposit(&target.token()) {
+        return ScanOutcome::NothingFound(target.request());
     }
-    calls
-}
-
-fn count_candidates(calls: &[BalanceOfCall], balances: &[Erc20Value]) -> usize {
-    calls
-        .iter()
-        .zip(balances)
-        .filter(|(call, balance)| **balance >= min_deposit(&call.token))
-        .count()
+    ScanOutcome::Detected(AutomaticDeposit {
+        owner: target.account().owner,
+        subaccount: target.account().subaccount,
+        address: target.address(),
+        erc20_contract_address: target.token(),
+        last_scanned_block: latest_block,
+        scan_count: target.scan_count().saturating_add(1),
+        scanned_balance: balance,
+    })
 }
 
 /// Minimum balance for `token` to count as a scan candidate; a token absent from
-/// [`MIN_DEPOSITS`] never counts.
-fn min_deposit(token: &Address) -> Erc20Value {
+/// `MIN_DEPOSITS` never counts.
+pub fn min_deposit(token: &Address) -> Erc20Value {
     MIN_DEPOSITS
         .iter()
         .find(|(contract, _)| contract == token)

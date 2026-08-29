@@ -246,9 +246,23 @@ impl InternalHttpQueryHandler {
                 data_certificate_with_delegation_metadata.data_certificate
             },
         );
+        // The subnet's registry-configured `ResourceLimits` override the query limits:
+        // `maximum_query_instructions` bounds both the per-query and the composite-query-graph
+        // instruction limits, and `maximum_query_walltime_seconds` bounds the composite-query
+        // call-graph wall-clock time (the only query wall-clock limit; a single query is bounded
+        // by instructions). Each falls back to its own replica default when unset.
+        let resource_limits = state.get_ref().resource_limits();
+        let max_query_call_graph_instructions = resource_limits
+            .maximum_query_instructions_or(self.config.max_query_call_graph_instructions);
+        let max_query_call_walltime =
+            resource_limits.maximum_query_walltime_seconds_or(self.config.max_query_call_walltime);
         let max_instructions_per_query = match max_instructions {
-            Some(max_ins) => max_ins.min(self.max_instructions_per_query),
-            None => self.max_instructions_per_query,
+            // A caller-provided limit (currently only the HTTP outcalls transform budget) is
+            // authoritative for that call.
+            Some(max_instructions) => max_instructions,
+            // Otherwise the subnet's registry-configured limit overrides the replica default
+            // (up or down); when unset, the replica default is used.
+            None => resource_limits.maximum_query_instructions_or(self.max_instructions_per_query),
         };
         let mut context = query_context::QueryContext::new(
             &self.log,
@@ -266,8 +280,8 @@ impl InternalHttpQueryHandler {
             self.config.canister_guaranteed_callback_quota as u64,
             max_instructions_per_query,
             self.config.max_query_call_graph_depth,
-            self.config.max_query_call_graph_instructions,
-            self.config.max_query_call_walltime,
+            max_query_call_graph_instructions,
+            max_query_call_walltime,
             self.config.instruction_overhead_per_query_call,
             self.config.composite_queries,
             query.receiver,

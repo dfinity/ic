@@ -20,6 +20,7 @@ rust_library(
         "//rs/registry/resource_limits",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
+        "//rs/test_utilities/types",
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",

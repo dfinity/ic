@@ -9,13 +9,22 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added `maximum_query_instructions` and `maximum_query_walltime_seconds` fields to the
-  subnet record's `ResourceLimits`, allowing the query instruction limit and the maximum query
-  wall-clock time to be configured per subnet via `create_subnet` and `update_subnet`.
-  `maximum_query_instructions` applies both to a single (non-composite) query method execution
-  and to the total across a composite query call graph; `maximum_query_walltime_seconds`
-  bounds the wall-clock time a query (including a composite query call graph) may run. For each,
-  a value of `0` (or unset) means the replica's default is used.
+* `cooling_down` field in `SubnetRecord`, settable via `UpdateSubnetRecord` proposals. See
+  `ic_replicated_state::SubnetTopology::cooling_down` for the exact semantics. The field must not
+  be set on mainnet before the replica version rejecting ingress messages to cooling down subnets
+  has been rolled out to all subnets.
+
+* A subnet-split request will now fail if a concurrent call modified the `StandardEngineReplicaVersionRecord`
+  while the fresh key material was being generated for the splitting subnet.
+
+* A subnet-split request whose source subnet is a cloud engine that derives its replica version from the
+  `StandardEngineReplicaVersionRecord` will now be rejected while a deployment of a new replica version is
+  in progress. This guarantees that both subnets run the same replica version after the split.
+
+* Invariant requiring that every elected GuestOS and HostOS version ID is well-formed, i.e. that it consists
+  only of alphanumeric characters, dots, dashes and underscores.  Such IDs are what `ReplicaVersion` and
+  `HostosVersion` accept, so until now, it was possible to elect a version that consumers could not read
+  back out of the Registry.
 
 ## Changed
 

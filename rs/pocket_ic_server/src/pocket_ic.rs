@@ -2100,9 +2100,7 @@ impl PocketIcSubnets {
             //         max_cache_age_secs = opt (3_600 : nat64);
             //         allowed_domains = vec { "gmail.com"; "googlemail.com"; "outlook.com"; "hotmail.com"; "msn.com"; "live.com"; "icloud.com"; "me.com"; "mac.com"; "yahoo.com"; "ymail.com"; "aol.com"; "zoho.com"; "fastmail.com"; "fastmail.fm"; "hey.com"; "yandex.com"; "yandex.ru"; "mail.ru"; "qq.com"; "163.com"; "126.com"; "naver.com"; "daum.net";};
             //       };
-            //       sso_credential_migration = null;
             //       is_production = opt true;
-            //       mcp_config_migration = null;
             //       backend_canister_id = opt principal "rdmx6-jaaaa-aaaaa-aaadq-cai";
             //       enable_dapps_explorer = opt false;
             //       assigned_user_number_range = opt record {
@@ -2241,7 +2239,6 @@ impl PocketIcSubnets {
                 new_flow_origins: None,        // DIFFERENT FROM ICP MAINNET
                 openid_configs: openid_google, // DIFFERENT FROM ICP MAINNET
                 sso_allow_insecure_discovery: None,
-                sso_credential_migration: None,
                 analytics_config: None, // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
@@ -2252,7 +2249,6 @@ impl PocketIcSubnets {
                 dnssec_config: None,                // DIFFERENT FROM ICP MAINNET
                 doh_config: None,                   // DIFFERENT FROM ICP MAINNET
                 mcp_official_url: None,             // DIFFERENT FROM ICP MAINNET
-                mcp_config_migration: None,
             });
             ii_subnet
                 .state_machine
@@ -3821,11 +3817,12 @@ impl Operation for ProcessCanisterHttpInternal {
                     }
                     Ok((response, _payment_receipt)) => {
                         canister_http.pending.remove(&response.id);
-                        if let Some(context) = sm.canister_http_request_contexts().get(&response.id)
+                        if sm
+                            .canister_http_request_contexts()
+                            .contains_key(&response.id)
                         {
                             sm.mock_canister_http_response(
                                 response.id.get(),
-                                context.request.sender,
                                 vec![response.content; sm.nodes.len()],
                             );
                         }
@@ -3936,8 +3933,6 @@ fn process_mock_canister_https_response(
             canister_http_request_id,
         )));
     };
-    let canister_id = context.request.sender;
-
     let response_to_content = |response: &CanisterHttpResponse| match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
             let response = HttpsOutcallResponse {
@@ -4020,11 +4015,7 @@ fn process_mock_canister_https_response(
             subnet.nodes.len(),
         )));
     }
-    subnet.mock_canister_http_response(
-        mock_canister_http_response.request_id,
-        canister_id,
-        contents,
-    );
+    subnet.mock_canister_http_response(mock_canister_http_response.request_id, contents);
     OpOut::NoOutput
 }
 

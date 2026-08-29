@@ -1,5 +1,9 @@
+use crate::attestation::AttestationRequest;
 use crate::checked_amount::CheckedAmountOf;
-use crate::endpoints::events::{Event as CandidEvent, EventPayload, UnsignedTransaction};
+use crate::endpoints::events::{
+    Event as CandidEvent, EventPayload, SignedAuthorization as CandidSignedAuthorization,
+    UnsignedSweeperTransaction, UnsignedTransaction,
+};
 use crate::erc20::CkErc20Token;
 use crate::eth_logs::{LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent};
 use crate::eth_rpc_client::responses::TransactionReceipt;
@@ -7,15 +11,18 @@ use crate::lifecycle::EthereumNetwork;
 use crate::numeric::Wei;
 use crate::state::audit::{Event, replay_events_internal};
 use crate::state::transactions::{
-    Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex, ReimbursementRequest,
+    Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex, ReimbursementRequest, SweepId,
+    SweepRequest,
 };
 use crate::timed_sized_map::Timestamp;
 use crate::tx::{
-    AccessList, AccessListItem, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
-    StorageKey,
+    AccessList, AccessListItem, AuthorizationRequest, DelegatingSweep, Eip1559TransactionRequest,
+    SignedAuthorization, SignedEip1559TransactionRequest, SignedEip7702TransactionRequest,
+    SignedSweepTransaction, StorageKey, SweepTransaction, TransactionSignature,
 };
 use candid::Principal;
 use ic_agent::identity::AnonymousIdentity;
+use icrc_ledger_types::icrc1::account::Account;
 use num_traits::ToPrimitive;
 use phantom_newtype::Id;
 use std::env;
@@ -32,7 +39,7 @@ async fn should_replay_events_for_mainnet() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Mainnet);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(640_429_147_162_525_727_658_u128)
+        Wei::from(1_000_616_547_349_206_734_546_u128)
     );
 }
 
@@ -47,7 +54,7 @@ async fn should_replay_events_for_sepolia() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Sepolia);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(23_921_238_021_909_121_554_717_u128)
+        Wei::from(23_928_676_179_573_185_792_826_u128)
     );
 }
 
@@ -92,6 +99,7 @@ impl GetEventsFile {
         use crate::endpoints::events::{
             AccessListItem as CandidAccessListItem, EventSource as CandidEventSource,
             ReimbursementIndex as CandidReimbursementIndex,
+            TransactionReceipt as CandidTransactionReceipt,
             TransactionStatus as CandidTransactionStatus,
         };
         use crate::eth_logs::EventSource;
@@ -130,6 +138,20 @@ impl GetEventsFile {
             }
         }
 
+        fn map_transaction_receipt(receipt: CandidTransactionReceipt) -> TransactionReceipt {
+            TransactionReceipt {
+                block_hash: receipt.block_hash.parse().unwrap(),
+                block_number: receipt.block_number.try_into().unwrap(),
+                effective_gas_price: receipt.effective_gas_price.try_into().unwrap(),
+                gas_used: receipt.gas_used.try_into().unwrap(),
+                status: match receipt.status {
+                    CandidTransactionStatus::Success => TransactionStatus::Success,
+                    CandidTransactionStatus::Failure => TransactionStatus::Failure,
+                },
+                transaction_hash: receipt.transaction_hash.parse().unwrap(),
+            }
+        }
+
         fn map_nat<T>(num: candid::Nat) -> Id<T, u64> {
             Id::from(num.0.to_u64().unwrap())
         }
@@ -164,7 +186,9 @@ impl GetEventsFile {
             }
         }
 
-        fn map_signed_transaction(raw_transaction: &str) -> SignedEip1559TransactionRequest {
+        fn decode_signed_transaction(
+            raw_transaction: &str,
+        ) -> (Eip1559TransactionRequest, TransactionSignature) {
             use crate::tx::TransactionSignature;
             use ethers_core::types::transaction::eip2718::TypedTransaction;
             use ethnum::u256;
@@ -236,7 +260,53 @@ impl GetEventsFile {
                 s: map_ethers_u256(decoded_sig.s),
             };
 
-            SignedEip1559TransactionRequest::from((request, signature))
+            (request, signature)
+        }
+        fn map_signed_sweep_transaction(raw_transaction: &str) -> SignedSweepTransaction {
+            const EIP_7702_TRANSACTION_TYPE: u8 = 4;
+
+            let raw_bytes = hex::decode(raw_transaction.trim_start_matches("0x"))
+                .expect("BUG: sent sweep transaction is not hex-encoded");
+            if raw_bytes.first() == Some(&EIP_7702_TRANSACTION_TYPE) {
+                let signed = SignedEip7702TransactionRequest::decode(&raw_bytes)
+                    .expect("BUG: failed to deserialize sent EIP-7702 sweep transaction");
+                return SignedSweepTransaction::from((
+                    SweepTransaction::Eip7702(
+                        DelegatingSweep::new(signed.transaction().clone())
+                            .expect("BUG: sent EIP-7702 sweep installs no delegation"),
+                    ),
+                    signed.signature().clone(),
+                ));
+            }
+            let (transaction, signature) = decode_signed_transaction(raw_transaction);
+            SignedSweepTransaction::from((SweepTransaction::Eip1559(transaction), signature))
+        }
+
+        fn map_unsigned_sweeper_transaction(tx: UnsignedSweeperTransaction) -> SweepTransaction {
+            SweepTransaction::new(
+                map_unsigned_transaction(tx.transaction),
+                map_authorizations(tx.authorization_list),
+            )
+        }
+
+        fn map_authorizations(
+            authorizations: Vec<CandidSignedAuthorization>,
+        ) -> Vec<SignedAuthorization> {
+            fn map_signature_component(bytes: &[u8]) -> ethnum::u256 {
+                ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(bytes).unwrap())
+            }
+
+            authorizations
+                .into_iter()
+                .map(|authorization| SignedAuthorization {
+                    chain_id: authorization.chain_id.0.to_u64().unwrap(),
+                    delegate: authorization.delegate.parse().unwrap(),
+                    nonce: authorization.nonce.try_into().unwrap(),
+                    y_parity: authorization.y_parity,
+                    r: map_signature_component(&authorization.r),
+                    s: map_signature_component(&authorization.s),
+                })
+                .collect()
         }
 
         Event {
@@ -315,6 +385,21 @@ impl GetEventsFile {
                     from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                     created_at,
                 }),
+                EventPayload::AcceptedSweeperFundingRequest {
+                    withdrawal_amount,
+                    destination,
+                    ledger_burn_index,
+                    from,
+                    from_subaccount,
+                    created_at,
+                } => ET::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
+                    withdrawal_amount: withdrawal_amount.try_into().unwrap(),
+                    destination: destination.parse().unwrap(),
+                    ledger_burn_index: map_nat(ledger_burn_index),
+                    from,
+                    from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
+                    created_at,
+                }),
                 EventPayload::CreatedTransaction {
                     withdrawal_id,
                     transaction,
@@ -327,7 +412,9 @@ impl GetEventsFile {
                     raw_transaction,
                 } => ET::SignedTransaction {
                     withdrawal_id: map_nat(withdrawal_id),
-                    transaction: map_signed_transaction(&raw_transaction),
+                    transaction: SignedEip1559TransactionRequest::from(decode_signed_transaction(
+                        &raw_transaction,
+                    )),
                 },
                 EventPayload::ReplacedTransaction {
                     withdrawal_id,
@@ -341,20 +428,105 @@ impl GetEventsFile {
                     transaction_receipt,
                 } => ET::FinalizedTransaction {
                     withdrawal_id: map_nat(withdrawal_id),
-                    transaction_receipt: TransactionReceipt {
-                        block_hash: transaction_receipt.block_hash.parse().unwrap(),
-                        block_number: transaction_receipt.block_number.try_into().unwrap(),
-                        effective_gas_price: transaction_receipt
-                            .effective_gas_price
-                            .try_into()
-                            .unwrap(),
-                        gas_used: transaction_receipt.gas_used.try_into().unwrap(),
-                        status: match transaction_receipt.status {
-                            CandidTransactionStatus::Success => TransactionStatus::Success,
-                            CandidTransactionStatus::Failure => TransactionStatus::Failure,
+                    transaction_receipt: map_transaction_receipt(transaction_receipt),
+                },
+                EventPayload::AttestedDepositAddress {
+                    chain_id,
+                    deposit_helper,
+                    owner,
+                    subaccount,
+                    y_parity,
+                    r,
+                    s,
+                } => ET::AttestedDepositAddress {
+                    request: AttestationRequest::new(
+                        chain_id.0.to_u64().unwrap(),
+                        deposit_helper.parse().unwrap(),
+                        Account {
+                            owner,
+                            subaccount: subaccount.map(|subaccount| {
+                                <[u8; 32]>::try_from(subaccount.into_vec().as_slice()).unwrap()
+                            }),
                         },
-                        transaction_hash: transaction_receipt.transaction_hash.parse().unwrap(),
+                    ),
+                    signature: TransactionSignature {
+                        signature_y_parity: y_parity,
+                        r: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(r.as_slice()).unwrap()),
+                        s: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(s.as_slice()).unwrap()),
                     },
+                },
+                EventPayload::AuthorizedDepositAddress {
+                    owner,
+                    subaccount,
+                    authorization,
+                } => {
+                    let account = Account {
+                        owner,
+                        subaccount: subaccount.map(|subaccount| {
+                            <[u8; 32]>::try_from(subaccount.into_vec().as_slice()).unwrap()
+                        }),
+                    };
+                    let authorization = map_authorizations(vec![authorization])
+                        .pop()
+                        .expect("BUG: one authorization in, one out");
+                    ET::AuthorizedDepositAddress {
+                        request: AuthorizationRequest::new(
+                            account,
+                            authorization.chain_id,
+                            authorization.delegate,
+                            authorization.nonce,
+                        ),
+                        signature: TransactionSignature {
+                            signature_y_parity: authorization.y_parity,
+                            r: authorization.r,
+                            s: authorization.s,
+                        },
+                    }
+                }
+                EventPayload::AcceptedSweepRequest {
+                    sweep_id,
+                    destination,
+                    amount,
+                    data,
+                    max_transaction_fee,
+                    created_at,
+                    authorizations,
+                } => ET::AcceptedSweepRequest(SweepRequest {
+                    id: SweepId(sweep_id.0.to_u64().unwrap()),
+                    destination: destination.parse().unwrap(),
+                    amount: amount.try_into().unwrap(),
+                    data: data.into_vec(),
+                    max_transaction_fee: max_transaction_fee.try_into().unwrap(),
+                    created_at,
+                    authorizations: map_authorizations(authorizations),
+                }),
+                EventPayload::CreatedSweeperTransaction {
+                    sweep_id,
+                    transaction,
+                } => ET::CreatedSweeperTransaction {
+                    sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
+                    transaction: map_unsigned_sweeper_transaction(transaction),
+                },
+                EventPayload::SignedSweeperTransaction {
+                    sweep_id,
+                    raw_transaction,
+                } => ET::SignedSweeperTransaction {
+                    sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
+                    transaction: map_signed_sweep_transaction(&raw_transaction),
+                },
+                EventPayload::ReplacedSweeperTransaction {
+                    sweep_id,
+                    transaction,
+                } => ET::ReplacedSweeperTransaction {
+                    sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
+                    transaction: map_unsigned_sweeper_transaction(transaction),
+                },
+                EventPayload::FinalizedSweeperTransaction {
+                    sweep_id,
+                    transaction_receipt,
+                } => ET::FinalizedSweeperTransaction {
+                    sweep_id: SweepId(sweep_id.0.to_u64().unwrap()),
+                    transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
                 EventPayload::ReimbursedEthWithdrawal {
                     reimbursed_in_block,
@@ -472,12 +644,30 @@ impl GetEventsFile {
                         .map(|a| crate::state::event::DepositAddressRegistration {
                             owner: a.owner,
                             subaccount: a.subaccount,
+                            erc20_contract_address: a.erc20_contract_address.parse().unwrap(),
                             address: a.address.parse().unwrap(),
                             expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
                             last_scanned_block: None,
                             scan_count: 0,
                         })
                         .collect(),
+                }),
+                EventPayload::AutomaticDepositReceived {
+                    owner,
+                    subaccount,
+                    address,
+                    erc20_contract_address,
+                    last_scanned_block,
+                    scan_count,
+                    scanned_balance,
+                } => ET::AutomaticDepositReceived(crate::state::event::AutomaticDeposit {
+                    owner,
+                    subaccount,
+                    address: address.parse().unwrap(),
+                    erc20_contract_address: erc20_contract_address.parse().unwrap(),
+                    last_scanned_block: last_scanned_block.try_into().unwrap(),
+                    scan_count: scan_count.try_into().unwrap(),
+                    scanned_balance: scanned_balance.try_into().unwrap(),
                 }),
             },
         }

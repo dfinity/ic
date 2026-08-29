@@ -10,8 +10,10 @@ use crate::{
     crypto::*,
     node_id_into_protobuf, node_id_try_from_option,
 };
+use ic_base_types::{SubnetId, subnet_id_try_from_option};
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
+    registry::subnet::v1 as subnet_pb,
     types::v1 as pb,
 };
 use prost::Message;
@@ -93,7 +95,8 @@ impl CatchUpContent {
         let random_beacon = self.random_beacon.as_ref();
         let payload_hash = block.payload.get_hash();
         let block_payload = block.payload.as_ref();
-        block.payload.is_summary() == block_payload.is_summary()
+        block.payload.is_summary()
+            && block_payload.is_summary()
             && &crypto_hash(random_beacon) == random_beacon_hash
             && &crypto_hash(block) == block_hash
             && &crypto_hash(block_payload) == payload_hash
@@ -399,39 +402,76 @@ impl SignedBytesWithoutDomainSeparator for CatchUpContentProtobufBytes {
     }
 }
 
-#[test]
-fn test_catch_up_package_param_partial_ord() {
-    let c1 = CatchUpPackageParam {
-        height: Height::from(1),
-        registry_version: RegistryVersion::from(1),
-    };
-    let c2 = CatchUpPackageParam {
-        height: Height::from(2),
-        registry_version: RegistryVersion::from(1),
-    };
-    let c3 = CatchUpPackageParam {
-        height: Height::from(2),
-        registry_version: RegistryVersion::from(2),
-    };
-    let c4 = CatchUpPackageParam {
-        height: Height::from(1),
-        registry_version: RegistryVersion::from(2),
-    };
-    let c5 = CatchUpPackageParam {
-        height: Height::from(0),
-        registry_version: RegistryVersion::from(2),
-    };
-    // c2 > c1
-    assert_eq!(c2.partial_cmp(&c1), Some(Ordering::Greater));
-    // c3 > c1
-    assert_eq!(c3.partial_cmp(&c1), Some(Ordering::Greater));
-    // c3 > c2. This can happen when we want to recover a stuck subnet
-    // with a new CatchUpPackage.
-    assert_eq!(c3.partial_cmp(&c2), Some(Ordering::Greater));
-    // c3 == c3
-    assert_eq!(c3.partial_cmp(&c3), Some(Ordering::Equal));
-    // c4 > c1
-    assert_eq!(c4.partial_cmp(&c1), Some(Ordering::Greater));
-    // c5 does not compare to c1
-    assert_eq!(c5.partial_cmp(&c1), None);
+pub struct SubnetSplittingArgs {
+    pub destination_subnet_id: SubnetId,
+}
+
+impl TryFrom<subnet_pb::SubnetSplittingArgs> for SubnetSplittingArgs {
+    type Error = ProxyDecodeError;
+
+    fn try_from(
+        subnet_pb::SubnetSplittingArgs {
+            destination_subnet_id,
+        }: subnet_pb::SubnetSplittingArgs,
+    ) -> Result<Self, Self::Error> {
+        let destination_subnet_id =
+            subnet_id_try_from_option(destination_subnet_id, "destination_subnet_id")?;
+
+        Ok(SubnetSplittingArgs {
+            destination_subnet_id,
+        })
+    }
+}
+
+/// Types of [`CatchUpPackage`] created by the CUP maker
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum CatchUpPackageType {
+    Normal,
+    /// After delivering a splitting block to the DSM, we immediately create a CUP at the start of
+    /// the next dkg interval and we create a new summary block and a dummy random beacon on the fly.
+    PostSplit {
+        new_subnet_id: SubnetId,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_catch_up_package_param_partial_ord() {
+        let c1 = CatchUpPackageParam {
+            height: Height::from(1),
+            registry_version: RegistryVersion::from(1),
+        };
+        let c2 = CatchUpPackageParam {
+            height: Height::from(2),
+            registry_version: RegistryVersion::from(1),
+        };
+        let c3 = CatchUpPackageParam {
+            height: Height::from(2),
+            registry_version: RegistryVersion::from(2),
+        };
+        let c4 = CatchUpPackageParam {
+            height: Height::from(1),
+            registry_version: RegistryVersion::from(2),
+        };
+        let c5 = CatchUpPackageParam {
+            height: Height::from(0),
+            registry_version: RegistryVersion::from(2),
+        };
+        // c2 > c1
+        assert_eq!(c2.partial_cmp(&c1), Some(Ordering::Greater));
+        // c3 > c1
+        assert_eq!(c3.partial_cmp(&c1), Some(Ordering::Greater));
+        // c3 > c2. This can happen when we want to recover a stuck subnet
+        // with a new CatchUpPackage.
+        assert_eq!(c3.partial_cmp(&c2), Some(Ordering::Greater));
+        // c3 == c3
+        assert_eq!(c3.partial_cmp(&c3), Some(Ordering::Equal));
+        // c4 > c1
+        assert_eq!(c4.partial_cmp(&c1), Some(Ordering::Greater));
+        // c5 does not compare to c1
+        assert_eq!(c5.partial_cmp(&c1), None);
+    }
 }

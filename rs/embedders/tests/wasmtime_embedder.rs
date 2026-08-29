@@ -67,7 +67,6 @@ fn cannot_execute_wasm_without_memory() {
 fn correctly_count_instructions() {
     let data_size = 1024;
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(
             format!(
                 r#"
@@ -212,7 +211,6 @@ fn correctly_report_performance_counter() {
         + system_api_complexity::overhead::PERFORMANCE_COUNTER.get();
     let expected_instructions = expected_instructions_counter2;
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(
             format!(
                 r#"
@@ -578,69 +576,6 @@ fn zero_size_memory() {
         panic!("Expected CalledTrap error, but got {err}.");
     };
     assert_eq!(message, std::str::from_utf8(&[0; 0]).unwrap().to_string());
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn read_before_write_stats() {
-    // This wasm does a direct write to page 0.
-    let direct_wat = r#"
-            (module
-                (import "ic0" "msg_reply" (func $msg_reply))
-                (memory (export "memory") 1)
-                (func (export "canister_update write")
-                    (i32.store (i32.const 0) (i32.const 111))
-                    (call $msg_reply)
-                )
-            )"#;
-    let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .with_wat(direct_wat)
-        .with_api_type(ApiType::update(
-            UNIX_EPOCH,
-            vec![],
-            Cycles::zero(),
-            PrincipalId::new_user_test_id(0),
-            0.into(),
-            None,
-        ))
-        .build();
-    instance
-        .run(FuncRef::Method(WasmMethod::Update("write".to_string())))
-        .unwrap();
-    let stats = instance.get_stats();
-    assert_eq!(stats.wasm_direct_write_count, 1);
-    assert_eq!(stats.wasm_read_before_write_count, 0);
-
-    // This wasm does a read then write to page 0.
-    let read_then_write_wat = r#"
-            (module
-                (import "ic0" "msg_reply" (func $msg_reply))
-                (memory (export "memory") 1)
-                (func (export "canister_update write")
-                    (drop (i32.load (i32.const 4096)))
-                    (i32.store (i32.const 4096) (i32.const 111))
-                    (call $msg_reply)
-                )
-            )"#;
-    let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .with_wat(read_then_write_wat)
-        .with_api_type(ApiType::update(
-            UNIX_EPOCH,
-            vec![],
-            Cycles::zero(),
-            PrincipalId::new_user_test_id(0),
-            0.into(),
-            None,
-        ))
-        .build();
-    instance
-        .run(FuncRef::Method(WasmMethod::Update("write".to_string())))
-        .unwrap();
-    let stats = instance.get_stats();
-    assert_eq!(stats.wasm_direct_write_count, 0);
-    assert_eq!(stats.wasm_read_before_write_count, 1);
 }
 
 #[test]
@@ -1803,7 +1738,6 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
-        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1825,7 +1759,6 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
-        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1859,7 +1792,6 @@ fn wasm_canister_logging_instructions_charging() {
     for (message_len, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1878,7 +1810,6 @@ fn wasm_canister_logging_instructions_charging() {
     for (message_len, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1937,7 +1868,6 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
 
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-    config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -1949,7 +1879,6 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
     // same for wasm64
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-    config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -2174,6 +2103,8 @@ fn wasm64_import_system_api_functions() {
         (func $ic0_subnet_self_size (result i64)))
       (import "ic0" "subnet_self_copy"
         (func $ic0_subnet_self_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "subnet_self_node_count"
+        (func $ic0_subnet_self_node_count (result i32)))
 
         (global $g1 (export "g1") (mut i64) (i64.const 0))
         (func $test (export "canister_update test")
@@ -2797,6 +2728,59 @@ fn wasm64_subnet_self_size() {
                 .unwrap()
                 .ic0_subnet_self_size()
                 .unwrap() as i64
+        )
+    );
+}
+
+#[test]
+fn wasm64_subnet_self_node_count() {
+    // `ic0.subnet_self_node_count` returns an `i32` irrespective of the main
+    // memory type, so a Wasm64 canister imports it with an `i32` result too.
+    let wat = r#"
+    (module
+      (import "ic0" "subnet_self_node_count"
+        (func $ic0_subnet_self_node_count (result i32)))
+
+      (global $g1 (export "g1") (mut i32) (i32.const 0))
+      (func $test (export "canister_update test")
+        (call $ic0_subnet_self_node_count)
+        global.set $g1
+      )
+
+      (memory (export "memory") i64 1)
+    )"#;
+
+    let caller = user_test_id(24).get();
+    let payload: Vec<u8> = vec![1, 3, 5, 7];
+    let api = ApiType::update(
+        UNIX_EPOCH,
+        payload.clone(),
+        Cycles::zero(),
+        caller,
+        call_context_test_id(13),
+        None,
+    );
+
+    let config = ic_config::embedders::Config::default();
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .build();
+
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    assert_eq!(
+        res.exported_globals[0],
+        Global::I32(
+            instance
+                .store_data()
+                .system_api()
+                .unwrap()
+                .ic0_subnet_self_node_count()
+                .unwrap() as i32
         )
     );
 }
@@ -3532,14 +3516,8 @@ fn test_environment_variable_system_api() {
 }
 
 #[cfg(target_os = "linux")]
-fn run_instance_and_check_stats(
-    wat: &str,
-    use_deterministic_tracker: bool,
-    expected_os_pages: usize,
-    expected_wasm_pages: usize,
-) {
+fn run_instance_and_check_stats(wat: &str, expected_os_pages: usize, expected_wasm_pages: usize) {
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(use_deterministic_tracker)
         .with_wat(wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -3557,129 +3535,15 @@ fn run_instance_and_check_stats(
 
     let stats = instance.get_stats();
 
-    if use_deterministic_tracker {
-        // Deterministic tracker gives exact counts
-        assert_eq!(
-            stats.wasm_accessed_os_pages_count, expected_os_pages,
-            "Expected exactly {} accessed OS pages, got {}",
-            expected_os_pages, stats.wasm_accessed_os_pages_count
-        );
-        assert_eq!(
-            stats.wasm_accessed_wasm_pages_count, expected_wasm_pages,
-            "Expected exactly {} accessed Wasm pages, got {}",
-            expected_wasm_pages, stats.wasm_accessed_wasm_pages_count
-        );
-    } else {
-        // Prefetching tracker gives at least the expected counts
-        assert!(
-            stats.wasm_accessed_os_pages_count >= expected_os_pages,
-            "Expected at least {} accessed OS pages, got {}",
-            expected_os_pages,
-            stats.wasm_accessed_os_pages_count
-        );
-        assert!(
-            stats.wasm_accessed_wasm_pages_count >= expected_wasm_pages,
-            "Expected at least {} accessed Wasm pages, got {}",
-            expected_wasm_pages,
-            stats.wasm_accessed_wasm_pages_count
-        );
-    }
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn wasm_accessed_os_pages_count_is_correct() {
-    // Access a single OS page within the first Wasm page
-    // With prefetching enabled, accessing one page will prefetch multiple pages.
-    run_instance_and_check_stats(
-        r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (memory (export "memory") 2)
-            (func (export "canister_update test")
-                ;; Read from offset 0 (first OS page of first Wasm page)
-                (drop (i32.load (i32.const 0)))
-                (call $msg_reply)
-            )
-        )"#,
-        false,
-        1,
-        1,
+    assert_eq!(
+        stats.wasm_accessed_os_pages_count, expected_os_pages,
+        "Expected exactly {} accessed OS pages, got {}",
+        expected_os_pages, stats.wasm_accessed_os_pages_count
     );
-
-    // Access multiple OS pages within the same Wasm page
-    // With prefetching, we should access at least 3 OS pages, but likely more.
-    run_instance_and_check_stats(
-        r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (memory (export "memory") 2)
-            (func (export "canister_update test")
-                ;; Read from offset 0 (OS page 0)
-                (drop (i32.load (i32.const 0)))
-                ;; Read from offset 4096 (OS page 1)
-                (drop (i32.load (i32.const 4096)))
-                ;; Read from offset 8192 (OS page 2)
-                (drop (i32.load (i32.const 8192)))
-                (call $msg_reply)
-            )
-        )"#,
-        false,
-        3,
-        1,
-    );
-
-    // Access OS pages across multiple Wasm pages
-    // With prefetching, we should access at least 4 OS pages across 3 Wasm pages.
-    run_instance_and_check_stats(
-        &format!(
-            r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (memory (export "memory") 3)
-            (func (export "canister_update test")
-                ;; Access first OS page of first Wasm page (offset 0)
-                (drop (i32.load (i32.const 0)))
-                ;; Access first OS page of second Wasm page (offset 65536)
-                (drop (i32.load (i32.const {})))
-                ;; Access second OS page of second Wasm page (offset 65536 + 4096)
-                (drop (i32.load (i32.const {})))
-                ;; Access first OS page of third Wasm page (offset 131072)
-                (drop (i32.load (i32.const {})))
-                (call $msg_reply)
-            )
-        )"#,
-            WASM_PAGE_SIZE_IN_BYTES,
-            WASM_PAGE_SIZE_IN_BYTES + ic_sys::PAGE_SIZE,
-            2 * WASM_PAGE_SIZE_IN_BYTES
-        ),
-        false,
-        4,
-        3,
-    );
-
-    // Verify that both reads and writes are counted
-    // With prefetching, we should access at least 4 OS pages (2 reads + 2 writes).
-    run_instance_and_check_stats(
-        r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (memory (export "memory") 2)
-            (func (export "canister_update test")
-                ;; Read from OS page 0
-                (drop (i32.load (i32.const 100)))
-                ;; Write to OS page 1
-                (i32.store (i32.const 5000) (i32.const 42))
-                ;; Read from OS page 2
-                (drop (i32.load (i32.const 9000)))
-                ;; Write to OS page 3
-                (i32.store (i32.const 13000) (i32.const 43))
-                (call $msg_reply)
-            )
-        )"#,
-        false,
-        4,
-        1,
+    assert_eq!(
+        stats.wasm_accessed_wasm_pages_count, expected_wasm_pages,
+        "Expected exactly {} accessed Wasm pages, got {}",
+        expected_wasm_pages, stats.wasm_accessed_wasm_pages_count
     );
 }
 
@@ -3700,7 +3564,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
                 (call $msg_reply)
             )
         )"#,
-        true,
         OS_PAGES_PER_WASM_PAGE,
         1,
     );
@@ -3721,7 +3584,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
                 (call $msg_reply)
             )
         )"#,
-        true,
         OS_PAGES_PER_WASM_PAGE,
         1,
     );
@@ -3743,7 +3605,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
                 (call $msg_reply)
             )
         )"#,
-        true,
         OS_PAGES_PER_WASM_PAGE,
         1,
     );
@@ -3768,7 +3629,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
             WASM_PAGE_SIZE_IN_BYTES,
             2 * WASM_PAGE_SIZE_IN_BYTES
         ),
-        true,
         3 * OS_PAGES_PER_WASM_PAGE,
         3,
     );
@@ -3787,7 +3647,6 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
                 (call $msg_reply)
             )
         )"#,
-        true,
         2 * OS_PAGES_PER_WASM_PAGE,
         2,
     );
@@ -3796,15 +3655,14 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
 #[cfg(target_os = "linux")]
 fn run_wasm_and_get_instructions_used(
     wat: &str,
-    use_deterministic_tracker: bool,
+    page_overhead: NumInstructions,
 ) -> NumInstructions {
     let config = Config {
-        dirty_page_overhead: NumInstructions::new(1),
+        page_overhead,
         ..Default::default()
     };
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
-        .with_deterministic_memory_tracker_enabled(use_deterministic_tracker)
         .with_wat(wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -3827,16 +3685,20 @@ fn run_wasm_and_get_instructions_used(
     NumInstructions::from(instruction_limit.get() - remaining)
 }
 
+/// Asserts how many OS pages the memory tracker charges for while running
+/// `wat`, by running it twice and diffing: once with a per-OS-page overhead of
+/// zero (which isolates the rest of the message cost) and once with an overhead
+/// of one instruction per OS page (so the difference is the page count).
 #[cfg(target_os = "linux")]
 fn assert_deterministic_charges_extra(
     wat: &str,
     expected_extra_instructions: u64,
     description: &str,
 ) {
-    let prefetching_instructions = run_wasm_and_get_instructions_used(wat, false);
-    let deterministic_instructions = run_wasm_and_get_instructions_used(wat, true);
+    let uncharged = run_wasm_and_get_instructions_used(wat, NumInstructions::new(0));
+    let charged = run_wasm_and_get_instructions_used(wat, NumInstructions::new(1));
     assert_eq!(
-        deterministic_instructions.get() - prefetching_instructions.get(),
+        charged.get() - uncharged.get(),
         expected_extra_instructions,
         "{}",
         description
@@ -4141,7 +4003,6 @@ fn deterministic_tracker_exhausts_instructions_on_page_faults() {
     );
 
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(true)
         .with_wat(&wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -4207,7 +4068,6 @@ fn deterministic_tracker_reports_correct_page_stats() {
     let wat = make_memory_access_wat(&body);
 
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(true)
         .with_wat(&wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -4265,7 +4125,6 @@ fn deterministic_tracker_reports_zero_dirty_pages_for_reads() {
     let wat = make_memory_access_wat(&body);
 
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_deterministic_memory_tracker_enabled(true)
         .with_wat(&wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,

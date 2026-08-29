@@ -27,7 +27,9 @@ pub use execution_environment::{
     as_round_instructions, execute_canister,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
-pub use hypervisor::{Hypervisor, HypervisorMetrics};
+pub use hypervisor::{
+    CanisterMemoryHandling, Hypervisor, HypervisorMetrics, MemoryHandling, MemorySource,
+};
 use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -329,7 +331,7 @@ fn setup_execution_helper(
             own_subnet_id,
             logger.clone(),
             Arc::clone(&cycles_account_manager),
-            scheduler_config.dirty_page_overhead,
+            scheduler_config.page_overhead,
             Arc::clone(&fd_factory),
             Arc::clone(&state_reader),
             temp_dir,
@@ -373,6 +375,7 @@ fn setup_execution_helper(
         config.embedders_config.wasm_max_size,
         scheduler_config.canister_snapshot_baseline_instructions,
         scheduler_config.canister_snapshot_data_baseline_instructions,
+        scheduler_config.canister_log_resize_instructions_per_byte,
         config.default_wasm_memory_limit,
         config.max_number_of_snapshots_per_canister,
         config.max_environment_variables,

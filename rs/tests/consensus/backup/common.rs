@@ -46,68 +46,72 @@ use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResourceOverrides},
+        ic::{InternetComputer, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
-        test_setup::SystemTestBackend,
     },
     util::{MessageCanister, block_on, get_nns_node},
 };
 use ic_types::Height;
 use slog::{Logger, debug, error, info};
 use std::{
+    collections::BTreeSet,
     ffi::OsStr,
     fs,
     io::Write,
     net::IpAddr,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 use std::{fs::File, time::Duration};
 
+/// (destination file name, runtime dependency env var) of the binaries `ic-backup`
+/// needs to replay a replica version, for the version built from this branch. See
+/// `BACKUP_RUNTIME_DEPS` in BUILD.bazel. `ic-replay` looks the three sandbox
+/// binaries up next to itself, which is why all four go into the same directory.
+const BRANCH_BINARIES: &[(&str, &str)] = &[
+    ("ic-replay", "IC_REPLAY_PATH"),
+    ("sandbox_launcher", "SANDBOX_LAUNCHER_PATH"),
+    ("canister_sandbox", "CANISTER_SANDBOX_PATH"),
+    ("compiler_sandbox", "COMPILER_SANDBOX_PATH"),
+];
+
+/// The same binaries, as published for the mainnet NNS subnet's replica version.
+const MAINNET_NNS_BINARIES: &[(&str, &str)] = &[
+    ("ic-replay", "MAINNET_NNS_IC_REPLAY_PATH"),
+    ("sandbox_launcher", "MAINNET_NNS_SANDBOX_LAUNCHER_PATH"),
+    ("canister_sandbox", "MAINNET_NNS_CANISTER_SANDBOX_PATH"),
+    ("compiler_sandbox", "MAINNET_NNS_COMPILER_SANDBOX_PATH"),
+];
+
 const DKG_INTERVAL: u64 = 29;
 const SUBNET_SIZE: usize = 4;
 const DIVERGENCE_LOG_STR: &str = "The state hash of the CUP at height ";
 
-// Per-VM memory used on the local backend. There all VMs run on a single host,
-// so the Farm default of 24 GiB per VM would let the 4 VMs of the System subnet
-// collectively exceed the host's RAM and thrash swap. That starves the consensus
-// finalizer, so the subnet can't finalize the upgrade CUP and the test fails with
-// `Replica was running the old version only!`. 4 GiB per VM keeps all VMs
-// comfortably within the host's RAM.
-const LOCAL_BACKEND_VM_MEMORY: AmountOfMemoryKiB = AmountOfMemoryKiB::new(4 * 1024 * 1024);
-
 pub fn setup(env: TestEnv) {
-    let mut ic = InternetComputer::new().add_subnet(
-        Subnet::new(SubnetType::System)
-            .add_nodes(SUBNET_SIZE)
-            .with_chain_key_config(ChainKeyConfig {
-                key_configs: make_key_ids_for_all_schemes()
-                    .into_iter()
-                    .map(|key_id| KeyConfig {
-                        max_queue_size: 20,
-                        pre_signatures_to_create_in_advance: key_id
-                            .requires_pre_signatures()
-                            .then_some(7),
-                        key_id,
-                    })
-                    .collect(),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-                max_parallel_pre_signature_transcripts_in_creation: None,
-            })
-            .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
-    );
-    // On the local backend, cap the per-VM memory so all VMs fit within the
-    // single host's RAM (see `LOCAL_BACKEND_VM_MEMORY`). On Farm, keep the
-    // generous default.
-    if SystemTestBackend::from_env() == SystemTestBackend::Local {
-        ic = ic.with_resource_overrides(VmResourceOverrides {
-            memory_kibibytes: Some(LOCAL_BACKEND_VM_MEMORY),
-            ..Default::default()
-        });
-    }
-    ic.setup_and_start(&env)
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .add_nodes(SUBNET_SIZE)
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs: make_key_ids_for_all_schemes()
+                        .into_iter()
+                        .map(|key_id| KeyConfig {
+                            max_queue_size: 20,
+                            pre_signatures_to_create_in_advance: key_id
+                                .requires_pre_signatures()
+                                .then_some(7),
+                            key_id,
+                        })
+                        .collect(),
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
+                })
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
+        )
+        .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
@@ -156,34 +160,53 @@ pub fn test(env: TestEnv) {
     let initial_replica_version =
         get_assigned_replica_version(&nns_node).expect("There should be assigned replica version");
 
-    info!(
-        log,
-        "Copy the binaries needed for replay of the current version"
-    );
-    let backup_binaries_dir = backup_dir.join("binaries").join(binary_version.to_string());
-    fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
-
-    // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
-    copy_file(
-        &get_dependency_path_from_env("IC_REPLAY_PATH"),
-        &backup_binaries_dir,
-        "ic-replay",
-    );
-    copy_file(
-        &get_dependency_path_from_env("SANDBOX_LAUNCHER_PATH"),
-        &backup_binaries_dir,
-        "sandbox_launcher",
-    );
-    copy_file(
-        &get_dependency_path_from_env("CANISTER_SANDBOX_PATH"),
-        &backup_binaries_dir,
-        "canister_sandbox",
-    );
-    copy_file(
-        &get_dependency_path_from_env("COMPILER_SANDBOX_PATH"),
-        &backup_binaries_dir,
-        "compiler_sandbox",
-    );
+    // `ic-backup` replays each replica version's artifacts with that version's own
+    // binaries and downloads them from download.dfinity.systems when they are not
+    // already in `binaries/<version>/`. These tests run without external network
+    // access on the local backend, so every version that will be replayed has to be
+    // provided up front:
+    //
+    //   * backup_manager_upgrade_test:   mainnet NNS (initial) -> branch (target)
+    //   * backup_manager_downgrade_test: branch (initial)      -> mainnet NNS (target)
+    //
+    // Both are covered by seeding the initial, the target and the branch version. A
+    // version we have no binaries for fails here instead of stalling much later on a
+    // download that cannot succeed.
+    let mainnet_version =
+        get_mainnet_nns_revision().expect("could not read the mainnet NNS revision");
+    for version in BTreeSet::from([
+        binary_version.clone(),
+        initial_replica_version.clone(),
+        target_version.clone(),
+    ]) {
+        let binaries = if version == binary_version {
+            BRANCH_BINARIES
+        } else if version == mainnet_version {
+            MAINNET_NNS_BINARIES
+        } else {
+            panic!(
+                "No `ic-replay` available for replica version {version}. This test provides the \
+                 branch version ({binary_version}) and the mainnet NNS version ({mainnet_version}) \
+                 as bazel dependencies and cannot download any other version."
+            );
+        };
+        let backup_binaries_dir = backup_dir.join("binaries").join(version.to_string());
+        fs::create_dir_all(&backup_binaries_dir)
+            .expect("failure creating backup binaries directory");
+        info!(
+            log,
+            "Copying the {} binaries needed for replay to {}",
+            version,
+            backup_binaries_dir.display()
+        );
+        for (file_name, env_var) in binaries {
+            copy_file(
+                &get_dependency_path_from_env(env_var),
+                &backup_binaries_dir,
+                file_name,
+            );
+        }
+    }
 
     // Generate keypair and store the private key
     info!(log, "Create backup user credentials");
@@ -505,7 +528,23 @@ fn dir_exists_and_have_file(log: &Logger, dir: &PathBuf) -> bool {
 }
 
 fn copy_file(binary_path: &Path, backup_binaries_dir: &Path, file_name: &str) {
-    fs::copy(binary_path, backup_binaries_dir.join(file_name)).expect("failed to copy file");
+    // A dependency that lost its executable bit would only surface much later, as
+    // `ic-replay` failing to spawn its sandbox, so check it here at the source.
+    let mode = fs::metadata(binary_path)
+        .unwrap_or_else(|e| panic!("failed to stat {binary_path:?}: {e}"))
+        .permissions()
+        .mode();
+    assert!(
+        mode & 0o111 != 0,
+        "{binary_path:?} is not executable (mode {mode:o}); the bazel dependency providing it \
+         must produce an executable file"
+    );
+    let target = backup_binaries_dir.join(file_name);
+    fs::copy(binary_path, &target).expect("failed to copy file");
+    // `fs::copy` inherits the source's mode and bazel outputs are read-only, so make
+    // the copy writable in case anything wants to replace it.
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o755))
+        .expect("failed to set the permissions of the copied binary");
 }
 
 fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {

@@ -235,6 +235,7 @@ impl Finalizer {
             self.pick_block_to_finality_sign(pool, height)?
                 .get_hash()
                 .clone(),
+            self.replica_config.replica_version.clone(),
         );
         let signature = self
             .crypto
@@ -252,7 +253,7 @@ impl Finalizer {
 mod tests {
     //! Finalizer unit tests
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{
@@ -277,7 +278,7 @@ mod tests {
                 registry,
                 crypto,
                 ..
-            } = dependencies(pool_config, 1);
+            } = DependenciesBuilder::new(pool_config, 1).build();
             let message_routing = FakeMessageRouting::new();
 
             assert_eq!(pool.advance_round_normal_operation(), Height::from(1));
@@ -354,7 +355,7 @@ mod tests {
                 registry,
                 crypto,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![
@@ -373,7 +374,8 @@ mod tests {
                             .build(),
                     ),
                 ],
-            );
+            )
+            .build();
             let metrics_registry = MetricsRegistry::new();
             let message_routing = Arc::new(FakeMessageRouting::new());
             *message_routing.next_batch_height.write().unwrap() = Height::from(2);

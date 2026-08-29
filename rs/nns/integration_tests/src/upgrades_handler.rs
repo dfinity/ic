@@ -14,13 +14,31 @@ use ic_nns_test_utils::{
     itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::get_value,
 };
-use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
+use ic_protobuf::registry::replica_version::v1::{
+    GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
+    ReplicaVersionRecord,
+};
 use ic_registry_keys::make_replica_version_key;
-use ic_types::ReplicaVersion;
+use ic_test_utilities_types::ids::test_replica_version;
+use lazy_static::lazy_static;
 use registry_canister::mutations::{
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
 };
+
+lazy_static! {
+    static ref GUEST_LAUNCH_MEASUREMENTS: GuestLaunchMeasurements = GuestLaunchMeasurements {
+        guest_launch_measurements: vec![GuestLaunchMeasurement {
+            // An SEV-SNP measurement is exactly 48 bytes long. The value itself
+            // does not matter here.
+            measurement: vec![0x42; 48],
+            metadata: Some(GuestLaunchMeasurementMetadata {
+                kernel_cmdline: Some("foo=bar".to_string()),
+                vcpu_type: None,
+            }),
+        }],
+    };
+}
 
 async fn submit(
     governance: &Canister<'_>,
@@ -68,19 +86,24 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         let gov = &nns_canisters.governance;
         let sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
 
-        let update_versions_payload =
-            |elect: Option<String>, unelect: Vec<&str>| ReviseElectedGuestosVersionsPayload {
-                release_package_sha256_hex: elect.as_ref().map(|_| {
-                    "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D".into()
-                }),
-                release_package_urls: elect
-                    .as_ref()
-                    .map(|_| vec!["http://release_package.tar.zst".to_string()])
-                    .unwrap_or_default(),
+        let update_versions_payload = |elect: Option<String>, unelect: Vec<&str>| {
+            let is_electing_a_version = elect.is_some();
+
+            ReviseElectedGuestosVersionsPayload {
                 replica_version_to_elect: elect,
-                guest_launch_measurements: None,
+                release_package_sha256_hex: is_electing_a_version.then(|| {
+                    "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D".to_string()
+                }),
+                release_package_urls: if is_electing_a_version {
+                    vec!["http://release_package.tar.zst".to_string()]
+                } else {
+                    vec![]
+                },
+                guest_launch_measurements: is_electing_a_version
+                    .then(|| GUEST_LAUNCH_MEASUREMENTS.clone()),
                 replica_versions_to_unelect: unelect.iter().map(|s| s.to_string()).collect(),
-            };
+            }
+        };
         let elect_version_payload = |version_id: &str| -> ReviseElectedGuestosVersionsPayload {
             update_versions_payload(Some(version_id.into()), vec![])
         };
@@ -92,7 +115,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
             gov.update_from_sender("forward_vote", candid, input, &sender)
         };
 
-        let default_version = &ReplicaVersion::default().to_string();
+        let default_version = test_replica_version().to_string();
         let unassigned_nodes_version = "unassigned_nodes_version";
         let version_to_elect_and_unelect1 = "version_to_elect_and_unelect1";
         let version_to_elect_and_unelect2 = "version_to_elect_and_unelect2";
@@ -116,14 +139,20 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
 
         // Check state of elected versions
         for version in [
-            default_version,
+            &default_version,
             version_to_elect_and_unelect1,
             version_to_elect_and_unelect2,
             unassigned_nodes_version,
         ] {
-            assert!(is_elected_version(&nns_canisters.registry, version).await);
+            assert!(
+                is_elected_version(&nns_canisters.registry, version).await,
+                "Expected {version} to be elected"
+            );
         }
-        assert!(!is_elected_version(&nns_canisters.registry, version_to_elect).await);
+        assert!(
+            !is_elected_version(&nns_canisters.registry, version_to_elect).await,
+            "Did not expect {version_to_elect} to be elected"
+        );
 
         // update unassigned version
         let deploy_unassigned_payload = DeployGuestosToAllUnassignedNodesPayload {
@@ -151,7 +180,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                 Some("Key not present"),
             ),
             (
-                retire_version_payload(vec![version_to_elect_and_unelect1, default_version]),
+                retire_version_payload(vec![version_to_elect_and_unelect1, &default_version]),
                 Some("Using a version that isn't elected"),
             ),
             (
@@ -167,6 +196,25 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                     ..Default::default()
                 },
                 Some("All parameters to elect a version have to be either set or unset"),
+            ),
+            (
+                ReviseElectedGuestosVersionsPayload {
+                    guest_launch_measurements: None,
+                    ..update_versions_payload(Some("version_without_measurements".into()), vec![])
+                },
+                Some("Missing parameters: [\"guest_launch_measurements\"]"),
+            ),
+            (
+                ReviseElectedGuestosVersionsPayload {
+                    guest_launch_measurements: Some(GuestLaunchMeasurements {
+                        guest_launch_measurements: vec![],
+                    }),
+                    ..update_versions_payload(
+                        Some("version_with_empty_measurements".into()),
+                        vec![],
+                    )
+                },
+                Some("guest_launch_measurements are invalid"),
             ),
             (
                 elect_version_payload(""),
@@ -203,7 +251,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         }
 
         // Check state of elected versions
-        for version in [default_version, unassigned_nodes_version, version_to_elect] {
+        for version in [&default_version, unassigned_nodes_version, version_to_elect] {
             assert!(is_elected_version(&nns_canisters.registry, version).await);
         }
         for version in [version_to_elect_and_unelect1, version_to_elect_and_unelect2] {

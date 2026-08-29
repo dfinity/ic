@@ -19,7 +19,7 @@ tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
 # those uids are mapped to 0. The dev container has sudo NOPASSWD as a
 # fallback in case `podman unshare` is unavailable for any reason.
 _cleanup() {
-    if ! podman --root "$podman_storage_dir/root" --runroot "$podman_storage_dir/runroot" \
+    if ! podman --root "$podman_storage_dir/root" --runroot "$podman_storage_dir/runroot" --tmpdir "$podman_storage_dir/tmpdir" \
         unshare rm -rf "$tmpdir" "$podman_storage_dir" 2>/dev/null; then
 
         echo >&2 "WARNING: could not unshare podman runroot, forcing"

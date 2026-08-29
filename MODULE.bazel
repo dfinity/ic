@@ -409,15 +409,6 @@ http_file(
     url = "https://raw.githubusercontent.com/dfinity/ic-http-gateway-protocol/07bc0f3e6e95a8011de9d1712211cbafdf2e5bfe/examples/http-gateway/canister/http_gateway_canister_custom_assets.wasm.gz",
 )
 
-# Old version of wallet canister
-
-http_file(
-    name = "wallet_canister_0.7.2",
-    downloaded_file_path = "wallet.wasm",
-    sha256 = "1404b28b1c66491689b59e184a9de3c2be0dbdd75d952f29113b516742b7f898",
-    url = "https://github.com/dfinity/sdk/raw/0.7.2/src/distributed/wallet.wasm",
-)
-
 # Bitcoin canister
 
 http_file(
@@ -718,14 +709,14 @@ http_file(
 # ckETH
 http_file(
     name = "cketh_mainnet_events.gz",
-    sha256 = "e5ffdd0be68b11eacdc623547643dc3c4dc02de4bcb4e1dfb5906fd775c4d8e0",
-    url = "https://download.dfinity.systems/testdata/cketh/mainnet_events_v1.gz",
+    sha256 = "19531a137015b4c685134d7a454e981dbc8723227a947a78a274894c1ea7c867",
+    url = "https://download.dfinity.systems/testdata/cketh/mainnet_events_v2.gz",
 )
 
 http_file(
     name = "cketh_sepolia_events.gz",
-    sha256 = "ad417332a67911cace2ed1f5179b7b1e5f4eb5327a5e872f68a85283dfa838af",
-    url = "https://download.dfinity.systems/testdata/cketh/sepolia_events_v1.gz",
+    sha256 = "a4e034db414ea13e03e2533bbdf0e5291d9ccc6e81748191ec5b747389e74921",
+    url = "https://download.dfinity.systems/testdata/cketh/sepolia_events_v2.gz",
 )
 
 # EVM RPC canister
@@ -883,8 +874,11 @@ http_archive(
     sha256 = "10cd1111da87bf2400a380c1639a6cba8bfb937a24f9c51f5f88d393ae5f6f76",
     strip_prefix = "mtools-4.0.49",
     urls = [
-        "https://ftp.gnu.org/gnu/mtools/mtools-4.0.49.tar.gz",
+        # mirrors.kernel.org first: ftp.gnu.org and ftpmirror.gnu.org have a
+        # history of outages that broke CI (e.g. 2026-08-28).
+        "https://mirrors.kernel.org/gnu/mtools/mtools-4.0.49.tar.gz",
         "https://ftpmirror.gnu.org/mtools/mtools-4.0.49.tar.gz",
+        "https://ftp.gnu.org/gnu/mtools/mtools-4.0.49.tar.gz",
     ],
 )
 
@@ -1019,34 +1013,6 @@ http_archive(
     url = "https://github.com/aquasecurity/trivy/releases/download/v0.69.2/trivy_0.69.2_macOS-64bit.tar.gz",
 )
 
-http_archive(
-    name = "dfx-x86_64-darwin",
-    build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "be1079c5f48e4bb88c2421f65b501040250a13a4ea57c6ccc1d3edf17812f674",
-    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-x86_64-darwin.tar.gz",
-)
-
-http_archive(
-    name = "dfx-x86_64-linux",
-    build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "d1473ae15ece44e782f0f2f8ac586ead349fe434189df8b587eb738becce0138",
-    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-x86_64-linux.tar.gz",
-)
-
-http_archive(
-    name = "dfx-aarch64-darwin",
-    build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "c97b3975f3c72c20f016f7ef4d394fea5bb7e7d849dd77f6ab0ea0361ad6276c",
-    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-darwin.tar.gz",
-)
-
-http_archive(
-    name = "dfx-aarch64-linux",
-    build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "9da909e8a3cbcb938cfe8502afab87ec61e75c5744025cd0a18b621695c38a5e",
-    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-linux.tar.gz",
-)
-
 # We pull in the binary artifact to break a circular dependency
 # between repositories: `canbench` is hosted in a separate repository
 # and depends on `pocket_ic` hosted in this repository;
@@ -1085,65 +1051,65 @@ http_file(
 http_archive(
     name = "pebble-aarch64-darwin",
     build_file = "@//third_party:BUILD.pebble.bazel",
-    sha256 = "39e07d63dc776521f2ffe0584e5f4f081c984ac02742c882b430891d89f0c866",
+    sha256 = "09a3a4e6ebed71e8d83294a26d361232262f45a7488f5de7bccb5887b395217f",
     strip_prefix = "pebble-darwin-arm64/darwin/arm64",
-    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-darwin-arm64.tar.gz",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.10.1/pebble-darwin-arm64.tar.gz",
 )
 
 http_archive(
     name = "pebble-x86_64-darwin",
     build_file = "@//third_party:BUILD.pebble.bazel",
-    sha256 = "9b9625651f8ce47706235179503fec149f8f38bce2b2554efe8c0f2a021f877c",
+    sha256 = "e670ff869886022637e077502a62e7f23be693c45a5a6727ebd76da8fdce64dc",
     strip_prefix = "pebble-darwin-amd64/darwin/amd64",
-    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-darwin-amd64.tar.gz",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.10.1/pebble-darwin-amd64.tar.gz",
 )
 
 http_archive(
     name = "pebble-aarch64-linux",
     build_file = "@//third_party:BUILD.pebble.bazel",
-    sha256 = "0e70f2537353f61cbf06aa54740bf7f7bb5f963ba00e909f23af5f85bc13fd1a",
+    sha256 = "b53fd072a69eb7692451de4e8b0667e0bdf5cccd7e36fc51b8eaf2fcc135ed9f",
     strip_prefix = "pebble-linux-arm64/linux/arm64",
-    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-linux-arm64.tar.gz",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.10.1/pebble-linux-arm64.tar.gz",
 )
 
 http_archive(
     name = "pebble-x86_64-linux",
     build_file = "@//third_party:BUILD.pebble.bazel",
-    sha256 = "34595d915bbc2fc827affb3f58593034824df57e95353b031c8d5185724485ce",
+    sha256 = "4f2fcb5bca8c85c9cf73ad140fccfc0d2be40bd81ab99879c79b7b8a0b4f70ed",
     strip_prefix = "pebble-linux-amd64/linux/amd64",
-    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-linux-amd64.tar.gz",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.10.1/pebble-linux-amd64.tar.gz",
 )
 
 http_archive(
     name = "pebble-challtestsrv-aarch64-darwin",
     build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
-    sha256 = "1bc5a6cfa062d9756e98d67825daf67f61dd655bcb6025efca2138fe836c9bbc",
+    sha256 = "59bf917fe39c96e2edca980fc2899f4f04aa1ce5485f28d419d18237b902cf82",
     strip_prefix = "pebble-challtestsrv-darwin-arm64/darwin/arm64",
-    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-darwin-arm64.tar.gz",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.10.1/pebble-challtestsrv-darwin-arm64.tar.gz",
 )
 
 http_archive(
     name = "pebble-challtestsrv-x86_64-darwin",
     build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
-    sha256 = "3d1343b1bbe892145fd2da70be36e67b149e482fbff897e109b8053f4f790f40",
+    sha256 = "796bd923f2c595dd7bf15ae693096abfb1df962cb3673c7981ff306daa5c4a52",
     strip_prefix = "pebble-challtestsrv-darwin-amd64/darwin/amd64",
-    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-darwin-amd64.tar.gz",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.10.1/pebble-challtestsrv-darwin-amd64.tar.gz",
 )
 
 http_archive(
     name = "pebble-challtestsrv-aarch64-linux",
     build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
-    sha256 = "99a276aac8ceac121859b799708218e6dc57d7ca1dc1b8b5b586246b3c4160e6",
+    sha256 = "db8e1a79ccdb2195c489fbe4f40fddb7f30e86f9cd8a07912566ee5025094d6c",
     strip_prefix = "pebble-challtestsrv-linux-arm64/linux/arm64",
-    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-arm64.tar.gz",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.10.1/pebble-challtestsrv-linux-arm64.tar.gz",
 )
 
 http_archive(
     name = "pebble-challtestsrv-x86_64-linux",
     build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
-    sha256 = "a817449d1f05ae58bcb7bf073b4cebe5d31512f859ba4b83951bd825d28d2114",
+    sha256 = "e93a5aa25ecdf3af2f9fbb2de32b0173e64a2eae81002a4ccfe35fa6f4f60b92",
     strip_prefix = "pebble-challtestsrv-linux-amd64/linux/amd64",
-    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-amd64.tar.gz",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.10.1/pebble-challtestsrv-linux-amd64.tar.gz",
 )
 
 ## For //ci/githubstats:query to query our BuildBuddy services via protobuf-based RPC to fetch logs
@@ -1290,6 +1256,33 @@ mainnet_icos_images(
     path = "//:mainnet-icos-revisions.json",
 )
 
+mainnet_icos_binaries = use_repo_rule("//bazel:mainnet-icos-binaries.bzl", "mainnet_icos_binaries")
+
+# Mainnet release binaries, published for the same revisions as the mainnet ICOS
+# images above. Declaring them as Bazel dependencies (instead of having the tests
+# download them from the CDN while they run) is what allows the system-tests that
+# use them to also run on the network-isolated local backend. See the
+# mainnet_binaries_runtime_deps dicts in //rs/tests:common.bzl.
+mainnet_icos_binaries(
+    name = "mainnet_nns_binaries",
+    parts = [
+        "guestos",
+        "subnets",
+        "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_binaries(
+    name = "mainnet_app_binaries",
+    parts = [
+        "guestos",
+        "subnets",
+        "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
 mainnet_icos_versions = use_repo_rule("//bazel:mainnet-icos-versions.bzl", "mainnet_icos_versions")
 
 mainnet_icos_versions(
@@ -1369,16 +1362,6 @@ register_toolchains(
 )
 
 new_local_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
-
-# Use libsystemd from the host environment
-# Ideally this is pulled hermetically, but as this is only used by infogetty
-# within IC images, we have less compatibility to worry about, and packaging it
-# this way is easier.
-new_local_repository(
-    name = "libsystemd",
-    build_file = "@//third_party:BUILD.libsystemd.bazel",
-    path = "/usr",
-)
 
 # Use libvirt from the host environment
 # Used for managing virtual machines programmatically.

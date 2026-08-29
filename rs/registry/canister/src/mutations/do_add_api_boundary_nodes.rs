@@ -102,6 +102,13 @@ impl Registry {
 mod tests {
     use std::str::FromStr;
 
+    use crate::{
+        common::test_helpers::{
+            add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+            prepare_registry_with_nodes,
+        },
+        mutations::common::test::TEST_NODE_ID,
+    };
     use ic_base_types::{NodeId, PrincipalId, SubnetId};
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_protobuf::registry::{
@@ -111,16 +118,8 @@ mod tests {
         make_api_boundary_node_record_key, make_node_record_key, make_replica_version_key,
     };
     use ic_registry_transport::{insert, update};
-    use ic_types::ReplicaVersion;
+    use ic_test_utilities_types::ids::test_replica_version;
     use prost::Message;
-
-    use crate::{
-        common::test_helpers::{
-            add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
-            prepare_registry_with_nodes,
-        },
-        mutations::common::test::TEST_NODE_ID,
-    };
 
     use super::AddApiBoundaryNodesPayload;
 
@@ -162,7 +161,7 @@ mod tests {
 
         let payload = AddApiBoundaryNodesPayload {
             node_ids: vec![node_id],
-            version: ReplicaVersion::default().to_string(),
+            version: test_replica_version().to_string(),
         };
 
         registry.maybe_apply_mutation_internal(vec![insert(
@@ -257,6 +256,7 @@ mod tests {
         registry.maybe_apply_mutation_internal(vec![insert(
             make_replica_version_key("version"), // key
             ReplicaVersionRecord {
+                replica_version_id: Some("version".to_string()),
                 release_package_sha256_hex: "".into(),
                 release_package_urls: vec![],
                 guest_launch_measurements: None,
@@ -304,6 +304,7 @@ mod tests {
         registry.maybe_apply_mutation_internal(vec![insert(
             make_replica_version_key("version"), // key
             ReplicaVersionRecord {
+                replica_version_id: Some("version".to_string()),
                 release_package_sha256_hex: "".into(),
                 release_package_urls: vec![],
                 guest_launch_measurements: None,
@@ -342,6 +343,7 @@ mod tests {
         registry.maybe_apply_mutation_internal(vec![insert(
             make_replica_version_key("version"), // key
             ReplicaVersionRecord {
+                replica_version_id: Some("version".to_string()),
                 release_package_sha256_hex: "".into(),
                 release_package_urls: vec![],
                 guest_launch_measurements: None,
@@ -377,6 +379,7 @@ mod tests {
         registry.maybe_apply_mutation_internal(vec![insert(
             make_replica_version_key("version"), // key
             ReplicaVersionRecord {
+                replica_version_id: Some("version".to_string()),
                 release_package_sha256_hex: "".into(),
                 release_package_urls: vec![],
                 guest_launch_measurements: None,
@@ -421,6 +424,7 @@ mod tests {
         registry.maybe_apply_mutation_internal(vec![insert(
             make_replica_version_key("version"), // key
             ReplicaVersionRecord {
+                replica_version_id: Some("version".to_string()),
                 release_package_sha256_hex: "".into(),
                 release_package_urls: vec![],
                 guest_launch_measurements: None,

@@ -12,7 +12,10 @@ use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegist
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
-    consensus::{Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold},
+    consensus::{
+        Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold,
+        dkg::SubnetSplittingStatus,
+    },
     crypto::{
         Signed,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
@@ -25,6 +28,7 @@ pub mod chain_key;
 pub mod crypto;
 pub mod membership;
 pub mod pool_reader;
+pub mod subnet_splitting;
 
 /// When purging consensus or certification artifacts, we always keep a
 /// minimum chain length below the catch-up height.
@@ -156,6 +160,41 @@ pub fn aggregate<
     selector: Box<dyn Fn(&Message) -> Option<KeySelector> + '_>,
     artifact_shares: Shares,
 ) -> Vec<Signed<Message, CommitteeSignature>> {
+    aggregate_with_threshold(
+        log,
+        crypto,
+        selector,
+        Box::new(|content: &Message| {
+            membership
+                .get_committee_threshold(content.height(), Message::committee())
+                .inspect_err(|err| error!(log, "MembershipError: {:?}", err))
+                .ok()
+        }),
+        artifact_shares,
+    )
+}
+
+/// Same as [`aggregate`], but with the threshold of each content provided by the caller instead of
+/// being looked up in the [`Membership`].
+///
+/// This is required whenever the committee signing the shares cannot be derived from the consensus
+/// pool, e.g. for the post-split catch-up packages, whose committee is the one of a subnet which
+/// doesn't exist yet.
+#[allow(clippy::type_complexity)]
+pub fn aggregate_with_threshold<
+    Message: Eq + Ord + Clone + std::fmt::Debug,
+    CryptoMessage,
+    Signature: Ord,
+    KeySelector,
+    CommitteeSignature,
+    Shares: Iterator<Item = Signed<Message, Signature>>,
+>(
+    log: &ReplicaLogger,
+    crypto: &dyn Aggregate<CryptoMessage, Signature, KeySelector, CommitteeSignature>,
+    selector: Box<dyn Fn(&Message) -> Option<KeySelector> + '_>,
+    threshold: Box<dyn Fn(&Message) -> Option<Threshold> + '_>,
+    artifact_shares: Shares,
+) -> Vec<Signed<Message, CommitteeSignature>> {
     group_shares(artifact_shares)
         .into_iter()
         .filter_map(|(content_ref, shares)| {
@@ -166,21 +205,21 @@ pub fn aggregate<
                 );
                 None
             })?;
-            let threshold = match membership
-                .get_committee_threshold(content_ref.height(), Message::committee())
-            {
-                Ok(threshold) => threshold,
-                Err(err) => {
-                    error!(log, "MembershipError: {:?}", err);
-                    return None;
-                }
-            };
+            let threshold = threshold(&content_ref)?;
             if shares.len() < threshold {
                 return None;
             }
             let shares_ref = shares.iter().collect();
             crypto
                 .aggregate(shares_ref, selector)
+                .inspect_err(|err| {
+                    warn!(
+                        log,
+                        "aggregate: failed to aggregate the shares of content {:?}: {:?}",
+                        content_ref,
+                        err
+                    )
+                })
                 .ok()
                 .map(|signature| {
                     let content = content_ref.clone();
@@ -293,6 +332,21 @@ pub fn active_high_threshold_nidkg_id(
     })
 }
 
+/// Returns the current DKG transcript with the given tag from the DKG summary of the given
+/// summary block, if there is one.
+/// This function panics if the given block is not a summary block.
+pub fn get_current_transcript_from_summary_block<'a>(
+    summary_block: &'a Block,
+    tag: &NiDkgTag,
+) -> Option<&'a NiDkgTranscript> {
+    summary_block
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg
+        .current_transcript(tag)
+}
+
 /// Return the current low transcript for the given height if it was found.
 pub fn active_low_threshold_committee(
     reader: &dyn ConsensusPoolCache,
@@ -323,6 +377,14 @@ pub fn active_high_threshold_committee(
             )
         })
     })
+}
+
+/// Return the subnet splitting status for the given height if it was found.
+pub fn subnet_splitting_status_at_height(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+) -> Option<SubnetSplittingStatus> {
+    get_active_data_at(reader, height, get_subnet_splitting_status_at_given_summary)
 }
 
 /// Return the active DKGData active at the given height if it was found.
@@ -401,18 +463,17 @@ fn get_transcript_data_at_given_summary<T>(
     }
 }
 
-/// Check if the [`ReplicaVersion`] is the current version
-///
-/// # Arguments
-///
-/// - `version`: the [`ReplicaVersion`] to check against
-///
-/// # Returns
-///
-/// - `true` if `version` matches the current version
-/// - `false` otherwise
-pub fn is_current_protocol_version(version: &ReplicaVersion) -> bool {
-    version == &ReplicaVersion::default()
+fn get_subnet_splitting_status_at_given_summary(
+    summary_block: &Block,
+    height: Height,
+) -> Option<SubnetSplittingStatus> {
+    let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+
+    if dkg_summary.current_interval_includes(height) {
+        Some(dkg_summary.subnet_splitting_status())
+    } else {
+        None
+    }
 }
 
 /// Get the [`SubnetRecord`] of this subnet with the specified [`RegistryVersion`]
@@ -492,7 +553,7 @@ mod tests {
     };
 
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         SetupInitialDkgContext, SignWithThresholdContext,
@@ -833,7 +894,8 @@ mod tests {
     fn test_ignore_disqualified_ranks() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             const SUBNET_SIZE: u64 = 10;
-            let Dependencies { mut pool, .. } = dependencies(pool_config, SUBNET_SIZE);
+            let Dependencies { mut pool, .. } =
+                DependenciesBuilder::new(pool_config, SUBNET_SIZE).build();
 
             let height = Height::new(1);
 
