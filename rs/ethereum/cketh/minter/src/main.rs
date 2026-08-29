@@ -34,8 +34,8 @@ use ic_cketh_minter::state::audit::{Event, EventType, process_event};
 use ic_cketh_minter::state::automatic_deposits::DepositRequest;
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest, SweepRequest,
+    AuthorizedSweepItem, Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed,
+    ReimbursementIndex, ReimbursementRequest, SweepRequest,
 };
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
@@ -728,14 +728,18 @@ async fn get_canister_status() -> ic_cdk_management_canister::CanisterStatusResu
 #[query]
 fn get_events(arg: GetEventsArg) -> GetEventsResult {
     use ic_cketh_minter::endpoints::events::{
-        AccessListItem, ReimbursementIndex as CandidReimbursementIndex,
+        AccessListItem, AuthorizedSweepItem as CandidAuthorizedSweepItem,
+        ReimbursementIndex as CandidReimbursementIndex,
         SignedAuthorization as CandidSignedAuthorization,
         TransactionReceipt as CandidTransactionReceipt,
+        TransactionSignature as CandidTransactionSignature,
         TransactionStatus as CandidTransactionStatus, UnsignedSweeperTransaction,
         UnsignedTransaction,
     };
     use ic_cketh_minter::eth_rpc_client::responses::TransactionReceipt;
-    use ic_cketh_minter::tx::{SignableTransaction, SignedAuthorization, SweepTransaction};
+    use ic_cketh_minter::tx::{
+        SignableTransaction, SignedAuthorization, SweepTransaction, TransactionSignature,
+    };
     use serde_bytes::ByteBuf;
 
     const MAX_EVENTS_PER_RESPONSE: u64 = 100;
@@ -802,6 +806,36 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
         }
     }
 
+    fn map_signature(signature: &TransactionSignature) -> CandidTransactionSignature {
+        CandidTransactionSignature {
+            y_parity: signature.signature_y_parity,
+            r: ByteBuf::from(signature.r.to_be_bytes()),
+            s: ByteBuf::from(signature.s.to_be_bytes()),
+        }
+    }
+
+    fn map_authorized_sweep_items(items: &[AuthorizedSweepItem]) -> Vec<CandidAuthorizedSweepItem> {
+        items
+            .iter()
+            .map(
+                |AuthorizedSweepItem {
+                     item,
+                     authorization,
+                 }| CandidAuthorizedSweepItem {
+                    deposit: item.deposit.as_address().to_string(),
+                    owner: item.account.owner,
+                    subaccount: item.account.subaccount.map(ByteBuf::from),
+                    attestation: map_signature(&item.attestation),
+                    authorization: authorization.as_ref().map(|authorization| {
+                        map_authorizations(std::slice::from_ref(authorization))
+                            .pop()
+                            .expect("BUG: one authorization in, one out")
+                    }),
+                },
+            )
+            .collect()
+    }
+
     fn map_authorizations(
         authorizations: &[SignedAuthorization],
     ) -> Vec<CandidSignedAuthorization> {
@@ -811,9 +845,11 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 chain_id: authorization.chain_id.into(),
                 delegate: authorization.delegate.to_string(),
                 nonce: authorization.nonce.into(),
-                y_parity: authorization.y_parity,
-                r: ByteBuf::from(authorization.r.to_be_bytes()),
-                s: ByteBuf::from(authorization.s.to_be_bytes()),
+                signature: CandidTransactionSignature {
+                    y_parity: authorization.y_parity,
+                    r: ByteBuf::from(authorization.r.to_be_bytes()),
+                    s: ByteBuf::from(authorization.s.to_be_bytes()),
+                },
             })
             .collect()
     }
@@ -994,9 +1030,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                         deposit_helper: request.deposit_helper().to_string(),
                         owner: account.owner,
                         subaccount: account.subaccount.map(ByteBuf::from),
-                        y_parity: signature.signature_y_parity,
-                        r: ByteBuf::from(signature.r.to_be_bytes()),
-                        s: ByteBuf::from(signature.s.to_be_bytes()),
+                        attestation: map_signature(&signature),
                     }
                 }
                 EventType::AuthorizedDepositAddress { request, signature } => {
@@ -1012,19 +1046,17 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,
-                    amount,
-                    data,
+                    token,
+                    items,
                     max_transaction_fee,
                     created_at,
-                    authorizations,
                 }) => EP::AcceptedSweepRequest {
                     sweep_id: id.0.into(),
                     destination: destination.to_string(),
-                    amount: amount.into(),
-                    data: ByteBuf::from(data),
+                    token: token.to_string(),
+                    items: map_authorized_sweep_items(&items),
                     max_transaction_fee: max_transaction_fee.into(),
                     created_at,
-                    authorizations: map_authorizations(&authorizations),
                 },
                 EventType::CreatedSweeperTransaction {
                     sweep_id,

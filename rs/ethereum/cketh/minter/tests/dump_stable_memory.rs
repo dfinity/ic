@@ -4,12 +4,15 @@ use flate2::bufread::GzEncoder;
 use flate2::read::GzDecoder;
 use ic_cketh_minter::attestation::AttestationRequest;
 use ic_cketh_minter::checked_amount::CheckedAmountOf;
+use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::events::{
-    AccessListItem as CandidAccessListItem, Event as CandidEvent, EventSource as CandidEventSource,
-    GetEventsResult, ReimbursementIndex as CandidReimbursementIndex,
+    AccessListItem as CandidAccessListItem, AuthorizedSweepItem as CandidAuthorizedSweepItem,
+    Event as CandidEvent, EventSource as CandidEventSource, GetEventsResult,
+    ReimbursementIndex as CandidReimbursementIndex,
     SignedAuthorization as CandidSignedAuthorization,
-    TransactionReceipt as CandidTransactionReceipt, TransactionStatus as CandidTransactionStatus,
-    UnsignedSweeperTransaction, UnsignedTransaction,
+    TransactionReceipt as CandidTransactionReceipt,
+    TransactionSignature as CandidTransactionSignature,
+    TransactionStatus as CandidTransactionStatus, UnsignedSweeperTransaction, UnsignedTransaction,
 };
 use ic_cketh_minter::erc20::CkErc20Token;
 use ic_cketh_minter::eth_logs::{
@@ -20,9 +23,10 @@ use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::state::audit::EventType as ET;
 use ic_cketh_minter::state::event::Event;
 use ic_cketh_minter::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest, SweepId, SweepRequest,
+    AuthorizedSweepItem, Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed,
+    ReimbursementIndex, ReimbursementRequest, SweepId, SweepRequest,
 };
+use ic_cketh_minter::sweeper_contract::SweepItem;
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::{
     AccessList, AccessListItem, AuthorizationRequest, DelegatingSweep, Eip1559TransactionRequest,
@@ -234,20 +238,54 @@ fn map_unsigned_sweeper_transaction(tx: UnsignedSweeperTransaction) -> SweepTran
     )
 }
 
-fn map_authorizations(authorizations: Vec<CandidSignedAuthorization>) -> Vec<SignedAuthorization> {
-    fn map_signature_component(bytes: &[u8]) -> ethnum::u256 {
+fn map_candid_signature(signature: CandidTransactionSignature) -> TransactionSignature {
+    fn component(bytes: &[u8]) -> ethnum::u256 {
         ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(bytes).unwrap())
     }
 
+    TransactionSignature {
+        signature_y_parity: signature.y_parity,
+        r: component(&signature.r),
+        s: component(&signature.s),
+    }
+}
+
+fn map_authorizations(authorizations: Vec<CandidSignedAuthorization>) -> Vec<SignedAuthorization> {
     authorizations
         .into_iter()
-        .map(|authorization| SignedAuthorization {
-            chain_id: authorization.chain_id.0.to_u64().unwrap(),
-            delegate: authorization.delegate.parse().unwrap(),
-            nonce: authorization.nonce.try_into().unwrap(),
-            y_parity: authorization.y_parity,
-            r: map_signature_component(&authorization.r),
-            s: map_signature_component(&authorization.s),
+        .map(|authorization| {
+            let signature = map_candid_signature(authorization.signature);
+            SignedAuthorization {
+                chain_id: authorization.chain_id.0.to_u64().unwrap(),
+                delegate: authorization.delegate.parse().unwrap(),
+                nonce: authorization.nonce.try_into().unwrap(),
+                y_parity: signature.signature_y_parity,
+                r: signature.r,
+                s: signature.s,
+            }
+        })
+        .collect()
+}
+
+fn map_authorized_sweep_items(items: Vec<CandidAuthorizedSweepItem>) -> Vec<AuthorizedSweepItem> {
+    items
+        .into_iter()
+        .map(|item| AuthorizedSweepItem {
+            item: SweepItem {
+                deposit: DepositAddress::new(item.deposit.parse().unwrap()),
+                account: Account {
+                    owner: item.owner,
+                    subaccount: item
+                        .subaccount
+                        .map(|s| <[u8; 32]>::try_from(s.as_ref()).unwrap()),
+                },
+                attestation: map_candid_signature(item.attestation),
+            },
+            authorization: item.authorization.map(|authorization| {
+                map_authorizations(vec![authorization])
+                    .pop()
+                    .expect("BUG: one authorization in, one out")
+            }),
         })
         .collect()
 }
@@ -381,9 +419,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 deposit_helper,
                 owner,
                 subaccount,
-                y_parity,
-                r,
-                s,
+                attestation,
             } => ET::AttestedDepositAddress {
                 request: AttestationRequest::new(
                     chain_id.0.to_u64().unwrap(),
@@ -395,11 +431,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                         }),
                     },
                 ),
-                signature: TransactionSignature {
-                    signature_y_parity: y_parity,
-                    r: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(r.as_slice()).unwrap()),
-                    s: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(s.as_slice()).unwrap()),
-                },
+                signature: map_candid_signature(attestation),
             },
             EventPayload::AuthorizedDepositAddress {
                 owner,
@@ -432,19 +464,17 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
             EventPayload::AcceptedSweepRequest {
                 sweep_id,
                 destination,
-                amount,
-                data,
+                token,
+                items,
                 max_transaction_fee,
                 created_at,
-                authorizations,
             } => ET::AcceptedSweepRequest(SweepRequest {
                 id: SweepId(sweep_id.0.to_u64().unwrap()),
                 destination: destination.parse().unwrap(),
-                amount: amount.try_into().unwrap(),
-                data: data.into_vec(),
+                token: token.parse().unwrap(),
+                items: map_authorized_sweep_items(items),
                 max_transaction_fee: max_transaction_fee.try_into().unwrap(),
                 created_at,
-                authorizations: map_authorizations(authorizations),
             }),
             EventPayload::CreatedSweeperTransaction {
                 sweep_id,
