@@ -874,8 +874,11 @@ http_archive(
     sha256 = "10cd1111da87bf2400a380c1639a6cba8bfb937a24f9c51f5f88d393ae5f6f76",
     strip_prefix = "mtools-4.0.49",
     urls = [
-        "https://ftp.gnu.org/gnu/mtools/mtools-4.0.49.tar.gz",
+        # mirrors.kernel.org first: ftp.gnu.org and ftpmirror.gnu.org have a
+        # history of outages that broke CI (e.g. 2026-08-28).
+        "https://mirrors.kernel.org/gnu/mtools/mtools-4.0.49.tar.gz",
         "https://ftpmirror.gnu.org/mtools/mtools-4.0.49.tar.gz",
+        "https://ftp.gnu.org/gnu/mtools/mtools-4.0.49.tar.gz",
     ],
 )
 
