@@ -13,17 +13,22 @@
 mod tests;
 
 use crate::attestation::{AttestationRequest, sign_attestation};
+use crate::sweeper_contract::SweepItem;
 use crate::{
     deposit_address::sweeper_derivation_path,
     guard::TimerGuard,
     logs::{DEBUG, INFO},
-    numeric::{GasAmount, TransactionCount},
+    numeric::TransactionCount,
     runtime::CanisterRuntime,
     state::{
         State, TaskType,
         audit::{EventType, process_event},
+        automatic_deposits::SweepTarget,
         mutate_state, read_state,
-        transactions::{CreateSweepTransactionError, PipelineRequest},
+        transactions::{
+            AuthorizedSweepItem, CreateSweepTransactionError, PipelineRequest, SweepRequest,
+            sweep_gas_limit,
+        },
     },
     time::TimeProvider,
     tx::{AuthorizationRequest, GasFeeEstimate, lazy_refresh_gas_fee_estimate, sign_digest},
@@ -36,10 +41,6 @@ use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use std::collections::BTreeSet;
-
-/// Gas limit of a sweep transaction. A fixed, conservative bound; a per-request estimate arrives
-/// with the real delegate sweep call.
-pub(crate) const SWEEP_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
 
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
@@ -74,7 +75,7 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         return;
     }
 
-    let Some(_gas_fee_estimate) = lazy_refresh_gas_fee_estimate(runtime).await else {
+    let Some(gas_fee_estimate) = lazy_refresh_gas_fee_estimate(runtime).await else {
         log!(
             INFO,
             "[create_pending_sweeper_requests]: SKIPPING: failed retrieving gas fee estimate"
@@ -82,7 +83,7 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         return;
     };
 
-    for (_token, targets) in batch_per_token {
+    for (token, targets) in batch_per_token {
         let Some(attestation_requests) = read_state(|s| s.attestation_requests(&targets)) else {
             log!(
                 DEBUG,
@@ -100,7 +101,74 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         };
         sign_attestations_batch(attestation_requests, runtime).await;
         sign_authorizations_batch(authorization_requests, runtime).await;
+        enqueue_sweep(token, &targets, &gas_fee_estimate, runtime);
     }
+}
+
+/// Enqueues one sweep of `token` from the targets both signing passes covered, so the pipeline can
+/// price, sign and send it.
+///
+/// A target whose attestation or authorization is missing is left out rather than swept: its
+/// signing failed, so the sweep has nothing to prove the address credits the account, or nothing to
+/// delegate it with. It stays queued, and the next tick tries it again.
+fn enqueue_sweep<R: CanisterRuntime>(
+    token: Address,
+    targets: &[SweepTarget],
+    gas_fee_estimate: &GasFeeEstimate,
+    runtime: &R,
+) {
+    mutate_state(|s| {
+        let (Some(attestation_requests), Some(authorization_requests), Some(destination)) = (
+            s.attestation_requests(targets),
+            s.authorization_requests(targets),
+            s.sweeper_contract_address,
+        ) else {
+            return;
+        };
+
+        assert_eq!(targets.len(), attestation_requests.len());
+        assert_eq!(targets.len(), authorization_requests.len());
+
+        let items: Vec<_> = targets
+            .iter()
+            .zip(attestation_requests)
+            .zip(authorization_requests)
+            .filter_map(|((target, attestation_request), authorization_request)| {
+                let attestation = s.automatic_deposits.attestation(&attestation_request)?;
+                let authorization = s.automatic_deposits.authorization(&authorization_request)?;
+                Some(AuthorizedSweepItem {
+                    item: SweepItem {
+                        deposit: target.address(),
+                        account: target.account(),
+                        attestation: attestation.clone(),
+                    },
+                    authorization: Some(authorization_request.signed_with(authorization.clone())),
+                })
+            })
+            .collect();
+
+        if items.is_empty() {
+            log!(
+                INFO,
+                "[create_pending_sweeper_requests]: SKIPPING {token}: none of its queued deposits could be signed for"
+            );
+            return;
+        }
+
+        let max_transaction_fee = gas_fee_estimate
+            .clone()
+            .to_price(sweep_gas_limit(&items))
+            .max_transaction_fee();
+        let request = SweepRequest {
+            id: s.next_sweep_id,
+            destination,
+            token,
+            items,
+            max_transaction_fee,
+            created_at: runtime.time(),
+        };
+        process_event(s, EventType::AcceptedSweepRequest(request), runtime);
+    });
 }
 
 async fn sign_attestations_batch<R: CanisterRuntime>(
@@ -310,7 +378,7 @@ fn create_transactions_batch<T: TimeProvider>(
         match request.create_transaction(
             nonce,
             gas_fee_estimate.clone(),
-            SWEEP_TRANSACTION_GAS_LIMIT,
+            request.gas_limit(),
             ethereum_network,
         ) {
             Ok(transaction) => {

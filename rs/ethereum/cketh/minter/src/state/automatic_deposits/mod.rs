@@ -5,7 +5,8 @@ use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::eth_rpc::Hash;
-use crate::eth_rpc_client::responses::TransactionReceipt;
+use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::logs::INFO;
 use crate::numeric::{BlockNumber, Erc20Value, TransactionCount, TransactionNonce};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
 use crate::state::transactions::{
@@ -15,6 +16,7 @@ use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
 use crate::tx::{
     AuthorizationRequest, Finalized, GasFeeEstimate, Signed, SweepTransaction, TransactionSignature,
 };
+use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
@@ -177,13 +179,50 @@ impl AutomaticDeposits {
             .record_resubmit_transaction(new_tx)
     }
 
+    /// Finalize `id`'s transaction and release the deposits it held, whichever way it went: they
+    /// leave the queue on success because the funds moved, and on failure because the minter does
+    /// not retry them.
+    ///
+    /// # Panics
+    ///
+    /// If the sweep has no processed request, or a deposit it named is not queued or is held by
+    /// another sweep. Each means the queue has stopped describing which sweep owns which funds.
     pub fn record_finalized_sweep_transaction(
         &mut self,
         id: SweepId,
         receipt: &TransactionReceipt,
     ) -> Finalized<SweepTransaction> {
-        self.sweeper_transactions
-            .record_finalized_transaction(id, receipt)
+        let finalized = self
+            .sweeper_transactions
+            .record_finalized_transaction(id, receipt);
+        let request = self
+            .sweeper_transactions
+            .get_processed_request(&id)
+            .expect("BUG: missing sweep request");
+        let token = request.token;
+        let accounts: Vec<_> = request.items.iter().map(|item| item.item.account).collect();
+
+        for account in accounts {
+            let request = DepositRequest::new(account, token);
+            let entry = self
+                .sweep
+                .remove(&request)
+                .unwrap_or_else(|| panic!("BUG: {request:?} is not queued for sweeping"));
+            assert_eq!(
+                entry.swept_by,
+                Some(id),
+                "BUG: {request:?} is not held by sweep {id:?}"
+            );
+            if receipt.status == TransactionStatus::Failure {
+                log!(
+                    INFO,
+                    "[record_finalized_sweep_transaction]: DROPPING {request:?} from the sweep queue: {id:?} failed and the minter does not retry. Its {:?} stays at {}, and reaching it again needs the pair armed afresh.",
+                    entry.scanned_balance,
+                    entry.address
+                );
+            }
+        }
+        finalized
     }
 
     /// Equality as replay defines it: the sweeper pipeline reorders its queue without recording an
@@ -419,6 +458,7 @@ impl AutomaticDeposits {
                 last_scanned_block: deposit.last_scanned_block,
                 scan_count: deposit.scan_count,
                 scanned_balance: deposit.scanned_balance,
+                swept_by: None,
             },
         );
         assert!(
@@ -505,12 +545,16 @@ impl AutomaticDeposits {
             })
     }
 
+    /// The queued deposits a sweep could take next, batched by token, skipping those a sweep
+    /// already holds: taking them twice would move a balance the minter has already accounted for.
     pub fn requests_batch(
         &self,
         requested_batch_size: usize,
     ) -> BTreeMap<Address, Vec<SweepTarget>> {
         let mut batches = BTreeMap::new();
-        for (deposit_request, sweep_entry) in &self.sweep {
+        for (deposit_request, sweep_entry) in
+            self.sweep.iter().filter(|(_, entry)| entry.is_sweepable())
+        {
             let batch: &mut Vec<_> = batches.entry(deposit_request.token).or_default();
             if batch.len() < requested_batch_size {
                 batch.push(SweepTarget {
@@ -520,6 +564,33 @@ impl AutomaticDeposits {
             }
         }
         batches
+    }
+
+    /// Record that `sweep_id` took these accounts' deposits of `token`: each leaves the pool of
+    /// sweepable entries until the sweep is done with it.
+    ///
+    /// # Panics
+    ///
+    /// If a deposit is not queued, or another sweep already took it. Either means the queue no
+    /// longer describes which sweep owns which funds.
+    pub fn record_sweep_scheduled(
+        &mut self,
+        sweep_id: SweepId,
+        token: Address,
+        accounts: impl IntoIterator<Item = Account>,
+    ) {
+        for account in accounts {
+            let request = DepositRequest::new(account, token);
+            let entry = self
+                .sweep
+                .get_mut(&request)
+                .unwrap_or_else(|| panic!("BUG: {request:?} is not queued for sweeping"));
+            assert_eq!(
+                entry.swept_by, None,
+                "BUG: {request:?} was already taken by another sweep"
+            );
+            entry.swept_by = Some(sweep_id);
+        }
     }
 }
 
@@ -605,6 +676,17 @@ struct SweepEntry {
     scan_count: u32,
     /// The balance read for the token at `last_scanned_block`.
     scanned_balance: Erc20Value,
+    /// The sweep holding these funds, if one does. The entry stays queued while a sweep has it,
+    /// rather than leaving on being taken: until that sweep settles, this is the only record of
+    /// which balance sits at which address, and a failed sweep has to be able to say so.
+    swept_by: Option<SweepId>,
+}
+
+impl SweepEntry {
+    /// Whether a sweep could take these funds, i.e. no sweep already holds them.
+    fn is_sweepable(&self) -> bool {
+        self.swept_by.is_none()
+    }
 }
 
 /// The watchlist value held against one [`DepositRequest`]: the deposit address derived for its

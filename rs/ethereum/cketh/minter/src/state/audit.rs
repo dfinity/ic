@@ -121,6 +121,11 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         }
         EventType::AcceptedSweepRequest(request) => {
             state.next_sweep_id = request.id.next();
+            state.automatic_deposits.record_sweep_scheduled(
+                request.id,
+                request.token,
+                request.items.iter().map(|item| item.item.account),
+            );
             state
                 .automatic_deposits
                 .record_sweep_request(request.clone());
