@@ -165,10 +165,10 @@ pub(crate) fn deliver_canister_http_spent(
     log: &ReplicaLogger,
     metrics: &CanisterHttpSpentMetrics,
 ) {
-    // First update the contexts' refund status and accumulate the amounts to credit /
-    // report per canister; the crediting happens in a second pass, in
+    // First update the contexts' refund status and accumulate the amounts to refund /
+    // report per canister; the pooling happens in a second pass, in
     // `apply_accounting()`. This aggregates all reports of a canister into a single
-    // balance and metric update.
+    // pooled refund and metric update.
     let mut accounting: BTreeMap<CanisterId, CanisterAccounting> = BTreeMap::new();
     {
         let contexts = &mut state
@@ -1578,10 +1578,7 @@ mod tests {
 
         // refund = 13_000 − 9_500 = 3_500, but the context is still around, so
         // nothing has been observed yet.
-        assert_eq!(
-            balance(&state, caller),
-            INITIAL_BALANCE + Cycles::new(3_500)
-        );
+        assert_eq!(refunded(&state, caller), Cycles::new(3_500));
         assert_no_refunds(&metrics_registry, STATUS_COMPLETE);
         assert_no_refunds(&metrics_registry, STATUS_INCOMPLETE);
 
@@ -1590,10 +1587,7 @@ mod tests {
         let at_timeout = UNIX_EPOCH + DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
         refund_timed_out_canister_http_contexts(&mut state, at_timeout, &log, &metrics);
 
-        assert_eq!(
-            balance(&state, caller),
-            INITIAL_BALANCE + Cycles::new(3_500)
-        );
+        assert_eq!(refunded(&state, caller), Cycles::new(3_500));
         assert_refunds(
             &metrics_registry,
             STATUS_COMPLETE,
@@ -1633,10 +1627,7 @@ mod tests {
         refund_timed_out_canister_http_contexts(&mut state, at_timeout, &log, &metrics);
 
         // refund = 5_000 + 3 * 1_000 = 8_000.
-        assert_eq!(
-            balance(&state, caller),
-            INITIAL_BALANCE + Cycles::new(8_000)
-        );
+        assert_eq!(refunded(&state, caller), Cycles::new(8_000));
         assert_no_refunds(&metrics_registry, STATUS_COMPLETE);
         assert_refunds(
             &metrics_registry,
@@ -1670,7 +1661,7 @@ mod tests {
         let at_timeout = UNIX_EPOCH + DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
         refund_timed_out_canister_http_contexts(&mut state, at_timeout, &log, &metrics);
 
-        assert_eq!(balance(&state, caller), INITIAL_BALANCE);
+        assert_eq!(refunded(&state, caller), Cycles::zero());
         assert_refunds(
             &metrics_registry,
             STATUS_COMPLETE,
