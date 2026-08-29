@@ -570,8 +570,18 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
     /// in-flight calls" and corrupts its heap. Stopped through the client rather than through
     /// `CkEthSetup::stop_minter`, which drives the instance with explicit `tick`s (see the module
     /// documentation).
+    ///
+    /// Stopping also has to wait for those same outcalls first: a stop lands as an ingress the
+    /// server answers within a bounded burst of rounds, while the outcalls resolve on the
+    /// auto-progress loop's own pace — so a stop racing a busy minter can time out before the
+    /// calls it is waiting on come back.
     fn upgrade_minter_with(&self, arg: UpgradeArg) {
         let minter_id = self.minter_id();
+        self.poll_until(
+            AWAIT_DEADLINE,
+            |_| "the minter's in-flight HTTPS outcalls never resolved".to_string(),
+            |setup| setup.env().get_canister_http().is_empty().then_some(()),
+        );
         self.env()
             .stop_canister(minter_id, None)
             .expect("stopping the minter must succeed");

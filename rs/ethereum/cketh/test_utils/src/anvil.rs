@@ -365,15 +365,14 @@ impl Anvil {
     }
 
     fn await_receipt(&self, tx_hash: &str) -> Value {
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while Instant::now() < deadline {
+        for _ in 0..10 {
+            self.mine(1);
             let receipt = self.rpc("eth_getTransactionReceipt", serde_json::json!([tx_hash]));
             if !receipt.is_null() {
                 return receipt;
             }
-            std::thread::sleep(Duration::from_millis(50));
         }
-        panic!("no receipt for {tx_hash} within 10s");
+        panic!("no receipt for {tx_hash} within 10 mined blocks");
     }
 }
 
