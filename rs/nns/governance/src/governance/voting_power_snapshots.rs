@@ -131,7 +131,7 @@ impl VotingPowerSnapshots {
             .voting_power_totals
             .iter()
             .filter(|(created_at, _)| {
-                let age = now_seconds - created_at;
+                let age = now_seconds.saturating_sub(*created_at);
                 age <= MAXIMUM_STALENESS_SECONDS
             })
             .min_by_key(|(_, snapshot)| snapshot.total_potential_voting_power)?;
