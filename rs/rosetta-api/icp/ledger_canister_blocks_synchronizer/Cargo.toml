@@ -26,6 +26,7 @@ rosetta-core = { path = "../../common/rosetta_core" }
 rusqlite = { workspace = true, features = ["bundled", "hooks"] }
 serde = { workspace = true }
 tokio = { workspace = true }
+tokio-rusqlite = "0.7"
 tracing = { workspace = true }
 url = { workspace = true }
 

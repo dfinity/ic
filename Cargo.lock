@@ -10490,6 +10490,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "tokio",
+ "tokio-rusqlite",
  "tracing",
  "url",
 ]

@@ -85,7 +85,7 @@ use self::{
 #[async_trait]
 pub trait LedgerAccess {
     // Maybe we should just return RwLockReadGuard explicitly and drop the Box
-    async fn read_blocks<'a>(&'a self) -> Box<dyn Deref<Target = Blocks> + 'a>;
+    async fn read_blocks<'a>(&'a self) -> Box<dyn Deref<Target = Blocks> + Send + 'a>;
     async fn sync_blocks(&self, stopped: Arc<AtomicBool>) -> Result<(), ApiError>;
     fn ledger_canister_id(&self) -> &CanisterId;
     fn governance_canister_id(&self) -> &CanisterId;
@@ -263,7 +263,7 @@ impl LedgerClient {
 
 #[async_trait]
 impl LedgerAccess for LedgerClient {
-    async fn read_blocks(&self) -> Box<dyn Deref<Target = Blocks> + '_> {
+    async fn read_blocks(&self) -> Box<dyn Deref<Target = Blocks> + Send + '_> {
         self.ledger_blocks_synchronizer.read_blocks().await
     }
 

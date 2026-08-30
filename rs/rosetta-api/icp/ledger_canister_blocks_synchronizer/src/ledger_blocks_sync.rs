@@ -64,8 +64,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         let rosetta_metrics =
             RosettaMetrics::new("ICP".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string());
         let mut blocks = match store_location {
-            Some(loc) => Blocks::new_persistent(loc, config)?,
-            None => Blocks::new_in_memory(config)?,
+            Some(loc) => Blocks::new_persistent(loc, config).await?,
+            None => Blocks::new_in_memory(config).await?,
         };
 
         if let Some(blocks_access) = &blocks_access {
@@ -78,8 +78,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         }
 
         info!("Loading blocks from store");
-        let first_block = blocks.get_first_hashed_block();
-        let last_block = blocks.get_latest_hashed_block();
+        let first_block = blocks.get_first_hashed_block().await;
+        let last_block = blocks.get_latest_hashed_block().await;
         if let (Ok(first), Ok(last)) = (&first_block, &last_block) {
             info!(
                 "Ledger client is up. Loaded {} blocks from store. First block at {}, last at {}",
@@ -97,11 +97,11 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         if let Ok(x) = last_block {
             rosetta_metrics.set_synced_height(x.index);
         }
-        if let Ok(x) = blocks.get_latest_verified_hashed_block() {
+        if let Ok(x) = blocks.get_latest_verified_hashed_block().await {
             rosetta_metrics.set_verified_height(x.index);
         }
 
-        blocks.try_prune(&store_max_blocks, PRUNE_DELAY)?;
+        blocks.try_prune(&store_max_blocks, PRUNE_DELAY).await?;
 
         Ok(Self {
             blockchain: RwLock::new(blocks),
@@ -114,8 +114,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 
     async fn verify_store(blocks: &Blocks, canister_access: &B) -> Result<(), Error> {
         debug!("Verifying store...");
-        let first_block = blocks.get_first_hashed_block().ok();
-        match blocks.get_hashed_block(&0) {
+        let first_block = blocks.get_first_hashed_block().await.ok();
+        match blocks.get_hashed_block(&0).await {
             Ok(store_genesis) => {
                 let genesis = canister_access
                     .query_raw_block(0)
@@ -208,7 +208,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         Ok(())
     }
 
-    pub async fn read_blocks(&self) -> Box<dyn Deref<Target = Blocks> + '_> {
+    pub async fn read_blocks(&self) -> Box<dyn Deref<Target = Blocks> + Send + '_> {
         Box::new(self.blockchain.read().await)
     }
 
@@ -274,7 +274,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 
         let mut blockchain = self.blockchain.write().await;
 
-        let latest_hb_opt = blockchain.get_latest_hashed_block();
+        let latest_hb_opt = blockchain.get_latest_hashed_block().await;
         let (last_block_hash, next_block_index) = match latest_hb_opt {
             Ok(hb) => (Some(hb.hash), hb.index + 1),
             Err(_) => (None, 0),
@@ -320,15 +320,16 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         )
         .await?;
 
-        blockchain.make_rosetta_blocks_if_enabled(tip_index)?;
+        blockchain.make_rosetta_blocks_if_enabled(tip_index).await?;
 
         info!(
             "You are all caught up to block {}",
-            blockchain.get_latest_hashed_block()?.index
+            blockchain.get_latest_hashed_block().await?.index
         );
 
         blockchain
             .try_prune(&self.store_max_blocks, PRUNE_DELAY)
+            .await
             .map_err(|_| Error::InternalError("Failed to prune store".to_string()))
     }
 
@@ -445,16 +446,22 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     bar.set_message("store blocks");
                     bar.set_position(bar.position() - block_batch.len() as u64)
                 };
-                blockchain.push_batch(block_batch, progress_bar.as_ref())?;
+                blockchain
+                    .push_batch(block_batch, progress_bar.as_ref())
+                    .await?;
                 block_batch = Vec::new();
             }
         }
-        blockchain.push_batch(block_batch, progress_bar.as_ref())?;
+        blockchain
+            .push_batch(block_batch, progress_bar.as_ref())
+            .await?;
         if let Some(bar) = &progress_bar {
             bar.finish();
         }
         info!("Synced took {} seconds", t_total.elapsed().as_secs_f64());
-        blockchain.set_hashed_block_to_verified(&(range.end - 1))?;
+        blockchain
+            .set_hashed_block_to_verified(&(range.end - 1))
+            .await?;
         self.rosetta_metrics.set_verified_height(range.end - 1);
         Ok(())
     }
@@ -589,6 +596,7 @@ mod test {
                 .read_blocks()
                 .await
                 .get_first_hashed_block()
+                .await
                 .ok()
         );
     }
@@ -604,8 +612,13 @@ mod test {
         let actual_blocks = blocks_sync.read_blocks().await;
         // there isn't a blocks.len() to use, so we check that the last index + 1 gives error and then we check the blocks
         for (idx, eb) in blocks.iter().enumerate() {
-            let hb = actual_blocks.get_hashed_block(&(idx as u64)).unwrap();
-            assert!(actual_blocks.is_verified_by_idx(&(idx as u64)).unwrap());
+            let hb = actual_blocks.get_hashed_block(&(idx as u64)).await.unwrap();
+            assert!(
+                actual_blocks
+                    .is_verified_by_idx(&(idx as u64))
+                    .await
+                    .unwrap()
+            );
             assert_eq!(Block::block_hash(eb), Block::block_hash(&hb.block));
         }
     }
@@ -622,8 +635,8 @@ mod test {
             .unwrap();
         {
             let actual_blocks = blocks_sync.read_blocks().await;
-            let hashed_blocks = actual_blocks.get_hashed_block(&0).unwrap();
-            assert!(actual_blocks.is_verified_by_idx(&0).unwrap());
+            let hashed_blocks = actual_blocks.get_hashed_block(&0).await.unwrap();
+            assert!(actual_blocks.is_verified_by_idx(&0).await.unwrap());
             assert_eq!(
                 Block::block_hash(&blocks[0]),
                 Block::block_hash(&hashed_blocks.block)
@@ -637,8 +650,8 @@ mod test {
             .unwrap();
         {
             let actual_blocks = blocks_sync.read_blocks().await;
-            let hashed_blocks = actual_blocks.get_hashed_block(&1).unwrap();
-            assert!(actual_blocks.is_verified_by_idx(&1).unwrap());
+            let hashed_blocks = actual_blocks.get_hashed_block(&1).await.unwrap();
+            assert!(actual_blocks.is_verified_by_idx(&1).await.unwrap());
             assert_eq!(
                 Block::block_hash(&blocks[1]),
                 Block::block_hash(&hashed_blocks.block)
