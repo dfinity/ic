@@ -41,7 +41,8 @@ use ic_registry_subnet_features::{
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
-use ic_types::{NodeId, ReplicaVersion};
+use ic_test_utilities_types::ids::test_replica_version;
+use ic_types::NodeId;
 use pocket_ic::PocketIcBuilder;
 use prost::Message;
 use registry_canister::{
@@ -435,7 +436,7 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
         initial_notary_delay_millis: 1500,
-        replica_version_id: ReplicaVersion::default().into(),
+        replica_version_id: test_replica_version().into(),
         dkg_interval_length: 0,
         dkg_dealings_per_block: 1,
         start_as_nns: false,

@@ -278,7 +278,11 @@ impl ConsensusImpl {
         pool: &PoolReader<'_>,
         block: &Block,
     ) -> Option<FinalizationShare> {
-        let content = FinalizationContent::new(block.height, ic_types::crypto::crypto_hash(block));
+        let content = FinalizationContent::new(
+            block.height,
+            ic_types::crypto::crypto_hash(block),
+            self.replica_config.replica_version.clone(),
+        );
         let signature = self
             .finalizer
             .crypto

@@ -42,9 +42,6 @@ pub fn validate_payload(
     log: &ReplicaLogger,
 ) -> ValidationResult<DkgPayloadValidationError> {
     let current_height = parent.height.increment();
-    let registry_version = pool_reader
-        .registry_version(current_height)
-        .ok_or(DkgPayloadValidationFailure::FailedToGetRegistryVersion)?;
 
     let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
     let is_dkg_start_height = last_dkg_summary.get_next_start_height() == current_height;
@@ -61,9 +58,9 @@ pub fn validate_payload(
                 registry_client,
                 crypto,
                 pool_reader,
+                last_summary_block,
                 last_dkg_summary,
                 &parent,
-                registry_version,
                 state_reader,
                 validation_context,
                 log.clone(),
@@ -106,6 +103,10 @@ pub fn validate_payload(
                     InvalidDkgPayloadReason::DkgDealingAtStartHeight(current_height).into(),
                 );
             }
+
+            let registry_version = pool_reader
+                .registry_version(current_height)
+                .ok_or(DkgPayloadValidationFailure::FailedToGetRegistryVersion)?;
             let max_dealings_per_block = registry_client
                 .get_dkg_dealings_per_block(subnet_id, registry_version)
                 .map_err(DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock)?
@@ -273,6 +274,7 @@ mod tests {
     use ic_test_utilities_state::get_initial_state;
     use ic_test_utilities_types::ids::{
         NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, node_test_id, subnet_test_id,
+        test_replica_version,
     };
     use ic_types::{
         Height, NodeId, RegistryVersion,
@@ -284,6 +286,7 @@ mod tests {
         },
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         messages::CallbackId,
+        replica_config::ReplicaConfig,
         time::UNIX_EPOCH,
     };
     use std::{
@@ -756,6 +759,7 @@ mod tests {
                 target_subnet: NiDkgTargetSubnet::Local,
                 dkg_tag,
             },
+            test_replica_version(),
         );
 
         Message::fake(content, dealer_id)
@@ -859,8 +863,11 @@ mod tests {
             );
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(
-                node_id,
-                subnet_id,
+                ReplicaConfig {
+                    node_id,
+                    subnet_id,
+                    replica_version: test_replica_version(),
+                },
                 registry.clone(),
                 state_manager.clone(),
                 crypto.clone(),

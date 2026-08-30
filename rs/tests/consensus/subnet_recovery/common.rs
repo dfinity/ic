@@ -70,6 +70,7 @@ use slog::{Logger, info};
 use std::{
     collections::{BTreeMap, HashMap},
     convert::TryFrom,
+    str::FromStr,
 };
 use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
@@ -907,7 +908,7 @@ fn corrupt_latest_cup(
         CupCorruption::CorruptedWithValidNiDkgId => {
             info!(logger, "Modifying CUP replica version");
             cup.content.block.as_mut().version =
-                ReplicaVersion::try_from("invalid_version").unwrap();
+                ReplicaVersion::from_str("invalid_version").unwrap();
             pb::CatchUpPackage::from(cup)
         }
         CupCorruption::CorruptedIncludingInvalidNiDkgId => {

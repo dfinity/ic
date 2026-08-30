@@ -350,6 +350,10 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
             consumed_cycles_by_use_case_as_counters,
+            // Transient, with no corresponding proto field:
+            // `ReplicatedState::new_from_checkpoint` derives it from the canisters
+            // it loads.
+            consumed_cycles_total_including_canisters: NominalCycles::zero(),
             num_canisters: try_from_option_field(
                 item.num_canisters,
                 "SubnetMetrics::num_canisters",

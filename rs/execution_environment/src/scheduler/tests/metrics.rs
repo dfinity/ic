@@ -1,7 +1,8 @@
 //! Tests for scheduler metrics.
 
 use super::super::test_utilities::{
-    SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response, other_side,
+    SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response,
+    other_side,
 };
 use super::super::*;
 use super::{
@@ -43,6 +44,20 @@ use ic_types_cycles::{
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
 use std::time::Duration;
+
+/// Observes the state metrics at `height`, having first refreshed the derived
+/// consumed-cycles total that the `replicated_state_consumed_cycles_since_replica_started`
+/// gauge reads. Production refreshes it on every `commit_and_certify`, which this
+/// harness never does.
+fn observe_state_metrics(test: &mut SchedulerTest, height: u64) {
+    test.state_mut().refresh_consumed_cycles();
+    test.state_metrics().observe(
+        test.state().metadata.own_subnet_id,
+        test.state(),
+        height.into(),
+        &no_op_logger(),
+    );
+}
 
 #[test]
 fn validate_consumed_instructions_metric() {
@@ -886,19 +901,13 @@ fn threshold_signature_agreements_metric_is_updated() {
     let schnorr_key_id = make_schnorr_key_id(0);
     let master_schnorr_key_id = MasterPublicKeyId::Schnorr(schnorr_key_id.clone());
     let mut test = SchedulerTestBuilder::new()
-        .with_replica_version(ReplicaVersion::default())
         .with_chain_keys(vec![
             master_ecdsa_key_id.clone(),
             master_schnorr_key_id.clone(),
         ])
         .build();
 
-    test.state_metrics().observe(
-        test.state().metadata.own_subnet_id,
-        test.state(),
-        1.into(),
-        &no_op_logger(),
-    );
+    observe_state_metrics(&mut test, 1);
 
     let canister_id = test.create_canister();
 
@@ -1057,12 +1066,7 @@ fn threshold_signature_agreements_metric_is_updated() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    test.state_metrics().observe(
-        test.state().metadata.own_subnet_id,
-        test.state(),
-        2.into(),
-        &no_op_logger(),
-    );
+    observe_state_metrics(&mut test, 2);
 
     let threshold_signature_agreements_after = &test
         .state()
@@ -1117,12 +1121,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
 
         let canister_id = test.create_canister();
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         let consumed_cycles_before = NominalCycles::new(
             fetch_gauge(
@@ -1154,12 +1153,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
             .sign_with_ecdsa_contexts();
         assert_eq!(sign_with_ecdsa_contexts.len(), 1);
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
         let consumed_cycles_after = NominalCycles::new(
             fetch_gauge(
                 test.metrics_registry(),
@@ -1198,12 +1192,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             .subnet_features
             .http_requests = true;
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         let consumed_cycles_before = NominalCycles::new(
             fetch_gauge(
@@ -1264,12 +1253,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             Some(NumBytes::from(response_size_limit)),
         );
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
         let consumed_cycles_after = NominalCycles::new(
             fetch_gauge(
                 test.metrics_registry(),
@@ -1435,12 +1419,7 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
             .system_state
             .consume_cycles(removed_cycles);
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         assert_eq!(
             fetch_gauge_vec(
@@ -1481,12 +1460,7 @@ fn consumed_cycles_for_resource_allocations_are_updated_from_valid_canisters() {
         test.advance_time(duration);
         test.charge_for_resource_allocations();
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         let expected_memory_cycles = (test.memory_cost(memory_allocation, duration)
             + test.canister_base_cost(memory_allocation, duration))
@@ -1559,12 +1533,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         );
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         assert_eq!(
             fetch_gauge_vec(
