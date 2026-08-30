@@ -560,6 +560,7 @@ impl ValidatedRegisterExtension {
                     wasm,
                     init_blob,
                     CanisterInstallMode::Install,
+                    None,
                 )
                 .await?;
 
@@ -1230,6 +1231,7 @@ impl ValidatedUpgradeExtension {
                 wasm,
                 arg_bytes,
                 CanisterInstallMode::Upgrade,
+                None,
             )
             .await?;
 

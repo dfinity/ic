@@ -97,7 +97,7 @@ use ic_canister_profiler::SpanStats;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
-    CanisterInstallModeV2,
+    CanisterInstallModeV2, CanisterUpgradeOptions as RootCanisterUpgradeOptions,
 };
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
@@ -196,6 +196,24 @@ pub fn bytes_to_subaccount(
     bytes.try_into().map_err(|_| {
         GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Invalid subaccount")
     })
+}
+
+/// Combines the arguments into the Mode type required by Root (and the
+/// Management canister).
+///
+/// If mode is not Upgrade, then canister_upgrade_options does not affect the
+/// return value (but in non-release builds, this panics via debug_assert).
+fn assemble_mode(
+    mode: CanisterInstallMode,
+    canister_upgrade_options: Option<RootCanisterUpgradeOptions>,
+) -> CanisterInstallModeV2 {
+    match mode {
+        CanisterInstallMode::Upgrade => CanisterInstallModeV2::Upgrade(canister_upgrade_options),
+        mode => {
+            debug_assert_eq!(canister_upgrade_options, None);
+            CanisterInstallModeV2::from(mode)
+        }
+    }
 }
 
 impl NeuronPermissionType {
@@ -2677,6 +2695,10 @@ impl Governance {
             ));
         }
 
+        let canister_upgrade_options = upgrade
+            .upgrade_options()
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+
         let mode = upgrade.mode_or_upgrade() as i32;
 
         let wasm = Wasm::try_from(&upgrade)
@@ -2689,6 +2711,7 @@ impl Governance {
                 .canister_upgrade_arg
                 .unwrap_or_else(|| Encode!().unwrap()),
             CanisterInstallMode::try_from(CanisterInstallModeProto::try_from(mode)?)?,
+            canister_upgrade_options,
         )
         .await
     }
@@ -2699,6 +2722,7 @@ impl Governance {
         wasm: Wasm,
         arg: Vec<u8>,
         mode: CanisterInstallMode,
+        canister_upgrade_options: Option<RootCanisterUpgradeOptions>,
     ) -> Result<(), GovernanceError> {
         // Serialize upgrade.
         let payload = {
@@ -2709,7 +2733,7 @@ impl Governance {
             // For more details, please refer to the comments above the (definition of the)
             // stop_before_installing field in ChangeCanisterRequest.
             let stop_before_installing = true;
-            let mode = CanisterInstallModeV2::from(mode);
+            let mode = assemble_mode(mode, canister_upgrade_options);
 
             let mut change_canister_arg =
                 ChangeCanisterRequest::new(stop_before_installing, mode, canister_id)
@@ -2885,6 +2909,7 @@ impl Governance {
                     Wasm::Bytes(target_wasm.clone()),
                     Encode!().unwrap(),
                     CanisterInstallMode::Upgrade,
+                    None,
                 )
                 .await?;
             }
@@ -2952,6 +2977,7 @@ impl Governance {
                     Wasm::Bytes(target_wasm.clone()),
                     Encode!().unwrap(),
                     CanisterInstallMode::Upgrade,
+                    None,
                 )
                 .await?;
             }
@@ -3154,6 +3180,7 @@ impl Governance {
             Wasm::Bytes(ledger_wasm),
             ledger_upgrade_arg,
             CanisterInstallMode::Upgrade,
+            None,
         )
         .await?;
 
