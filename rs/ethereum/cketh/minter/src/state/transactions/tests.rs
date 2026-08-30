@@ -51,7 +51,7 @@ mod withdrawal_transactions {
         use crate::test_fixtures::expect_panic_with_message;
 
         #[test]
-        fn should_record_withdrawal_request() {
+        fn should_record_request() {
             fn test<R: Into<WithdrawalRequest> + Clone>(withdrawal_request: R) {
                 let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
                 transactions.record_request(withdrawal_request.clone());
@@ -2142,7 +2142,7 @@ mod withdrawal_transactions {
         use crate::state::transactions::ResubmitTransactionError;
         use crate::state::transactions::tests::{
             DEFAULT_CREATED_AT, DEFAULT_PRINCIPAL, DEFAULT_WITHDRAWAL_AMOUNT,
-            create_and_record_signed_transaction,
+            ckerc20_withdrawal_request_with_index, create_and_record_signed_transaction,
         };
         use crate::state::transactions::{
             CreateTransactionError, EthWithdrawalRequest, NotReimbursable, PipelineRequest,
@@ -2179,6 +2179,71 @@ mod withdrawal_transactions {
                 ReimbursementIndex::try_from(&request),
                 Err(NotReimbursable),
                 "a funding request must not yield a reimbursement index"
+            );
+        }
+
+        #[test]
+        fn should_report_the_outstanding_funding_until_its_transaction_finalizes() {
+            let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
+            let funding = sweeper_funding_payload();
+
+            transactions.record_request(sweeper_funding_request());
+            assert_eq!(
+                transactions.outstanding_sweeper_funding(),
+                Some(&funding),
+                "a queued funding is outstanding"
+            );
+
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                sweeper_funding_request(),
+                gas_fee_estimate(),
+            );
+            assert_eq!(
+                transactions.outstanding_sweeper_funding(),
+                Some(&funding),
+                "a funding whose transaction is waiting to be signed is outstanding"
+            );
+
+            let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+            assert_eq!(
+                transactions.outstanding_sweeper_funding(),
+                Some(&funding),
+                "a funding whose transaction was sent is outstanding until it finalizes"
+            );
+
+            transactions.record_finalized_transaction(
+                funding.ledger_burn_index,
+                transaction_receipt(&signed_tx, TransactionStatus::Success),
+            );
+            assert_eq!(
+                transactions.outstanding_sweeper_funding(),
+                None,
+                "a finalized funding is no longer outstanding, however long it stays among the \
+                 processed requests"
+            );
+        }
+
+        #[test]
+        fn should_not_report_a_user_withdrawal_as_an_outstanding_funding() {
+            let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
+            let cketh = cketh_withdrawal_request_with_index(LedgerBurnIndex::new(15));
+
+            transactions.record_request(cketh.clone());
+            transactions.record_request(ckerc20_withdrawal_request_with_index(
+                LedgerBurnIndex::new(16),
+                LedgerBurnIndex::new(17),
+            ));
+            assert_eq!(transactions.outstanding_sweeper_funding(), None);
+
+            let created_tx =
+                create_and_record_transaction(&mut transactions, cketh, gas_fee_estimate());
+            create_and_record_signed_transaction(&mut transactions, created_tx);
+
+            assert_eq!(
+                transactions.outstanding_sweeper_funding(),
+                None,
+                "only a funding is a funding, at whatever stage the others are"
             );
         }
 
@@ -2904,42 +2969,70 @@ pub mod arbitrary {
 
 mod sweep_lane {
     use super::{gas_fee_estimate, sign_transaction, transaction_receipt};
+    use crate::deposit_address::DepositAddress;
     use crate::eth_rpc_client::responses::TransactionStatus;
     use crate::lifecycle::EthereumNetwork;
+    use crate::numeric::GasAmount;
     use crate::numeric::{TransactionCount, TransactionNonce, Wei, WeiPerGas};
     use crate::state::transactions::{
-        CreateSweepTransactionError, PipelineRequest, ResubmitTransactionError, SweepId,
-        SweepRequest, TransactionPipeline,
+        AuthorizedSweepItem, CreateSweepTransactionError, PipelineRequest,
+        ResubmitTransactionError, SweepId, SweepRequest, TransactionPipeline, sweep_gas_limit,
     };
-    use crate::sweep::SWEEP_TRANSACTION_GAS_LIMIT;
+
+    const SWEEP_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
+    use crate::sweeper_contract::SweepItem;
     use crate::tx::{
         DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate,
-        SignableTransaction, SignedAuthorization, SweepTransaction,
+        SignableTransaction, SignedAuthorization, SweepTransaction, TransactionSignature,
     };
     use assert_matches::assert_matches;
+    use candid::Principal;
     use ethnum::u256;
     use ic_ethereum_types::Address;
+    use icrc_ledger_types::icrc1::account::Account;
 
     const EIP1559_TX_ID: u8 = 2;
     const SET_CODE_TX_ID: u8 = 4;
 
+    /// A sweep of two deposit addresses, both already delegated to the sweeper contract and so
+    /// carrying no authorization.
     fn sweep_request(id: u64) -> SweepRequest {
         SweepRequest {
             id: SweepId(id),
             destination: Address::new([id as u8; 20]),
-            amount: Wei::ZERO,
-            data: vec![0xaa, 0xbb, 0xcc],
+            token: Address::new([0xc0; 20]),
+            items: vec![sweep_item(1, None), sweep_item(2, None)],
             max_transaction_fee: Wei::from(1_000_000_000_000_000_u64),
             created_at: 1_620_328_630_000_000_000,
-            authorizations: vec![],
         }
     }
 
     /// A sweep of two deposit addresses that are not yet delegated to the sweeper contract.
     fn delegating_sweep_request(id: u64) -> SweepRequest {
         SweepRequest {
-            authorizations: vec![authorization(1), authorization(2)],
+            items: vec![
+                sweep_item(1, Some(authorization(1))),
+                sweep_item(2, Some(authorization(2))),
+            ],
             ..sweep_request(id)
+        }
+    }
+
+    fn sweep_item(seed: u8, authorization: Option<SignedAuthorization>) -> AuthorizedSweepItem {
+        AuthorizedSweepItem {
+            item: SweepItem {
+                deposit: DepositAddress::new(Address::new([seed; 20])),
+                account: Account {
+                    owner: Principal::management_canister(),
+                    subaccount: Some([seed; 32]),
+                },
+                attestation: TransactionSignature {
+                    signature_y_parity: false,
+                    r: u256::from(seed),
+                    s: u256::from(seed),
+                },
+            },
+            authorization,
         }
     }
 
@@ -2984,6 +3077,41 @@ mod sweep_lane {
     }
 
     #[test]
+    fn should_scale_the_sweep_gas_limit_with_the_distinct_addresses_walked() {
+        const MEASURED_TEN_DEPOSIT_SWEEP_GAS: u128 = 609_431;
+
+        let items_for = |addresses: u8| -> Vec<AuthorizedSweepItem> {
+            (1..=addresses).map(|seed| sweep_item(seed, None)).collect()
+        };
+
+        assert_eq!(sweep_gas_limit(&items_for(1)), GasAmount::new(225_000));
+        assert_eq!(sweep_gas_limit(&items_for(10)), GasAmount::new(1_710_000));
+        assert!(sweep_gas_limit(&items_for(10)) > GasAmount::new(MEASURED_TEN_DEPOSIT_SWEEP_GAS));
+
+        let one_address_ten_times: Vec<_> = (0..10).map(|_| sweep_item(1, None)).collect();
+        assert_eq!(
+            sweep_gas_limit(&one_address_ten_times),
+            sweep_gas_limit(&items_for(1))
+        );
+    }
+
+    #[test]
+    fn should_price_and_create_a_sweep_transaction_with_the_same_gas_limit() {
+        let request = delegating_sweep_request(1);
+        let transaction = request
+            .create_transaction(
+                TransactionNonce::ZERO,
+                gas_fee_estimate(),
+                request.gas_limit(),
+                EthereumNetwork::Sepolia,
+            )
+            .expect("BUG: the fixture allowance covers the fixture fee");
+
+        assert_eq!(request.gas_limit(), sweep_gas_limit(&request.items));
+        assert_eq!(transaction.gas_limit(), sweep_gas_limit(&request.items));
+    }
+
+    #[test]
     fn should_create_a_sweep_transaction_on_the_lane_own_nonce() {
         let mut pipeline = sweeper_pipeline();
         pipeline.record_request(sweep_request(0));
@@ -2998,37 +3126,40 @@ mod sweep_lane {
         );
         assert_eq!(tx.destination(), &sweep_request(0).destination);
         assert_eq!(tx.amount(), &Wei::ZERO);
-        assert_eq!(tx.data(), sweep_request(0).data);
+        assert_eq!(tx.data(), sweep_request(0).call_data());
     }
 
     #[test]
     fn should_sweep_with_the_transaction_type_the_delegations_to_install_call_for() {
         struct Case {
             scenario: &'static str,
-            authorizations: Vec<SignedAuthorization>,
+            items: Vec<AuthorizedSweepItem>,
             expected_transaction_type: u8,
         }
 
         for case in [
             Case {
                 scenario: "every swept address already delegated",
-                authorizations: vec![],
+                items: vec![sweep_item(1, None), sweep_item(2, None)],
                 expected_transaction_type: EIP1559_TX_ID,
             },
             Case {
                 scenario: "one swept address still to delegate",
-                authorizations: vec![authorization(1)],
+                items: vec![sweep_item(1, Some(authorization(1))), sweep_item(2, None)],
                 expected_transaction_type: SET_CODE_TX_ID,
             },
             Case {
                 scenario: "two swept addresses still to delegate",
-                authorizations: vec![authorization(1), authorization(2)],
+                items: vec![
+                    sweep_item(1, Some(authorization(1))),
+                    sweep_item(2, Some(authorization(2))),
+                ],
                 expected_transaction_type: SET_CODE_TX_ID,
             },
         ] {
             let context = case.scenario;
             let request = SweepRequest {
-                authorizations: case.authorizations,
+                items: case.items,
                 ..sweep_request(0)
             };
             let mut pipeline = sweeper_pipeline();
@@ -3043,12 +3174,12 @@ mod sweep_lane {
             );
             assert_eq!(
                 tx.authorizations(),
-                request.authorizations.as_slice(),
+                request.authorizations().as_slice(),
                 "{context}"
             );
             assert_eq!(tx.destination(), &request.destination, "{context}");
-            assert_eq!(tx.amount(), &request.amount, "{context}");
-            assert_eq!(tx.data(), request.data, "{context}");
+            assert_eq!(tx.amount(), &Wei::ZERO, "{context}");
+            assert_eq!(tx.data(), request.call_data(), "{context}");
             assert_eq!(tx.nonce(), TransactionNonce::ZERO, "{context}");
         }
     }
@@ -3069,7 +3200,7 @@ mod sweep_lane {
         };
         assert_eq!(id, &SweepId(0));
         assert_eq!(bumped.transaction_type(), SET_CODE_TX_ID);
-        assert_eq!(bumped.authorizations(), request.authorizations.as_slice());
+        assert_eq!(bumped.authorizations(), request.authorizations().as_slice());
         assert!(bumped.max_priority_fee_per_gas() > created.max_priority_fee_per_gas());
         assert_eq!(bumped.max_fee_per_gas(), created.max_fee_per_gas());
     }
@@ -3103,7 +3234,7 @@ mod sweep_lane {
         assert_eq!(finalized.transaction_hash(), &signed.hash());
         assert_eq!(
             finalized.transaction().authorizations(),
-            delegating_sweep_request(0).authorizations.as_slice()
+            delegating_sweep_request(0).authorizations().as_slice()
         );
     }
 

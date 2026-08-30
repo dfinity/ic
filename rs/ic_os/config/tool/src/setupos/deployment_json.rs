@@ -42,8 +42,7 @@ pub struct VmResources {
 }
 
 impl Default for VmResources {
-    /// These currently match the defaults for nested tests on Farm:
-    /// (`HOSTOS_VCPUS_PER_VM / 2`, `HOSTOS_MEMORY_KIB_PER_VM / 2`)
+    /// Fallback for a `deployment.json` that omits the field.
     fn default() -> Self {
         VmResources {
             memory: 16,

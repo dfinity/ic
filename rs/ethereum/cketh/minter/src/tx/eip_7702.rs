@@ -4,11 +4,13 @@ use super::{
 };
 use crate::{
     checked_amount::CheckedAmountOf,
+    deposit_address::{DepositAddressSchema, deposit_derivation_path},
     eth_rpc::Hash,
     numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas},
 };
 use ethnum::u256;
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
 use minicbor::{Decode, Encode};
 use rlp::{Rlp, RlpStream};
 use serde_bytes::ByteBuf;
@@ -52,6 +54,67 @@ impl AsRef<Eip7702TransactionRequest> for Eip7702TransactionRequest {
     }
 }
 
+/// What a deposit address authorizes, and what a stored signature over it is valid for: the tuple
+/// itself, plus the account whose deposit address signed it.
+///
+/// This is the key an authorization is cached under, so any change to what is authorized — another
+/// chain, another sweeper contract, another nonce — misses the cache and is signed afresh instead
+/// of reusing a tuple that no longer says what the minter means.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
+pub struct AuthorizationRequest {
+    #[n(0)]
+    account: Account,
+    #[n(1)]
+    chain_id: u64,
+    #[n(2)]
+    delegate: Address,
+    #[n(3)]
+    nonce: TransactionNonce,
+}
+
+impl AuthorizationRequest {
+    pub fn new(
+        account: Account,
+        chain_id: u64,
+        delegate: Address,
+        nonce: TransactionNonce,
+    ) -> Self {
+        Self {
+            account,
+            chain_id,
+            delegate,
+            nonce,
+        }
+    }
+
+    pub fn account(&self) -> Account {
+        self.account
+    }
+
+    pub fn derivation_path(&self) -> Vec<ByteBuf> {
+        deposit_derivation_path(DepositAddressSchema::CkErc20, &self.account)
+    }
+
+    pub fn authorization(&self) -> Authorization {
+        Authorization {
+            chain_id: self.chain_id,
+            delegate: self.delegate,
+            nonce: self.nonce,
+        }
+    }
+
+    pub fn signed_with(&self, signature: TransactionSignature) -> SignedAuthorization {
+        SignedAuthorization {
+            chain_id: self.chain_id,
+            delegate: self.delegate,
+            nonce: self.nonce,
+            y_parity: signature.signature_y_parity,
+            r: signature.r,
+            s: signature.s,
+        }
+    }
+}
+
 /// An unsigned EIP-7702 authorization signed over by an authority to delegate its code.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Authorization {
@@ -79,24 +142,6 @@ impl Authorization {
         let mut bytes = self.rlp_bytes().to_vec();
         bytes.insert(0, EIP7702_AUTHORIZATION_MAGIC);
         Hash(ic_sha3::Keccak256::hash(bytes))
-    }
-
-    pub async fn sign(self, derivation_path: Vec<ByteBuf>) -> Result<SignedAuthorization, String> {
-        if self.chain_id == 0 {
-            return Err(
-                "BUG: EIP-7702 authorization chain_id must be set explicitly and never 0"
-                    .to_string(),
-            );
-        }
-        let signature = super::sign_digest(&self.hash(), &derivation_path).await?;
-        Ok(SignedAuthorization {
-            chain_id: self.chain_id,
-            delegate: self.delegate,
-            nonce: self.nonce,
-            y_parity: signature.signature_y_parity,
-            r: signature.r,
-            s: signature.s,
-        })
     }
 }
 
