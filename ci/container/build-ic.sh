@@ -10,7 +10,11 @@ if [ "${BUILD_IC_NESTED:-}" == 1 ]; then
 fi
 export BUILD_IC_NESTED=1
 
-export ROOT_DIR="$(git rev-parse --show-toplevel)"
+# Assign, then export: `export X="$(...)"` swallows the command
+# substitution's exit status, so a failing git would leave X empty and
+# `set -e` would not notice.
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+export ROOT_DIR
 
 # This script needs to be run inside the ic-build container
 # If it isn't, we drop into the correct container.
@@ -105,7 +109,8 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
-export VERSION="$(git rev-parse HEAD)"
+VERSION="$(git rev-parse HEAD)"
+export VERSION
 
 BAZEL_TARGETS=()
 

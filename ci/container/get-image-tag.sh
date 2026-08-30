@@ -2,7 +2,9 @@
 
 set -eEuo pipefail
 
-cd "$(git rev-parse --show-toplevel)"
+# Assign first: `cd "$(...)"` would silently `cd ""` (exit 0) if git failed.
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
 
 INPUT_FILES=(
     ci/container/Dockerfile

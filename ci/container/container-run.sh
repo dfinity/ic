@@ -205,6 +205,66 @@ RUNTIME_RUN_ARGS=(
     --mount type=tmpfs,target="/tmp/containers" # expected by ic-os build
 )
 
+# Where `.git` is a *file* rather than a directory it holds a path to the real
+# git directory -- typically a linked git worktree, whose `.git` names an admin
+# directory under the main checkout's `.git`, but a `--separate-git-dir` clone
+# or a submodule looks the same. Mounting only the checkout leaves that pointer
+# dangling, so every `git` call inside the container fails -- including the
+# `$(git rev-parse --show-toplevel)` that several ci scripts rely on. Mount the
+# git directory at the very same absolute path so the pointer resolves.
+#
+# Note that for a worktree this hands the container read-write access to the
+# main checkout's entire git directory, where for a plain clone only the
+# checkout itself is exposed.
+if [ -f "${REPO_ROOT}/.git" ]; then
+    GIT_COMMON_DIR="$(git rev-parse --git-common-dir)"
+    GIT_COMMON_DIR="$(cd "$GIT_COMMON_DIR" && pwd)" # may be relative
+    case "$GIT_COMMON_DIR" in
+        "$REPO_ROOT" | "$REPO_ROOT"/*)
+            : # inside the checkout already, covered by the mount above
+            ;;
+        *)
+            # Mounting at the same absolute path only helps if the pointer *is*
+            # absolute. With `worktree.useRelativePaths` (git >= 2.48) `.git`
+            # holds a path relative to the checkout, which inside the container
+            # resolves against $WORKDIR no matter where the admin directory is
+            # mounted, and so keeps dangling. Say so instead of handing over a
+            # container in which git does not work.
+            GITDIR_POINTER="$(sed -n 's/^gitdir: //p' "${REPO_ROOT}/.git")"
+            case "$GITDIR_POINTER" in
+                /*) ;;
+                *)
+                    eprintln "'${REPO_ROOT}/.git' points at '$GITDIR_POINTER', a path relative to the checkout."
+                    eprintln "The checkout is mounted at '$WORKDIR' in the container, so that path cannot be made to resolve there."
+                    eprintln "Re-point it absolutely, e.g. from the main checkout:"
+                    eprintln "> git -c worktree.useRelativePaths=false worktree repair '$REPO_ROOT'"
+                    exit 1
+                    ;;
+            esac
+
+            eprintln "Git directory lies outside the checkout, also mounting '$GIT_COMMON_DIR'"
+            RUNTIME_RUN_ARGS+=(
+                --mount type=bind,source="${GIT_COMMON_DIR}",target="${GIT_COMMON_DIR}"
+
+                # Each worktree admin directory holds a back-pointer to its
+                # worktree's *host* path, and those paths do not exist in the
+                # container (this checkout lives at $WORKDIR, the others are not
+                # mounted at all), so git considers every worktree prunable here.
+                # That is harmless for reading, but `git gc` prunes worktrees as
+                # part of its job -- and git runs gc automatically after
+                # commit/fetch/... -- so it would delete the host's admin
+                # directories. Disable worktree pruning itself rather than gc as
+                # a whole: object maintenance keeps working, and an explicit
+                # `git gc` is safe too. (`git worktree prune` ignores this
+                # setting, so still don't run that one in here.)
+                -e GIT_CONFIG_COUNT=1
+                -e GIT_CONFIG_KEY_0=gc.worktreePruneExpire
+                -e GIT_CONFIG_VALUE_0=never
+            )
+            ;;
+    esac
+fi
+
 # Privilege/isolation flags required by the IC-OS guest build, per runtime.
 if [ "$RUNTIME" = docker ]; then
     # Under docker the IC-OS build runs (rootless) podman *inside* this
