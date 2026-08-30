@@ -11,7 +11,9 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_hash_of::{HASH_LENGTH, HashOf};
 use ic_ledger_suite_in_memory_ledger::{AllowancesRecentlyPurged, verify_ledger_state};
-use ic_ledger_suite_state_machine_helpers::{AllowanceProvider, send_approval, send_transfer_from};
+use ic_ledger_suite_state_machine_helpers::{
+    AllowanceProvider, await_archiving, send_approval, send_transfer_from,
+};
 use ic_ledger_suite_state_machine_tests::MINTER;
 use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
@@ -570,6 +572,25 @@ fn test_get_blocks_returns_multiple_archive_callbacks() {
 }
 
 #[test]
+fn test_trapped_archiving_is_counted() {
+    ic_ledger_suite_state_machine_tests::subnet_memory::test_trapped_archiving_is_counted(
+        ledger_wasm(),
+        encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
+fn test_transfer_when_subnet_is_out_of_memory() {
+    ic_ledger_suite_state_machine_tests::subnet_memory::test_transfer_when_subnet_is_out_of_memory(
+        ledger_wasm(),
+        encode_init_args,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
 fn test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles() {
     ic_ledger_suite_state_machine_tests::archiving::test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles(
         ledger_wasm(),
@@ -860,12 +881,16 @@ fn transfer(
         .execute_ingress_as(from.owner.into(), ledger_id, "icrc1_transfer", args)
         .expect("Unable to perform icrc1_transfer")
         .bytes();
-    Decode!(&res, Result<Nat, TransferError>)
+    let block_index = Decode!(&res, Result<Nat, TransferError>)
         .unwrap()
         .expect("Unable to decode icrc1_transfer error")
         .0
         .to_u64()
-        .unwrap()
+        .unwrap();
+    // The ledger replies before it archives, so let any archiving triggered by
+    // this transfer run to completion.
+    await_archiving(env);
+    block_index
 }
 
 #[test]

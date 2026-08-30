@@ -5233,8 +5233,19 @@ pub mod archiving {
             "icrc1_transfer",
             encode_transfer_args(p1.0, p2.0, 10_000),
         );
-        let mut transfer_status = message_status(&env, &transfer_message_id).unwrap();
-        assert!(transfer_status.is_none());
+        // The ledger archives after replying, so the transfer completes in the
+        // first round while the archiving continues in the background.
+        let transfer_result = Decode!(
+            &message_status(&env, &transfer_message_id)
+                .unwrap()
+                .expect("the transfer should have completed")
+                .bytes(),
+            Result<Nat, TransferError>
+        )
+        .expect("failed to decode transfer response")
+        .map(|n| n.0.to_u64().unwrap())
+        .expect("transfer should succeed");
+        assert_eq!(transfer_result, NUM_INITIAL_BALANCES);
 
         // Keep listing the archives and calling env.tick() until the ledger reports that an
         // archive has been created.
@@ -5267,24 +5278,14 @@ pub mod archiving {
         // Verify that the ledger response contained no archive info.
         assert!(get_blocks_res.archived_ranges.is_empty());
 
-        // Tick until the transfer completes, meaning the archiving also completes.
+        // Tick until the archiving completes.
         const MAX_TICKS: usize = 500;
         let mut ticks = 0;
-        while transfer_status.is_none() {
+        while env.has_inflight_messages() {
             env.tick();
             ticks += 1;
             assert!(ticks < MAX_TICKS);
-            transfer_status = message_status(&env, &transfer_message_id).unwrap();
         }
-        let transfer_result = Decode!(
-            &transfer_status.unwrap()
-            .bytes(),
-            Result<Nat, TransferError>
-        )
-        .expect("failed to decode transfer response")
-        .map(|n| n.0.to_u64().unwrap())
-        .expect("transfer should succeed");
-        assert_eq!(transfer_result, NUM_INITIAL_BALANCES);
 
         // Verify that the ledger now does not return the first block, but reports that it is in
         // the first archive.
@@ -5372,15 +5373,27 @@ pub mod archiving {
                 &get_blocks_res
             ));
 
-            // Tick until the transfer completes, meaning the archiving also completes.
+            // The ledger archives after replying, so the transfer completes in
+            // the first round while the archiving continues in the background.
+            let transfer_result = Decode!(
+                &message_status(&env, &transfer_message_id)
+                    .unwrap()
+                    .expect("the transfer should have completed")
+                    .bytes(),
+                Result<Nat, TransferError>
+            )
+            .expect("failed to decode transfer response")
+            .map(|n| n.0.to_u64().unwrap())
+            .expect("transfer should succeed");
+            assert_eq!(transfer_result, NUM_INITIAL_BALANCES + i - 1);
+
+            // Tick until the archiving completes.
             const MAX_TICKS: usize = 500;
             let mut ticks = 0;
-            let mut transfer_status = message_status(&env, &transfer_message_id).unwrap();
-            while transfer_status.is_none() {
+            while env.has_inflight_messages() {
                 env.tick();
                 ticks += 1;
                 assert!(ticks < MAX_TICKS);
-                transfer_status = message_status(&env, &transfer_message_id).unwrap();
                 // Verify that block `0` is only reported to exist in one place.
                 let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
                 assert!(!ledger_reports_first_block_in_two_places(
@@ -5388,15 +5401,6 @@ pub mod archiving {
                     &get_blocks_res
                 ));
             }
-            let transfer_result = Decode!(
-                &transfer_status.unwrap()
-                .bytes(),
-                Result<Nat, TransferError>
-            )
-            .expect("failed to decode transfer response")
-            .map(|n| n.0.to_u64().unwrap())
-            .expect("transfer should succeed");
-            assert_eq!(transfer_result, NUM_INITIAL_BALANCES + i - 1);
 
             // An archive should exist
             assert!(!get_archives(&env, ledger_id).is_empty());
@@ -5929,7 +5933,7 @@ pub mod archiving {
         )
     }
 
-    fn encode_transfer_args(
+    pub(crate) fn encode_transfer_args(
         from: impl Into<Account>,
         to: impl Into<Account>,
         amount: u64,
@@ -6030,6 +6034,301 @@ pub mod archiving {
             });
         }
         Log { entries }
+    }
+}
+
+/// Tests covering how the ledger behaves when the subnet it runs on has no
+/// memory left.
+pub mod subnet_memory {
+    use super::*;
+    use ic_ledger_suite_state_machine_helpers::{balance_of, parse_metric, total_supply};
+    use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
+    use ic_state_machine_tests::StateMachineBuilder;
+    use ic_types::NumBytes;
+    use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
+    use std::fmt::Debug;
+
+    const WASM_PAGE_SIZE: u64 = 64 * 1024;
+    const MIB: u64 = 1024 * 1024;
+    const GIB: u64 = 1024 * MIB;
+
+    /// Deliberately small, so that the filler canister can exhaust it. The
+    /// reservation threshold is set to the capacity, which switches storage
+    /// reservation off entirely (`ResourceSaturation::reservation_factor`
+    /// returns 0 once the two are equal) — this test is about running out of
+    /// memory, not about running out of reserved cycles.
+    const SUBNET_MEMORY_CAPACITY: u64 = 8 * GIB;
+
+    /// Chunk sizes, in bytes, used to fill the subnet: each is grown repeatedly
+    /// until it no longer fits, so the leftover headroom ends up below the
+    /// smallest chunk. A single message can only grow memory by
+    /// `(capacity - usage) / scheduler_cores`, hence the first chunk is well
+    /// below the capacity.
+    const FILLER_CHUNKS: [u64; 4] = [GIB, 64 * MIB, MIB, WASM_PAGE_SIZE];
+
+    /// A transaction that arrives when the subnet is out of memory must leave
+    /// no trace.
+    ///
+    /// The ledger applies a transaction synchronously, so a trap while applying
+    /// it — here because the ledger cannot allocate the memory its first block
+    /// needs — discards the whole message: the caller gets an error, and no
+    /// block, balance or supply change is committed.
+    ///
+    /// This is the counterpart to the archiving atomicity test: a failure
+    /// *before* the ledger's first await is atomic, whereas one after it is
+    /// not, which is why archiving must not be awaited before replying.
+    ///
+    /// Note what it takes to get here. A full subnet is not by itself enough to
+    /// make a transaction fail: the ledger allocates in large chunks and serves
+    /// most transactions out of memory it already holds. This test relies on a
+    /// freshly installed ledger, whose first transaction has to allocate the
+    /// memory for its block log.
+    pub fn test_transfer_when_subnet_is_out_of_memory<T, B>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+        get_blocks_fn: fn(
+            &StateMachine,
+            CanisterId,
+            u64,
+            usize,
+        ) -> archiving::GenericGetBlocksResponse<B>,
+    ) where
+        T: CandidType,
+        B: Eq + Debug,
+    {
+        let p1 = PrincipalId::new_user_test_id(1);
+
+        let env = StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                SubnetConfig::new(SubnetType::Application),
+                HypervisorConfig {
+                    subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY),
+                    subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY),
+                    // Memory held back for response callbacks. At the mainnet
+                    // value it would exceed the scaled-down capacity.
+                    subnet_memory_reservation: NumBytes::new(0),
+                    ..HypervisorConfig::default()
+                },
+            )))
+            .build();
+
+        // A ledger with no initial balances has no blocks yet, so its first
+        // transaction is also its first allocation.
+        let ledger_id = env
+            .install_canister_with_cycles(
+                ledger_wasm,
+                Encode!(&encode_init_args(init_args(vec![]))).unwrap(),
+                None,
+                Cycles::new(100_000_000_000_000),
+            )
+            .expect("failed to install the ledger");
+        assert_eq!(get_blocks_fn(&env, ledger_id, 0, 1).chain_length, 0);
+
+        // Fill the subnet. The filler only grows logical stable memory, which
+        // it never writes to, so this costs no host storage.
+        let filler = env
+            .install_canister_with_cycles(
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                vec![],
+                None,
+                Cycles::new(100_000_000_000_000_000),
+            )
+            .expect("failed to install the filler canister");
+        for chunk in FILLER_CHUNKS {
+            while grow_filler(&env, filler, chunk / WASM_PAGE_SIZE) {}
+        }
+
+        // The mint has to allocate, and cannot.
+        let mint_result = env.execute_ingress_as(
+            PrincipalId(MINTER.owner),
+            ledger_id,
+            "icrc1_transfer",
+            archiving::encode_transfer_args(MINTER, p1.0, 10_000_000),
+        );
+        let err = mint_result.expect_err("the mint should have failed on a full subnet");
+        println!("mint on a full subnet failed with `{err}`");
+        assert_eq!(
+            get_blocks_fn(&env, ledger_id, 0, 1).chain_length,
+            0,
+            "the ledger rejected the mint with `{err}` but recorded a block anyway"
+        );
+        assert_eq!(
+            balance_of(&env, ledger_id, p1.0),
+            0,
+            "the ledger rejected the mint with `{err}` but minted funds anyway"
+        );
+        assert_eq!(
+            total_supply(&env, ledger_id),
+            0,
+            "the ledger rejected the mint with `{err}` but changed the total supply anyway"
+        );
+
+        // Give the memory back: the very same mint now succeeds, which shows
+        // the ledger was only held up by the subnet being full and that the
+        // failed attempt left it in a usable state.
+        env.uninstall_code(filler)
+            .expect("failed to uninstall the filler canister");
+        env.execute_ingress_as(
+            PrincipalId(MINTER.owner),
+            ledger_id,
+            "icrc1_transfer",
+            archiving::encode_transfer_args(MINTER, p1.0, 10_000_000),
+        )
+        .expect("the mint should succeed once the subnet has memory again");
+        assert_eq!(get_blocks_fn(&env, ledger_id, 0, 1).chain_length, 1);
+        assert_eq!(balance_of(&env, ledger_id, p1.0), 10_000_000);
+    }
+
+    /// Storage pressure the filler holds while the ledger works normally.
+    const PRESSURE_BASE_PAGES: u64 = 3 * GIB / WASM_PAGE_SIZE;
+    /// Added while the ledger is suspended in archiving, so that the next page
+    /// it grows reserves more cycles than its limit allows.
+    const PRESSURE_CROSSING_PAGES: u64 = 5 * GIB / WASM_PAGE_SIZE;
+    /// Small enough that the first page the archive continuation grows exceeds
+    /// it.
+    const LEDGER_RESERVED_CYCLES_LIMIT: u128 = 100_000_000;
+    /// `create_and_initialize_node_canister` wants at least 4.5T for the
+    /// archive and at least 10T left in the ledger.
+    const CYCLES_FOR_ARCHIVE_CREATION: u64 = 20_000_000_000_000;
+    const LEDGER_CYCLES: u128 = 200_000_000_000_000;
+    const FILLER_CYCLES: u128 = 100_000_000_000_000_000;
+
+    /// An archiving attempt that traps must be counted.
+    ///
+    /// Archiving does not hold up the reply, so a round that traps is invisible
+    /// to the caller and `ledger_archiving_failures` is what is left to notice
+    /// it by. A trap discards everything the failing message did, including any
+    /// attempt to record it, so the count comes from the archiving guard's
+    /// destructor, which runs while the task is being canceled.
+    ///
+    /// The trap is produced the way it can be produced on mainnet: the subnet
+    /// is pushed over its storage reservation threshold while the ledger is
+    /// suspended in archiving, so the memory its continuation needs is refused
+    /// with `IC0534`.
+    pub fn test_trapped_archiving_is_counted<T, B>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+        get_archives: fn(&StateMachine, CanisterId) -> Vec<Principal>,
+        get_blocks_fn: fn(
+            &StateMachine,
+            CanisterId,
+            u64,
+            usize,
+        ) -> archiving::GenericGetBlocksResponse<B>,
+    ) where
+        T: CandidType,
+        B: Eq + Debug,
+    {
+        let p1 = PrincipalId::new_user_test_id(1);
+        let env = StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                SubnetConfig::new(SubnetType::Application),
+                HypervisorConfig {
+                    // Reservation starts well below the capacity, so that the
+                    // filler can push the subnet over the threshold while
+                    // leaving the ledger room to be installed and to run.
+                    subnet_memory_threshold: NumBytes::new(4 * GIB),
+                    subnet_memory_capacity: NumBytes::new(64 * GIB),
+                    subnet_memory_reservation: NumBytes::new(0),
+                    ..HypervisorConfig::default()
+                },
+            )))
+            .build();
+
+        let filler = env
+            .install_canister_with_cycles(
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                vec![],
+                Some(
+                    CanisterSettingsArgsBuilder::new()
+                        // The filler reserves a lot when it crosses the
+                        // threshold; it must not be capped by the default 5T.
+                        .with_reserved_cycles_limit(FILLER_CYCLES)
+                        .build(),
+                ),
+                Cycles::new(FILLER_CYCLES),
+            )
+            .expect("failed to install the filler canister");
+
+        let mut init = init_args(vec![]);
+        init.archive_options.cycles_for_archive_creation = Some(CYCLES_FOR_ARCHIVE_CREATION);
+        let ledger_id = env
+            .install_canister_with_cycles(
+                ledger_wasm,
+                Encode!(&encode_init_args(init)).unwrap(),
+                Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_reserved_cycles_limit(LEDGER_RESERVED_CYCLES_LIMIT)
+                        .build(),
+                ),
+                Cycles::new(LEDGER_CYCLES),
+            )
+            .expect("failed to install the ledger");
+        assert!(grow_filler(&env, filler, PRESSURE_BASE_PAGES));
+        assert_eq!(parse_metric(&env, ledger_id, ARCHIVING_FAILURES_METRIC), 0);
+
+        // One block short of the archive trigger threshold, so that the next
+        // transfer is the one that archives.
+        for _ in 0..(ARCHIVE_TRIGGER_THRESHOLD - 1) {
+            transfer(&env, ledger_id, MINTER, p1.0, 10_000_000).expect("mint failed");
+        }
+        assert!(
+            get_archives(&env, ledger_id).is_empty(),
+            "archiving must not have been triggered yet"
+        );
+
+        // Let the ledger apply the transfer and suspend in archiving, then push
+        // the subnet over the threshold while it is waiting.
+        let blocks_before = get_blocks_fn(&env, ledger_id, 0, 1).chain_length;
+        let message = env.send_ingress(
+            PrincipalId(MINTER.owner),
+            ledger_id,
+            "icrc1_transfer",
+            archiving::encode_transfer_args(MINTER, p1.0, 10_000_000),
+        );
+        for _ in 0..100 {
+            if get_blocks_fn(&env, ledger_id, 0, 1).chain_length > blocks_before {
+                break;
+            }
+            env.tick();
+        }
+        assert_eq!(
+            get_blocks_fn(&env, ledger_id, 0, 1).chain_length,
+            blocks_before + 1,
+            "the ledger did not commit the transfer"
+        );
+        assert!(grow_filler(&env, filler, PRESSURE_CROSSING_PAGES));
+
+        // The ledger replies before archiving, so the transfer succeeds even
+        // though the archiving that follows it traps.
+        env.await_ingress(message, 100)
+            .expect("the transfer should have succeeded");
+        env.run_until_completion(200);
+
+        assert!(
+            get_archives(&env, ledger_id).is_empty(),
+            "expected the archive continuation to have been trapped, but an \
+             archive was created; the test is not exercising a trapped attempt"
+        );
+        assert_eq!(
+            parse_metric(&env, ledger_id, ARCHIVING_FAILURES_METRIC),
+            1,
+            "the trapped archiving attempt was not counted"
+        );
+    }
+
+    const ARCHIVING_FAILURES_METRIC: &str = "ledger_archiving_failures";
+
+    /// Grows the filler's logical stable memory, returning whether it fit.
+    fn grow_filler(env: &StateMachine, filler: CanisterId, pages: u64) -> bool {
+        let reply = env
+            .execute_ingress(
+                filler,
+                "update",
+                wasm().stable64_grow(pages).reply_int64().build(),
+            )
+            .expect("failed to call the filler canister");
+        u64::from_le_bytes(reply.bytes()[..8].try_into().unwrap()) != u64::MAX
     }
 }
 
