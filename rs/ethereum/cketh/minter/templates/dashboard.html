@@ -111,6 +111,12 @@
                         <th>Minter address</th>
                         <td>{% call etherscan_address_link(minter_address) %}{% endcall %}</td>
                     </tr>
+                    {% if sweeper_contract_address.is_some() -%}
+                    <tr id="sweeper-contract-address">
+                        <th>Sweeper contract address</th>
+                        <td>{% call etherscan_address_link(sweeper_contract_address.unwrap()) %}{% endcall %}</td>
+                    </tr>
+                    {%- endif %}
                     <tr id="cketh-ledger-canister-id">
                         <th>ckETH ledger canister ID</th>
                         <td><code>{{ cketh_ledger_id }}</code></td>

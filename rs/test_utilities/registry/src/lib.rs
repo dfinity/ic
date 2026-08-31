@@ -23,10 +23,11 @@ use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_test_utilities_types::ids::test_replica_version;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
 use ic_types::{
-    NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
+    NodeId, PrincipalId, RegistryVersion, SubnetId,
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
 };
 use ic_types_cycles::CanisterCyclesCostSchedule;
@@ -243,13 +244,14 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
         initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
-        replica_version_id: ReplicaVersion::default().into(),
+        replica_version_id: test_replica_version().to_string(),
         dkg_interval_length: 59,
         dkg_dealings_per_block: 1,
         start_as_nns: false,
         subnet_type: SubnetType::Application.into(),
         is_halted: false,
         halt_at_cup_height: false,
+        cooling_down: false,
         features: Some(Default::default()),
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],

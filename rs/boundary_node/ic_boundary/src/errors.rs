@@ -9,8 +9,8 @@ use axum::{
 };
 use bytes::Bytes;
 
+use ic_bn_lib::http::Error as HttpError;
 use ic_bn_lib::http::{body::buffer_body, headers::X_IC_ERROR_CAUSE};
-use ic_bn_lib_common::types::http::Error as HttpError;
 use strum::{Display, IntoStaticStr};
 use tower_governor::GovernorError;
 

@@ -472,9 +472,8 @@ fn get_pending_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_interfaces::p2p::consensus::MutablePool;
-    use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::message_routing::FakeMessageRouting;
@@ -492,8 +491,9 @@ mod tests {
                 state_manager,
                 replica_config,
                 registry,
+                message_routing,
                 ..
-            } = dependencies(pool_config, 1);
+            } = DependenciesBuilder::new(pool_config, 1).build();
 
             state_manager
                 .get_mut()
@@ -537,17 +537,17 @@ mod tests {
                 .withf(move |height| *height == *checkpoint_purge_height_clone.read().unwrap())
                 .return_const(());
 
-            let mut message_routing = MockMessageRouting::new();
             let expected_batch_height = Arc::new(RwLock::new(Height::from(0)));
             let expected_batch_height_clone = Arc::clone(&expected_batch_height);
             message_routing
+                .get_mut()
                 .expect_expected_batch_height()
                 .returning(move || *expected_batch_height_clone.read().unwrap());
 
             let purger = Purger::new(
                 replica_config,
                 state_manager,
-                Arc::new(message_routing),
+                message_routing,
                 registry,
                 no_op_logger(),
                 MetricsRegistry::new(),
@@ -631,7 +631,7 @@ mod tests {
                 replica_config,
                 registry,
                 ..
-            } = dependencies(pool_config, 3);
+            } = DependenciesBuilder::new(pool_config, 3).build();
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
@@ -667,7 +667,7 @@ mod tests {
                 replica_config,
                 registry,
                 ..
-            } = dependencies(pool_config, 3);
+            } = DependenciesBuilder::new(pool_config, 3).build();
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
@@ -706,7 +706,7 @@ mod tests {
     #[test]
     fn test_get_purge_height() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { mut pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
 
             // Initial purge height is None.
             assert_eq!(get_purge_height(&PoolReader::new(&pool)), None);
@@ -737,8 +737,9 @@ mod tests {
                 state_manager,
                 replica_config,
                 registry,
+                message_routing,
                 ..
-            } = dependencies(pool_config, 10);
+            } = DependenciesBuilder::new(pool_config, 10).build();
 
             let expected_extra_heights = Arc::new(RwLock::new(BTreeSet::new()));
             let extra_heights_clone = Arc::clone(&expected_extra_heights);
@@ -759,7 +760,7 @@ mod tests {
             let purger = Purger::new(
                 replica_config,
                 state_manager.clone(),
-                Arc::new(MockMessageRouting::new()),
+                message_routing,
                 registry,
                 no_op_logger(),
                 MetricsRegistry::new(),
@@ -822,20 +823,21 @@ mod tests {
                 state_manager,
                 replica_config,
                 registry,
+                message_routing,
                 ..
-            } = dependencies(pool_config, 10);
+            } = DependenciesBuilder::new(pool_config, 10).build();
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
                 .returning(|| Height::new(0));
-            let mut message_routing = MockMessageRouting::new();
             message_routing
+                .get_mut()
                 .expect_expected_batch_height()
                 .returning(|| Height::new(0));
             let purger = Purger::new(
                 replica_config,
                 state_manager,
-                Arc::new(message_routing),
+                message_routing,
                 registry,
                 no_op_logger(),
                 MetricsRegistry::new(),

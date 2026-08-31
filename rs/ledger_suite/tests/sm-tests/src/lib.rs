@@ -3397,6 +3397,117 @@ where
     assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
 }
 
+/// A spend needs no allowance only when the spender *is* the account it spends from — which the
+/// ledger decides on the whole account, subaccount included. Owning the principal is not enough,
+/// so a caller holding funds under a subaccount must name that subaccount to reach them.
+pub fn test_transfer_from_self_subaccount<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    const SUBACCOUNT: [u8; 32] = [42; 32];
+
+    let owner = PrincipalId::new_user_test_id(1);
+    let to = PrincipalId::new_user_test_id(2);
+    let from = Account {
+        owner: owner.0,
+        subaccount: Some(SUBACCOUNT),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![(from, 100_000)]);
+
+    // Same owner, but the spender is {owner, None} while the funds are under {owner, SUBACCOUNT}:
+    // two different accounts, so this needs an allowance it does not have.
+    let mut transfer_from_args = default_transfer_from_args(from, to.0, 30_000);
+    transfer_from_args.spender_subaccount = None;
+    assert_eq!(
+        send_transfer_from(&env, canister_id, owner.0, &transfer_from_args),
+        Err(TransferFromError::InsufficientAllowance {
+            allowance: Nat::from(0_u8)
+        })
+    );
+    assert_eq!(balance_of(&env, canister_id, from), 100_000);
+    assert_eq!(balance_of(&env, canister_id, to.0), 0);
+
+    // Naming the account's own subaccount makes it a self-spend, which needs no allowance.
+    transfer_from_args.spender_subaccount = Some(SUBACCOUNT);
+    let block_index = send_transfer_from(&env, canister_id, owner.0, &transfer_from_args)
+        .expect("transfer_from failed");
+    assert_eq!(
+        block_index, 1,
+        "the rejected spend must not have written a block"
+    );
+    assert_eq!(balance_of(&env, canister_id, from), 100_000 - 30_000 - FEE);
+    assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
+}
+
+/// Burns from `{P, Some(s)}` with the spender naming that same subaccount, and reports what the
+/// ledger made of it — the two ledgers disagree, so the caller states which outcome its own owes.
+///
+/// ICRC ledgers accept it: burning is how an account holding tokens under a subaccount gives them
+/// up, and naming the account's own subaccount makes it a self-spend. The ICP ledger rejects it,
+/// because `Operation::Burn` (`rs/ledger_suite/icp/src/lib.rs`) checks an allowance for any spender
+/// — exempting the self-spend only when *consuming* one, not when checking.
+///
+/// Either way the books must stay consistent, which is asserted here: an accepted burn is fee-free
+/// and reduces the supply, a rejected one moves nothing at all.
+pub fn test_transfer_from_self_subaccount_burn<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) -> Result<BlockIndex, TransferFromError>
+where
+    T: CandidType,
+{
+    const SUBACCOUNT: [u8; 32] = [42; 32];
+    const INITIAL_BALANCE: u64 = 100_000;
+    const BURN_AMOUNT: u64 = 20_000;
+
+    let owner = PrincipalId::new_user_test_id(1);
+    let from = Account {
+        owner: owner.0,
+        subaccount: Some(SUBACCOUNT),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![(from, INITIAL_BALANCE)]);
+
+    let minter = minting_account(&env, canister_id).expect("the ledger has a minting account");
+    let supply_before = total_supply(&env, canister_id);
+    let mut burn_args = default_transfer_from_args(from, minter, BURN_AMOUNT);
+    burn_args.spender_subaccount = Some(SUBACCOUNT);
+    burn_args.fee = None;
+
+    let result = send_transfer_from(&env, canister_id, owner.0, &burn_args);
+
+    match result {
+        Ok(_) => {
+            assert_eq!(
+                balance_of(&env, canister_id, from),
+                INITIAL_BALANCE - BURN_AMOUNT,
+                "a burn is fee-free, so only the burned amount leaves the account"
+            );
+            assert_eq!(
+                total_supply(&env, canister_id),
+                supply_before - BURN_AMOUNT,
+                "burning must reduce the supply rather than move the tokens"
+            );
+        }
+        Err(_) => {
+            assert_eq!(
+                balance_of(&env, canister_id, from),
+                INITIAL_BALANCE,
+                "a rejected burn must not move funds"
+            );
+            assert_eq!(
+                total_supply(&env, canister_id),
+                supply_before,
+                "a rejected burn must not change the supply"
+            );
+        }
+    }
+    result
+}
+
 pub fn test_transfer_from_minter<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,

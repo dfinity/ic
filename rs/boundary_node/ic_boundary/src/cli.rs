@@ -1,13 +1,14 @@
 use candid::Principal;
 use clap::{ArgGroup, Args, Parser};
 use humantime::parse_duration;
-use ic_bn_lib_common::{
-    parse_size, parse_size_usize,
-    types::{
-        acme::AcmeUrl,
-        http::{HttpClientCli, HttpServerCli},
+use ic_bn_lib::{
+    http::{
+        client::cli::HttpClientCli,
+        server::cli::HttpServerCli,
         shed::{ShedShardedCli, ShedSystemCli},
     },
+    parse_size, parse_size_usize,
+    tls::acme::AcmeUrl,
 };
 use ic_config::crypto::CryptoConfig;
 use ic_types::CanisterId;
@@ -280,7 +281,7 @@ pub struct RateLimiting {
     /// File is re-read periodically (see below) and new rules are applied if the changes are detected.
     ///
     /// Expecting YAML list with objects that have at least one of
-    /// (canister_id, subnet_id, methods_regex, request_types, limit) fields.
+    /// (canister_id, subnet_id, sender_id, methods_regex, request_types, limit) fields.
     ///
     /// Example:
     /// - canister_id: aaaaa-aa
@@ -291,6 +292,9 @@ pub struct RateLimiting {
     /// - subnet_id: aaaaaa-aa
     ///   canister_id: aaaaa-aa
     ///   methods_regex: ^baz$
+    ///   limit: block
+    ///
+    /// - sender_id: 2vxsx-fae
     ///   limit: block
     #[clap(env, long)]
     pub rate_limit_generic_file: Option<PathBuf>,

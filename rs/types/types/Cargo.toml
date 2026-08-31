@@ -55,7 +55,6 @@ ic-types-test-utils = { path = "../types_test_utils" }
 pretty_assertions = { workspace = true }
 rand_chacha = { workspace = true }
 rstest = { workspace = true }
-rusty-fork = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }

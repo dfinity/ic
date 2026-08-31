@@ -139,11 +139,13 @@ pub fn construct_ic_stack(
     create_consensus_pool_dir(&config);
     ensure_persistent_pool_replica_version_compatibility(
         artifact_pool_config.persistent_pool_db_path(),
+        &replica_version,
     );
 
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
         node_id,
         subnet_id,
+        &replica_version,
         // Note: it's important to pass the original proto which came from the command line (as
         // opposed to, for example, a proto which was first deserialized and then serialized
         // again). Since the proto file could have been produced and signed by nodes running a
@@ -291,6 +293,7 @@ pub fn construct_ic_stack(
         subnet_id,
         subnet_type,
         root_subnet_id,
+        state_manager.clone(),
         registry.clone(),
         Arc::clone(&crypto) as Arc<_>,
         cancellation_token.child_token(),
@@ -318,8 +321,8 @@ pub fn construct_ic_stack(
         node_id,
         subnet_id,
         subnet_type,
-        guestos_version,
-        replica_version,
+        guestos_version.clone(),
+        replica_version.clone(),
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::new(state_sync) as Arc<_>,
@@ -357,6 +360,8 @@ pub fn construct_ic_stack(
         Arc::clone(&crypto) as Arc<_>,
         node_id,
         subnet_id,
+        replica_version,
+        guestos_version,
         root_subnet_id,
         log.clone(),
         consensus_pool_cache,

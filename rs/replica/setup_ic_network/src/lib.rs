@@ -360,6 +360,7 @@ pub fn setup_consensus_and_p2p(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
     guestos_version: ReplicaVersion,
+
     replica_version: ReplicaVersion,
     tls_config: Arc<dyn TlsConfig>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -465,6 +466,7 @@ pub fn setup_consensus_and_p2p(
         subnet_id,
         subnet_type,
         guestos_version,
+
         replica_version,
         artifact_pools,
         channels,
@@ -498,6 +500,7 @@ fn start_consensus(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
     guestos_version: ReplicaVersion,
+
     replica_version: ReplicaVersion,
     artifact_pools: ArtifactPools,
     abortable_broadcast_channels: AbortableBroadcastChannels,
@@ -570,12 +573,19 @@ fn start_consensus(
     ));
     // ------------------------------------------------------------------------
 
-    let replica_config = ReplicaConfig { node_id, subnet_id, guestos_version, replica_version };
+    let replica_config = ReplicaConfig {
+        node_id,
+        subnet_id,
+        guestos_version,
+        replica_version,
+    };
     let dkg_key_manager = Arc::new(Mutex::new(ic_consensus_dkg::DkgKeyManager::new(
         metrics_registry.clone(),
         Arc::clone(&consensus_crypto),
         log.clone(),
         &PoolReader::new(&*consensus_pool.read().unwrap()),
+        registry_client.clone(),
+        replica_config.clone(),
     )));
 
     let mut join_handles = vec![];
@@ -642,9 +652,7 @@ fn start_consensus(
     join_handles.push(create_artifact_handler(
         abortable_broadcast_channels.dkg,
         ic_consensus_dkg::DkgImpl::new(
-            node_id,
-            subnet_id,
-            replica_config.replica_version.clone(),
+            replica_config.clone(),
             Arc::clone(&registry_client),
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&consensus_crypto),
@@ -692,7 +700,7 @@ fn start_consensus(
             Arc::new(Mutex::new(canister_http_adapter_client)),
             Arc::clone(&consensus_crypto),
             Arc::clone(&consensus_pool_cache),
-            ReplicaConfig { subnet_id, node_id, guestos_version: replica_config.guestos_version.clone(), replica_version: replica_config.replica_version.clone() },
+            replica_config,
             subnet_type,
             Arc::clone(&registry_client),
             metrics_registry.clone(),

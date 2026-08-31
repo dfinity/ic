@@ -20,7 +20,8 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{ReplicaLogger, error, fatal, info, warn};
 use ic_management_canister_types_private::{
-    CanisterIdRange, CanisterStatusType, EmptyBlob, ListCanistersResponse, Payload as _,
+    CanisterIdRange, CanisterInfoResponse, CanisterStatusType, EmptyBlob, ListCanistersResponse,
+    Payload as _,
 };
 use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_type::SubnetType;
@@ -445,6 +446,38 @@ pub(crate) fn validate_controller_or_subnet_admin(
             controller_provided: *sender,
         })
     }
+}
+
+/// Computes the response to the `canister_info` management canister method.
+///
+/// The method is not subject to any access control: the canister history is
+/// public information that any principal is allowed to retrieve. The size of
+/// the response is bounded by `MAX_CANISTER_HISTORY_CHANGES`, so producing it
+/// consumes no round instructions.
+///
+/// This is shared by the replicated path (an inter-canister call to
+/// `canister_info`) and the non-replicated path (see
+/// `crate::query_handler::subnet_query`) so that both return the same response.
+pub(crate) fn canister_info(
+    canister: &CanisterState,
+    num_requested_changes: Option<u64>,
+) -> CanisterInfoResponse {
+    let canister_history = canister.system_state.get_canister_history();
+    let total_num_changes = canister_history.get_total_num_changes();
+    let changes = canister_history
+        .get_changes(num_requested_changes.unwrap_or(0) as usize)
+        .map(|e| (*e.clone()).clone())
+        .collect();
+    let module_hash = canister
+        .execution_state
+        .as_ref()
+        .map(|es| es.wasm_binary.binary.module_hash().to_vec());
+    let controllers = canister
+        .controllers()
+        .iter()
+        .copied()
+        .collect::<Vec<PrincipalId>>();
+    CanisterInfoResponse::new(total_num_changes, changes, module_hash, controllers)
 }
 
 /// Computes the response to the `list_canisters` management canister method.

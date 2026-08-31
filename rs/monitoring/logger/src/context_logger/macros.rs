@@ -67,7 +67,7 @@ macro_rules! new_logger {
         update_context!(context; $($field $( . $sub_field)* => $value),*);
         $logger.with_new_context(context)
     }};
-    ($logger:expr_2021) => {{
+    ($logger:expr_2021 $(,)*) => {{
         $logger.clone()
     }};
 }
@@ -127,7 +127,7 @@ macro_rules! info {
     ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Info, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ) => {{
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Info)) {
             log!($logger, slog::Level::Info, $message $(,$args)*)
         }
@@ -167,7 +167,7 @@ macro_rules! warn {
     ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Warning ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ) => {{
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Warning)) {
             log!($logger, slog::Level::Warning, $message $(,$args)*)
         }
@@ -183,7 +183,7 @@ macro_rules! warn {
 /// Log an error-level log, with context fields if given
 #[macro_export(local_inner_macros)]
 macro_rules! error {
-    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ) => {{
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Error)) {
             log!($logger, slog::Level::Error, $message $(,$args)*)
         }
@@ -272,7 +272,7 @@ macro_rules! log {
 
 #[macro_export(local_inner_macros)]
 macro_rules! update_context {
-    ($context:expr_2021; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),*) => {{
+    ($context:expr_2021; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         $(
             let mut sub_context = match $context.$field {
                 Some(x) => x.clone(),
@@ -288,7 +288,7 @@ macro_rules! update_context {
 /// Return a LogMetadata
 #[macro_export(local_inner_macros)]
 macro_rules! log_metadata {
-    ($level:expr_2021) => {{
+    ($level:expr_2021 $(,)*) => {{
         $crate::context_logger::LogMetadata {
             level: $level,
             module_path: std::module_path!(),

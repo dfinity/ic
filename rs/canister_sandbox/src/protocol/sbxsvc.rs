@@ -495,7 +495,6 @@ mod tests {
                         CyclesAccountManagerConfig::application_subnet(),
                     ),
                     std::sync::Arc::new(NetworkTopology::default()),
-                    NumInstructions::new(42),
                     ComputeAllocation::zero(),
                     123,
                     RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(10)),

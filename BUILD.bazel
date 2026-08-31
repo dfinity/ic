@@ -183,19 +183,6 @@ alias(
     }),
 )
 
-### dfx
-
-alias(
-    name = "dfx",
-    actual = select({
-        "@bazel_tools//src/conditions:darwin_x86_64": "@dfx-x86_64-darwin//:dfx",
-        "@bazel_tools//src/conditions:darwin_arm64": "@dfx-aarch64-darwin//:dfx",
-        "@bazel_tools//src/conditions:linux_x86_64": "@dfx-x86_64-linux//:dfx",
-        "@bazel_tools//src/conditions:linux_aarch64": "@dfx-aarch64-linux//:dfx",
-        "//conditions:default": "@platforms//:incompatible",
-    }),
-)
-
 ### pebble & pebble DNS, used in Boundary Nodes ACME testing
 
 alias(
@@ -231,7 +218,7 @@ alias(
     }),
 )
 
-### mkfs.ext4, statically-linked, used to build ext4 filesystem images
+### mkfs.ext4, used to build ext4 filesystem images
 
 # mke2fs is the underlying binary; mkfs.ext4 is upstream's symlink name for it.
 alias(
@@ -251,8 +238,16 @@ alias(
     }),
 )
 
-### e2fsdroid, used to populate ext4 filesystem images (fs_config + SELinux contexts)
+### debugfs, used to inspect ext filesystems (e.g. extract files from ext4 images)
+alias(
+    name = "debugfs",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@e2fsprogs//:debugfs",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
 
+### e2fsdroid, used to populate ext4 filesystem images (fs_config + SELinux contexts)
 alias(
     name = "e2fsdroid",
     actual = select({
@@ -359,6 +354,17 @@ platform(
         "@platforms//os:osx",
         "@platforms//cpu:x86_64",
     ],
+)
+
+# Host platform + a pinned glibc for the hermetic-llvm toolchain.
+# Without this constraint hermetic-llvm defaults to glibc 2.28, which lacks symbols we use
+# (e.g. gettid, glibc 2.30). Set on Linux via bazelrc (build:linux --platforms/--host_platform);
+# one definition covers both x86_64 and aarch64 hosts because it inherits the autodetected host constraints.
+# Note that an explicit --platforms=... on the command line overrides this default and silently reverts to glibc 2.28.
+platform(
+    name = "linux-glibc-2.31",
+    constraint_values = ["@llvm//constraints/libc:gnu.2.31"],
+    parents = ["@platforms//host"],
 )
 
 ## Extract ovmf firmware from the `ovmf-generic-hwe` `.deb`.

@@ -8,7 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 ic-test-utilities-privileges-macros = { path = "macros" }
-nix = { workspace = true }
+libc = { workspace = true }
+static_assertions = { workspace = true }
+tempfile = { workspace = true }
 
 [dev-dependencies]
-tempfile = { workspace = true }
+tokio = { workspace = true }

@@ -30,11 +30,4 @@ if [ -e /dev/net/tun ] && [ ! -w /dev/net/tun ]; then
     sudo chmod 0666 /dev/net/tun
 fi
 
-# Bazel rules in .bazelrc.build bind-mount /tmp/zig-cache into sandboxed
-# actions for the hermetic_cc toolchain. Ensure it exists and is writable.
-if [ ! -d /tmp/zig-cache ]; then
-    sudo mkdir -p /tmp/zig-cache
-    sudo chown "$(id -u)":"$(id -g)" /tmp/zig-cache
-fi
-
 exec "$@"

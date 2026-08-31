@@ -45,7 +45,7 @@ socks5-impl = { version = "0.6", features = ["tokio"] }
 tempfile = { workspace = true }
 tokio-rustls = { workspace = true }
 uuid = { workspace = true }
-warp = { version = "0.3.7", features = ["tls"] }
+warp = { workspace = true }
 
 [features]
 http = []

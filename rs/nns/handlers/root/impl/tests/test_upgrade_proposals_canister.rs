@@ -1,6 +1,6 @@
 use candid::Encode;
 use dfn_candid::candid;
-use ic_management_canister_types_private::CanisterInstallMode::Upgrade;
+use ic_management_canister_types_private::CanisterInstallModeV2::Upgrade;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType::Running},
@@ -62,7 +62,7 @@ fn test_upgrade_governance_canister() {
             .unwrap();
 
         let change_canister_request =
-            ChangeCanisterRequest::new(true, Upgrade, fake_governance_canister.canister_id())
+            ChangeCanisterRequest::new(true, Upgrade(None), fake_governance_canister.canister_id())
                 .with_wasm(STABLE_MEMORY_READER_WASM.clone());
 
         // The upgrade should work

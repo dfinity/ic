@@ -21,6 +21,7 @@ use ic_types::{
         Signed,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet, config::NiDkgConfig},
     },
+    replica_config::ReplicaConfig,
 };
 use rayon::prelude::*;
 use std::{
@@ -64,7 +65,7 @@ const REMOTE_DKG_REPEATED_FAILURE_ERROR: &str = "Attempts to run this DKG repeat
 pub struct DkgImpl {
     node_id: NodeId,
     subnet_id: SubnetId,
-    binary_version: ReplicaVersion,
+    replica_version: ReplicaVersion,
     registry_client: Arc<dyn RegistryClient>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -77,9 +78,7 @@ pub struct DkgImpl {
 impl DkgImpl {
     /// Build a new DKG component
     pub fn new(
-        node_id: NodeId,
-        subnet_id: SubnetId,
-        binary_version: ReplicaVersion,
+        replica_config: ReplicaConfig,
         registry_client: Arc<dyn RegistryClient>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         crypto: Arc<dyn ConsensusCrypto>,
@@ -88,10 +87,16 @@ impl DkgImpl {
         metrics_registry: ic_metrics::MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
+        let ReplicaConfig {
+            node_id,
+            subnet_id,
+            replica_version,
+            ..
+        } = replica_config;
         Self {
             node_id,
             subnet_id,
-            binary_version,
+            replica_version,
             registry_client,
             state_reader,
             crypto,
@@ -128,7 +133,11 @@ impl DkgImpl {
 
         let content =
             match ic_interfaces::crypto::NiDkgAlgorithm::create_dealing(&*self.crypto, config) {
-                Ok(dealing) => DealingContent::new(dealing, config.dkg_id().clone()),
+                Ok(dealing) => DealingContent::new(
+                    dealing,
+                    config.dkg_id().clone(),
+                    self.replica_version.clone(),
+                ),
                 Err(err) => {
                     match config.dkg_id().target_subnet {
                         NiDkgTargetSubnet::Local => error!(
@@ -192,7 +201,7 @@ impl DkgImpl {
             return Mutations::new();
         };
 
-        if message.content.version != self.binary_version {
+        if message.content.version != self.replica_version {
             return Mutations::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
         }
 
@@ -422,10 +431,7 @@ mod tests {
     };
     use core::panic;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
-    use ic_consensus_mocks::{
-        Dependencies, dependencies, dependencies_with_subnet_params,
-        dependencies_with_subnet_records_with_raw_state_manager,
-    };
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_test_utils_ni_dkg::dummy_dealing;
@@ -445,7 +451,7 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_state::get_initial_state;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
         RegistryVersion, ReplicaVersion,
         batch::ValidationContext,
@@ -461,10 +467,12 @@ mod tests {
                 errors::create_transcript_error::DkgCreateTranscriptError,
             },
         },
+        replica_config::ReplicaConfig,
         time::UNIX_EPOCH,
     };
     use payload_validator::validate_payload;
-    use std::{collections::BTreeSet, convert::TryFrom};
+    use std::collections::BTreeSet;
+    use std::str::FromStr;
     use test_utils::{extract_dealings_from_highest_block, extract_remote_dkgs_from_highest_block};
     use utils::{tags_iter, vetkd_key_ids_for_subnet};
 
@@ -510,8 +518,9 @@ mod tests {
                     dkg_pool,
                     registry,
                     state_manager,
+                    replica_config,
                     ..
-                } = dependencies_with_subnet_params(
+                } = DependenciesBuilder::single_subnet(
                     pool_config,
                     subnet_id,
                     vec![(
@@ -521,7 +530,8 @@ mod tests {
                             .with_chain_key_config(test_vet_key_config())
                             .build(),
                     )],
-                );
+                )
+                .build();
                 state_manager
                     .get_mut()
                     .expect_get_latest_certified_state()
@@ -531,14 +541,19 @@ mod tests {
                     )));
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
-                let replica_1 = node_test_id(1);
-                let dkg_key_manager =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let replica_config_1 = ReplicaConfig {
+                    node_id: node_test_id(1),
+                    ..replica_config.clone()
+                };
+                let dkg_key_manager = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReader::new(&pool),
+                    registry.clone(),
+                    replica_config_1.clone(),
+                );
                 let dkg = DkgImpl::new(
-                    replica_1,
-                    subnet_id,
-    ReplicaVersion::default(),
- ReplicaVersion::default(),
+                    replica_config_1.clone(),
                     registry.clone(),
                     state_manager.clone(),
                     crypto.clone(),
@@ -568,9 +583,13 @@ mod tests {
                 }
                 assert_eq!(dealings.messages.len(), 3);
                 for tag in tags_iter(&vet_key_ids) {
-                    assert!(dealings.messages.iter().any(
-                        |m| m.signature.signer == replica_1 && m.content.dkg_id.dkg_tag == tag
-                    ));
+                    assert!(
+                        dealings
+                            .messages
+                            .iter()
+                            .any(|m| m.signature.signer == replica_config_1.node_id
+                                && m.content.dkg_id.dkg_tag == tag)
+                    );
                 }
 
                 // Now make sure, the dealing from the same dealer will not be included in a new
@@ -603,14 +622,19 @@ mod tests {
 
                 // Create another dealer and add his dealings into the unvalidated pool of
                 // replica 1.
-                let replica_2 = node_test_id(2);
-                let dkg_key_manager_2 =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let replica_config_2 = ReplicaConfig {
+                    node_id: node_test_id(2),
+                    ..replica_config
+                };
+                let dkg_key_manager_2 = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReader::new(&pool),
+                    registry.clone(),
+                    replica_config_2.clone(),
+                );
                 let dkg_2 = DkgImpl::new(
-                    replica_2,
-                    subnet_id,
-    ReplicaVersion::default(),
- ReplicaVersion::default(),
+                    replica_config_2.clone(),
                     registry,
                     state_manager,
                     crypto,
@@ -629,7 +653,7 @@ mod tests {
                         ChangeAction::AddToValidated(message) => {
                             dkg_pool.write().unwrap().insert(UnvalidatedArtifact {
                                 message: message.clone(),
-                                peer_id: replica_1,
+                                peer_id: replica_config_1.node_id,
                                 timestamp: UNIX_EPOCH,
                             })
                         }
@@ -664,9 +688,13 @@ mod tests {
                 }
                 assert_eq!(dealings.messages.len(), 3);
                 for tag in tags_iter(&vet_key_ids) {
-                    assert!(dealings.messages.iter().any(
-                        |m| m.signature.signer == replica_2 && m.content.dkg_id.dkg_tag == tag
-                    ));
+                    assert!(
+                        dealings
+                            .messages
+                            .iter()
+                            .any(|m| m.signature.signer == replica_config_2.node_id
+                                && m.content.dkg_id.dkg_tag == tag)
+                    );
                 }
             });
         });
@@ -683,7 +711,7 @@ mod tests {
                     state_manager,
                     replica_config,
                     ..
-                } = dependencies(pool_config.clone(), 2);
+                } = DependenciesBuilder::new(pool_config.clone(), 2).build();
                 state_manager
                     .get_mut()
                     .expect_get_latest_certified_state()
@@ -694,13 +722,20 @@ mod tests {
                 let mut dkg_pool =
                     DkgPoolImpl::new(MetricsRegistry::new(), logger.clone(), Height::from(0));
                 // Let's check that replica 3, who's not a dealer, does not produce dealings.
-                let dkg_key_manager =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let replica_config_3 = ReplicaConfig {
+                    node_id: node_test_id(3),
+                    ..replica_config.clone()
+                };
+                let dkg_key_manager = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReader::new(&pool),
+                    registry.clone(),
+                    replica_config_3.clone(),
+                );
                 let dkg = DkgImpl::new(
-                    node_test_id(3),
-                    replica_config.subnet_id,
-    ReplicaVersion::default(),
-registry.clone(),
+                    replica_config_3,
+                    registry.clone(),
                     state_manager.clone(),
                     crypto.clone(),
                     pool.get_cache(),
@@ -711,13 +746,20 @@ registry.clone(),
                 assert!(dkg.on_state_change(&dkg_pool).is_empty());
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
-                let dkg_key_manager =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let replica_config_1 = ReplicaConfig {
+                    node_id: node_test_id(1),
+                    ..replica_config
+                };
+                let dkg_key_manager = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReader::new(&pool),
+                    registry.clone(),
+                    replica_config_1.clone(),
+                );
                 let dkg = DkgImpl::new(
-                    node_test_id(1),
-                    replica_config.subnet_id,
-    ReplicaVersion::default(),
-registry,
+                    replica_config_1,
+                    registry,
                     state_manager,
                     crypto,
                     pool.get_cache(),
@@ -779,26 +821,26 @@ registry,
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             use ic_types::crypto::threshold_sig::ni_dkg::*;
             with_test_replica_logger(|logger| {
-                let node_ids = vec![node_test_id(0), node_test_id(1)];
                 let dkg_interval_length = 99;
-                let subnet_id = subnet_test_id(0);
                 let Dependencies {
                     mut pool,
                     crypto,
                     registry,
+                    replica_config,
                     state_manager,
                     dkg_pool,
                     ..
-                } = dependencies_with_subnet_records_with_raw_state_manager(
-                    pool_config,
-                    subnet_id,
-                    vec![(
-                        10,
-                        SubnetRecordBuilder::from(&node_ids)
-                            .with_dkg_interval_length(dkg_interval_length)
-                            .build(),
-                    )],
-                );
+                } = DependenciesBuilder::new(pool_config, 2)
+                    .with_dkg_interval_length(dkg_interval_length)
+                    .with_replica_config(ReplicaConfig {
+                        // Node Id = 1, who is a dealer
+                        node_id: node_test_id(1),
+                        subnet_id: subnet_test_id(0),
+                        guestos_version: test_replica_version(),
+                        replica_version: test_replica_version(),
+                    })
+                    .without_state_manager_expectations()
+                    .build();
 
                 let target_id = NiDkgTargetId::new([0_u8; 32]);
                 complement_state_manager_with_setup_initial_dkg_request(
@@ -809,14 +851,16 @@ registry,
                     Some(target_id),
                 );
 
-                // Now we instantiate the DKG component for node Id = 1, who is a dealer.
-                let dkg_key_manager =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let dkg_key_manager = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReader::new(&pool),
+                    registry.clone(),
+                    replica_config.clone(),
+                );
                 let dkg = DkgImpl::new(
-                    node_test_id(1),
-                    subnet_id,
-    ReplicaVersion::default(),
-registry.clone(),
+                    replica_config,
+                    registry.clone(),
                     state_manager.clone(),
                     crypto,
                     pool.get_cache(),
@@ -945,24 +989,16 @@ registry.clone(),
     fn test_config_generation_failures_are_added_to_data_blocks() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             use ic_types::crypto::threshold_sig::ni_dkg::*;
-            let node_ids = vec![node_test_id(0), node_test_id(1)];
             let dkg_interval_length = 99;
-            let subnet_id = subnet_test_id(0);
             let Dependencies {
                 mut pool,
                 registry,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_records_with_raw_state_manager(
-                pool_config,
-                subnet_id,
-                vec![(
-                    10,
-                    SubnetRecordBuilder::from(&node_ids)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            );
+            } = DependenciesBuilder::new(pool_config, 2)
+                .with_dkg_interval_length(dkg_interval_length)
+                .without_state_manager_expectations()
+                .build();
 
             let target_id = NiDkgTargetId::new([0_u8; 32]);
             complement_state_manager_with_setup_initial_dkg_request(
@@ -1022,7 +1058,10 @@ registry.clone(),
                 for dkg_id in summary.dkg.configs.keys() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                 }
-                assert_eq!(summary.dkg.transcripts_for_remote_subnets.len(), 0);
+                assert_eq!(
+                    summary.dkg.transcripts_for_remote_subnets.as_ref(),
+                    Some(&vec![])
+                );
                 // Verify that the remote_dkg_attempts are set to `Completed`.
                 assert_eq!(
                     summary.dkg.remote_dkg_attempts.get(&target_id),
@@ -1066,23 +1105,35 @@ registry.clone(),
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config_1| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config_2| {
                 let crypto = Arc::new(CryptoReturningOk::default());
-                let node_id_1 = node_test_id(1);
-                // This is not a dealer!
-                let node_id_2 = node_test_id(0);
                 let Dependencies {
                     pool: consensus_pool_1,
                     registry: registry_1,
                     state_manager: state_manager_1,
                     replica_config: replica_config_1,
                     ..
-                } = dependencies(pool_config_1, 2);
+                } = DependenciesBuilder::new(pool_config_1, 2)
+                    .with_replica_config(ReplicaConfig {
+                        node_id: node_test_id(1),
+                        subnet_id: subnet_test_id(0),
+                        guestos_version: test_replica_version(),
+                        replica_version: test_replica_version(),
+                    })
+                    .build();
                 let Dependencies {
                     pool: consensus_pool_2,
                     registry: registry_2,
                     state_manager: state_manager_2,
                     replica_config: replica_config_2,
                     ..
-                } = dependencies(pool_config_2, 2);
+                } = DependenciesBuilder::new(pool_config_2, 2)
+                    .with_replica_config(ReplicaConfig {
+                        // This is not a dealer!
+                        node_id: node_test_id(0),
+                        subnet_id: subnet_test_id(0),
+                        guestos_version: test_replica_version(),
+                        replica_version: test_replica_version(),
+                    })
+                    .build();
                 for state_manager in [&state_manager_1, &state_manager_2] {
                     state_manager
                         .get_mut()
@@ -1104,11 +1155,11 @@ registry.clone(),
                         crypto.clone(),
                         logger.clone(),
                         &PoolReader::new(&consensus_pool_1),
+                        registry_1.clone(),
+                        replica_config_1.clone(),
                     );
                     let dkg_1 = DkgImpl::new(
-                        node_id_1,
-                        replica_config_1.subnet_id,
-                    ReplicaVersion::default(),
+                        replica_config_1.clone(),
                         registry_1,
                         state_manager_1,
                         crypto.clone(),
@@ -1122,11 +1173,11 @@ registry.clone(),
                         crypto.clone(),
                         logger.clone(),
                         &PoolReader::new(&consensus_pool_2),
+                        registry_2.clone(),
+                        replica_config_2.clone(),
                     );
                     let dkg_2 = DkgImpl::new(
-                        node_id_2,
-                        replica_config_2.subnet_id,
-                    ReplicaVersion::default(),
+                        replica_config_2,
                         registry_2,
                         state_manager_2,
                         crypto.clone(),
@@ -1148,7 +1199,7 @@ registry.clone(),
                             dkg_key_manager: dkg_key_manager_2,
                             pool: consensus_pool_2,
                         },
-                        node_id_1,
+                        replica_config_1.node_id,
                     );
                 });
             });
@@ -1357,7 +1408,7 @@ registry.clone(),
             // that it gets rejected.
             let mut invalid_dealing_message = valid_dealing_message.clone();
             invalid_dealing_message.content.version =
-                ReplicaVersion::try_from("invalid_version").unwrap();
+                ReplicaVersion::from_str("invalid_version").unwrap();
 
             node_2.dkg_pool.insert(UnvalidatedArtifact {
                 message: invalid_dealing_message.clone(),
@@ -1520,31 +1571,29 @@ registry.clone(),
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config_2| {
                 use ic_types::crypto::threshold_sig::ni_dkg::*;
                 with_test_replica_logger(|logger| {
-                    let node_ids = vec![node_test_id(0), node_test_id(1)];
                     let dkg_interval_length = 99;
-                    let subnet_id = subnet_test_id(0);
 
                     // Set pool_1 and pool_2
-                    let dependencies_1 = dependencies_with_subnet_records_with_raw_state_manager(
-                        pool_config_1,
-                        subnet_id,
-                        vec![(
-                            10,
-                            SubnetRecordBuilder::from(&node_ids)
-                                .with_dkg_interval_length(dkg_interval_length)
-                                .build(),
-                        )],
-                    );
-                    let dependencies_2 = dependencies_with_subnet_records_with_raw_state_manager(
-                        pool_config_2,
-                        subnet_id,
-                        vec![(
-                            10,
-                            SubnetRecordBuilder::from(&node_ids)
-                                .with_dkg_interval_length(dkg_interval_length)
-                                .build(),
-                        )],
-                    );
+                    let dependencies_1 = DependenciesBuilder::new(pool_config_1, 2)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .with_replica_config(ReplicaConfig {
+                            node_id: node_test_id(1),
+                            subnet_id: subnet_test_id(0),
+                            guestos_version: test_replica_version(),
+                            replica_version: test_replica_version(),
+                        })
+                        .without_state_manager_expectations()
+                        .build();
+                    let dependencies_2 = DependenciesBuilder::new(pool_config_2, 2)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .with_replica_config(ReplicaConfig {
+                            node_id: node_test_id(2),
+                            subnet_id: subnet_test_id(0),
+                            guestos_version: test_replica_version(),
+                            replica_version: test_replica_version(),
+                        })
+                        .without_state_manager_expectations()
+                        .build();
 
                     // Return an empty call context when we create the first summary,
                     // so that we later test the case where remote dealing has a different
@@ -1568,8 +1617,8 @@ registry.clone(),
                     let registry_2 = dependencies_2.registry.clone();
                     let state_manager_1 = dependencies_1.state_manager.clone();
                     let state_manager_2 = dependencies_2.state_manager.clone();
-                    let subnet_id_1 = dependencies_1.replica_config.subnet_id;
-                    let subnet_id_2 = dependencies_2.replica_config.subnet_id;
+                    let replica_config_1 = dependencies_1.replica_config;
+                    let replica_config_2 = dependencies_2.replica_config;
                     let mut pool_1 = dependencies_1.pool;
                     let mut pool_2 = dependencies_2.pool;
 
@@ -1607,33 +1656,37 @@ registry.clone(),
                     }
 
                     // Now we instantiate the DKG components. Node Id = 1 is a dealer.
-                    let dgk_key_manager_1 = new_dkg_key_manager(
+                    let dkg_key_manager_1 = new_dkg_key_manager(
                         crypto_1.clone(),
                         logger.clone(),
                         &PoolReader::new(&pool_1),
+                        registry_1.clone(),
+                        replica_config_1.clone(),
                     );
                     let dkg_1 = DkgImpl::new(
-                        node_test_id(1),
-                        subnet_id_1,
-    ReplicaVersion::default(),
-registry_1,
+                        replica_config_1,
+                        registry_1,
                         state_manager_1,
                         crypto_1,
                         pool_1.get_cache(),
-                        dgk_key_manager_1.clone(),
+                        dkg_key_manager_1.clone(),
                         MetricsRegistry::new(),
                         logger.clone(),
                     );
 
                     let dkg_2 = DkgImpl::new(
-                        node_test_id(2),
-                        subnet_id_2,
-    ReplicaVersion::default(),
-registry_2,
+                        replica_config_2.clone(),
+                        registry_2.clone(),
                         state_manager_2,
                         crypto_2.clone(),
                         pool_2.get_cache(),
-                        new_dkg_key_manager(crypto_2, logger.clone(), &PoolReader::new(&pool_2)),
+                        new_dkg_key_manager(
+                            crypto_2,
+                            logger.clone(),
+                            &PoolReader::new(&pool_2),
+                            registry_2,
+                            replica_config_2,
+                        ),
                         MetricsRegistry::new(),
                         logger.clone(),
                     );
@@ -1645,7 +1698,7 @@ registry_2,
 
                     // The last summary contains two local configs, but the state contains an initial DKG context.
                     // dkg.on_state_change should create 4 dealings for all 4 resulting configs.
-                    sync_dkg_key_manager(&dgk_key_manager_1, &pool_1);
+                    sync_dkg_key_manager(&dkg_key_manager_1, &pool_1);
                     let change_set = dkg_1.on_state_change(&dkg_pool_1);
                     match &change_set.as_slice() {
                         &[
@@ -1730,7 +1783,7 @@ registry_2,
     ) -> (Dependencies, NiDkgTargetId, Vec<NiDkgId>) {
         let node_ids = (1..8).map(node_test_id).collect::<Vec<_>>();
 
-        let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
+        let mut deps = DependenciesBuilder::single_subnet(
             pool_config,
             subnet_test_id(0),
             vec![(
@@ -1739,7 +1792,9 @@ registry_2,
                     .with_dkg_interval_length(REMOTE_DKG_INTERVAL)
                     .build(),
             )],
-        );
+        )
+        .without_state_manager_expectations()
+        .build();
 
         let target_id = NiDkgTargetId::new([0_u8; 32]);
         complement_state_manager_with_setup_initial_dkg_request(
@@ -1819,7 +1874,8 @@ registry_2,
                 deps.crypto.as_ref(),
                 &pool_reader,
                 &*deps.dkg_pool.read().unwrap(),
-                parent,
+                parent.clone(),
+                &pool_reader.dkg_summary_block(&parent).unwrap(),
                 block.payload.as_ref(),
                 deps.state_manager.as_ref(),
                 &block.context,
@@ -1968,7 +2024,8 @@ registry_2,
                     deps.crypto.as_ref(),
                     &pool_reader,
                     &*deps.dkg_pool.read().unwrap(),
-                    parent,
+                    parent.clone(),
+                    &pool_reader.dkg_summary_block(&parent).unwrap(),
                     &payload_without_remote,
                     deps.state_manager.as_ref(),
                     &block.context,
@@ -2075,6 +2132,7 @@ registry_2,
                         &pool_reader,
                         &*deps.dkg_pool.read().unwrap(),
                         parent.clone(),
+                        &pool_reader.dkg_summary_block(&parent).unwrap(),
                         &payload,
                         deps.state_manager.as_ref(),
                         &validation_context,
@@ -2107,21 +2165,20 @@ registry_2,
     fn test_remote_dealing_validation_is_deferred_until_context_exists() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let node_ids = vec![node_test_id(0), node_test_id(1)];
                 let dkg_interval_length = 99;
-                let subnet_id = subnet_test_id(0);
                 let target_id = NiDkgTargetId::new([9_u8; 32]);
 
-                let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
-                    pool_config,
-                    subnet_id,
-                    vec![(
-                        10,
-                        SubnetRecordBuilder::from(&node_ids)
-                            .with_dkg_interval_length(dkg_interval_length)
-                            .build(),
-                    )],
-                );
+                let mut deps = DependenciesBuilder::new(pool_config, 2)
+                    .with_replica_config(ReplicaConfig {
+                        // Node 2 is a non-dealer receiver
+                        node_id: node_test_id(2),
+                        subnet_id: subnet_test_id(0),
+                        guestos_version: test_replica_version(),
+                        replica_version: test_replica_version(),
+                    })
+                    .with_dkg_interval_length(dkg_interval_length)
+                    .without_state_manager_expectations()
+                    .build();
 
                 // Start without context so remote dealing validation is deferred.
                 complement_state_manager_with_dkg_contexts(
@@ -2137,11 +2194,11 @@ registry_2,
                     deps.crypto.clone(),
                     logger.clone(),
                     &PoolReader::new(&deps.pool),
+                    deps.registry.clone(),
+                    deps.replica_config.clone(),
                 );
                 let receiver_dkg = DkgImpl::new(
-                    node_test_id(2),
-                    deps.replica_config.subnet_id,
-                    ReplicaVersion::default(),
+                    deps.replica_config.clone(),
                     deps.registry.clone(),
                     deps.state_manager.clone(),
                     deps.crypto.clone(),
@@ -2156,7 +2213,7 @@ registry_2,
                     DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger(), start_height);
                 let remote_dkg_id = NiDkgId {
                     start_block_height: start_height,
-                    dealer_subnet: subnet_id,
+                    dealer_subnet: deps.replica_config.subnet_id,
                     dkg_tag: NiDkgTag::LowThreshold,
                     target_subnet: NiDkgTargetSubnet::Remote(target_id),
                 };
@@ -2164,7 +2221,7 @@ registry_2,
                 let other_target_id = NiDkgTargetId::new([10_u8; 32]);
                 let deferred_remote_dkg_id = NiDkgId {
                     start_block_height: start_height,
-                    dealer_subnet: subnet_id,
+                    dealer_subnet: deps.replica_config.subnet_id,
                     dkg_tag: NiDkgTag::LowThreshold,
                     target_subnet: NiDkgTargetSubnet::Remote(other_target_id),
                 };
@@ -2236,7 +2293,7 @@ registry_2,
             };
             let target_id = NiDkgTargetId::new([0_u8; 32]);
 
-            let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
+            let mut deps = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
@@ -2255,7 +2312,9 @@ registry_2,
                         })
                         .build(),
                 )],
-            );
+            )
+            .without_state_manager_expectations()
+            .build();
 
             // No contexts at the beginning
             complement_state_manager_with_dkg_contexts(deps.state_manager.clone(), vec![], None);
@@ -2345,7 +2404,7 @@ registry_2,
                 let setup_target_id = NiDkgTargetId::new([1_u8; 32]);
                 let reshare_target_id = NiDkgTargetId::new([2_u8; 32]);
 
-                let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
+                let mut deps = DependenciesBuilder::single_subnet(
                     pool_config,
                     subnet_test_id(0),
                     vec![(
@@ -2364,7 +2423,9 @@ registry_2,
                             })
                             .build(),
                     )],
-                );
+                )
+                .without_state_manager_expectations()
+                .build();
 
                 let registry_version = deps.registry.get_latest_version();
                 let mut contexts = vec![
@@ -2570,7 +2631,7 @@ registry_2,
                 registry,
                 replica_config,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
@@ -2580,7 +2641,8 @@ registry_2,
                         .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             // Get the latest summary block, which is the genesis block
             let cup = PoolReader::new(&pool).get_highest_catch_up_package();
@@ -2861,12 +2923,16 @@ registry_2,
         crypto: Arc<dyn ConsensusCrypto>,
         logger: ReplicaLogger,
         pool_reader: &PoolReader<'_>,
+        registry: Arc<dyn RegistryClient>,
+        replica_config: ReplicaConfig,
     ) -> Arc<Mutex<DkgKeyManager>> {
         Arc::new(Mutex::new(DkgKeyManager::new(
             MetricsRegistry::new(),
             crypto,
             logger,
             pool_reader,
+            registry,
+            replica_config,
         )))
     }
 

@@ -1476,7 +1476,6 @@ fn replace_system_api_functions(
     injected_functions: &InjectedFunctions,
     injected_counters: &InjectedCounters,
     stable_memory_index: u32,
-    dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
     max_wasm_memory_size: NumBytes,
 ) {
@@ -1488,7 +1487,6 @@ fn replace_system_api_functions(
         injected_functions,
         injected_counters,
         stable_memory_index,
-        dirty_page_overhead,
         main_memory_type,
         max_wasm_memory_size,
     ) {
@@ -1564,7 +1562,6 @@ pub(super) fn instrument(
     mut module: wirm::Module<'_>,
     cost_to_compile_wasm_instruction: NumInstructions,
     metering_type: MeteringType,
-    dirty_page_overhead: NumInstructions,
     max_wasm_memory_size: NumBytes,
     max_stable_memory_size: NumBytes,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
@@ -1633,7 +1630,6 @@ pub(super) fn instrument(
         &injected_functions,
         &injected_counters,
         stable_memory_index,
-        dirty_page_overhead,
         main_memory_type,
         max_wasm_memory_size,
     );

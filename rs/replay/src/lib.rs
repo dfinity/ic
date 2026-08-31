@@ -61,6 +61,7 @@ mod validator;
 ///         start_height: 0,
 ///     })),
 ///     skip_prompts: true,
+///     replica_version: None,
 /// };
 /// // Once the arguments are set well, the local store and spool directories are populated;
 /// // replay function could be called as follows:
@@ -127,7 +128,8 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
 
         {
             let _enter_guard = rt.enter();
-            let player = Player::new(cfg, subnet_id).with_replay_target_height(target_height);
+            let player = Player::new(cfg, subnet_id, args.replica_version)
+                .with_replay_target_height(target_height);
 
             if let Some(SubCommand::GetRecoveryCup(cmd)) = subcmd {
                 cmd_get_recovery_cup(&player, cmd).unwrap();

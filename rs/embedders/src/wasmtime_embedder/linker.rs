@@ -32,6 +32,9 @@ use std::convert::TryFrom;
 /// from wasm sandbox to the replica execution environment.
 const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
 
+/// For the signing costs, the user provides a name. Bound the allowed length.
+const MAX_KEY_NAME_LENGTH: usize = 256;
+
 fn unexpected_err(s: String) -> HypervisorError {
     HypervisorError::WasmEngineError(WasmEngineError::Unexpected(s))
 }
@@ -1019,6 +1022,15 @@ pub fn syscalls<
         })
         .unwrap();
 
+    linker
+        .func_wrap("ic0", "subnet_self_node_count", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::SUBNET_SELF_NODE_COUNT)?;
+                with_system_api(&mut caller, |s| s.ic0_subnet_self_node_count())
+            }
+        })
+        .unwrap();
+
     match main_memory_type {
         WasmMemoryType::Wasm32 => {
             linker
@@ -1295,7 +1307,19 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, src: I, size: I, curve: u32, dst: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
-                charge_for_cpu_and_mem(&mut caller, overhead::COST_ECDSA, size)?;
+                charge_for_cpu_and_mem(&mut caller, overhead::COST_ECDSA, usize::min(size, MAX_KEY_NAME_LENGTH))?;
+                if size > MAX_KEY_NAME_LENGTH {
+                    return Err(process_err(
+                        &mut caller,
+                        HypervisorError::UserContractViolation {
+                            error: format!(
+                                "ic0.cost_sign_with_ecdsa: key name is too large: {size} bytes (maximum {MAX_KEY_NAME_LENGTH})"
+                            ),
+                            suggestion: "".to_string(),
+                            doc_link: "".to_string(),
+                        },
+                    ));
+                }
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_sign_with_ecdsa(src, size, curve, dst, memory)
@@ -1310,7 +1334,23 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, src: I, size: I, algorithm: u32, dst: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
-                charge_for_cpu_and_mem(&mut caller, overhead::COST_SCHNORR, size)?;
+                charge_for_cpu_and_mem(
+                    &mut caller,
+                    overhead::COST_SCHNORR,
+                    usize::min(size, MAX_KEY_NAME_LENGTH),
+                )?;
+                if size > MAX_KEY_NAME_LENGTH {
+                    return Err(process_err(
+                        &mut caller,
+                        HypervisorError::UserContractViolation {
+                            error: format!(
+                                "ic0.cost_sign_with_schnorr: key name is too large: {size} bytes (maximum {MAX_KEY_NAME_LENGTH})"
+                            ),
+                            suggestion: "".to_string(),
+                            doc_link: "".to_string(),
+                        },
+                    ));
+                }
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_sign_with_schnorr(src, size, algorithm, dst, memory)
@@ -1327,7 +1367,19 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, src: I, size: I, curve: u32, dst: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
-                charge_for_cpu_and_mem(&mut caller, overhead::COST_VETKD, size)?;
+                charge_for_cpu_and_mem(&mut caller, overhead::COST_VETKD, usize::min(size, MAX_KEY_NAME_LENGTH))?;
+                if size > MAX_KEY_NAME_LENGTH {
+                    return Err(process_err(
+                        &mut caller,
+                        HypervisorError::UserContractViolation {
+                            error: format!(
+                                "ic0.cost_vetkd_derive_key: key name is too large: {size} bytes (maximum {MAX_KEY_NAME_LENGTH})"
+                            ),
+                            suggestion: "".to_string(),
+                            doc_link: "".to_string(),
+                        },
+                    ));
+                }
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_vetkd_derive_key(src, size, curve, dst, memory)

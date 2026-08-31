@@ -6,13 +6,26 @@
 //! IC HTTP endpoint URL. Playground and arbitrary named networks defined in
 //! `networks.json` are intentionally not supported.
 //!
-//! For `local`, resolution mirrors dfx's `LocalBindDetermination::ApplyRunning
-//! WebserverPort`: the address to connect to defaults to `127.0.0.1:8000` inside
-//! a dfx project (a `dfx.json` found by walking up from the working directory) or
-//! `127.0.0.1:4943` for the shared network, and is overridden by the port
+//! For `local`, resolution mirrors dfx's
+//! `LocalBindDetermination::ApplyRunningWebserverPort`. Walk up from the working
+//! directory to find the nearest `dfx.json`. If that file declares its own
+//! `networks.local` entry, read the address from there, defaulting to
+//! `127.0.0.1:8000` when the entry has no `bind`. Otherwise, read the address
+//! from the shared `local` network in `networks.json`, defaulting to
+//! `127.0.0.1:4943` when that file has no `local` entry either. This
+//! "otherwise" case covers both not finding any `dfx.json`, and finding one
+//! that doesn't declare `local`. Either address is overridden by the port
 //! recorded in the network's `webserver-port` file when a replica is running.
-use crate::config::directories::get_shared_network_data_directory;
+use crate::config::directories::{
+    DFX_CONFIG_ROOT, get_shared_network_data_directory, get_user_dfx_config_dir_with_override,
+};
+use crate::error::fs::ReadToStringError;
 use crate::error::get_user_home::GetUserHomeError;
+use crate::error::load_dfx_config::LoadDfxConfigError;
+use crate::error::load_networks_config::LoadNetworksConfigError;
+use crate::json::load_json_file;
+use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use url::Url;
@@ -23,13 +36,38 @@ const DEFAULT_IC_GATEWAY_TRAILING_SLASH: &str = "https://icp0.io/";
 const DEFAULT_SHARED_LOCAL_ADDRESS: &str = "127.0.0.1:4943"; // hex for "IC"
 const DEFAULT_PROJECT_LOCAL_ADDRESS: &str = "127.0.0.1:8000";
 
-/// The subset of dfx's `NetworkDescriptor` that SNS actually consumes. Named
+/// The subset of dfx-core's `NetworkDescriptor` that SNS actually consumes. Named
 /// after the upstream `dfx_core::config::model::network_descriptor::NetworkDescriptor`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NetworkDescriptor {
     pub providers: Vec<String>,
     pub is_ic: bool,
 }
+
+/// The subset of dfx-core's `ConfigNetwork::ConfigLocalProvider`
+/// (`config/model/dfinity.rs`) this crate needs: just a "bind" address. Used
+/// to deserialize the "local" entry of both a project's `dfx.json`
+/// (`networks.local`) and the shared `networks.json` (`local`). Unknown
+/// fields on the network object (e.g. "bitcoin", "replica") are ignored.
+#[derive(Deserialize)]
+struct LocalNetworkBind {
+    bind: Option<String>,
+}
+
+/// The subset of dfx-core's `ConfigInterface` this crate needs: a project's
+/// `dfx.json` "networks" map, from which only the "local" entry, if any, is
+/// read.
+#[derive(Deserialize)]
+struct ProjectDfxJson {
+    #[serde(default)]
+    networks: BTreeMap<String, LocalNetworkBind>,
+}
+
+/// The shared `networks.json`'s top-level shape: a map from network name to
+/// its configuration, from which only the "local" entry, if any, is read.
+/// Named after dfx-core's `NetworksConfigInterface::networks` field, which has
+/// the same type (`config/model/dfinity.rs`).
+type SharedNetworksJson = BTreeMap<String, LocalNetworkBind>;
 
 #[derive(Error, Debug)]
 pub enum NetworkResolutionError {
@@ -38,14 +76,40 @@ pub enum NetworkResolutionError {
     )]
     NetworkNotFound(String),
 
+    // dfx-core's `Config::from_current_dir` propagates a `std::env::current_dir`
+    // failure as an Err (`LoadDfxConfigError::DetermineCurrentWorkingDirFailed`),
+    // rather than treating it the same as no project root being found.
+    #[error("Failed to determine current working dir")]
+    DetermineCurrentWorkingDirFailed(#[source] std::io::Error),
+
     #[error("Failed to determine the shared local network data directory")]
     DetermineSharedNetworkDirectoryFailed(#[source] GetUserHomeError),
 
-    #[error("Failed to read webserver port from {0}")]
-    ReadWebserverPortFailed(PathBuf, #[source] std::io::Error),
+    // Copied (name + shape) from dfx-core's `LoadDfxConfigError`: mirrors
+    // `Config::from_file`/`Config::from_slice` reading and parsing dfx.json,
+    // including a non-string "bind" value, which fails the same typed
+    // deserialization as any other malformed field.
+    #[error(transparent)]
+    LoadProjectDfxJsonFailed(#[from] LoadDfxConfigError),
 
-    #[error("Failed to parse port value in {0}")]
-    ParsePortValueFailed(PathBuf, #[source] std::num::ParseIntError),
+    // Copied (name + shape) from dfx-core's `LoadNetworksConfigError`: mirrors
+    // `NetworksConfig::new`/`from_file` reading and parsing networks.json,
+    // with the same non-string-"bind" fidelity note as `LoadProjectDfxJsonFailed`.
+    #[error(transparent)]
+    LoadSharedNetworksConfigFailed(#[from] LoadNetworksConfigError),
+
+    // Copied (name + shape) from dfx-core's `NetworkConfigError::ReadWebserverPortFailed`
+    // (`error/network_config.rs`), which wraps `ReadToStringError` rather than
+    // an unadorned `std::io::Error` -- the path is carried by `ReadToStringError`
+    // itself, not duplicated onto this variant.
+    #[error("Failed to read webserver port")]
+    ReadWebserverPortFailed(#[source] ReadToStringError),
+
+    // Copied (name, shape, and message) from dfx-core's
+    // `NetworkConfigError::ParsePortValueFailed` (`error/network_config.rs`),
+    // including its boxing of both fields.
+    #[error("Failed to parse contents of {0} as a port value")]
+    ParsePortValueFailed(Box<PathBuf>, #[source] Box<std::num::ParseIntError>),
 }
 
 /// Determines whether the provided connection is the official IC.
@@ -96,15 +160,33 @@ pub fn resolve_network(network_name: &str) -> Result<NetworkDescriptor, NetworkR
 
 /// Resolves the `local` network, mirroring dfx's default bind determination.
 fn resolve_local_network() -> Result<NetworkDescriptor, NetworkResolutionError> {
-    let (data_directory, default_address) = match find_project_root() {
-        Some(project_root) => (
+    let working_directory = std::env::current_dir()
+        .map_err(NetworkResolutionError::DetermineCurrentWorkingDirFailed)?;
+    let dfx_config_root = DFX_CONFIG_ROOT.lock().unwrap().clone().map(PathBuf::from);
+    resolve_local_network_with(&working_directory, dfx_config_root.as_deref())
+}
+
+/// Does the actual work of [`resolve_local_network`], but takes the working
+/// directory and the `DFX_CONFIG_ROOT` environment variable override as
+/// explicit parameters instead of reading them, making this more testable.
+///
+/// `dfx_config_root` is the value of the `DFX_CONFIG_ROOT` environment
+/// variable: `None` means it is not set, `Some` means it is set to that path.
+fn resolve_local_network_with(
+    working_directory: &Path,
+    dfx_config_root: Option<&Path>,
+) -> Result<NetworkDescriptor, NetworkResolutionError> {
+    let project_local_network = find_project_local_network(working_directory)?;
+
+    let (data_directory, default_address) = match project_local_network {
+        Some((project_root, bind)) => (
             project_root.join(".dfx").join("network").join("local"),
-            project_local_address(&project_root),
+            bind,
         ),
         None => (
             get_shared_network_data_directory("local")
                 .map_err(NetworkResolutionError::DetermineSharedNetworkDirectoryFailed)?,
-            DEFAULT_SHARED_LOCAL_ADDRESS.to_string(),
+            shared_local_address(dfx_config_root)?,
         ),
     };
 
@@ -116,37 +198,122 @@ fn resolve_local_network() -> Result<NetworkDescriptor, NetworkResolutionError> 
     })
 }
 
-/// Walks up from the working directory looking for a `dfx.json`, returning the
-/// directory that contains it (the project root), if any.
-fn find_project_root() -> Option<PathBuf> {
-    let mut dir = std::env::current_dir().ok()?;
+/// Walks up from `working_directory` looking for a `dfx.json`. The directory
+/// containing `dfx.json` is the "project root". If `dfx.json` has "network" > "local",
+/// then, we return 2 things:
+///
+/// 1. the project root
+/// 2. the "bind" value within the local network, or DEFAULT_PROJECT_LOCAL_ADDRESS.
+///
+/// Otherwise, returns None. In this case, dfx falls back to the shared
+/// network.
+///
+/// Mirrors dfx's `create_project_network_descriptor`, which only produces a project
+/// network descriptor for networks actually present in the project's `dfx.json`.
+///
+/// Returns `Err` if the nearest `dfx.json` exists, but cannot be read or
+/// parsed as JSON. A "bind" value that is present but not a string fails
+/// that same parse, so it returns `Err` too. Unlike "no dfx.json" or
+/// "dfx.json has no local network" (both legitimate, and treated as
+/// `None`), these are all real problems with the user's project.
+fn find_project_local_network(
+    working_directory: &Path,
+) -> Result<Option<(PathBuf, String)>, NetworkResolutionError> {
+    let mut dir = working_directory.to_path_buf();
+
     loop {
-        if dir.join("dfx.json").is_file() {
-            return Some(dir);
+        let dfx_json = dir.join("dfx.json");
+
+        if !dfx_json.is_file() {
+            // Try the parent directory.
+            if !dir.pop() {
+                // Give up, because no parent directory.
+                return Ok(None);
+            }
+            continue;
         }
-        if !dir.pop() {
-            return None;
-        }
+
+        // Found the nearest dfx.json! Read and parse it.
+        let project_dfx_json: ProjectDfxJson = load_dfx_json(&dfx_json)?;
+
+        // Get networks.local out of dfx.json. If it doesn't exist, return None.
+        let Some(local) = project_dfx_json.networks.get("local") else {
+            // dfx.json exists and parses, but does not declare its own "local"
+            // network. This is a legitimate "not found": fall back to the
+            // shared network.
+            return Ok(None);
+        };
+
+        // Fall back to default.
+        let bind = local
+            .bind
+            .clone()
+            .unwrap_or_else(|| DEFAULT_PROJECT_LOCAL_ADDRESS.to_string());
+
+        return Ok(Some((dir, bind)));
     }
 }
 
-/// Returns the configured address for the project's `local` network, falling
-/// back to dfx's project default. Only the `bind` field is honoured; when a
-/// replica is running its `webserver-port` takes precedence regardless.
-fn project_local_address(project_root: &Path) -> String {
-    let dfx_json = project_root.join("dfx.json");
-    let bind = std::fs::read(&dfx_json)
-        .ok()
-        .and_then(|content| serde_json::from_slice::<serde_json::Value>(&content).ok())
-        .and_then(|value| {
-            value
-                .get("networks")?
-                .get("local")?
-                .get("bind")?
-                .as_str()
-                .map(str::to_string)
-        });
-    bind.unwrap_or_else(|| DEFAULT_PROJECT_LOCAL_ADDRESS.to_string())
+/// Reads and parses `path` (a project's `dfx.json`) into the subset of its
+/// schema this crate needs. Mirrors dfx-core's `Config::from_file` +
+/// `Config::from_slice`.
+fn load_dfx_json(path: &Path) -> Result<ProjectDfxJson, LoadDfxConfigError> {
+    let content = crate::fs::read(path)?;
+    serde_json::from_slice(&content).map_err(|err| {
+        LoadDfxConfigError::DeserializeValueFailed(Box::new(path.to_path_buf()), err)
+    })
+}
+
+/// Looks for `networks.json` in the shared dfx config directory (normally
+/// `~/.config/dfx`, but see `dfx_config_root`). Within that, looks for
+/// `"local"`. Within the `"local"` Object, looks for `"bind"`:
+///
+/// * If there is a value, returns it (assuming it is a string).
+/// * Otherwise, returns DEFAULT_SHARED_LOCAL_ADDRESS
+///
+/// (Otherwise, Err is returned.)
+///
+/// Mirrors dfx's `create_shared_network_descriptor`.
+///
+/// `dfx_config_root` is the value of the `DFX_CONFIG_ROOT` environment
+/// variable, read by the caller (`resolve_local_network`) and passed in
+/// explicitly. When `None`, `DFX_CONFIG_ROOT` is not set, and the shared dfx
+/// config directory falls back to its real default location (see
+/// `get_user_dfx_config_dir_with_override`).
+fn shared_local_address(dfx_config_root: Option<&Path>) -> Result<String, NetworkResolutionError> {
+    let networks = load_shared_networks_config(dfx_config_root)?;
+
+    let Some(local) = networks.get("local") else {
+        // No "local" entry: use the default.
+        return Ok(DEFAULT_SHARED_LOCAL_ADDRESS.to_string());
+    };
+
+    // Fall back to default.
+    Ok(local
+        .bind
+        .clone()
+        .unwrap_or_else(|| DEFAULT_SHARED_LOCAL_ADDRESS.to_string()))
+}
+
+/// Reads and parses the shared `networks.json`, defaulting to an empty map
+/// when the file doesn't exist. Mirrors dfx-core's `NetworksConfig::new` +
+/// `NetworksConfig::from_file`.
+fn load_shared_networks_config(
+    dfx_config_root: Option<&Path>,
+) -> Result<SharedNetworksJson, LoadNetworksConfigError> {
+    let networks_json = get_user_dfx_config_dir_with_override(dfx_config_root)
+        .map_err(LoadNetworksConfigError::GetConfigPathFailed)?
+        .join("networks.json");
+
+    if !networks_json.is_file() {
+        // No networks.json: use the default. Mirrors dfx-core's
+        // `NetworksConfig::new`, which only defaults when the file doesn't
+        // exist. If it exists but can't be read or parsed, that's an Err
+        // instead (see `LoadConfigFromFileFailed` below).
+        return Ok(SharedNetworksJson::new());
+    }
+
+    load_json_file(&networks_json).map_err(LoadNetworksConfigError::LoadConfigFromFileFailed)
 }
 
 /// Applies a running replica's webserver port (if any) to the default address.
@@ -158,15 +325,15 @@ fn get_running_webserver_address(
     let local_address = default_local_address.to_string();
     let path = data_directory.join("webserver-port");
     if path.exists() {
-        let s = std::fs::read_to_string(&path)
-            .map_err(|e| NetworkResolutionError::ReadWebserverPortFailed(path.clone(), e))?;
+        let s = crate::fs::read_to_string(&path)
+            .map_err(NetworkResolutionError::ReadWebserverPortFailed)?;
         let s = s.trim();
         if s.is_empty() {
             Ok(local_address)
         } else {
-            let port = s
-                .parse::<u16>()
-                .map_err(|e| NetworkResolutionError::ParsePortValueFailed(path.clone(), e))?;
+            let port = s.parse::<u16>().map_err(|e| {
+                NetworkResolutionError::ParsePortValueFailed(Box::new(path), Box::new(e))
+            })?;
             // converting to a socket address, and then setting the port,
             // will unfortunately transform "localhost:port" to "[::1]:{port}",
             // which the agent fails to connect with.
@@ -180,3 +347,7 @@ fn get_running_webserver_address(
         Ok(local_address)
     }
 }
+
+#[cfg(test)]
+#[path = "network_tests.rs"]
+mod tests;

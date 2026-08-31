@@ -34,6 +34,7 @@ pub fn validate_payload(
     pool_reader: &PoolReader<'_>,
     dkg_pool: &dyn DkgPool,
     parent: Block,
+    last_summary_block: &Block,
     payload: &BlockPayload,
     state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
@@ -41,17 +42,8 @@ pub fn validate_payload(
     log: &ReplicaLogger,
 ) -> ValidationResult<DkgPayloadValidationError> {
     let current_height = parent.height.increment();
-    let registry_version = pool_reader
-        .registry_version(current_height)
-        .ok_or(DkgPayloadValidationFailure::FailedToGetRegistryVersion)?;
 
-    let last_summary_block = pool_reader
-        .dkg_summary_block(&parent)
-        // We expect the parent to be valid, so there will be _always_ a DKG start block on the
-        // chain.
-        .expect("No DKG start block found for the parent block.");
     let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
-
     let is_dkg_start_height = last_dkg_summary.get_next_start_height() == current_height;
 
     match payload {
@@ -66,9 +58,9 @@ pub fn validate_payload(
                 registry_client,
                 crypto,
                 pool_reader,
+                last_summary_block,
                 last_dkg_summary,
                 &parent,
-                registry_version,
                 state_reader,
                 validation_context,
                 log.clone(),
@@ -76,8 +68,8 @@ pub fn validate_payload(
             )?;
             if summary_payload.dkg != expected_summary {
                 return Err(InvalidDkgPayloadReason::MismatchedDkgSummary(
-                    expected_summary,
-                    summary_payload.dkg.clone(),
+                    Box::new(expected_summary),
+                    Box::new(summary_payload.dkg.clone()),
                 )
                 .into());
             }
@@ -111,6 +103,10 @@ pub fn validate_payload(
                     InvalidDkgPayloadReason::DkgDealingAtStartHeight(current_height).into(),
                 );
             }
+
+            let registry_version = pool_reader
+                .registry_version(current_height)
+                .ok_or(DkgPayloadValidationFailure::FailedToGetRegistryVersion)?;
             let max_dealings_per_block = registry_client
                 .get_dkg_dealings_per_block(subnet_id, registry_version)
                 .map_err(DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock)?
@@ -209,15 +205,16 @@ fn validate_dealings_payload(
     for message in &dealings.messages {
         metrics.with_label_values(&["total"]).inc();
 
-        // Skip the rest if already present in DKG pool
+        let Some(config) = configs.get(&message.content.dkg_id) else {
+            return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
+        };
+
+        // Skip the (expensive) crypto verification if the dealing was verified against
+        // this config already, i.e. it is present in the validated DKG pool.
         if dkg_pool.validated_contains(message) {
             metrics.with_label_values(&["dkg_pool_hit"]).inc();
             continue;
         }
-
-        let Some(config) = configs.get(&message.content.dkg_id) else {
-            return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
-        };
 
         // Verify the signature and dealing.
         crypto_validate_dealing(crypto, config, message)?;
@@ -260,7 +257,7 @@ mod tests {
     use super::*;
     use crate::{DkgImpl, DkgKeyManager};
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
     use ic_crypto_test_utils_ni_dkg::{dummy_dealing, dummy_transcript_for_tests};
     use ic_interfaces::{
@@ -277,6 +274,7 @@ mod tests {
     use ic_test_utilities_state::get_initial_state;
     use ic_test_utilities_types::ids::{
         NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, node_test_id, subnet_test_id,
+        test_replica_version,
     };
     use ic_types::{
         Height, NodeId, RegistryVersion, ReplicaVersion,
@@ -288,6 +286,7 @@ mod tests {
         },
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         messages::CallbackId,
+        replica_config::ReplicaConfig,
         time::UNIX_EPOCH,
     };
     use std::{
@@ -303,27 +302,20 @@ mod tests {
     fn test_validate_payload() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 4;
-            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
             let Dependencies {
                 crypto,
                 mut pool,
                 registry,
+                replica_config,
                 state_manager,
                 dkg_pool,
                 ..
-            } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    5,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            );
+            } = DependenciesBuilder::new(pool_config, 4)
+                .with_dkg_interval_length(dkg_interval_length)
+                .build();
 
             let context = ValidationContext {
-                registry_version: RegistryVersion::from(5),
+                registry_version: RegistryVersion::from(1),
                 certified_height: Height::from(0),
                 time: ic_types::time::UNIX_EPOCH,
             };
@@ -335,14 +327,18 @@ mod tests {
             let block = Block::from(pool.make_next_block());
             let block_payload = block.payload.as_ref();
 
+            let last_summary_block = PoolReader::new(&pool)
+                .dkg_summary_block(&parent_block)
+                .unwrap();
             assert!(
                 validate_payload(
-                    subnet_test_id(0),
+                    replica_config.subnet_id,
                     registry.as_ref(),
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
                     dkg_pool.read().unwrap().deref(),
                     parent_block,
+                    &last_summary_block,
                     block_payload,
                     state_manager.as_ref(),
                     &context,
@@ -359,14 +355,18 @@ mod tests {
             let block = Block::from(pool.make_next_block());
             let summary = block.payload.as_ref();
 
+            let last_summary_block = PoolReader::new(&pool)
+                .dkg_summary_block(&parent_block)
+                .unwrap();
             assert!(
                 validate_payload(
-                    subnet_test_id(0),
+                    replica_config.subnet_id,
                     registry.as_ref(),
                     crypto.as_ref(),
                     &PoolReader::new(&pool),
                     dkg_pool.read().unwrap().deref(),
                     parent_block,
+                    &last_summary_block,
                     summary,
                     state_manager.as_ref(),
                     &context,
@@ -416,6 +416,44 @@ mod tests {
             Err(DkgPayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::MissingDkgConfigForDealing
             ))
+        );
+    }
+
+    #[test]
+    fn validate_dealings_payload_when_wrong_dkg_id_and_in_dkg_pool_fails_test() {
+        // Validation should fail if the block contains a dealing without a coresponding config,
+        // even if the dealing is present in the validated pool.
+        let dealing = fake_dkg_message(SUBNET_2, NODE_1);
+        assert_eq!(
+            validate_payload_test_case_with_validated_dealings(
+                /*dealings_to_validate=*/ vec![dealing.clone()],
+                /*parents_dealings=*/ vec![],
+                /*validated_pool_dealings=*/ vec![dealing],
+                /*max_dealings_per_block=*/ 1,
+                SUBNET_1,
+                /*committee=*/ &[NODE_1],
+            ),
+            Err(DkgPayloadValidationError::InvalidArtifact(
+                InvalidDkgPayloadReason::MissingDkgConfigForDealing
+            ))
+        );
+    }
+
+    #[test]
+    fn validate_dealings_payload_when_valid_and_in_dkg_pool_passes_test() {
+        // A dealing that does have a config is still accepted when it is present in the
+        // validated DKG pool, i.e. the pool is still used to skip the crypto verification.
+        let dealing = fake_dkg_message(SUBNET_1, NODE_1);
+        assert_eq!(
+            validate_payload_test_case_with_validated_dealings(
+                /*dealings_to_validate=*/ vec![dealing.clone()],
+                /*parents_dealings=*/ vec![],
+                /*validated_pool_dealings=*/ vec![dealing],
+                /*max_dealings_per_block=*/ 1,
+                SUBNET_1,
+                /*committee=*/ &[NODE_1],
+            ),
+            Ok(())
         );
     }
 
@@ -519,7 +557,7 @@ mod tests {
                 registry,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config.clone(),
                 SUBNET_1,
                 vec![(
@@ -528,7 +566,8 @@ mod tests {
                         .with_dkg_dealings_per_block(1)
                         .build(),
                 )],
-            );
+            )
+            .build();
 
             let mut parent = Block::from(pool.make_next_block());
             parent.payload = Payload::new(
@@ -579,6 +618,7 @@ mod tests {
                 idkg: idkg::Payload::default(),
             });
 
+            let last_summary_block = PoolReader::new(&pool).dkg_summary_block(&parent).unwrap();
             assert_eq!(
                 validate_payload(
                     SUBNET_1,
@@ -587,6 +627,7 @@ mod tests {
                     &PoolReader::new(&pool),
                     dkg_pool.read().unwrap().deref(),
                     parent,
+                    &last_summary_block,
                     &block_payload,
                     state_manager.as_ref(),
                     &context,
@@ -610,6 +651,28 @@ mod tests {
         subnet_id: SubnetId,
         committee: &[NodeId],
     ) -> ValidationResult<DkgPayloadValidationError> {
+        validate_payload_test_case_with_validated_dealings(
+            dealings_to_validate,
+            parent_dealings,
+            /*validated_pool_dealings=*/ vec![],
+            max_dealings_per_payload,
+            subnet_id,
+            committee,
+        )
+    }
+
+    /// Same as [`validate_payload_test_case`], but additionally inserts
+    /// `validated_pool_dealings` into the validated section of the node-local DKG pool
+    /// before validating the payload.
+    #[allow(clippy::result_large_err)]
+    fn validate_payload_test_case_with_validated_dealings(
+        dealings_to_validate: Vec<Message>,
+        parent_dealings: Vec<Message>,
+        validated_pool_dealings: Vec<Message>,
+        max_dealings_per_payload: u64,
+        subnet_id: SubnetId,
+        committee: &[NodeId],
+    ) -> ValidationResult<DkgPayloadValidationError> {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let registry_version = 1;
 
@@ -620,7 +683,7 @@ mod tests {
                 registry,
                 state_manager,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config.clone(),
                 subnet_id,
                 vec![(
@@ -629,6 +692,14 @@ mod tests {
                         .with_dkg_dealings_per_block(max_dealings_per_payload)
                         .build(),
                 )],
+            )
+            .build();
+
+            dkg_pool.write().unwrap().apply(
+                validated_pool_dealings
+                    .into_iter()
+                    .map(ChangeAction::AddToValidated)
+                    .collect(),
             );
 
             let mut parent = Block::from(pool.make_next_block());
@@ -653,13 +724,15 @@ mod tests {
                 idkg: idkg::Payload::default(),
             });
 
+            let last_summary_block = PoolReader::new(&pool).dkg_summary_block(&parent).unwrap();
             validate_payload(
                 subnet_id,
                 registry.as_ref(),
                 crypto.as_ref(),
                 &PoolReader::new(&pool),
                 dkg_pool.read().unwrap().deref(),
-                parent.clone(),
+                parent,
+                &last_summary_block,
                 &block_payload,
                 state_manager.as_ref(),
                 &context,
@@ -686,6 +759,7 @@ mod tests {
                 target_subnet: NiDkgTargetSubnet::Local,
                 dkg_tag,
             },
+            test_replica_version(),
         );
 
         Message::fake(content, dealer_id)
@@ -720,8 +794,9 @@ mod tests {
                 registry,
                 state_manager,
                 registry_data_provider,
+                replica_config,
                 ..
-            } = dependencies_with_subnet_params(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(
@@ -730,7 +805,14 @@ mod tests {
                         .with_dkg_interval_length(dkg_interval_length)
                         .build(),
                 )],
-            );
+            )
+            .with_replica_config(ReplicaConfig {
+                node_id,
+                subnet_id,
+                guestos_version: test_replica_version(),
+                replica_version: test_replica_version(),
+            })
+            .build();
             state_manager
                 .get_mut()
                 .expect_get_latest_certified_state()
@@ -785,12 +867,12 @@ mod tests {
                 crypto.clone(),
                 no_op_logger(),
                 &PoolReader::new(&pool),
+                registry.clone(),
+                replica_config.clone(),
             );
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(
-                node_id,
-                subnet_id,
-                ReplicaVersion::default(),
+                replica_config,
                 registry.clone(),
                 state_manager.clone(),
                 crypto.clone(),
@@ -839,6 +921,7 @@ mod tests {
                 idkg: idkg::Payload::default(),
             });
 
+            let last_summary_block = PoolReader::new(&pool).dkg_summary_block(&parent).unwrap();
             let result = validate_payload(
                 subnet_id,
                 registry.as_ref(),
@@ -846,6 +929,7 @@ mod tests {
                 &PoolReader::new(&pool),
                 &dkg_pool,
                 parent.clone(),
+                &last_summary_block,
                 &block_payload,
                 state_manager.as_ref(),
                 &context,
@@ -866,6 +950,7 @@ mod tests {
                 &PoolReader::new(&pool),
                 &dkg_pool,
                 parent,
+                &last_summary_block,
                 &block_payload,
                 state_manager.as_ref(),
                 &context,

@@ -80,7 +80,7 @@ pub(crate) struct ProposeToCreateSubnetCmd {
 
     #[clap(long)]
     /// ID of the Replica version to run.
-    pub replica_version_id: Option<ReplicaVersion>,
+    pub replica_version_id: ReplicaVersion,
 
     #[clap(long)]
     /// The length of all DKG intervals. The DKG interval length is the number
@@ -279,8 +279,6 @@ impl ProposeToCreateSubnetCmd {
         }
         // Other default parameters.
         {
-            self.replica_version_id
-                .get_or_insert(ReplicaVersion::default());
             self.max_number_of_canisters.get_or_insert(0);
             self.features.get_or_insert(SubnetFeatures::default());
             self.canister_cycles_cost_schedule
@@ -324,11 +322,7 @@ impl ProposeToCreateSubnetCmd {
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap_or_default(),
             max_ingress_bytes_per_block: self.max_ingress_bytes_per_block,
             max_block_payload_size: self.max_block_payload_size.unwrap_or_default(),
-            replica_version_id: self
-                .replica_version_id
-                .as_ref()
-                .expect("replica_version_id must be specified.")
-                .to_string(),
+            replica_version_id: self.replica_version_id.to_string(),
             unit_delay_millis: self.unit_delay_millis.unwrap_or_default(),
             initial_notary_delay_millis: self.initial_notary_delay_millis.unwrap_or_default(),
             dkg_interval_length: self.dkg_interval_length.unwrap_or_default(),
@@ -414,7 +408,7 @@ mod tests {
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
-            replica_version_id: None,
+            replica_version_id: ReplicaVersion::from_str("").unwrap(),
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
             initial_chain_key_configs_to_request: None,
@@ -432,7 +426,7 @@ mod tests {
     #[test]
     fn cli_to_payload_conversion_works_for_chain_key_fields() {
         // Boilerplate stuff
-        let replica_version_id = ReplicaVersion::default();
+        let replica_version_id = ReplicaVersion::from_str("123").unwrap();
         let features = SubnetFeatures::default();
 
         let initial_chain_key_configs_to_request = r#"[{
@@ -465,7 +459,7 @@ mod tests {
             idkg_key_rotation_period_ms,
             max_parallel_pre_signature_transcripts_in_creation,
 
-            replica_version_id: Some(replica_version_id.clone()),
+            replica_version_id: replica_version_id.clone(),
             features: Some(features),
             canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
             ..empty_propose_to_create_subnet_cmd()

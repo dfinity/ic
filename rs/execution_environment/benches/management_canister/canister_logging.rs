@@ -328,7 +328,7 @@ fn fetch_response(
     let state = env.get_latest_state();
     let mut request = FetchCanisterLogsRequest::new(target);
     request.filter = filter;
-    let (reply, _record_count, _content_size) = fetch_canister_logs_response_for_bench(
+    let (reply, _instructions) = fetch_canister_logs_response_for_bench(
         sender,
         state.canister_state(&target).unwrap(),
         request,

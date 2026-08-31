@@ -154,7 +154,7 @@ mod tests {
 
     use axum::{Router, body::Body, http::Request, middleware, routing::post};
     use http::StatusCode;
-    use ic_bn_lib_common::principal;
+    use ic_bn_lib::principal;
     use ic_types::{PrincipalId, messages::Blob};
     use tower::Service;
 

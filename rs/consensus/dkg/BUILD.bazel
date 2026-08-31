@@ -74,6 +74,7 @@ rust_test(
         "@crate_index//:prometheus",
         "@crate_index//:prost",
         "@crate_index//:rayon",
+        "@crate_index//:rstest",
         "@crate_index//:slog",
     ],
 )

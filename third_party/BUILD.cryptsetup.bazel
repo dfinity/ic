@@ -1,0 +1,32 @@
+# Use libcryptsetup from the host environment
+#
+# Linked (by explicit path, so no host -L dir leaks into the link line) into
+# the libcryptsetup-rs-sys crate via a crate annotation in
+# bazel/rust.MODULE.bazel.
+
+load("@rules_cc//cc:cc_import.bzl", "cc_import")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+cc_import(
+    name = "cryptsetup-internal",
+    # The unversioned .so (the -dev symlink): the linker looks for exactly
+    # libcryptsetup.so when resolving -lcryptsetup; the runtime dependency is
+    # recorded from its SONAME (libcryptsetup.so.12).
+    shared_library = "lib/x86_64-linux-gnu/libcryptsetup.so",
+    visibility = ["//visibility:private"],
+)
+
+# Carries the linkopts below on top of the import.
+cc_library(
+    name = "cryptsetup",
+    # The host libcryptsetup.so is built against the host glibc, which is
+    # newer than the glibc our hermetic toolchain targets. lld (default
+    # --no-allow-shlib-undefined for executables) checks the undefined
+    # *versioned* symbol references of every shared library against the target
+    # glibc stubs, so it rejects the ones added after the target version.
+    # This library is system-provided: those symbols are resolved by the host
+    # glibc at runtime, so don't reject them at link time.
+    linkopts = ["-Wl,--allow-shlib-undefined"],
+    visibility = ["//visibility:public"],
+    deps = ["cryptsetup-internal"],
+)

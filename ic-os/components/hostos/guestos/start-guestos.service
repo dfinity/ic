@@ -1,0 +1,13 @@
+[Unit]
+Description=Startup GuestOS VMs
+RequiresMountsFor=/boot/config
+Wants=guestos.target
+Before=guestos.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ic/bin/start-guestos.sh
+
+[Install]
+WantedBy=multi-user.target

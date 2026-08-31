@@ -445,10 +445,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
     );
     let own_subnet_id = state.metadata.own_subnet_id;
     let inverted_routing_table = Arc::new(invert_routing_table(
-        state
-            .metadata
-            .network_topology
-            .routing_table_for_certification(),
+        state.metadata.network_topology.routing_table(),
     ));
     let split_routing_table = Arc::new(split_inverted_routing_table(
         &inverted_routing_table,
@@ -478,7 +475,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
             )
             .with("subnet", move || {
                 subnets_as_tree(
-                    state.metadata.network_topology.subnets_for_certification(),
+                    state.metadata.network_topology.subnets(),
                     own_subnet_id,
                     &state.metadata.own_subnet_info.node_public_keys,
                     inverted_routing_table.clone(),
@@ -495,7 +492,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                 "canister_ranges",
                 move || {
                     canister_ranges_as_tree(
-                        state.metadata.network_topology.subnets_for_certification(),
+                        state.metadata.network_topology.subnets(),
                         Arc::clone(&split_routing_table),
                         certification_version,
                     )
@@ -599,6 +596,7 @@ macro_rules! message_expander {
                 CertificationVersion::V26 => $expand::<{ CertificationVersion::V26 as u32 }>,
                 CertificationVersion::V27 => $expand::<{ CertificationVersion::V27 as u32 }>,
                 CertificationVersion::V28 => $expand::<{ CertificationVersion::V28 as u32 }>,
+                CertificationVersion::V29 => $expand::<{ CertificationVersion::V29 as u32 }>,
             }
         }
     };
@@ -1025,6 +1023,7 @@ fn select_canister_expander(version: CertificationVersion) -> SubtreeExpander {
         CertificationVersion::V26 => expand_canister::<{ CertificationVersion::V26 as u32 }>,
         CertificationVersion::V27 => expand_canister::<{ CertificationVersion::V27 as u32 }>,
         CertificationVersion::V28 => expand_canister::<{ CertificationVersion::V28 as u32 }>,
+        CertificationVersion::V29 => expand_canister::<{ CertificationVersion::V29 as u32 }>,
     }
 }
 
@@ -1144,6 +1143,8 @@ fn subnets_as_tree<'a>(
                     .with_tree_if(
                         subnet_id == &own_subnet_id,
                         "metrics",
+                        // Starting with `V29`, the reported total also includes
+                        // the cycles consumed by all non-deleted canisters.
                         blob(move || encode_subnet_metrics(metrics, certification_version)),
                     )
                     .with_tree_if(

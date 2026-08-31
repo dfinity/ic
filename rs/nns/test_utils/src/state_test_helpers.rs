@@ -1292,6 +1292,7 @@ pub fn nns_propose_upgrade_nns_canister(
             wasm_module: Some(wasm_module),
             arg: Some(module_arg),
             skip_stopping_before_installing: None,
+            canister_upgrade_options: None,
         })),
         ..Default::default()
     };

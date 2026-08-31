@@ -6,6 +6,7 @@ use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
+    canister_http::canister_http_threshold,
     consensus::{
         Committee, HasHeight, RandomBeacon, Rank, Threshold, get_committee_size,
         get_faults_tolerated,
@@ -208,7 +209,7 @@ impl Membership {
         // 2. Non replicated request should only be sent to committee nodes.
         let committee = self.get_nodes_at_version(registry_version)?;
         let faults_tolerated = get_faults_tolerated(committee.len());
-        let threshold = committee.len() - faults_tolerated;
+        let threshold = canister_http_threshold(committee.len());
         Ok(CanisterHttpCommittee {
             committee,
             threshold,

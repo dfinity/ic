@@ -10,6 +10,12 @@ jobs:
   dependency-review:
     runs-on: ubuntu-latest
     env:
+      # Intentional no-op: no step reads this. Added by #8729 ("Adds CTF
+      # variable, it does not adjust the workflow functionality") and kept on
+      # purpose, understood to be a capture-the-flag marker that a researcher
+      # who exfiltrates it can present as proof of an exploit against this
+      # pull_request_target workflow. Check with @dfinity/infra before removing
+      # it as unused config.
       CTF_PROOF: ${{ secrets.CTF_PROOF }}
     steps:
       - name: Checkout base
@@ -17,11 +23,16 @@ jobs:
         with:
           ref: 'master'
           path: "base"
+          # This job parses a file taken verbatim from the (untrusted) fork, so
+          # no write-capable token may be left readable on disk. The only step
+          # that needs the token gets it from the environment instead.
+          persist-credentials: false
       - name: Checkout PR
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: "pr"
+          persist-credentials: false
           sparse-checkout: |
             Cargo.Bazel.toml.lock
           sparse-checkout-cone-mode: false
@@ -46,6 +57,12 @@ jobs:
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           $SHELL_WRAPPER python3 ci/src/dependencies/job/bazel_rust_gh_submission_job.py
       - name: Dependency Review
-        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: moderate
+          # The base commit's dependency snapshot is submitted by a separate
+          # workflow run, so it can still be missing when this check compares
+          # the base against the PR head. Without a retry the comparison sees
+          # zero base dependencies, reports the entire tree as newly added and
+          # fails on pre-existing advisories.
+          retry-on-snapshot-warnings: true

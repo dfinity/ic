@@ -4,8 +4,8 @@ use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
 };
-use ic_cdk::bitcoin_canister::{Network as BitcoinNetwork, SendTransactionRequest};
 use ic_cdk::{init, update};
+use ic_cdk_bitcoin_canister::SendTransactionRequest;
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -197,11 +197,7 @@ fn dogecoin_send_transaction(transaction: SendTransactionRequest) {
 
 fn send_transaction(transaction: SendTransactionRequest) {
     mutate_state(|s| {
-        let cdk_network = match transaction.network {
-            BitcoinNetwork::Mainnet => Network::Mainnet,
-            BitcoinNetwork::Testnet => Network::Testnet,
-            BitcoinNetwork::Regtest => Network::Regtest,
-        };
+        let cdk_network = Network::from(transaction.network);
         assert_eq!(cdk_network, s.network);
         if s.is_available {
             s.mempool.insert(ByteBuf::from(transaction.transaction));

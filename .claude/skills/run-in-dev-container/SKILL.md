@@ -7,7 +7,7 @@ description: Use when you need to run a command (build, test, tool) inside the I
 
 `./ci/container/container-run.sh` runs a command inside the pinned IC dev
 container (the `ghcr.io/dfinity/ic-dev` image), bind-mounting the repo checkout
-at `/ic` and reusing `~/.cache` for the Bazel/cargo/zig caches.
+at `/ic` and reusing `~/.cache` for the Bazel/cargo caches.
 
 Prefer running builds and build tooling through it: it gives you the exact,
 pinned toolchain environment, and standardizing on the container — regardless of

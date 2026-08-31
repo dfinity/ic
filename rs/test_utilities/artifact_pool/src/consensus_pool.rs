@@ -43,6 +43,7 @@ pub struct TestConsensusPool {
     time_source: Arc<dyn TimeSource>,
     dkg_payload_builder: Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> DkgPayload>,
     membership: Membership,
+    replica_version: ReplicaVersion,
 }
 
 pub struct Round<'a> {
@@ -152,13 +153,16 @@ fn dkg_payload_builder_fn(
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
 ) -> Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> DkgPayload> {
     Box::new(move |cons_pool, parent, validation_context| {
+        let pool = PoolReader::new(cons_pool);
+        let last_summary_block = pool.dkg_summary_block(&parent).expect("No DKG summary");
         ic_consensus_dkg::create_payload(
             subnet_id,
             &*registry_client,
             &*crypto,
-            &PoolReader::new(cons_pool),
+            &pool,
             dkg_pool.clone(),
             &parent,
+            &last_summary_block,
             &*state_manager,
             validation_context,
             no_op_logger(),
@@ -175,6 +179,7 @@ impl TestConsensusPool {
     pub fn new(
         node_id: NodeId,
         subnet_id: SubnetId,
+        replica_version: ReplicaVersion,
         pool_config: ArtifactPoolConfig,
         time_source: Arc<dyn TimeSource>,
         registry_client: Arc<dyn RegistryClient>,
@@ -212,6 +217,7 @@ impl TestConsensusPool {
         let pool = ConsensusPoolImpl::new(
             node_id,
             subnet_id,
+            &replica_version,
             ic_test_utilities_consensus::make_genesis(summary).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
@@ -226,6 +232,7 @@ impl TestConsensusPool {
             time_source,
             dkg_payload_builder,
             membership,
+            replica_version,
         }
     }
 
@@ -291,6 +298,7 @@ impl TestConsensusPool {
         block.context.time += monotonic_block_increment;
 
         block.context.registry_version = registry_version;
+        block.version = self.replica_version.clone();
         let idkg = block.payload.as_ref().as_idkg().cloned();
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
         let payload = match dkg_payload {
@@ -313,7 +321,10 @@ impl TestConsensusPool {
 
     pub fn make_next_tape(&self) -> RandomTape {
         let finalized_height = self.validated().finalization().max_height().unwrap();
-        RandomTape::fake(RandomTapeContent::new(finalized_height))
+        RandomTape::fake(RandomTapeContent::new(
+            finalized_height,
+            self.replica_version.clone(),
+        ))
     }
 
     /// Creates an equivocation proof for the given height and rank. Make sure
@@ -322,12 +333,7 @@ impl TestConsensusPool {
         let signer = self.get_block_maker_by_rank(height, Some(rank));
         EquivocationProof {
             signer,
-            version: self
-                .pool
-                .validated()
-                .highest_catch_up_package()
-                .content
-                .version,
+            version: self.replica_version.clone(),
             height,
             subnet_id: self.subnet_id,
             hash1: CryptoHashOf::new(CryptoHash(vec![1, 2, 3])),
@@ -662,7 +668,11 @@ impl TestConsensusPool {
 
         // create RB shares for new blocks
         for i in 0..rb_shares {
-            let content = RandomBeaconContent::new(height, ic_types::crypto::crypto_hash(&beacon));
+            let content = RandomBeaconContent::new(
+                height,
+                ic_types::crypto::crypto_hash(&beacon),
+                self.replica_version.clone(),
+            );
             let share = RandomBeaconShare {
                 signature: crypto
                     .sign_threshold(&content, &dkg_id)
@@ -683,7 +693,11 @@ impl TestConsensusPool {
         // create notarization shares for new blocks
         for i in 0..n_shares {
             let block = &blocks[rand_num.next().unwrap() % blocks.len()];
-            let content = NotarizationContent::new(height, block.content.get_hash().clone());
+            let content = NotarizationContent::new(
+                height,
+                block.content.get_hash().clone(),
+                self.replica_version.clone(),
+            );
             let share = NotarizationShare {
                 signature: crypto
                     .sign_multi(&content, node_id, RegistryVersion::from(1))
@@ -704,7 +718,11 @@ impl TestConsensusPool {
         // create finalization shares for new blocks
         for i in 0..f_shares {
             let block = &blocks[rand_num.next().unwrap() % blocks.len()];
-            let content = FinalizationContent::new(height, block.content.get_hash().clone());
+            let content = FinalizationContent::new(
+                height,
+                block.content.get_hash().clone(),
+                self.replica_version.clone(),
+            );
             let share = FinalizationShare {
                 signature: crypto
                     .sign_multi(&content, node_id, RegistryVersion::from(1))
@@ -725,7 +743,11 @@ impl TestConsensusPool {
     }
 
     pub fn notarize(&mut self, block: &BlockProposal) -> Notarization {
-        let content = NotarizationContent::new(block.height(), block.content.get_hash().clone());
+        let content = NotarizationContent::new(
+            block.height(),
+            block.content.get_hash().clone(),
+            self.replica_version.clone(),
+        );
         let notarization = Notarization::fake(content);
         self.insert_validated(notarization.clone());
 
@@ -733,7 +755,11 @@ impl TestConsensusPool {
     }
 
     pub fn finalize(&mut self, block: &BlockProposal) -> Finalization {
-        let content = FinalizationContent::new(block.height(), block.content.get_hash().clone());
+        let content = FinalizationContent::new(
+            block.height(),
+            block.content.get_hash().clone(),
+            self.replica_version.clone(),
+        );
         let finalization = Finalization::fake(content);
         self.insert_validated(finalization.clone());
 
@@ -741,8 +767,11 @@ impl TestConsensusPool {
     }
 
     pub fn finalize_block(&mut self, block: &Block) {
-        let content =
-            FinalizationContent::new(block.height(), ic_types::crypto::crypto_hash(block));
+        let content = FinalizationContent::new(
+            block.height(),
+            ic_types::crypto::crypto_hash(block),
+            self.replica_version.clone(),
+        );
         self.insert_validated(Finalization::fake(content))
     }
 
@@ -798,7 +827,8 @@ impl TestConsensusPool {
     }
 
     pub fn insert_random_tape(&mut self, height: Height) {
-        let msg = RandomTape::fake(RandomTapeContent::new(height)).into_message();
+        let msg = RandomTape::fake(RandomTapeContent::new(height, self.replica_version.clone()))
+            .into_message();
         let time_source = self.time_source.clone();
         self.apply(vec![ChangeAction::AddToValidated(
             ValidatedConsensusArtifact {

@@ -30,7 +30,7 @@ Heap Memory Overhead
 --------------------
 
 Each Wasm heap memory page has an associated overhead defined
-by `DEFAULT_DIRTY_PAGE_OVERHEAD` and other costs.
+by `DEFAULT_PAGE_OVERHEAD` and other costs.
 
 1. ✅ Runs daily on CI.
 2. ✅ Results are available in [Grafana](https://grafana.mainnet.dfinity.network/d/benchmarks-embedders-heap/benchmarks3a-embedders-heap).
@@ -64,7 +64,7 @@ Stable Memory Overhead
 ----------------------
 
 Each Wasm stable memory page has an associated overhead defined
-by `DEFAULT_DIRTY_PAGE_OVERHEAD` and other costs.
+by `DEFAULT_PAGE_OVERHEAD` and other costs.
 
 1. ✅ Runs daily on CI.
 2. ✅ Results are available in [Grafana](https://grafana.mainnet.dfinity.network/d/benchmarks-embedders-stable-memory/benchmarks3a-embedders-stable-memory).

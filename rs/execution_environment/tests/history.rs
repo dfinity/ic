@@ -80,14 +80,18 @@ fn failed() -> IngressStatus {
     }
 }
 
-fn valid_transitions() -> Vec<(IngressStatus, Vec<IngressStatus>)> {
+/// The valid state transitions, as `(origin status, next statuses)` pairs. An
+/// origin of `None` stands for `IngressStatus::Unknown`, i.e. for the absence of
+/// an ingress history entry (which is why it is not a status one can transition
+/// *to*: recording an `IngressStatus::Unknown` is a bug).
+fn valid_transitions() -> Vec<(Option<IngressStatus>, Vec<IngressStatus>)> {
     vec![
+        (None, vec![received(), processing(), completed(), failed()]),
+        (Some(received()), vec![processing(), completed(), failed()]),
         (
-            Unknown,
-            vec![Unknown, received(), processing(), completed(), failed()],
+            Some(processing()),
+            vec![processing(), completed(), failed()],
         ),
-        (received(), vec![processing(), completed(), failed()]),
-        (processing(), vec![processing(), completed(), failed()]),
     ]
 }
 
@@ -181,12 +185,14 @@ fn test_valid_transitions() {
 
         for (origin_state, next_states) in valid_transitions().into_iter() {
             let mut state = state.clone();
-            ingress_history_writer.set_status(
-                &mut state,
-                message_id.clone(),
-                origin_state,
-                ExecutionRound::from(0),
-            );
+            if let Some(origin_state) = origin_state {
+                ingress_history_writer.set_status(
+                    &mut state,
+                    message_id.clone(),
+                    origin_state,
+                    ExecutionRound::from(0),
+                );
+            }
 
             for next_state in next_states {
                 let mut state = state.clone();
@@ -223,15 +229,16 @@ fn test_invalid_transitions() {
                     .into_iter()
                     .map(move |next| (origin.clone(), next))
             })
-            .collect::<HashSet<(IngressStatus, IngressStatus)>>();
+            .collect::<HashSet<(Option<IngressStatus>, IngressStatus)>>();
 
         let all_statuses = [Unknown, received(), processing(), completed(), failed()];
-        // creates the cartesian product of all states and filters out the valid
-        // transitions
+        // creates the cartesian product of all states (with `Unknown` as an origin
+        // standing for the absence of an entry) and filters out the valid transitions
 
         for (origin_state, next_state) in all_statuses
             .iter()
             .flat_map(|from| {
+                let from = (*from != Unknown).then(|| from.clone());
                 all_statuses
                     .iter()
                     .map(move |to| (from.clone(), to.clone()))
@@ -243,12 +250,14 @@ fn test_invalid_transitions() {
             let ingress_history_writer = std::panic::AssertUnwindSafe(&ingress_history_writer);
             let result = std::panic::catch_unwind(|| {
                 let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-                ingress_history_writer.set_status(
-                    &mut state,
-                    message_id.clone(),
-                    origin_state.clone(),
-                    ExecutionRound::from(0),
-                );
+                if let Some(origin_state) = origin_state.clone() {
+                    ingress_history_writer.set_status(
+                        &mut state,
+                        message_id.clone(),
+                        origin_state,
+                        ExecutionRound::from(0),
+                    );
+                }
                 ingress_history_writer.set_status(
                     &mut state,
                     message_id.clone(),

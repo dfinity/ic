@@ -53,11 +53,16 @@ pub const HASH_LENGTH: usize = 32;
 ///
 /// The extended public key format uses a byte to represent the derivation
 /// level of a key, thus BIP32 derivations with more than 255 path elements
-/// are not interoperable with other software.
+/// are not interoperable with other software. This cap applies to the *full*
+/// path seen by threshold crypto, which the replica derives from the path
+/// supplied here by prepending exactly one element: the caller's principal
+/// for `sign_with_ecdsa`/`sign_with_schnorr`, and the target canister id for
+/// `ecdsa_public_key`/`schnorr_public_key`. One slot is therefore reserved
+/// for that prefix, leaving 254 for the caller.
 ///
 /// See https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format
 /// for details
-const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 255;
+pub const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 254;
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
@@ -1940,17 +1945,21 @@ pub enum CanisterInstallMode {
     Upgrade = 3,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, EnumString, Serialize,
+)]
 /// Wasm main memory retention on upgrades.
 /// Currently used to specify the persistence of Wasm main memory.
 pub enum WasmMemoryPersistence {
     /// Retain the main memory across upgrades.
     /// Used for enhanced orthogonal persistence, as implemented in Motoko
     #[serde(rename = "keep")]
+    #[strum(serialize = "keep")]
     Keep,
     /// Reinitialize the main memory on upgrade.
     /// Default behavior without enhanced orthogonal persistence.
     #[serde(rename = "replace")]
+    #[strum(serialize = "replace")]
     Replace,
 }
 
@@ -3754,6 +3763,7 @@ impl Payload<'_> for ListCanistersResponse {}
 pub enum QueryMethod {
     FetchCanisterLogs,
     CanisterStatus,
+    CanisterInfo,
     ListCanisters,
     CanisterMetrics,
 }

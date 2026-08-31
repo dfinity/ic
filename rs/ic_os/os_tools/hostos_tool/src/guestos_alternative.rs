@@ -146,18 +146,18 @@ fn swap_guestos_alternative_impl(
     command_runner
         .status(Command::new("systemctl").args([
             "stop",
-            "guestos.service",
+            "guestos@0.service",
             "upgrade-guestos.service",
         ]))
-        .context("Failed to stop guestos.service and upgrade-guestos.service")?;
+        .context("Failed to stop guestos@0.service and upgrade-guestos.service")?;
 
     info!("Swapping GuestOS boot alternative...");
     let target_boot_alternative = update_grubenv(partition_provider, target_boot_alternative);
 
     info!("Restarting GuestOS...");
     command_runner
-        .status(Command::new("systemctl").args(["start", "guestos.service"]))
-        .context("Failed to restart guestos.service after swapping GuestOS boot alternative")?;
+        .status(Command::new("systemctl").args(["start", "guestos@0.service"]))
+        .context("Failed to restart guestos@0.service after swapping GuestOS boot alternative")?;
 
     match target_boot_alternative {
         Ok(alternative) => {
@@ -216,7 +216,7 @@ mod tests {
                 .expect_status()
                 .withf(|cmd| {
                     format!("{cmd:?}")
-                        == r#""systemctl" "stop" "guestos.service" "upgrade-guestos.service""#
+                        == r#""systemctl" "stop" "guestos@0.service" "upgrade-guestos.service""#
                 })
                 .once()
                 .return_once(|_| Ok(std::process::ExitStatus::default()));
@@ -224,7 +224,7 @@ mod tests {
         if expect_start_guestos {
             mock_runner
                 .expect_status()
-                .withf(|cmd| format!("{cmd:?}") == r#""systemctl" "start" "guestos.service""#)
+                .withf(|cmd| format!("{cmd:?}") == r#""systemctl" "start" "guestos@0.service""#)
                 .once()
                 .return_once(|_| Ok(std::process::ExitStatus::default()));
         }

@@ -12,8 +12,8 @@ use ic_management_canister_types_private::{
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     Method, Payload as _, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
     ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, StoredChunksArgs,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
@@ -155,10 +155,13 @@ impl Request {
             Ok(Method::StartCanister)
             | Ok(Method::CanisterStatus)
             | Ok(Method::DeleteCanister)
-            | Ok(Method::UninstallCode)
             | Ok(Method::DepositCycles)
             | Ok(Method::StopCanister) => match CanisterIdRecord::decode(&self.method_payload) {
                 Ok(record) => Some(record.get_canister_id()),
+                Err(_) => None,
+            },
+            Ok(Method::UninstallCode) => match UninstallCodeArgs::decode(&self.method_payload) {
+                Ok(args) => Some(args.get_canister_id()),
                 Err(_) => None,
             },
             Ok(Method::CanisterInfo) => match CanisterInfoRequest::decode(&self.method_payload) {
@@ -555,7 +558,9 @@ impl Hash for Response {
 }
 
 /// XNet message type (like `Request` and `Response`) for guaranteed delivery of
-/// refunds for best-effort calls.
+/// cycles that are refunded outside of a response: e.g. the payment of a dropped
+/// best-effort call; or the unspent part of an HTTP outcall's payment that was
+/// only settled after the response was already delivered.
 ///
 /// Represents an _anonymous refund_.
 ///

@@ -12,6 +12,13 @@ on:
         required: false
         default: ''
         type: string
+    outputs:
+      release-build:
+        description: Whether this run was a release build, i.e. uploaded artifacts to the CDN.
+        value: ${{ jobs.config.outputs.release-build }}
+      manifest-sha256:
+        description: sha256 of the upload-manifest.
+        value: ${{ jobs.upload-manifests.outputs.manifest-sha256 }}
 
 permissions:
   actions: write # needed for uploading artifacts to github
@@ -33,7 +40,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:65ab9023792784e8e13dbdd5b9a63c2dff0cd38237afd1cdbc299577505d4b88
+      image: ghcr.io/dfinity/ic-build@sha256:caacdcf7c2346ff8b6d8b86ecfa89b1365fa111f744e0e777ac5bf9a5ca97c61
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -89,7 +96,7 @@ jobs:
 
           # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
           # the full build to occur (including versioning)
-          protected_branches=("^master$" "^feat-ai-on-engines$" "^rc--" "^hotfix-" "^public-hotfix-")
+          protected_branches=("^master$" "^rc--" "^hotfix-")
           for pattern in "${protected_branches[@]}"; do
               if [[ "$BRANCH_NAME" =~ $pattern ]]; then
                   is_protected_branch="true"
@@ -128,7 +135,13 @@ jobs:
           else
               # default behavior is to not release, only build targets with modified inputs and skip long_tests.
               release_build="false"
-              diff_only="true"
+
+              # The `infer-bazel-targets` job below is very unstable when diff_only is enabled so we temporarily disable it until we have a proper fix.
+              # When diff_only is enabled ci/scripts/targets.py will run a bazel query involving `rdeps` of modified files which will force all bazel repositories to be downloaded.
+              # These include several multi-GB mainnet ICOS images which will either cause the runner to run out of disk space or the bazel query to run for a very long time or timeout.
+              # diff_only="true"
+              diff_only="false"
+
               skip_long_tests="true"
           fi
 
@@ -173,7 +186,9 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
-            targets_args=()
+            # Local system-tests will run on the Remote Execution Cluster @ Namespace
+            # via the .github/workflows/ci-rbe-evaluation.yml job so skip them in this job:
+            targets_args=(--exclude_tags=local_system_test)
             if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
               targets_args+=("--skip_long_tests")
             fi
@@ -203,6 +218,8 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     needs: [config, infer-bazel-targets]
+    outputs:
+      manifest-sha256: ${{ steps.upload-artifacts.outputs.manifest-sha256 }}
     environment:
       # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
       # It also requires the AWS and CF secrets which are only available in the `upload-artifacts` environment.
@@ -227,7 +244,7 @@ jobs:
           bazel_args=( --config=flaky_retry ) # auto retry eg systests
           if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
               bazel_args+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
-          elif [[ $BRANCH_NAME =~ ^(hotfix-|public-hotfix-) ]]; then
+          elif [[ $BRANCH_NAME =~ ^hotfix- ]]; then
               bazel_args+=( --test_timeout_filters=short,moderate )
           else
               bazel_args+=( --keep_going )
@@ -237,7 +254,6 @@ jobs:
             # make sure the version is stamped in
             bazel_args+=( --config=stamped )
           fi
-
 
           echo "bazel-args=${bazel_args[@]}" >> $GITHUB_OUTPUT
 
@@ -271,6 +287,7 @@ jobs:
           aws-region: eu-central-1
 
       - name: Upload artifacts
+        id: upload-artifacts
         uses: ./.github/actions/upload-artifacts
         if: needs.config.outputs.release-build == 'true'
         env:
@@ -278,6 +295,7 @@ jobs:
           CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
           name: Bazel Test All
+          manifest-name: upload-manifest-main
           # with --check_up_to_date Bazel will error out if the artifacts
           # to be uploaded were not built in the build step above
           # (this ensures that the exact artifacts built above are uploaded)
@@ -318,18 +336,19 @@ jobs:
     timeout-minutes: 120
     needs: [config]
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
+    outputs:
+      arm64-linux-sums: ${{ steps.sums.outputs.arm64-linux-sums }}
+      arm64-darwin-sums: ${{ steps.sums.outputs.arm64-darwin-sums }}
+      x86_64-darwin-sums: ${{ steps.sums.outputs.x86_64-darwin-sums }}
     steps:
       - name: Set up Bazel cache
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --enable_remote_asset_api --bazelrc=/tmp/bazel-cache.bazelrc
-          cat /tmp/bazel-cache.bazelrc
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
       - name: Build and Test
         run: |
-          mkdir -p /tmp/zig-cache
-
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
@@ -362,6 +381,54 @@ jobs:
           cp \
             ./bazel-bin/publish/binaries/pocket-ic.gz \
             ./build/pocket-ic-server-x86_64-darwin.gz
+
+      - name: Record artifact checksums
+        id: sums
+        if: ${{ needs.config.outputs.release-build == 'true' }}
+        shell: bash
+        env:
+          OS: ${{ matrix.os }}
+        run: |
+          set -euo pipefail
+          cd build
+
+          # macOS runners may only have perl's shasum, not GNU coreutils
+          # (same fallback as in .github/actions/bazel).
+          if command -v sha256sum >/dev/null; then
+            sha256() { sha256sum "$@"; }
+          else
+            sha256() { shasum -a 256 "$@"; }
+          fi
+
+          # Record the sha256sum lines of every file uploaded as an Actions
+          # artifact below in this job's outputs. The
+          # upload-external-artifacts job re-checks the downloaded artifacts
+          # against them before re-uploading anything to the CDN: an Actions
+          # artifact can be replaced mid-run by anything holding an
+          # `actions: write` token, but job outputs cannot be tampered with
+          # by other jobs. Recording happens right after the builds so the
+          # whole-codebase build and test steps below stay outside this
+          # trust chain: should any of them overwrite these files, the
+          # uploaded artifact no longer matches its recorded sums and
+          # verification fails loudly.
+          sha256 \
+            "pocket-ic-server-arm64-$OS.gz" \
+            "ic-admin-arm64-$OS.gz" \
+            "sns-arm64-$OS.gz" \
+            | LC_ALL=C sort -k2 >"$RUNNER_TEMP/arm64-sums"
+          {
+            echo "arm64-$OS-sums<<SUMS"
+            cat "$RUNNER_TEMP/arm64-sums"
+            echo "SUMS"
+          } >>"$GITHUB_OUTPUT"
+
+          if [[ "$OS" == darwin ]]; then
+            {
+              echo "x86_64-darwin-sums<<SUMS"
+              sha256 pocket-ic-server-x86_64-darwin.gz
+              echo "SUMS"
+            } >>"$GITHUB_OUTPUT"
+          fi
 
       # Ensures that local development works on arm64-darwin.
       - name: Build the entire codebase on darwin
@@ -418,6 +485,8 @@ jobs:
     name: Upload external artifacts
     needs: [bazel-test-arm64, config]
     if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
+    outputs:
+      manifest-sha256: ${{ steps.upload-artifacts.outputs.manifest-sha256 }}
     # The `Upload artifacts` step below requires the AWS & CF secrets
     # which are only available in the `upload-artifacts` environment.
     environment: upload-artifacts
@@ -447,6 +516,32 @@ jobs:
           # avoid downloading to workspace to avoid version being marked as dirty
           path: ~/.cache/pocket-ic-server-x86_64-darwin
 
+      - name: Verify downloaded artifacts
+        shell: bash
+        env:
+          ARM64_LINUX_SUMS: ${{ needs.bazel-test-arm64.outputs.arm64-linux-sums }}
+          ARM64_DARWIN_SUMS: ${{ needs.bazel-test-arm64.outputs.arm64-darwin-sums }}
+          X86_64_DARWIN_SUMS: ${{ needs.bazel-test-arm64.outputs.x86_64-darwin-sums }}
+        run: |
+          set -euo pipefail
+
+          # Re-check every file downloaded above against the sha256sum lines
+          # the producing bazel-test-arm64 legs recorded in their job
+          # outputs, before anything is bundled and re-uploaded to the CDN:
+          # an Actions artifact can be replaced mid-run by anything holding
+          # an `actions: write` token, but job outputs cannot be tampered
+          # with by other jobs. A missing or empty output also fails here:
+          # sha256sum rejects input without valid checksum lines.
+          check() { # <download-dir> <recorded sha256sum lines>
+            echo "$2" | (cd "$1" && sha256sum --check --strict)
+            # Also reject artifacts carrying anything beyond the recorded files
+            diff <(echo "$2" | awk '{print $2}' | LC_ALL=C sort) \
+              <(cd "$1" && find . -mindepth 1 | sed 's|^\./||' | LC_ALL=C sort)
+          }
+          check ~/.cache/arm64-binaries-linux "$ARM64_LINUX_SUMS"
+          check ~/.cache/arm64-binaries-darwin "$ARM64_DARWIN_SUMS"
+          check ~/.cache/pocket-ic-server-x86_64-darwin "$X86_64_DARWIN_SUMS"
+
       - name: Prepare bundle
         id: prepare-bundle
         run: |
@@ -466,6 +561,15 @@ jobs:
           mkdir -p "$bundledir/binaries/x86_64-darwin/"
           cp ~/.cache/pocket-ic-server-x86_64-darwin/pocket-ic-server-x86_64-darwin.gz "$bundledir/binaries/x86_64-darwin/pocket-ic.gz"
 
+          # Give these hand-assembled directories the same SHA256SUMS file
+          # that the bazel-built bundles get from the artifact_bundle rule
+          # so every binaries/<platform>/ directory on the CDN carries
+          # a checksum manifest that release workflows can verify
+          # against its attestation.
+          for d in arm64-linux arm64-darwin x86_64-darwin; do
+            (cd "$bundledir/binaries/$d" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
+          done
+
           echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
@@ -476,13 +580,72 @@ jobs:
           aws-region: eu-central-1
 
       - name: Upload artifacts
+        id: upload-artifacts
         uses: ./.github/actions/upload-artifacts
         env:
           CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
           CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
           name: arm64 artifacts
+          manifest-name: upload-manifest-external
           upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
+
+  # Merge the per-job upload manifests into the single upload-manifest
+  # artifact exposed through this workflow's `manifest-sha256` output.
+  upload-manifests:
+    name: Merge upload manifests
+    needs: [config, bazel-test-all, upload-external-artifacts]
+    if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      manifest-sha256: ${{ steps.merge.outputs.sha256 }}
+    steps:
+      - name: Download main upload manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: upload-manifest-main
+          path: ${{ runner.temp }}/upload-manifests/main
+
+      - name: Download external upload manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: upload-manifest-external
+          path: ${{ runner.temp }}/upload-manifests/external
+
+      - name: Verify and merge manifests
+        id: merge
+        shell: bash
+        env:
+          MANIFEST_SHA256_MAIN: ${{ needs.bazel-test-all.outputs.manifest-sha256 }}
+          MANIFEST_SHA256_EXTERNAL: ${{ needs.upload-external-artifacts.outputs.manifest-sha256 }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/upload-manifests"
+
+          # Verify the downloaded artifacts against the hashes recorded in
+          # the producing jobs' outputs before merging anything: an Actions
+          # artifact can be replaced mid-run by anything holding an
+          # `actions: write` token, but job outputs cannot be tampered with
+          # by other jobs. A missing or empty output also fails here:
+          # sha256sum rejects the malformed line.
+          echo "$MANIFEST_SHA256_MAIN  main/upload-manifest.sha256sums" | sha256sum --check
+          echo "$MANIFEST_SHA256_EXTERNAL  external/upload-manifest.sha256sums" | sha256sum --check
+
+          LC_ALL=C sort -k2 \
+            main/upload-manifest.sha256sums \
+            external/upload-manifest.sha256sums \
+            >upload-manifest.sha256sums
+
+          echo "sha256=$(sha256sum upload-manifest.sha256sums | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
+
+      - name: Upload merged manifest
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: upload-manifest
+          path: ${{ runner.temp }}/upload-manifests/upload-manifest.sha256sums
+          if-no-files-found: error
 
   python-ci-tests:
     name: Python CI Tests
@@ -575,6 +738,15 @@ jobs:
     name: Build Determinism
     runs-on: ubuntu-latest
     needs: [build-ic, bazel-test-all]
+    # Run even when `bazel-test-all` fails: its test failures happen *after*
+    # its build succeeded, its execution logs were uploaded (the bazel action
+    # uploads them on failure too) and — on release builds — the artifacts
+    # were already published to the CDN. Without this condition a single
+    # failing/flaky test silently skipped the determinism check while the
+    # artifacts still shipped. `build-ic` still has to succeed: it produces the
+    # no-cache side of the comparison (and is skipped on merge_group, where
+    # there is nothing to compare).
+    if: ${{ !cancelled() && needs.build-ic.result == 'success' }}
     steps:
       - name: Download execution logs (cache)
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -656,10 +828,8 @@ jobs:
           steps.filter.outputs.cargo == 'true' ||
           contains(github.event.pull_request.labels.*.name, 'CI_RUN_CARGO_JOBS') ||
           env.BRANCH_NAME == 'master' ||
-          env.BRANCH_NAME == 'feat-ai-on-engines' ||
           startsWith(env.BRANCH_NAME, 'rc--') ||
-          startsWith(env.BRANCH_NAME, 'hotfix-') ||
-          startsWith(env.BRANCH_NAME, 'public-hotfix-')
+          startsWith(env.BRANCH_NAME, 'hotfix-')
         shell: bash
         env:
           # on dind_small cargo sometimes runs out of files (when building and linting). This trades
@@ -711,6 +881,22 @@ jobs:
             command: "--image ic-build bash"
     steps:
       - *checkout
+      - name: Workaround for actions/runner-images#14473 (crun pinning)
+        run: |
+          # Workaround for actions/runner-images#14473:
+          # Podman 5.x on ubuntu-24.04/22.04 picks /usr/bin/crun (1.14.1) over
+          # /usr/local/bin/crun (1.28). Pin it explicitly.
+          #
+          # container-run.sh always invokes podman as `sudo podman`, which
+          # resets $HOME, so a per-user containers.conf drop-in under $HOME
+          # would never be seen by (rootful) podman. Instead, use
+          # container-run.sh's own ~/.container-run.conf hook: it is sourced
+          # in the invoking (non-root) shell *before* `sudo podman run` is
+          # exec'd, and PODMAN_RUN_USR_ARGS is appended as CLI args to that
+          # `podman run` call -- which, unlike $HOME, survive sudo.
+          if command -v podman &>/dev/null && [ -x /usr/local/bin/crun ]; then
+            echo 'PODMAN_RUN_USR_ARGS=(--runtime /usr/local/bin/crun)' >>~/.container-run.conf
+          fi
       - name: Filter Relevant Files
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
@@ -725,9 +911,7 @@ jobs:
         if: |
           steps.filter.outputs.container-run == 'true' ||
           env.BRANCH_NAME == 'master' ||
-          env.BRANCH_NAME == 'feat-ai-on-engines' ||
           startsWith(env.BRANCH_NAME, 'rc--') ||
-          startsWith(env.BRANCH_NAME, 'hotfix-') ||
-          startsWith(env.BRANCH_NAME, 'public-hotfix-')
+          startsWith(env.BRANCH_NAME, 'hotfix-')
         run: |
           ./ci/container/container-run.sh ${{ matrix.command }}

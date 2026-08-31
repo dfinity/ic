@@ -1,8 +1,7 @@
-#![allow(deprecated)]
 use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, NodeId, PrincipalId, SubnetId};
-use ic_cdk::call;
-use ic_management_canister_types_private::CanisterInstallMode;
+use ic_cdk::call::{Call, Error as IcCdkCallError};
+use ic_management_canister_types_private::CanisterInstallModeV2;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultFromManagementCanister,
@@ -144,16 +143,14 @@ thread_local! {
 }
 
 async fn get_current_governance_canister_wasm() -> Vec<u8> {
-    let status: (CanisterStatusResultFromManagementCanister,) = call(
-        CanisterId::ic_00().get().0,
-        "canister_status",
-        (CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),),
-    )
-    .await
-    .unwrap();
+    let status = Call::unbounded_wait(CanisterId::ic_00().get().0, "canister_status")
+        .with_arg(CanisterIdRecord::from(GOVERNANCE_CANISTER_ID))
+        .await
+        .unwrap()
+        .candid::<CanisterStatusResultFromManagementCanister>()
+        .unwrap();
 
     status
-        .0
         .module_hash
         .expect("Governance canister must return a module hash")
 }
@@ -186,7 +183,7 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
     // - That it is an upgrade (reinstall is not supported).
     if request.wasm_module.is_empty()
         || request.canister_id != GOVERNANCE_CANISTER_ID
-        || request.mode != CanisterInstallMode::Upgrade
+        || !matches!(request.mode, CanisterInstallModeV2::Upgrade(_))
     {
         let message = format!(
             "{LOG_PREFIX}Invalid proposal. Proposal must be an upgrade proposal \
@@ -467,15 +464,25 @@ async fn get_nns_subnet_id() -> Result<SubnetId, String> {
     let request = GetSubnetForCanisterRequest {
         principal: Some(GOVERNANCE_CANISTER_ID.get()),
     };
-    let (response,): (Result<SubnetForCanister, String>,) = call(
-        REGISTRY_CANISTER_ID.get().0,
-        "get_subnet_for_canister",
-        (request,),
-    )
-    .await
-    .map_err(|(code, message)| {
-        format!("Error when calling get_subnet_for_canister, code: {code:?}, message: {message}")
-    })?;
+    let response: Result<SubnetForCanister, String> =
+        Call::unbounded_wait(REGISTRY_CANISTER_ID.get().0, "get_subnet_for_canister")
+            .with_arg(request)
+            .await
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| {
+                response
+                    .candid::<Result<SubnetForCanister, String>>()
+                    .map_err(IcCdkCallError::from)
+            })
+            .map_err(|err| {
+                let code = match &err {
+                    IcCdkCallError::CallRejected(rejected) => rejected.reject_code().ok(),
+                    _ => None,
+                };
+                format!(
+                    "Error when calling get_subnet_for_canister, code: {code:?}, message: {err}"
+                )
+            })?;
     let response = response?;
     let nns_subnet_id = response
         .subnet_id

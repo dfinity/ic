@@ -17,7 +17,6 @@ config_tool = { path = "../ic_os/config/tool" }
 config_types = { path = "../ic_os/config/types" }
 der = { workspace = true }
 exec = "0.3.1"
-env-file-reader = "0.3.0"
 guest_upgrade_server = { path = "../ic_os/guest_upgrade/server" }
 hex = { workspace = true }
 pem = { workspace = true }

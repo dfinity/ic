@@ -33,6 +33,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SubnetSchedule;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
+use ic_replicated_state::metadata_state::UnflushedCheckpointOps;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     CanisterState, CanisterStates, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
@@ -423,7 +424,6 @@ impl SchedulerImpl {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
 
-        let mut ingress_execution_results = Vec::new();
         let mut is_first_iteration = true;
         let mut total_heap_delta = NumBytes::new(0);
         let mut heartbeat_and_timer_canisters = BTreeSet::new();
@@ -432,6 +432,7 @@ impl SchedulerImpl {
         //      - Execute subnet messages.
         //      - Execute heartbeat and global timer tasks.
         //      - Execute canisters input messages in parallel.
+        //      - Update the ingress history with the resulting ingress statuses.
         //      - Induct messages on the same subnet.
         let mut state = loop {
             // Execute subnet messages.
@@ -513,7 +514,7 @@ impl SchedulerImpl {
                 executed_canisters,
                 canisters_with_completed_messages,
                 canisters_with_zero_instruction_executions,
-                ingress_results: mut loop_ingress_execution_results,
+                ingress_results: iteration_ingress_execution_results,
                 heap_delta,
             } = self.execute_canisters_in_inner_round(
                 active_canisters_partitioned_by_cores,
@@ -540,7 +541,20 @@ impl SchedulerImpl {
             }
             state.put_canister_states(canisters);
 
-            ingress_execution_results.append(&mut loop_ingress_execution_results);
+            // Write the ingress statuses produced by this iteration's canister
+            // executions to the ingress history right away, i.e., before the next
+            // iteration's subnet messages are executed. Subnet messages update the
+            // ingress history directly, so deferring these updates to
+            // the end of the round would apply them out of order.
+            for (message_id, status) in iteration_ingress_execution_results {
+                let old_status = self.ingress_history_writer.set_status(
+                    &mut state,
+                    message_id,
+                    status,
+                    current_round,
+                );
+                canister_ingress_latencies.on_ingress_status_changed(&old_status);
+            }
 
             round_schedule.end_iteration(
                 &mut state,
@@ -604,16 +618,6 @@ impl SchedulerImpl {
                     .task_queue
                     .remove_heartbeat_and_global_timer();
             }
-        }
-
-        for (message_id, status) in ingress_execution_results {
-            let old_status = self.ingress_history_writer.set_status(
-                &mut state,
-                message_id,
-                status,
-                current_round,
-            );
-            canister_ingress_latencies.on_ingress_status_changed(&old_status);
         }
 
         state
@@ -837,6 +841,11 @@ impl SchedulerImpl {
                 .duration_between_allocation_charges(),
         );
         let mut all_rejects = Vec::new();
+        // The deletions of the snapshots of the canisters uninstalled below, recorded
+        // so that their directories are also deleted from the tip. Accumulated here
+        // because `state.metadata` is not accessible from within the closure; merged
+        // into the state's operations after the loop.
+        let mut unflushed_checkpoint_ops = UnflushedCheckpointOps::default();
         // TODO(DSM-103): Charge all canisters every N rounds / seconds (and otherwise
         // do nothing). Ensure that paused execution canisters are charged eventually.
         state.canisters_for_each_mut(|_id, canister| {
@@ -871,7 +880,6 @@ impl SchedulerImpl {
                 all_rejects.push(uninstall_canister(
                     &self.log,
                     canister,
-                    None, /* we're at the end of a round so no need to update round limits */
                     state_time,
                     Arc::clone(&self.fd_factory),
                 ));
@@ -883,7 +891,9 @@ impl SchedulerImpl {
                 canister
                     .system_state
                     .burn_remaining_balance_for_uninstall(cost_schedule);
-                canister.canister_snapshots.delete_snapshots();
+                canister
+                    .canister_snapshots
+                    .delete_snapshots(&mut unflushed_checkpoint_ops);
 
                 info!(
                     self.log,
@@ -893,6 +903,11 @@ impl SchedulerImpl {
                 self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
             }
         });
+
+        state
+            .metadata
+            .unflushed_checkpoint_ops
+            .extend(unflushed_checkpoint_ops);
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
         for rejects in all_rejects.into_iter() {
@@ -1083,6 +1098,17 @@ impl SchedulerImpl {
     //
     // TODO(DSM-103): Consider only aborting actually scheduled canisters.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
+        // Backfill the HTTP/ECDSA outcall cycles from the legacy scalar fields of
+        // `SubnetMetrics` into the corresponding entries of its by-use-case map.
+        // This must run regardless of subnet activity: the subnet-level use cases
+        // are only observed on outcalls, canister deletion and dropped messages,
+        // so tying the migration to an observation would leave the entries stale
+        // forever on a subnet that does none of these.
+        state
+            .metadata
+            .subnet_metrics
+            .migrate_outcalls_cycles_to_use_cases();
+
         let cost_schedule = state.get_own_cost_schedule();
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
@@ -1399,6 +1425,11 @@ impl Scheduler for SchedulerImpl {
             &round_log,
         );
 
+        // Drop canisters that were deleted during the round (e.g. by a `delete_canister`
+        // subnet message) from the round schedule. Beyond this point it is safe to assume
+        // that the round schedule only refers to existing canisters.
+        round_schedule.retain_existing_canisters(&state);
+
         // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
         {
             let _timer = self
@@ -1652,7 +1683,8 @@ fn execute_canisters_on_thread(
                 exec_env,
                 canister_arc,
                 instruction_limits.clone(),
-                config.max_instructions_per_query_message,
+                resource_limits
+                    .maximum_query_instructions_or(config.max_instructions_per_query_message),
                 Arc::clone(&network_topology),
                 time,
                 &mut round_limits,

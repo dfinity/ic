@@ -22,18 +22,14 @@ fn should_not_change_other_field_when_deposit_with_subaccount_present() {
         }
     );
 
-    scrapings
-        .set_contract_address(
-            LogScrapingId::EthDepositWithoutSubaccount,
-            ETH_HELPER_SMART_CONTRACT.parse().unwrap(),
-        )
-        .unwrap();
-    scrapings
-        .set_contract_address(
-            LogScrapingId::Erc20DepositWithoutSubaccount,
-            ERC20_HELPER_SMART_CONTRACT.parse().unwrap(),
-        )
-        .unwrap();
+    scrapings.set_contract_address(
+        LogScrapingId::EthDepositWithoutSubaccount,
+        ETH_HELPER_SMART_CONTRACT.parse().unwrap(),
+    );
+    scrapings.set_contract_address(
+        LogScrapingId::Erc20DepositWithoutSubaccount,
+        ERC20_HELPER_SMART_CONTRACT.parse().unwrap(),
+    );
 
     let info_before = scrapings.info();
     assert_eq!(
@@ -50,14 +46,12 @@ fn should_not_change_other_field_when_deposit_with_subaccount_present() {
         }
     );
 
-    scrapings
-        .set_contract_address(
-            LogScrapingId::EthOrErc20DepositWithSubaccount,
-            DEPOSIT_WITH_SUBACCOUNT_HELPER_SMART_CONTRACT
-                .parse()
-                .unwrap(),
-        )
-        .unwrap();
+    scrapings.set_contract_address(
+        LogScrapingId::EthOrErc20DepositWithSubaccount,
+        DEPOSIT_WITH_SUBACCOUNT_HELPER_SMART_CONTRACT
+            .parse()
+            .unwrap(),
+    );
     scrapings.set_last_scraped_block_number(
         LogScrapingId::EthOrErc20DepositWithSubaccount,
         (LAST_SCRAPED_BLOCK_NUMBER + 1).into(),

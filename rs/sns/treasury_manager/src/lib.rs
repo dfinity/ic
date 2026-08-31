@@ -1,8 +1,4 @@
-// Prevents warnings from the Derivative macro.
-#![allow(clippy::needless_lifetimes)]
-
 use candid::{CandidType, Nat, Principal};
-use derivative::Derivative;
 use serde::{Deserialize, Serialize, Serializer};
 use std::{
     collections::BTreeMap,
@@ -161,15 +157,24 @@ pub struct Error {
     pub kind: ErrorKind,
 }
 
-fn fmt_principal_as_string(
-    principal: &Principal,
-    f: &mut std::fmt::Formatter,
-) -> Result<(), std::fmt::Error> {
-    write!(f, "{principal}")
+/// The `Debug` implementation of this uses the textual format (just like
+/// `Display`), whereas the `Debug` implementation on `Principal` is
+/// hostile to humans.
+///
+/// ```ignore
+/// f.debug_struct("Account")
+///     .field("owner", &PrincipalAsString(&self.owner))
+///     .finish()
+/// ```
+struct PrincipalAsString<'a>(&'a Principal);
+
+impl fmt::Debug for PrincipalAsString<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
-#[derive(CandidType, Clone, Derivative, Deserialize, PartialEq, Serialize)]
-#[derivative(Debug)]
+#[derive(CandidType, Clone, Deserialize, PartialEq, Serialize)]
 pub enum ErrorKind {
     /// Prevents the call from being attempted.
     Precondition {},
@@ -180,7 +185,6 @@ pub enum ErrorKind {
     /// An error that occurred while calling a canister.
     Call {
         method: String,
-        #[derivative(Debug(format_with = "fmt_principal_as_string"))]
         canister_id: Principal,
     },
 
@@ -192,6 +196,35 @@ pub enum ErrorKind {
 
     /// An exotic error that cannot be categorized using the tags above.
     Generic { generic_error_name: String },
+}
+
+// Hand-written so that `canister_id` is rendered as text.
+impl fmt::Debug for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Precondition {} => f.debug_struct("Precondition").finish(),
+
+            Self::Postcondition {} => f.debug_struct("Postcondition").finish(),
+
+            Self::Call {
+                method,
+                canister_id,
+            } => f
+                .debug_struct("Call")
+                .field("method", method)
+                .field("canister_id", &PrincipalAsString(canister_id))
+                .finish(),
+
+            Self::Backend {} => f.debug_struct("Backend").finish(),
+
+            Self::TemporarilyUnavailable {} => f.debug_struct("TemporarilyUnavailable").finish(),
+
+            Self::Generic { generic_error_name } => f
+                .debug_struct("Generic")
+                .field("generic_error_name", generic_error_name)
+                .finish(),
+        }
+    }
 }
 
 impl Error {
@@ -291,12 +324,22 @@ pub struct BalancesRequest {}
 
 pub type Subaccount = [u8; 32];
 
-#[derive(CandidType, Clone, Copy, Derivative, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[derivative(Debug)]
+#[derive(CandidType, Clone, Copy, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Account {
-    #[derivative(Debug(format_with = "fmt_principal_as_string"))]
     pub owner: Principal,
     pub subaccount: Option<Subaccount>,
+}
+
+// Hand-written so that `owner` is rendered as text.
+impl fmt::Debug for Account {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self { owner, subaccount } = self;
+
+        f.debug_struct("Account")
+            .field("owner", &PrincipalAsString(owner))
+            .field("subaccount", subaccount)
+            .finish()
+    }
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
@@ -410,18 +453,37 @@ impl From<TreasuryManagerOperation> for Vec<u8> {
 /// However, for generality, any call from the Treasury Manager can be recorded in the audit trail,
 /// even if it is not related to any literal ledger transaction, e.g., adding a token to a DEX
 /// for the first time, or checking the latest ledger metadata.
-#[derive(CandidType, Clone, Derivative, Deserialize, PartialEq, Serialize)]
-#[derivative(Debug)]
+#[derive(CandidType, Clone, Deserialize, PartialEq, Serialize)]
 pub struct Transaction {
     pub timestamp_ns: u64,
 
-    #[derivative(Debug(format_with = "fmt_principal_as_string"))]
     pub canister_id: Principal,
 
     pub result: Result<TransactionWitness, Error>,
     pub purpose: String,
 
     pub treasury_manager_operation: TreasuryManagerOperation,
+}
+
+// Hand-written so that `canister_id` is rendered as text.
+impl fmt::Debug for Transaction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            timestamp_ns,
+            canister_id,
+            result,
+            purpose,
+            treasury_manager_operation,
+        } = self;
+
+        f.debug_struct("Transaction")
+            .field("timestamp_ns", timestamp_ns)
+            .field("canister_id", &PrincipalAsString(canister_id))
+            .field("result", result)
+            .field("purpose", purpose)
+            .field("treasury_manager_operation", treasury_manager_operation)
+            .finish()
+    }
 }
 
 impl Display for Transaction {
@@ -445,18 +507,33 @@ pub struct AuditTrail {
     pub transactions: Vec<Transaction>,
 }
 
-#[derive(CandidType, Clone, Derivative, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[derivative(Debug)]
+#[derive(CandidType, Clone, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Asset {
     Token {
         symbol: String,
 
-        #[derivative(Debug(format_with = "fmt_principal_as_string"))]
         ledger_canister_id: Principal,
 
         #[serde(serialize_with = "serialize_nat_as_u64")]
         ledger_fee_decimals: Nat,
     },
+}
+
+// Hand-written so that `ledger_canister_id` is rendered as text.
+impl fmt::Debug for Asset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self::Token {
+            symbol,
+            ledger_canister_id,
+            ledger_fee_decimals,
+        } = self;
+
+        f.debug_struct("Token")
+            .field("symbol", symbol)
+            .field("ledger_canister_id", &PrincipalAsString(ledger_canister_id))
+            .field("ledger_fee_decimals", ledger_fee_decimals)
+            .finish()
+    }
 }
 
 #[derive(CandidType, Clone, Debug, PartialEq, Eq, Hash, Deserialize)]

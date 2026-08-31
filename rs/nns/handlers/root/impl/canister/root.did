@@ -18,8 +18,18 @@ type CanisterIdRecord = record {
 
 type CanisterInstallMode = variant {
   reinstall;
-  upgrade;
+  upgrade : opt CanisterUpgradeOptions;
   install;
+};
+
+type CanisterUpgradeOptions = record {
+  skip_pre_upgrade : opt bool;
+  wasm_memory_persistence : opt WasmMemoryPersistence;
+};
+
+type WasmMemoryPersistence = variant {
+  keep;
+  replace;
 };
 
 type CanisterSettings = record {

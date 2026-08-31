@@ -728,17 +728,25 @@ impl
     )> for SubnetMetrics
 {
     fn from(
-        (metrics, _certification_version): (
+        (metrics, certification_version): (
             &ic_replicated_state::metadata_state::SubnetMetrics,
             CertificationVersion,
         ),
     ) -> Self {
-        // All currently supported certification versions (up to and including
-        // `V27`) use the legacy total, which double counts the cycles consumed
-        // by deleted canisters. Switching to the fixed `consumed_cycles_total`
-        // changes the certified value, so it must be gated behind a new
-        // certification version once one is introduced.
-        let (high, low) = metrics.consumed_cycles_total_v27().into_parts();
+        // Up to and including `V28`, the reported total uses the legacy
+        // `consumed_cycles_total_v28`, which double counts the cycles consumed
+        // by deleted canisters and does not account for non-deleted canisters.
+        //
+        // Starting with `V29`, the reported total is the stored
+        // `SubnetMetrics::consumed_cycles_total_including_canisters`, which no
+        // longer double counts deleted canisters and does account for the existing
+        // ones.
+        let consumed_cycles_total = if certification_version >= CertificationVersion::V29 {
+            metrics.consumed_cycles_total_including_canisters()
+        } else {
+            metrics.consumed_cycles_total_v28()
+        };
+        let (high, low) = consumed_cycles_total.into_parts();
         Self {
             num_canisters: metrics.num_canisters,
             canister_state_bytes: metrics.canister_state_bytes.get(),

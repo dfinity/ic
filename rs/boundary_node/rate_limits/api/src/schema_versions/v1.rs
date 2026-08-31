@@ -153,6 +153,7 @@ impl std::fmt::Display for IpPrefixes {
 pub struct RateLimitRule {
     pub canister_id: Option<Principal>,
     pub subnet_id: Option<Principal>,
+    pub sender_id: Option<Principal>,
     #[serde(default, with = "serde_regex")]
     pub methods_regex: Option<Regex>,
     pub ip: Option<IpNet>,
@@ -169,6 +170,7 @@ impl PartialEq for RateLimitRule {
             && self.request_types == other.request_types
             && self.canister_id == other.canister_id
             && self.subnet_id == other.subnet_id
+            && self.sender_id == other.sender_id
             && self.ip == other.ip
             && self.ip_prefix_group == other.ip_prefix_group
             && self.limit == other.limit
@@ -191,6 +193,7 @@ impl<'de> Deserialize<'de> for RateLimitRule {
 
         if this.canister_id.is_none()
             && this.subnet_id.is_none()
+            && this.sender_id.is_none()
             && this.methods_regex.is_none()
             && this.request_types.is_none()
             && this.ip.is_none()
@@ -217,9 +220,10 @@ impl std::fmt::Display for RateLimitRule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "CanisterID: {}, SubnetID: {}, Request Types: {:?}, Methods: {}, IP: {}, IP Prefix: {}, Limit: {}",
+            "CanisterID: {}, SubnetID: {}, SenderID: {}, Request Types: {:?}, Methods: {}, IP: {}, IP Prefix: {}, Limit: {}",
             format_option(&self.canister_id),
             format_option(&self.subnet_id),
+            format_option(&self.sender_id),
             self.request_types,
             format_option(&self.methods_regex),
             format_option(&self.ip),
@@ -300,6 +304,7 @@ mod test {
             RateLimitRule {
                 canister_id: Some(Principal::from_text("aaaaa-aa").unwrap()),
                 subnet_id: None,
+                sender_id: None,
                 methods_regex: Some(Regex::new("^.*$").unwrap()),
                 request_types: None,
                 ip: Some(IpNet::new_assert(
@@ -414,6 +419,13 @@ mod test {
             - call_v2
             - call_v3
           limit: pass
+
+        - sender_id: 2vxsx-fae
+          limit: block
+
+        - canister_id: aaaaa-aa
+          sender_id: 2vxsx-fae
+          limit: 100/1s
           "};
 
         let rules: Vec<RateLimitRule> = serde_yaml::from_str(rules).unwrap();
@@ -423,6 +435,7 @@ mod test {
             vec![
                 RateLimitRule {
                     subnet_id: None,
+                    sender_id: None,
                     canister_id: Some(Principal::from_text("aaaaa-aa").unwrap()),
                     request_types: None,
                     methods_regex: Some(Regex::new("^.*$").unwrap()),
@@ -435,6 +448,7 @@ mod test {
                 },
                 RateLimitRule {
                     subnet_id: None,
+                    sender_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_types: None,
                     methods_regex: Some(Regex::new("^(foo|bar)$").unwrap()),
@@ -449,6 +463,7 @@ mod test {
                         )
                         .unwrap()
                     ),
+                    sender_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_types: None,
                     methods_regex: None,
@@ -458,6 +473,7 @@ mod test {
                 },
                 RateLimitRule {
                     subnet_id: None,
+                    sender_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_types: None,
                     methods_regex: Some(Regex::new("^(foo|bar)$").unwrap()),
@@ -467,6 +483,7 @@ mod test {
                 },
                 RateLimitRule {
                     subnet_id: None,
+                    sender_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_types: Some(vec![RequestType::QueryV2]),
                     methods_regex: Some(Regex::new("^(foo|bar)$").unwrap()),
@@ -476,6 +493,7 @@ mod test {
                 },
                 RateLimitRule {
                     subnet_id: None,
+                    sender_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_types: Some(vec![RequestType::QueryV2, RequestType::CallV3]),
                     methods_regex: None,
@@ -485,12 +503,35 @@ mod test {
                 },
                 RateLimitRule {
                     subnet_id: None,
+                    sender_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_types: Some(vec![RequestType::CallV2, RequestType::CallV3]),
                     methods_regex: None,
                     ip: None,
                     ip_prefix_group: None,
                     limit: Action::Pass,
+                },
+                // A rule with only a sender_id is valid (sender_id is a filtering condition)
+                RateLimitRule {
+                    subnet_id: None,
+                    sender_id: Some(Principal::from_text("2vxsx-fae").unwrap()),
+                    canister_id: None,
+                    request_types: None,
+                    methods_regex: None,
+                    ip: None,
+                    ip_prefix_group: None,
+                    limit: Action::Block,
+                },
+                // sender_id combines with other conditions
+                RateLimitRule {
+                    subnet_id: None,
+                    sender_id: Some(Principal::from_text("2vxsx-fae").unwrap()),
+                    canister_id: Some(Principal::from_text("aaaaa-aa").unwrap()),
+                    request_types: None,
+                    methods_regex: None,
+                    ip: None,
+                    ip_prefix_group: None,
+                    limit: Action::Limit(100, Duration::from_secs(1)),
                 },
             ],
         );
@@ -590,6 +631,7 @@ mod test {
             vec![
                 RateLimitRule {
                     subnet_id: None,
+                    sender_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_types: Some(vec![RequestType::CallV2]),
                     methods_regex: None,
@@ -599,6 +641,7 @@ mod test {
                 },
                 RateLimitRule {
                     subnet_id: None,
+                    sender_id: None,
                     canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
                     request_types: Some(vec![RequestType::CallV3]),
                     methods_regex: None,
@@ -608,6 +651,7 @@ mod test {
                 },
                 RateLimitRule {
                     subnet_id: None,
+                    sender_id: None,
                     canister_id: Some(Principal::from_text("aaaaa-aa").unwrap()),
                     request_types: Some(vec![RequestType::CallV2, RequestType::CallV3]),
                     methods_regex: None,

@@ -36,11 +36,12 @@ use serde_with::{DisplayFromStr, serde_as};
 use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::num::NonZeroU8;
 use std::str::FromStr;
 use strum::{Display, EnumString};
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.15.0";
+pub const CONFIG_VERSION: &str = "1.16.0";
 
 /// List of field paths that have been removed and should not be reused.
 pub static RESERVED_FIELD_PATHS: &[&str] = &[
@@ -193,8 +194,7 @@ pub struct HostOSDevSettings {
 }
 
 impl Default for HostOSDevSettings {
-    /// These currently match the defaults for nested tests on Farm:
-    /// (`HOSTOS_VCPUS_PER_VM / 2`, `HOSTOS_MEMORY_KIB_PER_VM / 2`)
+    /// Fallback for a `deployment.json` that omits the field.
     fn default() -> Self {
         HostOSDevSettings {
             vm_memory: 16,
@@ -248,6 +248,16 @@ pub struct GuestOSDevSettings {
     /// Pre-generated TLS certificate and key for ic-boundary.
     #[serde(default)]
     pub ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
+    /// PEM-encoded certificates to trust, in addition to the public roots
+    /// compiled into the replica, when connecting to an API boundary node.
+    ///
+    /// A cloud engine subnet fetches its NNS delegation from an API boundary
+    /// node over TLS. In a testnet that node's certificate comes from a
+    /// throw-away CA rather than a public one, so that CA has to be handed to
+    /// the replica. Left unset in production, where the public roots are the
+    /// only trust anchors. To be used in system tests only.
+    #[serde(default)]
+    pub extra_api_boundary_node_trust_anchors_pem: Option<String>,
     /// PEM-encoded NNS public key.
     /// Overrides the hardcoded NNS public key on the rootfs.
     pub nns_pub_key_override: Option<String>,
@@ -341,6 +351,28 @@ pub struct FixedIpv6Config {
     // Fixed ipv6 address includes subnet mask /64
     pub address: String,
     pub gateway: Ipv6Addr,
+}
+
+#[derive(Copy, Clone)]
+pub enum VmSlot {
+    Plain,
+    Multi(NonZeroU8),
+}
+
+impl VmSlot {
+    pub fn new(slot: u8) -> Self {
+        match slot {
+            0 => VmSlot::Plain,
+            v => VmSlot::Multi(NonZeroU8::new(v).unwrap()),
+        }
+    }
+
+    pub fn to_suffix(&self) -> String {
+        match self {
+            VmSlot::Plain => String::new(),
+            VmSlot::Multi(v) => format!("{}", v),
+        }
+    }
 }
 
 #[cfg(test)]

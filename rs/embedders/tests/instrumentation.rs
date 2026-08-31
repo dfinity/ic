@@ -1,5 +1,4 @@
 use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
-use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::wasm_utils;
 use ic_embedders::{
@@ -287,29 +286,17 @@ fn instr_used(instance: &mut WasmtimeInstance) -> u64 {
 /// - `n_heap_wasm_pages`: pages first *written* on the heap.
 ///   Each triggers `mark_wasm_page_accessed` + `mark_wasm_page_dirty`:
 ///   2 × (WASM_PAGE_SIZE / OS_PAGE_SIZE) = 2 × 16 = 32 instructions.
-/// - `n_stable_wasm_pages`: pages first *accessed* in stable memory.
-///   Stable memory uses `DirtyPageTracking::Ignore`, so only
-///   `mark_wasm_page_accessed` fires: 16 instructions per page.
-///
-/// Returns 0 when the deterministic memory tracker is disabled.
+/// - `n_stable_wasm_pages`: same as for heap: 32 instructions per page.
 fn deterministic_tracker_overhead(n_heap_wasm_pages: u64, n_stable_wasm_pages: u64) -> u64 {
-    if EmbeddersConfig::default()
-        .feature_flags
-        .deterministic_memory_tracker
-        == FlagStatus::Enabled
-    {
-        let os_pages_per_wasm_page = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64;
-        n_heap_wasm_pages * 2 * os_pages_per_wasm_page
-            + n_stable_wasm_pages * os_pages_per_wasm_page
-    } else {
-        0
-    }
+    let os_pages_per_wasm_page = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64;
+    n_heap_wasm_pages * 2 * os_pages_per_wasm_page
+        + n_stable_wasm_pages * 2 * os_pages_per_wasm_page
 }
 
 #[allow(clippy::field_reassign_with_default)]
 fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
     let mut config = EmbeddersConfig::default();
-    config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
+    config.page_overhead = SchedulerConfig::application_subnet().page_overhead;
     WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -321,7 +308,7 @@ fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
 fn new_instance_for_stable_write(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
     let mut config = EmbeddersConfig::default();
     config.metering_type = MeteringType::New;
-    config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
+    config.page_overhead = SchedulerConfig::application_subnet().page_overhead;
     WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -813,13 +800,7 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
         },
         wasm_memory_type,
     );
-    let mut cd = SchedulerConfig::application_subnet()
-        .dirty_page_overhead
-        .get();
-
-    if let WasmMemoryType::Wasm64 = wasm_memory_type {
-        cd *= EmbeddersConfig::default().wasm64_dirty_page_overhead_multiplier;
-    }
+    let cd = SchedulerConfig::application_subnet().page_overhead.get();
 
     // Both stores target Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
     // so only one heap page-first-write event occurs.
@@ -829,9 +810,8 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
     // Function is 1 instruction.
     assert_eq!(
         instructions_used,
-        1 + 5 * cc + cg + 2 * cs + cl + 2 * cd + overhead
+        1 + 5 * cc + cg + 2 * cs + cl + overhead * cd
     );
-
     // Now run the same with insufficient instructions
     // We should still succeed (to avoid potentially failing pre-upgrades
     // of canisters that did not adjust their code to new metering)
@@ -872,7 +852,7 @@ fn run_charge_for_dirty_stable64_test() {
             (memory (export "memory") 10)
         )"#;
 
-    let mut instance = new_instance_for_stable_write(wat, 10000);
+    let mut instance = new_instance_for_stable_write(wat, 10_000_000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -917,9 +897,7 @@ fn run_charge_for_dirty_stable64_test() {
 
     let system_api = instance.store_data().system_api().unwrap();
 
-    let cd = SchedulerConfig::application_subnet()
-        .dirty_page_overhead
-        .get();
+    let cd = SchedulerConfig::application_subnet().page_overhead.get();
 
     let csg = system_api_complexity::overhead_native::STABLE_GROW.get();
     let csw = system_api_complexity::overhead_native::STABLE64_WRITE.get()
@@ -940,25 +918,8 @@ fn run_charge_for_dirty_stable64_test() {
     assert_eq!(
         instructions_used,
         // Function is 1 instruction.
-        1 + cdrop
-            + ccall * 4
-            + csg
-            + cc * 15
-            + cs * 2
-            + cd * 3
-            + csw * 2
-            + csr
-            + cl
-            + cg
-            + overhead
+        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + csw * 2 + csr + cl + cg + overhead * cd
     );
-
-    // Now run the same with insufficient instructions
-    // We should still succeed (to avoid potentially failing pre-upgrades
-    // of canisters that did not adjust their code to new metering)
-    let mut instance = new_instance_for_stable_write(wat, instructions_used - 1);
-
-    instance.run(func_ref("test")).unwrap();
 }
 
 #[test]
@@ -989,7 +950,7 @@ fn run_charge_for_dirty_stable_test() {
             (memory (export "memory") 10)
         )"#;
 
-    let mut instance = new_instance_for_stable_write(wat, 10000);
+    let mut instance = new_instance_for_stable_write(wat, 1_000_000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -1034,9 +995,7 @@ fn run_charge_for_dirty_stable_test() {
 
     let system_api = instance.store_data().system_api().unwrap();
 
-    let cd = SchedulerConfig::application_subnet()
-        .dirty_page_overhead
-        .get();
+    let cd = SchedulerConfig::application_subnet().page_overhead.get();
 
     let csg = system_api_complexity::overhead_native::STABLE_GROW.get();
     let csw = system_api_complexity::overhead_native::STABLE_WRITE.get()
@@ -1057,25 +1016,8 @@ fn run_charge_for_dirty_stable_test() {
     assert_eq!(
         instructions_used,
         // Function is 1 instruction.
-        1 + cdrop
-            + ccall * 4
-            + csg
-            + cc * 15
-            + cs * 2
-            + cd * 3
-            + csw * 2
-            + csr
-            + cl
-            + cg
-            + overhead
+        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + csw * 2 + csr + cl + cg + overhead * cd
     );
-
-    // Now run the same with insufficient instructions
-    // We should still succeed (to avoid potentially failing pre-upgrades
-    // of canisters that did not adjust their code to new metering)
-    let mut instance = new_instance_for_stable_write(wat, instructions_used - 1);
-
-    instance.run(func_ref("test")).unwrap();
 }
 
 #[test]
@@ -1170,10 +1112,9 @@ fn metering_wasm64_load_store_canister() {
             (memory i64 1000)
         )"#;
 
-    let embedder_config = EmbeddersConfig::default();
-
+    let page_overhead = NumInstructions::new(1000);
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_config(embedder_config)
+        .with_page_overhead(page_overhead)
         .with_wat(wat)
         .with_num_instructions(NumInstructions::new(10000))
         .build();
@@ -1224,8 +1165,15 @@ fn metering_wasm64_load_store_canister() {
     // Both stores hit Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
     // so only one heap page-first-write event occurs.
     let overhead = deterministic_tracker_overhead(1, 0);
-    let total_cost =
-        1 + 2 * const_0 + const_17 + const_117 + const_4096 + 2 * store + load + drop + overhead;
+    let total_cost = 1
+        + 2 * const_0
+        + const_17
+        + const_117
+        + const_4096
+        + 2 * store
+        + load
+        + drop
+        + overhead * page_overhead.get();
     assert_eq!(instr_used_wasm64, total_cost);
 
     // Compute cost in Wasm32 mode and compare.
@@ -1240,7 +1188,7 @@ fn metering_wasm64_load_store_canister() {
             (memory 1000)
         )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_config(EmbeddersConfig::default())
+        .with_page_overhead(page_overhead)
         .with_wat(wat_wasm32)
         .with_num_instructions(NumInstructions::new(10000))
         .build();
@@ -1295,7 +1243,7 @@ fn metering_wasm64_load_store_canister() {
         + 2 * store_wasm32
         + load_wasm32
         + drop_wasm32
-        + overhead;
+        + overhead * page_overhead.get();
     assert_eq!(wasm_32_instructions, total_cost_wasm32);
 
     // Check that the cost in Wasm64 mode is higher than in Wasm32 mode.

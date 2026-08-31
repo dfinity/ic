@@ -347,12 +347,15 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>> Valid
         current_round: ExecutionRound,
     ) {
         for msg in msgs {
-            let message_id = msg.content().id();
             if !self.is_duplicate(state, &msg) {
                 self.induct_message(state, msg, current_round);
             } else {
                 self.observe_inducted_ingress_status(LABEL_VALUE_DUPLICATE);
-                debug!(self.log, "Didn't induct duplicate message {}", message_id);
+                debug!(
+                    self.log,
+                    "Didn't induct duplicate message {}",
+                    msg.content().id()
+                );
             }
         }
         self.observe_ingress_history_size(state.total_ingress_memory_taken());

@@ -39,22 +39,14 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 /// Returns the extra instruction overhead charged in-band by the deterministic
 /// memory tracker for `n_wasm_pages` Wasm pages first written in replicated
 /// mode (DirtyPageTracking::Track). Each such page triggers both
-/// `mark_wasm_page_accessed` and `mark_wasm_page_dirty`, charging two
-/// instructions per OS page per Wasm page.  The OS page size varies by
-/// platform (4 KiB on Linux, 16 KiB on arm64-darwin).
+/// `mark_wasm_page_accessed` and `mark_wasm_page_dirty`, i.e. it is charged
+/// twice per OS page. The result is a page count, to be multiplied by
+/// `page_overhead`. The OS page size varies by platform (4 KiB on Linux, 16 KiB
+/// on arm64-darwin).
 fn deterministic_tracker_write_overhead(n_wasm_pages: u64) -> u64 {
-    use ic_config::flag_status::FlagStatus;
     use ic_sys::PAGE_SIZE;
     const WASM_PAGE_SIZE: u64 = 65536;
-    if EmbeddersConfig::default()
-        .feature_flags
-        .deterministic_memory_tracker
-        == FlagStatus::Enabled
-    {
-        n_wasm_pages * 2 * (WASM_PAGE_SIZE / PAGE_SIZE as u64)
-    } else {
-        0
-    }
+    n_wasm_pages * 2 * (WASM_PAGE_SIZE / PAGE_SIZE as u64)
 }
 
 // instruction cost of executing inc method on the test canister
@@ -108,20 +100,12 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         MeteringType::None => 0,
     };
 
-    let cost_dirty = if let MeteringType::New = config.embedders_config.metering_type {
-        ic_config::subnet_config::SchedulerConfig::application_subnet()
-            .dirty_page_overhead
-            .get()
-    } else {
-        0
-    };
-
     let cost_default = 1; // Default cost of executing a function, even if it is empty.
 
     // Total cost of `(func $inc ...)`:
     cost_default +
     // (i32.store
-    cost_store + cost_dirty +
+    cost_store +
     // (i32.const 0)
     cost_const +
     // (i32.add
@@ -1128,14 +1112,17 @@ fn test_subnet_size_ingress_induction_cost() {
 
 #[test]
 fn test_subnet_size_execute_message_cost() {
+    let page_overhead = ic_config::subnet_config::SchedulerConfig::application_subnet()
+        .page_overhead
+        .get();
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
     // The `inc` method writes to the heap (first access), so the deterministic
     // memory tracker charges an extra 32 instructions in-band (accessed + dirty
     // for 1 Wasm page) when enabled.
-    let reference_instructions_cost =
-        inc_instruction_cost(HypervisorConfig::default()) + deterministic_tracker_write_overhead(1);
+    let reference_instructions_cost = inc_instruction_cost(HypervisorConfig::default())
+        + page_overhead * deterministic_tracker_write_overhead(1);
     let reference_cost = calculate_execution_cost(
         &config,
         NumInstructions::from(reference_instructions_cost),
@@ -1145,7 +1132,7 @@ fn test_subnet_size_execute_message_cost() {
     // Check default cost.
     assert_eq!(
         reference_instructions_cost,
-        2019 + deterministic_tracker_write_overhead(1)
+        1019 + page_overhead * deterministic_tracker_write_overhead(1)
     );
     let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     assert_eq!(

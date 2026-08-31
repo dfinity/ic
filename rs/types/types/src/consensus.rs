@@ -288,9 +288,10 @@ impl Block {
         height: Height,
         rank: Rank,
         context: ValidationContext,
+        version: ReplicaVersion,
     ) -> Self {
         Block {
-            version: ReplicaVersion::default(),
+            version,
             parent,
             payload,
             height,
@@ -430,9 +431,9 @@ pub struct NotarizationContent {
 
 impl NotarizationContent {
     /// Create a new notarization content from a height and a block hash
-    pub fn new(height: Height, block: CryptoHashOf<Block>) -> Self {
+    pub fn new(height: Height, block: CryptoHashOf<Block>, version: ReplicaVersion) -> Self {
         NotarizationContent {
-            version: ReplicaVersion::default(),
+            version,
             height,
             block,
         }
@@ -530,9 +531,9 @@ pub struct FinalizationContent {
 }
 
 impl FinalizationContent {
-    pub fn new(height: Height, block: CryptoHashOf<Block>) -> Self {
+    pub fn new(height: Height, block: CryptoHashOf<Block>, version: ReplicaVersion) -> Self {
         FinalizationContent {
-            version: ReplicaVersion::default(),
+            version,
             height,
             block,
         }
@@ -638,9 +639,13 @@ pub type HashedRandomBeacon = Hashed<CryptoHashOf<RandomBeacon>, RandomBeacon>;
 impl RandomBeaconContent {
     /// Create a new RandomBeaconContent with a given height and parent
     /// RandomBeacon
-    pub fn new(height: Height, parent: CryptoHashOf<RandomBeacon>) -> Self {
+    pub fn new(
+        height: Height,
+        parent: CryptoHashOf<RandomBeacon>,
+        version: ReplicaVersion,
+    ) -> Self {
         Self {
-            version: ReplicaVersion::default(),
+            version,
             height,
             parent,
         }
@@ -742,11 +747,8 @@ impl SignedBytesWithoutDomainSeparator for RandomTapeContent {
 
 impl RandomTapeContent {
     /// Create a new RandomTapeContent from a given height
-    pub fn new(height: Height) -> Self {
-        RandomTapeContent {
-            version: ReplicaVersion::default(),
-            height,
-        }
+    pub fn new(height: Height, version: ReplicaVersion) -> Self {
+        RandomTapeContent { version, height }
     }
 }
 

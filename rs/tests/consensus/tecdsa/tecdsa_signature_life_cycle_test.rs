@@ -128,7 +128,7 @@ fn test(env: TestEnv) {
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
-                    "Unable to route management canister request {method_name}: \
+                    "call rejected: 3 - Unable to route management canister request {method_name}: \
                         ChainKeyError(\"Requested unknown threshold key: {key_id}, existing keys: {initial_key_ids_as_string}\")",
                 ),
                 error_code: Some("IC0406".to_string()),
@@ -150,7 +150,7 @@ fn test(env: TestEnv) {
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
-                    "Unable to route management canister request {method_name}: \
+                    "call rejected: 3 - Unable to route management canister request {method_name}: \
                         ChainKeyError(\"Requested unknown or disabled threshold key: {key_id}, \
                         existing enabled keys: {initial_key_ids_as_string}\")",
                 ),
@@ -256,7 +256,7 @@ fn test(env: TestEnv) {
                     let expected_reject = RejectResponse {
                         reject_code: RejectCode::CanisterReject,
                         reject_message: format!(
-                            "Unable to route management canister request {method_name}: \
+                            "call rejected: 3 - Unable to route management canister request {method_name}: \
                                 ChainKeyError(\"Requested unknown or disabled threshold key: {key_id}, \
                                 existing enabled keys: []\")",
                         ),

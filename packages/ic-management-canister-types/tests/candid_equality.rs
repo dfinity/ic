@@ -57,7 +57,7 @@ fn canister_status(_: CanisterStatusArgs) -> CanisterStatusResult {
     unimplemented!()
 }
 
-#[candid_method(update)]
+#[candid_method(query)]
 fn canister_info(_: CanisterInfoArgs) -> CanisterInfoResult {
     unimplemented!()
 }

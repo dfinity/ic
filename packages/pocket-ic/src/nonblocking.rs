@@ -49,9 +49,6 @@ use tracing_subscriber::EnvFilter;
 // wait time between polling requests
 const POLLING_PERIOD_MS: u64 = 10;
 
-// the default value of the `--hard-ttl` CLI option of the PocketIC server
-const HARD_TTL_SECS: u64 = 600; // 10 minutes
-
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
@@ -156,7 +153,7 @@ impl PocketIc {
                 server_binary,
                 reuse: true,
                 ttl: None,
-                hard_ttl: Some(Duration::from_secs(HARD_TTL_SECS)),
+                hard_ttl: None,
             })
             .await;
             server_url
@@ -387,6 +384,8 @@ impl PocketIc {
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
+    /// Only returns after the certified time of the IC
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
@@ -435,6 +434,8 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
+    /// Only returns after the certified time of the PocketIC instance
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
@@ -451,6 +452,8 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
+    /// Only returns after the certified time of the PocketIC instance
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]

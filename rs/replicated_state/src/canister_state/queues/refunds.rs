@@ -24,6 +24,10 @@ pub struct RefundPool {
     // Refund amounts, by recipient.
     #[validate_eq(Ignore)]
     amounts: BTreeMap<CanisterId, Cycles>,
+
+    /// Transient: total amount of pooled cycles.
+    #[validate_eq(Ignore)]
+    total: Cycles,
 }
 
 impl RefundPool {
@@ -31,6 +35,7 @@ impl RefundPool {
         Self {
             refunds: BTreeSet::new(),
             amounts: BTreeMap::new(),
+            total: Cycles::zero(),
         }
     }
 
@@ -59,7 +64,10 @@ impl RefundPool {
         // Add the updated amount to the priority queue.
         assert!(self.refunds.insert(Refund::anonymous(receiver, amount)));
 
+        self.total += cycles;
+
         debug_assert_eq!(self.amounts.len(), self.refunds.len());
+        debug_assert_eq!(self.compute_total(), self.total);
     }
 
     /// Retains only the refunds for which the predicate `f` returns `true`.
@@ -69,6 +77,8 @@ impl RefundPool {
             self.refunds
                 .contains(&Refund::anonymous(*receiver, *amount))
         });
+        // Retaining is `O(n)` anyway, so just recompute the total.
+        self.total = self.compute_total();
 
         debug_assert_eq!(self.amounts.len(), self.refunds.len());
     }
@@ -87,11 +97,15 @@ impl RefundPool {
         self.refunds.is_empty()
     }
 
+    /// Returns the total amount of pooled cycles.
+    pub fn total(&self) -> Cycles {
+        self.total
+    }
+
     /// Computes the total amount of pooled cycles.
     ///
     /// Complexity: `O(n)`
-    #[cfg(debug_assertions)]
-    pub(crate) fn compute_total(&self) -> Cycles {
+    fn compute_total(&self) -> Cycles {
         self.refunds
             .iter()
             .fold(Cycles::zero(), |acc, r| acc + r.amount())

@@ -9,11 +9,10 @@ use crate::driver::farm::{Farm, VmType};
 use crate::driver::ic::VmResources;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use crate::driver::ic::{ImageSizeGiB, VmResourceOverrides};
+use crate::driver::ic_images::get_empty_disk_image;
 use crate::driver::nested::{NestedNode, NestedNodeSpec};
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::{
-    get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
-};
+use crate::driver::test_env_api::{get_guestos_img_sha256, get_guestos_img_url};
 use crate::driver::test_setup::{GroupSetup, SystemTestBackend};
 use crate::driver::universal_vm::UniversalVm;
 use anyhow;
@@ -25,7 +24,7 @@ use std::path::PathBuf;
 use url::Url;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
-const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
+const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(4 * 1024 * 1024); // 4GiB
 const DEFAULT_VM_RESOURCES: VmResources = VmResources {
     vcpus: DEFAULT_VCPUS_PER_VM,
     memory_kibibytes: DEFAULT_MEMORY_KIB_PER_VM,
@@ -33,7 +32,11 @@ const DEFAULT_VM_RESOURCES: VmResources = VmResources {
 };
 
 pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(8);
-pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(33554432); // 32GiB
+/// Allocates 16 GiB so the nested GuestOS retains the standard 4 GiB
+/// ([`DEFAULT_MEMORY_KIB_PER_VM`]) after the two host deductions: 8 GiB for
+/// HostOS ([`HOSTOS_MEMORY_RESERVED_GIB`]) and 4 GiB for the upgrade VM
+/// (`UPGRADE_VM_MEMORY_GIB` in `rs/ic_os/os_tools/guest_vm_runner/src/guest_vm_config.rs`).
+pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(16 * 1024 * 1024); // 16GiB
 const DEFAULT_NESTED_VM_RESOURCES: VmResources = VmResources {
     vcpus: HOSTOS_VCPUS_PER_VM,
     memory_kibibytes: HOSTOS_MEMORY_KIB_PER_VM,
@@ -57,45 +60,32 @@ pub struct ResourceRequest {
 pub enum DiskImage {
     /// Image downloaded by a Farm host via URL with sha256 verification.
     Url {
-        image_type: ImageType,
+        /// Whether this is an IC-OS image (GuestOS, HostOS, SetupOS).
+        ///
+        /// Farm applies IC-OS-specific handling to images announced as IC-OS
+        /// images (`icOsImageViaUrl`) and attaches all other images as-is
+        /// (`imageViaUrl`).
+        ic_os_image: bool,
         url: Url,
         sha256: String,
     },
     /// Image already present locally on disk. Used by the Local backend.
-    Local {
-        image_type: ImageType,
-        path: PathBuf,
-    },
-}
-
-impl DiskImage {
-    pub fn image_type(&self) -> &ImageType {
-        match self {
-            DiskImage::Url { image_type, .. } => image_type,
-            DiskImage::Local { image_type, .. } => image_type,
-        }
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
-pub enum ImageType {
-    IcOsImage,
-    PrometheusImage,
-    UniversalImage,
+    Local { path: PathBuf },
 }
 
 impl From<DiskImage> for ImageLocation {
     fn from(src: DiskImage) -> ImageLocation {
         match src {
             DiskImage::Url {
-                image_type: ImageType::IcOsImage,
+                ic_os_image: true,
                 url,
                 sha256,
             } => IcOsImageViaUrl { url, sha256 },
             DiskImage::Url { url, sha256, .. } => ImageViaUrl { url, sha256 },
-            DiskImage::Local { .. } => {
-                panic!("Local DiskImage cannot be converted to Farm ImageLocation")
-            }
+            DiskImage::Local { path } => panic!(
+                "DiskImage::Local is not supported by the Farm backend. Path: {:?}",
+                path
+            ),
         }
     }
 }
@@ -192,14 +182,13 @@ pub fn get_resource_request(
     // must not call `get_guestos_img_url`/`get_guestos_img_sha256` there.
     let primary_image = match SystemTestBackend::read_attribute(test_env) {
         SystemTestBackend::Farm => DiskImage::Url {
-            image_type: ImageType::IcOsImage,
+            ic_os_image: true,
             url: get_guestos_img_url(test_env),
             sha256: get_guestos_img_sha256(),
         },
         SystemTestBackend::Local => {
-            let var = local_path_env_var(&ImageType::IcOsImage);
+            let var = "ENV_DEPS__GUESTOS_DISK_IMG_PATH";
             DiskImage::Local {
-                image_type: ImageType::IcOsImage,
                 path: PathBuf::from(
                     std::env::var(var)
                         .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
@@ -249,15 +238,7 @@ pub fn get_resource_request_for_nested_nodes(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let empty_disk_img_url = get_empty_disk_img_url()?;
-    let empty_disk_img_sha256 = get_empty_disk_img_sha256()?;
-
-    // Add a VM request for each node.
-    let mut res_req = ResourceRequest::new(DiskImage::Url {
-        image_type: ImageType::IcOsImage,
-        url: empty_disk_img_url,
-        sha256: empty_disk_img_sha256,
-    });
+    let mut res_req = ResourceRequest::new(get_empty_disk_image(test_env)?);
     let group_setup = GroupSetup::read_attribute(test_env);
     let group_resource_overrides = group_setup.vm_resource_overrides;
     res_req.group_name = group_name.to_string();
@@ -277,43 +258,11 @@ pub const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
     "ae94e672589c8cb47231976f8d0a4abaac4b8fde9ded1a664de6d7c32f0eac25";
 
 /// Returns the default Universal VM disk image as a Farm-style URL.
-/// Under the Local backend, callers should pipe this through [`maybe_localize`]
-/// so the URL is replaced with the local path supplied by bazel.
 pub fn default_universal_vm_disk_image() -> DiskImage {
     DiskImage::Url {
-        image_type: ImageType::UniversalImage,
+        ic_os_image: false,
         url: Url::parse(&format!("http://download.proxy-global.dfinity.network:8080/farm/universal-vm/{DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux/universal-vm.img.zst")).expect("should not fail!"),
         sha256: String::from(DEFAULT_UNIVERSAL_VM_IMG_SHA256),
-    }
-}
-
-/// Environment variable name carrying the local path for a given image type.
-fn local_path_env_var(image_type: &ImageType) -> &'static str {
-    match image_type {
-        ImageType::IcOsImage => "ENV_DEPS__GUESTOS_DISK_IMG_PATH",
-        ImageType::PrometheusImage => "ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH",
-        ImageType::UniversalImage => "ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH",
-    }
-}
-
-/// Convert a `DiskImage::Url` into a `DiskImage::Local` when running under the
-/// Local backend, preserving its `image_type`. The local path is looked up via
-/// the appropriate `ENV_DEPS__*_DISK_IMG_PATH` environment variable provided by
-/// the bazel `system_test(local = True, ...)` macro.
-pub fn maybe_localize(primary_image: DiskImage, env: &TestEnv) -> DiskImage {
-    match SystemTestBackend::read_attribute(env) {
-        SystemTestBackend::Farm => primary_image,
-        SystemTestBackend::Local => match primary_image {
-            DiskImage::Local { .. } => primary_image,
-            DiskImage::Url { image_type, .. } => {
-                let var = local_path_env_var(&image_type);
-                let path = PathBuf::from(
-                    std::env::var(var)
-                        .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
-                );
-                DiskImage::Local { image_type, path }
-            }
-        },
     }
 }
 
@@ -324,13 +273,12 @@ pub fn get_resource_request_for_universal_vm(
     env: &TestEnv,
 ) -> anyhow::Result<ResourceRequest> {
     let primary_image = match universal_vm.primary_image.clone() {
-        Some(image) => maybe_localize(image, env),
+        Some(image) => image,
         None => match SystemTestBackend::read_attribute(env) {
             SystemTestBackend::Farm => default_universal_vm_disk_image(),
             SystemTestBackend::Local => {
-                let var = local_path_env_var(&ImageType::UniversalImage);
+                let var = "ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH";
                 DiskImage::Local {
-                    image_type: ImageType::UniversalImage,
                     path: PathBuf::from(
                         std::env::var(var)
                             .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),

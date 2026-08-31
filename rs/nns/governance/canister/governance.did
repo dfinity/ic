@@ -25,6 +25,7 @@ type Action = variant {
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
   CreateCanisterAndInstallCode : CreateCanisterAndInstallCode;
+  UpdateStandardEngineReplicaVersion : UpdateStandardEngineReplicaVersion;
 };
 
 type AddHotKey = record {
@@ -87,6 +88,11 @@ type CanisterStatusResultV2 = record {
 type CanisterSummary = record {
   status : opt CanisterStatusResultV2;
   canister_id : opt principal;
+};
+
+type CanisterUpgradeOptions = record {
+  skip_pre_upgrade : opt bool;
+  wasm_memory_persistence : opt int32;
 };
 
 type Change = variant {
@@ -471,6 +477,7 @@ type InstallCode = record {
   canister_id : opt principal;
   arg_hash : opt blob;
   install_mode : opt int32;
+  canister_upgrade_options : opt CanisterUpgradeOptions;
 };
 
 type InstallCodeRequest = record {
@@ -482,6 +489,7 @@ type InstallCodeRequest = record {
   skip_stopping_before_installing : opt bool;
   canister_id : opt principal;
   install_mode : opt int32;
+  canister_upgrade_options : opt CanisterUpgradeOptions;
 };
 
 type KnownNeuron = record {
@@ -1096,6 +1104,7 @@ type ProposalActionRequest = variant {
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
   CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeRequest;
+  UpdateStandardEngineReplicaVersion : UpdateStandardEngineReplicaVersion;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental
@@ -1150,6 +1159,13 @@ type BlessAlternativeGuestOsVersion = record {
   //
   // (Here, we refer to the version being replaced as the "base" version.)
   base_guest_launch_measurements : opt GuestLaunchMeasurements; };
+
+// Changes what replica version(s) are run by Cloud Engines.
+type UpdateStandardEngineReplicaVersion = record {
+  new_replica_version_id : opt text;
+  old_replica_version_id : opt text;
+  deployment_progress : opt float64;
+};
 
 type GuestLaunchMeasurements = record {
   guest_launch_measurements : opt vec GuestLaunchMeasurement;

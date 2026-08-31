@@ -34,3 +34,6 @@ url = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = { version = "3" }
+
+[dev-dependencies]
+tempfile = { workspace = true }

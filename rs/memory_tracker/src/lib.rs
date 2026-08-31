@@ -1,10 +1,8 @@
-use bit_vec::BitVec;
-use ic_logger::ReplicaLogger;
 use ic_replicated_state::{
     PageIndex, PageMap,
     page_map::{FileDescriptor, MemoryInstructions},
 };
-use ic_sys::{PAGE_SIZE, PageBytes};
+use ic_sys::PAGE_SIZE;
 use ic_types::{NumBytes, NumOsPages};
 use nix::{
     errno::Errno,
@@ -16,18 +14,12 @@ use std::{
     ops::Range,
     os::unix::io::BorrowedFd,
     ptr::NonNull,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, AtomicUsize, Ordering},
-    },
+    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
     time::Duration,
 };
 
-use signal_mutex::SignalMutex;
-
 mod conversions;
 mod deterministic;
-mod prefetching;
 pub mod signal_mutex;
 #[cfg(test)]
 mod tests;
@@ -80,10 +72,7 @@ pub(crate) mod checksum {
     }
 }
 
-use deterministic::DeterministicMemoryTracker;
-pub use prefetching::PrefetchingMemoryTracker;
-/// Only used for benchmarks.
-pub use prefetching::basic_signal_handler;
+pub use deterministic::DeterministicMemoryTracker;
 
 /// Memory limits for the deterministic memory tracker.
 #[derive(Clone, Copy, Default)]
@@ -109,23 +98,8 @@ pub enum AccessKind {
     Write,
 }
 
-/// Specifies the kind of handler for missing pages.
-#[derive(Clone, Copy)]
-pub enum MissingPageHandlerKind {
-    /// The generic handler, which does not use `AccessKind` information.
-    Generic,
-    /// The prefetching handler, which leverages `AccessKind` and prefetching
-    /// for improved performance.
-    Prefetching,
-    /// A handler that provides deterministic prefetching behavior
-    /// and works on all platforms.
-    Deterministic,
-}
-
 #[derive(Default)]
 pub struct MemoryTrackerMetrics {
-    read_before_write_count: AtomicUsize,
-    direct_write_count: AtomicUsize,
     sigsegv_count: AtomicUsize,
     mmap_count: AtomicUsize,
     mprotect_count: AtomicUsize,
@@ -134,14 +108,6 @@ pub struct MemoryTrackerMetrics {
 }
 
 impl MemoryTrackerMetrics {
-    pub fn read_before_write_count(&self) -> usize {
-        self.read_before_write_count.load(Ordering::Relaxed)
-    }
-
-    pub fn direct_write_count(&self) -> usize {
-        self.direct_write_count.load(Ordering::Relaxed)
-    }
-
     pub fn sigsegv_count(&self) -> usize {
         self.sigsegv_count.load(Ordering::Relaxed)
     }
@@ -217,259 +183,10 @@ impl MemoryArea {
         let a = address as usize;
         (self.start <= a) && (a < self.start + self.size.get().get() as usize)
     }
-}
 
-/// Bitmap tracking which pages on the memory were accessed during an execution.
-struct PageBitmap {
-    pages: BitVec,
-    marked_count: NumOsPages,
-}
-
-impl PageBitmap {
-    fn new(num_pages: NumOsPages) -> Self {
-        Self {
-            pages: BitVec::from_elem(num_pages.get() as usize, false),
-            marked_count: 0.into(),
-        }
-    }
-
-    fn grow(&mut self, delta_pages: NumOsPages) {
-        self.pages.grow(delta_pages.get() as usize, false);
-    }
-
-    fn marked_count(&self) -> NumOsPages {
-        self.marked_count
-    }
-
-    /// Indicates if the given page was accessed.
-    pub fn is_marked(&self, page_idx: PageIndex) -> bool {
-        self.pages.get(page_idx.get() as usize).unwrap_or(false)
-    }
-
-    fn mark(&mut self, page_idx: PageIndex) {
-        self.pages.set(page_idx.get() as usize, true);
-        self.marked_count.inc_assign();
-    }
-
-    fn mark_range(&mut self, range: &Range<PageIndex>) {
-        let range = range.start.get()..range.end.get();
-        for i in range {
-            self.mark(PageIndex::new(i));
-        }
-    }
-
-    /// Returns the largest range around the faulting page such that all pages there have
-    /// not been marked yet.
-    fn restrict_range_to_unmarked(
-        &self,
-        faulting_page: PageIndex,
-        range: Range<PageIndex>,
-    ) -> Range<PageIndex> {
-        debug_assert!(
-            range.contains(&faulting_page),
-            "Error checking page:{faulting_page} ∈ range:{range:?}"
-        );
-        let range = range_intersection(&range, &self.page_range());
-
-        let old_start = range.start.get();
-        let mut start = faulting_page.get();
-        while start > old_start {
-            if self.pages.get(start as usize - 1).unwrap_or(true) {
-                break;
-            }
-            start -= 1;
-        }
-        let old_end = range.end.get();
-        let mut end = faulting_page.get();
-        while end < old_end {
-            if self.pages.get(end as usize).unwrap_or(true) {
-                break;
-            }
-            end += 1;
-        }
-
-        PageIndex::new(start)..PageIndex::new(end)
-    }
-
-    /// Returns the largest range around the faulting page such that
-    /// all pages there have been already marked.
-    fn restrict_range_to_marked(
-        &self,
-        faulting_page: PageIndex,
-        range: Range<PageIndex>,
-    ) -> Range<PageIndex> {
-        debug_assert!(
-            range.contains(&faulting_page),
-            "Error checking page:{faulting_page} ∈ range:{range:?}"
-        );
-        let range = range_intersection(&range, &self.page_range());
-
-        let old_start = range.start.get();
-        let mut start = faulting_page.get();
-        while start > old_start {
-            match self.pages.get(start as usize - 1) {
-                None | Some(false) => break,
-                Some(true) => {}
-            }
-            start -= 1;
-        }
-        let old_end = range.end.get();
-        let mut end = faulting_page.get();
-        while end < old_end {
-            match self.pages.get(end as usize) {
-                None | Some(false) => break,
-                Some(true) => {}
-            }
-            end += 1;
-        }
-        PageIndex::new(start)..PageIndex::new(end)
-    }
-
-    /// Returns the range of pages that are predicted to be marked in the future
-    /// based on the marked pages before the start of the given range or after the end.
-    fn restrict_range_to_predicted(
-        &self,
-        faulting_page: PageIndex,
-        range: Range<PageIndex>,
-    ) -> Range<PageIndex> {
-        debug_assert!(
-            range.contains(&faulting_page),
-            "Error checking page:{faulting_page} ∈ range:{range:?}"
-        );
-        let range = range_intersection(&range, &self.page_range());
-        if range.is_empty() {
-            return range;
-        }
-
-        let page = faulting_page.get();
-        let start = range.start.get();
-        let end = range.end.get();
-
-        let mut bwd_predicted_count = 0;
-        while page - bwd_predicted_count > start {
-            if !self
-                .pages
-                .get((page + bwd_predicted_count + 1) as usize)
-                .unwrap_or(false)
-            {
-                break;
-            }
-            bwd_predicted_count += 1;
-        }
-
-        let mut fwd_predicted_count = 1;
-        while fwd_predicted_count < page && page + fwd_predicted_count < end {
-            if !self
-                .pages
-                .get((page - fwd_predicted_count) as usize)
-                .unwrap_or(false)
-            {
-                break;
-            }
-            fwd_predicted_count += 1;
-        }
-
-        PageIndex::new(page - bwd_predicted_count)..PageIndex::new(page + fwd_predicted_count)
-    }
-
+    /// Returns the range of OS pages covered by the tracked memory area.
     fn page_range(&self) -> Range<PageIndex> {
-        PageIndex::new(0)..PageIndex::new(self.pages.len() as u64)
-    }
-}
-
-/// Memory tracker interface.
-pub trait MemoryTracker {
-    /// Creates a new memory tracker.
-    fn new(
-        start: *mut libc::c_void,
-        size: NumBytes,
-        log: ReplicaLogger,
-        dirty_page_tracking: DirtyPageTracking,
-        page_map: PageMap,
-        memory_limits: MemoryLimits,
-        page_overhead: u64,
-        subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
-    ) -> nix::Result<Self>
-    where
-        Self: Sized;
-
-    /// Handles missing page signal (SIGSEGV or SIGBUS).
-    fn handle_sigsegv(
-        &self,
-        access_kind: Option<AccessKind>,
-        fault_address: *mut libc::c_void,
-    ) -> bool;
-
-    /// Returns the memory area covered by the tracker.
-    fn memory_area(&self) -> &MemoryArea;
-
-    /// Expands the tracked memory area.
-    fn expand(&self, delta: NumBytes);
-
-    /// Returns a number of accessed pages.
-    fn num_accessed_pages(&self) -> usize;
-
-    /// Returns a list of accessed page indexes.
-    fn take_accessed_pages(&self) -> Vec<PageIndex>;
-
-    /// Returns a list of dirty page indexes.
-    fn take_dirty_pages(&self) -> Vec<PageIndex>;
-
-    /// Returns a list of speculatively dirty page indexes.
-    fn take_speculatively_dirty_pages(&self) -> Vec<PageIndex>;
-
-    /// Returns None if a speculatively dirty page was not modified.
-    fn validate_speculatively_dirty_page(&self, page_idx: PageIndex) -> Option<PageIndex>;
-
-    /// Returns `true` if a specified page was marked as accessed.
-    fn is_accessed(&self, page_idx: PageIndex) -> bool;
-
-    /// Returns a reference to the specified page map OS page content.
-    fn get_page(&self, page_idx: PageIndex) -> &PageBytes;
-
-    /// Return the associated metrics.
-    fn metrics(&self) -> &MemoryTrackerMetrics;
-}
-
-/// Dynamic dispatch is used to minimize code changes.
-/// Remove this dispatch mechanism once we have fully switched to
-/// the deterministic memory tracker.
-pub type SigsegvMemoryTracker = Box<dyn MemoryTracker + Send>;
-
-pub fn new(
-    start: *mut libc::c_void,
-    size: NumBytes,
-    log: ReplicaLogger,
-    dirty_page_tracking: DirtyPageTracking,
-    page_map: PageMap,
-    missing_page_handler_kind: Option<MissingPageHandlerKind>,
-    memory_limits: MemoryLimits,
-    page_overhead: u64,
-    subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
-) -> nix::Result<SigsegvMemoryTracker> {
-    match missing_page_handler_kind {
-        Some(MissingPageHandlerKind::Deterministic) => {
-            Ok(Box::new(DeterministicMemoryTracker::new(
-                start,
-                size,
-                log,
-                dirty_page_tracking,
-                page_map,
-                memory_limits,
-                page_overhead,
-                subtract_instruction_counter,
-            )?))
-        }
-        _ => Ok(Box::new(PrefetchingMemoryTracker::new(
-            start,
-            size,
-            log,
-            dirty_page_tracking,
-            page_map,
-            memory_limits,
-            page_overhead,
-            subtract_instruction_counter,
-        )?)),
+        PageIndex::new(0)..PageIndex::new(self.size.get().get() / PAGE_SIZE as u64)
     }
 }
 
@@ -646,10 +363,6 @@ fn apply_memory_instructions(
         };
         metrics.mprotect_count.fetch_add(1, Ordering::Relaxed);
     }
-}
-
-fn range_intersection(range1: &Range<PageIndex>, range2: &Range<PageIndex>) -> Range<PageIndex> {
-    range1.start.max(range2.start)..range1.end.min(range2.end)
 }
 
 fn range_size_in_bytes(range: &Range<PageIndex>) -> usize {

@@ -17,7 +17,7 @@
 //! Other tags use uppercase suffixes (ENV_DEPS__GUESTOS_SEV_RECOVERY_DISK_IMG, etc.).
 
 use crate::driver::local_backend::LocalBackend;
-use crate::driver::resource::{DiskImage, ImageType};
+use crate::driver::resource::DiskImage;
 use crate::driver::serve_files_task::FILE_SERVER_PORT;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::read_dependency_from_env_to_string;
@@ -142,7 +142,7 @@ pub fn get_guestos_disk_image(env: &TestEnv) -> DiskImage {
 pub fn get_tagged_guestos_disk_image(env: &TestEnv, tag: &str) -> DiskImage {
     match SystemTestBackend::read_attribute(env) {
         SystemTestBackend::Farm => DiskImage::Url {
-            image_type: ImageType::IcOsImage,
+            ic_os_image: true,
             url: get_tagged_guestos_img_url(env, tag),
             sha256: get_tagged_guestos_img_sha256(tag),
         },
@@ -150,7 +150,6 @@ pub fn get_tagged_guestos_disk_image(env: &TestEnv, tag: &str) -> DiskImage {
             let suffix = tag_to_env_suffix(tag);
             let var = format!("ENV_DEPS__GUESTOS{suffix}_DISK_IMG_PATH");
             DiskImage::Local {
-                image_type: ImageType::IcOsImage,
                 path: PathBuf::from(
                     std::env::var(&var).unwrap_or_else(|_| panic!("Failed to read '{var}'")),
                 ),
@@ -300,6 +299,34 @@ pub fn get_setupos_img_sha256() -> String {
     let env = "ENV_DEPS__SETUPOS_DISK_IMG_HASH";
 
     std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'"))
+}
+
+/// Get the all-zero disk image a nested node uses as its primary disk from the
+/// environment. SetupOS installs HostOS onto this disk.
+pub fn get_empty_disk_image(env: &TestEnv) -> Result<DiskImage> {
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => {
+            let url_var = "ENV_DEPS__EMPTY_DISK_IMG_URL";
+            let hash_var = "ENV_DEPS__EMPTY_DISK_IMG_HASH";
+            Ok(DiskImage::Url {
+                ic_os_image: true,
+                url: Url::parse(
+                    &std::env::var(url_var).with_context(|| format!("Failed to read {url_var}"))?,
+                )
+                .with_context(|| format!("Invalid Url in {url_var}"))?,
+                sha256: std::env::var(hash_var)
+                    .with_context(|| format!("Failed to read {hash_var}"))?,
+            })
+        }
+        SystemTestBackend::Local => {
+            let var = "ENV_DEPS__EMPTY_DISK_IMG_PATH";
+            Ok(DiskImage::Local {
+                path: PathBuf::from(
+                    std::env::var(var).with_context(|| format!("Failed to read {var}"))?,
+                ),
+            })
+        }
+    }
 }
 
 /// Pull the version of the HostOS from either the HostOS or the SetupOS image (whichever is

@@ -1044,6 +1044,7 @@ impl HasId<NiDkgTargetId> for RemoteDkgAttempts {}
 impl HasId<PreSigId> for PreSignatureInCreation {}
 impl HasId<PreSigId> for PreSignatureRef {}
 impl HasId<NodeId> for CanisterHttpResponseSignature {}
+impl HasId<NodeId> for Cycles {}
 
 #[cfg(test)]
 mod tests {

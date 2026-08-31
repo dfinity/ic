@@ -1,6 +1,6 @@
 use crate::BtcNetwork;
 use ic_btc_interface::Txid;
-use ic_cdk::management_canister::{
+use ic_cdk_management_canister::{
     HttpHeader, HttpMethod, HttpRequestArgs, TransformContext, TransformFunc,
 };
 use std::cell::RefCell;

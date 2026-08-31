@@ -22,7 +22,7 @@ use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
     SubnetRecordBuilder, add_subnet_record, insert_initial_dkg_transcript,
 };
-use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
 use ic_types::{
     CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
     malicious_flags::MaliciousFlags,
@@ -102,8 +102,8 @@ pub(crate) fn setup() -> (
     let replica_config = ReplicaConfig {
         node_id: NodeId::from(PrincipalId::new_node_test_id(27)),
         subnet_id,
-        guestos_version: ReplicaVersion::default(),
-        replica_version: ReplicaVersion::default(),
+        guestos_version: test_replica_version(),
+        replica_version: test_replica_version(),
     };
 
     let metrics_registry = MetricsRegistry::new();

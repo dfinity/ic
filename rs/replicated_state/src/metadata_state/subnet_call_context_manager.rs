@@ -7,7 +7,7 @@ use ic_management_canister_types_private::{
 };
 use ic_types::{
     CanisterId, ExecutionRound, Height, NodeId, RegistryVersion, Time,
-    canister_http::CanisterHttpRequestContext,
+    canister_http::{CanisterHttpRequestContext, PricingVersion},
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
     crypto::{
         canister_threshold_sig::{
@@ -23,6 +23,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     convert::{From, TryFrom},
     sync::Arc,
+    time::Duration,
 };
 
 /// ECDSA message hash size in bytes.
@@ -30,6 +31,10 @@ const MESSAGE_HASH_SIZE: usize = 32;
 
 /// Threshold algorithm nonce size in bytes.
 const NONCE_SIZE: usize = 32;
+
+/// How long a `CanisterHttpRequestContext` whose response was already delivered
+/// to execution is retained before being removed.
+pub const DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
@@ -266,9 +271,15 @@ impl SubnetCallContextManager {
         callback_id
     }
 
+    /// Removes and returns the context for the given `callback_id`, if any.
+    ///
+    /// `current_time` is the batch time; it is stamped onto retained
+    /// `CanisterHttpRequestContext`, so that the retention timeout
+    /// runs from the point the response was delivered.
     pub fn retrieve_context(
         &mut self,
         callback_id: CallbackId,
+        current_time: Time,
         logger: &ReplicaLogger,
     ) -> Option<SubnetCallContext> {
         self.setup_initial_dkg_contexts
@@ -318,6 +329,16 @@ impl SubnetCallContextManager {
                             context.request.sender_reply_callback,
                             context.request.sender
                         );
+                        if context.pricing_version == PricingVersion::PayAsYouGo {
+                            // If the pricing version is pay-as-you-go, move the context
+                            // to the delivered contexts. This lets us keep accounting
+                            // late per-replica spend reports (and refund cycles from the
+                            // replicas that never responded on timeout).
+                            let mut delivered_context = context.clone();
+                            delivered_context.time = current_time;
+                            self.delivered_canister_http_request_contexts
+                                .insert(callback_id, delivered_context);
+                        }
                         SubnetCallContext::CanisterHttpRequest(context)
                     })
             })
@@ -347,6 +368,26 @@ impl SubnetCallContextManager {
                         SubnetCallContext::BitcoinSendTransactionInternal(context)
                     })
             })
+    }
+
+    /// Removes all delivered `CanisterHttpRequestContext`s that have been around
+    /// for longer than [`DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT`] and
+    /// returns them along with their callback IDs, so that the caller can refund
+    /// the per-replica allowance of the replicas that never responded.
+    ///
+    /// The timeout is measured against the `time` recorded in the retained
+    /// `CanisterHttpRequestContext` -- the batch time at the point its response
+    /// was delivered -- and the provided `current_time` (the batch time).
+    pub fn time_out_delivered_canister_http_request_contexts(
+        &mut self,
+        current_time: Time,
+    ) -> Vec<(CallbackId, CanisterHttpRequestContext)> {
+        self.delivered_canister_http_request_contexts
+            .extract_if(.., |_callback_id, context| {
+                current_time.saturating_duration_since(context.time)
+                    >= DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
+            })
+            .collect()
     }
 
     pub fn push_install_code_call(&mut self, call: InstallCodeCall) -> InstallCodeCallId {
@@ -431,6 +472,61 @@ impl SubnetCallContextManager {
             }
         });
         removed
+    }
+
+    /// Returns the number of in-progress subnet calls of each type, as
+    /// `(call type, count)` pairs.
+    pub fn context_counts(&self) -> impl Iterator<Item = (&'static str, usize)> {
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever a new context type is added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
+        let Self {
+            next_callback_id: _,
+            setup_initial_dkg_contexts,
+            sign_with_threshold_contexts,
+            canister_http_request_contexts,
+            delivered_canister_http_request_contexts,
+            reshare_chain_key_contexts,
+            bitcoin_get_successors_contexts,
+            bitcoin_send_transaction_internal_contexts,
+            canister_management_calls,
+            raw_rand_contexts,
+            // Not a call context; exported separately, by key ID.
+            pre_signature_stashes: _,
+        } = self;
+
+        [
+            ("setup_initial_dkg", setup_initial_dkg_contexts.len()),
+            ("sign_with_threshold", sign_with_threshold_contexts.len()),
+            (
+                "canister_http_request",
+                canister_http_request_contexts.len(),
+            ),
+            (
+                "delivered_canister_http_request",
+                delivered_canister_http_request_contexts.len(),
+            ),
+            ("reshare_chain_key", reshare_chain_key_contexts.len()),
+            (
+                "bitcoin_get_successors",
+                bitcoin_get_successors_contexts.len(),
+            ),
+            (
+                "bitcoin_send_transaction_internal",
+                bitcoin_send_transaction_internal_contexts.len(),
+            ),
+            ("raw_rand", raw_rand_contexts.len()),
+            (
+                "install_code",
+                canister_management_calls.install_code_calls_len(),
+            ),
+            (
+                "stop_canister",
+                canister_management_calls.stop_canister_calls_len(),
+            ),
+        ]
+        .into_iter()
     }
 
     /// Returns the number of `sign_with_threshold_contexts` per key id.

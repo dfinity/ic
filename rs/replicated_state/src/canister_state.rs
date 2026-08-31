@@ -14,9 +14,7 @@ use crate::canister_state::system_state::{
 use crate::{InputQueueType, OutputRequest, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
-use ic_interfaces::execution_environment::{
-    MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
-};
+use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
     SnapshotVisibility, StatusVisibility,
@@ -25,8 +23,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{CallbackId, CanisterMessage, Ingress, RequestOrResponse, Response};
 use ic_types::methods::{SystemMethod, WasmMethod};
 use ic_types::{
-    CanisterId, CanisterLog, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, Time,
+    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -630,19 +627,16 @@ impl CanisterState {
 
     /// Clears the canister log.
     pub fn clear_log(&mut self) {
-        self.system_state.canister_log.clear();
         self.system_state.log_memory_store.clear();
     }
 
     /// Removes the canister log.
     pub fn remove_log(&mut self) {
-        self.system_state.canister_log.clear();
         self.system_state.log_memory_store.deallocate();
     }
 
     /// Sets the new canister log.
-    pub fn set_log(&mut self, (canister_log, log_memory_store): (CanisterLog, LogMemoryStore)) {
-        self.system_state.canister_log = canister_log;
+    pub fn set_log(&mut self, log_memory_store: LogMemoryStore) {
         self.system_state.log_memory_store = log_memory_store;
     }
 
@@ -681,26 +675,23 @@ impl CanisterState {
             .is_low_wasm_memory_hook_condition_satisfied(self.wasm_memory_usage())
     }
 
-    /// Adds a canister change to canister history and returns the change
-    /// of subnet available execution memory due to updating canister history.
-    #[must_use]
+    /// Adds a canister change to canister history.
+    ///
+    /// The additional canister history increases the canister's memory usage, which
+    /// the caller is responsible for accounting for in the subnet available
+    /// execution memory (and the canister's cycles). Callers typically record the
+    /// change and then pass the memory usage *including* it to
+    /// `cycles_and_memory_usage_checks_and_updates`; callers that update the subnet
+    /// available execution memory directly can instead read the change in
+    /// `memory_allocated_bytes()` across this call.
     pub fn add_canister_change(
         &mut self,
         timestamp_nanos: Time,
         change_origin: CanisterChangeOrigin,
         change_details: CanisterChangeDetails,
-    ) -> SubnetAvailableExecutionMemoryChange {
-        let old_allocated_bytes = self.memory_allocated_bytes();
+    ) {
         self.system_state
             .add_canister_change(timestamp_nanos, change_origin, change_details);
-        let new_allocated_bytes = self.memory_allocated_bytes();
-        if new_allocated_bytes >= old_allocated_bytes {
-            let allocated_bytes = new_allocated_bytes - old_allocated_bytes;
-            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes)
-        } else {
-            let deallocated_bytes = old_allocated_bytes - new_allocated_bytes;
-            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes)
-        }
     }
 }
 

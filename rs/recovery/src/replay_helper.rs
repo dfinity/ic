@@ -33,6 +33,7 @@ pub async fn replay(
         subcmd,
         data_root: Some(data_root),
         skip_prompts,
+        replica_version: None,
     };
     // Since replay output needs to be persisted anyway in case the recovery process
     // is restarted, we avoid declaring a return value and moving out of the

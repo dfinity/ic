@@ -8,7 +8,6 @@ filegroup(
     ),
 )
 
-# This only builds with --hermetic_cc=false or the disable_hermetic_cc transition.
 meson(
     name = "libfuse",
     env = {

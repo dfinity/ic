@@ -73,7 +73,7 @@ pub const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1641016800;
 pub const ONE_TRILLION: u64 = 1_000_000_000_000;
 
 /// The number of cycles required to create an SNS, charged by the SNS-W canister.
-pub const SNS_CREATION_FEE: u64 = 180 * ONE_TRILLION;
+pub const SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION as u128;
 
 // The number of nanoseconds per second.
 pub const NANO_SECONDS_PER_SECOND: u64 = 1_000_000_000;

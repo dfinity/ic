@@ -1,5 +1,5 @@
 //! Defines the [`ReplicaConfig`].
-use crate::{NodeId, PrincipalId, ReplicaVersion, SubnetId};
+use crate::{NodeId, ReplicaVersion, SubnetId};
 use serde::{Deserialize, Serialize};
 
 pub const NODE_INDEX_DEFAULT: u64 = 0;
@@ -21,16 +21,5 @@ impl ReplicaConfig {
     /// yet rebooted into the target GuestOS.
     pub fn needs_reboot(&self) -> bool {
         self.guestos_version != self.replica_version
-    }
-}
-
-impl Default for ReplicaConfig {
-    fn default() -> Self {
-        ReplicaConfig {
-            node_id: NodeId::from(PrincipalId::new_node_test_id(NODE_INDEX_DEFAULT)),
-            subnet_id: SubnetId::from(PrincipalId::new_subnet_test_id(SUBNET_ID_DEFAULT)),
-            guestos_version: ReplicaVersion::default(),
-            replica_version: ReplicaVersion::default(),
-        }
     }
 }

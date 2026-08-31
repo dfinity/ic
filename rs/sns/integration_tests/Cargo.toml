@@ -49,7 +49,6 @@ ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_s
 ic-universal-canister = { path = "../../universal_canister/lib" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = { workspace = true }
-pretty-bytes = "0.2.2"
 proptest = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }

@@ -44,8 +44,7 @@ fn should_reconnect_after_request_from_client_cannot_be_sent_because_too_large()
 
     let signature = sign_message(TooLarge, &client_cannot_send_large_request);
     assert_matches!(signature, Err(TransientInternalError {internal_error})
-        if internal_error.contains("the client failed to send the request")
-        && internal_error.contains("Caused by: could not write to the transport")
+        if internal_error.contains("the client failed to buffer the request in the underlying transport")
         && internal_error.contains("Caused by: frame size too big")
     );
 
@@ -94,7 +93,11 @@ fn should_unfortunately_be_dead_after_response_from_server_cannot_be_received_by
     assert_matches!(client.idkg_gen_dealing_encryption_key_pair(), Ok(_)); //encoded response from server has 39 bytes
 
     let keys = client.current_node_public_keys_with_timestamps(); //encoded response from server has 93 bytes
-    assert_matches!(keys, Err(CspPublicKeyStoreError::TransientInternalError(msg)) if msg.contains("an error occurred while waiting for the server response"));
+    assert_matches!(keys, Err(CspPublicKeyStoreError::TransientInternalError(msg))
+        if msg.contains("the channel was disconnected due to a critical error")
+        && msg.contains("Caused by: could not read from the transport")
+        && msg.contains("Caused by: frame size too big")
+    );
 
     // `tarpc` seems to have a race condition in this particular, very rare
     // case: https://github.com/google/tarpc/issues/415. Adding a delay

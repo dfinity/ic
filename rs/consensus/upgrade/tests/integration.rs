@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 
 use ic_artifact_pool::upgrade_permit_auth_pool::UpgradePermitAuthPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_mocks::dependencies_with_subnet_records_with_raw_state_manager;
+use ic_consensus_mocks::DependenciesBuilder;
 use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilder;
 use ic_consensus_upgrade::pool_manager::UpgradePermitAuthPoolManager;
 use ic_consensus_upgrade::{permit_limits, subnet_membership};
@@ -73,11 +73,13 @@ struct TestFixture {
 impl TestFixture {
     fn new(num_nodes: u64, pool_config: ArtifactPoolConfig) -> Self {
         let nodes: Vec<NodeId> = (0..num_nodes).map(node_test_id).collect();
-        let deps = dependencies_with_subnet_records_with_raw_state_manager(
+        let deps = DependenciesBuilder::single_subnet(
             pool_config,
             subnet_test_id(0),
             vec![(1, SubnetRecordBuilder::from(&nodes).build())],
-        );
+        )
+        .without_state_manager_expectations()
+        .build();
         let ic_consensus_mocks::Dependencies {
             crypto,
             membership,

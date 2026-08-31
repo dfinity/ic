@@ -10,6 +10,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/config",
+        "//rs/https_outcalls/pricing",
         "//rs/interfaces",
         "//rs/monitoring/logger",
         "//rs/nns/constants",

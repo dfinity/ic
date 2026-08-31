@@ -80,6 +80,7 @@ pub fn build_signature_inputs<'a>(
             debug_assert_eq!(context.derivation_path.len(), 1);
             const EMPTY_VEC_REF: &Vec<u8> = &vec![];
             let inputs = ThresholdSigInputs::VetKd(VetKdArgs {
+                request_id,
                 context: VetKdDerivationContextRef {
                     caller: context.request.sender.get_ref(),
                     context: context.derivation_path.first().unwrap_or(EMPTY_VEC_REF),

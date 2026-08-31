@@ -1,0 +1,39 @@
+# Patch for determinism issues.
+#
+# pcre2-sys's build script (with PCRE2_SYS_STATIC=1) enumerates the bundled
+# PCRE2 C sources with an unsorted `std::fs::read_dir`, so the member order of
+# the produced archive is the filesystem's directory-iteration order — stable
+# on any one machine but different across machines (e.g. ext4 iterates in
+# name-hash order with a per-filesystem seed). The order leaks into binaries
+# linking the archive as the order of their STT_FILE symbols, which made
+# //rs/ic_os/open_rootfs (and hence the GuestOS image) non-reproducible
+# across machines. Sort the sources to make the archive deterministic.
+#
+# Upstream PR: https://github.com/BurntSushi/rust-pcre2/pull/58
+diff --git a/build.rs b/build.rs
+index 4a6fcad..3329e54 100644
+--- a/build.rs
++++ b/build.rs
+@@ -52,6 +52,11 @@ fn main() {
+     enable_jit(&target, &mut builder);
+ 
+     builder.include(upstream.join("src")).include(upstream.join("include"));
++    // read_dir returns entries in filesystem iteration order, which differs
++    // between machines. That order becomes the archive's member order and
++    // leaks into downstream binaries (e.g. as the order of their STT_FILE
++    // symbols), breaking reproducible builds. Sort to make it deterministic.
++    let mut sources = Vec::new();
+     for result in std::fs::read_dir(upstream.join("src")).unwrap() {
+         let dent = result.unwrap();
+         let path = dent.path();
+@@ -70,6 +75,10 @@ fn main() {
+         {
+             continue;
+         }
++        sources.push(path);
++    }
++    sources.sort();
++    for path in sources {
+         builder.file(path);
+     }
+ 

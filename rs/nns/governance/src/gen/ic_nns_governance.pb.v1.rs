@@ -466,7 +466,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34, 35"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -585,6 +585,9 @@ pub mod proposal {
         /// Create a canister in a (possibly non-NNS) subnet and install code into it.
         #[prost(message, tag = "34")]
         CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCode),
+        /// Change what replica version(s) are run by Cloud Engines.
+        #[prost(message, tag = "35")]
+        UpdateStandardEngineReplicaVersion(super::UpdateStandardEngineReplicaVersion),
     }
 }
 /// Take a canister snapshot.
@@ -2837,9 +2840,40 @@ pub struct InstallCode {
     /// The hash of the arg to pass to the canister. Calculated from `arg` when proposal is created.
     #[prost(bytes = "vec", optional, tag = "7")]
     pub arg_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Options that only apply when install_mode is upgrade.
+    #[prost(message, optional, tag = "8")]
+    pub canister_upgrade_options: ::core::option::Option<install_code::CanisterUpgradeOptions>,
 }
 /// Nested message and enum types in `InstallCode`.
 pub mod install_code {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Message,
+    )]
+    pub struct CanisterUpgradeOptions {
+        /// Whether to skip the canister's pre_upgrade hook.
+        #[prost(bool, optional, tag = "1")]
+        pub skip_pre_upgrade: ::core::option::Option<bool>,
+        /// Whether to retain (keep) or drop (replace) the canister's Wasm main
+        /// memory across the upgrade. If the old WASM had a custom section named
+        /// "icp:private enhanced-orthogonal-persistence", then this must be set
+        /// (otherwise, the Management canister will block the upgrade). If keep is
+        /// used here, then the new WASM must also have the same custom section.
+        #[prost(
+            enumeration = "::ic_protobuf::types::v1::WasmMemoryPersistence",
+            optional,
+            tag = "2"
+        )]
+        pub wasm_memory_persistence: ::core::option::Option<i32>,
+    }
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -3158,6 +3192,25 @@ pub struct BlessAlternativeGuestOsVersion {
     pub base_guest_launch_measurements: ::core::option::Option<
         ::ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements,
     >,
+}
+/// Changes what replica version(s) are run by Cloud Engines. See Registry's
+/// do_update_standard_engine_replica_version for what changes are allowed.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct UpdateStandardEngineReplicaVersion {
+    #[prost(string, tag = "1")]
+    pub new_replica_version_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub old_replica_version_id: ::prost::alloc::string::String,
+    #[prost(double, tag = "3")]
+    pub deployment_progress: f64,
 }
 #[derive(
     candid::CandidType,

@@ -465,6 +465,7 @@ fn test_nns_governance() {
         skip_stopping_before_installing: None,
         canister_id: Some(PrincipalId(canister_id)),
         install_mode: Some(1), // Install
+        canister_upgrade_options: None,
     };
     let proposal_action = ProposalActionRequest::InstallCode(install_code);
     let proposal = MakeProposalRequest {

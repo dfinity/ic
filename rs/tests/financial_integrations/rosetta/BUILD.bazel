@@ -40,6 +40,7 @@ system_test_nns(
 system_test_nns(
     name = "rosetta_neuron_follow_test",
     cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM (add_fast_single_node_subnet) * 6 vCPUs + 1 Rosetta UniversalVm * 6 vCPUs (deployed by rosetta_test_lib::setup).
+    enable_uvm = True,
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],

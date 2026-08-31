@@ -51,7 +51,7 @@ pub enum SubnetRunningState {
 
 /// This represents the initial configuration of an NNS subnetwork of an IC
 /// instance.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct SubnetConfig {
     /// The subnet id of this subnetwork.
     pub subnet_index: SubnetIndex,
@@ -350,6 +350,7 @@ impl SubnetConfig {
             subnet_type: self.subnet_type.into(),
             is_halted: self.running_state == SubnetRunningState::Halted,
             halt_at_cup_height: false,
+            cooling_down: false,
             features: Some(self.features.into()),
             max_number_of_canisters: self.max_number_of_canisters,
             ssh_readonly_access: self.ssh_readonly_access,

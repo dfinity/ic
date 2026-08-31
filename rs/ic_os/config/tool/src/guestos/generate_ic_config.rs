@@ -29,6 +29,8 @@ pub struct IcConfigTemplate {
     pub domain_name: String,
     pub node_reward_type: String,
     pub malicious_behavior: String,
+    /// Already JSON-encoded: either `null` or a quoted string.
+    pub extra_api_boundary_node_trust_anchors_pem: String,
 }
 
 /// Generate IC configuration from template and guestos config
@@ -186,6 +188,18 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         .map(|mb| serde_json::to_string(mb).unwrap_or_default())
         .unwrap_or_default();
 
+    let extra_api_boundary_node_trust_anchors_pem = match &guestos_config
+        .guestos_settings
+        .guestos_dev_settings
+        .extra_api_boundary_node_trust_anchors_pem
+    {
+        // A PEM spans several lines, so it has to be JSON-encoded rather than
+        // interpolated verbatim.
+        Some(pem) => serde_json::to_string(pem)
+            .context("Failed to encode the extra API boundary node trust anchors")?,
+        None => "null".to_string(),
+    };
+
     Ok(IcConfigTemplate {
         // TODO https://dfinity.atlassian.net/browse/NODE-1909
         ipv6_prefix,
@@ -199,6 +213,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         domain_name,
         node_reward_type,
         malicious_behavior: with_default(malicious_behavior, "null"),
+        extra_api_boundary_node_trust_anchors_pem,
     })
 }
 

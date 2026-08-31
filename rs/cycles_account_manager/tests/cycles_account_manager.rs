@@ -872,7 +872,7 @@ fn cycles_withdraw_for_execution() {
         CompoundCycles::<Instructions>::new(Cycles::from(initial_amount / 2), cost_schedule);
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -885,7 +885,7 @@ fn cycles_withdraw_for_execution() {
     assert_eq!(system_state.balance(), initial_cycles - amount.real());
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -915,7 +915,7 @@ fn cycles_withdraw_for_execution() {
     );
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -948,7 +948,7 @@ fn cycles_withdraw_for_execution() {
     // no more cycles can be withdrawn, the rest is reserved for storage
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -960,7 +960,7 @@ fn cycles_withdraw_for_execution() {
     );
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -972,7 +972,7 @@ fn cycles_withdraw_for_execution() {
     );
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -984,7 +984,7 @@ fn cycles_withdraw_for_execution() {
     );
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -1038,7 +1038,7 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
         CompoundCycles::<Instructions>::new(Cycles::from(initial_amount / 2), cost_schedule);
     assert!(
         cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
@@ -1233,23 +1233,61 @@ fn consume_cycles_for_uninstall_drains_reserved_balance() {
 #[test]
 fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        cost_schedule,
+        DEFAULT_REFERENCE_SUBNET_SIZE,
+    );
     let cam = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .build();
+    let reserved = Cycles::new(10_000_000);
+    let main = Cycles::new(30_000_000);
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(Cycles::new(4_000_000));
-    system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
-    cam.consume_with_threshold(
+    system_state.add_cycles(main + reserved);
+    system_state.reserve_cycles(reserved).unwrap();
+
+    let n_max = NumInstructions::from(1_000_000);
+    let n_refund = NumInstructions::from(600_000);
+
+    // Prepaying the execution cost only draws from the main balance.
+    let prepaid = cam
+        .prepay_execution_cycles(
+            &mut system_state,
+            NumBytes::from(0),
+            MessageMemoryUsage::ZERO,
+            ComputeAllocation::default(),
+            n_max,
+            subnet_cycles_config,
+            false,
+            WASM_EXECUTION_MODE,
+        )
+        .unwrap();
+    assert_ne!(prepaid.real(), Cycles::zero());
+    assert_eq!(system_state.reserved_balance(), reserved);
+    assert_eq!(system_state.balance(), main - prepaid.real());
+
+    // Refunding the unused instructions returns the cycles to the main balance,
+    // again leaving the reserved balance untouched.
+    let no_op_counter = IntCounter::new("no_op", "no_op").unwrap();
+    cam.refund_unused_execution_cycles(
         &mut system_state,
-        CompoundCycles::<Instructions>::new(Cycles::new(2_000_000), cost_schedule),
-        Cycles::new(0),
-        false,
-    )
-    .unwrap();
-    assert_eq!(system_state.reserved_balance(), Cycles::new(1_000_000));
-    assert_eq!(system_state.balance(), Cycles::new(1_000_000));
+        n_refund,
+        n_max,
+        prepaid,
+        &no_op_counter,
+        subnet_cycles_config,
+        WASM_EXECUTION_MODE,
+        &no_op_logger(),
+    );
+    let refund = cam
+        .variable_execution_cost(n_refund, subnet_cycles_config, WASM_EXECUTION_MODE)
+        .real();
+    assert_ne!(refund, Cycles::zero());
+    assert_eq!(system_state.reserved_balance(), reserved);
+    assert_eq!(system_state.balance(), main - prepaid.real() + refund);
 }
 
 #[test]

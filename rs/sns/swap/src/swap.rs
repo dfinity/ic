@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::{
     clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
     environment::CanisterEnvironment,
@@ -29,7 +28,7 @@ use crate::{
 };
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
-use ic_cdk::api::call::RejectionCode;
+use ic_cdk::call::{Error as IcCdkCallError, RejectCode};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{
@@ -108,11 +107,35 @@ impl From<(Option<i32>, String)> for CanisterCallError {
     }
 }
 
-impl From<(RejectionCode, String)> for CanisterCallError {
-    fn from(value: (RejectionCode, String)) -> Self {
+impl From<IcCdkCallError> for CanisterCallError {
+    // The match is deliberately exhaustive (rather than using a catch-all arm) so
+    // that a new `IcCdkCallError` variant forces us to revisit this mapping
+    // instead of silently classifying it as `RejectCode::SysTransient`.
+    fn from(err: IcCdkCallError) -> Self {
+        let (code, description) = match err {
+            IcCdkCallError::CallRejected(rejected) => (
+                rejected.raw_reject_code() as i32,
+                rejected.reject_message().to_string(),
+            ),
+
+            // A response that cannot be decoded means the callee misbehaved.
+            IcCdkCallError::CandidDecodeFailed(err) => {
+                (RejectCode::CanisterError as i32, err.to_string())
+            }
+
+            // Neither of these ever left this canister, so the call may well
+            // succeed if retried.
+            IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
+                (RejectCode::SysTransient as i32, err.to_string())
+            }
+            IcCdkCallError::CallPerformFailed(err) => {
+                (RejectCode::SysTransient as i32, err.to_string())
+            }
+        };
+
         Self {
-            code: Some(value.0 as i32),
-            description: value.1,
+            code: Some(code),
+            description,
         }
     }
 }

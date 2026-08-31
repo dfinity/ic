@@ -15,13 +15,11 @@ Success::
 2. Http request to invalid http endpoint returns a transient timeout error.
 
 end::catalog[] */
-#![allow(deprecated)]
 
 use anyhow::Result;
 use anyhow::bail;
 use canister_http::*;
 use dfn_candid::candid_one;
-use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -29,7 +27,7 @@ use ic_system_test_driver::driver::test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACK
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
-use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
+use proxy_canister::{RejectionCode, RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 
 fn main() -> Result<()> {

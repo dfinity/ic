@@ -38,7 +38,7 @@ fn state_machine_for_test(instructions_limit: u64) -> StateMachine {
 
 #[test]
 fn test_next_message_if_over_instructions() {
-    let instructions_limit = 500_000;
+    let instructions_limit = 1_000_000;
     let state_machine = state_machine_for_test(instructions_limit);
 
     let long_message_wasm = Project::cargo_bin_maybe_from_env("long-message-canister", &[]);

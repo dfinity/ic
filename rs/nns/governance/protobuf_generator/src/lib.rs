@@ -89,6 +89,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         ".registry.replica_version.v1",
         "::ic-protobuf::registry::replica-version::v1",
     );
+    config.extern_path(".types.v1", "::ic-protobuf::types::v1");
 
     config.type_attribute(".", "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]");
 

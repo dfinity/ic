@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""
+Derive instructions for Claude from STANDARDS_AND_CONVENTIONS.md (the "source"
+file).
+
+Basically, this produces a file at
+standards_and_conventions/claude_author_instructions.md, which contains a subset
+of the source file. The reason for this smaller file is to avoid overwhelming
+Claude.
+
+Content in the source file that gets excluded are surrounded by paren, or double
+paren. Blank lines are not allowed within single paren. Double paren must occur
+on their own line.
+
+The plan is to also generate instructions for a collection of Claude reviewers.
+
+Currently, paren in paren is not supported.
+"""
+
+import re
+import sys
+from pathlib import Path
+
+LOCAL_DIRECTORY = Path(__file__).resolve().parent
+SOURCE = LOCAL_DIRECTORY / "../STANDARDS_AND_CONVENTIONS.md"
+OUTPUT = LOCAL_DIRECTORY / "claude_author_instructions.md"
+
+FRONT_MATTER = (
+    "This file is derived mechanically from STANDARDS_AND_CONVENTIONS.md, and\n"
+    "tells Claude how to write code here.\n"
+)
+
+ENCLOSED_BY_DOUBLE_PAREN_RE = re.compile(r"^\(\(\s*$\n(.*?)^\)\)\s*$\n?", re.DOTALL | re.MULTILINE)
+ENCLOSED_BY_SINGLE_PAREN_RE = re.compile(r"\([^()]*\)", re.DOTALL)
+
+CODE_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
+INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+PLACEHOLDER_RE = re.compile(r"\x00CODE\d+\x00")
+
+
+# This is a hack to prevent code snippets from messing with paren exclusion.
+def protect_code(text):
+    """Replace all inline `code` and ```fenced``` blocks with opaque
+    placeholders, so no later step ever sees a paren that's really Rust
+    syntax rather than exclusion markup."""
+    saved = []
+
+    def save(m):
+        saved.append(m.group(0))
+        return f"\x00CODE{len(saved) - 1}\x00"
+
+    text = CODE_BLOCK_RE.sub(save, text)
+    text = INLINE_CODE_RE.sub(save, text)
+    return text, saved
+
+
+def restore_code(text, saved):
+    return PLACEHOLDER_RE.sub(lambda m: saved[int(m.group(0)[5:-1])], text)
+
+
+def strip_section_markers(text):
+    dropped = []
+
+    def record(m):
+        dropped.append(m.group(0))
+        return ""
+
+    return ENCLOSED_BY_DOUBLE_PAREN_RE.sub(record, text), dropped
+
+
+def strip_parens_to_fixed_point(text):
+    dropped = []
+    while True:
+        matches = list(ENCLOSED_BY_SINGLE_PAREN_RE.finditer(text))
+        if not matches:
+            break
+        dropped.extend(m.group(0) for m in matches)
+        text = ENCLOSED_BY_SINGLE_PAREN_RE.sub("", text)
+    return text, dropped
+
+
+# TODO: Add --check, or something, which would be used in CI to block changes
+# where there are violations.
+def find_violations(text):
+    # Code is already protected by the time this runs, so any paren seen
+    # here is a real markup paren, not Rust syntax.
+    violations = []
+    for m in re.finditer(r"\(([^()]*(?:\([^()]*\)[^()]*)*)\)", text, re.DOTALL):
+        span = m.group(0)
+        if span.count("(") > 1:
+            violations.append(("nested parens", span))
+        elif "\n\n" in span:
+            violations.append(("blank line inside single parens", span))
+    return violations
+
+
+def cleanup_whitespace(text):
+    # Collapse repeated internal whitespace (e.g. a double space left behind
+    # by a removed parenthetical), but never touch a line's leading
+    # indentation -- hanging indents and nested list bullets are meaningful.
+    def collapse_line(line):
+        stripped = line.lstrip(" \t")
+        indent = line[: len(line) - len(stripped)]
+        content = re.sub(r"[ \t]+", " ", stripped)
+        content = re.sub(r" +([.,:;)])", r"\1", content).rstrip()
+        return indent + content if content else ""
+
+    text = "\n".join(collapse_line(line) for line in text.split("\n"))
+    text = re.sub(r"\n{3,}", "\n\n\n", text)
+    return text
+
+
+def main():
+    original = SOURCE.read_text(encoding="utf-8")
+
+    protected, saved_code = protect_code(original)
+
+    text, dropped_sections = strip_section_markers(protected)
+
+    violations = find_violations(text)
+    for kind, span in violations:
+        print(f"WARNING: {kind}: {restore_code(span, saved_code)!r}", file=sys.stderr)
+
+    text, dropped_spans = strip_parens_to_fixed_point(text)
+    text = cleanup_whitespace(text).strip() + "\n"
+    text = restore_code(text, saved_code)
+
+    def non_whitespace_len(s):
+        return sum(1 for c in s if not c.isspace())
+
+    original_chars = non_whitespace_len(original)
+    kept_chars = non_whitespace_len(text)
+    cut_chars = original_chars - kept_chars
+
+    OUTPUT.write_text(FRONT_MATTER + "\n\n" + text, encoding="utf-8")
+
+    print(f"Wrote {OUTPUT.relative_to(LOCAL_DIRECTORY.parent)}")
+    print(f"Original non-whitespace chars: {original_chars}")
+    print(f"Kept (author AI):              {kept_chars}")
+    print(f"Cut:                           {cut_chars} ({100 * cut_chars / original_chars:.1f}%)")
+    print(f"Whole sections dropped:        {len(dropped_sections)}")
+    print(f"Paren spans dropped:           {len(dropped_spans)}")
+    if violations:
+        print(f"\n{len(violations)} markup violation(s) found (see warnings above)", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use candid::{CandidType, Encode, Principal};
 use ic_canister_log::log;
 use ic_cdk::call::{Call, CallFailed, OnewayError, RejectCode};
-use ic_cdk::management_canister::{
+use ic_cdk_management_canister::{
     CanisterInstallMode, CanisterSettings, CanisterStatusArgs, CreateCanisterArgs,
     DepositCyclesArgs, InstallCodeArgs, StartCanisterArgs, StopCanisterArgs, canister_status,
     install_code, start_canister, stop_canister,
@@ -247,7 +247,7 @@ impl CanisterRuntime for IcCanisterRuntime {
                 method: "create_canister".to_string(),
                 reason: Reason::from_call_failed(err),
             })?
-            .candid::<ic_cdk::management_canister::CreateCanisterResult>()
+            .candid::<ic_cdk_management_canister::CreateCanisterResult>()
             .map_err(|err| CallError {
                 method: "create_canister".to_string(),
                 reason: Reason::InternalError(format!("candid decode failed: {err}")),

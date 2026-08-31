@@ -11,7 +11,7 @@ use ic_nervous_system_integration_tests::{
         upgrade_nns_canister_to_tip_of_master_or_panic,
     },
 };
-use ic_nns_constants::{self, GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{self, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm,
     create_modified_sns_wasm,
@@ -137,7 +137,8 @@ async fn test_upgrade_existing_sns() {
     )
     .await;
 
-    eprintln!("Step 3. Upgrade NNS Governance and SNS-W to the latest version ...");
+    eprintln!("Step 3. Upgrade NNS Root, Governance, and SNS-W to the latest version ...");
+    upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, ROOT_CANISTER_ID).await;
     upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, GOVERNANCE_CANISTER_ID).await;
     upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, SNS_WASM_CANISTER_ID).await;
 

@@ -117,10 +117,16 @@ pub async fn process_controllers_changed(
     };
 
     // These checks are repeated because the canisters may have changed since validation:
-    let ProcessingResult::Success(migrated_canister_status) =
-        canister_status(request.migrated_canister).await
-    else {
-        return ProcessingResult::NoProgress;
+    let migrated_canister_status = match canister_status(request.migrated_canister).await {
+        ProcessingResult::Success(s) => s,
+        ProcessingResult::FatalFailure(_) => {
+            return ProcessingResult::FatalFailure(RequestState::Failed {
+                request,
+                recovery_state: RecoveryState::new(),
+                reason: "Migrated canister not found.".to_string(),
+            });
+        }
+        ProcessingResult::NoProgress => return ProcessingResult::NoProgress,
     };
     if migrated_canister_status.status != CanisterStatusType::Stopped {
         return ProcessingResult::FatalFailure(RequestState::Failed {
@@ -145,10 +151,16 @@ pub async fn process_controllers_changed(
         });
     }
 
-    let ProcessingResult::Success(replaced_canister_status) =
-        canister_status(request.replaced_canister).await
-    else {
-        return ProcessingResult::NoProgress;
+    let replaced_canister_status = match canister_status(request.replaced_canister).await {
+        ProcessingResult::Success(s) => s,
+        ProcessingResult::FatalFailure(_) => {
+            return ProcessingResult::FatalFailure(RequestState::Failed {
+                request,
+                recovery_state: RecoveryState::new(),
+                reason: "Replaced canister not found.".to_string(),
+            });
+        }
+        ProcessingResult::NoProgress => return ProcessingResult::NoProgress,
     };
     if replaced_canister_status.status != CanisterStatusType::Stopped {
         return ProcessingResult::FatalFailure(RequestState::Failed {
@@ -339,14 +351,19 @@ pub async fn process_migrated_canister_deleted(
         .filter(|x| **x != canister_self())
         .cloned()
         .collect::<Vec<Principal>>();
-    let ProcessingResult::Success(()) =
-        // The migration canister is the exclusive controller of `request.migrated_canister`
-        // and thus the following call cannot fail because of the caller
-        // not being a controller.
-        set_controllers(request.migrated_canister, controllers, request.replaced_canister_subnet).await
-    else {
-        return ProcessingResult::NoProgress;
-    };
+    // The migration canister is the exclusive controller of `request.migrated_canister`
+    // and thus the following call cannot fail because of the caller
+    // not being a controller.
+    match set_controllers(
+        request.migrated_canister,
+        controllers,
+        request.replaced_canister_subnet,
+    )
+    .await
+    {
+        ProcessingResult::Success(()) | ProcessingResult::FatalFailure(()) => {}
+        ProcessingResult::NoProgress => return ProcessingResult::NoProgress,
+    }
     ProcessingResult::Success(RequestState::RestoredControllers { request })
 }
 

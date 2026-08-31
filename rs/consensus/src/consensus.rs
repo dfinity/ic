@@ -266,12 +266,13 @@ impl ConsensusImpl {
                 crypto.clone(),
                 state_manager.clone(),
                 message_routing.clone(),
+                registry_client.clone(),
                 logger.clone(),
             ),
             block_maker: BlockMaker::new(
                 Arc::clone(&time_source) as Arc<_>,
                 replica_config.clone(),
-                Arc::clone(&registry_client),
+                registry_client.clone(),
                 membership.clone(),
                 crypto.clone(),
                 payload_builder.clone(),
@@ -285,7 +286,7 @@ impl ConsensusImpl {
             validator: Validator::new(
                 replica_config.clone(),
                 membership.clone(),
-                Arc::clone(&registry_client),
+                registry_client.clone(),
                 crypto.clone(),
                 payload_builder,
                 state_manager.clone(),
@@ -300,6 +301,8 @@ impl ConsensusImpl {
                 membership,
                 message_routing.clone(),
                 crypto.clone(),
+                registry_client.clone(),
+                replica_config.clone(),
                 logger.clone(),
             ),
             purger: Purger::new(
@@ -649,7 +652,7 @@ impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for Consensus
 mod tests {
     use super::*;
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -664,20 +667,12 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{CryptoHashOfState, Height, SubnetId, crypto::CryptoHash};
+    use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash};
     use std::sync::Arc;
 
     fn set_up_consensus_with_subnet_record(
         record: SubnetRecord,
         pool_config: ArtifactPoolConfig,
-    ) -> (ConsensusImpl, TestConsensusPool, Arc<FastForwardTimeSource>) {
-        set_up_consensus_with_subnet_record_and_subnet_id(record, pool_config, subnet_test_id(0))
-    }
-
-    fn set_up_consensus_with_subnet_record_and_subnet_id(
-        record: SubnetRecord,
-        pool_config: ArtifactPoolConfig,
-        subnet_id: SubnetId,
     ) -> (ConsensusImpl, TestConsensusPool, Arc<FastForwardTimeSource>) {
         let Dependencies {
             pool,
@@ -690,7 +685,8 @@ mod tests {
             idkg_pool,
             upgrade_permit_auth_pool,
             ..
-        } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record)]);
+        } = DependenciesBuilder::single_subnet(pool_config, subnet_test_id(0), vec![(1, record)])
+            .build();
         state_manager
             .get_mut()
             .expect_latest_certified_height()
@@ -707,8 +703,8 @@ mod tests {
         let metrics_registry = MetricsRegistry::new();
 
         let consensus_impl = ConsensusImpl::new(
-            replica_config,
-            registry,
+            replica_config.clone(),
+            registry.clone(),
             pool.get_cache(),
             crypto.clone(),
             Arc::new(FakeIngressSelector::new()),
@@ -725,6 +721,8 @@ mod tests {
                 crypto,
                 no_op_logger(),
                 &PoolReader::new(&pool),
+                registry,
+                replica_config,
             ))),
             Arc::new(FakeMessageRouting::new()),
             state_manager,

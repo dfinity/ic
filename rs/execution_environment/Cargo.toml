@@ -55,7 +55,6 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
-wasmparser = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -87,7 +86,7 @@ proptest = { workspace = true }
 regex-lite = { workspace = true }
 rstest = { workspace = true }
 serde_bytes = { workspace = true }
-test-strategy = "0.3.1"
+test-strategy = { workspace = true }
 wat = { workspace = true }
 wirm = { workspace = true }
 

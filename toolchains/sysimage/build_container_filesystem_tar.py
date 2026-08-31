@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import subprocess
+import tarfile
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -31,7 +33,7 @@ class BaseImageOverride:
 def get_storage_dir_args():
     if "PODMAN_STORAGE_DIR" in os.environ:
         base = os.environ.get("PODMAN_STORAGE_DIR")
-        return f"--root {base}/root --runroot {base}/runroot"
+        return f"--root {base}/root --runroot {base}/runroot --tmpdir {base}/tmpdir"
     else:
         return ""
 
@@ -105,22 +107,27 @@ def export_container_filesystem(image_tag: str, destination_tar_filename: str):
     Export the filesystem from an image.
     Creates container - but does not start it, avoiding timestamp and other determinism issues.
     """
-    # tempfile cleanup is handled by proc_wrapper.sh
-    tempdir = tempfile.mkdtemp()
-    tar_file = tempdir + "/temp.tar"
-    fakeroot_statefile = tempdir + "/fakeroot.state"
-    tar_dir = tempdir + "/tar"
-
     container_name = image_tag + "_container"
     storage_args = get_storage_dir_args()
 
     invoke.run(f"podman {storage_args} create --name {container_name} {image_tag}")
-    invoke.run(f"podman {storage_args} export -o {tar_file} {container_name}")
-    invoke.run(f"mkdir -p {tar_dir}")
-    invoke.run(f"fakeroot -s {fakeroot_statefile} tar xpf {tar_file} --same-owner --numeric-owner -C {tar_dir}")
-    invoke.run(
-        f"fakeroot -i {fakeroot_statefile} tar cf {destination_tar_filename} --mtime='UTC 1970-01-01 00:00:00' --numeric-owner --sort=name --exclude='run/*' -C {tar_dir} $(ls -A {tar_dir})"
-    )
+
+    with subprocess.Popen(f"podman {storage_args} export {container_name}", stdout=subprocess.PIPE, shell=True) as proc:
+        with tarfile.open(fileobj=proc.stdout, mode="r|") as source, tarfile.open(
+            destination_tar_filename, "w|", format=tarfile.GNU_FORMAT
+        ) as destination:
+            for member in source:
+                if member.name.startswith("run/"):
+                    continue
+
+                if member.islnk() and member.linkname.startswith("run/"):
+                    raise RuntimeError(f"{member.name} is a hard link to `/run`, which is stripped out of the image")
+
+                data = source.extractfile(member) if member.isfile() else None
+                destination.addfile(member.replace(mtime=0, uname="", gname="", deep=False), data)
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"podman export failed (exit {proc.returncode})")
 
 
 def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:

@@ -370,7 +370,7 @@ fn should_fail_parsing_ec_keys_on_unsupported_curves() {
         assert_matches!(
             pk_result,
             Err(CryptoError::MalformedPublicKey { internal_error, .. })
-            if internal_error.contains("Unsupported or unparsable public key")
+            if internal_error.contains("Unsupported public key algorithm identifier")
         );
     }
 }
@@ -443,4 +443,24 @@ fn crypto_component(config: &CryptoConfig) -> CryptoComponent {
     ic_crypto_node_key_generation::generate_node_signing_keys(vault.as_ref());
 
     CryptoComponent::new(config, None, Arc::new(dummy_registry), no_op_logger(), None)
+}
+
+#[test]
+fn should_report_the_algorithm_identifier_of_an_unsupported_public_key() {
+    // A valid prime192v1 public key, i.e. a supported algorithm OID (ECDSA) with
+    // an unsupported curve OID as its parameters.
+    const VALID_PRIME192V1_PUBKEY_DER_HEX: &str = "3049301306072a8648ce3d020106082a8648ce3d0301010332000425adc4047e9dcf0d7efbe6bb6e76794555c51f0dfd6f7f90f3067f69e17e989d5969f68e9aefbef70a1788af0b86c03e";
+    let pk_der = hex::decode(VALID_PRIME192V1_PUBKEY_DER_HEX).expect("invalid hex");
+
+    let error = user_public_key_from_bytes(&pk_der).unwrap_err();
+
+    let CryptoError::MalformedPublicKey { internal_error, .. } = &error else {
+        panic!("unexpected error: {error}");
+    };
+    // The identifier is rendered in full, i.e. it is not truncated.
+    assert!(
+        internal_error.starts_with("Unsupported public key algorithm identifier:")
+            && !internal_error.ends_with("..."),
+        "unexpected error: {internal_error}"
+    );
 }

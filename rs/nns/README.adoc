@@ -2,6 +2,19 @@
 
 This directory is intended to contain the various canisters, and possibly command-line tools, used for decentralized control of the Internet Computer.
 
+## Canister call graph
+
+The diagram below shows how NNS backend canisters talk to one another,
+giving an overview of the system.
+
+image::docs/canister_call_graph.svg[NNS backend canisters: inter-canister call graph,width=900]
+
+To regenerate `rs/nns/docs/canister_call_graph.svg` after editing `rs/nns/docs/canister_call_graph.dot`, run:
+[code,shell]
+----
+dot -Tsvg rs/nns/docs/canister_call_graph.dot -o rs/nns/docs/canister_call_graph.svg
+----
+
 ## Deploying the NNS canisters
 
 Before using the NNS a range of canisters must be deployed into the

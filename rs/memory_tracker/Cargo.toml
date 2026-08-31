@@ -14,7 +14,6 @@ ic-logger = { path = "../monitoring/logger" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
-lazy_static = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }

@@ -202,7 +202,7 @@ mod test {
     use ic_interfaces::dkg::DkgPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::FakeSigner;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
         NodeId,
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -218,7 +218,7 @@ mod test {
             target_subnet: NiDkgTargetSubnet::Local,
         };
         dkg::Message {
-            content: dkg::DealingContent::new(dummy_dealing(0), dkg_id),
+            content: dkg::DealingContent::new(dummy_dealing(0), dkg_id, test_replica_version()),
             signature: BasicSignature::fake(node_id),
         }
     }

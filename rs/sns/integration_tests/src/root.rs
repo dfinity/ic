@@ -3,7 +3,7 @@ use canister_test::Project;
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
-use ic_management_canister_types_private::CanisterInstallMode;
+use ic_management_canister_types_private::{CanisterInstallMode, CanisterInstallModeV2};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
@@ -315,7 +315,7 @@ fn test_root_restarts_governance_on_stop_canister_timeout() {
 
     let proposal = ChangeCanisterRequest {
         stop_before_installing: true,
-        mode: CanisterInstallMode::Upgrade,
+        mode: CanisterInstallModeV2::Upgrade(None),
         canister_id: GOVERNANCE_CANISTER_ID,
         wasm_module,
         arg: vec![],

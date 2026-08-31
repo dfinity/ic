@@ -15,7 +15,7 @@ use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
-use ic_types::ReplicaVersion;
+use ic_test_utilities_types::ids::test_replica_version;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use maplit::btreemap;
 use pocket_ic::common::rest::{
@@ -753,7 +753,7 @@ fn create_subnet_in_registry_canister() {
     for node_id in [node_id_1, node_id_2] {
         let create_subnet_payload = CreateSubnetPayload {
             node_ids: vec![NodeId::new(PrincipalId(node_id))],
-            replica_version_id: ReplicaVersion::default().to_string(),
+            replica_version_id: test_replica_version().to_string(),
             ..Default::default()
         };
         update_candid_as::<_, (Result<NewSubnet, String>,)>(

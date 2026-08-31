@@ -10,7 +10,7 @@ if ! "$RUFF" check . || ! "$RUFF" format . --check; then
 
 [-] Linting Python files failed
     Please run the following command to fix it:
-    $ bazel run //:ruff-format
+    $ bazel run //:ruff-fix
 EOF
     exit 1
 fi

@@ -10,13 +10,13 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::{replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord};
 use ic_registry_keys::{make_replica_version_key, make_subnet_record_key};
-use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
 
 use assert_matches::assert_matches;
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
 };
-use ic_types::ReplicaVersion;
+use lazy_static::lazy_static;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
@@ -27,25 +27,18 @@ use registry_canister::{
 
 const MOCK_HASH: &str = "acdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdc";
 
-fn guest_launch_measurements_for_test() -> Option<GuestLaunchMeasurements> {
-    Some(GuestLaunchMeasurements {
-        guest_launch_measurements: vec![
-            GuestLaunchMeasurement {
-                measurement: vec![0x42; 48],
-                metadata: Some(GuestLaunchMeasurementMetadata {
-                    kernel_cmdline: Some("foo=bar".into()),
-                    vcpu_type: None,
-                }),
-            },
-            GuestLaunchMeasurement {
-                measurement: vec![0x42; 48],
-                metadata: Some(GuestLaunchMeasurementMetadata {
-                    kernel_cmdline: Some("hello=world".into()),
-                    vcpu_type: None,
-                }),
-            },
-        ],
-    })
+lazy_static! {
+    static ref GUEST_LAUNCH_MEASUREMENTS: GuestLaunchMeasurements = GuestLaunchMeasurements {
+        guest_launch_measurements: vec![GuestLaunchMeasurement {
+            // An SEV-SNP measurement is exactly 48 bytes long. The value itself
+            // does not matter here.
+            measurement: vec![0x42; 48],
+            metadata: Some(GuestLaunchMeasurementMetadata {
+                kernel_cmdline: Some("foo=bar".to_string()),
+                vcpu_type: None,
+            }),
+        }],
+    };
 }
 
 #[test]
@@ -188,7 +181,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             replica_version_to_elect: Some(replica_version_id.into()),
             release_package_sha256_hex: Some(MOCK_HASH.into()),
             release_package_urls: vec![release_package_url.clone()],
-            guest_launch_measurements: guest_launch_measurements_for_test(),
+            guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
             replica_versions_to_unelect: vec![],
         };
         assert!(
@@ -215,7 +208,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             replica_version_to_elect: Some(replica_version_id.into()),
             release_package_sha256_hex: None,
             release_package_urls: vec![],
-            guest_launch_measurements: guest_launch_measurements_for_test(),
+            guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
             replica_versions_to_unelect: vec![],
         };
         assert!(
@@ -235,9 +228,10 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await,
             ReplicaVersionRecord {
+                replica_version_id: Some(replica_version_id.to_string()),
                 release_package_sha256_hex: MOCK_HASH.into(),
                 release_package_urls: vec![release_package_url.clone()],
-                guest_launch_measurements: guest_launch_measurements_for_test(),
+                guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
             }
         );
 
@@ -247,7 +241,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         // Set the subnet to an elected version: it should work
         let set_to_elected_ = DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_test_id(999).get(),
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
         };
         assert!(
             forward_call_via_universal_canister(
@@ -265,7 +259,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await
             .replica_version_id,
-            ReplicaVersion::default().to_string(),
+            test_replica_version().to_string(),
         );
 
         // Try to set the subnet to an unelected version: it should fail
@@ -289,7 +283,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await
             .replica_version_id,
-            ReplicaVersion::default().to_string(),
+            test_replica_version().to_string(),
         );
 
         Ok(())

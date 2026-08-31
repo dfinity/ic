@@ -284,7 +284,7 @@ pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResp
 mod tests {
     use super::*;
     use candid::Principal;
-    use ic_bn_lib_common::principal;
+    use ic_bn_lib::principal;
     use serde_cbor::Value;
     use std::collections::BTreeMap;
 

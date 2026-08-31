@@ -1,3 +1,4 @@
+use crate::canister_http_spent::CanisterHttpSpentMetrics;
 use crate::state_machine::{StateMachine, StateMachineImpl};
 use crate::{routing, scheduling};
 use ic_config::execution_environment::{
@@ -34,8 +35,7 @@ use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
-    DroppedMessageMetrics, FullTopology, NetworkTopology, OwnSubnetInfo, ReplicatedState,
-    SubnetTopology,
+    DroppedMessageMetrics, NetworkTopology, OwnSubnetInfo, ReplicatedState, SubnetTopology,
 };
 use ic_types::batch::{Batch, BatchContent, BatchSummary};
 use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
@@ -359,6 +359,9 @@ pub(crate) struct MessageRoutingMetrics {
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
 
+    /// Metrics for the accounting of HTTP outcall (cycles) spent reports and refunds.
+    pub(crate) canister_http_spent_metrics: CanisterHttpSpentMetrics,
+
     /// Metrics for the `next_checkpoint_height` passed to `process_batch`.
     next_checkpoint_height: IntGauge,
 }
@@ -502,6 +505,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
+
+            canister_http_spent_metrics: CanisterHttpSpentMetrics::new(metrics_registry),
 
             next_checkpoint_height: metrics_registry.int_gauge(
                 METRIC_NEXT_CHECKPOINT_HEIGHT,
@@ -997,7 +1002,7 @@ impl<RegistryClient_: RegistryClient> RegistryReader<RegistryClient_> {
         let subnet_ids = subnet_ids_record.unwrap_or_default();
 
         // Populate subnet topologies for all subnets.
-        let mut all_subnets = BTreeMap::new();
+        let mut subnets = BTreeMap::new();
 
         for subnet_id in &subnet_ids {
             let public_key = self
@@ -1118,7 +1123,7 @@ impl<RegistryClient_: RegistryClient> RegistryReader<RegistryClient_> {
                 );
             }
 
-            all_subnets.insert(
+            subnets.insert(
                 *subnet_id,
                 SubnetTopology {
                     public_key,
@@ -1128,27 +1133,17 @@ impl<RegistryClient_: RegistryClient> RegistryReader<RegistryClient_> {
                     chain_keys_held,
                     cost_schedule,
                     subnet_admins,
+                    cooling_down: subnet_record.cooling_down,
                 },
             );
         }
 
-        let full_routing_table = self
+        let routing_table = self
             .registry
             .get_routing_table(registry_version)
             .map_err(|err| registry_error("routing table", None, err))?
             .unwrap_or_default();
 
-        // All subnets see the full topology, including CloudEngine subnets.
-        let subnets: BTreeMap<_, _> = all_subnets
-            .iter()
-            .map(|(id, topo)| (*id, topo.clone()))
-            .collect();
-        let routing_table = full_routing_table
-            .iter()
-            .map(|(range, id)| (*range, *id))
-            .collect::<BTreeMap<_, _>>()
-            .try_into()
-            .map_err(|err| Persistent(format!("routing table err: {:?}", err)))?;
         let canister_migrations = self
             .registry
             .get_canister_migrations(registry_version)
@@ -1205,18 +1200,6 @@ impl<RegistryClient_: RegistryClient> RegistryReader<RegistryClient_> {
             })
             .collect();
 
-        // Only the NNS subnet needs the full (unfiltered) topology so that its
-        // certified state tree contains entries for every subnet (including
-        // cloud engines).
-        let full_topology = if own_subnet_id == nns_subnet_id {
-            Some(FullTopology {
-                subnets: all_subnets,
-                routing_table: Arc::new(full_routing_table),
-            })
-        } else {
-            None
-        };
-
         let api_boundary_nodes = self.try_to_populate_api_boundary_nodes(registry_version)?;
 
         Ok(NetworkTopology::new(
@@ -1227,7 +1210,6 @@ impl<RegistryClient_: RegistryClient> RegistryReader<RegistryClient_> {
             chain_key_enabled_subnets,
             self.bitcoin_config.testnet_canister_id,
             self.bitcoin_config.mainnet_canister_id,
-            full_topology,
             default_initial_dkg_subnet_id,
             api_boundary_nodes,
         ))

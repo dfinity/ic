@@ -10,8 +10,8 @@ use ic_embedders::{
     wasmtime_embedder::system_api::ExecutionParameters,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
-    SubnetAvailableMemoryError, WasmExecutionOutput,
+    HypervisorError, HypervisorResult, MessageMemoryUsage, SubnetAvailableMemoryError,
+    WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
 use ic_management_canister_types_private::{
@@ -23,10 +23,9 @@ use ic_replicated_state::canister_state::system_state::{
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
 use ic_sys::PAGE_SIZE;
-use ic_types::{
-    CanisterLog, CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall,
-};
+use ic_types::{CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall};
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
+use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 use ic_wasm_types::WasmHash;
 
 use crate::{
@@ -41,30 +40,6 @@ use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 #[cfg(test)]
 mod tests;
 
-/// Indicates whether the memory is kept or replaced with new (initial) memory.
-/// Applicable to both the stable memory and the main memory of a canister.
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub(crate) enum MemoryHandling {
-    /// Retain the memory.
-    Keep,
-    /// Reset the memory.
-    Replace,
-}
-
-/// Specifies the handling of the canister's memories.
-/// * On install and re-install:
-///   - Replace both the stable memory and the main memory.
-/// * On upgrade:
-///   - For canisters with enhanced orthogonal persistence (Motoko):
-///     Retain both the main memory and the stable memory.
-///   - For all other canisters:
-///     Retain only the stable memory and erase the main memory.
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub(crate) struct CanisterMemoryHandling {
-    pub stable_memory_handling: MemoryHandling,
-    pub main_memory_handling: MemoryHandling,
-}
-
 /// The main steps of `install_code` execution that may fail with an error or
 /// change the canister state.
 #[derive(Clone, Debug)]
@@ -72,8 +47,14 @@ pub(crate) struct CanisterMemoryHandling {
 pub(crate) enum InstallCodeStep {
     ValidateInput,
     ReplaceExecutionStateAndAllocations {
+        /// The execution state as returned by
+        /// `Hypervisor::create_execution_state`, i.e. with the memories that
+        /// this `install_code` preserves (if any) already in place. Replaying
+        /// this step hence re-applies those memories as they were at the time
+        /// of the original execution rather than re-deriving them from the
+        /// replayed canister state; the two agree because replaying the
+        /// preceding steps is deterministic.
         maybe_execution_state: HypervisorResult<ExecutionState>,
-        memory_handling: CanisterMemoryHandling,
     },
     ClearCertifiedData,
     ClearLog,
@@ -103,6 +84,8 @@ pub(crate) enum InstallCodeStep {
 pub(crate) struct PausedInstallCodeHelper {
     steps: Vec<InstallCodeStep>,
     instructions_left: NumInstructions,
+    initial_cycles_balance: Cycles,
+    executed_wasm_instructions: NumInstructions,
 }
 
 /// A helper that implements and keeps track of `install_code` steps.
@@ -124,12 +107,28 @@ pub(crate) struct InstallCodeHelper {
     deallocated_wasm_custom_sections_bytes: NumBytes,
     // The total heap delta of all steps.
     total_heap_delta: NumBytes,
+    // The cycles balance of the clean canister state this helper was built from.
+    initial_cycles_balance: Cycles,
+    /// Instructions already executed by this `install_code`, if previously
+    /// paused.
+    ///
+    /// *Finished* Wasm executions update the instruction limits in
+    /// `execution_parameters`. Paused slices only update the round limits. If
+    /// resuming a paused execution fails, the instruction limits are not
+    /// updated. Hence, we track the executed instructions, to make it possible
+    /// to charge for failed resumptions.
+    ///
+    /// Reset once a Wasm execution has finished and updated the instruction
+    /// limits correspondingly, so that the next Wasm execution (e.g.,
+    /// `canister_init` after `(start)`) starts counting from zero.
+    executed_wasm_instructions: NumInstructions,
 }
 
 impl InstallCodeHelper {
     pub fn new(clean_canister: &CanisterState, original: &OriginalContext) -> Self {
         Self {
             steps: vec![],
+            initial_cycles_balance: clean_canister.system_state.balance(),
             canister: clean_canister.clone(),
             message_instruction_limit: original.execution_parameters.instruction_limits.message(),
             execution_parameters: original.execution_parameters.clone(),
@@ -139,6 +138,7 @@ impl InstallCodeHelper {
             deallocated_bytes: NumBytes::new(0),
             deallocated_wasm_custom_sections_bytes: NumBytes::new(0),
             total_heap_delta: NumBytes::new(0),
+            executed_wasm_instructions: NumInstructions::new(0),
         }
     }
 
@@ -180,16 +180,16 @@ impl InstallCodeHelper {
             module_hash: module_hash.clone(),
         });
         let details = CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice());
-        let available_execution_memory_change =
-            self.canister
-                .add_canister_change(timestamp_nanos, origin, details);
-        match available_execution_memory_change {
-            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes) => {
-                self.allocated_bytes += allocated_bytes;
-            }
-            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes) => {
-                self.deallocated_bytes += deallocated_bytes;
-            }
+        // Recording the canister history entry changes the canister's allocated
+        // memory; accumulate that change so it is accounted for across the steps.
+        let old_allocated_bytes = self.canister.memory_allocated_bytes();
+        self.canister
+            .add_canister_change(timestamp_nanos, origin, details);
+        let new_allocated_bytes = self.canister.memory_allocated_bytes();
+        if new_allocated_bytes >= old_allocated_bytes {
+            self.allocated_bytes += new_allocated_bytes - old_allocated_bytes;
+        } else {
+            self.deallocated_bytes += old_allocated_bytes - new_allocated_bytes;
         }
     }
 
@@ -233,38 +233,78 @@ impl InstallCodeHelper {
 
     /// Returns a struct with all the necessary information to replay the
     /// performed `install_code` steps in subsequent rounds.
-    pub fn pause(self) -> PausedInstallCodeHelper {
+    /// The given `slice_executed_instructions` are the instructions executed by
+    /// the slice of the Wasm execution that is being paused; they are added to
+    /// the instructions executed by its earlier slices.
+    pub fn pause(self, slice_executed_instructions: NumInstructions) -> PausedInstallCodeHelper {
         PausedInstallCodeHelper {
             instructions_left: self.instructions_left(),
             steps: self.steps,
+            initial_cycles_balance: self.initial_cycles_balance,
+            executed_wasm_instructions: self.executed_wasm_instructions
+                + slice_executed_instructions,
         }
     }
 
     /// Replays the previous `install_code` steps on the given clean canister.
-    /// Returns an error if any step fails. Otherwise, it returns an instance of
-    /// the helper that can be used to continue the `install_code` execution.
+    /// Returns an error if the cycles balance of the clean canister dropped below
+    /// the cycles balance at the start of the DTS execution or if any step
+    /// fails. Otherwise, it returns an instance of the helper that can be used
+    /// to continue the `install_code` execution.
     #[allow(clippy::result_large_err)]
     pub fn resume(
         clean_canister: &CanisterState,
         paused: PausedInstallCodeHelper,
         original: &OriginalContext,
         round: &RoundContext,
-    ) -> Result<
-        Self,
-        (
-            CanisterManagerError,
-            NumInstructions,
-            (CanisterLog, LogMemoryStore),
-        ),
-    > {
+    ) -> Result<Self, (CanisterManagerError, NumInstructions, LogMemoryStore)> {
         let mut helper = Self::new(clean_canister, original);
         let paused_instructions_left = paused.instructions_left;
+        let executed_wasm_instructions = paused.executed_wasm_instructions;
+        // If resuming fails, then the instructions already executed by the paused
+        // Wasm execution are charged in addition to the instructions accounted
+        // for in `paused_instructions_left`: they have been executed and hence
+        // consumed round instructions, but the instruction limits of the helper
+        // are updated only when the Wasm execution finishes.
+        let instructions_left_on_error = NumInstructions::new(
+            paused_instructions_left
+                .get()
+                .saturating_sub(executed_wasm_instructions.get()),
+        );
+
+        // The cycles balance of the clean canister must not decrease during the
+        // DTS execution: the recorded steps are replayed on the clean canister
+        // state and a lower balance might no longer be able to cover them.
+        // An increase is safe: all cycles changes of the DTS execution are
+        // applied relative to the balance of the clean canister state and hence
+        // the additional cycles are preserved.
+        if helper.initial_cycles_balance < paused.initial_cycles_balance {
+            let msg = "Mismatch in cycles balance when resuming an install code".to_string();
+            let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
+            let err = (clean_canister.canister_id(), err).into();
+            return Err((
+                err,
+                instructions_left_on_error,
+                helper.clone_log_memory_store(),
+            ));
+        }
+
         for state_change in paused.steps.into_iter() {
             helper
                 .replay_step(state_change, original, round)
-                .map_err(|err| (err, paused_instructions_left, helper.take_canister_log()))?;
+                .map_err(|err| {
+                    (
+                        err,
+                        instructions_left_on_error,
+                        helper.clone_log_memory_store(),
+                    )
+                })?;
         }
         debug_assert_eq!(paused_instructions_left, helper.instructions_left());
+        // Replaying the steps of a Wasm execution that has already finished resets
+        // this counter (see `handle_wasm_execution`), so it is restored after
+        // replaying all the steps.
+        helper.executed_wasm_instructions = executed_wasm_instructions;
         Ok(helper)
     }
 
@@ -350,7 +390,7 @@ impl InstallCodeHelper {
                     original,
                     round,
                     CanisterManagerError::Hypervisor(self.canister.canister_id(), err),
-                    self.take_canister_log(),
+                    self.clone_log_memory_store(),
                 );
             }
         }
@@ -394,7 +434,7 @@ impl InstallCodeHelper {
                         original,
                         round,
                         err,
-                        self.take_canister_log(),
+                        self.clone_log_memory_store(),
                     );
                 }
             }
@@ -423,7 +463,7 @@ impl InstallCodeHelper {
                     original,
                     round,
                     err,
-                    self.take_canister_log(),
+                    self.clone_log_memory_store(),
                 );
             }
         }
@@ -467,7 +507,7 @@ impl InstallCodeHelper {
                         original,
                         round,
                         err,
-                        self.take_canister_log(),
+                        self.clone_log_memory_store(),
                     );
                 }
             }
@@ -538,21 +578,21 @@ impl InstallCodeHelper {
         Ok(())
     }
 
-    /// Replaces the execution state of the current canister with the freshly
-    /// created execution state. The stable memory and the main memory are
-    /// conditionally replaced based on the given `memory_handling`.
+    /// Replaces the execution state of the current canister with the newly
+    /// created execution state. Which memories the new execution state carries
+    /// (the initial ones of the new module or the preserved ones of the old
+    /// execution state) has already been decided by
+    /// `Hypervisor::create_execution_state`.
     ///
     /// It also updates the compute and memory allocations with the requested
     /// values in `original` context.
     pub fn replace_execution_state_and_allocations(
         &mut self,
         maybe_execution_state: HypervisorResult<ExecutionState>,
-        memory_handling: CanisterMemoryHandling,
     ) -> Result<(), CanisterManagerError> {
         self.steps
             .push(InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 maybe_execution_state: maybe_execution_state.clone(),
-                memory_handling,
             });
 
         let old_memory_usage = self.canister.memory_usage();
@@ -563,22 +603,11 @@ impl InstallCodeHelper {
             .as_ref()
             .map_or(NumBytes::new(0), |es| es.metadata.memory_usage());
 
-        // Replace the execution state and maybe the stable memory.
-        let mut execution_state =
+        // Replace the execution state, dropping the old one.
+        let execution_state =
             maybe_execution_state.map_err(|err| (self.canister.canister_id(), err))?;
 
         let new_wasm_custom_sections_memory_used = execution_state.metadata.memory_usage();
-
-        if let Some(old) = self.canister.execution_state.take() {
-            match memory_handling.stable_memory_handling {
-                MemoryHandling::Keep => execution_state.stable_memory = old.stable_memory,
-                MemoryHandling::Replace => {}
-            }
-            match memory_handling.main_memory_handling {
-                MemoryHandling::Keep => execution_state.wasm_memory = old.wasm_memory,
-                MemoryHandling::Replace => {}
-            }
-        };
 
         self.canister.execution_state = Some(execution_state);
 
@@ -618,13 +647,12 @@ impl InstallCodeHelper {
         }
     }
 
-    /// Takes the canister log.
-    pub(crate) fn take_canister_log(&mut self) -> (CanisterLog, LogMemoryStore) {
-        // TODO(DSM-105): Remove duplication when the migration is fully done.
-        (
-            self.canister.system_state.canister_log.take(),
-            self.canister.system_state.log_memory_store.clone(),
-        )
+    /// Returns a clone of the canister's log memory store.
+    ///
+    /// Cloning is cheap as the log memory store is backed by a persistent
+    /// `PageMap` whose clone creates an independent snapshot cheaply.
+    pub(crate) fn clone_log_memory_store(&self) -> LogMemoryStore {
+        self.canister.system_state.log_memory_store.clone()
     }
 
     /// Checks the result of Wasm execution and applies the state changes.
@@ -654,6 +682,11 @@ impl InstallCodeHelper {
         self.execution_parameters
             .instruction_limits
             .update(output.num_instructions_left);
+        // The instructions of all the slices of this Wasm execution are now
+        // reflected in the instruction limits above. Hence the next Wasm
+        // execution (e.g., `canister_init` after `(start)`) starts counting
+        // from zero.
+        self.executed_wasm_instructions = NumInstructions::new(0);
 
         debug_assert!(
             output
@@ -774,10 +807,7 @@ impl InstallCodeHelper {
             InstallCodeStep::ValidateInput => self.validate_input(original),
             InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 maybe_execution_state,
-                memory_handling,
-            } => {
-                self.replace_execution_state_and_allocations(maybe_execution_state, memory_handling)
-            }
+            } => self.replace_execution_state_and_allocations(maybe_execution_state),
             InstallCodeStep::ClearCertifiedData => {
                 self.clear_certified_data();
                 Ok(())
@@ -860,11 +890,11 @@ pub(crate) fn finish_err(
     original: OriginalContext,
     round: RoundContext,
     err: CanisterManagerError,
-    new_canister_log: (CanisterLog, LogMemoryStore),
+    new_log_memory_store: LogMemoryStore,
 ) -> DtsInstallCodeResult {
     let mut new_canister = clean_canister;
 
-    new_canister.set_log(new_canister_log);
+    new_canister.set_log(new_log_memory_store);
     new_canister
         .system_state
         .apply_ingress_induction_cycles_debit(

@@ -161,7 +161,6 @@ fn consensus_queue_is_emptied() {
     let ecdsa_key_id = make_ecdsa_key_id(0);
     let master_ecdsa_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
     let mut test = SchedulerTestBuilder::new()
-        .with_replica_version(ReplicaVersion::default())
         .with_chain_keys(vec![master_ecdsa_key_id.clone()])
         .build();
 
@@ -816,7 +815,7 @@ fn zero_instruction_overhead_config() -> SchedulerConfig {
         instruction_overhead_per_execution: NumInstructions::from(0),
         instruction_overhead_per_canister: NumInstructions::from(0),
         instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
-        dirty_page_overhead: NumInstructions::from(0),
+        page_overhead: NumInstructions::from(0),
         ..SchedulerConfig::application_subnet()
     }
 }

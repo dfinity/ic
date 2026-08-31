@@ -14,8 +14,8 @@ use ic_cketh_minter::numeric::{
 use ic_cketh_minter::state::audit::{EventType, apply_state_transition};
 use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
 use ic_cketh_minter::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex, WithdrawalRequest,
-    create_transaction,
+    Erc20WithdrawalRequest, EthWithdrawalRequest, PipelineRequest, ReimbursementIndex,
+    WithdrawalRequest,
 };
 use ic_cketh_minter::state::{MintedEvent, State};
 use ic_cketh_minter::tx::{
@@ -47,7 +47,18 @@ fn should_display_metadata() {
         .has_minimum_withdrawal_amount("10_000_000_000_000_000")
         .has_eth_balance("0")
         .has_total_effective_tx_fees("0")
-        .has_total_unspent_tx_fees("0");
+        .has_total_unspent_tx_fees("0")
+        .has_no_elements_matching("#sweeper-contract-address");
+
+    let dashboard = DashboardTemplate {
+        sweeper_contract_address: Some(
+            Address::from_str("0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38").unwrap(),
+        ),
+        ..dashboard
+    };
+
+    DashboardAssert::assert_that(dashboard)
+        .has_sweeper_contract_address("0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38");
 }
 
 #[test]
@@ -147,8 +158,7 @@ fn should_display_helper_smart_contracts() {
     ) {
         dashboard
             .log_scrapings
-            .set_contract_address(id, contract_address.parse().unwrap())
-            .unwrap();
+            .set_contract_address(id, contract_address.parse().unwrap());
         dashboard
             .log_scrapings
             .set_last_scraped_block_number(id, BlockNumber::from(last_scraped_block_number));
@@ -523,10 +533,7 @@ fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_in
                 TransactionStatus::Success,
             ),
         ] {
-            apply_state_transition(
-                &mut state,
-                &req.clone().into_accepted_withdrawal_request_event(),
-            );
+            apply_state_transition(&mut state, &accepted_withdrawal_request_event(req.clone()));
             apply_state_transition(
                 &mut state,
                 &EventType::CreatedTransaction {
@@ -550,7 +557,7 @@ fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_in
             ),
         ] {
             let withdrawal_id = req.cketh_ledger_burn_index();
-            apply_state_transition(&mut state, &req.into_accepted_withdrawal_request_event());
+            apply_state_transition(&mut state, &accepted_withdrawal_request_event(req));
             apply_state_transition(
                 &mut state,
                 &EventType::CreatedTransaction {
@@ -664,7 +671,7 @@ fn should_display_finalized_transactions_sorted_by_decreasing_cketh_ledger_burn_
             ),
         ] {
             let id = req.cketh_ledger_burn_index();
-            apply_state_transition(&mut state, &req.into_accepted_withdrawal_request_event());
+            apply_state_transition(&mut state, &accepted_withdrawal_request_event(req));
             apply_state_transition(
                 &mut state,
                 &EventType::CreatedTransaction {
@@ -830,10 +837,7 @@ fn should_display_reimbursed_requests() {
             ),
         ] {
             let id = req.cketh_ledger_burn_index();
-            apply_state_transition(
-                &mut state,
-                &req.clone().into_accepted_withdrawal_request_event(),
-            );
+            apply_state_transition(&mut state, &accepted_withdrawal_request_event(req.clone()));
             apply_state_transition(
                 &mut state,
                 &EventType::CreatedTransaction {
@@ -884,12 +888,16 @@ fn should_display_reimbursed_requests() {
                                 },
                             );
                         }
+                        WithdrawalRequest::SweeperFunding(_) => {
+                            unreachable!("sweeper funding is never reimbursed")
+                        }
                     }
                 } else {
                     apply_state_transition(
                         &mut state,
                         &EventType::QuarantinedReimbursement {
-                            index: ReimbursementIndex::from(&req),
+                            index: ReimbursementIndex::try_from(&req)
+                                .expect("BUG: this test's fixtures are all user withdrawals"),
                         },
                     )
                 }
@@ -1146,6 +1154,8 @@ fn initial_state() -> State {
         next_transaction_nonce: TransactionNonce::ZERO.into(),
         last_scraped_block_number: candid::Nat::from(INITIAL_LAST_SCRAPED_BLOCK_NUMBER),
         evm_rpc_id: None,
+        ethereum_sweeper_contract_address: None,
+        next_sweeper_transaction_nonce: None,
     })
     .expect("valid init args")
 }
@@ -1208,7 +1218,7 @@ fn add_finalized_transactions(state: &mut State, num_transactions: u64) {
             TransactionStatus::Success,
         );
         let id = req.cketh_ledger_burn_index();
-        apply_state_transition(state, &req.into_accepted_withdrawal_request_event());
+        apply_state_transition(state, &accepted_withdrawal_request_event(req));
         apply_state_transition(
             state,
             &EventType::CreatedTransaction {
@@ -1259,7 +1269,7 @@ fn add_reimbursed_transactions(state: &mut State, num_transactions: u64) {
             TransactionStatus::Failure,
         );
         let id = req.cketh_ledger_burn_index();
-        apply_state_transition(state, &req.into_accepted_withdrawal_request_event());
+        apply_state_transition(state, &accepted_withdrawal_request_event(req));
         apply_state_transition(
             state,
             &EventType::CreatedTransaction {
@@ -1351,6 +1361,16 @@ pub fn ckusdt() -> CkErc20Token {
             .unwrap(),
         ckerc20_token_symbol: "ckUSDT".parse().unwrap(),
         ckerc20_ledger_id: "sa4so-piaaa-aaaar-qacnq-cai".parse().unwrap(),
+    }
+}
+
+fn accepted_withdrawal_request_event(request: WithdrawalRequest) -> EventType {
+    match request {
+        WithdrawalRequest::CkEth(request) => EventType::AcceptedEthWithdrawalRequest(request),
+        WithdrawalRequest::CkErc20(request) => EventType::AcceptedErc20WithdrawalRequest(request),
+        WithdrawalRequest::SweeperFunding(request) => {
+            EventType::AcceptedSweeperFundingRequest(request)
+        }
     }
 }
 
@@ -1468,14 +1488,15 @@ fn ckerc20_withdrawal_flow(
         base_fee_per_gas: WeiPerGas::from(250_000_000_u64),
         max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
     };
-    let transaction = create_transaction(
-        &withdrawal_request.clone().into(),
-        nonce,
-        gas_fee,
-        GasAmount::from(65_000_u32),
-        EthereumNetwork::Sepolia,
-    )
-    .unwrap();
+    let pipeline_request: WithdrawalRequest = withdrawal_request.clone().into();
+    let transaction = pipeline_request
+        .create_transaction(
+            nonce,
+            gas_fee,
+            GasAmount::from(65_000_u32),
+            EthereumNetwork::Sepolia,
+        )
+        .unwrap();
     let dummy_signature = TransactionSignature {
         signature_y_parity: false,
         r: Default::default(),
@@ -1608,6 +1629,14 @@ mod assertions {
                 "#minter-address > td",
                 expected_address,
                 "wrong minter address",
+            )
+        }
+
+        pub fn has_sweeper_contract_address(&self, expected_address: &str) -> &Self {
+            self.has_string_value(
+                "#sweeper-contract-address > td",
+                expected_address,
+                "wrong sweeper contract address",
             )
         }
 

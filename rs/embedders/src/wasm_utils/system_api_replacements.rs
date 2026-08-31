@@ -18,7 +18,6 @@ use crate::{
 };
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_sys::PAGE_SIZE;
-use ic_types::NumInstructions;
 use wirm::{DataType, ir::types::Instructions, wasmparser::BlockType};
 
 use ic_types::NumBytes;
@@ -54,7 +53,6 @@ pub(super) fn replacement_functions(
     injected_functions: &InjectedFunctions,
     injected_counters: &InjectedCounters,
     stable_memory_index: u32,
-    dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
     max_wasm_memory_size: NumBytes,
 ) -> Vec<(SystemApiFunc, ReplacementFunction)> {
@@ -912,21 +910,6 @@ pub(super) fn replacement_functions(
                             function_index: injected_functions.internal_trap,
                         },
                         End,
-                        // Decrement instruction counter to charge for dirty pages
-                        LocalGet {
-                            local_index: DIRTY_PAGE_COUNT,
-                        },
-                        I64ExtendI32U,
-                        I64Const {
-                            value: dirty_page_overhead.get().try_into().unwrap(),
-                        },
-                        I64Mul,
-                        // Bounds check above should guarantee that we don't
-                        // overflow as the over head is a small constant.
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
                         // perform memory fill
                         LocalGet {
                             local_index: BYTEMAP_START,
@@ -1155,21 +1138,6 @@ pub(super) fn replacement_functions(
                             function_index: injected_functions.internal_trap,
                         },
                         End,
-                        // Decrement instruction counter to charge for dirty pages
-                        LocalGet {
-                            local_index: DIRTY_PAGE_COUNT,
-                        },
-                        I64ExtendI32U,
-                        I64Const {
-                            value: dirty_page_overhead.get().try_into().unwrap(),
-                        },
-                        I64Mul,
-                        // Bounds check above should guarantee that we don't
-                        // overflow as the over head is a small constant.
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
                         // perform memory fill
                         LocalGet {
                             local_index: BYTEMAP_START,

@@ -41,8 +41,8 @@ use ic_types::messages::{
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, CountBytes, MemoryAllocation,
-    NumBytes, NumInstructions, PrincipalId, Time,
+    CanisterId, CanisterTimer, ComputeAllocation, CountBytes, MemoryAllocation, NumBytes,
+    NumInstructions, PrincipalId, Time,
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, CyclesUseCaseKind,
@@ -594,10 +594,6 @@ pub struct SystemState {
     /// Status visibility of the canister.
     pub status_visibility: StatusVisibility,
 
-    /// Log records of the canister.
-    #[validate_eq(CompareWithValidateEq)]
-    pub canister_log: CanisterLog,
-
     /// The memory used for storing log entries.
     #[validate_eq(CompareWithValidateEq)]
     pub log_memory_store: LogMemoryStore,
@@ -786,10 +782,6 @@ impl SystemState {
             log_visibility: Default::default(),
             snapshot_visibility: Default::default(),
             status_visibility: Default::default(),
-            // TODO(EXC-2118): CanisterLog does not store log records efficiently,
-            // therefore it should not scale to memory limit from above.
-            // Remove this field after migration is done.
-            canister_log: CanisterLog::default_aggregate(),
             log_memory_store: LogMemoryStore::new(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
@@ -825,7 +817,6 @@ impl SystemState {
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
         status_visibility: StatusVisibility,
-        canister_log: CanisterLog,
         log_memory_store_data: Option<PageMap>,
         log_memory_store_persistent_next_idx: u64,
         wasm_memory_limit: Option<NumBytes>,
@@ -863,7 +854,6 @@ impl SystemState {
             log_visibility,
             snapshot_visibility,
             status_visibility,
-            canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(
                 log_memory_store_data,
                 log_memory_store_persistent_next_idx,
@@ -1052,8 +1042,11 @@ impl SystemState {
                 // some of the postponed charges free.
             }
         }
+        // Charge only the part of the debit that the balance can cover. The remaining
+        // debit is dropped, so it must not be reported as consumed either.
+        let charged_debit = self.ingress_induction_cycles_debit - remaining_debit;
         self.consume_cycles(CompoundCycles::<IngressInduction>::new(
-            self.ingress_induction_cycles_debit,
+            charged_debit,
             cost_schedule,
         ));
         self.ingress_induction_cycles_debit = Cycles::zero();
@@ -2054,6 +2047,11 @@ impl SystemState {
     /// the consumed amount. Should be used either for cases where a prepayment
     /// needs to be made (that will be refunded later with `refund_cycles`) or
     /// a direct charge happens without a prepayment (e.g. when paying for memory).
+    ///
+    /// Callers are expected to cover the requested amount out of the balances, or
+    /// to cap the requested amount at what the balances cover. As defense in depth
+    /// against a caller that does neither, any part that the balances cannot cover
+    /// is neither charged nor reported as consumed.
     pub fn consume_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
         let requested_real = requested_amount.real();
         let use_case = T::cycles_use_case();
@@ -2075,9 +2073,16 @@ impl SystemState {
             | CyclesUseCase::BurnedCycles
             | CyclesUseCase::DroppedMessages => requested_real,
         };
+        // Should the balance not cover the whole amount, the subtraction below
+        // saturates at zero and the uncovered part is never actually charged. Report
+        // only the part that the balance could cover as consumed, so that the consumed
+        // cycles metrics never exceed the cycles removed from the balance. This is
+        // defense in depth: the balance is expected to cover the whole amount.
+        let uncharged_amount = remaining_amount - self.cycles_balance;
         self.cycles_balance -= remaining_amount;
+        let charged_amount = requested_amount.minus_uncharged(uncharged_amount);
         self.observe_consumed_cycles_with_use_case(
-            requested_amount.nominal(),
+            charged_amount.nominal(),
             NominalCycles::zero(),
             use_case,
             ConsumingCycles::Prepayment,
@@ -2172,8 +2177,10 @@ impl SystemState {
             ConsumingCycles::Refund => {}
         }
 
-        // Skip if the consumed cycles are zero and no metric updates are needed.
-        if prepayment - refund == NominalCycles::zero() {
+        // Skip only if there is nothing to record at all. Note that a refund equal to
+        // its prepayment still has to lower the gauge by the refunded amount, even
+        // though it contributes nothing to the monotonic counter.
+        if prepayment == NominalCycles::zero() && refund == NominalCycles::zero() {
             return;
         }
 
@@ -2374,7 +2381,7 @@ impl SystemState {
     ) -> Cycles {
         self.cycles_balance
             + self.queues.attached_cycles()
-            + refunds.map(RefundPool::compute_total).unwrap_or_default()
+            + refunds.map(RefundPool::total).unwrap_or_default()
             + extra_cycles.unwrap_or_default()
     }
 
@@ -2704,10 +2711,6 @@ pub mod testing {
             log_visibility: Default::default(),
             snapshot_visibility: Default::default(),
             status_visibility: Default::default(),
-            // TODO(EXC-2118): CanisterLog does not store log records efficiently,
-            // therefore it should not scale to memory limit from above.
-            // Remove this field after migration is done.
-            canister_log: CanisterLog::default_aggregate(),
             log_memory_store: LogMemoryStore::new(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),

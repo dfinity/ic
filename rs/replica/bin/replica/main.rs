@@ -182,17 +182,16 @@ fn main() -> io::Result<()> {
         .as_ref()
         .map(|proto| CatchUpPackage::try_from(proto).expect("deserializing CUP failed"));
 
-    // Set the replica version and report as metric
-    setup::set_replica_version(&replica_args, &logger);
-
-    // Pin the versions from CLI args so they don't require lazy file reads.
-    let replica_args_ok = replica_args.as_ref().expect("failed to parse CLI args");
-    let guestos_version = replica_args_ok.guestos_version.clone();
-    let replica_version = replica_args_ok.replica_version.clone();
-    // Make ReplicaVersion::default() return the binary version (for legacy
-    // callers that still use ::default()).
-    let _ = ic_types::ReplicaVersion::set_default_version(replica_version.clone());
-
+    const UNKNOWN_REPLICA_VERSION: &str = "unknown_replica_version";
+    let replica_version = replica_args.as_ref().map_or_else(
+        |_| ReplicaVersion::try_from(UNKNOWN_REPLICA_VERSION).unwrap(),
+        |args| args.replica_version.clone(),
+    );
+    let guestos_version = replica_args.as_ref().map_or_else(
+        |_| ReplicaVersion::try_from(UNKNOWN_REPLICA_VERSION).unwrap(),
+        |args| args.guestos_version.clone(),
+    );
+    // Report replica version metric
     {
         let g = metrics_registry.int_gauge_vec(
             "ic_replica_info",
@@ -200,7 +199,7 @@ fn main() -> io::Result<()> {
             &["ic_active_version", "ic_replica_binary_hash"],
         );
         g.with_label_values(&[
-            ReplicaVersion::default().as_ref(),
+            replica_version.as_ref(),
             &get_replica_binary_hash()
                 .map(|x| x.1)
                 .unwrap_or_else(|_| "na".to_string()),
