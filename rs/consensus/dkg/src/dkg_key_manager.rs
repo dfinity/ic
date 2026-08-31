@@ -854,7 +854,7 @@ mod tests {
                 )
                 .with_replica_config(ReplicaConfig {
                     node_id: local_node_id,
-                    // The local node always start in the source subnet.
+                    // The local node always starts in the source subnet.
                     subnet_id: source_subnet_id,
                     replica_version: test_replica_version(),
                 })
