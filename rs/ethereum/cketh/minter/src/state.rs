@@ -544,10 +544,12 @@ impl State {
         // Cannot underflow: a sweep transaction is created, and resubmitted, only while its fee
         // stays within this ceiling, and the fee it actually pays is at most the fee it was signed
         // for.
+        let effective_fee = receipt.effective_transaction_fee();
         let unspent_fee = fee_ceiling
-            .checked_sub(receipt.effective_transaction_fee())
+            .checked_sub(effective_fee)
             .expect("BUG: a sweep may not pay more than its fee ceiling");
-        self.sweeper_funding.record_finalized_sweep(unspent_fee);
+        self.sweeper_funding
+            .record_finalized_sweep(effective_fee, unspent_fee);
     }
 
     fn update_balance_upon_withdrawal(

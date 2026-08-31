@@ -303,18 +303,14 @@ mod sweep_events {
         assert_eq!(state.sweeper_funding.cumulative_spent(), spent);
     }
 
-    /// Provisioning beyond what the minter has recorded as delivered — an upgrade that starts the
-    /// counters from zero, or a sweeper funded before it was tracked — floors the bound rather than
-    /// trapping, which would take the replay of every later event with it.
     #[tokio::test]
-    async fn should_floor_the_bound_at_zero_rather_than_trap() {
+    #[should_panic(expected = "underflow when subtracting")]
+    async fn should_panic_when_provisioning_more_than_was_delivered() {
         let (mut state, _request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
 
         state
             .sweeper_funding
             .record_accepted_sweep(PREPAID_SWEEP_GAS);
-
-        assert_eq!(bound(&state), Wei::ZERO);
     }
 
     fn bound(state: &State) -> Wei {

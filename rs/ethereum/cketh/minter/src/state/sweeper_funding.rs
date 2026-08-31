@@ -13,9 +13,19 @@
 mod tests;
 
 use crate::numeric::Wei;
+use crate::state::EthBalance;
 
-/// How much ckETH has been burned for sweeping and how much of it has actually been spent: the two
-/// sides of the invariant above.
+/// How much ckETH has been burned for sweeping and how much of it has actually been spent — the two
+/// sides of the invariant above — along with the sweeper address' own [`EthBalance`], which the
+/// spending side maintains.
+///
+/// The sweeper's [`EthBalance`] differs from the main address' in *when* it debits: the main
+/// address debits what a transaction actually cost once it finalizes, while the sweeper debits an
+/// accepted sweep's whole fee ceiling up front and is credited back the part it did not pay at
+/// finalization. Holding the gas early is what keeps the balance a lower bound while sweeps are in
+/// flight, and the sweep pipeline only accepts a sweep the balance covers, so an uncovered debit
+/// is a bug, exactly as on the main address. ETH anyone else sends to the sweeper is not tracked
+/// and only pushes its true balance above this record.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SweeperFundingAccounting {
     /// Grows when a funding is accepted, by the whole amount that funding may spend.
@@ -26,15 +36,7 @@ pub struct SweeperFundingAccounting {
     /// Grows at the same point by the fee the transaction paid, which it does either way. Together
     /// with the amount transferred it is the spend, which never overtakes the burn.
     cumulative_transaction_fees: Wei,
-    /// Grows when a sweep is accepted, by the most that sweep can cost the sweeper address: the
-    /// ceiling on its transaction fee, which caps every resubmission too. Not part of the invariant
-    /// above — this ETH was already counted as spent when the funding that delivered it finalized —
-    /// but subtracted from the balance bound, so that gas a committed sweep will consume stops
-    /// counting as available the moment it is committed.
-    cumulative_sweep_provisioned: Wei,
-    /// Grows when a sweep finalizes, by the part of that provision it turned out not to need: the
-    /// fee it did not pay.
-    cumulative_sweep_refunded: Wei,
+    sweeper_balance: EthBalance,
 }
 
 impl Default for SweeperFundingAccounting {
@@ -43,8 +45,7 @@ impl Default for SweeperFundingAccounting {
             cumulative_burned: Wei::ZERO,
             cumulative_transferred: Wei::ZERO,
             cumulative_transaction_fees: Wei::ZERO,
-            cumulative_sweep_provisioned: Wei::ZERO,
-            cumulative_sweep_refunded: Wei::ZERO,
+            sweeper_balance: EthBalance::default(),
         }
     }
 }
@@ -69,32 +70,30 @@ impl SweeperFundingAccounting {
             .cumulative_transaction_fees
             .checked_add(transaction_fee)
             .expect("BUG: overflow in cumulative sweeper funding fees");
+        self.sweeper_balance.eth_balance_add(transferred);
         // Checked eagerly so a violation surfaces at the transition that caused it.
         let _ = self.burned_not_yet_spent();
     }
 
-    /// Records the most an accepted sweep can cost the sweeper address, taking it out of the balance
-    /// bound up front. Recorded when the sweep is accepted rather than when its transaction is
-    /// signed, so that a sweep provisions once however many times the pipeline resubmits it — every
-    /// attempt is capped by the same fee ceiling.
+    /// Debits the most an accepted sweep can cost the sweeper address: the ceiling on its
+    /// transaction fee, which caps every resubmission too, so a sweep is debited once however many
+    /// times the pipeline resubmits it.
     ///
     /// Deliberately not added to [`Self::cumulative_spent`]: that counter is the minter's own ETH,
     /// and this ETH was counted there once already, when the funding that delivered it to the
     /// sweeper finalized. Counting it twice would make spend overtake burn and trip the invariant.
     pub fn record_accepted_sweep(&mut self, provisioned: Wei) {
-        self.cumulative_sweep_provisioned = self
-            .cumulative_sweep_provisioned
-            .checked_add(provisioned)
-            .expect("BUG: overflow in cumulative sweep provisioned");
+        self.sweeper_balance.eth_balance_sub(provisioned);
     }
 
-    /// Records the part of a finalized sweep's provision it did not need, putting it back into the
-    /// balance bound.
-    pub fn record_finalized_sweep(&mut self, refunded: Wei) {
-        self.cumulative_sweep_refunded = self
-            .cumulative_sweep_refunded
-            .checked_add(refunded)
-            .expect("BUG: overflow in cumulative sweep refunded");
+    /// Settles a finalized sweep against the hold its acceptance took: the fee it did not pay
+    /// comes back into the balance, and both fees are recorded exactly as the main address records
+    /// its own.
+    pub fn record_finalized_sweep(&mut self, effective_fee: Wei, unspent_fee: Wei) {
+        self.sweeper_balance.eth_balance_add(unspent_fee);
+        self.sweeper_balance
+            .total_effective_tx_fees_add(effective_fee);
+        self.sweeper_balance.total_unspent_tx_fees_add(unspent_fee);
     }
 
     /// Total ETH debited from the main address on account of sweeping.
@@ -109,26 +108,16 @@ impl SweeperFundingAccounting {
     }
 
     /// A lower bound on the sweeper address' ETH balance: what finalized fundings delivered, less
-    /// what accepted sweeps have provisioned, plus what finalized sweeps handed back.
+    /// the gas held for every sweep in flight and the fees finalized sweeps actually paid.
     ///
-    /// Provisioning at acceptance rather than at spend is what keeps this a bound while sweeps are in
+    /// Holding at acceptance rather than at spend is what keeps this a bound while sweeps are in
     /// flight: gas a committed sweep will pay stops counting as available immediately, and a sweep
     /// whose finalization is never observed leaves the bound too *low* — which brings a funding
     /// forward and makes it larger, since [`SweeperFundingConfig::amount_due`] tops up to the target
     /// from wherever the bound sits — rather than too high, which would let the minter believe in
-    /// gas that is gone. ETH sent to the address by anyone else only pushes the true balance further
-    /// above the bound.
-    ///
-    /// Saturating rather than checked: these counters are the minter's own record, and after an
-    /// upgrade that starts them from zero — or a sweeper address funded before the minter tracked it
-    /// — provisioning can legitimately exceed the deliveries. Trapping here would trap the replay of
-    /// every event after it, so it floors at zero, which reads as "assume nothing is prepaid".
+    /// gas that is gone.
     pub fn sweeper_balance_lower_bound(&self) -> Wei {
-        self.cumulative_transferred
-            .checked_add(self.cumulative_sweep_refunded)
-            .expect("BUG: overflow in the sweeper balance bound")
-            .checked_sub(self.cumulative_sweep_provisioned)
-            .unwrap_or(Wei::ZERO)
+        self.sweeper_balance.eth_balance()
     }
 
     /// ckETH burned for sweeping that has not been spent yet: the burn of a funding in flight, plus
