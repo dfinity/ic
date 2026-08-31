@@ -783,7 +783,7 @@ mod tests {
         let subnet_id = subnet_id(4);
         let version = RegistryVersion::from(2);
 
-        let replica_version = ReplicaVersion::try_from("some_version").unwrap();
+        let replica_version = ReplicaVersion::from_str("some_version").unwrap();
         let replica_version_record = ReplicaVersionRecord::default();
 
         let subnet_record = SubnetRecord {
@@ -966,15 +966,15 @@ mod tests {
         // Step 3: Verify result(s).
         assert_eq!(
             low_priority_result,
-            Some(ReplicaVersion::try_from("new").unwrap())
+            Some(ReplicaVersion::from_str("new").unwrap())
         );
         assert_eq!(
             high_priority_result,
-            Some(ReplicaVersion::try_from("old").unwrap())
+            Some(ReplicaVersion::from_str("old").unwrap())
         );
         assert_eq!(
             override_result,
-            Some(ReplicaVersion::try_from("override").unwrap())
+            Some(ReplicaVersion::from_str("override").unwrap())
         );
     }
 
@@ -1150,7 +1150,7 @@ mod tests {
         let subnet_id = subnet_id(4);
         let version = RegistryVersion::from(2);
         let max_block_payload_size_bytes = 4 * 1024 * 1024; // 4MiB
-        let replica_version = ReplicaVersion::try_from("some_version").unwrap();
+        let replica_version = ReplicaVersion::from_str("some_version").unwrap();
 
         let subnet_record = SubnetRecord {
             max_block_payload_size: max_block_payload_size_bytes,

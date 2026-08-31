@@ -6,7 +6,7 @@ use ic_config::execution_environment::{
     CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, SUBNET_CALLBACK_SOFT_LIMIT,
     SUBNET_MEMORY_RESERVATION,
 };
-use ic_config::subnet_config::{DEFAULT_DIRTY_PAGE_OVERHEAD, SubnetConfig};
+use ic_config::subnet_config::{DEFAULT_PAGE_OVERHEAD, SubnetConfig};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::RejectCode;
@@ -75,13 +75,12 @@ lazy_static! {
 /// (e.g. read-only accesses or non-replicated execution).
 ///
 /// Each first-accessed Wasm page (64 KiB) triggers `mark_wasm_page_accessed`,
-/// which charges one instruction per OS page in-band via the SIGSEGV handler
-/// when the deterministic memory tracker is enabled.  The number of OS pages
-/// per Wasm page varies by platform (4 KiB pages on Linux, 16 KiB on
-/// arm64-darwin).
+/// which charges `page_overhead` instructions per OS page in-band via the
+/// SIGSEGV handler.  The number of OS pages per Wasm page varies by platform
+/// (4 KiB pages on Linux, 16 KiB on arm64-darwin).
 pub fn deterministic_tracker_overhead(n_wasm_pages: u64) -> u64 {
     const WASM_PAGE_SIZE: u64 = 65536;
-    n_wasm_pages * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64) * DEFAULT_DIRTY_PAGE_OVERHEAD.get()
+    n_wasm_pages * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64) * DEFAULT_PAGE_OVERHEAD.get()
 }
 
 /// Returns the extra instruction overhead charged by the deterministic memory
@@ -89,8 +88,8 @@ pub fn deterministic_tracker_overhead(n_wasm_pages: u64) -> u64 {
 /// execution (DirtyPageTracking::Track).
 ///
 /// Each first-written Wasm page triggers both `mark_wasm_page_accessed` and
-/// `mark_wasm_page_dirty` via the SIGSEGV handler, charging two instructions
-/// per OS page when the deterministic memory tracker is enabled.
+/// `mark_wasm_page_dirty` via the SIGSEGV handler, charging `page_overhead`
+/// instructions twice per OS page.
 pub fn deterministic_tracker_write_overhead(n_wasm_pages: u64) -> u64 {
     2 * deterministic_tracker_overhead(n_wasm_pages)
 }

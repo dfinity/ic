@@ -21,14 +21,15 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPu
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{ReplicaLogger, debug, info, new_logger};
+use ic_logger::{ReplicaLogger, debug, info, new_logger, warn};
 use ic_types::NodeId;
 use ic_types::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::vetkd::VetKdDerivationContext;
 use ic_types::crypto::vetkd::{
-    VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
-    VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
+    VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareSigningContent,
+    VetKdKeyShareCombinationError, VetKdKeyShareCreationError, VetKdKeyShareVerificationError,
+    VetKdKeyVerificationError,
 };
 use ic_types::crypto::{BasicSig, BasicSigOf};
 use std::collections::BTreeMap;
@@ -239,12 +240,18 @@ fn create_encrypted_key_share_internal(
         )
         .map_err(vetkd_key_share_creation_error_from_vault_error)?;
 
-    let signature = basic_sig::sign(&encrypted_key_share, vault, metrics)
-        .map_err(VetKdKeyShareCreationError::KeyShareSigningError)?;
+    let node_signature = basic_sig::sign(
+        &VetKdEncryptedKeyShareSigningContent::new(&args, &encrypted_key_share),
+        vault,
+        metrics,
+    )
+    .map_err(VetKdKeyShareCreationError::KeyShareSigningError)?
+    .get()
+    .0;
 
     Ok(VetKdEncryptedKeyShare {
         encrypted_key_share,
-        node_signature: signature.get().0,
+        node_signature,
     })
 }
 
@@ -290,11 +297,13 @@ fn verify_encrypted_key_share_internal<S: CspSigner>(
         })?;
 
     let signature = BasicSigOf::new(BasicSig(key_share.node_signature.clone()));
+    let signed_content =
+        VetKdEncryptedKeyShareSigningContent::new(args, &key_share.encrypted_key_share);
     BasicSigVerifierInternal::verify_basic_sig(
         csp_signer,
         registry,
         &signature,
-        &key_share.encrypted_key_share,
+        &signed_content,
         signer,
         registry_version_from_store,
     )
@@ -344,26 +353,45 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                 VetKdKeyShareCombinationError::InvalidArgumentEncryptionPublicKey
             }
         })?;
+    // Skip shares that cannot be deserialized, or whose signer is not a receiver of the transcript.
     let clib_shares: Vec<(NodeId, NodeIndex, EncryptedKeyShare)> = shares
         .iter()
-        .map(|(&node_id, share)| {
-            let node_index = transcript_data_from_store.index(node_id).ok_or(
-                VetKdKeyShareCombinationError::InternalError(format!(
-                    "missing index for node with ID {node_id} in threshold \
-                        sig data store for NI-DKG ID {}",
+        .filter_map(|(&node_id, share)| {
+            let Some(node_index) = transcript_data_from_store.index(node_id) else {
+                warn!(
+                    every_n_seconds => 10,
+                    logger,
+                    "missing index for node with ID {node_id} in threshold sig data \
+                        store for NI-DKG ID {}: skipping its encrypted key share",
                     args.ni_dkg_id
-                )),
-            )?;
-            let clib_share = EncryptedKeyShare::deserialize(&share.encrypted_key_share.0).map_err(
-                |e| match e {
-                    EncryptedKeyShareDeserializationError::InvalidEncryptedKeyShare => {
-                        VetKdKeyShareCombinationError::InvalidArgumentEncryptedKeyShare
-                    }
-                },
-            )?;
-            Ok((node_id, *node_index, clib_share))
+                );
+                return None;
+            };
+            match EncryptedKeyShare::deserialize(&share.encrypted_key_share.0) {
+                Ok(clib_share) => Some((node_id, *node_index, clib_share)),
+                Err(EncryptedKeyShareDeserializationError::InvalidEncryptedKeyShare) => {
+                    warn!(
+                        every_n_seconds => 10,
+                        logger,
+                        "encrypted key share of node with ID {node_id} for NI-DKG ID {} \
+                            is malformed: skipping it",
+                        args.ni_dkg_id
+                    );
+                    None
+                }
+            }
         })
-        .collect::<Result<_, _>>()?;
+        .collect();
+    // `ensure_sufficient_shares_to_fail_fast` above already rejected the case of too
+    // few shares having been collected, so getting here means shares were skipped.
+    if clib_shares.len() < reconstruction_threshold {
+        return Err(VetKdKeyShareCombinationError::CombinationError(format!(
+            "only {} of {} encrypted key shares were usable, fewer than the \
+                reconstruction threshold of {reconstruction_threshold}",
+            clib_shares.len(),
+            shares.len()
+        )));
+    }
     let clib_shares_for_combine_all: BTreeMap<NodeIndex, EncryptedKeyShare> = clib_shares
         .iter()
         .map(|(_node_id, node_index, clib_share)| (*node_index, clib_share.clone()))

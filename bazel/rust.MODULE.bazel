@@ -1044,7 +1044,7 @@ crate.spec(
 )
 crate.spec(
     package = "mockall",
-    version = "^0.13.1",
+    version = "^0.15.0",
 )
 crate.spec(
     package = "mockito",

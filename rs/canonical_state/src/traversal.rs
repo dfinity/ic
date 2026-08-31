@@ -1199,7 +1199,9 @@ mod tests {
     #[test]
     fn test_traverse_subnet_metrics_includes_canister_consumed_cycles_at_v29() {
         use crate::encoding::encode_subnet_metrics;
-        use ic_types_cycles::{CompoundCycles, Instructions, NominalCycles};
+        use ic_types_cycles::{
+            CompoundCycles, CyclesUseCase, Instructions, NominalCycles, NominalCyclesTesting,
+        };
 
         let own_subnet_id = subnet_test_id(1);
         let mut state = ReplicatedState::new(own_subnet_id, SubnetType::Application);
@@ -1227,6 +1229,13 @@ mod tests {
             );
         });
 
+        // Non-zero subnet-level consumption, so that the reported total covers both
+        // parts: the subnet-level aggregate and the canisters' part below.
+        let subnet_metrics = &mut state.metadata.subnet_metrics;
+        subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::new(1_000));
+        subnet_metrics
+            .observe_consumed_cycles_with_use_case(CyclesUseCase::VetKd, NominalCycles::new(4));
+
         // Add a non-deleted canister that has consumed some cycles.
         let mut canister_state = new_canister_state(
             canister_test_id(2),
@@ -1249,15 +1258,22 @@ mod tests {
 
         // The tree reads the stored aggregate, which is zero until refreshed.
         assert_eq!(
-            state.metadata.subnet_metrics.consumed_cycles_by_canisters,
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters(),
             NominalCycles::zero()
         );
 
-        // The refresh publishes the fold into `SubnetMetrics`.
-        state.refresh_consumed_cycles_by_canisters();
+        let subnet_level = state.metadata.subnet_metrics.consumed_cycles_total();
+        assert!(subnet_level > NominalCycles::zero());
+        state.refresh_consumed_cycles();
         assert_eq!(
-            state.metadata.subnet_metrics.consumed_cycles_by_canisters,
-            consumed_by_canisters
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters(),
+            subnet_level + consumed_by_canisters
         );
 
         for certification_version in all_supported_versions() {
@@ -1285,7 +1301,7 @@ mod tests {
 
             // The canister's consumed cycles are included only starting with V29.
             let mut metrics_without_canisters = state.metadata.subnet_metrics.clone();
-            metrics_without_canisters.consumed_cycles_by_canisters = NominalCycles::zero();
+            metrics_without_canisters.refresh_consumed_cycles(NominalCycles::zero());
             let without_canisters =
                 encode_subnet_metrics(&metrics_without_canisters, certification_version);
             if certification_version >= CertificationVersion::V29 {

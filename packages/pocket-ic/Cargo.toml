@@ -83,6 +83,7 @@ ic-registry-client = { path = "../../rs/registry/client" }
 ic-registry-client-helpers = { path = "../../rs/registry/helpers" }
 ic-registry-proto-data-provider = { path = "../../rs/registry/proto_data_provider" }
 ic-registry-transport = { path = "../../rs/registry/transport" }
+ic-test-utilities-types = { path = "../../rs/test_utilities/types" }
 ic-types = { path = "../../rs/types/types" }
 ic-universal-canister = { path = "../../rs/universal_canister/lib" }
 maplit = { workspace = true }
