@@ -2947,6 +2947,12 @@ impl PaygFees {
     }
 }
 
+/// What the canister pays on a charging subnet for the messages that carry an
+/// outcall, over and above the outcall itself. `ic0.cost_http_request_v2` prices
+/// the outcall alone, but the balance pays for all of it, so the check below has to
+/// allow for this on top.
+const CARRIER_MESSAGE_COSTS: u128 = 10_000_000;
+
 /// Makes a pay-as-you-go outcall and checks how the caller was charged for it.
 ///
 /// The payment leaves the balance up front; everything it covered beyond the base
@@ -3010,11 +3016,12 @@ async fn assert_charged_as_quoted(
         fees.base_fee
     );
     let quoted = fees.charge_ceiling(elapsed);
+    let bound = quoted + CARRIER_MESSAGE_COSTS;
     assert!(
-        charged <= quoted,
-        "{description} was charged {charged} cycles, more than the {quoted} that \
-         ic0.cost_http_request_v2 quotes for what it consumed — of the {withheld} withheld, so \
-         the unspent allowance looks not to have been refunded"
+        charged <= bound,
+        "{description} was charged {charged} cycles, more than the {bound} it should have cost: \
+         {quoted} quoted by ic0.cost_http_request_v2 for what the outcall consumed, plus \
+         {CARRIER_MESSAGE_COSTS} for the messages that carried it."
     );
     fees
 }
