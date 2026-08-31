@@ -17,7 +17,7 @@ use ic_replicated_state::metadata_state::UpgradeState;
 use ic_types::batch::{bytes_to_upgrade_payload, upgrade_payload_to_bytes};
 use ic_types::consensus::UpgradePermitAuthorizationShare;
 use ic_types::consensus::upgrade::{UpgradePermitAction, UpgradePermitShares};
-use ic_types::{Height, NodeId, NumBytes, PlatformVersion};
+use ic_types::{Height, NodeId, NumBytes};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, RwLock};
 use ic_interfaces::validation::ValidationError;
@@ -29,7 +29,7 @@ pub struct UpgradePayloadBuilder {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pool: Arc<RwLock<dyn UpgradePermitAuthPool>>,
     crypto: Arc<dyn ConsensusCrypto>,
-    platform_version: PlatformVersion,
+    needs_reboot: bool,
     logger: ReplicaLogger,
 }
 
@@ -41,7 +41,7 @@ impl UpgradePayloadBuilder {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         pool: Arc<RwLock<dyn UpgradePermitAuthPool>>,
         crypto: Arc<dyn ConsensusCrypto>,
-        platform_version: PlatformVersion,
+        needs_reboot: bool,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
@@ -50,7 +50,7 @@ impl UpgradePayloadBuilder {
             state_reader,
             pool,
             crypto,
-            platform_version,
+            needs_reboot,
             logger,
         }
     }
@@ -92,8 +92,7 @@ impl BatchPayloadBuilder for UpgradePayloadBuilder {
             &self.logger,
         );
         let limits = permit_limits(&membership);
-        let needs_reboot =
-            self.platform_version.guestos_version != self.platform_version.binary_version;
+        let needs_reboot = self.needs_reboot;
         let upgrade_state =
             self.upgrade_state_at(past_payloads, &membership.current_members, height);
 

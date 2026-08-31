@@ -22,7 +22,7 @@ use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry_non_final};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    Height, RegistryVersion, SubnetId, Time,
+    Height, RegistryVersion, ReplicaVersion, SubnetId, Time,
     batch::{BatchPayload, ValidationContext},
     consensus::{Payload, block_maker::SubnetRecords},
     replica_config::ReplicaConfig,
@@ -130,7 +130,8 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
     let replica_config = ReplicaConfig {
         subnet_id,
         node_id: node_test_id(0),
-        platform_version: Default::default(),
+        guestos_version: ReplicaVersion::default(),
+        replica_version: ReplicaVersion::default(),
     };
     let crypto = Arc::new(CryptoReturningOk::default());
     let state_manager = Arc::new(RefMockStateManager::default());

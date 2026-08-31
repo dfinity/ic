@@ -17,8 +17,8 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    Height, batch::BatchContent, crypto::CryptoHash, malicious_flags::MaliciousFlags,
-    replica_config::ReplicaConfig,
+    Height, ReplicaVersion, batch::BatchContent, crypto::CryptoHash,
+    malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
 };
 use rand::Rng;
 use rand_chacha::{ChaChaRng, rand_core::SeedableRng};
@@ -314,7 +314,8 @@ impl TestRunner {
                     .map(|(index, _)| ReplicaConfig {
                         node_id: node_test_id(index as u64),
                         subnet_id,
-                        platform_version: Default::default(),
+                        guestos_version: ReplicaVersion::default(),
+                        replica_version: ReplicaVersion::default(),
                     })
                     .collect();
                 let node_ids: Vec<_> = replica_configs

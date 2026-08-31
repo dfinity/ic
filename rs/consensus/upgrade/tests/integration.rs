@@ -45,7 +45,7 @@ use ic_types::consensus::{
 use ic_types::crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf};
 use ic_types::signature::BasicSignature;
 use ic_types::time::UNIX_EPOCH;
-use ic_types::{Height, NodeId, NumBytes, PlatformVersion, RegistryVersion, ReplicaVersion};
+use ic_types::{Height, NodeId, NumBytes, RegistryVersion};
 
 const MAX_SIZE: NumBytes = NumBytes::new(1024 * 1024);
 
@@ -61,8 +61,8 @@ struct TestFixture {
     crypto: Arc<dyn ConsensusCrypto>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     registry: Arc<FakeRegistryClient>,
-    needs_reboot: PlatformVersion,
-    rebooted: PlatformVersion,
+    needs_reboot: bool,
+    rebooted: bool,
     pools: Vec<Arc<RwLock<UpgradePermitAuthPoolImpl>>>,
     managers: Vec<UpgradePermitAuthPoolManager>,
     committed: UpgradeState,
@@ -128,17 +128,9 @@ impl TestFixture {
                 )
             })
             .collect();
-        let old = ReplicaVersion::try_from("0.1").unwrap();
-        let new = ReplicaVersion::try_from("0.2").unwrap();
         Self {
-            needs_reboot: PlatformVersion {
-                guestos_version: old,
-                binary_version: new.clone(),
-            },
-            rebooted: PlatformVersion {
-                guestos_version: new.clone(),
-                binary_version: new,
-            },
+            needs_reboot: true,
+            rebooted: false,
             nodes,
             pool,
             membership,
@@ -205,22 +197,22 @@ impl TestFixture {
             .increment()
     }
 
-    fn builder(&self, node: usize, platform_version: PlatformVersion) -> UpgradePayloadBuilder {
+    fn builder(&self, node: usize, needs_reboot: bool) -> UpgradePayloadBuilder {
         UpgradePayloadBuilder::new(
             self.nodes[node],
             self.membership.clone(),
             self.state_manager.clone(),
             self.pools[node].clone() as Arc<RwLock<dyn UpgradePermitAuthPool>>,
             self.crypto.clone(),
-            platform_version,
+            needs_reboot,
             no_op_logger(),
         )
     }
 
     /// The node's actions for its next block, given the finalized blocks so
     /// far.
-    fn build(&self, node: usize, platform_version: PlatformVersion) -> Vec<UpgradePermitAction> {
-        self.build_at(node, platform_version, RegistryVersion::new(1))
+    fn build(&self, node: usize, needs_reboot: bool) -> Vec<UpgradePermitAction> {
+        self.build_at(node, needs_reboot, RegistryVersion::new(1))
     }
 
     /// Like [`TestFixture::build`], with the block's context pinning the
@@ -228,7 +220,7 @@ impl TestFixture {
     fn build_at(
         &self,
         node: usize,
-        platform_version: PlatformVersion,
+        needs_reboot: bool,
         registry_version: RegistryVersion,
     ) -> Vec<UpgradePermitAction> {
         let past: Vec<_> = self
@@ -241,7 +233,7 @@ impl TestFixture {
             registry_version,
             time: UNIX_EPOCH,
         };
-        let payload = self.builder(node, platform_version).build_payload(
+        let payload = self.builder(node, needs_reboot).build_payload(
             self.next_height(),
             MAX_SIZE,
             &past,
@@ -286,7 +278,7 @@ impl TestFixture {
         (0..self.nodes.len())
             .map(|validator| {
                 let result = self
-                    .builder(validator, self.rebooted.clone())
+                    .builder(validator, self.rebooted)
                     .validate_payload(
                         self.next_height(),
                         &ProposalContext {
@@ -507,7 +499,7 @@ fn test_permit_lifecycle() {
 
         // Block 1 (maker: node 0): node 0's binary is ahead of its GuestOS,
         // so it requests a reboot permit.
-        let actions = fx.build(0, fx.needs_reboot.clone());
+        let actions = fx.build(0, fx.needs_reboot);
         assert_request(&actions, fx.node(0));
         fx.finalize(actions);
 
@@ -517,7 +509,7 @@ fn test_permit_lifecycle() {
         // Block 2 (maker: node 1): too early to authorize (shares in
         // flight), and with the only slot taken node 1 cannot request
         // either.
-        let actions = fx.build(1, fx.needs_reboot.clone());
+        let actions = fx.build(1, fx.needs_reboot);
         assert!(actions.is_empty());
         fx.finalize(actions);
 
@@ -527,7 +519,7 @@ fn test_permit_lifecycle() {
         assert_eq!(fx.validated_shares(2), 6);
         // Block 3 (maker: node 2): authorizes node 0's request; node 1
         // (cross-node) validates the block.
-        let actions = fx.build(2, fx.rebooted.clone());
+        let actions = fx.build(2, fx.rebooted);
         assert_authorize(&actions, fx.node(0), 6);
         fx.validates_all(2, &actions, RegistryVersion::new(1))
             .expect("all nodes must validate the authorize block");
@@ -536,7 +528,7 @@ fn test_permit_lifecycle() {
 
         // Node 0 reboots into the new GuestOS (versions match again) and,
         // once it is the block maker again, returns its permit.
-        let actions = fx.build(0, fx.rebooted.clone());
+        let actions = fx.build(0, fx.rebooted);
         assert_return(&actions, fx.node(0));
         fx.validates_all(0, &actions, RegistryVersion::new(1))
             .expect("all nodes must validate the return block");
@@ -544,7 +536,7 @@ fn test_permit_lifecycle() {
         assert!(fx.committed().authorized.is_empty());
 
         // With the slot freed, node 1's request goes through.
-        let actions = fx.build(1, fx.needs_reboot.clone());
+        let actions = fx.build(1, fx.needs_reboot);
         assert_request(&actions, fx.node(1));
     });
 }
@@ -556,7 +548,7 @@ fn test_request_expires() {
     with_test_pool_config(|pool_config| {
         let mut fx = TestFixture::new(7, pool_config);
 
-        let actions = fx.build(0, fx.needs_reboot.clone());
+        let actions = fx.build(0, fx.needs_reboot);
         assert_request(&actions, fx.node(0));
         fx.finalize(actions);
         assert!(fx.committed().requested.contains_key(&fx.node(0)));
@@ -580,7 +572,7 @@ fn test_request_expires() {
         assert!(fx.committed().requested.is_empty());
 
         // The slot is free again, so node 0 can re-request.
-        let actions = fx.build(0, fx.needs_reboot.clone());
+        let actions = fx.build(0, fx.needs_reboot);
         assert_request(&actions, fx.node(0));
     });
 }
@@ -819,7 +811,7 @@ fn test_leaving_node_may_be_authorized_but_cannot_vote() {
 
         // The leaving node may propose itself: every validator accepts its
         // request even at the version where node 12 is no longer staying.
-        let actions = fx.build(12, fx.needs_reboot.clone());
+        let actions = fx.build(12, fx.needs_reboot);
         assert_request(&actions, fx.node(12));
         let h12 = fx.next_height();
         fx.validates_all(12, &actions, RegistryVersion::new(2))
@@ -858,7 +850,7 @@ fn test_leaving_node_may_be_authorized_but_cannot_vote() {
 
         // Without the leaving node's share, the leaving node is authorized —
         // and its permit consumes the only slot.
-        let actions = fx.build(1, fx.rebooted.clone());
+        let actions = fx.build(1, fx.rebooted);
         assert_authorize(&actions, fx.node(12), 12);
         fx.validates_all(1, &actions, RegistryVersion::new(2))
             .expect("the leaving node may be authorized");
@@ -866,7 +858,7 @@ fn test_leaving_node_may_be_authorized_but_cannot_vote() {
         assert!(fx.committed().authorized.contains(&fx.node(12)));
 
         // With the only slot taken, a staying node cannot request.
-        let actions = fx.build_at(0, fx.needs_reboot.clone(), RegistryVersion::new(2));
+        let actions = fx.build_at(0, fx.needs_reboot, RegistryVersion::new(2));
         assert!(actions.is_empty());
         let request = vec![UpgradePermitAction::Request {
             requestor_node: fx.node(0),
@@ -879,19 +871,19 @@ fn test_leaving_node_may_be_authorized_but_cannot_vote() {
 
         // The leaving node reboots and returns its permit, freeing the slot
         // for the staying node.
-        let actions = fx.build(12, fx.rebooted.clone());
+        let actions = fx.build(12, fx.rebooted);
         assert_return(&actions, fx.node(12));
         fx.validates_all(12, &actions, RegistryVersion::new(2))
             .expect("the leaving node returns its permit");
         fx.finalize(actions);
         assert!(fx.committed().authorized.is_empty());
 
-        let actions = fx.build(0, fx.needs_reboot.clone());
+        let actions = fx.build(0, fx.needs_reboot);
         assert_request(&actions, fx.node(0));
         fx.finalize(actions);
         fx.run_managers();
         fx.gossip_shares();
-        let actions = fx.build(1, fx.rebooted.clone());
+        let actions = fx.build(1, fx.rebooted);
         assert_authorize(&actions, fx.node(0), 11);
         fx.validates_all(1, &actions, RegistryVersion::new(2))
             .expect("the staying node may be authorized after the return");
@@ -907,12 +899,12 @@ fn test_requester_cannot_authorize() {
     with_test_pool_config(|pool_config| {
         let mut fx = TestFixture::new(13, pool_config);
 
-        let actions = fx.build(0, fx.needs_reboot.clone());
+        let actions = fx.build(0, fx.needs_reboot);
         assert_request(&actions, fx.node(0));
         fx.finalize(actions);
         let h0 = Height::new(1);
 
-        let actions = fx.build(1, fx.needs_reboot.clone());
+        let actions = fx.build(1, fx.needs_reboot);
         assert_request(&actions, fx.node(1));
         fx.finalize(actions);
 
@@ -937,7 +929,7 @@ fn test_requester_cannot_authorize() {
         );
 
         // The builder's authorize for node 0 carries no share from node 1.
-        let actions = fx.build(2, fx.rebooted.clone());
+        let actions = fx.build(2, fx.rebooted);
         for action in &actions {
             if let UpgradePermitAction::Authorize(shares) = action {
                 if shares.node == fx.node(0) {
@@ -962,7 +954,7 @@ fn test_leaving_node_reduces_permits() {
         let mut fx = TestFixture::new(13, pool_config);
 
         for node in 0..2 {
-            let actions = fx.build(node, fx.needs_reboot.clone());
+            let actions = fx.build(node, fx.needs_reboot);
             assert_request(&actions, fx.node(node));
             fx.validates_all(node, &actions, RegistryVersion::new(1))
                 .expect("the raw budget is two");
@@ -977,7 +969,7 @@ fn test_leaving_node_reduces_permits() {
         fx.apply_membership_delta(2, (0..12).map(node_test_id).collect());
 
         // The first upgrade takes the only remaining permit.
-        let actions = fx.build(0, fx.needs_reboot.clone());
+        let actions = fx.build(0, fx.needs_reboot);
         assert_request(&actions, fx.node(0));
         fx.validates_all(0, &actions, RegistryVersion::new(2))
             .expect("one permit remains for the leaver");
@@ -985,7 +977,7 @@ fn test_leaving_node_reduces_permits() {
 
         // The second upgrade doesn't fit — the leaver consumes the other
         // permit even though it is not rebooting.
-        let actions = fx.build_at(1, fx.needs_reboot.clone(), RegistryVersion::new(2));
+        let actions = fx.build_at(1, fx.needs_reboot, RegistryVersion::new(2));
         assert!(actions.is_empty());
         let request = vec![UpgradePermitAction::Request {
             requestor_node: fx.node(1),
@@ -1000,7 +992,7 @@ fn test_leaving_node_reduces_permits() {
         // the leaving node sign nothing; threshold 11).
         fx.run_managers();
         fx.gossip_shares();
-        let actions = fx.build(2, fx.rebooted.clone());
+        let actions = fx.build(2, fx.rebooted);
         assert_authorize(&actions, fx.node(0), 11);
         fx.validates_all(2, &actions, RegistryVersion::new(2))
             .expect("the single upgrade completes");
@@ -1008,10 +1000,10 @@ fn test_leaving_node_reduces_permits() {
         assert!(fx.committed().authorized.contains(&fx.node(0)));
 
         // After node 0 returns its permit, node 1's upgrade may proceed.
-        let actions = fx.build(0, fx.rebooted.clone());
+        let actions = fx.build(0, fx.rebooted);
         assert_return(&actions, fx.node(0));
         fx.finalize(actions);
-        let actions = fx.build(1, fx.needs_reboot.clone());
+        let actions = fx.build(1, fx.needs_reboot);
         assert_request(&actions, fx.node(1));
         fx.validates_all(1, &actions, RegistryVersion::new(2))
             .expect("the freed permit goes to the next node");
@@ -1036,7 +1028,7 @@ fn test_stale_share_from_leaving_signer_is_excluded() {
         // Node 0 requests while everyone is still staying, and the twelve
         // shares from the non-requesters — including node 12's — are
         // collected.
-        let actions = fx.build(0, fx.needs_reboot.clone());
+        let actions = fx.build(0, fx.needs_reboot);
         assert_request(&actions, fx.node(0));
         fx.finalize(actions);
         fx.run_managers();
@@ -1051,7 +1043,7 @@ fn test_stale_share_from_leaving_signer_is_excluded() {
         // The builder excludes node 12's stale share: the authorize carries
         // the eleven staying signers — exactly the threshold — and
         // validates unanimously.
-        let actions = fx.build_at(1, fx.rebooted.clone(), RegistryVersion::new(2));
+        let actions = fx.build_at(1, fx.rebooted, RegistryVersion::new(2));
         match &actions[..] {
             [UpgradePermitAction::Authorize(shares)] => {
                 assert_eq!(shares.node, fx.node(0));
@@ -1077,7 +1069,7 @@ fn test_leavers_exhaust_the_reboot_budget() {
         let fx = TestFixture::new(13, pool_config);
         fx.apply_membership_delta(2, (0..11).map(node_test_id).collect());
 
-        let actions = fx.build_at(0, fx.needs_reboot.clone(), RegistryVersion::new(2));
+        let actions = fx.build_at(0, fx.needs_reboot, RegistryVersion::new(2));
         assert!(actions.is_empty());
         let request = vec![UpgradePermitAction::Request {
             requestor_node: fx.node(0),

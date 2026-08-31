@@ -48,7 +48,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
-    NodeId, PlatformVersion, SubnetId,
+    NodeId, ReplicaVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequest, CanisterHttpResponse,
@@ -359,7 +359,8 @@ pub fn setup_consensus_and_p2p(
     node_id: NodeId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    platform_version: PlatformVersion,
+    guestos_version: ReplicaVersion,
+    replica_version: ReplicaVersion,
     tls_config: Arc<dyn TlsConfig>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_sync_client: Arc<dyn StateSyncClient<Message = StateSyncMessage>>,
@@ -463,7 +464,8 @@ pub fn setup_consensus_and_p2p(
         node_id,
         subnet_id,
         subnet_type,
-        platform_version,
+        guestos_version,
+        replica_version,
         artifact_pools,
         channels,
         Arc::clone(&consensus_crypto) as Arc<_>,
@@ -495,7 +497,8 @@ fn start_consensus(
     node_id: NodeId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    platform_version: PlatformVersion,
+    guestos_version: ReplicaVersion,
+    replica_version: ReplicaVersion,
     artifact_pools: ArtifactPools,
     abortable_broadcast_channels: AbortableBroadcastChannels,
     // ConsensusCrypto is an extension of the Crypto trait and we can
@@ -567,7 +570,7 @@ fn start_consensus(
     ));
     // ------------------------------------------------------------------------
 
-    let replica_config = ReplicaConfig { node_id, subnet_id, platform_version: platform_version.clone() };
+    let replica_config = ReplicaConfig { node_id, subnet_id, guestos_version, replica_version };
     let dkg_key_manager = Arc::new(Mutex::new(ic_consensus_dkg::DkgKeyManager::new(
         metrics_registry.clone(),
         Arc::clone(&consensus_crypto),
@@ -641,7 +644,7 @@ fn start_consensus(
         ic_consensus_dkg::DkgImpl::new(
             node_id,
             subnet_id,
-            replica_config.platform_version.binary_version.clone(),
+            replica_config.replica_version.clone(),
             Arc::clone(&registry_client),
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&consensus_crypto),
@@ -689,7 +692,7 @@ fn start_consensus(
             Arc::new(Mutex::new(canister_http_adapter_client)),
             Arc::clone(&consensus_crypto),
             Arc::clone(&consensus_pool_cache),
-            ReplicaConfig { subnet_id, node_id, platform_version: platform_version.clone() },
+            ReplicaConfig { subnet_id, node_id, guestos_version: replica_config.guestos_version.clone(), replica_version: replica_config.replica_version.clone() },
             subnet_type,
             Arc::clone(&registry_client),
             metrics_registry.clone(),

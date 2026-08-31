@@ -348,6 +348,8 @@ where
                 config.clone(),
                 temp_node,
                 subnet_id,
+                ReplicaVersion::default(),
+                ReplicaVersion::default(),
                 registry.clone(),
                 crypto,
                 None,

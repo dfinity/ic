@@ -75,7 +75,6 @@ pub mod malicious_behavior;
 pub mod malicious_flags;
 pub mod messages;
 pub mod methods;
-pub mod platform_version;
 pub mod registry;
 pub mod replica_config;
 pub mod replica_version;
@@ -93,7 +92,6 @@ pub use crate::canister_log::{
     MAX_DELTA_LOG_MEMORY_LIMIT,
 };
 pub use crate::replica_version::ReplicaVersion;
-pub use crate::platform_version::PlatformVersion;
 pub use crate::time::Time;
 pub use ic_base_types::{
     CanisterId, CanisterIdBlobParseError, NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId,

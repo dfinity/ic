@@ -507,7 +507,7 @@ impl CanisterHttpPoolManagerImpl {
 
                 // Reject shares from different replica versions
                 if share.content.replica_version()
-                    != &self.replica_config.platform_version.binary_version
+                    != &self.replica_config.replica_version
                 {
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 }

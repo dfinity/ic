@@ -785,7 +785,7 @@ impl Validator {
     ) -> ValidationResult<ValidatorError> {
         check_protocol_version(
             artifact.version(),
-            &self.replica_config.platform_version.binary_version,
+            &self.replica_config.replica_version,
         )
             .map_err(|_| InvalidArtifactReason::ReplicaVersionMismatch)?;
         artifact.verify_signature(
@@ -906,7 +906,7 @@ impl Validator {
     {
         if check_protocol_version(
             notary_issued.content.version(),
-            &self.replica_config.platform_version.binary_version,
+            &self.replica_config.replica_version,
         )
         .is_err()
         {

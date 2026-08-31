@@ -31,7 +31,7 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    CryptoHashOfState, Height, batch::BatchContent, crypto::CryptoHash,
+    CryptoHashOfState, Height, ReplicaVersion, batch::BatchContent, crypto::CryptoHash,
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
 };
 use std::{
@@ -107,7 +107,12 @@ fn consensus_produces_expected_batches() {
         let router = Arc::new(router);
         let node_id = node_test_id(0);
         let subnet_id = subnet_test_id(0);
-        let replica_config = ReplicaConfig { node_id, subnet_id, platform_version: Default::default() };
+        let replica_config = ReplicaConfig {
+            node_id,
+            subnet_id,
+            guestos_version: ReplicaVersion::default(),
+            replica_version: ReplicaVersion::default(),
+        };
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
         let metrics_registry = MetricsRegistry::new();
@@ -194,7 +199,7 @@ fn consensus_produces_expected_batches() {
         let dkg = ic_consensus_dkg::DkgImpl::new(
             replica_config.node_id,
             replica_config.subnet_id,
-            replica_config.platform_version.binary_version.clone(),
+            replica_config.replica_version.clone(),
             Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,

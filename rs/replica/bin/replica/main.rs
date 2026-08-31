@@ -187,13 +187,11 @@ fn main() -> io::Result<()> {
 
     // Pin the versions from CLI args so they don't require lazy file reads.
     let replica_args_ok = replica_args.as_ref().expect("failed to parse CLI args");
-    let platform_version = ic_types::PlatformVersion {
-        guestos_version: replica_args_ok.guestos_version.clone(),
-        binary_version: replica_args_ok.replica_version.clone(),
-    };
+    let guestos_version = replica_args_ok.guestos_version.clone();
+    let replica_version = replica_args_ok.replica_version.clone();
     // Make ReplicaVersion::default() return the binary version (for legacy
     // callers that still use ::default()).
-    let _ = ic_types::ReplicaVersion::set_default_version(platform_version.binary_version.clone());
+    let _ = ic_types::ReplicaVersion::set_default_version(replica_version.clone());
 
     {
         let g = metrics_registry.int_gauge_vec(
@@ -295,7 +293,8 @@ fn main() -> io::Result<()> {
             config.clone(),
             node_id,
             subnet_id,
-            platform_version.clone(),
+            guestos_version.clone(),
+            replica_version.clone(),
             registry,
             crypto,
             cup_proto,

@@ -24,7 +24,8 @@ use ic_test_utilities_registry::{
 };
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
-    CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId, malicious_flags::MaliciousFlags,
+    CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
+    malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
 };
 use std::sync::Arc;
@@ -101,7 +102,8 @@ pub(crate) fn setup() -> (
     let replica_config = ReplicaConfig {
         node_id: NodeId::from(PrincipalId::new_node_test_id(27)),
         subnet_id,
-        platform_version: Default::default(),
+        guestos_version: ReplicaVersion::default(),
+        replica_version: ReplicaVersion::default(),
     };
 
     let metrics_registry = MetricsRegistry::new();
