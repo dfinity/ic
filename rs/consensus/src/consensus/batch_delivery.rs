@@ -870,6 +870,7 @@ mod tests {
                 mut pool,
                 membership,
                 registry,
+                replica_config,
                 ..
             } = DependenciesBuilder::multiple_subnets(
                 pool_config,
@@ -898,7 +899,7 @@ mod tests {
                 ],
             )
             .with_replica_config(ReplicaConfig {
-                node_id: NODE_1,
+                node_id,
                 subnet_id: SOURCE_SUBNET_ID,
                 replica_version: test_replica_version(),
             })
@@ -927,15 +928,14 @@ mod tests {
             let message_routing = FakeMessageRouting::new();
             *message_routing.next_batch_height.write().unwrap() = summary_height;
 
-            let result = deliver_batches(
+            let result = deliver_batches_for_finalizer(
                 &message_routing,
                 &membership,
                 &PoolReader::new(&pool),
                 registry.as_ref(),
                 &no_op_logger(),
-                Some(node_id),
-                SOURCE_SUBNET_ID,
-                None,
+                replica_config.node_id,
+                replica_config.subnet_id,
                 |_, _, _| {},
             );
 
