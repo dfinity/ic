@@ -57,11 +57,9 @@ impl SweeperFundingAccounting {
     /// Records a finalized funding transaction: `amount` is what its transfer carried and
     /// `transaction_fee` what it paid for gas, which it did either way.
     ///
-    /// The outcome decides both the count and whether the transfer landed, so it is one call: a
-    /// failure counts as a failure *and* delivers nothing, and neither can be recorded without the
-    /// other. A failure is counted rather than trapped — the accounting stays sound, since the burn
-    /// simply goes unspent — but the count is the only signal that something believed impossible has
-    /// happened. `WithdrawalTransactions::record_finalized_transaction` logs the same receipt.
+    /// The outcome decides both the count and whether the transfer landed, so it is one call.
+    /// A failure is counted rather than trapped: the burn simply goes unspent, and the count is the
+    /// only signal that something believed impossible has happened.
     pub fn record_finalized_funding(
         &mut self,
         status: &TransactionStatus,
@@ -86,9 +84,8 @@ impl SweeperFundingAccounting {
             .cumulative_transaction_fees
             .checked_add(transaction_fee)
             .expect("BUG: overflow in cumulative sweeper funding fees");
-        // Checked eagerly, and by the checked helper rather than the saturating getter, so that a
-        // violation traps at the transition that caused it rather than being smoothed over on the
-        // next metrics scrape.
+        // The checked helper, not the saturating getter: a violation traps at the transition that
+        // caused it rather than being smoothed over on the next scrape.
         self.checked_burned_not_yet_spent().expect(
             "BUG: more ETH spent on sweeping than ckETH burned for it, \
              meaning ckETH is under-backed",
@@ -126,10 +123,8 @@ impl SweeperFundingAccounting {
     /// the fees earlier fundings provisioned but did not pay. The in-flight part is drawn down when
     /// that funding finalizes; what is left of it never is, so the floor only ever rises.
     ///
-    /// Saturates, because the metrics and the dashboard read it from a query: an under-backed
-    /// minter is exactly when an operator needs those surfaces up, so they must not be the thing
-    /// that traps. The state transition that could cause it traps instead, through
-    /// [`Self::checked_burned_not_yet_spent`].
+    /// Saturates: the metrics and the dashboard read it from a query, and an under-backed minter is
+    /// exactly when those surfaces must stay up. The state transition traps instead.
     pub fn burned_not_yet_spent(&self) -> Wei {
         self.checked_burned_not_yet_spent().unwrap_or(Wei::ZERO)
     }

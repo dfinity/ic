@@ -81,9 +81,6 @@ pub struct DashboardWithdrawalRequest {
     pub value: Nat,
     pub token_symbol: CkTokenSymbol,
     pub created_at: Option<u64>,
-    /// Whether this is the minter funding its own sweeper address rather than a user withdrawal.
-    /// Both travel the same pipeline and so share this table, where a funding would otherwise read
-    /// as an unexplained ckETH withdrawal to an address nobody recognises.
     pub is_sweeper_funding: bool,
 }
 
@@ -303,20 +300,15 @@ pub struct DashboardTemplate {
     pub sweeper_funding: DashboardSweeperFunding,
 }
 
-/// Sweeper fee funding: where sweep gas comes from and how much of it is prepaid.
 #[derive(Clone)]
 pub struct DashboardSweeperFunding {
     pub sweeper_address: Option<Address>,
     pub cketh_burned: Wei,
     pub eth_spent: Wei,
     pub burned_not_yet_spent: Wei,
-    /// A lower bound on the prepaid gas at the sweeper address, from what recorded fundings
-    /// delivered there.
     pub prepaid_gas_lower_bound: Wei,
     pub low_water_mark: Wei,
     pub target: Wei,
-    /// The funding between its burn and its finalized transfer, if any. Shown because one that never
-    /// finalizes blocks every later funding, and no other view reveals it.
     pub in_flight: Option<DashboardInFlightFunding>,
 }
 

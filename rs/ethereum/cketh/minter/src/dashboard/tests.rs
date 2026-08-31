@@ -109,18 +109,13 @@ fn should_display_sweeper_funding() {
     DashboardAssert::assert_that(dashboard)
         .has_sweeper_cketh_burned("1_000_000")
         .has_sweeper_eth_spent("950_000")
-        // 1_000_000 burned - 950_000 spent, which stays as backing rather than discounting a
-        // later funding.
         .has_sweeper_burned_not_yet_spent("50_000")
-        // What the funding delivered, which is the bound the next funding decision reads.
         .has_sweeper_prepaid_gas("900_000");
 }
 
 #[test]
 fn should_display_an_in_flight_sweeper_funding() {
     let mut state = initial_state();
-    // Accepted the way the funding task does it, so the row reports the funding the pipeline
-    // actually holds rather than a value set beside it.
     apply_state_transition(
         &mut state,
         &EventType::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
