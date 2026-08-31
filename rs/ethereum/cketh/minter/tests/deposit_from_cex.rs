@@ -15,12 +15,12 @@ use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::endpoints::events::EventPayload;
 use ic_cketh_minter::numeric::Erc20Value;
-use ic_cketh_test_utils::CkEthSetup;
 use ic_cketh_test_utils::anvil::{
     Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
 };
-use ic_cketh_test_utils::ckerc20::CkErc20Setup;
+use ic_cketh_test_utils::ckerc20::{CkErc20Setup, Erc20Token};
 use ic_cketh_test_utils::live::{CexDeposit, DepositPlan, LiveSetup};
+use ic_cketh_test_utils::{CkEthSetup, SWEEPER_ADDRESS};
 use ic_ethereum_types::Address;
 
 #[test]
@@ -186,7 +186,10 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
 
     let setup = LiveSetup::<CkErc20Setup>::new();
     // `supported_erc20_tokens_owned()` registers ckUSDC then ckUSDT, in that order.
-    let [usdc, usdt] = setup.supported_erc20_tokens_owned();
+    let [usdc, usdt]: [Erc20Token; 2] = setup
+        .supported_erc20_tokens_owned()
+        .try_into()
+        .expect("expected exactly 2 supported tokens");
     let usdt_minimum = setup.minimum_deposit_amount(&usdt);
     let usdt_above_minimum = 2 * usdt_minimum;
     let usdc_at_minimum = setup.minimum_deposit_amount(&usdc);
@@ -243,7 +246,7 @@ fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
     let baseline = setup.funding_baseline();
     setup
         .upgrade_minter()
-        .expect_sweeper_address_derived()
+        .expect_sweeper_address(&address_from_hex(SWEEPER_ADDRESS))
         .expect_sweeper_starts_empty()
         .expect_eth_received()
         .expect_funding_backed_by_burn(&baseline);
@@ -266,7 +269,10 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
     let sweeper = setup.await_sweeper_address();
     let funded_gas = setup.anvil_eth_balance(&sweeper);
     let delegate = setup.sweep_contracts().delegate;
-    let [usdc, usdt] = setup.supported_erc20_tokens_owned();
+    let [usdc, usdt]: [Erc20Token; 2] = setup
+        .supported_erc20_tokens_owned()
+        .try_into()
+        .expect("expected exactly 2 supported tokens");
     let usdc_deposit = 10 * setup.minimum_deposit_amount(&usdc);
     let usdt_deposit = 15 * setup.minimum_deposit_amount(&usdt);
 
@@ -305,7 +311,6 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
         .expect_all_delegating_sweeps();
     assert_sweep_gas_near_demo(&sweeps, DEPOSITORS_PER_TOKEN);
 
-    // The funds left every deposit address and landed at the minter's main address.
     let setup = setup
         .assert_sweeps_batched_per_token(&deposits)
         .assert_addresses_swept_empty(&deposits)
@@ -330,7 +335,10 @@ fn should_sweep_a_second_deposit_despite_resending_a_stale_authorization() {
 
     let sweeper = setup.await_sweeper_address();
     let delegate = setup.sweep_contracts().delegate;
-    let [usdc, _usdt] = setup.supported_erc20_tokens_owned();
+    let [usdc, _usdt]: [Erc20Token; 2] = setup
+        .supported_erc20_tokens_owned()
+        .try_into()
+        .expect("expected exactly 2 supported tokens");
     let usdc_minimum = setup.minimum_deposit_amount(&usdc);
     let owner = setup.depositor(1);
 

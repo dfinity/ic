@@ -228,14 +228,8 @@ impl LiveSetup<CkErc20Setup> {
         &self.fixture.supported_erc20_tokens
     }
 
-    pub fn supported_erc20_tokens_owned(&self) -> [Erc20Token; 2] {
-        self.fixture
-            .supported_erc20_tokens
-            .clone()
-            .try_into()
-            .unwrap_or_else(|tokens: Vec<Erc20Token>| {
-                panic!("expected exactly 2 supported tokens, got {}", tokens.len())
-            })
+    pub fn supported_erc20_tokens_owned(&self) -> Vec<Erc20Token> {
+        self.fixture.supported_erc20_tokens.clone()
     }
 
     pub fn minimum_deposit_amount(&self, token: &Erc20Token) -> u128 {
@@ -292,7 +286,7 @@ impl LiveSetup<CkErc20Setup> {
             .expect("BUG: deposit_erc20 returned an error")
     }
 
-    /// Places every token [`Self::supported_erc20_tokens`] returns at its real mainnet address on
+    /// Places every registered token at its real mainnet address on
     /// the owned anvil node, and funds each deposit with a plain ERC-20 `transfer` from a seeded
     /// CEX-style account — all mined in a single block, so a concurrent scan (whose batched
     /// `eth_call` pins one block) sees either every deposit funded or none of them.
@@ -556,11 +550,18 @@ impl LiveSetup<CkErc20Setup> {
     }
 
     pub fn expect_mints(self, deposits: &[CexDeposit]) -> Self {
+        let mut ledgers: BTreeMap<Address, Principal> = BTreeMap::new();
+        for deposit in deposits {
+            ledgers
+                .entry(contract_address(&deposit.token))
+                .or_insert_with(|| {
+                    self.ckerc20_token(&deposit.token.ledger_init_arg.token_symbol)
+                        .ledger_canister_id
+                });
+        }
         let mut credits: BTreeMap<(Principal, Principal, Option<[u8; 32]>), u128> = BTreeMap::new();
         for deposit in deposits {
-            let ledger_id = self
-                .ckerc20_token(&deposit.token.ledger_init_arg.token_symbol)
-                .ledger_canister_id;
+            let ledger_id = ledgers[&contract_address(&deposit.token)];
             *credits
                 .entry((ledger_id, deposit.owner, Some(deposit.subaccount)))
                 .or_default() += deposit.amount;
@@ -967,6 +968,7 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
     }
 }
 
+#[must_use]
 pub struct FeeAccountFunding<S> {
     setup: LiveSetup<S>,
 }
@@ -979,8 +981,9 @@ impl<S: AsRef<CkEthSetup>> FeeAccountFunding<S> {
     }
 }
 
+#[must_use]
 pub struct MinterUpgraded<S> {
-    setup: LiveSetup<S>,
+    pub setup: LiveSetup<S>,
 }
 
 impl<S: AsRef<CkEthSetup>> MinterUpgraded<S> {
@@ -1002,6 +1005,7 @@ impl<S: AsRef<CkEthSetup>> MinterUpgraded<S> {
     }
 }
 
+#[must_use]
 pub struct SweeperFunding<S> {
     setup: LiveSetup<S>,
     sweeper: Address,
@@ -1026,6 +1030,7 @@ impl<S: AsRef<CkEthSetup>> SweeperFunding<S> {
     }
 }
 
+#[must_use]
 pub struct SweeperFunded<S> {
     setup: LiveSetup<S>,
     received: u128,
@@ -1072,6 +1077,7 @@ pub struct FundingBaseline {
     minter_eth_balance: u128,
 }
 
+#[must_use]
 pub struct DepositErc20Calls {
     setup: LiveSetup<CkErc20Setup>,
     responses: Vec<(DepositPlan, DepositErc20Response)>,
@@ -1105,6 +1111,7 @@ impl DepositErc20Calls {
     }
 }
 
+#[must_use]
 pub struct CexCredit<'a> {
     setup: LiveSetup<CkErc20Setup>,
     deposits: &'a [CexDeposit],
@@ -1128,6 +1135,7 @@ impl<'a> CexCredit<'a> {
     }
 }
 
+#[must_use]
 pub struct DetectionWatch<'a> {
     pub setup: LiveSetup<CkErc20Setup>,
     deposits: &'a [CexDeposit],
@@ -1154,6 +1162,7 @@ impl DetectionWatch<'_> {
     }
 }
 
+#[must_use]
 pub struct SweepsSent {
     setup: LiveSetup<CkErc20Setup>,
     sweeps: Vec<SentTransaction>,
