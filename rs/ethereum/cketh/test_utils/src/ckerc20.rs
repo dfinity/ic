@@ -176,6 +176,11 @@ impl CkErc20Setup {
         self
     }
 
+    pub fn add_support_for_subaccount_helper(mut self, helper: Address) -> Self {
+        self.cketh = self.cketh.add_support_for_subaccount_helper(helper);
+        self
+    }
+
     /// Advance the refresh timer and answer the resulting `eth_getBlockByNumber("latest")` with
     /// `block`, so the minter's latest block height becomes `block`, then settle the reply. The
     /// mock matches the full `["latest", false]` request, so concurrent `eth_getBlockByNumber`
