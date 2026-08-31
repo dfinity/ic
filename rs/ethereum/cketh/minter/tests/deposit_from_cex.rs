@@ -340,14 +340,7 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
     }
 
     // The CEX withdrawals: a plain ERC-20 transfer to each address, carrying no principal.
-    let holdings: Vec<Holding<'_>> = deposits
-        .iter()
-        .map(|deposit| Holding {
-            deposit: deposit.address,
-            token: deposit.token,
-            amount: deposit.amount,
-        })
-        .collect();
+    let holdings: Vec<Holding<'_>> = deposits.iter().map(Deposit::holding).collect();
     setup.credit_deposits(&holdings);
 
     for deposit in &deposits {
@@ -458,6 +451,16 @@ struct Deposit<'a> {
     token: &'a Erc20Token,
     amount: u128,
     address: Address,
+}
+
+impl<'a> Deposit<'a> {
+    fn holding(&self) -> Holding<'a> {
+        Holding {
+            deposit: self.address,
+            token: self.token,
+            amount: self.amount,
+        }
+    }
 }
 
 /// Prints what each sweep cost next to `deposit_from_cex_demo`'s measurements for the same delegate,
