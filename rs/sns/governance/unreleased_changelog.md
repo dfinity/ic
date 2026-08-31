@@ -9,6 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
+* Added support for upgrade options to `UpgradeSnsControlledCanister` proposals.
+  In particular, added `wasm_memory_persistence` and `skip_pre_upgrade`. The
+  former is of particular interest to Motoko canisters.
+
 ## Changed
 
 ## Deprecated
