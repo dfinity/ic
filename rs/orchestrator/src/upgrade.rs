@@ -192,7 +192,7 @@ impl Upgrade {
                 .ok()
         });
         // Determine the subnet_id using the local CUP.
-        let subnet_id = match (&maybe_local_cup, &maybe_local_cup_proto) {
+        let mut subnet_id = match (&maybe_local_cup, &maybe_local_cup_proto) {
             (Some(cup), _) => get_subnet_id(&self.registry, cup).map_err(|err| {
                 OrchestratorError::UpgradeError(format!(
                     "Couldn't determine the subnet id: {err:?}"
@@ -292,13 +292,13 @@ impl Upgrade {
         // In the vast majority of cases, they will be identical. In case of a subnet split, this is
         // not necessary the case, and we want the rest of this function to consider the new subnet
         // ID.
-        let new_subnet_id = get_subnet_id(&self.registry, &latest_cup).map_err(|err| {
+        subnet_id = get_subnet_id(&self.registry, &latest_cup).map_err(|err| {
             OrchestratorError::UpgradeError(format!(
                 "Couldn't determine the subnet id of the latest CUP: {err:?}"
             ))
         })?;
 
-        if subnet_id != new_subnet_id {
+        if subnet_id != old_subnet_id {
             info!(
                 self.logger,
                 "The latest CUP (registry version={}, height={}) is for a different subnet (subnet_id={}) \
@@ -306,15 +306,14 @@ impl Upgrade {
                 different subnet. This is normal in case of subnet splitting.",
                 latest_cup.content.registry_version(),
                 latest_cup.height(),
-                new_subnet_id,
                 subnet_id,
+                old_subnet_id,
             );
 
             // Update the subnet assignment to the new subnet ID such that the value returned by
             // this function matches the `subnet_assignment`
-            *self.subnet_assignment.write().unwrap() = SubnetAssignment::Assigned(new_subnet_id);
+            *self.subnet_assignment.write().unwrap() = SubnetAssignment::Assigned(subnet_id);
         }
-        let subnet_id = new_subnet_id;
 
         // If we replaced the previous local CUP, compare potential threshold master public keys with
         // the ones in the new CUP, to make sure they haven't changed. Raise an alert if they did.
