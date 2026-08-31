@@ -3164,6 +3164,95 @@ fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
 }
 
 #[test]
+fn test_canister_upgrade_options_rejected_when_mode_is_not_upgrade() {
+    // Step 1: Prepare the world.
+    let install = CanisterInstallMode::Install;
+    let canister_upgrade_options = Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Keep as i32),
+        skip_pre_upgrade: None,
+    });
+
+    // Step 2: Run the code under test.
+    let result = valid_canister_upgrade_options(install, canister_upgrade_options);
+
+    // Step 3: Inspect result(s).
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("canister_upgrade_options") && err.contains("mode is upgrade"),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn test_canister_upgrade_options_rejected_when_wasm_memory_persistence_unspecified() {
+    // Step 1: Prepare the world.
+    let upgrade = CanisterInstallMode::Upgrade;
+    let canister_upgrade_options = Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        // 0/Unspecified is not allowed here.
+        wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Unspecified as i32),
+        skip_pre_upgrade: None,
+    });
+
+    // Step 2: Run the code under test.
+    let result = valid_canister_upgrade_options(upgrade, canister_upgrade_options);
+
+    // Step 3: Inspect result(s).
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("Unrecognized") && err.contains("wasm_memory_persistence"),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn test_canister_upgrade_options_accepted_when_mode_is_upgrade() {
+    // Step 1: Prepare the world.
+    let upgrade = CanisterInstallMode::Upgrade;
+    let canister_upgrade_options = Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Keep as i32),
+        skip_pre_upgrade: Some(true),
+    });
+
+    // Step 2: Run the code under test.
+    let canister_upgrade_options =
+        valid_canister_upgrade_options(upgrade, canister_upgrade_options).unwrap();
+    let root_mode = assemble_mode(upgrade, canister_upgrade_options);
+
+    // Step 3: Inspect result(s).
+    assert_eq!(
+        root_mode,
+        CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        })),
+    );
+}
+
+#[test]
+fn test_canister_upgrade_options_accepted_when_wasm_memory_persistence_is_replace() {
+    // Step 1: Prepare the world.
+    let upgrade = CanisterInstallMode::Upgrade;
+    let canister_upgrade_options = Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Replace as i32),
+        skip_pre_upgrade: Some(false),
+    });
+
+    // Step 2: Run the code under test.
+    let canister_upgrade_options =
+        valid_canister_upgrade_options(upgrade, canister_upgrade_options).unwrap();
+    let root_mode = assemble_mode(upgrade, canister_upgrade_options);
+
+    // Step 3: Inspect result(s).
+    assert_eq!(
+        root_mode,
+        CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            skip_pre_upgrade: Some(false),
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
+        })),
+    );
+}
+
+#[test]
 fn test_allow_canister_upgrades_while_motion_proposal_execution_is_in_progress() {
     // Step 1: Prepare the world.
     use ProposalDecisionStatus as Status;
