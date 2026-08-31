@@ -282,21 +282,6 @@ fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
     );
 }
 
-/// The whole deposit-from-CEX flow against a real EVM, end to end: twenty users — each its own
-/// principal *and* subaccount — register deposit addresses, ten for USDC and ten for USDT, a
-/// CEX-style plain `transfer` funds each, and the minter then detects all twenty and credits every
-/// user in full with no further user action.
-///
-/// The minter sweeps them in **two** transactions, one per token. That is
-/// [DEFI-2980](https://dfinity.atlassian.net/browse/DEFI-2980): the delegate's batch entry point
-/// runs its whole token list against every address it touches, so one mixed transaction would pay
-/// for a `balanceOf` at all twenty (address, token) pairs to move twenty balances, half of them
-/// holding nothing.
-///
-/// Everything runs for real: a live PocketIC hosting the minter, the EVM RPC canister, the
-/// orchestrator and the ckUSDC/ckUSDT ledgers, making genuine HTTPS outcalls to an anvil node that
-/// holds the deployed `CkDeposit` helper and `CkSweeperAttested` delegate. Only the sweeper
-/// address' gas is shortcut: anvil credits it directly instead of the ckETH burn pipeline.
 #[test]
 fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
     /// Ten depositors per token, so each sweep is a ten-deposit single-token batch — directly
