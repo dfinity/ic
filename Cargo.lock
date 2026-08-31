@@ -11336,6 +11336,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "wat",
  "xrc-mock",
 ]
 
