@@ -17,10 +17,15 @@
 //!
 //! Two consequences of a live instance are worth knowing before adding to this harness:
 //!
-//! * An ingress message may not be awaited by driving the instance with explicit `tick`s: the rounds
-//!   arrive on their own, and a tick-driven await runs out its round budget and reports the message
-//!   as unanswerable. `CkEthSetup`'s own `minter_address` and `stop_minter` do exactly that, which is
-//!   why this module fetches the address and upgrades the minter itself.
+//! * An ingress message whose completion depends on canister-http traffic must be *polled* for
+//!   ([`pocket_ic::PocketIc::ingress_status`]), never awaited. The client's blocking awaits —
+//!   `await_call`, and everything built on it: `update_call`, `stop_canister`, … — run as one
+//!   server-side operation that executes up to 100 rounds back to back, and while it holds the
+//!   instance the auto-progress loop cannot run `ProcessCanisterHttpInternal`, so no outcall is
+//!   dispatched or answered until the await has already failed. A call that completes on rounds
+//!   alone finishes well within the budget; one waiting on an outcall response never can.
+//!   `CkEthSetup`'s tick-driving `minter_address` and `stop_minter` are unusable here for the same
+//!   reason, which is why this module fetches the address and upgrades the minter itself.
 //! * Any loop waiting on a minter timer must poll a canister while it waits. The PocketIC server
 //!   shuts an idle instance down, which stops the minter's timers and looks exactly like a minter
 //!   bug.
@@ -55,10 +60,8 @@ use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_minter::{BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL};
 use ic_ethereum_types::Address;
-use ic_management_canister_types::CanisterIdRecord;
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::PocketIc;
-use pocket_ic::common::rest::RawEffectivePrincipal;
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -743,34 +746,29 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
     ///
     /// The minter is stopped first, as any upgrade must be: upgrading a running canister leaves its
     /// in-flight HTTPS outcalls to resolve into fresh Wasm, which traps it with "CallFutureState for
-    /// in-flight calls" and corrupts its heap. Stopped through the client rather than through
-    /// `CkEthSetup::stop_minter`, which drives the instance with explicit `tick`s (see the module
-    /// documentation).
+    /// in-flight calls" and corrupts its heap.
     ///
-    /// The stop is also awaited without ticking (see the module documentation): stopping waits for
-    /// the minter's in-flight outcalls to close, and those resolve only on the auto-progress
-    /// loop's `ProcessCanisterHttpInternal` operations — which a tick-driven await excludes, since
-    /// it holds the instance for its whole round budget. An outcall in flight when the stop lands
-    /// could then never resolve within it, and the minter's timers open new outcalls too often for
-    /// waiting out a quiet window beforehand to be reliable.
+    /// The stop is submitted and then polled for, rather than awaited through the client's
+    /// `stop_canister` (see the module documentation): a stop only replies once every open call
+    /// context of the minter has closed, and when the stop lands while one of the minter's
+    /// timer-driven outcall chains is in flight, closing them takes the very canister-http
+    /// deliveries the blocking await prevents — so it deterministically burns its round budget
+    /// (which advances instance time by mere nanoseconds, so not even the 60-second outcall
+    /// timeout can fire inside it) and fails with `BadIngressMessage`. Nor can such a chain be
+    /// waited out beforehand: `get_canister_http()` lists only requests not yet handed to the
+    /// HTTP adapter, which auto-progress does within one ~100ms iteration, so on a live instance
+    /// a probe of it reads empty for virtually an outcall's whole lifetime — a stop gated on it
+    /// still races every chain. Polling the ingress status instead leaves the auto-progress loop
+    /// free to deliver the responses the stop is waiting on, however the stop lands.
     fn upgrade_minter_with(&self, arg: UpgradeArg) {
         let minter_id = self.minter_id();
-        let stop = self
-            .env()
-            .submit_call_with_effective_principal(
-                Principal::management_canister(),
-                RawEffectivePrincipal::CanisterId(minter_id.as_slice().to_vec()),
-                Principal::anonymous(),
-                "stop_canister",
-                Encode!(&CanisterIdRecord {
-                    canister_id: minter_id
-                })
-                .unwrap(),
-            )
-            .expect("submitting the minter stop must succeed");
-        self.env()
-            .await_call_no_ticks(stop)
-            .expect("stopping the minter must succeed");
+        let stop_message_id = self.cketh().submit_stop_minter();
+        self.poll_until(
+            AWAIT_DEADLINE,
+            |_| "the minter never stopped".to_string(),
+            |setup| setup.env().ingress_status(stop_message_id.clone()),
+        )
+        .expect("stopping the minter must succeed");
         self.env()
             .upgrade_canister(
                 minter_id,
