@@ -290,11 +290,10 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
     // 6-decimal amounts, both far above the ~$10 per-token candidate minimum.
     const USDC_DEPOSIT: u128 = 100_000_000;
     const USDT_DEPOSIT: u128 = 150_000_000;
-    /// Enough for both batch sweeps at anvil's gas price, with room for a fee bump.
-    const SWEEPER_GAS_WEI: u128 = 1_000_000_000_000_000_000;
 
     let sweeper = address_from_hex(SWEEPER_ADDRESS);
-    let setup = LiveSetup::new_sweep(&sweeper, SWEEPER_GAS_WEI);
+    let setup = LiveSetup::new_sweep();
+    let funded_gas = setup.anvil_eth_balance(&sweeper);
     let contracts = setup.sweep_contracts();
     let [usdc, usdt] = setup.supported_erc20_tokens() else {
         panic!("expected exactly 2 supported tokens")
@@ -421,7 +420,7 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
         );
     }
     assert!(
-        setup.anvil().balance(&sweeper) < SWEEPER_GAS_WEI,
+        setup.anvil().balance(&sweeper) < funded_gas,
         "the sweeper address pays for the sweeps out of its own prepaid gas"
     );
 

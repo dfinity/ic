@@ -47,7 +47,7 @@
 
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_cketh_minter::endpoints::events::{Event, EventPayload};
+use ic_cketh_minter::endpoints::events::{Event, EventPayload, TransactionStatus};
 use ic_cketh_minter::endpoints::{
     CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
     DepositStatus,
@@ -69,11 +69,9 @@ use crate::anvil::{
     deploy_mock_erc20, deploy_sweep_contracts, deposit_eth, erc20_balance_slot, u256_be,
 };
 use crate::ckerc20::{CkErc20Setup, Erc20Token};
-use crate::{CkEthSetup, EthereumBackend, MINTER_ADDRESS, minter_wasm, switch_to_live};
-
-/// Deposited for a test principal, so funding has deposit-backed ETH to spend. Comfortably above the
-/// 0.3 ETH funding target that the fixture's minimum withdrawal amount implies.
-const DEPOSIT_AMOUNT: u128 = 5_000_000_000_000_000_000; // 5 ETH
+use crate::{
+    CkEthSetup, EthereumBackend, MINTER_ADDRESS, SWEEPER_ADDRESS, minter_wasm, switch_to_live,
+};
 
 const FEE_ACCOUNT_BALANCE: u128 = 1_000_000_000_000_000_000; // 1 ckETH
 
@@ -130,6 +128,8 @@ const SWEEP_TICKS: u32 = 8;
 /// The mint follows the sweep through the log scrape, one more timer downstream.
 const CREDIT_TICKS: u32 = 6;
 
+const FUNDING_TICKS: u32 = 6;
+
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
 /// address, so the scan reads a real balance for that (address, token) pair.
 pub struct Holding<'a> {
@@ -177,11 +177,11 @@ impl LiveSetup<CkErc20Setup> {
 
     /// Like [`Self::new_balance_scan`], but with the real deposit helper and the attested sweeper
     /// delegate deployed on the node first, so the minter is installed knowing both, and with the
-    /// minter's dedicated sweeper address pre-funded with `sweeper_gas_wei` of ETH.
-    ///
-    /// Funding the sweeper directly is a shortcut: in production its gas comes from a ckETH burn
-    /// out of the minter's fee account, which is a separate pipeline from sweeping.
-    pub fn new_sweep(sweeper: &Address, sweeper_gas_wei: u128) -> Self {
+    /// minter's sweeper address ([`SWEEPER_ADDRESS`]) funded the way production funds it: a ckETH
+    /// burn out of the minter's fee account, delivered by the funding pipeline — which is also
+    /// what lets the minter know the sweeper can pay for a sweep, since it only accepts sweeps
+    /// whose fee its own funding accounting covers.
+    pub fn new_sweep() -> Self {
         let anvil = Arc::new(Anvil::start_mainnet_like());
         // The helper pays out to the minter's main address, which the minter only derives once
         // installed. It is only ever read back out of the helper event, never by the helper
@@ -202,7 +202,18 @@ impl LiveSetup<CkErc20Setup> {
              control, so a sweep would move every balance out of reach while still minting"
         );
         setup.sweep_contracts = Some(contracts);
-        setup.anvil.set_balance(sweeper, sweeper_gas_wei);
+        setup.deposit_helper = Some(contracts.helper);
+
+        setup.fund_fee_account();
+        setup.upgrade_minter();
+        let sweeper = address_from_hex(SWEEPER_ADDRESS);
+        assert_eq!(
+            setup.await_sweeper_address(),
+            sweeper,
+            "BUG: the minter derived a sweeper address other than the pinned SWEEPER_ADDRESS"
+        );
+        setup.await_eth_received(&sweeper, FUNDING_TICKS);
+        setup.await_funding_finalized();
         setup
     }
 
@@ -419,8 +430,8 @@ impl LiveSetup<CkErc20Setup> {
 }
 
 impl LiveSetup<CkEthSetup> {
-    /// The ckETH fixture alone — funding touches no ERC-20 — with a deposit already credited, so
-    /// there is deposit-backed ETH to spend, and the fee account holding the ckETH a funding burns.
+    /// The ckETH fixture alone — funding touches no ERC-20 — with the fee account already holding
+    /// the ckETH a funding burns, its deposit also being the deposit-backed ETH the funding spends.
     ///
     /// The minter's timers are left un-armed: a funding check runs on the next upgrade, so a test
     /// takes its ledger baselines and then calls [`Self::upgrade_minter`] when it is ready for the
@@ -433,19 +444,7 @@ impl LiveSetup<CkEthSetup> {
             sweep_contracts: None,
         });
         let setup = Self::go_live(cketh, anvil).with_deposit_helper();
-
-        // Funding may only spend ETH the minter received through deposits, so it needs a real one.
-        let depositor = Account {
-            owner: setup.cketh().caller.into(),
-            subaccount: None,
-        };
-        setup.deposit(depositor, DEPOSIT_AMOUNT);
-        // The fee account earns its ckETH the way it does in production — the ckETH ledger collects
-        // its fees there — but at 2e12 wei a transfer it would take 150'000 transfers to reach the
-        // funding target, so the harness deposits to that account directly instead. Deposited rather
-        // than minted so nothing here mints ckETH the minter did not back with ETH.
-        setup.deposit(setup.fee_account(), FEE_ACCOUNT_BALANCE);
-        setup.await_deposits_credited(&[depositor, setup.fee_account()]);
+        setup.fund_fee_account();
         setup
     }
 
@@ -465,20 +464,6 @@ impl LiveSetup<CkEthSetup> {
             ..Default::default()
         });
         self
-    }
-
-    /// Deposits `value` wei for `beneficiary` through the helper contract, as a depositor does.
-    fn deposit(&self, beneficiary: Account, value: u128) {
-        let helper = self
-            .deposit_helper
-            .expect("BUG: the funding fixture always deploys a deposit helper");
-        deposit_eth(
-            &self.anvil,
-            &helper,
-            &address_from_hex(DEV_ACCOUNT),
-            beneficiary,
-            value,
-        );
     }
 }
 
@@ -679,6 +664,47 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
             owner: self.minter_id(),
             subaccount: Some(ic_cketh_minter::CKETH_FEE_SUBACCOUNT),
         }
+    }
+
+    fn await_funding_finalized(&self) {
+        self.drive_until(
+            FUNDING_TICKS,
+            |_| "the minter never finalized the funding transfer successfully".to_string(),
+            |setup| {
+                setup.minter_events().iter().any(|event| {
+                    matches!(
+                        &event.payload,
+                        EventPayload::FinalizedTransaction {
+                            transaction_receipt,
+                            ..
+                        } if transaction_receipt.status == TransactionStatus::Success
+                    )
+                })
+            },
+        );
+    }
+
+    fn fund_fee_account(&self) {
+        // The fee account earns its ckETH the way it does in production — the ckETH ledger collects
+        // its fees there — but at 2e12 wei a transfer it would take 150'000 transfers to reach the
+        // funding target, so the harness deposits to that account directly instead. Deposited rather
+        // than minted so nothing here mints ckETH the minter did not back with ETH.
+        self.deposit(self.fee_account(), FEE_ACCOUNT_BALANCE);
+        self.await_deposits_credited(&[self.fee_account()]);
+    }
+
+    /// Deposits `value` wei for `beneficiary` through the helper contract, as a depositor does.
+    fn deposit(&self, beneficiary: Account, value: u128) {
+        let helper = self
+            .deposit_helper
+            .expect("BUG: the funding fixture always deploys a deposit helper");
+        deposit_eth(
+            &self.anvil,
+            &helper,
+            &address_from_hex(DEV_ACCOUNT),
+            beneficiary,
+            value,
+        );
     }
 
     /// The sweeper address the minter derived, scraped from its log line: there is no getter for it
