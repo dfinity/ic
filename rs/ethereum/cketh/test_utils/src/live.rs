@@ -239,6 +239,26 @@ impl LiveSetup<CkErc20Setup> {
         &self.fixture.supported_erc20_tokens
     }
 
+    pub fn minimum_deposit_amount(&self, token: &Erc20Token) -> u128 {
+        let minimum = self
+            .get_minter_info()
+            .minimum_deposit_amounts
+            .expect("BUG: the minter reports no minimum deposit amounts")
+            .into_iter()
+            .find(|minimum| {
+                Address::from_str(&minimum.erc20_contract_address)
+                    .expect("BUG: the minter reported an invalid token address")
+                    == contract_address(token)
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "BUG: the minter reports no minimum deposit amount for {}",
+                    token.contract.address
+                )
+            });
+        nat_to_u128(minimum.minimum_deposit_amount)
+    }
+
     /// Registers a `(caller/subaccount, token)` deposit and returns the Ethereum address the minter
     /// derived for it (shared across the caller's tokens).
     pub fn register_deposit_address(

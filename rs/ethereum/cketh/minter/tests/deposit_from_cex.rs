@@ -179,27 +179,27 @@ fn should_revert_the_whole_call_when_a_token_is_not_a_contract() {
 /// periodic balance scan makes genuine outcalls through the IC's HTTPS-outcalls feature — reaching
 /// anvil over HTTP — and reads real ERC-20 balances from it.
 ///
-/// Three independent depositors each fund a single token — 20 USDT, 15 USDC and 1 USDT — so the
-/// scan reads several addresses and tokens and must apply the per-token minimum to each. Only the
-/// two at-or-above-minimum deposits are flagged as candidates; the 1 USDT deposit is scanned but,
-/// being below the ~$10 minimum, is not.
+/// Three independent depositors each fund a single token — USDT at twice its minimum, USDC at
+/// exactly its minimum, and USDT at a tenth of it, every amount derived from the minimum the
+/// minter itself reports through `get_minter_info` — so the scan reads several addresses and
+/// tokens and must apply the per-token minimum to each. Only the two at-or-above-minimum deposits
+/// are flagged as candidates; the below-minimum deposit is scanned but not flagged.
 #[test]
 fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
     const DEPOSIT_SUBACCOUNT: [u8; 32] = [42; 32];
-    // 6-decimal amounts; ckUSDC and ckUSDT share a 10_000_000 (~$10) candidate minimum.
-    const USDT_ABOVE_MINIMUM: u128 = 20_000_000;
-    const USDC_ABOVE_MINIMUM: u128 = 15_000_000;
-    const USDT_BELOW_MINIMUM: u128 = 1_000_000;
 
     let setup = LiveSetup::new_balance_scan();
     // `supported_erc20_tokens()` registers ckUSDC then ckUSDT, in that order.
     let [usdc, usdt] = setup.supported_erc20_tokens() else {
         panic!("expected exactly 2 supported tokens")
     };
+    let usdt_above_minimum = 2 * setup.minimum_deposit_amount(usdt);
+    let usdc_at_minimum = setup.minimum_deposit_amount(usdc);
+    let usdt_below_minimum = setup.minimum_deposit_amount(usdt) / 10;
     let deposits = [
-        (setup.depositor(1), usdt, USDT_ABOVE_MINIMUM),
-        (setup.depositor(2), usdc, USDC_ABOVE_MINIMUM),
-        (setup.depositor(3), usdt, USDT_BELOW_MINIMUM),
+        (setup.depositor(1), usdt, usdt_above_minimum),
+        (setup.depositor(2), usdc, usdc_at_minimum),
+        (setup.depositor(3), usdt, usdt_below_minimum),
     ];
 
     let holdings: Vec<Holding<'_>> = deposits
@@ -216,14 +216,14 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
         setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, usdt).status,
         DepositStatus::AwaitingSweep(detected)
             if detected.erc20_contract_address == usdt.contract.address
-                && detected.scanned_balance == USDT_ABOVE_MINIMUM
+                && detected.scanned_balance == usdt_above_minimum
                 && detected.detected_at_block > 0_u8
     );
     assert_matches!(
         setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, usdc).status,
         DepositStatus::AwaitingSweep(detected)
             if detected.erc20_contract_address == usdc.contract.address
-                && detected.scanned_balance == USDC_ABOVE_MINIMUM
+                && detected.scanned_balance == usdc_at_minimum
                 && detected.detected_at_block > 0_u8
     );
     assert_matches!(
@@ -287,9 +287,6 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
     /// Ten depositors per token, so each sweep is a ten-deposit single-token batch — directly
     /// comparable with `deposit_from_cex_demo`'s measured scenarios.
     const DEPOSITORS_PER_TOKEN: u64 = 10;
-    // 6-decimal amounts, both far above the ~$10 per-token candidate minimum.
-    const USDC_DEPOSIT: u128 = 100_000_000;
-    const USDT_DEPOSIT: u128 = 150_000_000;
 
     let setup = LiveSetup::new_sweep();
     let sweeper = setup.await_sweeper_address();
@@ -298,15 +295,17 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
     let [usdc, usdt] = setup.supported_erc20_tokens() else {
         panic!("expected exactly 2 supported tokens")
     };
+    let usdc_deposit = 10 * setup.minimum_deposit_amount(usdc);
+    let usdt_deposit = 15 * setup.minimum_deposit_amount(usdt);
 
     // Every depositor gets a distinct principal and a distinct subaccount, so no two share a
     // deposit address and each attestation binds a different account.
     let deposits: Vec<Deposit> = (0..2 * DEPOSITORS_PER_TOKEN)
         .map(|index| {
             let (token, amount) = if index < DEPOSITORS_PER_TOKEN {
-                (usdc, USDC_DEPOSIT)
+                (usdc, usdc_deposit)
             } else {
-                (usdt, USDT_DEPOSIT)
+                (usdt, usdt_deposit)
             };
             let owner = setup.depositor(index);
             let subaccount = [u8::try_from(index).unwrap(); 32];
@@ -396,8 +395,8 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
         );
     }
     for (token, amount) in [
-        (usdc, USDC_DEPOSIT * u128::from(DEPOSITORS_PER_TOKEN)),
-        (usdt, USDT_DEPOSIT * u128::from(DEPOSITORS_PER_TOKEN)),
+        (usdc, usdc_deposit * u128::from(DEPOSITORS_PER_TOKEN)),
+        (usdt, usdt_deposit * u128::from(DEPOSITORS_PER_TOKEN)),
     ] {
         assert_eq!(
             setup
