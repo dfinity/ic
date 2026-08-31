@@ -73,10 +73,6 @@ use crate::{
     CkEthSetup, EthereumBackend, MINTER_ADDRESS, SWEEPER_ADDRESS, minter_wasm, switch_to_live,
 };
 
-/// Deposited for a test principal, so funding has deposit-backed ETH to spend. Comfortably above the
-/// 0.3 ETH funding target that the fixture's minimum withdrawal amount implies.
-const DEPOSIT_AMOUNT: u128 = 5_000_000_000_000_000_000; // 5 ETH
-
 const FEE_ACCOUNT_BALANCE: u128 = 1_000_000_000_000_000_000; // 1 ckETH
 
 /// Ticks granted for the minter's log scrape to find the harness' deposits. One suffices, since a
@@ -208,8 +204,7 @@ impl LiveSetup<CkErc20Setup> {
         setup.sweep_contracts = Some(contracts);
         setup.deposit_helper = Some(contracts.helper);
 
-        setup.deposit(setup.fee_account(), FEE_ACCOUNT_BALANCE);
-        setup.await_deposits_credited(&[setup.fee_account()]);
+        setup.fund_fee_account();
         setup.upgrade_minter();
         let sweeper = address_from_hex(SWEEPER_ADDRESS);
         assert_eq!(
@@ -435,8 +430,8 @@ impl LiveSetup<CkErc20Setup> {
 }
 
 impl LiveSetup<CkEthSetup> {
-    /// The ckETH fixture alone — funding touches no ERC-20 — with a deposit already credited, so
-    /// there is deposit-backed ETH to spend, and the fee account holding the ckETH a funding burns.
+    /// The ckETH fixture alone — funding touches no ERC-20 — with the fee account already holding
+    /// the ckETH a funding burns, its deposit also being the deposit-backed ETH the funding spends.
     ///
     /// The minter's timers are left un-armed: a funding check runs on the next upgrade, so a test
     /// takes its ledger baselines and then calls [`Self::upgrade_minter`] when it is ready for the
@@ -449,19 +444,7 @@ impl LiveSetup<CkEthSetup> {
             sweep_contracts: None,
         });
         let setup = Self::go_live(cketh, anvil).with_deposit_helper();
-
-        // Funding may only spend ETH the minter received through deposits, so it needs a real one.
-        let depositor = Account {
-            owner: setup.cketh().caller.into(),
-            subaccount: None,
-        };
-        setup.deposit(depositor, DEPOSIT_AMOUNT);
-        // The fee account earns its ckETH the way it does in production — the ckETH ledger collects
-        // its fees there — but at 2e12 wei a transfer it would take 150'000 transfers to reach the
-        // funding target, so the harness deposits to that account directly instead. Deposited rather
-        // than minted so nothing here mints ckETH the minter did not back with ETH.
-        setup.deposit(setup.fee_account(), FEE_ACCOUNT_BALANCE);
-        setup.await_deposits_credited(&[depositor, setup.fee_account()]);
+        setup.fund_fee_account();
         setup
     }
 
@@ -699,6 +682,15 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
                 })
             },
         );
+    }
+
+    fn fund_fee_account(&self) {
+        // The fee account earns its ckETH the way it does in production — the ckETH ledger collects
+        // its fees there — but at 2e12 wei a transfer it would take 150'000 transfers to reach the
+        // funding target, so the harness deposits to that account directly instead. Deposited rather
+        // than minted so nothing here mints ckETH the minter did not back with ETH.
+        self.deposit(self.fee_account(), FEE_ACCOUNT_BALANCE);
+        self.await_deposits_credited(&[self.fee_account()]);
     }
 
     /// Deposits `value` wei for `beneficiary` through the helper contract, as a depositor does.
