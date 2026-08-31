@@ -47,7 +47,7 @@
 
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_cketh_minter::endpoints::events::{Event, EventPayload};
+use ic_cketh_minter::endpoints::events::{Event, EventPayload, TransactionStatus};
 use ic_cketh_minter::endpoints::{
     CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
     DepositStatus,
@@ -69,7 +69,9 @@ use crate::anvil::{
     deploy_mock_erc20, deploy_sweep_contracts, deposit_eth, erc20_balance_slot, u256_be,
 };
 use crate::ckerc20::{CkErc20Setup, Erc20Token};
-use crate::{CkEthSetup, EthereumBackend, MINTER_ADDRESS, minter_wasm, switch_to_live};
+use crate::{
+    CkEthSetup, EthereumBackend, MINTER_ADDRESS, SWEEPER_ADDRESS, minter_wasm, switch_to_live,
+};
 
 /// Deposited for a test principal, so funding has deposit-backed ETH to spend. Comfortably above the
 /// 0.3 ETH funding target that the fixture's minimum withdrawal amount implies.
@@ -130,8 +132,6 @@ const SWEEP_TICKS: u32 = 8;
 /// The mint follows the sweep through the log scrape, one more timer downstream.
 const CREDIT_TICKS: u32 = 6;
 
-/// A budget, not a cost: one tick sends the funding transfer, the spares cover a tick landing
-/// before the funding task has burned, and a tick lost to an outcall the jump timed out.
 const FUNDING_TICKS: u32 = 6;
 
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
@@ -181,11 +181,11 @@ impl LiveSetup<CkErc20Setup> {
 
     /// Like [`Self::new_balance_scan`], but with the real deposit helper and the attested sweeper
     /// delegate deployed on the node first, so the minter is installed knowing both, and with the
-    /// sweeper address at `sweeper` funded the way production funds it: a ckETH burn out of the
-    /// minter's fee account, delivered by the funding pipeline — which is also what lets the
-    /// minter know the sweeper can pay for a sweep, since it only accepts sweeps whose fee its
-    /// own funding accounting covers.
-    pub fn new_sweep(sweeper: &Address) -> Self {
+    /// minter's sweeper address ([`SWEEPER_ADDRESS`]) funded the way production funds it: a ckETH
+    /// burn out of the minter's fee account, delivered by the funding pipeline — which is also
+    /// what lets the minter know the sweeper can pay for a sweep, since it only accepts sweeps
+    /// whose fee its own funding accounting covers.
+    pub fn new_sweep() -> Self {
         let anvil = Arc::new(Anvil::start_mainnet_like());
         // The helper pays out to the minter's main address, which the minter only derives once
         // installed. It is only ever read back out of the helper event, never by the helper
@@ -208,20 +208,16 @@ impl LiveSetup<CkErc20Setup> {
         setup.sweep_contracts = Some(contracts);
         setup.deposit_helper = Some(contracts.helper);
 
-        let depositor = Account {
-            owner: setup.cketh().caller.into(),
-            subaccount: None,
-        };
-        setup.deposit(depositor, DEPOSIT_AMOUNT);
         setup.deposit(setup.fee_account(), FEE_ACCOUNT_BALANCE);
-        setup.await_deposits_credited(&[depositor, setup.fee_account()]);
+        setup.await_deposits_credited(&[setup.fee_account()]);
         setup.upgrade_minter();
+        let sweeper = address_from_hex(SWEEPER_ADDRESS);
         assert_eq!(
             setup.await_sweeper_address(),
-            *sweeper,
-            "BUG: the minter derived a sweeper address the test did not expect"
+            sweeper,
+            "BUG: the minter derived a sweeper address other than the pinned SWEEPER_ADDRESS"
         );
-        setup.await_eth_received(sweeper, FUNDING_TICKS);
+        setup.await_eth_received(&sweeper, FUNDING_TICKS);
         setup.await_funding_finalized();
         setup
     }
@@ -687,18 +683,20 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         }
     }
 
-    /// Drives the minter until it has recorded the funding transfer as finalized, which is the
-    /// point its own accounting starts covering sweep gas with what that funding delivered —
-    /// merely seeing the ETH on anvil ([`Self::await_eth_received`]) is not it.
     fn await_funding_finalized(&self) {
         self.drive_until(
             FUNDING_TICKS,
-            |_| "the minter never finalized the funding transfer".to_string(),
+            |_| "the minter never finalized the funding transfer successfully".to_string(),
             |setup| {
-                setup
-                    .minter_events()
-                    .iter()
-                    .any(|event| matches!(event.payload, EventPayload::FinalizedTransaction { .. }))
+                setup.minter_events().iter().any(|event| {
+                    matches!(
+                        &event.payload,
+                        EventPayload::FinalizedTransaction {
+                            transaction_receipt,
+                            ..
+                        } if transaction_receipt.status == TransactionStatus::Success
+                    )
+                })
             },
         );
     }

@@ -292,7 +292,7 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
     const USDT_DEPOSIT: u128 = 150_000_000;
 
     let sweeper = address_from_hex(SWEEPER_ADDRESS);
-    let setup = LiveSetup::new_sweep(&sweeper);
+    let setup = LiveSetup::new_sweep();
     let funded_gas = setup.anvil_eth_balance(&sweeper);
     let contracts = setup.sweep_contracts();
     let [usdc, usdt] = setup.supported_erc20_tokens() else {
