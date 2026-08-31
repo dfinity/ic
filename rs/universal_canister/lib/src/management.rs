@@ -226,6 +226,14 @@ impl CandidCallBuilder<InstallCodeArgs> {
         self
     }
 
+    /// The argument passed to the installed canister's `canister_init` (or
+    /// `canister_post_upgrade`), i.e. the payload the universal canister
+    /// evaluates there.
+    pub fn with_arg<A: Into<Vec<u8>>>(mut self, arg: A) -> Self {
+        self.args.arg = arg.into();
+        self
+    }
+
     pub fn with_compute_allocation(mut self, allocation: u64) -> Self {
         self.args.compute_allocation = Some(candid::Nat::from(allocation));
         self

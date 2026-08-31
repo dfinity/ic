@@ -593,6 +593,18 @@ impl<'a> UniversalCanister<'a> {
             .call_and_wait()
             .await
     }
+
+    /// Submits `payload` as an ingress message to the canister's `update`
+    /// method without waiting for the call to complete. Useful for update calls
+    /// that are not expected to ever complete.
+    pub async fn submit_update<P: Into<Vec<u8>>>(&self, payload: P) -> Result<(), AgentError> {
+        self.agent
+            .update(&self.canister_id, "update")
+            .with_arg(payload.into())
+            .call()
+            .await
+            .map(|_| ())
+    }
 }
 
 /// Provides an abstraction to the message canister.
