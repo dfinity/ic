@@ -455,9 +455,6 @@ impl State {
         };
     }
 
-    /// Records what a finalized funding did to the sweeper's accounting, if the request was one.
-    /// Separate from [`Self::update_balance_upon_withdrawal`], which is about the minter's own ETH
-    /// balance and says nothing about fundings in its name.
     fn update_sweeper_funding_upon_withdrawal(
         &mut self,
         withdrawal_id: &LedgerBurnIndex,

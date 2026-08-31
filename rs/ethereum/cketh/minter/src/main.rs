@@ -1259,7 +1259,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
-                // Burned and spent are the two sides of the invariant, so both are counters.
                 w.encode_counter(
                     "cketh_minter_sweeper_funding_cketh_burned_total",
                     s.sweeper_funding.cumulative_burned().as_f64(),
@@ -1270,10 +1269,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     s.sweeper_funding.cumulative_spent().as_f64(),
                     "Cumulative ETH debited from the minter's main address for sweeping.",
                 )?;
-                // By outcome rather than failures alone, so that a failure rate and the funding
-                // throughput are both expressible. Failures are expected to stay at zero: funding
-                // is a bare transfer to an address derived from the minter's own key, which has no
-                // code to revert in.
                 w.counter_vec(
                     "cketh_minter_sweeper_funding_finalized_total",
                     "Funding transactions that finalized, by outcome.",
@@ -1286,9 +1281,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     &[("status", "failure")],
                     s.sweeper_funding.failed_fundings() as f64,
                 )?;
-                // Note for whoever writes the alerts: for a funding that succeeded this is the same
-                // wei that `cketh_minter_total_unspent_tx_fees` already counts, so summing the two
-                // double counts. See DEFI-2965.
                 w.encode_gauge(
                     "cketh_minter_sweeper_funding_burned_not_yet_spent",
                     s.sweeper_funding.burned_not_yet_spent().as_f64(),
@@ -1302,9 +1294,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Prepaid sweep gas: a lower bound on the sweeper address' ETH balance, from the \
                      fundings the minter recorded as finalized.",
                 )?;
-                // Exported so that "the sweeper needs gas and is not getting it" can be alerted on
-                // as `gas_balance < low_water_mark`, without hardcoding a threshold that moves with
-                // the minimum withdrawal amount.
                 let funding_config = s.sweeper_funding_config();
                 w.encode_gauge(
                     "cketh_minter_sweeper_funding_low_water_mark",
@@ -1316,8 +1305,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     funding_config.target.as_f64(),
                     "Balance the sweeper address is topped up to.",
                 )?;
-                // The diagnostic for a wedged funding: nothing else here shows one, since the
-                // gas-balance gauge tracks what the minter recorded rather than what it can spend.
                 w.encode_gauge(
                     "cketh_minter_sweeper_funding_in_flight_age_seconds",
                     s.withdrawal_transactions

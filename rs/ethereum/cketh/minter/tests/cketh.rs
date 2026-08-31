@@ -1341,9 +1341,6 @@ fn decode_ledger_memo_smoke() {
 }
 
 /// Tests with the EVM RPC canister
-/// The six sweeper-funding metrics, present and zero on a minter that has never funded. Cheap, and
-/// it is the only thing that catches a mistyped metric name or an encoder error, whose feedback loop
-/// is otherwise a Grafana dashboard that silently stays empty.
 #[test]
 fn should_export_the_sweeper_funding_metrics() {
     CkEthSetup::default()
