@@ -382,6 +382,29 @@ impl LiveSetup<CkErc20Setup> {
         scanned.expect("drive_until_with returns only once observe held")
     }
 
+    pub fn await_detection(
+        &self,
+        caller: Principal,
+        subaccount: [u8; 32],
+        token: &Erc20Token,
+    ) -> DepositErc20Response {
+        let mut detected = None;
+        self.drive_until_with(
+            SCAN_TICK,
+            SCAN_TICKS,
+            |_| "the deposit was not detected".to_string(),
+            |setup| {
+                let progress = setup.deposit_erc20(caller, subaccount, token);
+                let is_detected = matches!(progress.status, DepositStatus::AwaitingSweep(_));
+                if is_detected {
+                    detected = Some(progress);
+                }
+                is_detected
+            },
+        );
+        detected.expect("drive_until_with returns only once observe held")
+    }
+
     /// Waits for the sweeper address to send exactly `expected` transactions, returning what each
     /// did. An extra sweep is caught rather than ignored: sending more than `expected` fails
     /// immediately.

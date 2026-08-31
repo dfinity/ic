@@ -442,6 +442,118 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
     }
 }
 
+#[test]
+fn should_sweep_a_second_deposit_despite_resending_a_stale_authorization() {
+    const DEPOSIT_SUBACCOUNT: [u8; 32] = [7; 32];
+
+    let setup = LiveSetup::new_sweep();
+    let sweeper = setup.await_sweeper_address();
+    let delegate = setup.sweep_contracts().delegate;
+    let [usdc, _usdt] = setup.supported_erc20_tokens() else {
+        panic!("expected exactly 2 supported tokens")
+    };
+    let first_deposit = 3 * setup.minimum_deposit_amount(usdc);
+    let second_deposit = 2 * setup.minimum_deposit_amount(usdc);
+    let owner = setup.depositor(1);
+    let account = Account {
+        owner,
+        subaccount: Some(DEPOSIT_SUBACCOUNT),
+    };
+    let ledger_id = setup.ckerc20_token("ckUSDC").ledger_canister_id;
+
+    let address = setup.register_deposit_address(owner, DEPOSIT_SUBACCOUNT, usdc);
+    setup.credit_deposits(&[Holding {
+        deposit: address,
+        token: usdc,
+        amount: first_deposit,
+    }]);
+    assert_matches!(
+        setup.await_detection(owner, DEPOSIT_SUBACCOUNT, usdc).status,
+        DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == first_deposit
+    );
+    let first_sweep = setup.await_sweeps(&sweeper, 1).remove(0);
+    assert_eq!(
+        first_sweep.transaction_type, 4,
+        "the first sweep installs the delegation, so it must be an EIP-7702 transaction: {first_sweep:?}"
+    );
+    assert!(
+        first_sweep.succeeded,
+        "the first sweep reverted: {first_sweep:?}"
+    );
+    setup.await_credited(ledger_id, account, first_deposit);
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        1,
+        "applying the first sweep's authorization must spend the deposit address' nonce 0"
+    );
+
+    setup.credit_deposits(&[Holding {
+        deposit: address,
+        token: usdc,
+        amount: second_deposit,
+    }]);
+    let second_registration = setup.deposit_erc20(owner, DEPOSIT_SUBACCOUNT, usdc);
+    assert_eq!(
+        second_registration.address,
+        address.to_string(),
+        "re-registering the pair must yield the same deposit address"
+    );
+    assert_matches!(second_registration.status, DepositStatus::Scanning { .. });
+    assert_matches!(
+        setup.await_detection(owner, DEPOSIT_SUBACCOUNT, usdc).status,
+        DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == second_deposit
+    );
+
+    let second_sweep = setup.await_sweeps(&sweeper, 2).remove(1);
+    assert_eq!(
+        second_sweep.transaction_type, 4,
+        "the second sweep must reuse the recorded authorization rather than track that the \
+         address is already delegated: {second_sweep:?}"
+    );
+    assert_eq!(
+        setup.anvil().authorization_nonces(&second_sweep.hash),
+        vec![0],
+        "the re-sent authorization still names nonce 0, stale now that the address is at nonce 1"
+    );
+    assert!(
+        second_sweep.succeeded,
+        "the stale authorization must be skipped, not fail the sweep: {second_sweep:?}"
+    );
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        1,
+        "a skipped stale authorization must not advance the deposit address' nonce"
+    );
+    let mut designator = vec![0xef, 0x01, 0x00];
+    designator.extend_from_slice(delegate.as_ref());
+    assert_eq!(
+        setup.anvil().code(&address),
+        designator,
+        "the delegation installed by the first sweep must survive the second"
+    );
+    assert_eq!(
+        setup
+            .anvil()
+            .erc20_balance(&contract_address(usdc), &address),
+        Erc20Value::from(0_u8),
+        "the second sweep should have emptied the deposit address again"
+    );
+    assert_eq!(
+        setup
+            .anvil()
+            .erc20_balance(&contract_address(usdc), &address_from_hex(MINTER_ADDRESS)),
+        Erc20Value::from(first_deposit + second_deposit),
+        "both sweeps' funds should sit at the minter's main address"
+    );
+    setup.await_credited(ledger_id, account, first_deposit + second_deposit);
+    let mints = setup
+        .minter_events()
+        .into_iter()
+        .filter(|event| matches!(event.payload, EventPayload::MintedCkErc20 { .. }))
+        .count();
+    assert_eq!(mints, 2, "each deposit flow must be credited exactly once");
+}
+
 /// One user's deposit: who it credits, which token, and the address the CEX sends to.
 struct Deposit<'a> {
     owner: Principal,

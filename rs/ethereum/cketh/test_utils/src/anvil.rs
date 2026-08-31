@@ -380,6 +380,19 @@ impl Anvil {
             .unwrap_or_else(|e| panic!("not a u64 transaction count {count}: {e}"))
     }
 
+    pub fn authorization_nonces(&self, tx_hash: &str) -> Vec<u64> {
+        let transaction = self.rpc("eth_getTransactionByHash", serde_json::json!([tx_hash]));
+        transaction["authorizationList"]
+            .as_array()
+            .map(|tuples| {
+                tuples
+                    .iter()
+                    .map(|tuple| hex_u64(&tuple["nonce"]))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Credits `address` with `wei` of ETH (foundry's `anvil_setBalance`). The minter's sweeper
     /// address is funded this way rather than through the ckETH burn-and-withdraw pipeline, which is
     /// a separate concern from sweeping.
