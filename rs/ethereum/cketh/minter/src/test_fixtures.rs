@@ -1,9 +1,11 @@
 use crate::EVM_RPC_ID_STAGING;
+use crate::deposit_address::DepositAddress;
 use crate::eth_logs::LedgerSubaccount;
 use crate::lifecycle::init::InitArg;
-use crate::numeric::{LedgerBurnIndex, Wei};
+use crate::numeric::{BlockNumber, Erc20Value, LedgerBurnIndex, Wei};
 use crate::state::State;
 use crate::state::eth_logs_scraping::LogScrapingId;
+use crate::state::event::AutomaticDeposit;
 use crate::state::transactions::EthWithdrawalRequest;
 use crate::tx::TransactionSignature;
 use candid::{Nat, Principal};
@@ -92,6 +94,18 @@ pub fn sweeper_funding_request(withdrawal_amount: Wei) -> EthWithdrawalRequest {
     }
 }
 
+pub fn automatic_deposit() -> AutomaticDeposit {
+    AutomaticDeposit {
+        owner: account().owner,
+        subaccount: account().subaccount,
+        address: DepositAddress::new(Address::new([0xa1; 20])),
+        erc20_contract_address: Address::new([0x22; 20]),
+        last_scanned_block: BlockNumber::new(1_000),
+        scan_count: 1,
+        scanned_balance: Erc20Value::from(1_000_000_u64),
+    }
+}
+
 /// Install `state` into the global thread-local `STATE`, so `read_state`/`mutate_state` see it in a
 /// unit test. Each test runs on its own thread, so the `thread_local!` `STATE` is per-test.
 pub fn init_state(state: State) {
@@ -112,6 +126,57 @@ pub fn valid_init_arg() -> InitArg {
         evm_rpc_id: Some(EVM_RPC_ID_STAGING),
         ethereum_sweeper_contract_address: None,
         next_sweeper_transaction_nonce: None,
+    }
+}
+
+pub mod mock {
+    use crate::management::CallError;
+    use crate::runtime::CanisterRuntime;
+    use crate::time::TimeProvider;
+    use async_trait::async_trait;
+    use ic_cdk_management_canister::EcdsaPublicKeyResult;
+    use mockall::mock;
+
+    mock! {
+        #[derive(Debug)]
+        pub TimeProvider {}
+
+        impl TimeProvider for TimeProvider {
+            fn time(&self) -> u64;
+        }
+
+        impl Clone for TimeProvider {
+            fn clone(&self) -> Self;
+        }
+    }
+
+    mock! {
+        #[derive(Debug)]
+        pub CanisterRuntime {}
+
+        impl TimeProvider for CanisterRuntime {
+            fn time(&self) -> u64;
+        }
+
+        #[async_trait]
+        impl CanisterRuntime for CanisterRuntime {
+            async fn sign_with_ecdsa(
+                &self,
+                key_name: String,
+                derivation_path: Vec<Vec<u8>>,
+                message_hash: [u8; 32],
+            ) -> Result<[u8; 64], CallError>;
+
+            async fn ecdsa_public_key(
+                &self,
+                key_name: String,
+                derivation_path: Vec<Vec<u8>>,
+            ) -> Result<EcdsaPublicKeyResult, CallError>;
+        }
+
+        impl Clone for CanisterRuntime {
+            fn clone(&self) -> Self;
+        }
     }
 }
 

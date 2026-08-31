@@ -9,17 +9,22 @@
 //! `fetch_finalized_receipts`), but signing with the sweeper derivation path (`[3]`) and reading
 //! the sweeper address' own transaction count.
 
+#[cfg(test)]
+mod tests;
+
 use crate::{
     deposit_address::sweeper_derivation_path,
     guard::TimerGuard,
     logs::{DEBUG, INFO},
     numeric::{GasAmount, TransactionCount},
+    runtime::CanisterRuntime,
     state::{
         State, TaskType,
         audit::{EventType, process_event},
         mutate_state, read_state,
         transactions::{CreateSweepTransactionError, PipelineRequest},
     },
+    time::TimeProvider,
     tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate},
     withdraw::{
         fetch_finalized_receipts, finalized_transaction_count, latest_transaction_count,
@@ -38,7 +43,22 @@ const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
 
-pub async fn process_sweeper_transactions() {
+/// Turns the deposits the balance scan queued into the sweep requests that
+/// [`process_sweeper_transactions`] prices, signs, sends and finalizes.
+pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(_runtime: &R) {
+    let _guard = match TimerGuard::new(TaskType::SweeperEnqueue) {
+        Ok(guard) => guard,
+        Err(e) => {
+            log!(
+                DEBUG,
+                "Failed retrieving timer guard to create pending sweeper requests: {e:?}",
+            );
+            return;
+        }
+    };
+}
+
+pub async fn process_sweeper_transactions<R: CanisterRuntime>(runtime: R) {
     let _guard = match TimerGuard::new(TaskType::SweeperSend) {
         Ok(guard) => guard,
         Err(e) => {
@@ -50,7 +70,7 @@ pub async fn process_sweeper_transactions() {
         }
     };
 
-    if read_state(|s| !s.sweeper_transactions.has_pending_requests()) {
+    if read_state(|s| !s.automatic_deposits.has_pending_sweeps()) {
         return;
     }
 
@@ -62,7 +82,7 @@ pub async fn process_sweeper_transactions() {
         return;
     };
 
-    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate().await {
+    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate(&runtime).await {
         Some(gas_fee_estimate) => gas_fee_estimate,
         None => {
             // The withdrawal task refreshes the same estimate under a shared guard and runs first
@@ -73,42 +93,44 @@ pub async fn process_sweeper_transactions() {
                 INFO,
                 "[process_sweeper_transactions]: failed retrieving gas fee estimate, retrying",
             );
-            schedule_retry();
+            schedule_retry(runtime);
             return;
         }
     };
 
     let latest_transaction_count = latest_transaction_count(sender).await;
-    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate).await;
-    create_transactions_batch(&gas_fee_estimate);
-    sign_transactions_batch().await;
+    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate, &runtime).await;
+    create_transactions_batch(&gas_fee_estimate, &runtime);
+    sign_transactions_batch(&runtime).await;
     send_transactions_batch(sender, latest_transaction_count).await;
-    finalize_transactions_batch(sender).await;
+    finalize_transactions_batch(sender, &runtime).await;
 
-    if read_state(|s| s.sweeper_transactions.has_pending_requests()) {
-        schedule_retry();
+    if read_state(|s| s.automatic_deposits.has_pending_sweeps()) {
+        schedule_retry(runtime);
     }
 }
 
-fn schedule_retry() {
-    ic_cdk_timers::set_timer(crate::PROCESS_SWEEPER_TRANSACTIONS_RETRY_INTERVAL, async {
-        process_sweeper_transactions().await
-    });
+fn schedule_retry<R: CanisterRuntime>(runtime: R) {
+    ic_cdk_timers::set_timer(
+        crate::PROCESS_SWEEPER_TRANSACTIONS_RETRY_INTERVAL,
+        async move { process_sweeper_transactions(runtime).await },
+    );
 }
 
-async fn resubmit_transactions_batch(
+async fn resubmit_transactions_batch<T: TimeProvider>(
     latest_transaction_count: Option<TransactionCount>,
     gas_fee_estimate: &GasFeeEstimate,
+    time_provider: &T,
 ) {
-    if read_state(|s| s.sweeper_transactions.is_sent_tx_empty()) {
+    if read_state(|s| s.automatic_deposits.is_sent_sweep_tx_empty()) {
         return;
     }
     let Some(latest_transaction_count) = latest_transaction_count else {
         return;
     };
     let transactions_to_resubmit = read_state(|s| {
-        s.sweeper_transactions
-            .create_resubmit_transactions(latest_transaction_count, gas_fee_estimate.clone())
+        s.automatic_deposits
+            .create_resubmit_sweep_transactions(latest_transaction_count, gas_fee_estimate.clone())
     });
     for result in transactions_to_resubmit {
         match result {
@@ -124,6 +146,7 @@ async fn resubmit_transactions_batch(
                             sweep_id,
                             transaction,
                         },
+                        time_provider,
                     )
                 });
             }
@@ -137,13 +160,16 @@ async fn resubmit_transactions_batch(
     }
 }
 
-fn create_transactions_batch(gas_fee_estimate: &GasFeeEstimate) {
+fn create_transactions_batch<T: TimeProvider>(
+    gas_fee_estimate: &GasFeeEstimate,
+    time_provider: &T,
+) {
     for request in read_state(|s| {
-        s.sweeper_transactions
-            .requests_batch(SWEEP_REQUESTS_BATCH_SIZE)
+        s.automatic_deposits
+            .sweep_requests_batch(SWEEP_REQUESTS_BATCH_SIZE)
     }) {
         let ethereum_network = read_state(State::ethereum_network);
-        let nonce = read_state(|s| s.sweeper_transactions.next_transaction_nonce());
+        let nonce = read_state(|s| s.automatic_deposits.next_sweeper_transaction_nonce());
         let sweep_id = request.id;
         match request.create_transaction(
             nonce,
@@ -159,6 +185,7 @@ fn create_transactions_batch(gas_fee_estimate: &GasFeeEstimate) {
                             sweep_id,
                             transaction,
                         },
+                        time_provider,
                     );
                 });
             }
@@ -171,16 +198,16 @@ fn create_transactions_batch(gas_fee_estimate: &GasFeeEstimate) {
                     INFO,
                     "[process_sweeper_transactions]: Sweep {sweep_id:?} has prepaid gas {allowed_max_transaction_fee:?}, below the current transaction fee {actual_max_transaction_fee:?}. Sweep moved back to end of queue."
                 );
-                mutate_state(|s| s.sweeper_transactions.reschedule_request(sweep_id));
+                mutate_state(|s| s.automatic_deposits.reschedule_sweep_request(sweep_id));
             }
         }
     }
 }
 
-async fn sign_transactions_batch() {
+async fn sign_transactions_batch<R: CanisterRuntime>(runtime: &R) {
     let transactions_batch: Vec<_> = read_state(|s| {
-        s.sweeper_transactions
-            .transactions_to_sign_batch(SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE)
+        s.automatic_deposits
+            .sweep_transactions_to_sign_batch(SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE)
     });
     let results = join_all(
         transactions_batch
@@ -188,7 +215,7 @@ async fn sign_transactions_batch() {
             .map(|(sweep_id, tx)| async move {
                 (
                     sweep_id,
-                    crate::tx::sign(tx, sweeper_derivation_path()).await,
+                    crate::tx::sign(tx, sweeper_derivation_path(), runtime).await,
                 )
             }),
     )
@@ -202,6 +229,7 @@ async fn sign_transactions_batch() {
                         sweep_id,
                         transaction,
                     },
+                    runtime,
                 )
             }),
             Err(e) => log!(
@@ -220,7 +248,7 @@ async fn send_transactions_batch(
         return;
     };
     let transactions_to_send: Vec<_> = read_state(|s| {
-        s.sweeper_transactions.transactions_to_send_batch(
+        s.automatic_deposits.sweep_transactions_to_send_batch(
             latest_transaction_count,
             SWEEP_TRANSACTIONS_TO_SEND_BATCH_SIZE,
         )
@@ -228,15 +256,15 @@ async fn send_transactions_batch(
     send_signed_transactions(sender, &transactions_to_send).await;
 }
 
-async fn finalize_transactions_batch(sender: Address) {
-    if read_state(|s| s.sweeper_transactions.is_sent_tx_empty()) {
+async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_provider: &T) {
+    if read_state(|s| s.automatic_deposits.is_sent_sweep_tx_empty()) {
         return;
     }
     match finalized_transaction_count(sender).await {
         Ok(finalized_tx_count) => {
             let txs_to_finalize = read_state(|s| {
-                s.sweeper_transactions
-                    .sent_transactions_to_finalize(&finalized_tx_count)
+                s.automatic_deposits
+                    .sent_sweep_transactions_to_finalize(&finalized_tx_count)
             });
             if let Some(receipts) = fetch_finalized_receipts(txs_to_finalize).await {
                 for (sweep_id, transaction_receipt) in receipts {
@@ -247,6 +275,7 @@ async fn finalize_transactions_batch(sender: Address) {
                                 sweep_id,
                                 transaction_receipt: transaction_receipt.into(),
                             },
+                            time_provider,
                         );
                     });
                 }

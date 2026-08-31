@@ -12,6 +12,7 @@ use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
+use crate::runtime::CanisterRuntime;
 use crate::state::automatic_deposits::{AutomaticDeposits, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
@@ -29,7 +30,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet, btree_map};
 use std::fmt::{Display, Formatter};
 use strum_macros::EnumIter;
-use transactions::{SweepId, SweeperTransactionPipeline, WithdrawalTransactions};
+use transactions::{SweepId, WithdrawalTransactions};
 
 pub mod audit;
 pub mod automatic_deposits;
@@ -78,9 +79,6 @@ pub struct State {
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
     pub withdrawal_transactions: WithdrawalTransactions,
-    /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
-    /// its own nonce sequence, independent of the main-address withdrawal pipeline.
-    pub sweeper_transactions: SweeperTransactionPipeline,
     /// Monotonic counter minting the next [`SweepId`] for the sweeper pipeline.
     pub next_sweep_id: SweepId,
     pub skipped_blocks: BTreeMap<Address, BTreeSet<BlockNumber>>,
@@ -598,8 +596,8 @@ impl State {
         if let Some(nonce) = next_sweeper_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
                 .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {e}")))?;
-            self.sweeper_transactions
-                .update_next_transaction_nonce(nonce);
+            self.automatic_deposits
+                .update_next_sweeper_transaction_nonce(nonce);
         }
         if let Some(amount) = minimum_withdrawal_amount {
             let minimum_withdrawal_amount = Wei::try_from(amount).map_err(|e| {
@@ -711,7 +709,8 @@ impl State {
             other.ledger_suite_orchestrator_id
         );
         ensure_eq!(self.ckerc20_tokens, other.ckerc20_tokens);
-        ensure_eq!(self.automatic_deposits, other.automatic_deposits);
+        self.automatic_deposits
+            .is_equivalent_to(&other.automatic_deposits)?;
         ensure_eq!(
             self.sweeper_contract_address,
             other.sweeper_contract_address
@@ -719,8 +718,6 @@ impl State {
         ensure_eq!(self.sweeper_funding, other.sweeper_funding);
         ensure_eq!(self.next_sweep_id, other.next_sweep_id);
 
-        self.sweeper_transactions
-            .is_equivalent_to(&other.sweeper_transactions)?;
         self.withdrawal_transactions
             .is_equivalent_to(&other.withdrawal_transactions)
     }
@@ -803,11 +800,9 @@ where
     })
 }
 
-pub async fn lazy_call_ecdsa_public_key_with_chain_code() -> (PublicKey, [u8; 32]) {
-    use ic_cdk_management_canister::{
-        EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, ecdsa_public_key,
-    };
-
+pub async fn lazy_call_ecdsa_public_key_with_chain_code<R: CanisterRuntime>(
+    runtime: &R,
+) -> (PublicKey, [u8; 32]) {
     fn to_public_key_and_chain_code(response: &EcdsaPublicKeyResult) -> (PublicKey, [u8; 32]) {
         let public_key = PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
             ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
@@ -827,29 +822,26 @@ pub async fn lazy_call_ecdsa_public_key_with_chain_code() -> (PublicKey, [u8; 32
     }
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
     log!(DEBUG, "Fetching the ECDSA public key {key_name}");
-    let response = ecdsa_public_key(&EcdsaPublicKeyArgs {
-        canister_id: None,
-        derivation_path: crate::MAIN_DERIVATION_PATH
-            .into_iter()
-            .map(|x| x.to_vec())
-            .collect(),
-        key_id: EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: key_name,
-        },
-    })
-    .await
-    .unwrap_or_else(|err| ic_cdk::trap(format!("failed to get minter's public key: {err}")));
+    let response = runtime
+        .ecdsa_public_key(
+            key_name,
+            crate::MAIN_DERIVATION_PATH
+                .into_iter()
+                .map(|x| x.to_vec())
+                .collect(),
+        )
+        .await
+        .unwrap_or_else(|err| ic_cdk::trap(format!("failed to get minter's public key: {err}")));
     mutate_state(|s| s.ecdsa_public_key = Some(response.clone()));
     to_public_key_and_chain_code(&response)
 }
 
-pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
-    lazy_call_ecdsa_public_key_with_chain_code().await.0
+pub async fn lazy_call_ecdsa_public_key<R: CanisterRuntime>(runtime: &R) -> PublicKey {
+    lazy_call_ecdsa_public_key_with_chain_code(runtime).await.0
 }
 
-pub async fn minter_address() -> Address {
-    ecdsa_public_key_to_address(&lazy_call_ecdsa_public_key().await)
+pub async fn minter_address<R: CanisterRuntime>(runtime: &R) -> Address {
+    ecdsa_public_key_to_address(&lazy_call_ecdsa_public_key(runtime).await)
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -990,4 +982,5 @@ pub enum TaskType {
     BalanceScan,
     SweeperFunding,
     SweeperSend,
+    SweeperEnqueue,
 }
