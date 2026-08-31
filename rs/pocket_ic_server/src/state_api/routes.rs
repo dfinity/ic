@@ -291,6 +291,8 @@ where
         // Configures an IC instance to make progress automatically,
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
+        // Only returns after the certified time of the IC instance
+        // has been updated for the first time.
         .api_route("/{id}/auto_progress", post(auto_progress))
         // Returns whether automatic progress is enabled for an IC instance.
         .api_route("/{id}/auto_progress", get(get_auto_progress))

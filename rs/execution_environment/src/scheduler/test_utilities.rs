@@ -1390,7 +1390,6 @@ impl TestWasmExecutorCore {
         let instance_stats = InstanceStats {
             wasm_accessed_pages: message.dirty_pages,
             wasm_dirty_pages: message.dirty_pages,
-            wasm_read_before_write_count: message.dirty_pages,
             ..Default::default()
         };
         let slice = SliceExecutionOutput {

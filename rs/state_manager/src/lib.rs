@@ -3567,7 +3567,7 @@ impl StateManager for StateManagerImpl {
         // is derived from the canisters at checkpoint load, so refreshing it here,
         // right before the state is hashed, is what makes a replica that restarts
         // from the checkpoint agree with one that keeps running.
-        state.refresh_consumed_cycles_by_canisters();
+        state.refresh_consumed_cycles();
 
         let assert_tip_is_none = |states: &SharedState| {
             // The following assert validates that we don't have two clients

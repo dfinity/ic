@@ -385,6 +385,8 @@ impl PocketIc {
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
+    /// Only returns after the certified time of the IC
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
@@ -433,6 +435,8 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
+    /// Only returns after the certified time of the PocketIC instance
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
@@ -449,6 +453,8 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
+    /// Only returns after the certified time of the PocketIC instance
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]

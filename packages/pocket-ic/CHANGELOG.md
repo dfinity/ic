@@ -33,6 +33,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reported.
 - A node that cannot pay for gossiping its mocked reject reports an out-of-cycles reject instead of the mocked one, matching what
   a node of a real subnet does under pay-as-you-go pricing.
+
+## 16.0.0 - 2026-08-31
+
+### Added
+- Added the `SubnetCoolingDown` variant to the `ErrorCode` enum: ingress messages addressed to a subnet that is "cooling down" are rejected with this error code.
+- Added the `CanisterStatusAccessDenied` variant to the `ErrorCode` enum: a call to the `canister_status` endpoint of the management canister is rejected with this error code if the caller is not allowed to access the canister status according to the `status_visibility` canister setting.
+
+### Changed
+- The functions `PocketIc::auto_progress`, `PocketIc::make_live`, and their variants only return
+  after the certified time of the PocketIC instance has been updated for the first time
+  (the same applies to building an instance with automatic progress enabled).
 - No hard TTL is set on PocketIC servers started implicitly by the library (e.g. by `PocketIc::new` or `PocketIcBuilder::build`); previously a default of 10 minutes was used.
   The hard TTL is an absolute deadline measured from the server's launch which is not extended by activity, so a test suite whose total runtime exceeded it had its server terminated while still serving requests, failing in-flight calls with `Connection reset by peer`.
   Orphaned servers remain bounded by the (activity-based) soft TTL.

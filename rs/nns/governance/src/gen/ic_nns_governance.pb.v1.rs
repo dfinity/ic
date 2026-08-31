@@ -2859,7 +2859,9 @@ pub mod install_code {
         ::prost::Message,
     )]
     pub struct CanisterUpgradeOptions {
-        /// Whether to skip the canister's pre_upgrade hook.
+        /// Whether to skip the canister's pre_upgrade hook. This would generally be
+        /// used in emergencies. See the corresponding field in the Management
+        /// canister API.
         #[prost(bool, optional, tag = "1")]
         pub skip_pre_upgrade: ::core::option::Option<bool>,
         /// Whether to retain (keep) or drop (replace) the canister's Wasm main

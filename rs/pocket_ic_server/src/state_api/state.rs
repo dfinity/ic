@@ -68,7 +68,7 @@ use std::{
 use tokio::{
     sync::mpsc::Receiver,
     sync::mpsc::error::TryRecvError,
-    sync::{Mutex, RwLock, mpsc},
+    sync::{Mutex, RwLock, mpsc, oneshot},
     task::{JoinHandle, JoinSet, spawn, spawn_blocking},
     time::{self, sleep},
 };
@@ -1009,6 +1009,9 @@ impl ApiState {
         let mut instance = instances[instance_id].lock().await;
         if instance.progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
+            // Used to signal that the certified time has been set for the first time
+            // so that this function only returns after that happened.
+            let (certified_time_tx, certified_time_rx) = oneshot::channel::<()>();
             let handle = spawn(async move {
                 let mut now = SystemTime::now();
                 let time = ic_types::Time::from_nanos_since_unix_epoch(
@@ -1027,6 +1030,9 @@ impl ApiState {
                 .await
                 .is_some()
                 {
+                    // The receiver is dropped if the `auto_progress` future was cancelled
+                    // (e.g., because the client disconnected) and thus we ignore the result.
+                    let _ = certified_time_tx.send(());
                     debug!("Starting auto progress for instance {}.", instance_id);
                     loop {
                         let old = std::mem::replace(&mut now, SystemTime::now());
@@ -1066,6 +1072,14 @@ impl ApiState {
                 }
             });
             instance.progress_thread = Some(ProgressThread { handle, sender: tx });
+            // Drop the locks so that the progress thread can execute its first operation
+            // setting the certified time.
+            drop(instance);
+            drop(instances);
+            // Wait until the certified time has been set for the first time.
+            // The sender is dropped without sending if the progress thread stopped
+            // before setting the certified time and thus we ignore the result.
+            let _ = certified_time_rx.await;
             Ok(())
         } else {
             Err("Auto progress mode has already been enabled.".to_string())

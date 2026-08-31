@@ -707,6 +707,8 @@ pub enum InitialTime {
     /// Configures the new instance to make progress automatically,
     /// i.e., periodically update the time of the IC instance
     /// to the real time and execute rounds on the subnets.
+    /// Creating the instance only returns after the certified time
+    /// of the IC instance has been updated for the first time.
     AutoProgress(AutoProgressConfig),
 }
 
