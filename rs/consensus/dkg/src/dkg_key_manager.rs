@@ -297,7 +297,7 @@ impl DkgKeyManager {
     }
 
     fn get_post_split_summary(
-        &mut self,
+        &self,
         summary_block: &Block,
         scheduled: SplittingArgs,
     ) -> Result<DkgSummary, String> {
