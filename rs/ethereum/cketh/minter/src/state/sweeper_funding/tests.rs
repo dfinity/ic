@@ -134,6 +134,20 @@ mod accounting {
     }
 
     #[test]
+    fn should_hold_every_accepted_sweep() {
+        let mut accounting = funded_accounting();
+
+        accounting.record_accepted_sweep(Wei::new(FEE));
+        accounting.record_accepted_sweep(Wei::new(2 * FEE));
+
+        assert_eq!(
+            accounting.sweeper_balance_lower_bound(),
+            Wei::new(BURN - 3 * FEE),
+            "every accepted sweep adds its own hold"
+        );
+    }
+
+    #[test]
     #[should_panic(expected = "a sweep must not send ETH")]
     fn should_panic_when_a_finalized_sweep_sent_eth() {
         let mut accounting = funded_accounting();
@@ -296,7 +310,7 @@ mod config {
 mod sweep_events {
     use crate::eth_rpc::Hash;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-    use crate::numeric::{BlockNumber, Wei};
+    use crate::numeric::{BlockNumber, Wei, WeiPerGas};
     use crate::state::State;
     use crate::state::audit::{EventType, apply_state_transition};
     use crate::state::sweeper_funding::SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS;
@@ -306,7 +320,9 @@ mod sweep_events {
     use crate::test_fixtures::{
         PREPAID_SWEEP_GAS, account, gas_fee_estimate, state_with_enqueued_sweep, usdc,
     };
-    use crate::tx::{SignableTransaction, Signed, TransactionSignature};
+    use crate::tx::{
+        GasFeeEstimate, SignableTransaction, Signed, SweepTransaction, TransactionSignature,
+    };
 
     #[tokio::test]
     async fn should_provision_an_accepted_sweep_before_it_has_spent_anything() {
@@ -341,6 +357,38 @@ mod sweep_events {
                 "a {status:?} sweep must cost the sweeper exactly the {fee_paid} of gas it paid"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn should_settle_on_the_receipt_of_the_resubmission_that_finalized() {
+        let (mut state, request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
+        let repriced = GasFeeEstimate {
+            max_priority_fee_per_gas: WeiPerGas::ZERO,
+            ..gas_fee_estimate()
+        };
+
+        let fee_paid = settle(
+            &mut state,
+            &request,
+            TransactionStatus::Success,
+            Some(repriced),
+        );
+
+        let original_price = gas_fee_estimate()
+            .base_fee_per_gas
+            .checked_add(gas_fee_estimate().max_priority_fee_per_gas)
+            .unwrap();
+        assert_ne!(
+            Some(fee_paid),
+            original_price.transaction_cost(request.gas_limit()),
+            "the replacement must pay a different fee, or this shows nothing"
+        );
+        assert_eq!(
+            sweeper_balance(&state),
+            PREPAID_SWEEP_GAS.checked_sub(fee_paid).unwrap(),
+            "one refund, measured against the request's ceiling, settled off the receipt of \
+             whichever resubmission finalized"
+        );
     }
 
     #[tokio::test]
@@ -400,15 +448,24 @@ mod sweep_events {
     }
 
     fn finalize(state: &mut State, request: &SweepRequest, status: TransactionStatus) -> Wei {
+        settle(state, request, status, None)
+    }
+
+    fn settle(
+        state: &mut State,
+        request: &SweepRequest,
+        status: TransactionStatus,
+        replacement_estimate: Option<GasFeeEstimate>,
+    ) -> Wei {
         let sweep_id = request.id;
-        let transaction = request
-            .create_transaction(
-                state.automatic_deposits.next_sweeper_transaction_nonce(),
-                gas_fee_estimate(),
-                request.gas_limit(),
-                state.ethereum_network,
-            )
-            .expect("BUG: the fixture prices the request with the estimate it creates with");
+        let nonce = state.automatic_deposits.next_sweeper_transaction_nonce();
+        let ethereum_network = state.ethereum_network;
+        let priced_with = |estimate: GasFeeEstimate| {
+            request
+                .create_transaction(nonce, estimate, request.gas_limit(), ethereum_network)
+                .expect("BUG: the fixture prices the request with the estimate it creates with")
+        };
+        let transaction = priced_with(gas_fee_estimate());
         apply_state_transition(
             state,
             &EventType::CreatedSweeperTransaction {
@@ -416,28 +473,50 @@ mod sweep_events {
                 transaction: transaction.clone(),
             },
         );
-        let signed = Signed::from((
-            transaction,
-            TransactionSignature {
-                signature_y_parity: false,
-                r: Default::default(),
-                s: Default::default(),
-            },
-        ));
+        let sign = |transaction: SweepTransaction| {
+            Signed::from((
+                transaction,
+                TransactionSignature {
+                    signature_y_parity: false,
+                    r: Default::default(),
+                    s: Default::default(),
+                },
+            ))
+        };
         apply_state_transition(
             state,
             &EventType::SignedSweeperTransaction {
                 sweep_id,
-                transaction: signed.clone(),
+                transaction: sign(transaction.clone()),
             },
         );
-        let estimate = gas_fee_estimate();
+        let mut effective_estimate = gas_fee_estimate();
+        let mut signed = sign(transaction);
+        if let Some(estimate) = replacement_estimate {
+            let replacement = priced_with(estimate.clone());
+            apply_state_transition(
+                state,
+                &EventType::ReplacedSweeperTransaction {
+                    sweep_id,
+                    transaction: replacement.clone(),
+                },
+            );
+            signed = sign(replacement);
+            apply_state_transition(
+                state,
+                &EventType::SignedSweeperTransaction {
+                    sweep_id,
+                    transaction: signed.clone(),
+                },
+            );
+            effective_estimate = estimate;
+        }
         let receipt = TransactionReceipt {
             block_hash: Hash([0x11; 32]),
             block_number: BlockNumber::new(4_190_269),
-            effective_gas_price: estimate
+            effective_gas_price: effective_estimate
                 .base_fee_per_gas
-                .checked_add(estimate.max_priority_fee_per_gas)
+                .checked_add(effective_estimate.max_priority_fee_per_gas)
                 .unwrap(),
             gas_used: signed.transaction().gas_limit(),
             status,
