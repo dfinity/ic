@@ -313,7 +313,7 @@ mod sweep_events {
         let (state, request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
 
         assert_eq!(
-            bound(&state),
+            sweeper_balance(&state),
             PREPAID_SWEEP_GAS
                 .checked_sub(request.max_transaction_fee)
                 .unwrap(),
@@ -336,7 +336,7 @@ mod sweep_events {
                 "the fixture must leave an unspent part to hand back"
             );
             assert_eq!(
-                bound(&state),
+                sweeper_balance(&state),
                 PREPAID_SWEEP_GAS.checked_sub(fee_paid).unwrap(),
                 "a {status:?} sweep must cost the sweeper exactly the {fee_paid} of gas it paid"
             );
@@ -346,7 +346,7 @@ mod sweep_events {
     #[tokio::test]
     async fn should_fund_again_once_accepted_sweeps_consume_the_prepaid_gas() {
         let (mut state, request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
-        state.cketh_minimum_withdrawal_amount = bound(&state)
+        state.cketh_minimum_withdrawal_amount = sweeper_balance(&state)
             .checked_div_floor(SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS / 2)
             .expect("test setup: dividing by a non-zero constant");
         state.eth_balance = eth_balance_of(state.sweeper_funding_config().target);
@@ -361,7 +361,7 @@ mod sweep_events {
         let target = state.sweeper_funding_config().target;
         match plan_funding(&state) {
             FundingDecision::Fund(amount) => assert_eq!(
-                amount.checked_add(bound(&state)),
+                amount.checked_add(sweeper_balance(&state)),
                 Some(target),
                 "the funding must top the sweeper back up to the target"
             ),
@@ -395,7 +395,7 @@ mod sweep_events {
             .record_accepted_sweep(PREPAID_SWEEP_GAS);
     }
 
-    fn bound(state: &State) -> Wei {
+    fn sweeper_balance(state: &State) -> Wei {
         state.sweeper_funding.sweeper_balance_lower_bound()
     }
 
