@@ -547,13 +547,15 @@ fn start_consensus(
     let replica_config = ReplicaConfig {
         node_id,
         subnet_id,
-        replica_version: replica_version.clone(),
+        replica_version,
     };
     let dkg_key_manager = Arc::new(Mutex::new(ic_consensus_dkg::DkgKeyManager::new(
         metrics_registry.clone(),
         Arc::clone(&consensus_crypto),
         log.clone(),
         &PoolReader::new(&*consensus_pool.read().unwrap()),
+        registry_client.clone(),
+        replica_config.clone(),
     )));
 
     let mut join_handles = vec![];

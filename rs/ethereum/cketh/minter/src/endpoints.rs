@@ -450,6 +450,17 @@ pub mod events {
         pub access_list: Vec<AccessListItem>,
     }
 
+    /// A secp256k1 signature: the two 32-byte components and the parity recovering the signing
+    /// key from them.
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub struct TransactionSignature {
+        pub y_parity: bool,
+        /// 32-byte signature component.
+        pub r: ByteBuf,
+        /// 32-byte signature component.
+        pub s: ByteBuf,
+    }
+
     /// An [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) authorization tuple: a deposit
     /// address' signed consent to delegate its code to `delegate`, signed by the address itself.
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -457,11 +468,20 @@ pub mod events {
         pub chain_id: Nat,
         pub delegate: String,
         pub nonce: Nat,
-        pub y_parity: bool,
-        /// 32-byte signature component.
-        pub r: ByteBuf,
-        /// 32-byte signature component.
-        pub s: ByteBuf,
+        pub signature: TransactionSignature,
+    }
+
+    /// One deposit a sweep moves: the address the funds sit at, the account they are credited to,
+    /// the attestation binding the two, and the delegation letting the sweeper's code run there.
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub struct AuthorizedSweepItem {
+        pub deposit: String,
+        pub owner: Principal,
+        pub subaccount: Option<ByteBuf>,
+        /// The attestation signed by the deposit address itself.
+        pub attestation: TransactionSignature,
+        /// The delegation installed on the way, absent if the address is already delegated.
+        pub authorization: Option<SignedAuthorization>,
     }
 
     /// A sweep transaction the minter has created but not yet signed: a transaction, plus the
@@ -567,23 +587,23 @@ pub mod events {
             deposit_helper: String,
             owner: Principal,
             subaccount: Option<ByteBuf>,
-            y_parity: bool,
-            /// 32-byte signature component.
-            r: ByteBuf,
-            /// 32-byte signature component.
-            s: ByteBuf,
+            /// The attestation signed by the deposit address itself.
+            attestation: TransactionSignature,
+        },
+        AuthorizedDepositAddress {
+            owner: Principal,
+            subaccount: Option<ByteBuf>,
+            authorization: SignedAuthorization,
         },
         AcceptedSweepRequest {
             sweep_id: Nat,
             destination: String,
-            amount: Nat,
-            /// Transaction call data (the delegate sweep call).
-            data: ByteBuf,
+            /// The single ERC-20 contract this sweep moves.
+            token: String,
+            /// The deposits the sweep moves, one per account.
+            items: Vec<AuthorizedSweepItem>,
             max_transaction_fee: Nat,
             created_at: u64,
-            /// Delegations the sweep installs on the way, empty if every address it touches is
-            /// already delegated.
-            authorizations: Vec<SignedAuthorization>,
         },
         CreatedSweeperTransaction {
             sweep_id: Nat,

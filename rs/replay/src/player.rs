@@ -11,7 +11,7 @@ use ic_artifact_pool::{
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
 use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
-use ic_consensus::consensus::batch_delivery::deliver_batches;
+use ic_consensus::consensus::batch_delivery::deliver_batches_for_ic_replay;
 use ic_consensus_certification::VerifierImpl;
 use ic_consensus_utils::{lookup_replica_version, membership::Membership, pool_reader::PoolReader};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
@@ -712,13 +712,13 @@ impl Player {
     ) -> Height {
         let expected_batch_height = message_routing.expected_batch_height();
         let last_batch_height = loop {
-            match deliver_batches(
+            match deliver_batches_for_ic_replay(
                 message_routing,
                 membership,
                 pool,
                 &*self.registry,
-                self.subnet_id,
                 &self.log,
+                self.subnet_id,
                 replay_target_height,
             ) {
                 Ok(h) => break h,

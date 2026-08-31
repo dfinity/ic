@@ -794,6 +794,7 @@ mod tests {
                 registry,
                 state_manager,
                 registry_data_provider,
+                replica_config,
                 ..
             } = DependenciesBuilder::single_subnet(
                 pool_config,
@@ -805,6 +806,11 @@ mod tests {
                         .build(),
                 )],
             )
+            .with_replica_config(ReplicaConfig {
+                node_id,
+                subnet_id,
+                replica_version: test_replica_version(),
+            })
             .build();
             state_manager
                 .get_mut()
@@ -860,14 +866,12 @@ mod tests {
                 crypto.clone(),
                 no_op_logger(),
                 &PoolReader::new(&pool),
+                registry.clone(),
+                replica_config.clone(),
             );
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(
-                ReplicaConfig {
-                    node_id,
-                    subnet_id,
-                    replica_version: test_replica_version(),
-                },
+                replica_config,
                 registry.clone(),
                 state_manager.clone(),
                 crypto.clone(),
