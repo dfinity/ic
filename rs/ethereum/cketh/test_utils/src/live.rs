@@ -50,7 +50,7 @@ use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, TransactionStatus};
 use ic_cketh_minter::endpoints::{
     CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
-    DepositStatus,
+    DepositStatus, MinterInfo,
 };
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
@@ -498,6 +498,10 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         self.cketh().get_all_events()
     }
 
+    pub fn get_minter_info(&self) -> MinterInfo {
+        self.cketh().get_minter_info()
+    }
+
     /// Polls until `observe` produces a value, or fails with what the minter was doing. The shape
     /// every wait here had spelled out for itself; the sleep is [`POLL_INTERVAL`], as for the ticks.
     fn poll_until<T>(
@@ -707,13 +711,10 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         );
     }
 
-    /// The sweeper address the minter derived, scraped from its log line: there is no getter for it
-    /// yet, and it cannot be derived test-side without the master public key.
     fn sweeper_address(&self) -> Option<Address> {
-        self.minter_logs().iter().find_map(|line| {
-            let rest = line.split("[fund_sweeper]: ").nth(1)?;
-            let hex = rest.split_whitespace().next()?;
-            hex.parse().ok()
+        self.get_minter_info().sweeper_address.map(|address| {
+            Address::from_str(&address)
+                .expect("BUG: the minter reported an invalid sweeper address")
         })
     }
 

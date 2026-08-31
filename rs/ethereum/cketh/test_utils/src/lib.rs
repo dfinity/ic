@@ -102,9 +102,8 @@ pub const USDC_ERC20_CONTRACT_ADDRESS_LOWERCASE: &str =
 pub const MINTER_ADDRESS: &str = "0x30a14171b7c4c93ff5213f82eeb74f7c7e3f1ebc";
 /// The minter's dedicated sweeper address, derived from the same test key as [`MINTER_ADDRESS`]
 /// under the sweeper derivation path. Hardcoded as the value that derivation is expected to
-/// produce, so a test can name it before the minter is installed; `MinterInfo::sweeper_address`
-/// reports what the running minter actually derived. A test that funds it asserts the sweep really
-/// was sent from here, so a stale value fails loudly.
+/// produce; the `get_minter_info` tests assert it against the `MinterInfo::sweeper_address` the
+/// running minter actually derived, so a stale value fails loudly.
 pub const SWEEPER_ADDRESS: &str = "0x07e326c6604e3801270fc52ffb7ad3d6c5dfe89c";
 pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";

@@ -16,12 +16,12 @@ use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::endpoints::events::EventPayload;
 use ic_cketh_minter::numeric::Erc20Value;
+use ic_cketh_test_utils::MINTER_ADDRESS;
 use ic_cketh_test_utils::anvil::{
     Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
 };
 use ic_cketh_test_utils::ckerc20::Erc20Token;
 use ic_cketh_test_utils::live::{Holding, LiveSetup, contract_address};
-use ic_cketh_test_utils::{MINTER_ADDRESS, SWEEPER_ADDRESS};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeSet;
@@ -291,8 +291,8 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
     const USDC_DEPOSIT: u128 = 100_000_000;
     const USDT_DEPOSIT: u128 = 150_000_000;
 
-    let sweeper = address_from_hex(SWEEPER_ADDRESS);
     let setup = LiveSetup::new_sweep();
+    let sweeper = setup.await_sweeper_address();
     let funded_gas = setup.anvil_eth_balance(&sweeper);
     let contracts = setup.sweep_contracts();
     let [usdc, usdt] = setup.supported_erc20_tokens() else {
