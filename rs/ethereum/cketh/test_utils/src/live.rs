@@ -269,29 +269,50 @@ impl LiveSetup<CkErc20Setup> {
     }
 
     /// Places every token [`Self::supported_erc20_tokens`] returns at its real mainnet address on
-    /// the owned anvil node, and credits each holding by writing its `balanceOf` mapping slot
-    /// directly.
+    /// the owned anvil node, and funds each holding CEX-style: a plain ERC-20 `transfer` from a
+    /// seeded exchange account to the deposit address, carrying no principal.
     ///
-    /// Every balance is written *before* any token gets code. The fail-loud batcher only returns a
-    /// (scan-advancing) result once every token has code — by which point all balances are already
-    /// in place — so a concurrent scan can never observe a partially-credited state.
+    /// All the transfers are mined in a single block. The scan's batched `eth_call` pins one
+    /// block, so a concurrent scan sees either every holding funded or none of them — never a
+    /// partial state that would split the sweep batches a test pins. A scan landing before that
+    /// block reads zero balances and simply keeps scanning, as on mainnet.
     pub fn credit_deposits(&self, holdings: &[Holding<'_>]) {
-        let dev = address_from_hex(DEV_ACCOUNT);
-        // Reuse MockUSDT's deployed bytecode to give each token a working `balanceOf`.
-        let runtime = self.anvil.code(&deploy_mock_erc20(&self.anvil, &dev));
-
-        for holding in holdings {
-            self.anvil.set_storage_at(
-                &contract_address(holding.token),
-                &erc20_balance_slot(&holding.deposit),
-                &u256_be(holding.amount),
-            );
-        }
-        // Every registered token is read in the shared batch, so a token without code would revert
-        // the whole scan even for holdings that do not involve it.
+        let cex = address_from_hex(DEV_ACCOUNT);
+        // Reuse MockUSDT's deployed bytecode to give each token a working `balanceOf` and
+        // `transfer`. Every registered token needs code, not just the held ones: all of them are
+        // read in the shared batch, so a token without code would revert the whole scan even for
+        // holdings that do not involve it.
+        let runtime = self.anvil.code(&deploy_mock_erc20(&self.anvil, &cex));
         for token in self.supported_erc20_tokens() {
             self.anvil.set_code(&contract_address(token), &runtime);
         }
+
+        let mut cex_totals: BTreeMap<Address, u128> = BTreeMap::new();
+        for holding in holdings {
+            let total = cex_totals
+                .entry(contract_address(holding.token))
+                .or_default();
+            *total = total
+                .checked_add(holding.amount)
+                .expect("BUG: the CEX account's balance overflows");
+        }
+        for (token, total) in &cex_totals {
+            self.anvil
+                .set_storage_at(token, &erc20_balance_slot(&cex), &u256_be(*total));
+        }
+
+        let transfers: Vec<(Address, Address, u128)> = holdings
+            .iter()
+            .map(|holding| {
+                (
+                    contract_address(holding.token),
+                    holding.deposit,
+                    holding.amount,
+                )
+            })
+            .collect();
+        self.anvil.fund_in_one_block(&cex, &transfers);
+
         for holding in holdings {
             assert_eq!(
                 self.anvil
