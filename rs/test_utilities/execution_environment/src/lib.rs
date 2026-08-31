@@ -65,6 +65,7 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
 use ic_test_utilities::state_manager::FakeStateManager;
+use ic_test_utilities_types::ids::test_replica_version;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::batch::ChainKeyData;
 use ic_types::crypto::threshold_sig::ni_dkg::{
@@ -318,7 +319,7 @@ pub struct ExecutionTest {
     current_round: ExecutionRound,
 
     // Read-only fields.
-    dirty_heap_page_overhead: u64,
+    heap_page_overhead: u64,
     instruction_limits: InstructionLimits,
     install_code_instruction_limits: InstructionLimits,
     instruction_limit_per_query_message: NumInstructions,
@@ -355,8 +356,8 @@ impl ExecutionTest {
         Arc::clone(&self.exec_env)
     }
 
-    pub fn dirty_heap_page_overhead(&self) -> u64 {
-        self.dirty_heap_page_overhead
+    pub fn heap_page_overhead(&self) -> u64 {
+        self.heap_page_overhead
     }
 
     pub fn user_id(&self) -> UserId {
@@ -2474,7 +2475,7 @@ impl Default for ExecutionTestBuilder {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             time: UNIX_EPOCH,
             current_round: ExecutionRound::new(1),
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
             precompiled_universal_canister: true,
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: BTreeSet::new(),
@@ -3126,17 +3127,17 @@ impl ExecutionTestBuilder {
             })
             .collect::<BTreeMap<_, _>>();
 
-        let dirty_page_overhead = match self.subnet_type {
-            SubnetType::Application => SchedulerConfig::application_subnet().dirty_page_overhead,
-            SubnetType::System => SchedulerConfig::system_subnet().dirty_page_overhead,
+        let page_overhead = match self.subnet_type {
+            SubnetType::Application => SchedulerConfig::application_subnet().page_overhead,
+            SubnetType::System => SchedulerConfig::system_subnet().page_overhead,
             SubnetType::VerifiedApplication => {
-                SchedulerConfig::verified_application_subnet().dirty_page_overhead
+                SchedulerConfig::verified_application_subnet().page_overhead
             }
-            SubnetType::CloudEngine => SchedulerConfig::cloud_engine().dirty_page_overhead,
+            SubnetType::CloudEngine => SchedulerConfig::cloud_engine().page_overhead,
         };
 
-        let dirty_heap_page_overhead = match self.execution_config.embedders_config.metering_type {
-            MeteringType::New => dirty_page_overhead.get(),
+        let heap_page_overhead = match self.execution_config.embedders_config.metering_type {
+            MeteringType::New => page_overhead.get(),
             _ => 0,
         };
 
@@ -3186,7 +3187,7 @@ impl ExecutionTestBuilder {
             subnet_memory_reservation,
             subnet_available_callbacks: self.execution_config.subnet_callback_soft_limit as i64,
             time: self.time,
-            dirty_heap_page_overhead,
+            heap_page_overhead,
             instruction_limits: InstructionLimits::new(
                 self.subnet_config
                     .scheduler_config

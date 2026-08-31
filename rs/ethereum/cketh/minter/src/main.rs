@@ -29,17 +29,20 @@ use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::{self, BurnMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
+use ic_cketh_minter::runtime::IC_CANISTER_RUNTIME;
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
 use ic_cketh_minter::state::automatic_deposits::DepositRequest;
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest, SweepRequest,
+    AuthorizedSweepItem, Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed,
+    ReimbursementIndex, ReimbursementRequest, SweepRequest,
 };
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
-use ic_cketh_minter::sweep::process_sweeper_transactions;
+use ic_cketh_minter::sweep::{create_pending_sweeper_requests, process_sweeper_transactions};
+use ic_cketh_minter::sweeper::fund_sweeper_address;
+use ic_cketh_minter::time::IC_TIME_PROVIDER;
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
@@ -49,7 +52,7 @@ use ic_cketh_minter::withdraw::{
 use ic_cketh_minter::{
     BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
     PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL,
-    SCRAPING_ETH_LOGS_INTERVAL, state, storage,
+    SCRAPING_ETH_LOGS_INTERVAL, SWEEP_ENQUEUE_INTERVAL, SWEEPER_FUNDING_INTERVAL, state, storage,
 };
 use ic_cketh_minter::{endpoints, erc20};
 use ic_ethereum_types::Address;
@@ -82,14 +85,18 @@ fn validate_ckerc20_active() {
 fn setup_timers() {
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
         // Initialize the minter's public key to make the address known.
-        let _ = lazy_call_ecdsa_public_key().await;
+        let _ = lazy_call_ecdsa_public_key(&IC_CANISTER_RUNTIME).await;
+        // Sequenced after the key rather than scheduled on a delay: the sweeper address cannot be
+        // derived without it, and a delay only guesses at when it will be cached. Running here also
+        // keeps the two off separate tasks, since two concurrent `ecdsa_public_key` calls trap.
+        fund_sweeper_address(&IC_TIME_PROVIDER).await;
     });
     // Start scraping logs immediately after the install, then repeat with the interval.
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
-        scrape_logs().await;
+        scrape_logs(&IC_TIME_PROVIDER).await;
     });
     ic_cdk_timers::set_timer_interval(SCRAPING_ETH_LOGS_INTERVAL, async || {
-        scrape_logs().await;
+        scrape_logs(&IC_TIME_PROVIDER).await;
     });
     // Refresh the latest block height immediately after the install, then repeat
     // with the interval.
@@ -100,19 +107,25 @@ fn setup_timers() {
         refresh_latest_block_height().await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
-        process_retrieve_eth_requests().await;
+        process_retrieve_eth_requests(IC_CANISTER_RUNTIME).await;
+    });
+    ic_cdk_timers::set_timer_interval(SWEEP_ENQUEUE_INTERVAL, async || {
+        create_pending_sweeper_requests(&IC_CANISTER_RUNTIME).await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_SWEEPER_TRANSACTIONS_INTERVAL, async || {
-        process_sweeper_transactions().await;
+        process_sweeper_transactions(IC_CANISTER_RUNTIME).await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, async || {
-        process_reimbursement().await;
+        process_reimbursement(&IC_TIME_PROVIDER).await;
     });
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
-        balance_scan().await;
+        balance_scan(&IC_TIME_PROVIDER).await;
     });
     ic_cdk_timers::set_timer_interval(BALANCE_SCAN_INTERVAL, async || {
-        balance_scan().await;
+        balance_scan(&IC_TIME_PROVIDER).await;
+    });
+    ic_cdk_timers::set_timer_interval(SWEEPER_FUNDING_INTERVAL, async || {
+        fund_sweeper_address(&IC_TIME_PROVIDER).await;
     });
 }
 
@@ -122,7 +135,7 @@ fn init(arg: MinterArg) {
         MinterArg::InitArg(init_arg) => {
             log!(INFO, "[init]: initialized minter with arg: {:?}", init_arg);
             STATE.with(|cell| {
-                storage::record_event(EventType::Init(init_arg.clone()));
+                storage::record_event(EventType::Init(init_arg.clone()), &IC_TIME_PROVIDER);
                 *cell.borrow_mut() =
                     Some(State::try_from(init_arg).expect("BUG: failed to initialize minter"))
             });
@@ -149,13 +162,16 @@ fn emit_preupgrade_events() {
                     EventType::SyncedDepositWithSubaccountToBlock { block_number }
                 }
             };
-            storage::record_event(event);
+            storage::record_event(event, &IC_TIME_PROVIDER);
         }
     });
 
     let registry = read_state(|s| s.automatic_deposits.watchlist_snapshot());
     if !registry.registrations.is_empty() {
-        storage::record_event(EventType::RegisteredDepositAddresses(registry));
+        storage::record_event(
+            EventType::RegisteredDepositAddresses(registry),
+            &IC_TIME_PROVIDER,
+        );
     }
 }
 
@@ -171,15 +187,19 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
         Some(MinterArg::InitArg(_)) => {
             ic_cdk::trap("cannot upgrade canister state with init args");
         }
-        Some(MinterArg::UpgradeArg(upgrade_args)) => lifecycle::post_upgrade(Some(upgrade_args)),
-        None => lifecycle::post_upgrade(None),
+        Some(MinterArg::UpgradeArg(upgrade_args)) => {
+            lifecycle::post_upgrade(Some(upgrade_args), &IC_TIME_PROVIDER)
+        }
+        None => lifecycle::post_upgrade(None, &IC_TIME_PROVIDER),
     }
     setup_timers();
 }
 
 #[update]
 async fn minter_address() -> String {
-    state::minter_address().await.to_string()
+    state::minter_address(&IC_CANISTER_RUNTIME)
+        .await
+        .to_string()
 }
 
 #[update]
@@ -226,7 +246,7 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
 
     // Not armed yet: register. Ensure the minter's ECDSA public key has been fetched and cached in
     // the state so that the (synchronous) registration below can derive the address.
-    state::lazy_call_ecdsa_public_key_with_chain_code().await;
+    state::lazy_call_ecdsa_public_key_with_chain_code(&IC_CANISTER_RUNTIME).await;
     let now = Timestamp::from_nanos(ic_cdk::api::time());
     // Re-check the status after the await: a concurrent balance scan may have detected a deposit and
     // moved this pair into the sweep queue while we waited for the ECDSA key (only possible right
@@ -436,6 +456,7 @@ async fn withdraw_eth(
                 process_event(
                     s,
                     EventType::AcceptedEthWithdrawalRequest(withdrawal_request.clone()),
+                    &IC_TIME_PROVIDER,
                 );
             });
             Ok(RetrieveEthRequest::from(withdrawal_request))
@@ -613,6 +634,7 @@ async fn withdraw_erc20(
                         process_event(
                             s,
                             EventType::AcceptedErc20WithdrawalRequest(withdrawal_request.clone()),
+                            &IC_TIME_PROVIDER,
                         );
                     });
                     Ok(RetrieveErc20Request::from(withdrawal_request))
@@ -640,6 +662,7 @@ async fn withdraw_erc20(
                             process_event(
                                 s,
                                 EventType::FailedErc20WithdrawalRequest(reimbursement_request),
+                                &IC_TIME_PROVIDER,
                             );
                         });
                     }
@@ -657,7 +680,7 @@ async fn withdraw_erc20(
 }
 
 async fn estimate_erc20_transaction_fee() -> Option<Wei> {
-    lazy_refresh_gas_fee_estimate()
+    lazy_refresh_gas_fee_estimate(&IC_TIME_PROVIDER)
         .await
         .map(|gas_fee_estimate| {
             gas_fee_estimate
@@ -684,7 +707,13 @@ async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
     }
     let ckerc20_token = erc20::CkErc20Token::try_from(erc20_token)
         .unwrap_or_else(|e| ic_cdk::trap(format!("ERROR: {e}")));
-    mutate_state(|s| process_event(s, EventType::AddedCkErc20Token(ckerc20_token)));
+    mutate_state(|s| {
+        process_event(
+            s,
+            EventType::AddedCkErc20Token(ckerc20_token),
+            &IC_TIME_PROVIDER,
+        )
+    });
 }
 
 #[update]
@@ -699,14 +728,18 @@ async fn get_canister_status() -> ic_cdk_management_canister::CanisterStatusResu
 #[query]
 fn get_events(arg: GetEventsArg) -> GetEventsResult {
     use ic_cketh_minter::endpoints::events::{
-        AccessListItem, ReimbursementIndex as CandidReimbursementIndex,
+        AccessListItem, AuthorizedSweepItem as CandidAuthorizedSweepItem,
+        ReimbursementIndex as CandidReimbursementIndex,
         SignedAuthorization as CandidSignedAuthorization,
         TransactionReceipt as CandidTransactionReceipt,
+        TransactionSignature as CandidTransactionSignature,
         TransactionStatus as CandidTransactionStatus, UnsignedSweeperTransaction,
         UnsignedTransaction,
     };
     use ic_cketh_minter::eth_rpc_client::responses::TransactionReceipt;
-    use ic_cketh_minter::tx::{SignableTransaction, SignedAuthorization, SweepTransaction};
+    use ic_cketh_minter::tx::{
+        SignableTransaction, SignedAuthorization, SweepTransaction, TransactionSignature,
+    };
     use serde_bytes::ByteBuf;
 
     const MAX_EVENTS_PER_RESPONSE: u64 = 100;
@@ -773,6 +806,36 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
         }
     }
 
+    fn map_signature(signature: &TransactionSignature) -> CandidTransactionSignature {
+        CandidTransactionSignature {
+            y_parity: signature.signature_y_parity,
+            r: ByteBuf::from(signature.r.to_be_bytes()),
+            s: ByteBuf::from(signature.s.to_be_bytes()),
+        }
+    }
+
+    fn map_authorized_sweep_items(items: &[AuthorizedSweepItem]) -> Vec<CandidAuthorizedSweepItem> {
+        items
+            .iter()
+            .map(
+                |AuthorizedSweepItem {
+                     item,
+                     authorization,
+                 }| CandidAuthorizedSweepItem {
+                    deposit: item.deposit.as_address().to_string(),
+                    owner: item.account.owner,
+                    subaccount: item.account.subaccount.map(ByteBuf::from),
+                    attestation: map_signature(&item.attestation),
+                    authorization: authorization.as_ref().map(|authorization| {
+                        map_authorizations(std::slice::from_ref(authorization))
+                            .pop()
+                            .expect("BUG: one authorization in, one out")
+                    }),
+                },
+            )
+            .collect()
+    }
+
     fn map_authorizations(
         authorizations: &[SignedAuthorization],
     ) -> Vec<CandidSignedAuthorization> {
@@ -782,9 +845,11 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 chain_id: authorization.chain_id.into(),
                 delegate: authorization.delegate.to_string(),
                 nonce: authorization.nonce.into(),
-                y_parity: authorization.y_parity,
-                r: ByteBuf::from(authorization.r.to_be_bytes()),
-                s: ByteBuf::from(authorization.s.to_be_bytes()),
+                signature: CandidTransactionSignature {
+                    y_parity: authorization.y_parity,
+                    r: ByteBuf::from(authorization.r.to_be_bytes()),
+                    s: ByteBuf::from(authorization.s.to_be_bytes()),
+                },
             })
             .collect()
     }
@@ -958,22 +1023,40 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id: withdrawal_id.get().into(),
                     transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
+                EventType::AttestedDepositAddress { request, signature } => {
+                    let account = request.account();
+                    EP::AttestedDepositAddress {
+                        chain_id: request.chain_id().into(),
+                        deposit_helper: request.deposit_helper().to_string(),
+                        owner: account.owner,
+                        subaccount: account.subaccount.map(ByteBuf::from),
+                        attestation: map_signature(&signature),
+                    }
+                }
+                EventType::AuthorizedDepositAddress { request, signature } => {
+                    let account = request.account();
+                    EP::AuthorizedDepositAddress {
+                        owner: account.owner,
+                        subaccount: account.subaccount.map(ByteBuf::from),
+                        authorization: map_authorizations(&[request.signed_with(signature)])
+                            .pop()
+                            .expect("BUG: one authorization in, one out"),
+                    }
+                }
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,
-                    amount,
-                    data,
+                    token,
+                    items,
                     max_transaction_fee,
                     created_at,
-                    authorizations,
                 }) => EP::AcceptedSweepRequest {
                     sweep_id: id.0.into(),
                     destination: destination.to_string(),
-                    amount: amount.into(),
-                    data: ByteBuf::from(data),
+                    token: token.to_string(),
+                    items: map_authorized_sweep_items(&items),
                     max_transaction_fee: max_transaction_fee.into(),
                     created_at,
-                    authorizations: map_authorizations(&authorizations),
                 },
                 EventType::CreatedSweeperTransaction {
                     sweep_id,
@@ -1237,6 +1320,18 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_oldest_incomplete_eth_withdrawal_request_age_seconds",
                     (age_nanos / 1_000_000_000) as f64,
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
+                )?;
+
+                w.encode_gauge(
+                    "cketh_minter_stored_attestations",
+                    s.automatic_deposits.attestations_len() as f64,
+                    "Number of deposit address attestations the minter has signed and stored.",
+                )?;
+
+                w.encode_gauge(
+                    "cketh_minter_stored_authorizations",
+                    s.automatic_deposits.authorizations_len() as f64,
+                    "Number of delegation authorizations the minter has signed and stored.",
                 )?;
 
                 w.encode_gauge(

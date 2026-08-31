@@ -19,7 +19,7 @@ use ic_protobuf::registry::replica_version::v1::{
     ReplicaVersionRecord,
 };
 use ic_registry_keys::make_replica_version_key;
-use ic_types::ReplicaVersion;
+use ic_test_utilities_types::ids::test_replica_version;
 use lazy_static::lazy_static;
 use registry_canister::mutations::{
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
@@ -115,7 +115,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
             gov.update_from_sender("forward_vote", candid, input, &sender)
         };
 
-        let default_version = &ReplicaVersion::default().to_string();
+        let default_version = test_replica_version().to_string();
         let unassigned_nodes_version = "unassigned_nodes_version";
         let version_to_elect_and_unelect1 = "version_to_elect_and_unelect1";
         let version_to_elect_and_unelect2 = "version_to_elect_and_unelect2";
@@ -139,14 +139,20 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
 
         // Check state of elected versions
         for version in [
-            default_version,
+            &default_version,
             version_to_elect_and_unelect1,
             version_to_elect_and_unelect2,
             unassigned_nodes_version,
         ] {
-            assert!(is_elected_version(&nns_canisters.registry, version).await);
+            assert!(
+                is_elected_version(&nns_canisters.registry, version).await,
+                "Expected {version} to be elected"
+            );
         }
-        assert!(!is_elected_version(&nns_canisters.registry, version_to_elect).await);
+        assert!(
+            !is_elected_version(&nns_canisters.registry, version_to_elect).await,
+            "Did not expect {version_to_elect} to be elected"
+        );
 
         // update unassigned version
         let deploy_unassigned_payload = DeployGuestosToAllUnassignedNodesPayload {
@@ -174,7 +180,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                 Some("Key not present"),
             ),
             (
-                retire_version_payload(vec![version_to_elect_and_unelect1, default_version]),
+                retire_version_payload(vec![version_to_elect_and_unelect1, &default_version]),
                 Some("Using a version that isn't elected"),
             ),
             (
@@ -245,7 +251,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         }
 
         // Check state of elected versions
-        for version in [default_version, unassigned_nodes_version, version_to_elect] {
+        for version in [&default_version, unassigned_nodes_version, version_to_elect] {
             assert!(is_elected_version(&nns_canisters.registry, version).await);
         }
         for version in [version_to_elect_and_unelect1, version_to_elect_and_unelect2] {

@@ -88,8 +88,8 @@
     "tag": "release-2026-08-19"
   },
   "internet_identity_frontend": {
-    "sha256": "1b028cc9ec9e7d121a2d8a0bf01328dfb331c6fd34aac8cb968de208dc0d5b4d",
-    "tag": "release-2026-08-21"
+    "sha256": "9d61e682453076022a8dc3ddaee4f587ef6bce0d44401fd67dffcededf6f75bd",
+    "tag": "release-2026-08-28"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -104,8 +104,8 @@
     "sha256": "0327f3833c4a61b1d23820bc2564e233ecfa623a770d5e25d5fd81dd652ab376"
   },
   "nns_dapp_test": {
-    "sha256": "6e7ea29b9862ef3123a88fec8c88b66d8a9faad704b1fe1dd1efec18ccfe7eba",
-    "tag": "proposal-143661"
+    "sha256": "1c76cfe887a934c77e0c8c40915a3b465414f588d04701cebc2448f64c69a47b",
+    "tag": "proposal-143733"
   },
   "node-rewards": {
     "rev": "5ec6c4cd04236a30930f57463a272b41ec093127",
