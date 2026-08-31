@@ -1191,8 +1191,8 @@ fn report_master_public_key_changed_metric(
 mod tests {
     use crate::catch_up_package_provider::LocalCUPReader;
     use crate::catch_up_package_provider::tests::{
-        SPLIT_REGISTRY_VERSION, make_post_split_cup, mock_tls_config, node_record_serving,
-        start_cup_server,
+        DESTINATION_SUBNET_ID, SOURCE_SUBNET_ID, SPLIT_REGISTRY_VERSION, make_post_split_cup,
+        mock_tls_config, node_record_serving, start_cup_server,
     };
     use crate::process_manager::{Process, ProcessRunner};
     use crate::processes::{
@@ -2962,9 +2962,9 @@ mod tests {
         test_upgrade(test_scenario).await;
     }
 
-    /// Sets up a registry where the source subnet `SUBNET_1` is split into `SUBNET_1` and
-    /// `SUBNET_2` at [`SPLIT_REGISTRY_VERSION`], and where the node under test is a member of
-    /// `new_subnet_id` after the split.
+    /// Sets up a registry where the source subnet is split into `SOURCE_SUBNET_ID` and
+    /// `DESTINATION_SUBNET_ID` at `SPLIT_REGISTRY_VERSION`, and where the node under test is a
+    /// member of `new_subnet_id` after the split.
     ///
     /// Both subnets run `replica_version` before the split and `post_split_replica_version`
     /// afterwards. Passing the same version for both means that the split does not come with a
@@ -2980,16 +2980,16 @@ mod tests {
         new_subnet_id: SubnetId,
         server_addr: SocketAddr,
     ) -> Arc<ProtoRegistryDataProvider> {
-        let other_subnet_id = if new_subnet_id == SUBNET_1 {
-            SUBNET_2
+        let other_subnet_id = if new_subnet_id == SOURCE_SUBNET_ID {
+            DESTINATION_SUBNET_ID
         } else {
-            SUBNET_1
+            SOURCE_SUBNET_ID
         };
         let no_recalled_replica_versions = Vec::<String>::new();
 
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         add_root_subnet_id_to_provider(&data_provider, RegistryVersion::from(1), SUBNET_42);
-        add_subnet_list_record(&data_provider, 1, vec![SUBNET_42, SUBNET_1, SUBNET_2]);
+        add_subnet_list_record(&data_provider, 1, vec![SUBNET_42, SOURCE_SUBNET_ID]);
         add_replica_version_to_provider(&data_provider, RegistryVersion::from(1), replica_version);
         if post_split_replica_version != replica_version {
             add_replica_version_to_provider(
@@ -3003,7 +3003,7 @@ mod tests {
         add_subnet_record_to_provider(
             &data_provider,
             RegistryVersion::from(1),
-            SUBNET_1,
+            SOURCE_SUBNET_ID,
             SubnetType::Application,
             [node_id, other_node_id],
             replica_version,
@@ -3018,7 +3018,7 @@ mod tests {
             add_subnet_record_to_provider(
                 &data_provider,
                 SPLIT_REGISTRY_VERSION - RegistryVersion::from(1),
-                SUBNET_1,
+                new_subnet_id,
                 SubnetType::Application,
                 [node_id, other_node_id],
                 replica_version,
@@ -3027,6 +3027,11 @@ mod tests {
         }
 
         // The split itself: the two nodes end up in different subnets.
+        add_subnet_list_record(
+            &data_provider,
+            SPLIT_REGISTRY_VERSION.get(),
+            vec![SUBNET_42, SOURCE_SUBNET_ID, DESTINATION_SUBNET_ID],
+        );
         for (subnet_id, member) in [(new_subnet_id, node_id), (other_subnet_id, other_node_id)] {
             add_subnet_record_to_provider(
                 &data_provider,
@@ -3065,10 +3070,10 @@ mod tests {
     /// further iteration must then be a no-op, i.e. the replica must not be restarted over and
     /// over again for the same post-split CUP.
     #[rstest]
-    #[case::source_reaches_own_subnet_first(SUBNET_1, SUBNET_1)]
-    #[case::source_reaches_other_subnet_first(SUBNET_1, SUBNET_2)]
-    #[case::destination_reaches_own_subnet_first(SUBNET_2, SUBNET_2)]
-    #[case::destination_reaches_other_subnet_first(SUBNET_2, SUBNET_1)]
+    #[case::source_reaches_own_subnet_first(SOURCE_SUBNET_ID, SOURCE_SUBNET_ID)]
+    #[case::source_reaches_other_subnet_first(SOURCE_SUBNET_ID, DESTINATION_SUBNET_ID)]
+    #[case::destination_reaches_own_subnet_first(DESTINATION_SUBNET_ID, DESTINATION_SUBNET_ID)]
+    #[case::destination_reaches_other_subnet_first(DESTINATION_SUBNET_ID, SOURCE_SUBNET_ID)]
     #[tokio::test]
     async fn test_subnet_split_scenarios(
         #[case] new_subnet_id: SubnetId,
@@ -3081,7 +3086,7 @@ mod tests {
         let post_split_cup_height = Height::from(200);
         // Only the destination subnet's replicas need to be restarted, as only their subnet public
         // key changed.
-        let should_restart_replica = new_subnet_id != SUBNET_1;
+        let should_restart_replica = new_subnet_id != SOURCE_SUBNET_ID;
 
         let first_cup_committee = if first_served_subnet_id == new_subnet_id {
             vec![node_id]
@@ -3102,13 +3107,13 @@ mod tests {
             current_replica_version: current_replica_version.clone(),
             has_local_cup: Some(CUPScenario {
                 height: local_cup_height,
-                subnet_id: SUBNET_1,
+                subnet_id: SOURCE_SUBNET_ID,
                 registry_version: RegistryVersion::from(5),
             }),
             has_registry_cup: None,
             // The child processes were started by a previous iteration of the upgrade loop, such
             // that a restart is observable.
-            initial_subnet_assignment: SubnetAssignment::Assigned(SUBNET_1),
+            initial_subnet_assignment: SubnetAssignment::Assigned(SOURCE_SUBNET_ID),
             is_leaving: None,
             upgrade_to: None,
         };
@@ -3148,14 +3153,14 @@ mod tests {
             // its latest CUP still includes it, but not at the latest registry version, so it is
             // effectively `Leaving`.
             let expected_flow = if should_restart_replica {
-                OrchestratorControlFlow::Leaving(SUBNET_1)
+                OrchestratorControlFlow::Leaving(SOURCE_SUBNET_ID)
             } else {
-                OrchestratorControlFlow::Assigned(SUBNET_1)
+                OrchestratorControlFlow::Assigned(SOURCE_SUBNET_ID)
             };
             assert_eq!(upgrade_loop.check().await.unwrap(), expected_flow);
             assert_eq!(
                 upgrade_loop.subnet_assignment(),
-                SubnetAssignment::Assigned(SUBNET_1)
+                SubnetAssignment::Assigned(SOURCE_SUBNET_ID)
             );
             assert_eq!(local_cup().height(), local_cup_height);
             assert!(upgrade_loop.is_replica_running());
@@ -3245,8 +3250,8 @@ mod tests {
     /// Source nodes must also reboot into the new version, but they are not restarted normally
     /// anyway.
     #[rstest]
-    #[case::source_subnet(SUBNET_1)]
-    #[case::destination_subnet(SUBNET_2)]
+    #[case::source_subnet(SOURCE_SUBNET_ID)]
+    #[case::destination_subnet(DESTINATION_SUBNET_ID)]
     #[tokio::test]
     async fn test_subnet_split_with_upgrade_executes_upgrade_instead_of_restarting(
         #[case] new_subnet_id: SubnetId,
@@ -3269,7 +3274,7 @@ mod tests {
             current_replica_version: current_replica_version.clone(),
             has_local_cup: Some(CUPScenario {
                 height: Height::from(100),
-                subnet_id: SUBNET_1,
+                subnet_id: SOURCE_SUBNET_ID,
                 // Lower than [`SPLIT_REGISTRY_VERSION - 1`], such that the local CUP alone would
                 // not trigger the upgrade: only the post-split CUP does.
                 registry_version: RegistryVersion::from(5),
@@ -3277,13 +3282,8 @@ mod tests {
             has_registry_cup: None,
             // The child processes were started by a previous iteration of the upgrade loop, such
             // that a restart would be observable.
-            initial_subnet_assignment: SubnetAssignment::Assigned(SUBNET_1),
+            initial_subnet_assignment: SubnetAssignment::Assigned(SOURCE_SUBNET_ID),
             is_leaving: None,
-            // The registry is built by `setup_registry_for_split` below rather than by
-            // `UpgradeTestScenario::setup_registry`, so this only drives the test harness: it makes
-            // it prepare the image and the target version, and expect exactly one call to
-            // `has_replicated_all_versions_certified_before_init`. The upgrade itself is announced
-            // by the post-split subnet records at [`SPLIT_REGISTRY_VERSION - 1`].
             upgrade_to: Some(ReplicaUpgradeScenario {
                 replica_version: upgrade_replica_version.clone(),
                 registry_version: SPLIT_REGISTRY_VERSION - RegistryVersion::from(1),
@@ -3359,7 +3359,7 @@ mod tests {
             )
             // A destination node still detects that the CUP is for its new subnet, ...
             .has_exactly_n_messages_containing(
-                usize::from(new_subnet_id != SUBNET_1),
+                usize::from(new_subnet_id != SOURCE_SUBNET_ID),
                 &Level::Info,
                 &format!("is for a different subnet (subnet_id={new_subnet_id})"),
             )

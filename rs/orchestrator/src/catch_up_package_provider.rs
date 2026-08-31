@@ -965,8 +965,8 @@ pub(crate) mod tests {
     /// The registry version at which the subnet split is set in the registry, and thus also the
     /// registry version of the post-split CUPs.
     pub(crate) const SPLIT_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(10);
-    const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
-    const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
+    pub(crate) const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
+    pub(crate) const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
 
     /// Creates a deserializable [`CatchUpPackage`] whose DKG summary carries the given committee,
     /// registry version and subnet splitting status.
