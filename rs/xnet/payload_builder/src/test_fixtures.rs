@@ -339,7 +339,7 @@ pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
             LOCAL_SUBNET,
             expected_index,
             expected_index,
-            (POOLED_SLICE_BYTE_SIZE_MAX - 350) * 98 / 100
+            adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX)
         ));
     }
 

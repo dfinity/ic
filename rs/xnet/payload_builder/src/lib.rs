@@ -1348,6 +1348,13 @@ pub struct RefillStreamSliceIndices {
     pub byte_limit: usize,
 }
 
+/// Reduces `slice_byte_size` to account for overhead in the `XNetEndpoint`
+/// request, which only counts message bytes (measured: 350 bytes for
+/// certification plus base witness, 2% for large payloads).
+pub fn adjusted_byte_limit(slice_byte_size: usize) -> usize {
+    slice_byte_size.saturating_sub(350) * 98 / 100
+}
+
 /// Computes `RefillStreamSliceIndices` for every subnet whose stream slices should be refilled
 /// in the given certified slice pool owned by the given subnet.
 pub fn refill_stream_slice_indices(
@@ -1412,9 +1419,7 @@ pub fn refill_stream_slice_indices(
             RefillStreamSliceIndices {
                 witness_begin,
                 msg_begin,
-                // XNetEndpoint only counts message bytes, allow some overhead (measuread: 350
-                // bytes for certification plus base witness, 2% for large payloads).
-                byte_limit: (slice_byte_limit.saturating_sub(350)) * 98 / 100,
+                byte_limit: adjusted_byte_limit(slice_byte_limit),
             },
         );
     }
