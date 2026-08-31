@@ -1846,6 +1846,42 @@ impl Default for StateMachineBuilder {
     }
 }
 
+/// The responses consensus would produce for the pending `setup_initial_dkg`
+/// requests of `state`: a dummy transcript per request, derived from `seed` so
+/// that the result stays deterministic.
+///
+/// `setup_initial_dkg` can only be called on the NNS subnet, so the seed does
+/// not need to depend on the subnet ID.
+fn setup_initial_dkg_responses(state: &ReplicatedState, seed: u64) -> Vec<ConsensusResponse> {
+    let mut rng = StdRng::seed_from_u64(seed);
+    state
+        .metadata
+        .subnet_call_context_manager
+        .setup_initial_dkg_contexts
+        .keys()
+        .map(|callback_id| {
+            let ni_dkg_transcript = dummy_initial_dkg_transcript_with_master_key(&mut rng).0;
+            let public_key = (&ni_dkg_transcript).try_into().unwrap();
+            let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
+            let subnet_id = PrincipalId::new_self_authenticating(&public_key_der).into();
+            let mut high_threshold_transcript_record = ni_dkg_transcript.clone();
+            high_threshold_transcript_record.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
+            let mut low_threshold_transcript_record = ni_dkg_transcript;
+            low_threshold_transcript_record.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
+            let initial_transcript_records = SetupInitialDKGResponse {
+                low_threshold_transcript_record: high_threshold_transcript_record.into(),
+                high_threshold_transcript_record: low_threshold_transcript_record.into(),
+                fresh_subnet_id: subnet_id,
+                subnet_threshold_public_key: public_key.into(),
+            };
+            ConsensusResponse::new(
+                *callback_id,
+                MsgPayload::Data(initial_transcript_records.encode()),
+            )
+        })
+        .collect()
+}
+
 impl StateMachine {
     /// Provides the implicit time increment for a single round of execution
     /// if time does not advance between consecutive rounds.
@@ -1960,34 +1996,7 @@ impl StateMachine {
         }
         let self_validating = Some(batch_payload.self_validating);
         let mut consensus_responses = http_responses;
-        // `setup_initial_dkg` can only be called on the NNS subnet
-        // and thus the seed does not need to depend on the subnet ID
-        let mut rng = StdRng::seed_from_u64(certified_height.get());
-        for callback_id in state
-            .metadata
-            .subnet_call_context_manager
-            .setup_initial_dkg_contexts
-            .keys()
-        {
-            let ni_dkg_transcript = dummy_initial_dkg_transcript_with_master_key(&mut rng).0;
-            let public_key = (&ni_dkg_transcript).try_into().unwrap();
-            let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
-            let subnet_id = PrincipalId::new_self_authenticating(&public_key_der).into();
-            let mut high_threshold_transcript_record = ni_dkg_transcript.clone();
-            high_threshold_transcript_record.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
-            let mut low_threshold_transcript_record = ni_dkg_transcript;
-            low_threshold_transcript_record.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
-            let initial_transcript_records = SetupInitialDKGResponse {
-                low_threshold_transcript_record: high_threshold_transcript_record.into(),
-                high_threshold_transcript_record: low_threshold_transcript_record.into(),
-                fresh_subnet_id: subnet_id,
-                subnet_threshold_public_key: public_key.into(),
-            };
-            consensus_responses.push(ConsensusResponse::new(
-                *callback_id,
-                MsgPayload::Data(initial_transcript_records.encode()),
-            ));
-        }
+        consensus_responses.extend(setup_initial_dkg_responses(&state, certified_height.get()));
         let mut payload = PayloadBuilder::new()
             .with_ingress_messages(ingress_messages)
             .with_xnet_payload(xnet_payload)
@@ -3034,6 +3043,14 @@ impl StateMachine {
         {
             self.process_threshold_signing_request(id, context, &mut payload_builder);
         }
+
+        // Process `setup_initial_dkg` requests, which consensus would answer.
+        payload_builder
+            .consensus_responses
+            .extend(setup_initial_dkg_responses(
+                &state,
+                self.state_manager.latest_state_height().get(),
+            ));
 
         self.execute_payload(payload_builder);
     }

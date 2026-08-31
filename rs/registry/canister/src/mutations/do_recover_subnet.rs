@@ -488,7 +488,7 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
     }
 }
 
-fn panic_if_record_changed_across_versions(
+pub(crate) fn panic_if_record_changed_across_versions(
     registry: &Registry,
     key: &str,
     initial_registry_version: Version,
