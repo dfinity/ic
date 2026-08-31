@@ -252,7 +252,7 @@ impl DkgKeyManager {
                         warn!(
                             every_n_seconds => 5,
                             self.logger,
-                            "Couldn't get the next DKG summary for the new subnet after the split: {err:?}"
+                            "Couldn't compute the post-split DKG summary for the new subnet after the split: {err}"
                         );
                         return;
                     }
@@ -308,7 +308,7 @@ impl DkgKeyManager {
             scheduled,
         )
         .map_err(|err| {
-            format!("Couldn't determine the post-split subnet assignment after the split: {err:?}")
+            format!("Couldn't determine the post-split subnet assignment after the split: {err}")
         })?
         .new_subnet_id;
 
