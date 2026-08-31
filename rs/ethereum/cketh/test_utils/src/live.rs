@@ -130,6 +130,10 @@ const SWEEP_TICKS: u32 = 8;
 /// The mint follows the sweep through the log scrape, one more timer downstream.
 const CREDIT_TICKS: u32 = 6;
 
+/// A budget, not a cost: one tick sends the funding transfer, the spares cover a tick landing
+/// before the funding task has burned, and a tick lost to an outcall the jump timed out.
+const FUNDING_TICKS: u32 = 6;
+
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
 /// address, so the scan reads a real balance for that (address, token) pair.
 pub struct Holding<'a> {
@@ -177,11 +181,11 @@ impl LiveSetup<CkErc20Setup> {
 
     /// Like [`Self::new_balance_scan`], but with the real deposit helper and the attested sweeper
     /// delegate deployed on the node first, so the minter is installed knowing both, and with the
-    /// minter's dedicated sweeper address pre-funded with `sweeper_gas_wei` of ETH.
-    ///
-    /// Funding the sweeper directly is a shortcut: in production its gas comes from a ckETH burn
-    /// out of the minter's fee account, which is a separate pipeline from sweeping.
-    pub fn new_sweep(sweeper: &Address, sweeper_gas_wei: u128) -> Self {
+    /// sweeper address at `sweeper` funded the way production funds it: a ckETH burn out of the
+    /// minter's fee account, delivered by the funding pipeline — which is also what lets the
+    /// minter know the sweeper can pay for a sweep, since it only accepts sweeps whose fee its
+    /// own funding accounting covers.
+    pub fn new_sweep(sweeper: &Address) -> Self {
         let anvil = Arc::new(Anvil::start_mainnet_like());
         // The helper pays out to the minter's main address, which the minter only derives once
         // installed. It is only ever read back out of the helper event, never by the helper
@@ -202,7 +206,23 @@ impl LiveSetup<CkErc20Setup> {
              control, so a sweep would move every balance out of reach while still minting"
         );
         setup.sweep_contracts = Some(contracts);
-        setup.anvil.set_balance(sweeper, sweeper_gas_wei);
+        setup.deposit_helper = Some(contracts.helper);
+
+        let depositor = Account {
+            owner: setup.cketh().caller.into(),
+            subaccount: None,
+        };
+        setup.deposit(depositor, DEPOSIT_AMOUNT);
+        setup.deposit(setup.fee_account(), FEE_ACCOUNT_BALANCE);
+        setup.await_deposits_credited(&[depositor, setup.fee_account()]);
+        setup.upgrade_minter();
+        assert_eq!(
+            setup.await_sweeper_address(),
+            *sweeper,
+            "BUG: the minter derived a sweeper address the test did not expect"
+        );
+        setup.await_eth_received(sweeper, FUNDING_TICKS);
+        setup.await_funding_finalized();
         setup
     }
 
@@ -466,20 +486,6 @@ impl LiveSetup<CkEthSetup> {
         });
         self
     }
-
-    /// Deposits `value` wei for `beneficiary` through the helper contract, as a depositor does.
-    fn deposit(&self, beneficiary: Account, value: u128) {
-        let helper = self
-            .deposit_helper
-            .expect("BUG: the funding fixture always deploys a deposit helper");
-        deposit_eth(
-            &self.anvil,
-            &helper,
-            &address_from_hex(DEV_ACCOUNT),
-            beneficiary,
-            value,
-        );
-    }
 }
 
 impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
@@ -679,6 +685,36 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
             owner: self.minter_id(),
             subaccount: Some(ic_cketh_minter::CKETH_FEE_SUBACCOUNT),
         }
+    }
+
+    /// Drives the minter until it has recorded the funding transfer as finalized, which is the
+    /// point its own accounting starts covering sweep gas with what that funding delivered —
+    /// merely seeing the ETH on anvil ([`Self::await_eth_received`]) is not it.
+    fn await_funding_finalized(&self) {
+        self.drive_until(
+            FUNDING_TICKS,
+            |_| "the minter never finalized the funding transfer".to_string(),
+            |setup| {
+                setup
+                    .minter_events()
+                    .iter()
+                    .any(|event| matches!(event.payload, EventPayload::FinalizedTransaction { .. }))
+            },
+        );
+    }
+
+    /// Deposits `value` wei for `beneficiary` through the helper contract, as a depositor does.
+    fn deposit(&self, beneficiary: Account, value: u128) {
+        let helper = self
+            .deposit_helper
+            .expect("BUG: the funding fixture always deploys a deposit helper");
+        deposit_eth(
+            &self.anvil,
+            &helper,
+            &address_from_hex(DEV_ACCOUNT),
+            beneficiary,
+            value,
+        );
     }
 
     /// The sweeper address the minter derived, scraped from its log line: there is no getter for it
