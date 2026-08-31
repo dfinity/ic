@@ -20,7 +20,7 @@ fn test_remove_subnet_local_registry_records() {
     use ic_registry_routing_table::RoutingTable;
     use ic_registry_subnet_features::SubnetFeatures;
     use ic_registry_subnet_type::SubnetType;
-    use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
+    use ic_types::{CanisterId, PrincipalId, SubnetId};
     use ic_types_cycles::CanisterCyclesCostSchedule;
     use rand::SeedableRng;
     use rand::rngs::StdRng;
@@ -91,7 +91,7 @@ fn test_remove_subnet_local_registry_records() {
         make_canister_ranges_key(CanisterId::from_u64(0)),
         make_subnet_list_record_key(),
         make_provisional_whitelist_record_key(),
-        make_replica_version_key(ReplicaVersion::default()),
+        make_replica_version_key(ic_test_utilities_types::ids::test_replica_version()),
         make_chain_key_enabled_subnet_list_key(&MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "test_ecdsa_key".to_string(),
