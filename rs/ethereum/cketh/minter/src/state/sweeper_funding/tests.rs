@@ -221,22 +221,18 @@ mod sweep_events {
     use crate::state::tests::eth_balance_of;
     use crate::state::transactions::{PipelineRequest, SweepRequest};
     use crate::sweeper::{FundingDecision, plan_funding};
-    use crate::test_fixtures::{account, gas_fee_estimate, state_with_enqueued_sweep, usdc};
+    use crate::test_fixtures::{
+        PREPAID_SWEEP_GAS, account, gas_fee_estimate, state_with_enqueued_sweep, usdc,
+    };
     use crate::tx::{SignableTransaction, Signed, TransactionSignature};
-
-    /// What a funding is taken to have delivered to the sweeper, arranged directly: comfortably
-    /// above any fee a fixture sweep can be charged.
-    const DELIVERED: u128 = 1_000_000_000_000_000_000;
 
     #[tokio::test]
     async fn should_provision_an_accepted_sweep_before_it_has_spent_anything() {
-        let (mut state, request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
-
-        deliver(&mut state);
+        let (state, request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
 
         assert_eq!(
             bound(&state),
-            Wei::new(DELIVERED)
+            PREPAID_SWEEP_GAS
                 .checked_sub(request.max_transaction_fee)
                 .unwrap(),
             "the whole of what the sweep may cost stops counting as available gas"
@@ -250,7 +246,6 @@ mod sweep_events {
     async fn should_settle_the_bound_on_what_a_finalized_sweep_actually_cost() {
         for status in [TransactionStatus::Success, TransactionStatus::Failure] {
             let (mut state, request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
-            deliver(&mut state);
 
             let fee_paid = finalize(&mut state, &request, status);
 
@@ -260,7 +255,7 @@ mod sweep_events {
             );
             assert_eq!(
                 bound(&state),
-                Wei::new(DELIVERED).checked_sub(fee_paid).unwrap(),
+                PREPAID_SWEEP_GAS.checked_sub(fee_paid).unwrap(),
                 "a {status:?} sweep must cost the sweeper exactly the {fee_paid} of gas it paid"
             );
         }
@@ -269,7 +264,6 @@ mod sweep_events {
     #[tokio::test]
     async fn should_fund_again_once_accepted_sweeps_consume_the_prepaid_gas() {
         let (mut state, request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
-        deliver(&mut state);
         state.cketh_minimum_withdrawal_amount = bound(&state)
             .checked_div_floor(SWEEPER_FUNDING_TARGET_IN_MINIMUM_WITHDRAWAL_AMOUNTS / 2)
             .expect("test setup: dividing by a non-zero constant");
@@ -300,7 +294,6 @@ mod sweep_events {
     #[tokio::test]
     async fn should_leave_the_burn_first_accounting_alone() {
         let (mut state, request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
-        deliver(&mut state);
         let burned = state.sweeper_funding.cumulative_burned();
         let spent = state.sweeper_funding.cumulative_spent();
 
@@ -315,21 +308,17 @@ mod sweep_events {
     /// trapping, which would take the replay of every later event with it.
     #[tokio::test]
     async fn should_floor_the_bound_at_zero_rather_than_trap() {
-        let (state, _request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
+        let (mut state, _request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
+
+        state
+            .sweeper_funding
+            .record_accepted_sweep(PREPAID_SWEEP_GAS);
 
         assert_eq!(bound(&state), Wei::ZERO);
     }
 
     fn bound(state: &State) -> Wei {
         state.sweeper_funding.sweeper_balance_lower_bound()
-    }
-
-    /// Records a finalized funding that put [`DELIVERED`] at the sweeper address.
-    fn deliver(state: &mut State) {
-        state.sweeper_funding.record_burn(Wei::new(DELIVERED));
-        state
-            .sweeper_funding
-            .record_finalized_funding(Wei::new(DELIVERED), Wei::ZERO);
     }
 
     /// Drives the already-accepted `request` through the sweeper pipeline to a receipt of `status`,

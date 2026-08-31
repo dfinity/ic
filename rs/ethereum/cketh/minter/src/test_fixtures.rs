@@ -146,6 +146,15 @@ pub async fn deposits_with_enqueued_sweep(
     (state.automatic_deposits, request)
 }
 
+pub const PREPAID_SWEEP_GAS: Wei = Wei::new(1_000_000_000_000_000_000);
+
+pub fn prepay_sweep_gas(state: &mut State) {
+    state.sweeper_funding.record_burn(PREPAID_SWEEP_GAS);
+    state
+        .sweeper_funding
+        .record_finalized_funding(PREPAID_SWEEP_GAS, Wei::ZERO);
+}
+
 /// A [`State`] whose sweep queue holds exactly these funded pairs, all taken by the one sweep
 /// [`create_pending_sweeper_requests`] enqueued for them, returned along with that request. The
 /// deposits, attestations and authorizations the enqueue pairs up arrive through the event log, so
@@ -154,6 +163,7 @@ pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, 
     const SWEEP_DECIDED_AT: u64 = 1_620_328_630_000_000_000;
 
     let mut state = state_with_deposit_helper(deposit_helper());
+    prepay_sweep_gas(&mut state);
     state.sweeper_contract_address = Some(sweeper_contract());
     state.last_transaction_price_estimate = Some((SWEEP_DECIDED_AT, gas_fee_estimate()));
     let chain_id = state.ethereum_network.chain_id();
