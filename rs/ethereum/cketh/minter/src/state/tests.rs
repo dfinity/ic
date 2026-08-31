@@ -15,7 +15,6 @@ use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::event::{Event, EventType};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex, SweepId,
-    SweeperTransactionPipeline,
 };
 use crate::state::{Erc20Balances, EthBalance, State};
 use crate::test_fixtures::{
@@ -1170,7 +1169,6 @@ fn state_equivalence() {
     };
     let state = State {
         sweeper_funding: Default::default(),
-        sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
         next_sweep_id: SweepId(0),
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),

@@ -12,7 +12,8 @@ pub use eip_1559::{
     SignedTransactionRequest, TransactionRequest,
 };
 pub use eip_7702::{
-    Authorization, Eip7702TransactionRequest, SignedAuthorization, SignedEip7702TransactionRequest,
+    Authorization, AuthorizationRequest, Eip7702TransactionRequest, SignedAuthorization,
+    SignedEip7702TransactionRequest,
 };
 pub use finalized::Finalized;
 pub use signed::{SignableTransaction, Signed, TransactionSignature, sign};
@@ -27,7 +28,9 @@ use crate::{
     guard::TimerGuard,
     logs::{DEBUG, INFO},
     numeric::{GasAmount, Wei, WeiPerGas},
+    runtime::CanisterRuntime,
     state::{TaskType, lazy_call_ecdsa_public_key_with_chain_code, mutate_state, read_state},
+    time::TimeProvider,
 };
 use candid::Nat;
 use ethnum::u256;
@@ -181,19 +184,21 @@ pub fn encode_u256<T: Into<u256>>(stream: &mut RlpStream, value: T) {
 
 /// Sign `digest` with the minter's ECDSA key under `derivation_path`, resolving the signature's
 /// parity bit against the key that made it.
-pub(crate) async fn sign_digest(
+pub(crate) async fn sign_digest<R: CanisterRuntime>(
     digest: &Hash,
     derivation_path: &[ByteBuf],
+    runtime: &R,
 ) -> Result<TransactionSignature, String> {
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
-    let signature = crate::management::sign_with_ecdsa(
-        key_name,
-        ic_management_canister_types_private::DerivationPath::new(derivation_path.to_vec()),
-        digest.0,
-    )
-    .await
-    .map_err(|e| format!("failed to sign digest: {e}"))?;
-    let recid = compute_recovery_id(digest, &signature, derivation_path).await;
+    let signature = runtime
+        .sign_with_ecdsa(
+            key_name,
+            derivation_path.iter().map(|path| path.to_vec()).collect(),
+            digest.0,
+        )
+        .await
+        .map_err(|e| format!("failed to sign digest: {e}"))?;
+    let recid = compute_recovery_id(digest, &signature, derivation_path, runtime).await;
     if recid.is_x_reduced() {
         return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
     }
@@ -209,12 +214,13 @@ pub(crate) async fn sign_digest(
 ///
 /// Recovery only succeeds against the public key that produced the signature, so the master key is
 /// derived along the same path first.
-async fn compute_recovery_id(
+async fn compute_recovery_id<R: CanisterRuntime>(
     digest: &Hash,
     signature: &[u8],
     derivation_path: &[ByteBuf],
+    runtime: &R,
 ) -> RecoveryId {
-    let (master_public_key, chain_code) = lazy_call_ecdsa_public_key_with_chain_code().await;
+    let (master_public_key, chain_code) = lazy_call_ecdsa_public_key_with_chain_code(runtime).await;
     let ecdsa_public_key = derive_public_key(&master_public_key, &chain_code, derivation_path);
     debug_assert!(
         ecdsa_public_key.verify_signature_prehashed(&digest.0, signature),
@@ -336,10 +342,12 @@ impl TransactionPrice {
     }
 }
 
-pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
+pub async fn lazy_refresh_gas_fee_estimate<T: TimeProvider>(
+    time_provider: &T,
+) -> Option<GasFeeEstimate> {
     const MAX_AGE_NS: u64 = 60_000_000_000_u64; //60 seconds
 
-    async fn do_refresh() -> Option<GasFeeEstimate> {
+    async fn do_refresh<T: TimeProvider>(time_provider: &T) -> Option<GasFeeEstimate> {
         let _guard = match TimerGuard::new(TaskType::RefreshGasFeeEstimate) {
             Ok(guard) => guard,
             Err(e) => {
@@ -366,7 +374,7 @@ pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
             Ok(estimate) => {
                 mutate_state(|s| {
                     s.last_transaction_price_estimate =
-                        Some((ic_cdk::api::time(), estimate.clone()));
+                        Some((time_provider.time(), estimate.clone()));
                 });
                 estimate
             }
@@ -398,14 +406,14 @@ pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
             }))
     }
 
-    let now_ns = ic_cdk::api::time();
+    let now_ns = time_provider.time();
     match read_state(|s| s.last_transaction_price_estimate.clone()) {
         Some((last_estimate_timestamp_ns, estimate))
             if now_ns < last_estimate_timestamp_ns.saturating_add(MAX_AGE_NS) =>
         {
             Some(estimate)
         }
-        _ => do_refresh().await,
+        _ => do_refresh(time_provider).await,
     }
 }
 #[derive(Eq, PartialEq, Debug)]

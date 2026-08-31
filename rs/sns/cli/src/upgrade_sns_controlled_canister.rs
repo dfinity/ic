@@ -482,6 +482,8 @@ pub async fn exec<C: CallCanisters>(
                     store_canister_id: Some(store_canister_id.get()),
                     chunk_hashes_list,
                 }),
+                // TODO: Add support for upgrade options to SNS CLI.
+                canister_upgrade_options: None,
             },
         )),
     };
