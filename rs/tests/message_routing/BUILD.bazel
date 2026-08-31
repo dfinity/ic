@@ -141,7 +141,7 @@ system_test_nns(
 
 system_test_nns(
     name = "subnet_cooling_down_test",
-    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 1 System + 3 Application fast-single-node subnets = 4 IC Node VMs * 6 vCPUs.
+    cpus = MIN_LOCAL_CPUS + 16 * DEFAULT_VCPUS_PER_VM,  # 1 System + 3 Application subnets of 4 nodes each = 16 IC Node VMs * 6 vCPUs.
     enable_mainnet_nns_variant = False,  # The `cooling_down` field of the subnet record is not supported by the mainnet NNS canisters.
     tags = [
         "long_test",  # since the subnet only quiesces once its long-running `install_code` calls are done and the ingress history is pruned.
@@ -164,6 +164,8 @@ system_test_nns(
         "@crate_index//:candid",
         "@crate_index//:hex",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-utils",
         "@crate_index//:slog",
         "@crate_index//:tokio",
         "@crate_index//:url",
