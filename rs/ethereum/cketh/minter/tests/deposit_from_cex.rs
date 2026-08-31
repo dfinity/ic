@@ -1,28 +1,11 @@
-//! Semantic verification of the deployless balance batcher (`BATCHER_INITCODE`)
-//! against a real EVM: a local anvil node runs the exact bytecode the minter
-//! ships, so this complements the byte-level assembler golden
-//! (`balance_scan::batcher::tests::initcode_matches_readable_assembly`) by
-//! proving the program actually *does* the right thing end to end.
-//!
-//! It deploys `MockUSDT` (a standard ERC-20 with `balanceOf(address)`), funds a
-//! set of holders, and issues the batcher exactly as the minter does — a
-//! create-style `eth_call` (`to` omitted) whose calldata is
-//! `encode_balance_batch(..)`. The returned blob is decoded with
-//! `decode_balance_batch` and checked against the balances anvil reports
-//! directly. A separate test pins the fail-loud contract: a batch touching a
-//! non-contract "token" reverts the whole call rather than reporting a zero
-//! balance.
-//!
-//! Three further tests drive whole features end to end through a live PocketIC
-//! and the real EVM RPC canister (see [`ic_cketh_test_utils::live`]): the
-//! balance scan; sweeper fee funding, which deposits through the production
-//! helper contract and then watches the minter burn ckETH from its fee
-//! subaccount to pay for sweep gas; and the whole deposit-from-CEX flow,
-//! crediting twenty CEX deposits through one EIP-7702 sweep per token.
-//!
-//! The anvil node client and its ABI/solc helpers live in
-//! [`ic_cketh_test_utils::anvil`]; `anvil` and `solc` are vendored via Bazel
-//! (`ANVIL_BIN`, `SOLC_BIN`); see BUILD.bazel.
+//! Integration tests showcasing the support of deposits from central exchanges:
+//! 1) the user notifies the minter of an upcoming deposit of a given token.
+//! 2) the minter watches the balance of that address for roughly 24H
+//! 3) if the address' balance is sufficient (roughly at least $10 equivalent), the minter proceeds with consolidating the funds.
+//! 4) the deposit address delegates to a sweeper contract,
+//! whose purpose is to move the ERC-20 from the deposit address by calling the helper smart contract (DepositHelperWithSubaccount.sol),
+//! to trigger the original deposit flow. This requires in particular the minter attesting that the given deposit address is for a given
+//! principal and subaccount.
 
 use assert_matches::assert_matches;
 use candid::Principal;
