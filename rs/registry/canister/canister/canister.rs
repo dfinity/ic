@@ -1089,13 +1089,16 @@ fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) {
 #[unsafe(export_name = "canister_update merge_subnets")]
 fn merge_subnets() {
     check_caller_is_governance_and_log("merge_subnets");
-    over(candid_one, merge_subnets_);
+    over_async(candid_one, |payload: MergeSubnetsPayload| async move {
+        merge_subnets_(payload).await
+    });
 }
 
 #[candid_method(update, rename = "merge_subnets")]
-fn merge_subnets_(payload: MergeSubnetsPayload) {
+async fn merge_subnets_(payload: MergeSubnetsPayload) {
     registry_mut()
         .merge_subnets(payload)
+        .await
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
                 "{LOG_PREFIX} Merge subnets failed: {error_message}"

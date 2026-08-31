@@ -6,6 +6,7 @@ use ic_nns_test_utils::{
     },
     registry::{initial_routing_table_mutations, prepare_registry_with_two_node_sets},
 };
+use ic_protobuf::registry::subnet::v1::{RecoveryArgs, catch_up_package_contents::CupType};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::CanisterId;
@@ -14,13 +15,25 @@ use registry_canister::{
 };
 
 mod common;
-use common::test_helpers::{check_error_message, check_subnet_for_canisters};
+use common::test_helpers::{
+    check_error_message, check_subnet_for_canisters, get_cup_contents, get_subnet_record,
+};
+
+/// The recovery CUP the merge creates for the destination subnet. The values are
+/// arbitrary: this test does not run a subnet from the resulting CUP, it only
+/// checks that the endpoint accepts them and records them.
+const MERGE_HEIGHT: u64 = 100;
+const MERGE_TIME_NS: u64 = 1_234_567_890;
+const MERGED_STATE_HASH: &[u8] = &[42; 32];
 
 /// Exercises the `merge_subnets` endpoint end to end. The payload validation
 /// itself is covered by the unit tests of `Registry::merge_subnets`, so this test
 /// only covers what those cannot: that the endpoint is reachable with a Candid
-/// encoded payload, that only governance may call it, and that the resulting
-/// routing table is visible through the canister's query API.
+/// encoded payload, that only governance may call it, that the canisters of the
+/// source subnet end up routed to the destination subnet, and that the recovery
+/// CUP of the destination subnet -- whose DKG transcripts come from the
+/// `setup_initial_dkg` call the endpoint makes half way through -- is recorded
+/// and the destination subnet is brought back online.
 #[test]
 fn test_merge_subnets() {
     state_machine_test_on_nns_subnet(|runtime| {
@@ -76,6 +89,10 @@ fn test_merge_subnets() {
                         MergeSubnetsPayload {
                             source_subnet: subnet_id_1,
                             destination_subnet: subnet_id_2,
+                            height: MERGE_HEIGHT,
+                            time_ns: MERGE_TIME_NS,
+                            state_hash: MERGED_STATE_HASH.to_vec(),
+                            initial_dkg_subnet_id: None,
                         },
                     )
                     .await as Result<(), String>,
@@ -90,6 +107,10 @@ fn test_merge_subnets() {
                 Encode!(&MergeSubnetsPayload {
                     source_subnet: subnet_id_1,
                     destination_subnet: subnet_id_2,
+                    height: MERGE_HEIGHT,
+                    time_ns: MERGE_TIME_NS,
+                    state_hash: MERGED_STATE_HASH.to_vec(),
+                    initial_dkg_subnet_id: None,
                 })
                 .unwrap(),
             )
@@ -108,6 +129,41 @@ fn test_merge_subnets() {
                 ],
             )
             .await;
+
+            // Step 5: Verify results: the destination subnet got a recovery CUP at the
+            // height, time and state hash of the merged state, with fresh DKG
+            // transcripts, and is no longer halted.
+            let cup_contents = get_cup_contents(&registry, subnet_id_2).await;
+            assert_eq!(cup_contents.height, MERGE_HEIGHT);
+            assert_eq!(cup_contents.time, MERGE_TIME_NS);
+            assert_eq!(cup_contents.state_hash, MERGED_STATE_HASH);
+            assert_eq!(
+                cup_contents.cup_type,
+                Some(CupType::Recovery(RecoveryArgs {
+                    height: MERGE_HEIGHT,
+                    time: MERGE_TIME_NS,
+                    state_hash: MERGED_STATE_HASH.to_vec(),
+                })),
+            );
+            assert!(
+                cup_contents
+                    .initial_ni_dkg_transcript_low_threshold
+                    .is_some(),
+                "the recovery CUP should hold a low threshold DKG transcript",
+            );
+            assert!(
+                cup_contents
+                    .initial_ni_dkg_transcript_high_threshold
+                    .is_some(),
+                "the recovery CUP should hold a high threshold DKG transcript",
+            );
+
+            let subnet_record = get_subnet_record(&registry, subnet_id_2).await;
+            assert!(
+                !subnet_record.is_halted,
+                "the destination subnet should have been brought back online",
+            );
+            assert!(!subnet_record.halt_at_cup_height);
 
             Ok(())
         }
