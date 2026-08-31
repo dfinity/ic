@@ -18,7 +18,7 @@ use ic_cketh_minter::endpoints::events::EventPayload;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::MINTER_ADDRESS;
 use ic_cketh_test_utils::anvil::{
-    Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
+    Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, delegation_designator, deploy_mock_erc20,
 };
 use ic_cketh_test_utils::ckerc20::Erc20Token;
 use ic_cketh_test_utils::live::{Holding, LiveSetup, contract_address};
@@ -193,9 +193,10 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
     let [usdc, usdt] = setup.supported_erc20_tokens() else {
         panic!("expected exactly 2 supported tokens")
     };
-    let usdt_above_minimum = 2 * setup.minimum_deposit_amount(usdt);
+    let usdt_minimum = setup.minimum_deposit_amount(usdt);
+    let usdt_above_minimum = 2 * usdt_minimum;
     let usdc_at_minimum = setup.minimum_deposit_amount(usdc);
-    let usdt_below_minimum = setup.minimum_deposit_amount(usdt) / 10;
+    let usdt_below_minimum = usdt_minimum / 10;
     let deposits = [
         (setup.depositor(1), usdt, usdt_above_minimum),
         (setup.depositor(2), usdc, usdc_at_minimum),
@@ -408,9 +409,7 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
         );
     }
 
-    // Every address is now delegated, by the 23-byte EIP-7702 designator `0xef0100 || delegate`.
-    let mut designator = vec![0xef, 0x01, 0x00];
-    designator.extend_from_slice(contracts.delegate.as_ref());
+    let designator = delegation_designator(&contracts.delegate);
     for deposit in &deposits {
         assert_eq!(
             setup.anvil().code(&deposit.address),
@@ -452,8 +451,9 @@ fn should_sweep_a_second_deposit_despite_resending_a_stale_authorization() {
     let [usdc, _usdt] = setup.supported_erc20_tokens() else {
         panic!("expected exactly 2 supported tokens")
     };
-    let first_deposit = 3 * setup.minimum_deposit_amount(usdc);
-    let second_deposit = 2 * setup.minimum_deposit_amount(usdc);
+    let usdc_minimum = setup.minimum_deposit_amount(usdc);
+    let first_deposit = 3 * usdc_minimum;
+    let second_deposit = 2 * usdc_minimum;
     let owner = setup.depositor(1);
     let account = Account {
         owner,
@@ -523,11 +523,9 @@ fn should_sweep_a_second_deposit_despite_resending_a_stale_authorization() {
         1,
         "a skipped stale authorization must not advance the deposit address' nonce"
     );
-    let mut designator = vec![0xef, 0x01, 0x00];
-    designator.extend_from_slice(delegate.as_ref());
     assert_eq!(
         setup.anvil().code(&address),
-        designator,
+        delegation_designator(&delegate),
         "the delegation installed by the first sweep must survive the second"
     );
     assert_eq!(

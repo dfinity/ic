@@ -256,6 +256,12 @@ impl LiveSetup<CkErc20Setup> {
                     token.contract.address
                 )
             });
+        let no_minimum_sentinel: Nat = Erc20Value::MAX.into();
+        assert_ne!(
+            minimum.minimum_deposit_amount, no_minimum_sentinel,
+            "the minter reports no real minimum deposit amount for {}",
+            token.contract.address
+        );
         nat_to_u128(minimum.minimum_deposit_amount)
     }
 
@@ -362,24 +368,16 @@ impl LiveSetup<CkErc20Setup> {
         subaccount: [u8; 32],
         token: &Erc20Token,
     ) -> DepositErc20Response {
-        let mut scanned = None;
-        self.drive_until_with(
-            SCAN_TICK,
-            SCAN_TICKS,
-            |_| "the deposit address was not scanned".to_string(),
-            |setup| {
-                let progress = setup.deposit_erc20(caller, subaccount, token);
-                let is_scanned = match &progress.status {
-                    DepositStatus::Scanning { scan_count, .. } => *scan_count >= 1,
-                    DepositStatus::AwaitingSweep(_) => true,
-                };
-                if is_scanned {
-                    scanned = Some(progress);
-                }
-                is_scanned
+        self.await_deposit_status(
+            caller,
+            subaccount,
+            token,
+            "the deposit address was not scanned",
+            |status| match status {
+                DepositStatus::Scanning { scan_count, .. } => *scan_count >= 1,
+                DepositStatus::AwaitingSweep(_) => true,
             },
-        );
-        scanned.expect("drive_until_with returns only once observe held")
+        )
     }
 
     pub fn await_detection(
@@ -388,21 +386,38 @@ impl LiveSetup<CkErc20Setup> {
         subaccount: [u8; 32],
         token: &Erc20Token,
     ) -> DepositErc20Response {
-        let mut detected = None;
+        self.await_deposit_status(
+            caller,
+            subaccount,
+            token,
+            "the deposit was not detected",
+            |status| matches!(status, DepositStatus::AwaitingSweep(_)),
+        )
+    }
+
+    fn await_deposit_status(
+        &self,
+        caller: Principal,
+        subaccount: [u8; 32],
+        token: &Erc20Token,
+        what: &str,
+        is_done: impl Fn(&DepositStatus) -> bool,
+    ) -> DepositErc20Response {
+        let mut reached = None;
         self.drive_until_with(
             SCAN_TICK,
             SCAN_TICKS,
-            |_| "the deposit was not detected".to_string(),
+            |_| what.to_string(),
             |setup| {
                 let progress = setup.deposit_erc20(caller, subaccount, token);
-                let is_detected = matches!(progress.status, DepositStatus::AwaitingSweep(_));
-                if is_detected {
-                    detected = Some(progress);
+                let done = is_done(&progress.status);
+                if done {
+                    reached = Some(progress);
                 }
-                is_detected
+                done
             },
         );
-        detected.expect("drive_until_with returns only once observe held")
+        reached.expect("drive_until_with returns only once observe held")
     }
 
     /// Waits for the sweeper address to send exactly `expected` transactions, returning what each

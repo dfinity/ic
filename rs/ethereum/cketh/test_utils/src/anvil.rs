@@ -655,6 +655,12 @@ fn decode_address(data: &[u8]) -> Address {
     )
 }
 
+pub fn delegation_designator(delegate: &Address) -> Vec<u8> {
+    let mut designator = vec![0xef, 0x01, 0x00];
+    designator.extend_from_slice(delegate.as_ref());
+    designator
+}
+
 /// What a transaction the harness went looking for actually did on chain.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SentTransaction {
