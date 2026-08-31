@@ -334,8 +334,6 @@ rust_test(
         "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
-    # Skipped on pull requests that don't touch the minter or this test; CI still runs it when a
-    # direct source changes, and always on master.
     tags = ["long_test"],
     deps = [
         # Keep sorted.

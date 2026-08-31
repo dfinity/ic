@@ -269,20 +269,15 @@ impl LiveSetup<CkErc20Setup> {
     }
 
     /// Places every token [`Self::supported_erc20_tokens`] returns at its real mainnet address on
-    /// the owned anvil node, and funds each holding CEX-style: a plain ERC-20 `transfer` from a
-    /// seeded exchange account to the deposit address, carrying no principal.
-    ///
-    /// All the transfers are mined in a single block. The scan's batched `eth_call` pins one
-    /// block, so a concurrent scan sees either every holding funded or none of them — never a
-    /// partial state that would split the sweep batches a test pins. A scan landing before that
-    /// block reads zero balances and simply keeps scanning, as on mainnet.
+    /// the owned anvil node, and funds each holding with a plain ERC-20 `transfer` from a seeded
+    /// CEX-style account — all mined in a single block, so a concurrent scan (whose batched
+    /// `eth_call` pins one block) sees either every holding funded or none of them.
     pub fn credit_deposits(&self, holdings: &[Holding<'_>]) {
         let cex = address_from_hex(DEV_ACCOUNT);
-        // Reuse MockUSDT's deployed bytecode to give each token a working `balanceOf` and
-        // `transfer`. Every registered token needs code, not just the held ones: all of them are
-        // read in the shared batch, so a token without code would revert the whole scan even for
-        // holdings that do not involve it.
+        // Reuse MockUSDT's deployed bytecode to give each token a working `balanceOf`.
         let runtime = self.anvil.code(&deploy_mock_erc20(&self.anvil, &cex));
+        // Every registered token is read in the shared batch, so a token without code would revert
+        // the whole scan even for holdings that do not involve it.
         for token in self.supported_erc20_tokens() {
             self.anvil.set_code(&contract_address(token), &runtime);
         }

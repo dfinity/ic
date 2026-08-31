@@ -197,13 +197,6 @@ impl Anvil {
         Erc20Value::from(decode_uint(&out))
     }
 
-    /// Sends one plain ERC-20 `transfer` per `(token, to, amount)` entry from `from`, all mined
-    /// in a single block: interval mining is paused so no block can land between the sends, one
-    /// block is mined carrying every transfer, and the interval is restored. A reader pinning a
-    /// block therefore sees either none of the transfers or all of them.
-    ///
-    /// Assumes the node mines on an interval (as [`Self::start_mainnet_like`] configures), since
-    /// that is what gets paused and restored.
     pub(crate) fn fund_in_one_block(&self, from: &Address, transfers: &[(Address, Address, u128)]) {
         self.rpc("evm_setIntervalMining", serde_json::json!([0]));
         let hashes: Vec<String> = transfers
