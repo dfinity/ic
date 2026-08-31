@@ -530,6 +530,25 @@ fn test_auto_progress() {
     assert!(pic.auto_progress_enabled());
 }
 
+#[test]
+fn test_auto_progress_updates_certified_time() {
+    let pic = PocketIc::new();
+
+    // We create a test canister.
+    let canister = pic.create_canister();
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    let before = SystemTime::now();
+    pic.auto_progress();
+
+    // Enabling auto progress only returns after the certified time has been updated
+    // for the first time and thus a query call (which reads the certified time)
+    // must observe a time no earlier than the time before enabling auto progress.
+    let t: (u64,) = query_candid(&pic, canister, "time", ((),)).unwrap();
+    assert!(t.0 >= Time::from(before).as_nanos_since_unix_epoch());
+}
+
 fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
     let current_time = pic.get_time().as_nanos_since_unix_epoch();
     let t: (u64,) = query_candid(pic, test_canister, "time", ((),)).unwrap();
