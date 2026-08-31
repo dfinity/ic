@@ -359,7 +359,7 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
         );
         assert!(sweep.succeeded, "the sweep reverted: {sweep:?}");
     }
-    report_gas(&sweeps, DEPOSITORS_PER_TOKEN);
+    assert_sweep_gas_near_demo(&sweeps, DEPOSITORS_PER_TOKEN);
 
     // What each sweep actually batched, so that two transactions cannot pass as one per token.
     let mut batched: Vec<(Address, usize)> = setup
@@ -463,13 +463,16 @@ impl<'a> Deposit<'a> {
     }
 }
 
-/// Prints what each sweep cost next to `deposit_from_cex_demo`'s measurements for the same delegate,
-/// so a change in either shows up as a difference rather than having to be recomputed by hand.
-fn report_gas(sweeps: &[SentTransaction], deposits_per_sweep: u64) {
+fn assert_sweep_gas_near_demo(sweeps: &[SentTransaction], deposits_per_sweep: u64) {
     // `ATTESTED_SCENARIOS` in deposit_from_cex_demo.rs, EIP-7702 (first sweep) column.
     const DEMO_ONE_DEPOSIT: u64 = 98_000;
     const DEMO_TEN_DEPOSITS: u64 = 609_431;
+    const GAS_BAND_PERCENT: u64 = 10;
 
+    assert_eq!(
+        deposits_per_sweep, 10,
+        "the demo baseline is measured for ten-deposit sweeps"
+    );
     for sweep in sweeps {
         let per_deposit = sweep.gas_used / deposits_per_sweep;
         println!(
@@ -479,6 +482,13 @@ fn report_gas(sweeps: &[SentTransaction], deposits_per_sweep: u64) {
             sweep.gas_used,
             per_deposit,
             DEMO_TEN_DEPOSITS / 10,
+        );
+        assert!(
+            sweep.gas_used.abs_diff(DEMO_TEN_DEPOSITS) * 100
+                <= DEMO_TEN_DEPOSITS * GAS_BAND_PERCENT,
+            "a ten-deposit sweep used {} gas, more than {GAS_BAND_PERCENT}% away from the \
+             demo-measured {DEMO_TEN_DEPOSITS}: {sweep:?}",
+            sweep.gas_used,
         );
     }
 }
