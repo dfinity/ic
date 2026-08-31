@@ -17681,11 +17681,14 @@ dependencies = [
  "candid",
  "canister-test",
  "dfn_candid",
+ "hex",
  "ic-agent",
  "ic-base-types",
  "ic-management-canister-types 0.8.0",
  "ic-nns-governance-api",
+ "ic-recovery",
  "ic-registry-subnet-type",
+ "ic-state-layout",
  "ic-system-test-driver",
  "ic-types",
  "ic-universal-canister",
@@ -17698,6 +17701,7 @@ dependencies = [
  "slog",
  "tempfile",
  "tokio",
+ "url",
  "xnet-test",
 ]
 

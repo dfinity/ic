@@ -147,19 +147,26 @@ system_test_nns(
         "long_test",  # since the subnet only quiesces once its long-running `install_code` calls are done and the ingress history is pruned.
     ],
     test_timeout = "eternal",
-    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
+        "ENV_DEPS__STATE_TOOL": "//rs/state_tool:state-tool",
+    },
     deps = [
         # Keep sorted.
         "//rs/nns/governance/api",
+        "//rs/recovery",
         "//rs/registry/canister",
         "//rs/registry/subnet_type",
+        "//rs/state_layout",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:ic-agent",
         "@crate_index//:slog",
         "@crate_index//:tokio",
+        "@crate_index//:url",
     ],
 )
 
