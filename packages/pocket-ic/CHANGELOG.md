@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 16.0.0 - 2026-08-31
+
 ### Added
 - Added the `SubnetCoolingDown` variant to the `ErrorCode` enum: ingress messages addressed to a subnet that is "cooling down" are rejected with this error code.
+- Added the `CanisterStatusAccessDenied` variant to the `ErrorCode` enum: a call to the `canister_status` endpoint of the management canister is rejected with this error code if the caller is not allowed to access the canister status according to the `status_visibility` canister setting.
 
 ### Changed
 - The functions `PocketIc::auto_progress`, `PocketIc::make_live`, and their variants only return
