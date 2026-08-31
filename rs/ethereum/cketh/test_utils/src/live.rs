@@ -19,10 +19,15 @@
 //!
 //! Two consequences of a live instance are worth knowing before adding to this harness:
 //!
-//! * An ingress message may not be awaited by driving the instance with explicit `tick`s: the rounds
-//!   arrive on their own, and a tick-driven await runs out its round budget and reports the message
-//!   as unanswerable. `CkEthSetup`'s own `minter_address` and `stop_minter` do exactly that, which is
-//!   why this module fetches the address and upgrades the minter itself.
+//! * An ingress message whose completion depends on canister-http traffic must be *polled* for
+//!   ([`pocket_ic::PocketIc::ingress_status`]), never awaited. The client's blocking awaits —
+//!   `await_call`, and everything built on it: `update_call`, `stop_canister`, … — run as one
+//!   server-side operation that executes up to 100 rounds back to back, and while it holds the
+//!   instance the auto-progress loop cannot run `ProcessCanisterHttpInternal`, so no outcall is
+//!   dispatched or answered until the await has already failed. A call that completes on rounds
+//!   alone finishes well within the budget; one waiting on an outcall response never can.
+//!   `CkEthSetup`'s tick-driving `minter_address` and `stop_minter` are unusable here for the same
+//!   reason, which is why this module fetches the address and upgrades the minter itself.
 //! * Any loop waiting on a minter timer must poll a canister while it waits. The PocketIC server
 //!   shuts an idle instance down, which stops the minter's timers and looks exactly like a minter
 //!   bug.
@@ -568,24 +573,29 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
     ///
     /// The minter is stopped first, as any upgrade must be: upgrading a running canister leaves its
     /// in-flight HTTPS outcalls to resolve into fresh Wasm, which traps it with "CallFutureState for
-    /// in-flight calls" and corrupts its heap. Stopped through the client rather than through
-    /// `CkEthSetup::stop_minter`, which drives the instance with explicit `tick`s (see the module
-    /// documentation).
+    /// in-flight calls" and corrupts its heap.
     ///
-    /// Stopping also has to wait for those same outcalls first: a stop lands as an ingress the
-    /// server answers within a bounded burst of rounds, while the outcalls resolve on the
-    /// auto-progress loop's own pace — so a stop racing a busy minter can time out before the
-    /// calls it is waiting on come back.
+    /// The stop is submitted and then polled for, rather than awaited through the client's
+    /// `stop_canister` (see the module documentation): a stop only replies once every open call
+    /// context of the minter has closed, and when the stop lands while one of the minter's
+    /// timer-driven outcall chains is in flight, closing them takes the very canister-http
+    /// deliveries the blocking await prevents — so it deterministically burns its round budget
+    /// (which advances instance time by mere nanoseconds, so not even the 60-second outcall
+    /// timeout can fire inside it) and fails with `BadIngressMessage`. Nor can such a chain be
+    /// waited out beforehand: `get_canister_http()` lists only requests not yet handed to the
+    /// HTTP adapter, which auto-progress does within one ~100ms iteration, so on a live instance
+    /// a probe of it reads empty for virtually an outcall's whole lifetime — a stop gated on it
+    /// still races every chain. Polling the ingress status instead leaves the auto-progress loop
+    /// free to deliver the responses the stop is waiting on, however the stop lands.
     fn upgrade_minter_with(&self, arg: UpgradeArg) {
         let minter_id = self.minter_id();
+        let stop_message_id = self.cketh().submit_stop_minter();
         self.poll_until(
             AWAIT_DEADLINE,
-            |_| "the minter's in-flight HTTPS outcalls never resolved".to_string(),
-            |setup| setup.env().get_canister_http().is_empty().then_some(()),
-        );
-        self.env()
-            .stop_canister(minter_id, None)
-            .expect("stopping the minter must succeed");
+            |_| "the minter never stopped".to_string(),
+            |setup| setup.env().ingress_status(stop_message_id.clone()),
+        )
+        .expect("stopping the minter must succeed");
         self.env()
             .upgrade_canister(
                 minter_id,
