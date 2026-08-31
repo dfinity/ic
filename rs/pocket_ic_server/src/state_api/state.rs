@@ -1006,8 +1006,8 @@ impl ApiState {
                 .await
                 .is_some()
                 {
-                    // The receiver might have been dropped if this function returned early,
-                    // e.g., because auto progress was stopped, and thus we ignore the result.
+                    // The receiver is dropped if the `auto_progress` future was cancelled
+                    // (e.g., because the client disconnected) and thus we ignore the result.
                     let _ = certified_time_tx.send(());
                     debug!("Starting auto progress for instance {}.", instance_id);
                     loop {
