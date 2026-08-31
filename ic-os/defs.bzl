@@ -68,13 +68,13 @@ def icos_build(
         tags = ["manual"],
     )
 
-    # A separate copy of the version file installed as replica_version.txt in
-    # the rootfs. The overlay also ships a replica_version.txt (with the
+    # A separate copy of the version file installed as binary_version.txt in
+    # the rootfs. The overlay also ships a binary_version.txt (with the
     # post-upgrade version); the sysext merge shadows this rootfs copy.
     copy_file(
-        name = "copy_replica_version_txt",
+        name = "copy_binary_version_txt",
         src = ic_version,
-        out = "replica_version.txt",
+        out = "binary_version.txt",
         allow_symlink = True,
         visibility = ["//visibility:public"],
         tags = ["manual"],
@@ -91,9 +91,9 @@ def icos_build(
         )
 
         native.genrule(
-            name = "test_replica_version_txt",
-            srcs = [":copy_replica_version_txt"],
-            outs = ["replica_version-test.txt"],
+            name = "test_binary_version_txt",
+            srcs = [":copy_binary_version_txt"],
+            outs = ["binary_version-test.txt"],
             cmd = "sed -e 's/.*/&-test/' < $< > $@",
             visibility = ["//visibility:public"],
             tags = ["manual"],
@@ -202,7 +202,7 @@ def icos_build(
         partition_root_hash = partition_root + "-hash"
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
         version_txt = "version" + test_suffix + ".txt"
-        replica_version_txt = "replica_version" + test_suffix + ".txt"
+        binary_version_txt = "binary_version" + test_suffix + ".txt"
         boot_args = "boot" + test_suffix + "_args"
         launch_measurements = "launch-measurements" + test_suffix + ".json"
 
@@ -217,7 +217,7 @@ def icos_build(
                 k: v
                 for k, v in (image_deps["rootfs"].items() + [
                     (version_txt, "/opt/ic/share/version.txt:0644"),
-                    (replica_version_txt, "/opt/ic/share/replica_version.txt:0644"),
+                    (binary_version_txt, "/opt/ic/share/binary_version.txt:0644"),
                 ])
             },
             target_compatible_with = ["@platforms//os:linux"],
@@ -446,15 +446,15 @@ def icos_build(
         for test_suffix in ["", "-test"]:
             update_image_tar = "update-img" + test_suffix + ".tar"
 
-            # Build a per-variant overlay with the correct replica_version.txt.
+            # Build a per-variant overlay with the correct binary_version.txt.
             overlay_label = None
             if has_overlay:
-                replica_version_src = "replica_version" + test_suffix + ".txt"
+                binary_version_src = "binary_version" + test_suffix + ".txt"
                 overlay_out = "overlay" + test_suffix + ".raw"
-                overlay_srcs = overlay_common_srcs + [":" + replica_version_src]
+                overlay_srcs = overlay_common_srcs + [":" + binary_version_src]
                 overlay_cmds = list(overlay_common_cmds) + [
                     "mkdir -p $${STAGING}/opt/ic/share",
-                    "cp \"$(location :%s)\" \"$${STAGING}/opt/ic/share/replica_version.txt\"" % replica_version_src,
+                    "cp \"$(location :%s)\" \"$${STAGING}/opt/ic/share/binary_version.txt\"" % binary_version_src,
                     # Build the SquashFS image. Skip compression because the final
                     # tar will be compressed anyway (see zstd_compress below).
                     "mksquashfs $${STAGING} $(@D)/" + overlay_out + " -noappend -no-compression -no-progress -no-fragments -b 1M",
