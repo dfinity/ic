@@ -293,9 +293,6 @@ mod config {
     }
 }
 
-/// The sweeper's own spending, driven through the state transitions the sweep pipeline records, so
-/// that the wiring is covered and not only the arithmetic. The funding that delivers the ETH is a
-/// precondition here rather than the subject, so it is arranged directly.
 mod sweep_events {
     use crate::eth_rpc::Hash;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -402,9 +399,6 @@ mod sweep_events {
         state.sweeper_funding.sweeper_balance_lower_bound()
     }
 
-    /// Drives the already-accepted `request` through the sweeper pipeline to a receipt of `status`,
-    /// priced below its ceiling so that part of the provision comes back, and returns the fee that
-    /// receipt charged.
     fn finalize(state: &mut State, request: &SweepRequest, status: TransactionStatus) -> Wei {
         let sweep_id = request.id;
         let transaction = request

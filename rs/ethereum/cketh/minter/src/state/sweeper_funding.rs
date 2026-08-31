@@ -16,8 +16,21 @@ use crate::numeric::Wei;
 use crate::tx::{Finalized, SweepTransaction};
 
 /// How much ckETH has been burned for sweeping and how much of it has actually been spent — the two
-/// sides of the invariant above — along with the sweeper address' own [`SweeperBalance`], which the
+/// sides of the invariant above — along with the sweeper address' own ETH balance, which the
 /// spending side maintains.
+///
+/// The sweeper's balance is kept like [`EthBalance`] keeps the main address' but differs in *when*
+/// it debits: the main address debits what a transaction actually cost once it finalizes, while
+/// the sweeper debits an accepted sweep's whole possible cost — its fee ceiling, a sweep sending
+/// no ETH — up front, and is credited back at finalization whatever the sweep turned out not to
+/// spend. Holding the whole cost early is what keeps the balance a lower bound while sweeps are in
+/// flight, and the sweep pipeline only accepts a sweep the balance covers, so an uncovered debit
+/// is a bug, exactly as on the main address. There is no unspent-fee counter either: an unspent
+/// fee returns into the balance and is spent by a later sweep, unlike on the main address where it
+/// accrues as surplus. ETH anyone else sends to the sweeper is not tracked and only pushes its
+/// true balance above this record.
+///
+/// [`EthBalance`]: crate::state::EthBalance
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SweeperFundingAccounting {
     /// Grows when a funding is accepted, by the whole amount that funding may spend.
@@ -42,18 +55,6 @@ impl Default for SweeperFundingAccounting {
     }
 }
 
-/// The sweeper address' ETH, kept like [`EthBalance`] keeps the main address' but differing in
-/// *when* it debits: the main address debits what a transaction actually cost once it finalizes,
-/// while the sweeper debits an accepted sweep's whole possible cost — its fee ceiling, a sweep
-/// sending no ETH — up front, and is credited back at finalization whatever the sweep turned out
-/// not to spend. Holding the whole cost early is what keeps the balance a lower bound while
-/// sweeps are in flight, and the sweep pipeline only accepts a sweep the balance covers, so an
-/// uncovered debit is a bug, exactly as on the main address. There is no unspent-fee counter
-/// either: an unspent fee returns into the balance and is spent by a later sweep, unlike on the
-/// main address where it accrues as surplus. ETH anyone else sends to the sweeper is not tracked
-/// and only pushes its true balance above this record.
-///
-/// [`EthBalance`]: crate::state::EthBalance
 #[derive(Clone, Eq, PartialEq, Debug)]
 struct SweeperBalance {
     eth_balance: Wei,
