@@ -54,7 +54,7 @@ pub fn deliver_batches_for_ic_replay(
     log: &ReplicaLogger,
     subnet_id: SubnetId,
     // If set to `None`, we will deliver all batches until the finalized height.
-    // If set to `Some(h)`, we will deliver all bathes up to the height `min(h, finalized_height)`.
+    // If set to `Some(h)`, we will deliver all batches up to the height `min(h, finalized_height)`.
     max_batch_height_to_deliver: Option<Height>,
 ) -> Result<Height, MessageRoutingError> {
     deliver_batches(
