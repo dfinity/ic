@@ -527,12 +527,12 @@ impl State {
     }
 
     /// Takes the whole cost an accepted sweep can put on the sweeper address out of the balance
-    /// bound: the ETH it will transfer plus its fee ceiling, which caps every resubmission the
-    /// pipeline makes for it. An ERC-20 sweep moves its tokens through call data and carries no
-    /// ETH value, so the fee is all it can cost.
+    /// bound: its fee ceiling, which caps every resubmission the pipeline makes for it. An ERC-20
+    /// sweep moves its tokens through call data and carries no ETH value, so the fee is all it
+    /// can cost.
     pub fn update_sweeper_balance_upon_accepted_sweep(&mut self, request: &SweepRequest) {
         self.sweeper_funding
-            .record_accepted_sweep(Wei::ZERO, request.max_transaction_fee);
+            .record_accepted_sweep(request.max_transaction_fee);
     }
 
     fn update_balance_upon_withdrawal(

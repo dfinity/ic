@@ -12,7 +12,6 @@
 #[cfg(test)]
 mod tests;
 
-use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::numeric::Wei;
 use crate::tx::{Finalized, SweepTransaction};
 
@@ -45,9 +44,9 @@ impl Default for SweeperFundingAccounting {
 
 /// The sweeper address' ETH, kept like [`EthBalance`] keeps the main address' but differing in
 /// *when* it debits: the main address debits what a transaction actually cost once it finalizes,
-/// while the sweeper debits an accepted sweep's whole possible cost — the ETH it will transfer
-/// plus its fee ceiling — up front, and is credited back at finalization whatever the sweep turned
-/// out not to spend. Holding the whole cost early is what keeps the balance a lower bound while
+/// while the sweeper debits an accepted sweep's whole possible cost — its fee ceiling, a sweep
+/// sending no ETH — up front, and is credited back at finalization whatever the sweep turned out
+/// not to spend. Holding the whole cost early is what keeps the balance a lower bound while
 /// sweeps are in flight, and the sweep pipeline only accepts a sweep the balance covers, so an
 /// uncovered debit is a bug, exactly as on the main address. There is no unspent-fee counter
 /// either: an unspent fee returns into the balance and is spent by a later sweep, unlike on the
@@ -120,42 +119,37 @@ impl SweeperFundingAccounting {
         let _ = self.burned_not_yet_spent();
     }
 
-    /// Debits the whole cost an accepted sweep can put on the sweeper address — the ETH it will
-    /// transfer plus the ceiling on its transaction fee, which caps every resubmission too — so a
-    /// sweep is debited once however many times the pipeline resubmits it.
+    /// Debits the whole cost an accepted sweep can put on the sweeper address: the ceiling on its
+    /// transaction fee, which caps every resubmission too — so a sweep is debited once however
+    /// many times the pipeline resubmits it.
     ///
     /// Deliberately not added to [`Self::cumulative_spent`]: that counter is the minter's own ETH,
     /// and this ETH was counted there once already, when the funding that delivered it to the
     /// sweeper finalized. Counting it twice would make spend overtake burn and trip the invariant.
-    pub fn record_accepted_sweep(&mut self, eth_transferred: Wei, max_transaction_fee: Wei) {
-        self.sweeper_balance.debit(
-            eth_transferred
-                .checked_add(max_transaction_fee)
-                .expect("BUG: overflow in the cost of an accepted sweep"),
-        );
+    pub fn record_accepted_sweep(&mut self, max_transaction_fee: Wei) {
+        self.sweeper_balance.debit(max_transaction_fee);
     }
 
     /// Settles a finalized sweep against the hold its acceptance took, reading what actually
     /// happened off the transaction and its receipt: the part of `max_transaction_fee` the sweep
-    /// did not pay comes back into the balance — along with the ETH it never sent, if it failed —
-    /// and the fee it paid is recorded.
+    /// did not pay comes back into the balance, and the fee it paid is recorded. The fee is a
+    /// sweep's whole cost whether it succeeded or reverted — its acceptance held nothing else, so
+    /// a sweep that sent ETH is a bug.
     pub fn record_finalized_sweep(
         &mut self,
         max_transaction_fee: Wei,
         sweep: &Finalized<SweepTransaction>,
     ) {
+        assert_eq!(
+            *sweep.transaction_amount(),
+            Wei::ZERO,
+            "BUG: a sweep must not send ETH, its acceptance held only the transaction fee"
+        );
         let effective_fee = sweep.effective_transaction_fee();
         let unspent_fee = max_transaction_fee
             .checked_sub(effective_fee)
             .expect("BUG: a sweep may not pay more than its fee ceiling");
-        let unspent = match sweep.transaction_status() {
-            TransactionStatus::Success => unspent_fee,
-            TransactionStatus::Failure => sweep
-                .transaction_amount()
-                .checked_add(unspent_fee)
-                .expect("BUG: overflow in the unspent cost of a failed sweep"),
-        };
-        self.sweeper_balance.credit(unspent);
+        self.sweeper_balance.credit(unspent_fee);
         self.sweeper_balance.add_effective_tx_fee(effective_fee);
     }
 
