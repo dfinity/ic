@@ -29,7 +29,6 @@ Success::
 1. Each scenario returns the expected `FlexibleHttpRequestResult` (or rejection).
 
 end::catalog[] */
-#![allow(deprecated)]
 
 use anyhow::{Result, bail};
 use candid::{Decode, Principal};

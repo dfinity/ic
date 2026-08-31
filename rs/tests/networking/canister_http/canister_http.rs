@@ -67,13 +67,8 @@ pub fn setup(env: TestEnv) {
     setup_with_app_subnets(env, &[CanisterCyclesCostSchedule::Normal]);
 }
 
-/// Like [`setup`], but with a *second* application subnet on a free cost schedule,
-/// where HTTP outcalls cost nothing, reached through
-/// [`get_paying_proxy_canister_id`]'s free counterpart.
-///
-/// The two differ only in whether HTTP outcalls are paid for, which lets one suite
-/// exercise every scenario both where pricing is moot and where the allowance,
-/// refund and out-of-cycles paths are live.
+/// Like [`setup`], but with a second application subnet on a free cost schedule,
+/// where HTTP outcalls cost nothing.
 pub fn setup_with_free_and_paying_subnets(env: TestEnv) {
     setup_with_app_subnets(
         env,
@@ -87,38 +82,30 @@ pub fn setup_with_free_and_paying_subnets(env: TestEnv) {
 /// Sets up an IC with a 1-node system subnet and one 4-node application subnet per
 /// entry in `app_subnets`, which gives each its cost schedule.
 ///
-/// HTTP outcalls are enabled on every subnet, including the system one — which is
-/// free for outcalls despite its normal cost schedule — and each gets a proxy
+/// HTTP outcalls are enabled on every subnet, including the system one, which is
+/// free for outcalls despite its normal cost schedule. Every subnet gets a proxy
 /// canister: the system subnet's is reached through
-/// [`get_system_proxy_canister_id`], the first application subnet's through
-/// [`get_proxy_canister_id`], and a second one's through
-/// [`get_paying_proxy_canister_id`].
+/// [`get_system_proxy_canister_id`] and each application subnet's through
+/// [`get_proxy_canister_id_for`], or through [`get_proxy_canister_id`] when there
+/// is only one.
 ///
-/// Application subnets are looked up by cost schedule rather than by position (see
-/// [`get_app_subnet_node_snapshots_with_schedule`]), so their schedules must be
-/// distinct.
-fn setup_with_app_subnets(env: TestEnv, app_subnets: &[CanisterCyclesCostSchedule]) {
-    assert!(
-        matches!(app_subnets, [_] | [_, CanisterCyclesCostSchedule::Normal]),
-        "expected one application subnet, or two with the second one paying, \
-         got {app_subnets:?}"
-    );
-
+/// Cost schedules in `app_subnets` must be distinct.
+pub fn setup_with_app_subnets(env: TestEnv, app_subnets: &[CanisterCyclesCostSchedule]) {
     std::thread::scope(|s| {
         s.spawn(|| {
-            let with_outcalls = || SubnetFeatures {
+            let with_outcalls = SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
             };
             let mut ic = InternetComputer::new().add_subnet(
                 Subnet::new(SubnetType::System)
-                    .with_features(with_outcalls())
+                    .with_features(with_outcalls)
                     .add_nodes(1),
             );
             for &cost_schedule in app_subnets {
                 ic = ic.add_subnet(
                     Subnet::new(SubnetType::Application)
-                        .with_features(with_outcalls())
+                        .with_features(with_outcalls)
                         .with_cost_schedule(cost_schedule)
                         .add_nodes(4),
                 );

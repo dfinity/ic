@@ -14,11 +14,10 @@ Success::
 1. Received http response with status 200.
 
 end::catalog[] */
-#![allow(deprecated)]
 
 use anyhow::Result;
 use assert_matches::assert_matches;
-use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one};
+use candid::{CandidType, Deserialize, Encode, Principal, decode_one};
 use canister_http::*;
 use canister_test::{Canister, Runtime};
 use ic_agent::{
@@ -28,10 +27,10 @@ use ic_agent::{
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
+use ic_https_outcalls_pricing::MAX_RESPONSE_TIME;
 use ic_management_canister_types_private::{
-    BoundedHttpHeaders, FlexibleCanisterHttpRequestArgs, FlexibleHttpRequestResult, HttpHeader,
-    HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, TransformContext,
-    TransformFunc,
+    HttpHeader, HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO,
+    TransformContext, TransformFunc,
 };
 use ic_system_test_driver::{
     canister_agent::HasCanisterAgentCapability,
@@ -46,17 +45,18 @@ use ic_system_test_driver::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
-    NumberOfNodes, RegistryVersion,
-    canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES},
+    NumInstructions, NumberOfNodes, RegistryVersion,
+    canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES, ReplicationKind},
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::CanisterCyclesCostSchedule;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use proxy_canister::{
-    FlexibleRemoteHttpRequest, RejectionCode, RemoteHttpRequest, RemoteHttpResponse,
-    ResponseWithRefundedCycles, UnvalidatedCanisterHttpRequestArgs,
+    RejectionCode, RemoteHttpRequest, RemoteHttpResponse, ResponseWithRefundedCycles,
+    UnvalidatedCanisterHttpRequestArgs,
 };
 use serde_json::Value;
 use std::collections::{BTreeSet, HashSet};
+use std::time::{Duration, Instant};
 
 const MAX_REQUEST_BYTES_LIMIT: usize = 2_000_000;
 const MAX_MAX_RESPONSE_BYTES: usize = 2_000_000;
@@ -87,9 +87,7 @@ impl<'a> Handlers<'a> {
         Self::on_subnet(env, get_node_snapshots(env), get_proxy_canister_id(env))
     }
 
-    /// Handlers for the system subnet, which charges nothing for HTTP outcalls
-    /// despite its normal cost schedule — the free counterpart of
-    /// [`Handlers::new`].
+    /// Handlers for the system subnet, which charges nothing for HTTP outcalls.
     fn on_system_subnet(env: &'a TestEnv) -> Handlers<'a> {
         Self::on_subnet(
             env,
@@ -218,10 +216,7 @@ fn main() -> Result<()> {
                     test_only_headers_with_custom_max_response_bytes_exceeded
                 ))
                 .add_test(systest!(test_max_response_bytes_too_large))
-                .add_test(systest!(test_max_response_bytes_2_mb_returns_ok))
-                .add_test(systest!(
-                    test_flexible_http_request_enabled_on_normal_subnet
-                )),
+                .add_test(systest!(test_max_response_bytes_2_mb_returns_ok)),
         )
         // Pay-as-you-go pricing, which a caller opts into per request. These run
         // sequentially: `test_pay_as_you_go_charges_and_refunds` measures the proxy
@@ -441,36 +436,47 @@ fn test_no_cycles_attached(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     for pricing_version in [PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO] {
+        let request = UnvalidatedCanisterHttpRequestArgs {
+            url: format!("http://[{webserver_ipv6}]"),
+            headers: vec![],
+            method: HttpMethod::GET,
+            body: Some("".as_bytes().to_vec()),
+            transform: Some(TransformContext {
+                function: TransformFunc(candid::Func {
+                    principal: get_proxy_canister_id(&env).into(),
+                    method: "transform".to_string(),
+                }),
+                context: vec![0, 1, 2],
+            }),
+            max_response_bytes: None,
+            is_replicated: None,
+            pricing_version: Some(pricing_version),
+        };
+        // How much the caller is told it should have attached.
+        let proxy = handlers.proxy_canister().canister_id();
+        let required = Cycles::new(match pricing_version {
+            PRICING_VERSION_LEGACY => u128::from(expected_cycle_cost(
+                proxy,
+                request.clone(),
+                handlers.subnet_size,
+            )),
+            _ => payg_fees(proxy, request.clone(), handlers.subnet_size).base_fee,
+        });
+
         let (response, _) = block_on(submit_outcall(
             &handlers,
-            RemoteHttpRequest {
-                request: UnvalidatedCanisterHttpRequestArgs {
-                    url: format!("http://[{webserver_ipv6}]"),
-                    headers: vec![],
-                    method: HttpMethod::GET,
-                    body: Some("".as_bytes().to_vec()),
-                    transform: Some(TransformContext {
-                        function: TransformFunc(candid::Func {
-                            principal: get_proxy_canister_id(&env).into(),
-                            method: "transform".to_string(),
-                        }),
-                        context: vec![0, 1, 2],
-                    }),
-                    max_response_bytes: None,
-                    is_replicated: None,
-                    pricing_version: Some(pricing_version),
-                },
-                cycles: 0,
-            },
+            RemoteHttpRequest { request, cycles: 0 },
         ));
 
         assert_matches!(
-            response,
+            &response,
             Err(RejectResponse {
                 reject_code: RejectCode::CanisterReject,
+                reject_message,
                 ..
-            }),
-            "expected pricing version {pricing_version} to reject an unpaid outcall"
+            }) if reject_message.contains(&required.to_string()),
+            "expected pricing version {pricing_version} to reject an unpaid outcall as needing \
+             {required} cycles, got {response:?}"
         );
     }
 }
@@ -2749,83 +2755,27 @@ where
     }
 }
 
-/// Submits a flexible HTTP outcall through the proxy canister and returns the
-/// proxy's raw reply: `Ok(bytes)` (the Candid-encoded `FlexibleHttpRequestResult`)
-/// on a handled outcall, or `Err((code, message))` when `flexible_http_request`
-/// is rejected synchronously (e.g. because it is not enabled on this subnet).
-async fn submit_flexible_outcall(
-    handlers: &Handlers<'_>,
-    request: FlexibleRemoteHttpRequest,
-) -> Result<Vec<u8>, (RejectionCode, String)> {
-    let args = Encode!(&request).unwrap();
-    let agent = handlers.agent().await;
+/// Queries the proxy canister's balance once nothing is owed to it any more.
+///
+/// Waiting for the balance to stop *rising* rather than to stop moving is
+/// deliberate: Refunds are the only thing that adds to it, while other charges
+/// might subtract from it in parallel.
+async fn settled_proxy_balance(handlers: &Handlers<'_>) -> u128 {
+    /// Long enough to outlast a delivered request context, after which nothing can
+    /// still be owed.
+    const ATTEMPTS: usize = 10;
+    const INTERVAL: Duration = Duration::from_secs(10);
 
-    let principal_id: PrincipalId = handlers.proxy_canister().effective_canister_id();
-    let principal: Principal = principal_id.into();
-
-    let log = handlers.env.logger();
-    let canister_response = match retry_agent_on_transport_errors!(
-        "submit_flexible_outcall: call",
-        &log,
-        agent
-            .update(&principal, "send_flexible_request")
-            .with_arg(args.clone())
-            .call()
-    )
-    .await
-    .expect("submit_flexible_outcall retries exhausted")
-    {
-        Ok(CallResponse::Response(response)) => Ok(response),
-        Ok(CallResponse::Poll(request_id)) => retry_agent_on_transport_errors!(
-            "submit_flexible_outcall: wait",
-            &log,
-            agent.wait(&request_id, principal)
-        )
-        .await
-        .expect("submit_flexible_outcall retries exhausted"),
-        Err(err) => Err(err),
-    };
-
-    let serialized_bytes = canister_response.expect("send_flexible_request should reply");
-    decode_one::<Result<Vec<u8>, (RejectionCode, String)>>(&serialized_bytes.0)
-        .expect("Decoding the send_flexible_request reply should succeed.")
-}
-
-/// Flexible HTTP outcalls are priced with the pay-as-you-go pricing model, which
-/// is enabled on every subnet, so they work on a normal (paying) subnet too. The
-/// scenarios themselves are covered exhaustively by `canister_http_flexible_test`
-/// and `canister_http_flexible_paying_test`; this just pins down that the
-/// endpoint is reachable from the ordinary correctness setup.
-fn test_flexible_http_request_enabled_on_normal_subnet(env: TestEnv) {
-    let handlers = Handlers::new(&env);
-    let webserver_ipv6 = get_universal_vm_address(&env);
-
-    let request = FlexibleRemoteHttpRequest {
-        request: FlexibleCanisterHttpRequestArgs {
-            url: format!("https://[{webserver_ipv6}]/ascii/hello"),
-            max_response_bytes: None,
-            headers: BoundedHttpHeaders::new(vec![]),
-            body: None,
-            method: HttpMethod::GET,
-            transform: None,
-            replication: None,
-        },
-        cycles: HTTP_REQUEST_CYCLE_PAYMENT,
-    };
-
-    let result = block_on(submit_flexible_outcall(&handlers, request));
-
-    match result {
-        Ok(bytes) => {
-            let decoded = Decode!(&bytes, FlexibleHttpRequestResult)
-                .expect("failed to decode FlexibleHttpRequestResult");
-            assert_matches!(decoded, FlexibleHttpRequestResult::Ok(_));
+    let mut previous = proxy_cycle_balance(handlers).await;
+    for _ in 0..ATTEMPTS {
+        tokio::time::sleep(INTERVAL).await;
+        let current = proxy_cycle_balance(handlers).await;
+        if current <= previous {
+            return current;
         }
-        Err((reject_code, message)) => panic!(
-            "expected the flexible outcall to succeed on a normal subnet, \
-             got {reject_code:?}: '{message}'"
-        ),
+        previous = current;
     }
+    panic!("the proxy canister kept being credited, last seen at {previous}")
 }
 
 /// Queries the proxy canister's own cycle balance.
@@ -2852,13 +2802,22 @@ async fn proxy_cycle_balance(handlers: &Handlers<'_>) -> u128 {
 /// Base arguments for a `GET` outcall that opts into pay-as-you-go pricing, where
 /// only a base fee is charged up front and the rest of the payment becomes a
 /// per-replica allowance that is refunded if unspent.
-fn pay_as_you_go_args(url: String) -> UnvalidatedCanisterHttpRequestArgs {
+fn pay_as_you_go_args(
+    proxy_canister: PrincipalId,
+    url: String,
+) -> UnvalidatedCanisterHttpRequestArgs {
     UnvalidatedCanisterHttpRequestArgs {
         url,
         headers: vec![],
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
-        transform: None,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: proxy_canister.into(),
+                method: "transform".to_string(),
+            }),
+            context: vec![],
+        }),
         max_response_bytes: None,
         is_replicated: None,
         pricing_version: Some(PRICING_VERSION_PAY_AS_YOU_GO),
@@ -2916,6 +2875,9 @@ fn payg_fees(
             )
             .get(),
         node_count: dummy_context.replication.node_count(subnet_nodes),
+        request_size: dummy_context.variable_parts_size(),
+        replication_kind: dummy_context.replication.kind(),
+        subnet_size,
     }
 }
 
@@ -2927,13 +2889,49 @@ struct PaygFees {
     max_usage_fee: u128,
     /// How many replicas the allowances are split between.
     node_count: usize,
+    /// Enough of the request to price hypothetical outcalls against it.
+    request_size: NumBytes,
+    replication_kind: ReplicationKind,
+    subnet_size: usize,
 }
 
 impl PaygFees {
+    /// What `ic0.cost_http_request_v2` quotes for an outcall. This should be an upper bound
+    /// on what the outcall actually spends.
+    ///
+    /// The round trip is bounded by how long the whole call took.
+    fn charge_ceiling(&self, elapsed: Duration) -> u128 {
+        // What the server sends back and every replica downloads: a handful of bytes
+        // of body plus httpbin's five overhead headers (see `HTTPBIN_OVERHEAD_RESPONSE_HEADERS`).
+        const RAW_RESPONSE_CEILING: u64 = 512;
+        // What the transform hands back, and so what consensus puts into a block:
+        // the same body with the headers stripped.
+        const TRANSFORMED_RESPONSE_CEILING: u64 = 64;
+        // Decoding half a kilobyte, clearing a vector and re-encoding.
+        const TRANSFORM_INSTRUCTIONS: u64 = 100_000;
+
+        CyclesAccountManagerBuilder::new()
+            .build()
+            .http_request_fee_v2(
+                self.request_size,
+                elapsed.min(MAX_RESPONSE_TIME),
+                NumBytes::from(RAW_RESPONSE_CEILING),
+                NumInstructions::from(TRANSFORM_INSTRUCTIONS),
+                NumBytes::from(TRANSFORMED_RESPONSE_CEILING),
+                self.replication_kind,
+                CyclesAccountManagerSubnetConfig::new(
+                    self.subnet_size,
+                    CanisterCyclesCostSchedule::Normal,
+                    DEFAULT_REFERENCE_SUBNET_SIZE,
+                ),
+            )
+            .real()
+            .get()
+    }
+
     /// What the request has withheld from it up front, given a `payment` ample
     /// enough that the worst-case usage fee is what bounds the allowances rather
-    /// than the payment itself. Panics if it is not, since the caller's
-    /// expectations would then be wrong in a way worth failing loudly on.
+    /// than the payment itself.
     fn withheld(&self, payment: u128) -> u128 {
         assert!(
             self.max_usage_fee <= payment - self.base_fee,
@@ -2949,74 +2947,102 @@ impl PaygFees {
     }
 }
 
-/// A non-flexible outcall priced pay-as-you-go succeeds and is charged only what
-/// it actually cost, far less than the payment it attached.
+/// Makes a pay-as-you-go outcall and checks how the caller was charged for it.
 ///
-/// Under pay-as-you-go the payment is taken up front and the unspent part of the
-/// per-replica allowances is credited back to the caller's balance afterwards,
-/// rather than returned as refunded cycles on the reply — so this watches the
-/// balance, which is where the refund actually lands.
+/// The payment leaves the balance up front; everything it covered beyond the base
+/// fee and the per-replica allowances comes back on the reply, and the unspent part
+/// of the allowances is credited to the balance once the response is delivered. So
+/// what stays charged is the base fee plus what the outcall really spent — more
+/// than the base fee alone, since delivering a response is never free, and no more
+/// than `ic0.cost_http_request_v2` quotes for the resources it consumed, which is
+/// the figure a canister is expected to attach.
+///
+/// Returns the fees, for whatever the caller wants to assert on top.
+async fn assert_charged_as_quoted(
+    handlers: &Handlers<'_>,
+    description: &str,
+    request: UnvalidatedCanisterHttpRequestArgs,
+) -> PaygFees {
+    let payment = u128::from(HTTP_REQUEST_CYCLE_PAYMENT);
+    let fees = payg_fees(
+        handlers.proxy_canister().canister_id(),
+        request.clone(),
+        handlers.subnet_size,
+    );
+    let withheld = fees.withheld(payment);
+
+    let before = settled_proxy_balance(handlers).await;
+    let started = Instant::now();
+    let (response, refunded_cycles) = submit_outcall(
+        handlers,
+        RemoteHttpRequest {
+            request,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    )
+    .await;
+    // Bounds the HTTP round trip the replicas were charged for: their request
+    // happened strictly inside this call.
+    let elapsed = started.elapsed();
+    assert_matches!(
+        &response,
+        Ok(ok) if ok.status == 200,
+        "{description} did not succeed: {response:?}"
+    );
+
+    // Deterministic, unlike the charge: it does not depend on how long the server
+    // took or on how many replicas' receipts consensus took.
+    assert_eq!(
+        refunded_cycles,
+        RefundedCycles::Cycles((payment - withheld) as u64),
+        "expected {description} to return everything beyond the {withheld} cycles withheld \
+         out of a {payment}-cycle payment on the reply"
+    );
+
+    let after = settled_proxy_balance(handlers).await;
+    let charged = before
+        .checked_sub(after)
+        .unwrap_or_else(|| panic!("balance grew from {before} to {after} across {description}"));
+    assert!(
+        charged > fees.base_fee,
+        "{description} was charged {charged} cycles, no more than the {} base fee — yet \
+         delivering a response always costs something on top of it",
+        fees.base_fee
+    );
+    let quoted = fees.charge_ceiling(elapsed);
+    assert!(
+        charged <= quoted,
+        "{description} was charged {charged} cycles, more than the {quoted} that \
+         ic0.cost_http_request_v2 quotes for what it consumed — of the {withheld} withheld, so \
+         the unspent allowance looks not to have been refunded"
+    );
+    fees
+}
+
+/// A fully-replicated outcall priced pay-as-you-go: every replica of the subnet
+/// fetches the response and they share the allowances between them.
 fn test_pay_as_you_go_charges_and_refunds(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let request = pay_as_you_go_args(format!("https://[{webserver_ipv6}]/ascii/priced"));
-    let payment = u128::from(HTTP_REQUEST_CYCLE_PAYMENT);
+    let request = pay_as_you_go_args(
+        get_proxy_canister_id(&env),
+        format!("https://[{webserver_ipv6}]/ascii/priced"),
+    );
 
-    block_on(async {
-        let fees = payg_fees(
-            handlers.proxy_canister().canister_id(),
-            request.clone(),
-            handlers.subnet_size,
-        );
-        let withheld = fees.withheld(payment);
-
-        let before = proxy_cycle_balance(&handlers).await;
-        let (response, refunded_cycles) = submit_outcall(
-            &handlers,
-            RemoteHttpRequest {
-                request,
-                cycles: HTTP_REQUEST_CYCLE_PAYMENT,
-            },
-        )
-        .await;
-        assert_matches!(response, Ok(r) if r.status == 200);
-
-        // Whatever the payment covered beyond the base fee and the allowances was
-        // never at risk, so it comes back on the reply. Unlike the charge below,
-        // this is exact: it does not depend on how long the server took.
-        assert_eq!(
-            refunded_cycles,
-            RefundedCycles::Cycles((payment - withheld) as u64),
-            "expected the reply to return everything beyond the {withheld} cycles withheld \
-             out of a {payment}-cycle payment"
-        );
-
-        let after = proxy_cycle_balance(&handlers).await;
-        let charged = before
-            .checked_sub(after)
-            .unwrap_or_else(|| panic!("balance grew from {before} to {after} across an outcall"));
-        assert!(
-            charged > 0,
-            "a pay-as-you-go outcall on a normal cost schedule charged nothing"
-        );
-        // The unspent part of the allowances is credited back to the balance after
-        // the response is delivered. Fetching a handful of bytes spends a tiny
-        // fraction of what was withheld for a worst-case response, so a charge
-        // anywhere near the withheld amount means that credit never happened —
-        // which a bound expressed as a fraction of the *payment* would not catch,
-        // the payment being far larger again than the amount withheld.
-        assert!(
-            charged * 10 < withheld,
-            "a small outcall was charged {charged} of the {withheld} cycles withheld, so the \
-             unspent allowance looks not to have been refunded"
-        );
-    });
+    let fees = block_on(assert_charged_as_quoted(
+        &handlers,
+        "a fully-replicated pay-as-you-go outcall",
+        request,
+    ));
+    assert_eq!(
+        fees.node_count, handlers.subnet_size,
+        "a fully-replicated outcall is served by every replica of the subnet"
+    );
 }
 
-/// The same, for a *non-replicated* outcall: a single replica fetches the
-/// response, so it is granted the whole allowance rather than a share of it, and
-/// its spend has to cover gossiping the response to the others on top of
-/// downloading it.
+/// The same for a *non-replicated* outcall: one replica fetches the response, so it
+/// is granted the whole allowance rather than a share of it, and its spend has to
+/// cover gossiping the response to the others on top of downloading it.
 ///
 /// Pay-as-you-go and non-replicated outcalls are each covered on their own
 /// elsewhere; this is the combination, where the fee formulas take their
@@ -3026,71 +3052,44 @@ fn test_pay_as_you_go_non_replicated(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
     let request = UnvalidatedCanisterHttpRequestArgs {
         is_replicated: Some(false),
-        ..pay_as_you_go_args(format!("https://[{webserver_ipv6}]/ascii/unreplicated"))
-    };
-    let payment = u128::from(HTTP_REQUEST_CYCLE_PAYMENT);
-
-    block_on(async {
-        let fees = payg_fees(
-            handlers.proxy_canister().canister_id(),
-            request.clone(),
-            handlers.subnet_size,
-        );
-        assert_eq!(
-            fees.node_count, 1,
-            "a non-replicated outcall is served by exactly one replica"
-        );
-        let withheld = fees.withheld(payment);
-
-        let before = proxy_cycle_balance(&handlers).await;
-        let (response, refunded_cycles) = submit_outcall(
-            &handlers,
-            RemoteHttpRequest {
-                request,
-                cycles: HTTP_REQUEST_CYCLE_PAYMENT,
-            },
+        ..pay_as_you_go_args(
+            get_proxy_canister_id(&env),
+            format!("https://[{webserver_ipv6}]/ascii/unreplicated"),
         )
-        .await;
-        assert_matches!(response, Ok(r) if r.status == 200);
-        assert_eq!(
-            refunded_cycles,
-            RefundedCycles::Cycles((payment - withheld) as u64),
-            "expected the reply to return everything beyond the {withheld} cycles withheld"
-        );
+    };
 
-        let after = proxy_cycle_balance(&handlers).await;
-        let charged = before
-            .checked_sub(after)
-            .unwrap_or_else(|| panic!("balance grew from {before} to {after} across an outcall"));
-        assert!(charged > 0, "a non-replicated outcall charged nothing");
-        assert!(
-            charged * 10 < withheld,
-            "a small non-replicated outcall was charged {charged} of the {withheld} cycles \
-             withheld, so the unspent allowance looks not to have been refunded"
-        );
-    });
+    let fees = block_on(assert_charged_as_quoted(
+        &handlers,
+        "a non-replicated pay-as-you-go outcall",
+        request,
+    ));
+    assert_eq!(
+        fees.node_count, 1,
+        "a non-replicated outcall is served by exactly one replica"
+    );
 }
 
 /// Pay-as-you-go admits a request exactly when the payment covers the base fee,
 /// and not a cycle below it.
-///
-/// The threshold matters in both directions: too high and callers are turned away
-/// from outcalls they can afford, too low and the subtraction that turns the
-/// payment into allowances underflows into a free-service hole.
 fn test_pay_as_you_go_base_fee_threshold(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let request = pay_as_you_go_args(format!("https://[{webserver_ipv6}]/ascii/threshold"));
+    let request = pay_as_you_go_args(
+        get_proxy_canister_id(&env),
+        format!("https://[{webserver_ipv6}]/ascii/threshold"),
+    );
     let base_fee = payg_fees(
         handlers.proxy_canister().canister_id(),
         request.clone(),
         handlers.subnet_size,
     )
     .base_fee as u64;
+    // The reject message renders the figure the way `Cycles` displays it, with
+    // underscore separators, so match on that rather than on the bare integer.
+    let base_fee_shown = Cycles::new(u128::from(base_fee)).to_string();
 
     block_on(async {
-        // A cycle short: refused up front, nothing charged, the payment returned.
-        let before = proxy_cycle_balance(&handlers).await;
+        // A cycle short: refused up front, with the payment returned untouched.
         let (response, refunded_cycles) = submit_outcall(
             &handlers,
             RemoteHttpRequest {
@@ -3105,24 +3104,19 @@ fn test_pay_as_you_go_base_fee_threshold(env: TestEnv) {
                 reject_code: RejectCode::CanisterReject,
                 reject_message,
                 ..
-            }) if reject_message.contains(&base_fee.to_string()),
-            "expected a rejection naming the {base_fee}-cycle base fee, got {response:?}"
+            }) if reject_message.contains(&base_fee_shown),
+            "expected a rejection naming the {base_fee_shown}-cycle base fee, got {response:?}"
         );
         assert_eq!(
             refunded_cycles,
             RefundedCycles::Cycles(base_fee - 1),
             "a request that was never admitted should have its whole payment returned"
         );
-        assert_eq!(
-            proxy_cycle_balance(&handlers).await,
-            before,
-            "a request that was never admitted should not move the balance"
-        );
 
         // Exactly the base fee: admitted, and the base fee is kept. Nothing is left
         // over for allowances, so no replica can afford to put a response into a
         // block and the outcall ends as out of cycles rather than succeeding.
-        let before = proxy_cycle_balance(&handlers).await;
+        let before = settled_proxy_balance(&handlers).await;
         let (response, refunded_cycles) = submit_outcall(
             &handlers,
             RemoteHttpRequest {
@@ -3149,11 +3143,15 @@ fn test_pay_as_you_go_base_fee_threshold(env: TestEnv) {
             RefundedCycles::Cycles(0),
             "a payment of exactly the base fee leaves nothing to refund"
         );
-        let after = proxy_cycle_balance(&handlers).await;
-        assert_eq!(
-            before - after,
-            u128::from(base_fee),
-            "the base fee is charged even when the outcall goes on to fail"
+        // A lower bound, not an equality: on a subnet that charges, the canister also
+        // pays to receive the ingress message, to run the update, and to exist.
+        // So the balance moves by more than the base fee.
+        let after = settled_proxy_balance(&handlers).await;
+        assert!(
+            before - after >= u128::from(base_fee),
+            "the balance moved by {} cycles, less than the {base_fee} base fee, which is \
+             charged even when the outcall goes on to fail",
+            before - after
         );
     });
 }
@@ -3161,24 +3159,8 @@ fn test_pay_as_you_go_base_fee_threshold(env: TestEnv) {
 /// A non-flexible outcall that can pay its replicas for fetching a response but
 /// not for putting one into a block fails as out of cycles, rather than hanging
 /// until it times out.
-///
-/// Delivering a response costs roughly `N * (10N + 600)` cycles per byte against
-/// ~50 cycles per byte to download it, so a payment sized to comfortably cover
-/// the downloads still falls far short of the consensus cost for a large enough
-/// response.
 fn test_pay_as_you_go_out_of_cycles(env: TestEnv) {
     const BODY_SIZE: usize = 500_000;
-    // The payment has to land in a window. Each replica spends ~50 cycles/byte to
-    // download (~25M here) and its receipt is discarded unless its allowance `A`
-    // covers that, so `A` must exceed ~25M. Delivering costs `N * (10N + 600)`
-    // cycles/byte — ~2_560 at `N = 4`, so ~1.28B here — and the outcall is only out
-    // of cycles if what is left of the collective allowance falls short of that:
-    // `4A - 4S < 2_560 * BODY_SIZE`. Writing `A = k * S` that is `k < ~13.8`,
-    // whatever the response size. `k = 4` sits in the middle of the window, giving
-    // ~4x margin on both sides.
-    //
-    // Note the direction: paying *more* buys a bigger allowance and so makes the
-    // outcall affordable, not less so.
     const PAYMENT: u64 = 400_000_000;
 
     let handlers = Handlers::new(&env);
@@ -3187,7 +3169,10 @@ fn test_pay_as_you_go_out_of_cycles(env: TestEnv) {
     let (response, _refunded) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: pay_as_you_go_args(format!("https://[{webserver_ipv6}]/bytes/{BODY_SIZE}")),
+            request: pay_as_you_go_args(
+                get_proxy_canister_id(&env),
+                format!("https://[{webserver_ipv6}]/bytes/{BODY_SIZE}"),
+            ),
             cycles: PAYMENT,
         },
     ));
@@ -3209,14 +3194,7 @@ fn test_pay_as_you_go_out_of_cycles(env: TestEnv) {
 /// nothing at all, or a payment that comes back in full — and the caller's
 /// balance is left untouched. Holds under both pricing versions.
 ///
-/// The free subnet here is the system subnet, which charges nothing for outcalls
-/// despite its normal cost schedule and already carries a proxy canister, so this
-/// needs no extra subnet in the topology. What a free *cost schedule* does
-/// differently is only how it reaches the same pinned schedule in the request
-/// context, which the execution-environment tests cover directly.
-///
-/// The free counterpart of [`test_no_cycles_attached`] and, for the payment case,
-/// of [`test_pay_as_you_go_charges_and_refunds`].
+/// The free subnet here is the system subnet.
 fn test_free_subnet_charges_nothing(env: TestEnv) {
     let handlers = Handlers::on_system_subnet(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
