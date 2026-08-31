@@ -336,12 +336,6 @@ jobs:
     timeout-minutes: 120
     needs: [config]
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
-    # sha256sum lines for the files inside each uploaded Actions artifact
-    # ('' unless release-build), recorded by the "Record artifact checksums"
-    # step. Each matrix leg sets only its own keys; the runner drops empty
-    # outputs when merging matrix legs, so the legs do not overwrite each
-    # other. upload-external-artifacts re-checks its downloads against these
-    # before re-uploading anything to the CDN.
     outputs:
       arm64-linux-sums: ${{ steps.sums.outputs.arm64-linux-sums }}
       arm64-darwin-sums: ${{ steps.sums.outputs.arm64-darwin-sums }}
@@ -391,8 +385,6 @@ jobs:
       - name: Record artifact checksums
         id: sums
         if: ${{ needs.config.outputs.release-build == 'true' }}
-        # Explicit bash: without `shell:` the runner may resolve the default
-        # to plain sh, which cannot parse this script.
         shell: bash
         env:
           OS: ${{ matrix.os }}
@@ -525,8 +517,6 @@ jobs:
           path: ~/.cache/pocket-ic-server-x86_64-darwin
 
       - name: Verify downloaded artifacts
-        # Explicit bash: in this container job the default shell resolves to
-        # plain sh, which cannot parse the process substitutions below.
         shell: bash
         env:
           ARM64_LINUX_SUMS: ${{ needs.bazel-test-arm64.outputs.arm64-linux-sums }}
@@ -544,11 +534,7 @@ jobs:
           # sha256sum rejects input without valid checksum lines.
           check() { # <download-dir> <recorded sha256sum lines>
             echo "$2" | (cd "$1" && sha256sum --check --strict)
-            # Also reject artifacts carrying anything beyond the recorded
-            # files — enumerated with find so hidden entries and
-            # subdirectories count too — so a future edit that globs from
-            # these directories cannot pick up unrecorded extras that the
-            # check above never covered.
+            # Also reject artifacts carrying anything beyond the recorded files
             diff <(echo "$2" | awk '{print $2}' | LC_ALL=C sort) \
               <(cd "$1" && find . -mindepth 1 | sed 's|^\./||' | LC_ALL=C sort)
           }
@@ -577,8 +563,8 @@ jobs:
 
           # Give these hand-assembled directories the same SHA256SUMS file
           # that the bazel-built bundles get from the artifact_bundle rule
-          # (publish/defs.bzl), so every binaries/<platform>/ directory on the
-          # CDN carries a checksum manifest that release workflows can verify
+          # so every binaries/<platform>/ directory on the CDN carries
+          # a checksum manifest that release workflows can verify
           # against its attestation.
           for d in arm64-linux arm64-darwin x86_64-darwin; do
             (cd "$bundledir/binaries/$d" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
@@ -605,24 +591,12 @@ jobs:
           upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
 
   # Merge the per-job upload manifests into the single upload-manifest
-  # artifact exposed through this workflow's `manifest-sha256` output. That
-  # the CDN uploads happen in two jobs (bazel-test-all and
-  # upload-external-artifacts) is an implementation detail of this workflow:
-  # callers and the attest-uploads action only ever see one manifest, so a
-  # change to the set of upload jobs stays confined to this file.
-  #
-  # This job is part of the attestation trust chain (see the attest-uploads
-  # action): it verifies each downloaded manifest against the producing job's
-  # output before merging, and anchors the merged artifact in its own job
-  # output. It must never execute build or test code.
+  # artifact exposed through this workflow's `manifest-sha256` output.
   upload-manifests:
     name: Merge upload manifests
     needs: [config, bazel-test-all, upload-external-artifacts]
     if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
     runs-on: ubuntu-latest
-    # Reduced from the workflow-level grants: same-run artifact transfer uses
-    # the runner's runtime token, so this job needs neither `actions: write`
-    # nor `id-token: write`; `contents: read` is kept as the read-only floor.
     permissions:
       contents: read
     outputs:

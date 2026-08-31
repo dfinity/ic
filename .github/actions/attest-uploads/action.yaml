@@ -1,35 +1,11 @@
 name: Attest Uploaded Artifacts
 description: |
-  Generate a build-provenance attestation covering every file that this run's
-  ci-main.yml uploaded to the CDN (see ci-main's upload-manifests job,
-  which produces the upload manifest consumed here).
+  Generate a build-provenance attestation from a `upload-manifest` artifact.
 
-  The attestation is the integrity anchor that lets release workflows and the
-  mainnet-revisions updater verify CDN downloads against something independent
-  of the CDN: they fetch a directory's SHA256SUMS from the CDN, check it with
-  `gh attestation verify --repo dfinity/ic --signer-workflow <this pipeline>
-  --source-digest <commit> --format json`, require the verified attestation to
-  record the file's digest under the exact subject name
-  ic/<commit>/<directory>/SHA256SUMS — gh authenticates the digest only, and
-  this attestation covers every uploaded directory, so without the name check
-  a compromised CDN could serve another same-commit directory's attested
-  SHA256SUMS here — and then verify each artifact against the now trusted
-  sums.
-
-  The manifest artifact is re-checked against the sha256 carried by ci-main's
-  `manifest-sha256` output: an Actions artifact can be replaced mid-run by
-  anything holding an `actions: write` token, but job outputs cannot be
-  tampered with by other jobs. The same check anchors the merge that produced
-  the artifact: ci-main's upload-manifests job verified each upload
-  job's manifest against that job's output before merging.
-
-  The calling job needs `attestations: write` and `id-token: write` and must
-  therefore never execute build or test code — it may consume only this
-  manifest and 64-hex job outputs.
 inputs:
   manifest-sha256:
     required: true
-    description: sha256 of the upload-manifest artifact, from ci-main's outputs.
+    description: sha256 of the upload-manifest artifact.
 
 runs:
   using: "composite"
@@ -47,14 +23,8 @@ runs:
       run: |
         set -euo pipefail
         cd "$RUNNER_TEMP/upload-manifest"
-
-        # Verify the downloaded artifact against the hash recorded in
-        # ci-main's job outputs before attesting anything. A missing or
-        # empty output also fails here: sha256sum rejects the malformed line.
         echo "$MANIFEST_SHA256  upload-manifest.sha256sums" | sha256sum --check
 
-    # With no predicate input, actions/attest emits a SLSA build-provenance
-    # attestation — the predicate type `gh attestation verify` expects by default.
     - name: Attest
       uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
       with:

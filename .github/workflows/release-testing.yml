@@ -66,13 +66,6 @@ jobs:
       commit-sha: ${{ github.sha }}
       release-build: 'true'
 
-  # Attest what ci-main uploaded to the CDN so that tag-release.yml and the
-  # mainnet-revisions updater can verify their CDN downloads against an anchor
-  # independent of the CDN. Job-level permissions
-  # only: this job must stay isolated — it consumes nothing but ci-main's
-  # 64-hex manifest-sha256 output and the run-local upload-manifest artifact,
-  # never data derived from external dashboards, and no other job in this
-  # workflow may hold `attestations: write`.
   attest-uploads:
     name: Attest Uploaded Artifacts
     runs-on: ubuntu-latest

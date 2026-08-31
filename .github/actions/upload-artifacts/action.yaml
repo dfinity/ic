@@ -7,20 +7,10 @@ inputs:
   name:
     required: true
   manifest-name:
-    required: false
-    default: ''
-    description: |
-      When set, the sha256sum-format manifest the upload command emits on
-      stdout is uploaded as a GitHub Actions artifact with this name, and the
-      manifest's own sha256 is exposed as the `manifest-sha256` output. The manifest is the build-time integrity
-      record that ci-main's upload-manifests job merges into the single
-      upload-manifest artifact, which the `attest-uploads` jobs (see
-      ci-kickoff.yml and release-testing.yml) attest, so that release
-      workflows can verify CDN downloads against an anchor independent of the
-      CDN itself.
+    required: true
 outputs:
   manifest-sha256:
-    description: sha256 of the uploaded manifest ('' when manifest-name is unset)
+    description: sha256 of the uploaded manifest
     value: ${{ steps.manifest.outputs.sha256 }}
 
 runs:
@@ -51,7 +41,6 @@ runs:
 
     - name: Check manifest
       id: manifest
-      if: inputs.manifest-name != ''
       shell: bash
       run: |
         set -euo pipefail
@@ -71,7 +60,6 @@ runs:
         echo "sha256=$(sha256sum "$manifest" | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
 
     - name: Upload manifest
-      if: inputs.manifest-name != ''
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: ${{ inputs.manifest-name }}
