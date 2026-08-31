@@ -23,7 +23,6 @@ use ic_types::{
 use prometheus::{HistogramVec, IntCounterVec, IntGauge, IntGaugeVec};
 use std::{
     collections::{HashMap, HashSet},
-    hash::Hash,
     sync::{
         Arc,
         mpsc::{Receiver, sync_channel},
@@ -524,28 +523,15 @@ impl DkgKeyManager {
 
         while let Some(summary_block) = next_summary_block {
             let summary = &summary_block.payload.as_ref().as_summary().dkg;
-            let next_summary_height = summary.get_next_start_height();
-            for transcript in summary
-                .current_transcripts()
-                .values()
-                .chain(summary.next_transcripts().values())
-            {
-                transcripts_to_retain.insert_by_cloning_if_not_present(transcript);
-            }
+            insert_transcripts_of(&mut transcripts_to_retain, summary);
 
-            next_summary_block = pool_reader.get_finalized_block(next_summary_height);
+            next_summary_block = pool_reader.get_finalized_block(summary.get_next_start_height());
         }
 
         // The removal below runs concurrently with the loading of the `summaries_to_load`'s
         // transcripts, so they must be part of the retain set.
         for summary in summaries_to_load {
-            for transcript in summary
-                .current_transcripts()
-                .values()
-                .chain(summary.next_transcripts().values())
-            {
-                transcripts_to_retain.insert_by_cloning_if_not_present(transcript);
-            }
+            insert_transcripts_of(&mut transcripts_to_retain, summary);
         }
 
         let crypto = self.crypto.clone();
@@ -646,36 +632,25 @@ fn dkg_id_log_msg(id: &NiDkgId) -> String {
     )
 }
 
-/// An extension trait for sets, allowing to insert a value the caller doesn't own without paying
-/// for a clone when the value is already in the set.
+/// Inserts the current and next transcripts of the given summary into the set, cloning only the
+/// transcripts that are not yet present.
 ///
 /// [`HashSet::insert`] takes the value by ownership, so inserting from a reference requires
-/// cloning up front — only to find out, after having paid for the clone, that an equal value was
-/// already present. This trait checks for presence first and clones only when the value is
-/// actually inserted.
-///
-/// This is useful when collecting the transcripts to retain in `delete_inactive_keys`: the next
-/// transcripts of a summary are always the current transcripts of the following summary, so the
-/// walk over the finalized summaries yields the (large) `NiDkgTranscript`s twice.
-///
-/// The price is that an actually inserted value is hashed twice: once by `contains` and once by
-/// `insert`.
-trait CloningInsertIfNotPresent<T> {
-    /// Inserts a clone of `value` into the set if no equal value is present, without cloning
-    /// otherwise. Returns `true` if the value was inserted.
-    fn insert_by_cloning_if_not_present(&mut self, value: &T) -> bool;
-}
-
-impl<T> CloningInsertIfNotPresent<T> for HashSet<T>
-where
-    T: Eq + Hash + Clone,
-{
-    fn insert_by_cloning_if_not_present(&mut self, value: &T) -> bool {
-        if self.contains(value) {
-            return false;
+/// cloning up front — only to find out, after having paid for the clone of a (large)
+/// [`NiDkgTranscript`], that an equal value was already present. Checking for presence first
+/// avoids that, and duplicates are the common case when collecting the transcripts to retain:
+/// the next transcripts of a summary are always the current transcripts of the following
+/// summary. The price is that an actually inserted transcript is hashed twice: once by
+/// `contains` and once by `insert`.
+fn insert_transcripts_of(transcripts: &mut HashSet<NiDkgTranscript>, summary: &DkgSummary) {
+    for transcript in summary
+        .current_transcripts()
+        .values()
+        .chain(summary.next_transcripts().values())
+    {
+        if !transcripts.contains(transcript) {
+            transcripts.insert(transcript.clone());
         }
-
-        self.insert(value.clone())
     }
 }
 
@@ -700,6 +675,7 @@ mod tests {
         crypto::crypto_hash,
     };
     use rstest::rstest;
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_transcripts_get_loaded_and_retained() {
@@ -1055,31 +1031,42 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_by_cloning_if_not_present() {
+    fn test_insert_transcripts_of() {
+        let transcript = |start_height: u64| {
+            let committee = vec![node_test_id(0)];
+            let mut transcript = dummy_transcript_for_tests_with_params(
+                committee.clone(),
+                NiDkgTag::LowThreshold,
+                NiDkgTag::LowThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                /*registry_version=*/ 1,
+            );
+            // Make the transcripts distinguishable from each other.
+            transcript.dkg_id.start_block_height = Height::from(start_height);
+            transcript
+        };
+        let summary = |current: &NiDkgTranscript, next: &NiDkgTranscript| {
+            DkgSummary::new(
+                /*configs=*/ vec![],
+                BTreeMap::from([(NiDkgTag::LowThreshold, current.clone())]),
+                BTreeMap::from([(NiDkgTag::LowThreshold, next.clone())]),
+                RegistryVersion::from(1),
+                /*interval_length=*/ Height::from(0),
+                /*next_interval_length=*/ Height::from(0),
+                /*height=*/ Height::from(0),
+                /*remote_dkg_attempts=*/ BTreeMap::new(),
+                SubnetSplittingStatus::NotScheduled,
+            )
+        };
+
+        let (a, b, c) = (transcript(0), transcript(1), transcript(2));
         let mut set = HashSet::new();
 
-        assert!(set.insert_by_cloning_if_not_present(&"a".to_string()));
-        assert!(set.insert_by_cloning_if_not_present(&"b".to_string()));
-        assert!(!set.insert_by_cloning_if_not_present(&"a".to_string()));
+        insert_transcripts_of(&mut set, &summary(&a, &b));
+        assert_eq!(set, HashSet::from([a.clone(), b.clone()]));
 
-        assert_eq!(set, HashSet::from(["a".to_string(), "b".to_string()]));
-    }
-
-    #[test]
-    fn test_insert_by_cloning_if_not_present_does_not_clone_present_values() {
-        #[derive(PartialEq, Eq, Hash)]
-        struct NoClone(u32);
-
-        impl Clone for NoClone {
-            fn clone(&self) -> Self {
-                panic!("An already present value should not be cloned");
-            }
-        }
-
-        let mut set = HashSet::from([NoClone(1)]);
-
-        // Must not clone (and hence not panic), since an equal value is already present.
-        assert!(!set.insert_by_cloning_if_not_present(&NoClone(1)));
-        assert_eq!(set.len(), 1);
+        // The next transcripts of a summary are the current transcripts of the following one,
+        // so the second summary only contributes one new transcript.
+        insert_transcripts_of(&mut set, &summary(&b, &c));
+        assert_eq!(set, HashSet::from([a, b, c]));
     }
 }
