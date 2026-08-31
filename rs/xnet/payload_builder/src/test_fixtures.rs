@@ -45,7 +45,7 @@ pub(crate) const SRC_CANISTER: u64 = 2;
 pub(crate) const DST_CANISTER: u64 = 3;
 pub(crate) const CALLBACK_ID: u64 = 4;
 
-pub(crate) const PAYLOAD_BYTES_LIMIT: NumBytes = NumBytes::new(POOLED_SLICE_BYTE_SIZE_MAX as u64);
+pub(crate) const PAYLOAD_BYTES_LIMIT: NumBytes = NumBytes::new(4 << 20);
 
 pub(crate) const LOCAL_NODE_1_OPERATOR_1: NodeId = NODE_1;
 pub(crate) const REMOTE_NODE_1_OPERATOR_1: NodeId = NODE_2;
