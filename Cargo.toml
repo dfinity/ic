@@ -946,6 +946,7 @@ sys-mount = "3.0"
 sysinfo = "0.37"
 tar = "0.4.39"
 tempfile = "3.20"
+test-strategy = "0.4.0"
 textplots = "^0.8"
 # DO NOT upgrade to >=2.0.19 as it pulls in syn 3 whereas the rest of the
 # codebase uses syn 2.

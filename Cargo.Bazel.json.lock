@@ -1,5 +1,5 @@
 {
-  "checksum": "e531f700af05e625c7c906ab208a0419f635c3db0421f1cebf7fd5c5ae874b46",
+  "checksum": "46fa585d9d126d7755a96f3eb31c92d29410378db6c3d1424d19da222e5e0925",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -18493,6 +18493,66 @@
       ],
       "license_file": "LICENSE-Apache"
     },
+    "derive-ex 0.1.8": {
+      "name": "derive-ex",
+      "version": "0.1.8",
+      "package_url": "https://github.com/frozenlib/derive-ex",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/derive-ex/0.1.8/download",
+          "sha256": "bba95f299f6b9cd47f68a847eca2ae9060a2713af532dc35c342065544845407"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "derive_ex",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "derive_ex",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "structmeta 0.3.0",
+              "target": "structmeta"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.8"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "derive-new 0.7.0": {
       "name": "derive-new",
       "version": "0.7.0",
@@ -21147,7 +21207,7 @@
               "target": "strum_macros"
             },
             {
-              "id": "test-strategy 0.3.1",
+              "id": "test-strategy 0.4.5",
               "target": "test_strategy"
             }
           ],
@@ -70657,71 +70717,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "structmeta 0.2.0": {
-      "name": "structmeta",
-      "version": "0.2.0",
-      "package_url": "https://github.com/frozenlib/structmeta",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/structmeta/0.2.0/download",
-          "sha256": "78ad9e09554f0456d67a69c1584c9798ba733a5b50349a6c0d0948710523922d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "structmeta",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "structmeta",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.119",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "structmeta-derive 0.2.0",
-              "target": "structmeta_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.2.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
     "structmeta 0.3.0": {
       "name": "structmeta",
       "version": "0.3.0",
@@ -70779,62 +70774,6 @@
           "selects": {}
         },
         "version": "0.3.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
-    "structmeta-derive 0.2.0": {
-      "name": "structmeta-derive",
-      "version": "0.2.0",
-      "package_url": "https://github.com/frozenlib/structmeta",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/structmeta-derive/0.2.0/download",
-          "sha256": "a60bcaff7397072dca0017d1db428e30d5002e00b6847703e2e42005c95fbe00"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "structmeta_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "structmeta_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.119",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.2.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -73521,14 +73460,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "test-strategy 0.3.1": {
+    "test-strategy 0.4.5": {
       "name": "test-strategy",
-      "version": "0.3.1",
+      "version": "0.4.5",
       "package_url": "https://github.com/frozenlib/test-strategy",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/test-strategy/0.3.1/download",
-          "sha256": "b8361c808554228ad09bfed70f5c823caf8a3450b6881cc3a38eb57e8c08c1d9"
+          "url": "https://static.crates.io/crates/test-strategy/0.4.5/download",
+          "sha256": "8f7fd1eb9efb36942b85a290c4201d317980fe09bc88d34dd48aaaae03075c6a"
         }
       },
       "targets": [
@@ -73561,7 +73500,7 @@
               "target": "quote"
             },
             {
-              "id": "structmeta 0.2.0",
+              "id": "structmeta 0.3.0",
               "target": "structmeta"
             },
             {
@@ -73572,7 +73511,16 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.1"
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "derive-ex 0.1.8",
+              "target": "derive_ex"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.4.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -92236,7 +92184,7 @@
     "tar 0.4.46",
     "tarpc 0.37.0",
     "tempfile 3.23.0",
-    "test-strategy 0.3.1",
+    "test-strategy 0.4.5",
     "textplots 0.8.4",
     "thiserror 2.0.18",
     "thousands 0.2.0",
