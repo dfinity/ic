@@ -3,9 +3,9 @@
 //! 2) the minter watches the balance of that address for roughly 24H
 //! 3) if the address' balance is sufficient (roughly at least $10 equivalent), the minter proceeds with consolidating the funds.
 //! 4) the deposit address delegates to a sweeper contract,
-//! whose purpose is to move the ERC-20 from the deposit address by calling the helper smart contract (DepositHelperWithSubaccount.sol),
-//! to trigger the original deposit flow. This requires in particular the minter attesting that the given deposit address is for a given
-//! principal and subaccount.
+//!    whose purpose is to move the ERC-20 from the deposit address by calling the helper smart contract (DepositHelperWithSubaccount.sol),
+//!    to trigger the original deposit flow. This requires in particular the minter attesting that the given deposit address is for a given
+//!    principal and subaccount.
 
 use assert_matches::assert_matches;
 use candid::Principal;
