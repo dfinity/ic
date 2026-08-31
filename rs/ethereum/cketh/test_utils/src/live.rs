@@ -57,8 +57,10 @@ use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_minter::{BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL};
 use ic_ethereum_types::Address;
+use ic_management_canister_types::CanisterIdRecord;
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::PocketIc;
+use pocket_ic::common::rest::RawEffectivePrincipal;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -634,19 +636,29 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
     /// `CkEthSetup::stop_minter`, which drives the instance with explicit `tick`s (see the module
     /// documentation).
     ///
-    /// Stopping also has to wait for those same outcalls first: a stop lands as an ingress the
-    /// server answers within a bounded burst of rounds, while the outcalls resolve on the
-    /// auto-progress loop's own pace — so a stop racing a busy minter can time out before the
-    /// calls it is waiting on come back.
+    /// The stop is also awaited without ticking (see the module documentation): stopping waits for
+    /// the minter's in-flight outcalls to close, and those resolve only on the auto-progress
+    /// loop's `ProcessCanisterHttpInternal` operations — which a tick-driven await excludes, since
+    /// it holds the instance for its whole round budget. An outcall in flight when the stop lands
+    /// could then never resolve within it, and the minter's timers open new outcalls too often for
+    /// waiting out a quiet window beforehand to be reliable.
     fn upgrade_minter_with(&self, arg: UpgradeArg) {
         let minter_id = self.minter_id();
-        self.poll_until(
-            AWAIT_DEADLINE,
-            |_| "the minter's in-flight HTTPS outcalls never resolved".to_string(),
-            |setup| setup.env().get_canister_http().is_empty().then_some(()),
-        );
+        let stop = self
+            .env()
+            .submit_call_with_effective_principal(
+                Principal::management_canister(),
+                RawEffectivePrincipal::CanisterId(minter_id.as_slice().to_vec()),
+                Principal::anonymous(),
+                "stop_canister",
+                Encode!(&CanisterIdRecord {
+                    canister_id: minter_id
+                })
+                .unwrap(),
+            )
+            .expect("submitting the minter stop must succeed");
         self.env()
-            .stop_canister(minter_id, None)
+            .await_call_no_ticks(stop)
             .expect("stopping the minter must succeed");
         self.env()
             .upgrade_canister(
