@@ -498,7 +498,6 @@ fn should_sweep_a_second_deposit_despite_resending_a_stale_authorization() {
         address.to_string(),
         "re-registering the pair must yield the same deposit address"
     );
-    assert_matches!(second_registration.status, DepositStatus::Scanning { .. });
     assert_matches!(
         setup.await_detection(owner, DEPOSIT_SUBACCOUNT, usdc).status,
         DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == second_deposit

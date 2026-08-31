@@ -382,15 +382,22 @@ impl Anvil {
 
     pub fn authorization_nonces(&self, tx_hash: &str) -> Vec<u64> {
         let transaction = self.rpc("eth_getTransactionByHash", serde_json::json!([tx_hash]));
+        assert!(
+            !transaction.is_null(),
+            "no transaction {tx_hash} on the chain"
+        );
         transaction["authorizationList"]
             .as_array()
-            .map(|tuples| {
-                tuples
-                    .iter()
-                    .map(|tuple| hex_u64(&tuple["nonce"]))
-                    .collect()
+            .unwrap_or_else(|| panic!("transaction {tx_hash} carries no authorization list"))
+            .iter()
+            .map(|tuple| {
+                let nonce = tuple["nonce"].as_str().unwrap_or_else(|| {
+                    panic!("authorization tuple of {tx_hash} has no hex nonce: {tuple}")
+                });
+                u64::from_str_radix(nonce.trim_start_matches("0x"), 16)
+                    .unwrap_or_else(|e| panic!("not a u64 nonce {nonce}: {e}"))
             })
-            .unwrap_or_default()
+            .collect()
     }
 
     /// Credits `address` with `wei` of ETH (foundry's `anvil_setBalance`). The minter's sweeper
