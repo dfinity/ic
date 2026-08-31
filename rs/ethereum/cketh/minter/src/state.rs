@@ -497,10 +497,16 @@ impl State {
         sweep_id: &SweepId,
         receipt: &TransactionReceipt,
     ) {
-        let _ = self
+        let max_transaction_fee = self
+            .automatic_deposits
+            .processed_sweep_request(sweep_id)
+            .expect("BUG: missing sweep request")
+            .max_transaction_fee;
+        let finalized = self
             .automatic_deposits
             .record_finalized_sweep_transaction(*sweep_id, receipt);
-        self.update_sweeper_balance_upon_sweep(sweep_id, receipt);
+        self.sweeper_funding
+            .record_finalized_sweep(max_transaction_fee, &finalized);
     }
 
     pub fn next_request_id(&mut self) -> u64 {
@@ -520,36 +526,13 @@ impl State {
         };
     }
 
-    /// Takes the most an accepted sweep can cost the sweeper address out of the balance bound: its
-    /// fee ceiling, which caps every resubmission the pipeline makes for it. An ERC-20 sweep moves
-    /// its tokens through call data and carries no ETH value, so the fee is all it can cost.
+    /// Takes the whole cost an accepted sweep can put on the sweeper address out of the balance
+    /// bound: the ETH it will transfer plus its fee ceiling, which caps every resubmission the
+    /// pipeline makes for it. An ERC-20 sweep moves its tokens through call data and carries no
+    /// ETH value, so the fee is all it can cost.
     pub fn update_sweeper_balance_upon_accepted_sweep(&mut self, request: &SweepRequest) {
         self.sweeper_funding
-            .record_accepted_sweep(request.max_transaction_fee);
-    }
-
-    /// Hands back the part of a finalized sweep's provision it did not need: the fee it did not
-    /// pay, which is the whole of it either way, a reverted sweep being charged for its gas like
-    /// any other.
-    fn update_sweeper_balance_upon_sweep(
-        &mut self,
-        sweep_id: &SweepId,
-        receipt: &TransactionReceipt,
-    ) {
-        let fee_ceiling = self
-            .automatic_deposits
-            .processed_sweep_request(sweep_id)
-            .expect("BUG: missing sweep request")
-            .max_transaction_fee;
-        // Cannot underflow: a sweep transaction is created, and resubmitted, only while its fee
-        // stays within this ceiling, and the fee it actually pays is at most the fee it was signed
-        // for.
-        let effective_fee = receipt.effective_transaction_fee();
-        let unspent_fee = fee_ceiling
-            .checked_sub(effective_fee)
-            .expect("BUG: a sweep may not pay more than its fee ceiling");
-        self.sweeper_funding
-            .record_finalized_sweep(effective_fee, unspent_fee);
+            .record_accepted_sweep(Wei::ZERO, request.max_transaction_fee);
     }
 
     fn update_balance_upon_withdrawal(

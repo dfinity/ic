@@ -9,6 +9,12 @@ const FEE: u128 = 1_000_000_000_000_000; // 0.001 ETH
 /// event-driven tests in [`crate::state::tests`] and [`crate::sweeper::tests`].
 mod accounting {
     use super::*;
+    use crate::eth_rpc::Hash;
+    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+    use crate::numeric::{BlockNumber, GasAmount, TransactionNonce};
+    use crate::test_fixtures::{gas_fee_estimate, transaction_signature};
+    use crate::tx::{AccessList, Eip1559TransactionRequest, Finalized, Signed, SweepTransaction};
+    use ic_ethereum_types::Address;
 
     #[test]
     fn should_start_empty() {
@@ -125,6 +131,122 @@ mod accounting {
         accounting.record_burn(Wei::new(FEE));
 
         accounting.record_finalized_funding(Wei::new(BURN), Wei::new(FEE));
+    }
+
+    #[test]
+    fn should_hold_the_whole_cost_of_an_accepted_sweep() {
+        const VALUE_SENT: u128 = 12_345;
+        let mut accounting = funded_accounting();
+
+        accounting.record_accepted_sweep(Wei::new(VALUE_SENT), Wei::new(FEE));
+
+        assert_eq!(
+            accounting.sweeper_balance_lower_bound(),
+            Wei::new(BURN - VALUE_SENT - FEE),
+            "the ETH a sweep will transfer must stop counting as available gas, like its fee"
+        );
+    }
+
+    #[test]
+    fn should_recredit_only_the_unspent_fee_of_a_successful_sweep() {
+        const VALUE_SENT: u128 = 12_345;
+        let mut accounting = funded_accounting();
+        let (sweep, fee_paid) = finalized_sweep(Wei::new(VALUE_SENT), TransactionStatus::Success);
+        let fee_ceiling = fee_paid.checked_add(Wei::new(FEE)).unwrap();
+        accounting.record_accepted_sweep(Wei::new(VALUE_SENT), fee_ceiling);
+
+        accounting.record_finalized_sweep(fee_ceiling, &sweep);
+
+        assert_eq!(
+            accounting.sweeper_balance_lower_bound(),
+            Wei::new(BURN - VALUE_SENT).checked_sub(fee_paid).unwrap(),
+            "the transferred ETH left with the fee the sweep paid; only the unspent fee returns"
+        );
+    }
+
+    #[test]
+    fn should_recredit_the_eth_a_failed_sweep_did_not_send() {
+        const VALUE_SENT: u128 = 12_345;
+        let mut accounting = funded_accounting();
+        let (sweep, fee_paid) = finalized_sweep(Wei::new(VALUE_SENT), TransactionStatus::Failure);
+        let fee_ceiling = fee_paid.checked_add(Wei::new(FEE)).unwrap();
+        accounting.record_accepted_sweep(Wei::new(VALUE_SENT), fee_ceiling);
+
+        accounting.record_finalized_sweep(fee_ceiling, &sweep);
+
+        assert_eq!(
+            accounting.sweeper_balance_lower_bound(),
+            Wei::new(BURN).checked_sub(fee_paid).unwrap(),
+            "a reverted sweep pays its gas but its ETH never leaves the sweeper address"
+        );
+    }
+
+    #[test]
+    fn should_record_the_fees_sweeps_paid() {
+        let mut accounting = funded_accounting();
+        let (sweep, fee_paid) = finalized_sweep(Wei::ZERO, TransactionStatus::Success);
+        let fee_ceiling = fee_paid.checked_add(Wei::new(FEE)).unwrap();
+        accounting.record_accepted_sweep(Wei::ZERO, fee_ceiling);
+
+        accounting.record_finalized_sweep(fee_ceiling, &sweep);
+
+        assert_eq!(accounting.total_effective_sweep_fees(), fee_paid);
+        assert_eq!(
+            accounting.sweeper_balance_lower_bound(),
+            Wei::new(BURN).checked_sub(fee_paid).unwrap(),
+            "the unspent fee must stay available to the sweeper"
+        );
+    }
+
+    fn funded_accounting() -> SweeperFundingAccounting {
+        let mut accounting = SweeperFundingAccounting::default();
+        accounting.record_burn(Wei::new(BURN));
+        accounting.record_finalized_funding(Wei::new(BURN), Wei::ZERO);
+        accounting
+    }
+
+    fn finalized_sweep(
+        amount: Wei,
+        status: TransactionStatus,
+    ) -> (Finalized<SweepTransaction>, Wei) {
+        let estimate = gas_fee_estimate();
+        let max_fee_per_gas = estimate
+            .base_fee_per_gas
+            .checked_mul(2_u8)
+            .unwrap()
+            .checked_add(estimate.max_priority_fee_per_gas)
+            .unwrap();
+        let gas_limit = GasAmount::new(100_000);
+        let signed = Signed::from((
+            SweepTransaction::Eip1559(Eip1559TransactionRequest {
+                chain_id: 1,
+                nonce: TransactionNonce::ZERO,
+                max_priority_fee_per_gas: estimate.max_priority_fee_per_gas,
+                max_fee_per_gas,
+                gas_limit,
+                destination: Address::new([0x5e; 20]),
+                amount,
+                data: Vec::new(),
+                access_list: AccessList::new(),
+            }),
+            transaction_signature(),
+        ));
+        let receipt = TransactionReceipt {
+            block_hash: Hash([0x11; 32]),
+            block_number: BlockNumber::new(4_190_269),
+            effective_gas_price: estimate
+                .base_fee_per_gas
+                .checked_add(estimate.max_priority_fee_per_gas)
+                .unwrap(),
+            gas_used: gas_limit,
+            status,
+            transaction_hash: signed.hash(),
+        };
+        let fee_paid = receipt.effective_transaction_fee();
+        let finalized = signed
+            .try_finalize(receipt)
+            .expect("test setup: the receipt matches the signed transaction");
+        (finalized, fee_paid)
     }
 }
 
@@ -304,13 +426,13 @@ mod sweep_events {
     }
 
     #[tokio::test]
-    #[should_panic(expected = "underflow when subtracting")]
+    #[should_panic(expected = "cannot cover a debit")]
     async fn should_panic_when_provisioning_more_than_was_delivered() {
         let (mut state, _request) = state_with_enqueued_sweep(&[(account(), usdc())]).await;
 
         state
             .sweeper_funding
-            .record_accepted_sweep(PREPAID_SWEEP_GAS);
+            .record_accepted_sweep(Wei::ZERO, PREPAID_SWEEP_GAS);
     }
 
     fn bound(state: &State) -> Wei {
