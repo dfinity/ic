@@ -132,18 +132,6 @@ pub struct RestoreFromBackupCmd {
 }
 
 #[derive(Clone, Parser)]
-pub struct RestoreFromBackup2Cmd {
-    /// Registry local store path
-    pub registry_local_store_path: PathBuf,
-    /// Backup spool path
-    pub backup_spool_path: PathBuf,
-    /// The replica version to be restored
-    pub replica_version: String,
-    /// Height from which the restoration should happen
-    pub start_height: u64,
-}
-
-#[derive(Clone, Parser)]
 pub struct AddRegistryContentCmd {
     /// Path to a directory containing one file for each registry version to be
     /// inserted as initial content into the registry.
