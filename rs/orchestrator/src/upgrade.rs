@@ -796,15 +796,6 @@ fn get_subnet_id(registry: &RegistryHelper, cup: &CatchUpPackage) -> Result<Subn
         .as_ref()
         .as_summary()
         .dkg;
-
-    // If this is the first CUP created right after the subnet was split, infer the subnet id from
-    // the subnet splitting status in the dkg summary.
-    if let SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }) =
-        dkg_summary.subnet_splitting_status()
-    {
-        return Ok(new_subnet_id);
-    }
-
     // Note that although sometimes CUPs have no signatures (e.g. genesis and
     // recovery CUPs) they always have the signer id (the DKG id), which is taken
     // from the high-threshold transcript when we build a genesis/recovery CUP.
@@ -1248,7 +1239,7 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_list_record};
     use ic_test_utilities_types::ids::{
-        NODE_1, SUBNET_1, SUBNET_2, SUBNET_42, node_test_id, subnet_test_id,
+        NODE_1, NODE_2, SUBNET_1, SUBNET_42, node_test_id, subnet_test_id,
     };
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
     use ic_types::{
@@ -2984,13 +2975,12 @@ mod tests {
     /// from whichever peer it selects.
     fn setup_registry_for_split(
         node_id: NodeId,
+        other_node_id: NodeId,
         replica_version: &ReplicaVersion,
         post_split_replica_version: &ReplicaVersion,
         new_subnet_id: SubnetId,
         server_addr: SocketAddr,
     ) -> Arc<ProtoRegistryDataProvider> {
-        // The node ending up in the other half of the split.
-        let other_node_id = node_test_id(87654321);
         let other_subnet_id = if new_subnet_id == SUBNET_1 {
             SUBNET_2
         } else {
@@ -3086,6 +3076,7 @@ mod tests {
         #[case] first_served_subnet_id: SubnetId,
     ) {
         let node_id = NODE_1;
+        let other_node_id = NODE_2;
         let current_replica_version = ReplicaVersion::try_from("replica_version_0.1").unwrap();
         let local_cup_height = Height::from(100);
         let post_split_cup_height = Height::from(200);
@@ -3093,10 +3084,18 @@ mod tests {
         // key changed.
         let should_restart_replica = new_subnet_id != SUBNET_1;
 
-        let (server_addr, served_cup) = start_cup_server(pb::CatchUpPackage::from(
-            make_post_split_cup(post_split_cup_height, first_served_subnet_id),
-        ))
-        .await;
+        let first_cup_committee = if first_served_subnet_id == new_subnet_id {
+            vec![node_id]
+        } else {
+            vec![other_node_id]
+        };
+        let (server_addr, served_cup) =
+            start_cup_server(pb::CatchUpPackage::from(make_post_split_cup(
+                first_cup_committee,
+                post_split_cup_height,
+                first_served_subnet_id,
+            )))
+            .await;
 
         let test_scenario = UpgradeTestScenario {
             node_id,
@@ -3116,6 +3115,7 @@ mod tests {
         };
         let data_provider = setup_registry_for_split(
             node_id,
+            other_node_id,
             &current_replica_version,
             // The split does not come with a replica version upgrade.
             &current_replica_version,
@@ -3163,8 +3163,11 @@ mod tests {
 
             // The peer now serves the post-split CUP of our own subnet, which we should pick up on
             // the next iteration.
-            *served_cup.lock().unwrap() =
-                pb::CatchUpPackage::from(make_post_split_cup(post_split_cup_height, new_subnet_id));
+            *served_cup.lock().unwrap() = pb::CatchUpPackage::from(make_post_split_cup(
+                vec![node_id],
+                post_split_cup_height,
+                new_subnet_id,
+            ));
         }
 
         // The iteration adopting the post-split CUP of our own subnet. Note that when we didn't
@@ -3250,13 +3253,14 @@ mod tests {
         #[case] new_subnet_id: SubnetId,
     ) {
         let node_id = NODE_1;
+        let other_node_id = NODE_2;
         let current_replica_version = ReplicaVersion::try_from("replica_version_0.1").unwrap();
         let upgrade_replica_version = ReplicaVersion::try_from("replica_version_0.2").unwrap();
         let post_split_cup_height = Height::from(200);
 
         // The peer serves the post-split CUP of our own subnet right away.
         let (server_addr, _served_cup) = start_cup_server(pb::CatchUpPackage::from(
-            make_post_split_cup(post_split_cup_height, new_subnet_id),
+            make_post_split_cup(vec![node_id], post_split_cup_height, new_subnet_id),
         ))
         .await;
 
@@ -3290,6 +3294,7 @@ mod tests {
         };
         let data_provider = setup_registry_for_split(
             node_id,
+            other_node_id,
             &current_replica_version,
             // Both halves of the split are upgraded at the split.
             &upgrade_replica_version,

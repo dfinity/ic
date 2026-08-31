@@ -639,6 +639,8 @@ pub(crate) mod tests {
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
             dkg::{DkgSummary, SplittingArgs},
         },
+        crypto::threshold_sig::ni_dkg::{NiDkgReceivers, NiDkgTargetId, NiDkgTargetSubnet},
+        signature::ThresholdSignature,
         time::UNIX_EPOCH,
     };
     use rcgen::{CertificateParams, KeyPair};
@@ -966,21 +968,24 @@ pub(crate) mod tests {
     const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
     const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
 
-    /// Creates a deserializable [`CatchUpPackage`] whose DKG summary carries the given registry
-    /// version and subnet splitting status.
+    /// Creates a deserializable [`CatchUpPackage`] whose DKG summary carries the given committee,
+    /// registry version and subnet splitting status.
     ///
     /// Unlike [`fake_cup`], the result survives a protobuf round-trip, including the integrity
     /// check of [`CatchUpContent`].
     pub(crate) fn make_splitting_cup_for_test(
+        committee: Vec<NodeId>,
         height: Height,
         registry_version: RegistryVersion,
         subnet_splitting_status: SubnetSplittingStatus,
     ) -> CatchUpPackage {
         let fake_summary = DkgSummary::fake();
-        // Stamp the given registry version on the transcripts as well, such that
-        // `get_oldest_registry_version_in_use` agrees with the summary's registry version.
         let mut current_transcripts = fake_summary.current_transcripts().clone();
+        let committee = NiDkgReceivers::new(committee.into_iter().collect()).unwrap();
         for transcript in current_transcripts.values_mut() {
+            transcript.committee = committee.clone();
+            // Stamp the given registry version on the transcripts as well, such that
+            // `get_oldest_registry_version_in_use` agrees with the summary's registry version.
             transcript.registry_version = registry_version;
         }
 
@@ -1012,7 +1017,7 @@ pub(crate) mod tests {
             test_replica_version(),
         );
 
-        let mut cup = CatchUpPackage::fake(CatchUpContent::new(
+        let cup_content = CatchUpContent::new(
             HashedBlock::new(ic_types::crypto::crypto_hash, block),
             HashedRandomBeacon::new(
                 ic_types::crypto::crypto_hash,
@@ -1024,15 +1029,30 @@ pub(crate) mod tests {
             ),
             CryptoHashOf::from(CryptoHash(Vec::new())),
             None,
-        ));
-        cup.signature.signature = CombinedThresholdSigOf::new(CombinedThresholdSig(vec![1, 2, 3]));
-        cup
+        );
+        let mut cup_signature = ThresholdSignature::fake();
+        cup_signature.signature = CombinedThresholdSigOf::new(CombinedThresholdSig(vec![1, 2, 3]));
+        if matches!(subnet_splitting_status, SubnetSplittingStatus::PostSplit(_)) {
+            // Post-split CUPs use transcripts from the registry
+            cup_signature.signer.target_subnet =
+                NiDkgTargetSubnet::Remote(NiDkgTargetId::new([0_u8; 32]));
+        }
+
+        Signed {
+            content: cup_content,
+            signature: cup_signature,
+        }
     }
 
     /// Creates a post-split CUP at [`SPLIT_REGISTRY_VERSION`] announcing `new_subnet_id` as the
     /// subnet it belongs to.
-    pub(crate) fn make_post_split_cup(height: Height, new_subnet_id: SubnetId) -> CatchUpPackage {
+    pub(crate) fn make_post_split_cup(
+        committee: Vec<NodeId>,
+        height: Height,
+        new_subnet_id: SubnetId,
+    ) -> CatchUpPackage {
         make_splitting_cup_for_test(
+            committee,
             height,
             SPLIT_REGISTRY_VERSION,
             SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }),
@@ -1485,7 +1505,12 @@ pub(crate) mod tests {
             no_op_logger(),
         );
 
-        let cup = make_post_split_cup(Height::from(100), contacted_subnet_id);
+        let committee = if contacted_subnet_id == SOURCE_SUBNET_ID {
+            source_nodes
+        } else {
+            destination_nodes
+        };
+        let cup = make_post_split_cup(committee, Height::from(100), contacted_subnet_id);
 
         assert_eq!(
             cup_provider.is_splitting_cup_for_other_subnet(&cup),
@@ -1498,15 +1523,20 @@ pub(crate) mod tests {
         );
     }
 
-    #[test]
-    fn test_post_split_cup_is_rejected_if_our_subnet_is_unknown() {
+    #[rstest]
+    #[case::contacts_source(SOURCE_SUBNET_ID)]
+    #[case::contacts_destination(DESTINATION_SUBNET_ID)]
+    fn test_post_split_cup_is_rejected_if_our_subnet_is_unknown(
+        #[case] contacted_subnet_id: SubnetId,
+    ) {
         let tmp_dir = tempfile::tempdir().unwrap();
-        let node_id = node_test_id(1);
+        let source_nodes = vec![node_test_id(1)];
+        let destination_nodes = vec![node_test_id(2)];
+        let node_id = node_test_id(3);
         // We are member of neither subnet at the split registry version.
-        let registry =
-            setup_split_registry(node_id, &[node_test_id(2)], &[node_test_id(3)], |_| {
-                NodeRecord::default()
-            });
+        let registry = setup_split_registry(node_id, &source_nodes, &destination_nodes, |_| {
+            NodeRecord::default()
+        });
         let logger = InMemoryReplicaLogger::new();
         let mut cup_provider = make_cup_provider_with_registry(
             tmp_dir.path().to_path_buf(),
@@ -1516,7 +1546,12 @@ pub(crate) mod tests {
             ReplicaLogger::from(&logger),
         );
 
-        let cup = make_post_split_cup(Height::from(100), SUBNET_2);
+        let committee = if contacted_subnet_id == SOURCE_SUBNET_ID {
+            source_nodes
+        } else {
+            destination_nodes
+        };
+        let cup = make_post_split_cup(committee, Height::from(100), contacted_subnet_id);
 
         // We can't tell whether the CUP is ours, so we conservatively reject it and retry later.
         assert!(cup_provider.is_splitting_cup_for_other_subnet(&cup));
@@ -1543,6 +1578,7 @@ pub(crate) mod tests {
         );
 
         let cup = make_splitting_cup_for_test(
+            vec![node_id],
             Height::from(100),
             SPLIT_REGISTRY_VERSION,
             SubnetSplittingStatus::Scheduled(SplittingArgs {
@@ -1578,11 +1614,11 @@ pub(crate) mod tests {
         let height = Height::from(200);
 
         let (source_server_addr, _source_served_cup) = start_cup_server(pb::CatchUpPackage::from(
-            make_post_split_cup(height, SOURCE_SUBNET_ID),
+            make_post_split_cup(source_nodes.clone(), height, SOURCE_SUBNET_ID),
         ))
         .await;
         let (dest_server_addr, _dest_served_cup) = start_cup_server(pb::CatchUpPackage::from(
-            make_post_split_cup(height, DESTINATION_SUBNET_ID),
+            make_post_split_cup(destination_nodes.clone(), height, DESTINATION_SUBNET_ID),
         ))
         .await;
         let registry =
@@ -1678,6 +1714,7 @@ pub(crate) mod tests {
         // The next CUP that the subnet creates sets back the splitting status to `NotScheduled`,
         // which should clear the `split_in_progress_subnet_id` field.
         let cup = make_splitting_cup_for_test(
+            vec![node_id],
             Height::from(100),
             SPLIT_REGISTRY_VERSION,
             SubnetSplittingStatus::NotScheduled,
