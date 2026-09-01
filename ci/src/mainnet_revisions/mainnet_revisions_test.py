@@ -29,7 +29,7 @@ import pytest
 from mainnet_revisions import (
     VersionArtifactSums,
     VersionInfo,
-    check_elected_hash_against_build,
+    check_elected_update_img_hash_against_build,
     get_binary_hashes,
     is_record_up_to_date,
     parse_sha256sums,
@@ -206,9 +206,9 @@ def test_verified_json_rejects_tampered_bytes(monkeypatch):
 
 def test_elected_hash_must_match_build(monkeypatch):
     sums = sums_with(monkeypatch, attested={"guest-os/update-img": {"update-img.tar.zst": HASH}})
-    check_elected_hash_against_build(sums, "guest-os", HASH)
+    check_elected_update_img_hash_against_build(sums, "guest-os", HASH)
     with pytest.raises(Exception, match="does not match the build-time hash"):
-        check_elected_hash_against_build(sums, "guest-os", HASH[:-1] + "0")
+        check_elected_update_img_hash_against_build(sums, "guest-os", HASH[:-1] + "0")
 
 
 def test_get_binary_hashes_requires_every_binary(monkeypatch):
