@@ -81,7 +81,7 @@ def check_artifact_name(value, what: str):
         raise ValueError(f"{what} must only contain [A-Za-z0-9._-] and no '..', got {value!r}")
 
 
-def check_elected_hash_against_build(sums: "VersionArtifactSums", variant: str, elected_hash: str):
+def check_elected_update_img_hash_against_build(sums: "VersionArtifactSums", variant: str, elected_hash: str):
     """
     The NNS-elected update-image hash and the hash recorded at build time must agree.
 
@@ -257,7 +257,7 @@ def guestos_version_info_from_payload(payload: dict) -> VersionInfo:
     hash = payload["release_package_sha256_hex"]
 
     sums = VersionArtifactSums(version)
-    check_elected_hash_against_build(sums, "guest-os", hash)
+    check_elected_update_img_hash_against_build(sums, "guest-os", hash)
 
     launch_measurements = get_launch_measurements(sums, payload["guest_launch_measurements"])
     dev_hash = sums.file_sha256("guest-os/update-img-dev", "update-img.tar.zst")
@@ -340,7 +340,7 @@ def hostos_version_info_from_payload(payload: dict, logger: logging.Logger) -> V
     hash = payload["release_package_sha256_hex"]
 
     sums = VersionArtifactSums(version)
-    check_elected_hash_against_build(sums, "host-os", hash)
+    check_elected_update_img_hash_against_build(sums, "host-os", hash)
 
     dev_hash = sums.file_sha256("host-os/update-img-dev", "update-img.tar.zst")
 
