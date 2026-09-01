@@ -68,7 +68,7 @@ use std::{
 use tokio::{
     sync::mpsc::Receiver,
     sync::mpsc::error::TryRecvError,
-    sync::{Mutex, RwLock, mpsc},
+    sync::{Mutex, RwLock, mpsc, oneshot},
     task::{JoinHandle, JoinSet, spawn, spawn_blocking},
     time::{self, sleep},
 };
@@ -285,7 +285,10 @@ pub enum PocketIcError {
     SubnetRequestRoutingError(String),
     InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
     InvalidMockCanisterHttpResponses((usize, usize)),
+    NotAFlexibleCanisterHttpRequest((SubnetId, CanisterHttpRequestId)),
+    TooManyMockCanisterHttpResponses((usize, usize)),
     InvalidRejectCode(u64),
+    CanisterHttpRejectMessageTooLong((usize, usize)),
     SettingTimeIntoPast((u64, u64)),
     Forbidden(String),
     BlockmakerNotFound(NodeId),
@@ -348,8 +351,29 @@ impl std::fmt::Debug for OpOut {
                     "InvalidMockCanisterHttpResponses(actual={actual},expected={expected})"
                 )
             }
+            OpOut::Error(PocketIcError::NotAFlexibleCanisterHttpRequest((
+                subnet_id,
+                canister_http_request_id,
+            ))) => {
+                write!(
+                    f,
+                    "NotAFlexibleCanisterHttpRequest({subnet_id},{canister_http_request_id:?})"
+                )
+            }
+            OpOut::Error(PocketIcError::TooManyMockCanisterHttpResponses((actual, max))) => {
+                write!(
+                    f,
+                    "TooManyMockCanisterHttpResponses(actual={actual},max={max})"
+                )
+            }
             OpOut::Error(PocketIcError::InvalidRejectCode(code)) => {
                 write!(f, "InvalidRejectCode({code})")
+            }
+            OpOut::Error(PocketIcError::CanisterHttpRejectMessageTooLong((actual, max))) => {
+                write!(
+                    f,
+                    "CanisterHttpRejectMessageTooLong(actual={actual},max={max})"
+                )
             }
             OpOut::Error(PocketIcError::SettingTimeIntoPast((current, set))) => {
                 write!(f, "SettingTimeIntoPast(current={current},set={set})")
@@ -985,6 +1009,9 @@ impl ApiState {
         let mut instance = instances[instance_id].lock().await;
         if instance.progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
+            // Used to signal that the certified time has been set for the first time
+            // so that this function only returns after that happened.
+            let (certified_time_tx, certified_time_rx) = oneshot::channel::<()>();
             let handle = spawn(async move {
                 let mut now = SystemTime::now();
                 let time = ic_types::Time::from_nanos_since_unix_epoch(
@@ -1003,6 +1030,9 @@ impl ApiState {
                 .await
                 .is_some()
                 {
+                    // The receiver is dropped if the `auto_progress` future was cancelled
+                    // (e.g., because the client disconnected) and thus we ignore the result.
+                    let _ = certified_time_tx.send(());
                     debug!("Starting auto progress for instance {}.", instance_id);
                     loop {
                         let old = std::mem::replace(&mut now, SystemTime::now());
@@ -1042,6 +1072,14 @@ impl ApiState {
                 }
             });
             instance.progress_thread = Some(ProgressThread { handle, sender: tx });
+            // Drop the locks so that the progress thread can execute its first operation
+            // setting the certified time.
+            drop(instance);
+            drop(instances);
+            // Wait until the certified time has been set for the first time.
+            // The sender is dropped without sending if the progress thread stopped
+            // before setting the certified time and thus we ignore the result.
+            let _ = certified_time_rx.await;
             Ok(())
         } else {
             Err("Auto progress mode has already been enabled.".to_string())

@@ -47,7 +47,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
-    NodeId, SubnetId,
+    NodeId, ReplicaVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequest, CanisterHttpResponse,
@@ -336,6 +336,7 @@ pub fn setup_consensus_and_p2p(
     node_id: NodeId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
+    replica_version: ReplicaVersion,
     tls_config: Arc<dyn TlsConfig>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_sync_client: Arc<dyn StateSyncClient<Message = StateSyncMessage>>,
@@ -439,6 +440,7 @@ pub fn setup_consensus_and_p2p(
         node_id,
         subnet_id,
         subnet_type,
+        replica_version,
         artifact_pools,
         channels,
         Arc::clone(&consensus_crypto) as Arc<_>,
@@ -470,6 +472,7 @@ fn start_consensus(
     node_id: NodeId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
+    replica_version: ReplicaVersion,
     artifact_pools: ArtifactPools,
     abortable_broadcast_channels: AbortableBroadcastChannels,
     // ConsensusCrypto is an extension of the Crypto trait and we can
@@ -541,12 +544,18 @@ fn start_consensus(
     ));
     // ------------------------------------------------------------------------
 
-    let replica_config = ReplicaConfig { node_id, subnet_id };
+    let replica_config = ReplicaConfig {
+        node_id,
+        subnet_id,
+        replica_version,
+    };
     let dkg_key_manager = Arc::new(Mutex::new(ic_consensus_dkg::DkgKeyManager::new(
         metrics_registry.clone(),
         Arc::clone(&consensus_crypto),
         log.clone(),
         &PoolReader::new(&*consensus_pool.read().unwrap()),
+        registry_client.clone(),
+        replica_config.clone(),
     )));
 
     let mut join_handles = vec![];
@@ -593,7 +602,7 @@ fn start_consensus(
 
     // Create the certification client.
     let certifier = CertifierImpl::new(
-        replica_config,
+        replica_config.clone(),
         Arc::clone(&registry_client),
         Arc::clone(&certifier_crypto),
         Arc::clone(&state_manager) as Arc<_>,
@@ -612,8 +621,7 @@ fn start_consensus(
     join_handles.push(create_artifact_handler(
         abortable_broadcast_channels.dkg,
         ic_consensus_dkg::DkgImpl::new(
-            node_id,
-            subnet_id,
+            replica_config.clone(),
             Arc::clone(&registry_client),
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&consensus_crypto),
@@ -661,7 +669,7 @@ fn start_consensus(
             Arc::new(Mutex::new(canister_http_adapter_client)),
             Arc::clone(&consensus_crypto),
             Arc::clone(&consensus_pool_cache),
-            ReplicaConfig { subnet_id, node_id },
+            replica_config,
             subnet_type,
             Arc::clone(&registry_client),
             metrics_registry.clone(),

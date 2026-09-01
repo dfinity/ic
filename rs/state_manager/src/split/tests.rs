@@ -18,7 +18,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CheckpointLoadingMetrics, ReplicatedState, SystemMetadata,
     canister_state::canister_snapshots::CanisterSnapshot,
-    page_map::TestPageAllocatorFileDescriptorImpl, testing::ReplicatedStateTesting,
+    page_map::TestPageAllocatorFileDescriptorImpl,
 };
 use ic_state_layout::{
     CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, INGRESS_HISTORY_FILE, ProtoFileWith,

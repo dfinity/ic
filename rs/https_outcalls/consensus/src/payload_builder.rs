@@ -87,7 +87,7 @@ pub struct CanisterHttpBatchStats {
     pub single_signature_responses: usize,
     pub flexible_ok_responses: usize,
     pub flexible_ok_responses_candid_failures: usize,
-    pub flexible_errors: usize,
+    pub flexible_errors: BTreeMap<&'static str, usize>,
     pub flexible_errors_candid_failures: usize,
     pub payload_bytes: usize,
 }
@@ -239,6 +239,27 @@ impl CanisterHttpPayloadBuilderImpl {
                             accumulated_size += candidate_size;
                         }
                     }
+                    let groups = shares_by_callback_id.get(callback_id);
+                    let (groups, success, reject) = groups.map_or((0, 0, 0), |groups| {
+                        let (mut success, mut reject) = (0, 0);
+                        for share in groups.values().flatten() {
+                            if share.content.is_reject() {
+                                reject += 1;
+                            } else {
+                                success += 1;
+                            }
+                        }
+                        (groups.len(), success, reject)
+                    });
+                    warn!(
+                        self.log,
+                        "CanisterHttpPayloadBuilder: timeout for callback_id {callback_id} \
+                        with {groups} groups ({success} success, {reject} reject), pricing {:?}, \
+                        replication {:?}, refund status {:?}",
+                        request.pricing_version,
+                        request.replication,
+                        request.refund_status
+                    );
                     continue;
                 }
                 if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
@@ -423,6 +444,16 @@ impl CanisterHttpPayloadBuilderImpl {
                     }
                 }
             }
+        }
+
+        if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+            warn!(
+                every_n_seconds => 15,
+                self.log,
+                "CanisterHttpPayloadBuilder: reached max responses per block ({})",
+                CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
+            );
+            self.metrics.max_responses_per_block_reached.inc();
         }
 
         CanisterHttpPayload {
@@ -1090,7 +1121,6 @@ impl CanisterHttpPayloadBuilderImpl {
                         .filter(|share| !share.content.is_reject())
                         .map(|share| {
                             FlexibleCanisterHttpResponseWithProof::count_bytes_from_parts(
-                                &context.request.sender,
                                 share.content.content_size() as usize,
                                 share,
                             )
@@ -1409,7 +1439,7 @@ impl
             consensus_responses.push(ConsensusResponse::new(
                 error.callback_id,
                 Payload::Reject(RejectContext::new(
-                    RejectCode::SysTransient,
+                    RejectCode::CanisterReject,
                     out_of_cycles_reject_message(
                         &error.shares,
                         error.unspent_allowance,
@@ -1496,9 +1526,10 @@ impl
                 // Timeouts carry no shares and produce no spend report.
                 FlexibleCanisterHttpError::Timeout { .. } => None,
             };
+            let kind = error.kind();
             match flexible_error_into_consensus_response(error) {
                 Some(consensus_response) => {
-                    stats.flexible_errors += 1;
+                    *stats.flexible_errors.entry(kind).or_default() += 1;
                     consensus_responses.push(consensus_response);
                     if let Some(report) = report {
                         spent.initial.push(report);

@@ -58,7 +58,6 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Time, artifact::ConsensusMessageId, consensus::ConsensusMessageHashable,
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
-    replica_version::ReplicaVersion,
 };
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
@@ -98,23 +97,6 @@ enum ConsensusSubcomponent {
     Validator,
     Aggregator,
     Purger,
-}
-
-/// Describe expected version and artifact version when there is a mismatch.
-#[derive(Debug)]
-pub(crate) struct ReplicaVersionMismatch {}
-
-/// The function checks if the version of the given artifact matches the default
-/// protocol version and returns an error if it does not.
-pub(crate) fn check_protocol_version(
-    version: &ReplicaVersion,
-) -> Result<(), ReplicaVersionMismatch> {
-    let expected_version = ReplicaVersion::default();
-    if version != &expected_version {
-        Err(ReplicaVersionMismatch {})
-    } else {
-        Ok(())
-    }
 }
 
 /// Builds a rayon thread pool with the given number of threads.
@@ -253,12 +235,13 @@ impl ConsensusImpl {
                 crypto.clone(),
                 state_manager.clone(),
                 message_routing.clone(),
+                registry_client.clone(),
                 logger.clone(),
             ),
             block_maker: BlockMaker::new(
                 Arc::clone(&time_source) as Arc<_>,
                 replica_config.clone(),
-                Arc::clone(&registry_client),
+                registry_client.clone(),
                 membership.clone(),
                 crypto.clone(),
                 payload_builder.clone(),
@@ -272,7 +255,7 @@ impl ConsensusImpl {
             validator: Validator::new(
                 replica_config.clone(),
                 membership.clone(),
-                Arc::clone(&registry_client),
+                registry_client.clone(),
                 crypto.clone(),
                 payload_builder,
                 state_manager.clone(),
@@ -287,6 +270,8 @@ impl ConsensusImpl {
                 membership,
                 message_routing.clone(),
                 crypto.clone(),
+                registry_client.clone(),
+                replica_config.clone(),
                 logger.clone(),
             ),
             purger: Purger::new(
@@ -686,8 +671,8 @@ mod tests {
         let metrics_registry = MetricsRegistry::new();
 
         let consensus_impl = ConsensusImpl::new(
-            replica_config,
-            registry,
+            replica_config.clone(),
+            registry.clone(),
             pool.get_cache(),
             crypto.clone(),
             Arc::new(FakeIngressSelector::new()),
@@ -703,6 +688,8 @@ mod tests {
                 crypto,
                 no_op_logger(),
                 &PoolReader::new(&pool),
+                registry,
+                replica_config,
             ))),
             Arc::new(FakeMessageRouting::new()),
             state_manager,

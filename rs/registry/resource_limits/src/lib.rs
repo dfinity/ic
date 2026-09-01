@@ -8,6 +8,7 @@ use clap::Args;
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_types::{NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 /// Limits on resource consumption (e.g., memory usage).
 #[derive(Args, CandidType, Copy, Clone, Eq, PartialEq, Debug, Default, Serialize, Deserialize)]
@@ -30,8 +31,8 @@ pub struct ResourceLimits {
     /// The protocol uses a default value if the limit of `0` is specified.
     #[arg(long)]
     pub maximum_query_instructions: Option<NumInstructions>,
-    /// The maximum wall-clock time, in seconds, that a query (including a composite query call
-    /// graph) is allowed to run.
+    /// The maximum wall-clock time, in seconds, that a composite query call graph is allowed to
+    /// run.
     /// The protocol uses a default value if the limit of `0` is specified.
     #[arg(long)]
     pub maximum_query_walltime_seconds: Option<u64>,
@@ -80,6 +81,17 @@ impl ResourceLimits {
     pub fn maximum_query_instructions_or(&self, default: NumInstructions) -> NumInstructions {
         self.maximum_query_instructions
             .filter(|maximum_query_instructions| maximum_query_instructions.get() != 0)
+            .unwrap_or(default)
+    }
+
+    /// Returns the maximum wall-clock time a composite query call graph may run.
+    ///
+    /// This is `maximum_query_walltime_seconds` (as a `Duration`) if not `0`, otherwise the
+    /// provided `default`.
+    pub fn maximum_query_walltime_seconds_or(&self, default: Duration) -> Duration {
+        self.maximum_query_walltime_seconds
+            .filter(|seconds| *seconds != 0)
+            .map(Duration::from_secs)
             .unwrap_or(default)
     }
 }

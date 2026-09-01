@@ -9,7 +9,7 @@ use clap::Parser;
 use core::convert::From;
 use cycles_minting_canister::{CanisterSettings, CreateCanister, SubnetSelection};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_management_canister_types_private::CanisterInstallMode;
+use ic_management_canister_types_private::{CanisterInstallMode, WasmMemoryPersistence};
 use ic_nervous_system_agent::{
     CallCanisters, CanisterInfo, Request,
     management_canister::{self, delete_canister, stop_canister},
@@ -17,10 +17,12 @@ use ic_nervous_system_agent::{
     sns::{self, Sns, governance::SubmittedProposal, root::SnsCanisters},
 };
 use ic_nns_constants::CYCLES_LEDGER_CANISTER_ID;
+use ic_protobuf::types::v1::WasmMemoryPersistence as WasmMemoryPersistenceProto;
 use ic_sns_governance_api::pb::v1::{
     ChunkedCanisterWasm, Proposal, ProposalData, ProposalId, UpgradeSnsControlledCanister,
     get_proposal_response,
     proposal::{self, Action},
+    upgrade_sns_controlled_canister::CanisterUpgradeOptions,
 };
 use ic_wasm::{metadata, utils::parse_wasm};
 use itertools::{Either, Itertools};
@@ -70,6 +72,21 @@ pub struct UpgradeSnsControlledCanisterArgs {
     /// Human-readable text explaining why this upgrade is being done (may be markdown).
     #[clap(long)]
     pub summary: String,
+
+    /// Whether to skip the target canister's pre_upgrade hook. Only valid when
+    /// the target canister is being upgraded (as opposed to created).
+    #[clap(long)]
+    pub skip_pre_upgrade: bool,
+
+    /// Whether to retain (keep) or drop (replace) the target canister's main
+    /// memory before running the new code (between pre- and post-upgrade).
+    /// Required when upgrading a canister whose current/old Wasm module has the
+    /// `icp:private enhanced-orthogonal-persistence` custom section (this
+    /// happens with modern Motoko canisters, which use Enhanced Orthogonal
+    /// Persistence). When `keep` is used, the new code must declare support for
+    /// it using the same custom section.
+    #[clap(long)]
+    pub wasm_memory_persistence: Option<WasmMemoryPersistence>,
 }
 
 /// The arguments used to configure the refund_after_sns_controlled_canister_upgrade command.
@@ -357,6 +374,8 @@ pub async fn exec<C: CallCanisters>(
         candid_arg,
         proposal_url,
         summary,
+        skip_pre_upgrade,
+        wasm_memory_persistence,
     } = args;
 
     let caller_principal = PrincipalId(agent.caller()?);
@@ -459,6 +478,9 @@ pub async fn exec<C: CallCanisters>(
         );
     };
 
+    let canister_upgrade_options =
+        assemble_canister_upgrade_options(skip_pre_upgrade, wasm_memory_persistence);
+
     print!("Forming SNS proposal to upgrade target canister ... ");
     std::io::stdout().flush().unwrap();
     let sns_governance = sns::governance::GovernanceCanister {
@@ -482,6 +504,7 @@ pub async fn exec<C: CallCanisters>(
                     store_canister_id: Some(store_canister_id.get()),
                     chunk_hashes_list,
                 }),
+                canister_upgrade_options,
             },
         )),
     };
@@ -744,6 +767,31 @@ pub async fn cycles_ledger_create_canister<C: CallCanisters>(
         .expect("Cannot create canister")
 }
 
+/// Constructs a CanisterUpgradeOptions from its flag values.
+///
+/// Returns None if skip_pre_upgrade is false and wasm_memory_persistence is
+/// None, i.e. no "special" upgrade behavior was requested.
+fn assemble_canister_upgrade_options(
+    skip_pre_upgrade: bool,
+    wasm_memory_persistence: Option<WasmMemoryPersistence>,
+) -> Option<CanisterUpgradeOptions> {
+    let has_option = skip_pre_upgrade || wasm_memory_persistence.is_some();
+    if !has_option {
+        return None;
+    }
+
+    let skip_pre_upgrade = if skip_pre_upgrade { Some(true) } else { None };
+
+    let wasm_memory_persistence = wasm_memory_persistence.map(|wasm_memory_persistence| {
+        WasmMemoryPersistenceProto::from(&wasm_memory_persistence) as i32
+    });
+
+    Some(CanisterUpgradeOptions {
+        skip_pre_upgrade,
+        wasm_memory_persistence,
+    })
+}
+
 fn format_full_hash(hash: &[u8]) -> String {
     hash.iter()
         .map(|b| format!("{b:02x}"))
@@ -762,4 +810,67 @@ fn suggested_install_command(wasm_path_str: &Path, candid_arg: &Option<String>) 
         wasm_path_str.display(),
         arg_suggestion,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_assemble_canister_upgrade_options_when_no_flags_are_set() {
+        let result = assemble_canister_upgrade_options(
+            false, // skip_pre_upgrade
+            None,  // wasm_memory_persistence
+        );
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_assemble_canister_upgrade_options_when_only_skip_pre_upgrade_is_set() {
+        let result = assemble_canister_upgrade_options(
+            true, // skip_pre_upgrade
+            None, // wasm_memory_persistence
+        );
+
+        assert_eq!(
+            result,
+            Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(true),
+                wasm_memory_persistence: None,
+            }),
+        );
+    }
+
+    #[test]
+    fn test_assemble_canister_upgrade_options_when_only_wasm_memory_persistence_is_set() {
+        let result = assemble_canister_upgrade_options(
+            false,                             // skip_pre_upgrade
+            Some(WasmMemoryPersistence::Keep), // wasm_memory_persistence
+        );
+
+        assert_eq!(
+            result,
+            Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Keep as i32),
+            }),
+        );
+    }
+
+    #[test]
+    fn test_assemble_canister_upgrade_options_when_both_flags_are_set() {
+        let result = assemble_canister_upgrade_options(
+            true,                                 // skip_pre_upgrade
+            Some(WasmMemoryPersistence::Replace), // wasm_memory_persistence
+        );
+
+        assert_eq!(
+            result,
+            Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(true),
+                wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Replace as i32),
+            }),
+        );
+    }
 }
