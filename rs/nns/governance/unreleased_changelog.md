@@ -9,10 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* `UpdateCanisterSettings` and `CreateCanisterAndInstallCode` proposals can now
-  set `reserved_cycles_limit`, the upper bound on the cycles a canister may hold
-  in reserved cycles.
-
 ## Changed
 
 ## Deprecated
