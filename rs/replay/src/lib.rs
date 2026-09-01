@@ -136,12 +136,14 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
         {
             let _enter_guard = rt.enter();
 
-            // The checkpoint created at the target height only holds a state that can
-            // be used for deterministic state computation if it is a CUP height.
+            // The checkpoint holding the state replayed up to the target height can
+            // only be used for deterministic state computation if the target height is
+            // a CUP height. (The checkpoint itself is one height further up, created by
+            // the extra batch, unless the target height is a CUP height.)
             if let Some(h) = target_height
                 && args.create_checkpoint
             {
-                let question = format!("The checkpoint created at height {h} ")
+                let question = format!("The checkpoint of the state replayed up to height {h} ")
                     + "cannot be used for deterministic state computation if it is not a CUP height.\n"
                     + "Continue?";
                 if !args.skip_prompts && !consent_given(&question) {

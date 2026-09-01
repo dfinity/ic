@@ -6,7 +6,9 @@ use crate::{
     cli::{consent_given, read},
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_includes},
+    file_sync_helper::{
+        clear_dir, create_dir, read_dir, read_file, rsync, rsync_includes, write_file,
+    },
     get_available_nodes_heights_from_metrics, get_member_node_ids_and_ips,
     registry_helper::RegistryHelper,
     replay_helper,
@@ -20,9 +22,15 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::certification::CertificationPool;
 use ic_metrics::MetricsRegistry;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
-use ic_types::{Height, SubnetId, consensus::certification::CertificationMessage};
+use ic_types::{Height, ReplicaVersion, SubnetId, consensus::certification::CertificationMessage};
 use slog::{Logger, debug, info, warn};
-use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
+use std::{
+    collections::HashMap,
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::Command,
+    thread, time,
+};
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -416,6 +424,69 @@ impl Step for CopyLocalIcStateStep {
     }
 }
 
+/// Name of the file remembering the replica version the operator supplied for a
+/// replay without a consensus pool.
+const REPLICA_VERSION_FILE_NAME: &str = "replica_version.txt";
+
+/// Path of the consensus artifact store in the recovery working directory.
+///
+/// Note that [`IC_CONSENSUS_POOL_PATH`] is merely the root that the consensus and
+/// the certification store share. [`MergeCertificationPoolsStep`] creates that root
+/// for the certification store alone, so its existence says nothing about whether a
+/// consensus pool was downloaded.
+fn consensus_store_path(work_dir: &Path) -> PathBuf {
+    work_dir
+        .join("data")
+        .join(IC_CONSENSUS_POOL_PATH)
+        .join("consensus")
+}
+
+/// The replica version to run `ic-replay` with.
+///
+/// `None` whenever a consensus pool is available, since `ic-replay` then takes the
+/// version from the pool's finalized tip. Without a pool there is no tip, and the
+/// registry is no substitute: the subnet may well be stalled on a version older
+/// than the one the latest registry version assigns to it. The operator is
+/// therefore asked, once, and the answer is remembered in the working directory for
+/// the later steps that replay again.
+fn replica_version_for_replay(
+    logger: &Logger,
+    work_dir: &Path,
+    skip_prompts: bool,
+) -> RecoveryResult<Option<ReplicaVersion>> {
+    if consensus_store_path(work_dir).exists() {
+        return Ok(None);
+    }
+
+    let version_file = work_dir.join(REPLICA_VERSION_FILE_NAME);
+    if version_file.exists() {
+        let version = read_file(&version_file)?;
+        return ReplicaVersion::try_from(version.trim())
+            .map(Some)
+            .map_err(|e| {
+                RecoveryError::invalid_output_error(format!(
+                    "Failed to parse the replica version in {}: {e}",
+                    version_file.display()
+                ))
+            });
+    }
+
+    if skip_prompts {
+        return Err(RecoveryError::UnexpectedError(format!(
+            "No consensus pool found at {}, so `ic-replay` cannot derive the replica \
+             version; it has to be provided, which is not possible with skipped prompts.",
+            consensus_store_path(work_dir).display()
+        )));
+    }
+
+    let version: ReplicaVersion = read(
+        logger,
+        "Enter the replica version the subnet is currently running on:",
+    );
+    write_file(&version_file, version.to_string())?;
+    Ok(Some(version))
+}
+
 pub struct ReplaySubCmd {
     pub cmd: SubCommand,
     pub descr: String,
@@ -458,15 +529,12 @@ impl Step for ReplayStep {
         // is legitimate when no node could be reached over SSH to download the pool, but
         // it also looks exactly like a state download gone wrong, so warn about it and
         // let the operator decide.
-        let consensus_pool_path = self.work_dir.join("data").join(IC_CONSENSUS_POOL_PATH);
-        let replica_version = if consensus_pool_path.exists() {
-            // `ic-replay` takes the replica version from the pool's finalized tip.
-            None
-        } else {
+        let consensus_store_path = consensus_store_path(&self.work_dir);
+        if !consensus_store_path.exists() {
             warn!(
                 self.logger,
                 "No consensus pool found at {}: no blocks will be replayed and {}.",
-                consensus_pool_path.display(),
+                consensus_store_path.display(),
                 match &self.subcmd {
                     Some(_) =>
                         "only the subcommand will be executed, \
@@ -474,24 +542,16 @@ impl Step for ReplayStep {
                     None => "the state will be left unchanged",
                 }
             );
-            if self.skip_prompts {
-                None
-            } else {
-                if !consent_given(&self.logger, "Continue without a consensus pool?") {
-                    return Err(RecoveryError::UnexpectedError(
-                        "Replay without a consensus pool was declined".to_string(),
-                    ));
-                }
-                // Without a pool there is no finalized tip to take the replica version
-                // from, and it cannot be looked up in the registry either: the subnet
-                // may well be stalled on a version older than the one the latest
-                // registry version assigns to it. So ask the operator instead.
-                Some(read(
-                    &self.logger,
-                    "Enter the replica version the subnet is currently running on:",
-                ))
+            if !self.skip_prompts
+                && !consent_given(&self.logger, "Continue without a consensus pool?")
+            {
+                return Err(RecoveryError::UnexpectedError(
+                    "Replay without a consensus pool was declined".to_string(),
+                ));
             }
-        };
+        }
+        let replica_version =
+            replica_version_for_replay(&self.logger, &self.work_dir, self.skip_prompts)?;
 
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
 
@@ -832,6 +892,7 @@ impl Step for StopReplicaStep {
 }
 
 pub(crate) struct UpdateLocalStoreStep {
+    pub logger: Logger,
     pub subnet_id: SubnetId,
     pub work_dir: PathBuf,
     pub skip_prompts: bool,
@@ -849,8 +910,8 @@ impl Step for UpdateLocalStoreStep {
     fn exec(&self) -> RecoveryResult<()> {
         // Only the registry local store is of interest, the state is left as is.
         let create_checkpoint = false;
-        // A consensus pool is available, so the replica version is taken from it.
-        let replica_version = None;
+        let replica_version =
+            replica_version_for_replay(&self.logger, &self.work_dir, self.skip_prompts)?;
         block_on(replay_helper::replay(
             self.subnet_id,
             self.work_dir.join("ic.json5"),
@@ -868,6 +929,7 @@ impl Step for UpdateLocalStoreStep {
 }
 
 pub(crate) struct GetRecoveryCUPStep {
+    pub logger: Logger,
     pub subnet_id: SubnetId,
     pub config: PathBuf,
     pub state_hash: String,
@@ -892,8 +954,8 @@ impl Step for GetRecoveryCUPStep {
     fn exec(&self) -> RecoveryResult<()> {
         // The CUP is derived from the state replayed before, which is not changed.
         let create_checkpoint = false;
-        // A consensus pool is available, so the replica version is taken from it.
-        let replica_version = None;
+        let replica_version =
+            replica_version_for_replay(&self.logger, &self.work_dir, self.skip_prompts)?;
         block_on(replay_helper::replay(
             self.subnet_id,
             self.config.clone(),
@@ -1285,6 +1347,65 @@ mod tests {
         };
         assert!(
             matches!(step.exec(), Err(RecoveryError::UnexpectedError(e)) if e.starts_with("Did not find any certifications"))
+        );
+    }
+
+    /// With a consensus pool, `ic-replay` takes the replica version from its
+    /// finalized tip, so none has to be supplied and the operator is not asked.
+    #[test]
+    fn replica_version_not_needed_with_a_consensus_pool() {
+        let logger = crate::util::make_logger();
+        let tmp = tempfile::tempdir().expect("Could not create a temp dir");
+        let work_dir = tmp.path().to_path_buf();
+        create_dir(&consensus_store_path(&work_dir)).expect("Could not create the pool dir");
+
+        assert_matches::assert_matches!(
+            replica_version_for_replay(&logger, &work_dir, /*skip_prompts=*/ true),
+            Ok(None)
+        );
+    }
+
+    /// `MergeCertificationPoolsStep` creates the root that the consensus and the
+    /// certification store share, so that root existing must not be taken for a
+    /// downloaded consensus pool.
+    #[test]
+    fn merged_certifications_are_not_mistaken_for_a_consensus_pool() {
+        let logger = crate::util::make_logger();
+        let (tmp, pool1, _pool2) = setup_merge_certs(&logger);
+        let work_dir = tmp.path().to_path_buf();
+        pool1.validated.insert(make_certification(1, vec![1, 2, 3]));
+
+        MergeCertificationPoolsStep {
+            logger: logger.clone(),
+            work_dir: work_dir.clone(),
+        }
+        .exec()
+        .expect("Failed to merge the certification pools");
+        assert!(
+            work_dir.join("data").join(IC_CONSENSUS_POOL_PATH).exists(),
+            "the merge step should have created the shared pool root"
+        );
+
+        // No version can be determined without asking, and prompts are skipped.
+        assert_matches::assert_matches!(
+            replica_version_for_replay(&logger, &work_dir, /*skip_prompts=*/ true),
+            Err(RecoveryError::UnexpectedError(e)) if e.contains("No consensus pool found")
+        );
+    }
+
+    /// The version the operator supplied for the pool-less replay is remembered, so
+    /// that the later steps replaying again don't have to ask for it once more.
+    #[test]
+    fn remembered_replica_version_is_reused() {
+        let logger = crate::util::make_logger();
+        let tmp = tempfile::tempdir().expect("Could not create a temp dir");
+        let work_dir = tmp.path().to_path_buf();
+        write_file(&work_dir.join(REPLICA_VERSION_FILE_NAME), "foo".to_string())
+            .expect("Could not write the replica version");
+
+        assert_matches::assert_matches!(
+            replica_version_for_replay(&logger, &work_dir, /*skip_prompts=*/ true),
+            Ok(Some(version)) if version == ReplicaVersion::try_from("foo").unwrap()
         );
     }
 

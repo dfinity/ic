@@ -990,6 +990,7 @@ impl Recovery {
         skip_prompts: bool,
     ) -> impl Step + use<> {
         UpdateLocalStoreStep {
+            logger: self.logger.clone(),
             subnet_id,
             work_dir: self.work_dir.clone(),
             skip_prompts,
@@ -1005,6 +1006,7 @@ impl Recovery {
         let state_params = self.get_replay_output()?.state_params;
         let recovery_height = Recovery::get_recovery_height(state_params.height);
         Ok(GetRecoveryCUPStep {
+            logger: self.logger.clone(),
             subnet_id,
             config: self.work_dir.join("ic.json5"),
             result: self.work_dir.join("set_recovery_cup.txt"),

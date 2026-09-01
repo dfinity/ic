@@ -252,7 +252,11 @@ impl Player {
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
         let time_source = Arc::new(SysTimeSource::new());
 
-        let consensus_pool = if cfg.artifact_pool.consensus_pool_path.exists() {
+        // `consensus_pool_path` is only the root that the consensus and the
+        // certification store share, and the latter alone is enough to create it, so
+        // the consensus store itself is what decides whether there is a pool.
+        let consensus_store_path = cfg.artifact_pool.consensus_pool_path.join("consensus");
+        let consensus_pool = if consensus_store_path.exists() {
             let mut artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
             // We don't want to modify the original consensus pool during the subnet
             // recovery.
@@ -279,9 +283,9 @@ impl Player {
             // a version older than the one the latest registry version assigns to it.
             replica_version.unwrap_or_else(|| {
                 panic!(
-                    "No consensus pool found at {:?} and no replica version was given; \
+                    "No consensus pool found at {} and no replica version was given; \
                      one of the two is required.",
-                    cfg.artifact_pool.consensus_pool_path
+                    consensus_store_path.display()
                 )
             })
         };
