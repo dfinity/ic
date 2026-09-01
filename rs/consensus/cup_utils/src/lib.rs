@@ -245,12 +245,14 @@ fn bootstrap_idkg_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     use ic_crypto_test_utils_ni_dkg::dummy_initial_dkg_transcript;
     use ic_interfaces_registry::{RegistryClient, RegistryVersionedRecord};
     use ic_logger::no_op_logger;
     use ic_protobuf::registry::subnet::v1::{
-        CatchUpPackageContents, RecoveryArgs, SubnetRecord, catch_up_package_contents::CupType,
+        CatchUpPackageContents, RecoveryArgs, RegistryStoreUri, SubnetRecord,
+        catch_up_package_contents::CupType,
     };
     use ic_types::{
         Height, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, Time,
@@ -260,9 +262,12 @@ mod tests {
     };
     use ic_types_test_utils::ids::subnet_test_id;
 
-    #[test]
-    fn test_make_registry_cup() {
-        let registry_client = MockRegistryClient::new(RegistryVersion::from(12345), |key, _| {
+    const LATEST_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(12345);
+
+    /// Builds a registry client serving the CUP contents and the subnet record which
+    /// [`make_registry_cup`] needs, with the given `registry_store_uri` in the CUP contents.
+    fn setup_registry(registry_store_uri: Option<RegistryStoreUri>) -> impl RegistryClient {
+        MockRegistryClient::new(LATEST_REGISTRY_VERSION, move |key, _| {
             use prost::Message;
             if key.starts_with("catch_up_package_contents_") {
                 // Build a dummy cup
@@ -278,7 +283,7 @@ mod tests {
                         height: 54321,
                         time: 1,
                         state_hash: vec![1, 2, 3, 4, 5],
-                        registry_store_uri: None,
+                        registry_store_uri: registry_store_uri.clone(),
                         ecdsa_initializations: vec![],
                         chain_key_initializations: vec![],
                         cup_type: Some(CupType::Recovery(RecoveryArgs {
@@ -309,7 +314,12 @@ mod tests {
             } else {
                 None
             }
-        });
+        })
+    }
+
+    #[test]
+    fn test_make_registry_cup() {
+        let registry_client = setup_registry(/*registry_store_uri=*/ None);
         let result =
             make_registry_cup(&registry_client, subnet_test_id(0), &no_op_logger()).unwrap();
 
@@ -319,7 +329,7 @@ mod tests {
         );
         assert_eq!(
             result.content.block.get_value().context.registry_version,
-            RegistryVersion::from(12345)
+            LATEST_REGISTRY_VERSION
         );
         assert_eq!(
             result.content.block.get_value().context.certified_height,
@@ -327,9 +337,40 @@ mod tests {
         );
         assert_eq!(
             result.content.version(),
-            &ReplicaVersion::try_from("TestID").unwrap()
+            &ReplicaVersion::from_str("TestID").unwrap()
         );
         assert_eq!(result.signature.signer.dealer_subnet, subnet_test_id(0));
+    }
+
+    /// A registry CUP must reference the same registry version in the DKG summary of its block and
+    /// in that block's validation context.
+    #[test]
+    fn test_registry_cup_registry_versions_agree() {
+        for registry_store_uri in [
+            None,
+            Some(RegistryStoreUri {
+                uri: "https://localhost/registry.tar.gz".to_string(),
+                hash: "".to_string(),
+                registry_version: 999,
+            }),
+        ] {
+            let expected_registry_version = registry_store_uri
+                .as_ref()
+                .map(|uri| RegistryVersion::from(uri.registry_version))
+                .unwrap_or(LATEST_REGISTRY_VERSION);
+
+            let registry_client = setup_registry(registry_store_uri.clone());
+            let cup = make_registry_cup(&registry_client, subnet_test_id(0), &no_op_logger())
+                .expect("Failed to create the registry CUP");
+
+            assert_eq!(
+                cup.content.registry_version(),
+                cup.content.block.get_value().context.registry_version,
+                "Registry versions of the DKG summary and the block context disagree \
+                 for registry_store_uri {registry_store_uri:?}"
+            );
+            assert_eq!(cup.content.registry_version(), expected_registry_version);
+        }
     }
 
     /// `RegistryClient` implementation that allows to provide a custom function

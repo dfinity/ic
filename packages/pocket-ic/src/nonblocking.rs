@@ -3,12 +3,13 @@ use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpConfig, IcpFeatures, InitialTime,
-    InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles,
-    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
-    RawCanisterSnapshotDownload, RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles,
-    RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
-    RawPrincipalId, RawSenderInfo, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTickConfigs, RawTime, RawVerifyCanisterSigArg, SubnetId, Topology,
+    InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse,
+    MockFlexibleCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest,
+    RawCanisterId, RawCanisterResult, RawCanisterSnapshotDownload, RawCanisterSnapshotId,
+    RawCanisterSnapshotUpload, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs,
+    RawMessageId, RawMockCanisterHttpResponse, RawMockFlexibleCanisterHttpResponse, RawPrincipalId,
+    RawSenderInfo, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTickConfigs, RawTime,
+    RawVerifyCanisterSigArg, SubnetId, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
@@ -48,9 +49,6 @@ use tracing_subscriber::EnvFilter;
 
 // wait time between polling requests
 const POLLING_PERIOD_MS: u64 = 10;
-
-// the default value of the `--hard-ttl` CLI option of the PocketIC server
-const HARD_TTL_SECS: u64 = 600; // 10 minutes
 
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
@@ -156,7 +154,7 @@ impl PocketIc {
                 server_binary,
                 reuse: true,
                 ttl: None,
-                hard_ttl: Some(Duration::from_secs(HARD_TTL_SECS)),
+                hard_ttl: None,
             })
             .await;
             server_url
@@ -387,6 +385,8 @@ impl PocketIc {
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
+    /// Only returns after the certified time of the IC
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
@@ -435,6 +435,8 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
+    /// Only returns after the certified time of the PocketIC instance
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
@@ -451,6 +453,8 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
+    /// Only returns after the certified time of the PocketIC instance
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
@@ -1869,7 +1873,9 @@ impl PocketIc {
     /// Note that, unless a PocketIC instance is in auto progress mode,
     /// a response to the pending canister HTTP outcalls
     /// must be produced by the test driver and passed on to the PocketIC instace
-    /// using `PocketIc::mock_canister_http_response`.
+    /// using `PocketIc::mock_canister_http_response`, or, for a *flexible* outcall
+    /// (`CanisterHttpReplication::Flexible`), using
+    /// `PocketIc::mock_flexible_canister_http_response`.
     /// In auto progress mode, the PocketIC server produces a response for every
     /// pending canister HTTP outcall by actually making an HTTP request
     /// to the specified URL.
@@ -1880,7 +1886,11 @@ impl PocketIc {
         res.into_iter().map(|r| r.into()).collect()
     }
 
-    /// Mock a response to a pending canister HTTP outcall.
+    /// Mock a response to a pending canister HTTP outcall: the same response for
+    /// every node of the subnet, or one response per node if
+    /// `MockCanisterHttpResponse::additional_responses` is non-empty. For a
+    /// *flexible* outcall, whose committee nodes are answered individually, see
+    /// `PocketIc::mock_flexible_canister_http_response`.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
     pub async fn mock_canister_http_response(
         &self,
@@ -1890,6 +1900,33 @@ impl PocketIc {
         let raw_mock_canister_http_response: RawMockCanisterHttpResponse =
             mock_canister_http_response.into();
         self.post(endpoint, raw_mock_canister_http_response).await
+    }
+
+    /// Mock the responses of the committee nodes of a pending *flexible* canister
+    /// HTTP outcall, i.e. one made through the `flexible_http_request` management
+    /// canister endpoint.
+    ///
+    /// This takes at most one response per node of the outcall's committee (whose
+    /// size is the `total_requests` of the outcall's `CanisterHttpReplication::Flexible`
+    /// replication). Providing fewer responses than the committee size
+    /// models the remaining committee nodes never responding: with at least
+    /// `min_responses` successful ones among them the outcall still succeeds, and
+    /// with fewer it stays pending until the time is advanced past its 60 second
+    /// timeout, at which point it fails with a timeout error.
+    ///
+    /// All responses to an outcall must be provided in a single call: once any
+    /// response to it has been mocked, the outcall no longer shows up in
+    /// `PocketIc::get_canister_http` and further responses to it cannot be mocked.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn mock_flexible_canister_http_response(
+        &self,
+        mock_flexible_canister_http_response: MockFlexibleCanisterHttpResponse,
+    ) {
+        let endpoint = "update/mock_flexible_canister_http";
+        let raw_mock_flexible_canister_http_response: RawMockFlexibleCanisterHttpResponse =
+            mock_flexible_canister_http_response.into();
+        self.post(endpoint, raw_mock_flexible_canister_http_response)
+            .await
     }
 
     /// Download a canister snapshot to a given snapshot directory.

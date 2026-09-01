@@ -35,7 +35,7 @@ jobs:
       group: dm1
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:6002fe4444d6761b59522d453734bd337736c0a21fdaff57fac6bc98530e05af
+      image: ghcr.io/dfinity/ic-build@sha256:caacdcf7c2346ff8b6d8b86ecfa89b1365fa111f744e0e777ac5bf9a5ca97c61
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 180
@@ -65,6 +65,26 @@ jobs:
     with:
       commit-sha: ${{ github.sha }}
       release-build: 'true'
+
+  attest-uploads:
+    name: Attest Uploaded Artifacts
+    runs-on: ubuntu-latest
+    needs: [ci-main]
+    # Attestations exist only for the public repo: a build from ic-private
+    # gets attested when its branch is pushed to dfinity/ic as a hotfix-*
+    # branch and is re-built and re-uploaded byte-identically there.
+    if: needs.ci-main.outputs.release-build == 'true' && github.repository == 'dfinity/ic'
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+      - uses: ./.github/actions/attest-uploads
+        with:
+          manifest-sha256: ${{ needs.ci-main.outputs.manifest-sha256 }}
 
   setup-guest-os-qualification:
     name: Setting up guest os qualification pipeline

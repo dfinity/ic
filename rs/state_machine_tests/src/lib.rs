@@ -59,12 +59,12 @@ use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::test_logger;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
-    InstallCodeArgs, ListCanisterSnapshotArgs, ListCanisterSnapshotResponse, MasterPublicKeyId,
-    Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResponse,
+    self as ic00, CanisterIdRecord, CanisterLogRecord, CanisterSnapshotDataKind,
+    CanisterSnapshotDataOffset, InstallCodeArgs, ListCanisterSnapshotArgs,
+    ListCanisterSnapshotResponse, MasterPublicKeyId, Method, Payload, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
@@ -140,11 +140,11 @@ use ic_test_utilities_registry::{
     SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::ids::test_replica_version;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
-    CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height,
-    NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId,
-    SubnetId, UserId,
+    CanisterId, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes,
+    PrincipalId, Randomness, RegistryVersion, SnapshotId, SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
@@ -353,7 +353,7 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
         .unwrap();
 
     // replica version record
-    let replica_version = ReplicaVersion::default();
+    let replica_version = test_replica_version();
     let replica_version_record = ReplicaVersionRecord {
         replica_version_id: Some(replica_version.to_string()),
         release_package_sha256_hex: "".to_string(),
@@ -791,6 +791,25 @@ impl PocketIngressPool {
                 timestamp,
             },
         );
+    }
+
+    /// Removes the ingress messages that were just included in a block, along
+    /// with any messages whose ingress expiry has passed (those can never be
+    /// included in a block anymore).
+    ///
+    /// Without this the pool is never pruned and retains every ingress message
+    /// ever submitted -- including its payload -- for the lifetime of the
+    /// instance.
+    fn remove_inducted_and_expired(&mut self, inducted: &[SignedIngress], now: Time) {
+        for m in inducted {
+            self.validated
+                .remove(&IngressMessageId::new(m.expiry_time(), m.id()));
+        }
+        // Keys are ordered by `(expiry_time, message_id)`, so everything strictly
+        // below this bound has already expired.
+        let expiry_bound =
+            IngressMessageId::new(now, MessageId::from([0; EXPECTED_MESSAGE_ID_LENGTH]));
+        self.validated = self.validated.split_off(&expiry_bound);
     }
 }
 
@@ -1932,7 +1951,13 @@ impl StateMachine {
         // used by the function `Self::execute_payload` of the `StateMachine`.
         let xnet_payload = batch_payload.xnet.clone();
         let ingress = &batch_payload.ingress;
-        let ingress_messages = ingress.clone().try_into().unwrap();
+        let ingress_messages: Vec<SignedIngress> = ingress.clone().try_into().unwrap();
+        // Prune the ingress pool, mirroring what is done for the canister HTTP
+        // pool (`RemoveValidated`) and the query stats builder (`purge`) below.
+        self.ingress_pool
+            .write()
+            .unwrap()
+            .remove_inducted_and_expired(&ingress_messages, validation_context.time);
         let (http_responses, http_spent, _) =
             CanisterHttpPayloadBuilderImpl::into_messages(&batch_payload.canister_http);
         let inducted: Vec<_> = http_responses
@@ -2765,18 +2790,28 @@ impl StateMachine {
             .push(msg, self.get_time(), self.nodes[0].node_id);
     }
 
-    pub fn mock_canister_http_response(
+    /// Injects one response share per entry of `responses`, signed by the node it
+    /// is keyed by and carrying that node's payment receipt.
+    ///
+    /// This does not require one response per subnet node, which is what
+    /// non-fully-replicated outcalls need: only the nodes of the outcall's committee
+    /// produce a response, their responses may differ, and some of them may not
+    /// respond at all.
+    pub fn mock_canister_http_response_for_nodes(
         &self,
         request_id: u64,
-        canister_id: CanisterId,
-        contents: Vec<CanisterHttpResponseContent>,
+        responses: BTreeMap<NodeId, (CanisterHttpResponseContent, CanisterHttpPaymentReceipt)>,
     ) {
-        assert_eq!(contents.len(), self.nodes.len());
-        for (node, content) in std::iter::zip(self.nodes.iter(), contents) {
+        for node_id in responses.keys() {
+            assert!(
+                self.nodes.iter().any(|node| node.node_id == *node_id),
+                "cannot respond as {node_id}, which is not a node of this subnet"
+            );
+        }
+        for (node_id, (content, payment_receipt)) in responses {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
-                canister_id,
                 content: content.clone(),
             };
             let receipt_share = CanisterHttpResponseReceipt {
@@ -2785,12 +2820,12 @@ impl StateMachine {
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: content.count_bytes() as u32,
                     is_reject: content.is_reject(),
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: test_replica_version(),
                 },
-                payment_receipt: CanisterHttpPaymentReceipt::default(),
+                payment_receipt,
             };
             let signature = CryptoReturningOk::default()
-                .sign(&receipt_share, node.node_id, registry_version)
+                .sign(&receipt_share, node_id, registry_version)
                 .unwrap();
             let share = Signed {
                 content: receipt_share,
@@ -3162,7 +3197,7 @@ impl StateMachine {
             randomness: Randomness::from(seed),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         };
 
         self.message_routing
@@ -5042,13 +5077,25 @@ impl StateMachine {
         dst
     }
 
-    /// Returns the canister log of the specified canister.
-    pub fn canister_log(&self, canister_id: CanisterId) -> CanisterLog {
+    /// Returns all canister log records of the specified canister.
+    pub fn canister_log_records(&self, canister_id: CanisterId) -> Vec<CanisterLogRecord> {
         let replicated_state = self.state_manager.get_latest_state().take();
         let canister_state = replicated_state
             .canister_state(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
-        canister_state.system_state.canister_log.clone()
+        canister_state
+            .system_state
+            .log_memory_store
+            .all_records_for_testing()
+    }
+
+    /// Returns the number of bytes used by the canister log of the specified canister.
+    pub fn canister_log_bytes_used(&self, canister_id: CanisterId) -> usize {
+        let replicated_state = self.state_manager.get_latest_state().take();
+        let canister_state = replicated_state
+            .canister_state(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
+        canister_state.system_state.log_memory_store.bytes_used()
     }
 
     /// Sets the content of the stable memory for the specified canister.

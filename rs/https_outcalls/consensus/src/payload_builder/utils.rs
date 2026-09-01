@@ -339,6 +339,46 @@ pub(crate) fn find_non_flexible_out_of_cycles(
     })
 }
 
+/// The replicas of an already responded to outcall whose spend has been accounted
+/// for, and that must therefore not be refunded a second time.
+pub(crate) struct RefundedNodes<'a> {
+    by_context: &'a BTreeSet<NodeId>,
+    by_past_payload: Option<&'a HashSet<NodeId>>,
+}
+
+impl<'a> RefundedNodes<'a> {
+    pub(crate) fn new(
+        callback_id: CallbackId,
+        context: &'a CanisterHttpRequestContext,
+        past_payload_refunds: &'a BTreeMap<CallbackId, HashSet<NodeId>>,
+    ) -> Self {
+        Self {
+            by_context: &context.refund_status.refunding_nodes,
+            by_past_payload: past_payload_refunds.get(&callback_id),
+        }
+    }
+
+    pub(crate) fn contains(&self, node_id: &NodeId) -> bool {
+        self.by_context.contains(node_id)
+            || self
+                .by_past_payload
+                .is_some_and(|nodes| nodes.contains(node_id))
+    }
+}
+
+/// The receipts of the replicas that have contributed to an already responded to
+/// outcall but have not been refunded yet, at most one per replica.
+pub(crate) fn find_async_receipts<'a>(
+    grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&'a CanisterHttpResponseShare>>,
+    committee: &BTreeSet<NodeId>,
+    already_refunded: &RefundedNodes,
+) -> Vec<&'a CanisterHttpResponseShare> {
+    one_share_per_committee_member(grouped_shares, committee)
+        .into_iter()
+        .filter(|share| !already_refunded.contains(&share.signature.signer))
+        .collect()
+}
+
 /// Reconstructs, for every signer of an aggregated proof, the
 /// [`CanisterHttpResponseShare`] that signer actually signed: the shared
 /// [`CanisterHttpResponseMetadata`] combined with that signer's own
@@ -812,7 +852,7 @@ pub(crate) fn find_flexible_result(
 
     // 3. Even the smallest OK responses exceed the absolute payload limit?
     // Unseen responses could still submit small OK responses, so we account for them.
-    let num_unseen = committee.len().saturating_sub(seen_signers.len());
+    let num_unseen = committee.len().saturating_sub(all_shares.len());
     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
     if ok_candidates.len() >= min_known_ok_needed {
         let smallest_content_sum: usize = ok_candidates
@@ -999,8 +1039,9 @@ fn fund_flexible_selection<'a>(
 mod tests {
     use super::*;
     use ic_error_types::RejectCode;
+    use ic_test_utilities_types::ids::test_replica_version;
     use ic_types::{
-        CanisterId, NumberOfNodes, ReplicaVersion,
+        CanisterId, NumberOfNodes,
         canister_http::{
             CANDID_OVERHEAD_RESERVE_BYTES, CanisterHttpMethod, CanisterHttpReject,
             MAX_CANISTER_HTTP_RESPONSE_BYTES, MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
@@ -1127,7 +1168,7 @@ mod tests {
             content_hash: CryptoHashOf::new(CryptoHash(vec![])),
             content_size,
             is_reject,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         };
         check_content_size_within_limit(&metadata, callback_id, context)
     }

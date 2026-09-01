@@ -28,7 +28,7 @@ use ic_types::{
     messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, SenderInfo},
     methods::{SystemMethod, WasmClosure},
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{RequestInPrep, into_output_request};
@@ -1892,21 +1892,27 @@ impl SystemApiImpl {
 
     /// Appends the specified bytes on the heap as a string to the canister's logs.
     pub fn save_log_message(&mut self, src: usize, size: usize, heap: &[u8]) {
-        self.sandbox_safe_system_state.append_canister_log(
-            self.api_type.time(),
-            valid_subslice(
-                "save_log_message",
-                InternalAddress::new(src),
-                InternalAddress::new(size),
-                heap,
-            )
-            .unwrap_or(
-                // Do not trap here!
-                // If the specified memory range is invalid, ignore it and log the error message.
-                b"(debug_print message out of memory bounds)",
-            )
-            .to_vec(),
-        );
+        // The log record is truncated to the log's byte capacity anyway
+        // (see `CanisterLog::add_record`), so only copy the bytes that are kept.
+        let max_size = self
+            .sandbox_safe_system_state
+            .canister_log()
+            .byte_capacity();
+        // The bounds check covers the whole `[src, src + size)` range so that an
+        // out-of-bounds range is reported as such instead of being truncated.
+        let content = match valid_subslice(
+            "save_log_message",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        ) {
+            Ok(bytes) => bytes[..size.min(max_size)].to_vec(),
+            // Do not trap here!
+            // If the specified memory range is invalid, ignore it and log the error message.
+            Err(_) => b"(debug_print message out of memory bounds)".to_vec(),
+        };
+        self.sandbox_safe_system_state
+            .append_canister_log(self.api_type.time(), content);
     }
 
     /// Takes collected canister log records.
@@ -4456,7 +4462,11 @@ impl SystemApi for SystemApiImpl {
                 }
             })?;
 
-        let subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
+        // HTTP outcalls are also free on system subnets, despite their normal cost schedule.
+        let mut subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
+        if self.sandbox_safe_system_state.subnet_type == SubnetType::System {
+            subnet_cycles_config.cost_schedule = CanisterCyclesCostSchedule::Free;
+        }
         let replication_kind = cost_params_v2
             .replication_kind(NumberOfNodes::from(subnet_cycles_config.subnet_size as u32));
         let cost = self
@@ -4670,6 +4680,32 @@ impl SystemApi for SystemApiImpl {
             summarize(heap, dst, size)
         );
 
+        result
+    }
+
+    fn ic0_subnet_self_node_count(&self) -> HypervisorResult<u32> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0.subnet_self_node_count")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeCleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. } => Ok(self
+                .sandbox_safe_system_state
+                .subnet_cycles_config
+                .subnet_size as u32),
+        };
+
+        trace_syscall!(self, SubnetSelfNodeCount, result);
         result
     }
 }

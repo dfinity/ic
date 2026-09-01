@@ -194,6 +194,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         canister_upgrade_arg,
         mode,
         chunked_canister_wasm,
+        canister_upgrade_options: _,
     }) = action
     else {
         panic!("unexpected proposal action {action:?}");

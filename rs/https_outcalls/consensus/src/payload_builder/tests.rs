@@ -14,7 +14,8 @@ use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
 use ic_error_types::RejectCode;
 use ic_https_outcalls_pricing::fees::{
-    consensus_fee, flexible_initial_spent, min_flexible_consensus_cost, non_flexible_initial_spent,
+    consensus_fee, flexible_initial_spent, max_usage_fee, min_flexible_consensus_cost,
+    non_flexible_initial_spent,
 };
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
@@ -34,15 +35,16 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, node_id_to_u64, node_test_id, subnet_test_id},
+    ids::{node_id_to_u64, node_test_id, subnet_test_id, test_replica_version},
     messages::RequestBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
     batch::{
         CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
@@ -57,6 +59,7 @@ use ic_types::{
         CanisterHttpResponseShare, CanisterHttpResponseSignature,
         CanisterHttpResponseWithConsensus, MAX_CANISTER_HTTP_RESPONSE_BYTES,
         MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, PricingVersion, RefundStatus, Replication,
+        canister_http_threshold, max_http_outcall_response_size,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
@@ -114,7 +117,7 @@ fn single_request_test() {
                     add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
                     add_received_shares_to_pool(
                         pool_access.deref_mut(),
-                        shares[1..subnet_size - get_faults_tolerated(subnet_size)].to_vec(),
+                        shares[1..canister_http_threshold(subnet_size)].to_vec(),
                     );
                 }
 
@@ -212,6 +215,7 @@ fn multiple_payload_test() {
                     divergence_responses: vec![],
                     flexible_responses: vec![],
                     flexible_errors: vec![],
+                    async_receipts: vec![],
                 };
                 let past_payload = payload_to_bytes(past_payload, TEST_MAX_PAYLOAD_BYTES);
 
@@ -509,6 +513,7 @@ fn divergence_responses_count_toward_max_responses() {
             divergence_responses,
             flexible_responses: vec![],
             flexible_errors: vec![],
+            async_receipts: vec![],
         };
 
         let result = payload_builder.validate_payload(
@@ -662,6 +667,7 @@ fn duplicate_validation() {
             divergence_responses: vec![],
             flexible_responses: vec![],
             flexible_errors: vec![],
+            async_receipts: vec![],
         };
         let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let past_payloads = vec![PastPayload {
@@ -719,6 +725,7 @@ fn divergence_response_validation_test() {
                 }],
                 flexible_responses: vec![],
                 flexible_errors: vec![],
+                async_receipts: vec![],
             };
             let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
@@ -742,6 +749,7 @@ fn divergence_response_validation_test() {
                 }],
                 flexible_responses: vec![],
                 flexible_errors: vec![],
+                async_receipts: vec![],
             };
             let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
@@ -782,6 +790,7 @@ fn divergence_response_validation_test() {
                 }],
                 flexible_responses: vec![],
                 flexible_errors: vec![],
+                async_receipts: vec![],
             };
             let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
@@ -840,6 +849,7 @@ fn divergence_duplicate_signer_rejected() {
                 }],
                 flexible_responses: vec![],
                 flexible_errors: vec![],
+                async_receipts: vec![],
             };
             let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
 
@@ -1758,7 +1768,6 @@ fn test_response_and_metadata_with_content(
 ) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
     let response = CanisterHttpResponse {
         id: CallbackId::new(callback_id),
-        canister_id: canister_test_id(0),
         content,
     };
     let metadata = CanisterHttpResponseMetadata {
@@ -1766,7 +1775,7 @@ fn test_response_and_metadata_with_content(
         content_hash: crypto_hash(&response),
         content_size: response.content.count_bytes() as u32,
         is_reject: response.content.is_reject(),
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     };
     (response, metadata)
 }
@@ -2067,6 +2076,7 @@ where
             divergence_responses: vec![],
             flexible_responses: vec![],
             flexible_errors: vec![],
+            async_receipts: vec![],
         };
 
         let payload = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
@@ -3376,6 +3386,7 @@ fn into_messages_emits_initial_spend_reports() {
         timeouts: vec![timeout_callback],
         divergence_responses: vec![divergence],
         out_of_cycles: vec![out_of_cycles],
+        async_receipts: vec![],
     };
     let bytes = payload_to_bytes_max_4mb(payload);
 
@@ -3567,7 +3578,7 @@ fn flexible_error_into_messages_timeout() {
 
     assert_eq!(responses.len(), 1);
     assert_eq!(responses[0].callback, callback_id);
-    assert_eq!(stats.flexible_errors, 1);
+    assert_eq!(stats.flexible_errors, BTreeMap::from([("timeout", 1)]));
     assert_eq!(stats.flexible_errors_candid_failures, 0);
     // A flexible timeout carries no full response body, hence reports no spend.
     assert!(spent.initial.is_empty());
@@ -3611,7 +3622,10 @@ fn flexible_error_into_messages_too_many_rejects() {
 
     assert_eq!(responses.len(), 1);
     assert_eq!(responses[0].callback, callback_id);
-    assert_eq!(stats.flexible_errors, 1);
+    assert_eq!(
+        stats.flexible_errors,
+        BTreeMap::from([("too_many_rejects", 1)])
+    );
     assert_eq!(stats.flexible_errors_candid_failures, 0);
 
     let Payload::Data(ref data) = responses[0].payload else {
@@ -3666,7 +3680,10 @@ fn flexible_error_into_messages_responses_too_large() {
 
     assert_eq!(responses.len(), 1);
     assert_eq!(responses[0].callback, callback_id);
-    assert_eq!(stats.flexible_errors, 1);
+    assert_eq!(
+        stats.flexible_errors,
+        BTreeMap::from([("responses_too_large", 1)])
+    );
     assert_eq!(stats.flexible_errors_candid_failures, 0);
     // A responses-too-large error delivers no body (consensus cost zero), so it
     // reports the sum of its seen shares' per-replica spend. Here every share
@@ -5442,7 +5459,7 @@ fn flexible_response_group_is_not_funded_by_a_delivering_replica() {
 #[test]
 fn fully_replicated_response_waits_for_shares_covering_consensus_cost() {
     let num_nodes = 4;
-    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let threshold = canister_http_threshold(num_nodes);
     let cb_id = 0;
     let (response, metadata) = test_response_and_metadata(cb_id);
     let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
@@ -5496,7 +5513,7 @@ fn assert_responses_from_threshold_shares(
     expected_out_of_cycles: usize,
 ) {
     let cb_id = 0;
-    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let threshold = canister_http_threshold(num_nodes);
     let (response, metadata) = test_response_and_metadata(cb_id);
     // Ensure that the consensus cost is nonzero, so that the test only passes if the unspent
     // allowance is sufficient, or if the consensus cost isn't enforced (free and legacy requests).
@@ -5563,7 +5580,7 @@ fn initial_spent_is_limited_under_pay_as_you_go_pricing() {
 #[test]
 fn initial_spent_is_covered_under_pay_as_you_go_pricing() {
     let num_nodes = 4;
-    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let threshold = canister_http_threshold(num_nodes);
     let (_, metadata) = test_response_and_metadata(0);
     let consensus_cost = non_flexible_consensus_cost(num_nodes, metadata.content_size);
     let allowance = Cycles::new(consensus_cost.get().div_ceil(threshold as u128));
@@ -6499,7 +6516,10 @@ fn flexible_outcall_is_out_of_cycles_when_allowances_are_exhausted() {
             let (responses, spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(
                 &payload_to_bytes_max_4mb(payload.clone()),
             );
-            assert_eq!(stats.flexible_errors, 1);
+            assert_eq!(
+                stats.flexible_errors,
+                BTreeMap::from([("out_of_cycles", 1)])
+            );
             assert_eq!(responses.len(), 1);
             let Payload::Data(ref data) = responses[0].payload else {
                 panic!("Expected Payload::Data, got {:?}", responses[0].payload);
@@ -6948,7 +6968,7 @@ fn validate_payload_fails_for_an_oversized_non_flexible_response() {
     let num_nodes = 4;
     let cb_id = 0;
     let designated = node_test_id(0);
-    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let threshold = canister_http_threshold(num_nodes);
     // One byte more than the largest response the replica could have returned.
     let oversized = (MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES) as usize + 1;
     let (response, metadata) = test_response_and_metadata_with_content(
@@ -7015,7 +7035,7 @@ fn validate_payload_fails_for_an_oversized_non_flexible_response() {
 #[test]
 fn validate_payload_fails_for_initial_spent_exceeding_allowance() {
     let num_nodes = 4;
-    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let threshold = canister_http_threshold(num_nodes);
     let cb_id = 0;
     let (response, metadata) = test_response_and_metadata(cb_id);
     let mut proof = response_and_metadata_to_proof(&response, &metadata);
@@ -7070,7 +7090,7 @@ fn validate_payload_fails_for_initial_spent_exceeding_allowance() {
 #[test]
 fn validate_payload_accepts_initial_spent_within_the_collective_allowance() {
     let num_nodes = 4;
-    let threshold = num_nodes - get_faults_tolerated(num_nodes);
+    let threshold = canister_http_threshold(num_nodes);
     let cb_id = 0;
     let (response, metadata) = test_response_and_metadata(cb_id);
     let mut proof = response_and_metadata_to_proof(&response, &metadata);
@@ -7122,6 +7142,61 @@ fn validate_payload_accepts_initial_spent_within_the_collective_allowance() {
                 InvalidCanisterHttpPayloadReason::InitialSpentExceedsLimit { .. },
             ),
         ))
+    );
+}
+
+/// The allowance a fully-replicated request receives leaves its response
+/// deliverable by the fewest replicas that can produce the response.
+#[test]
+fn validate_payload_accepts_a_threshold_signed_response_at_the_quoted_price() {
+    let num_nodes = 13;
+    let threshold = canister_http_threshold(num_nodes);
+    let cb_id = 0;
+    let subnet_size = NumberOfNodes::from(num_nodes as u32);
+
+    // The per-replica allowance `ExecutionEnvironment` withholds from a request that
+    // attached the recommended amount of cycles.
+    let allowance = max_usage_fee(&Replication::FullyReplicated, None, subnet_size) / num_nodes;
+
+    // The largest response an outcall without a response limit may deliver, which is
+    // the one whose consensus fee the allowances have to stretch to.
+    let content_size = max_http_outcall_response_size(None);
+    let (response, metadata) = test_response_and_metadata_with_content(
+        cb_id,
+        CanisterHttpResponseContent::Success(vec![0; content_size as usize]),
+    );
+    let mut proof = response_and_metadata_to_proof(&response, &metadata);
+    for signer in 0..threshold as u64 {
+        add_signer_to_proof(&mut proof, node_test_id(signer));
+    }
+    proof.initial_spent = non_flexible_initial_spent(&proof.proof, subnet_size);
+    assert_eq!(
+        proof.initial_spent,
+        consensus_fee(content_size as u128, subnet_size),
+        "the signers claim no spend, so the whole initial spend is the consensus fee"
+    );
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            CallbackId::new(cb_id),
+            with_payg_allowance(request_context(Replication::FullyReplicated), allowance),
+        )],
+        |payload_builder, _pool| {
+            let payload = CanisterHttpPayload {
+                responses: vec![proof.clone()],
+                ..Default::default()
+            };
+            assert_matches!(
+                payload_builder.validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&default_validation_context()),
+                    &payload_to_bytes_max_4mb(payload),
+                    &[],
+                ),
+                Ok(())
+            );
+        },
     );
 }
 
@@ -7508,6 +7583,28 @@ fn setup_test_with_contexts(
     });
 }
 
+/// Like [`setup_test_with_contexts`], but the contexts are injected as already
+/// responded to, i.e. as delivered contexts awaiting their asynchronous receipts.
+fn setup_test_with_delivered_contexts(
+    num_nodes: usize,
+    delivered: Vec<(CallbackId, CanisterHttpRequestContext)>,
+    run: impl FnOnce(CanisterHttpPayloadBuilderImpl, Arc<RwLock<CanisterHttpPoolImpl>>),
+) {
+    // The context's subnet size must match the subnet the test registers, since
+    // payload building and validation source the subnet size from the context.
+    let delivered: Vec<_> = delivered
+        .into_iter()
+        .map(|(cb, mut ctx)| {
+            ctx.subnet_size = NumberOfNodes::from(num_nodes as u32);
+            (cb, ctx)
+        })
+        .collect();
+    test_config_with_http_feature(true, num_nodes, |mut payload_builder, pool| {
+        inject_contexts(&mut payload_builder, [], delivered, None);
+        run(payload_builder, pool);
+    });
+}
+
 fn setup_test_with_flexible_context(
     num_nodes: usize,
     callback_id: CallbackId,
@@ -7543,16 +7640,39 @@ pub(crate) fn inject_request_contexts_with_cost_schedule(
     contexts: impl IntoIterator<Item = (CallbackId, CanisterHttpRequestContext)>,
     cost_schedule: Option<CanisterCyclesCostSchedule>,
 ) {
+    inject_contexts(payload_builder, contexts, [], cost_schedule);
+}
+
+/// Replaces the payload_builder's state_reader with one containing the given
+/// request contexts, split into the ones still awaiting a response and the
+/// `delivered` ones, which have already been responded to and are only kept
+/// around for their asynchronous receipts.
+pub(crate) fn inject_contexts(
+    payload_builder: &mut CanisterHttpPayloadBuilderImpl,
+    contexts: impl IntoIterator<Item = (CallbackId, CanisterHttpRequestContext)>,
+    delivered: impl IntoIterator<Item = (CallbackId, CanisterHttpRequestContext)>,
+    cost_schedule: Option<CanisterCyclesCostSchedule>,
+) {
     let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-    for (cb, mut ctx) in contexts {
+    let with_cost_schedule = |mut ctx: CanisterHttpRequestContext| {
         if let Some(cost_schedule) = cost_schedule {
             ctx.cost_schedule = cost_schedule;
         }
+        ctx
+    };
+    for (cb, ctx) in contexts {
         init_state
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts
-            .insert(cb, ctx);
+            .insert(cb, with_cost_schedule(ctx));
+    }
+    for (cb, ctx) in delivered {
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .delivered_canister_http_request_contexts
+            .insert(cb, with_cost_schedule(ctx));
     }
     let state_manager = Arc::new(RefMockStateManager::default());
     state_manager
@@ -7770,6 +7890,7 @@ fn flexible_payload(groups: Vec<FlexibleCanisterHttpResponses>) -> CanisterHttpP
         divergence_responses: vec![],
         flexible_responses: groups,
         flexible_errors: vec![],
+        async_receipts: vec![],
     }
 }
 
@@ -7783,7 +7904,7 @@ fn metadata_share_with_content_size(
         content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
         content_size,
         is_reject: false,
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     };
     metadata_to_share(signer_node, &metadata)
 }
@@ -7794,7 +7915,7 @@ fn reject_metadata_share(callback_id: u64, signer_node: u64) -> CanisterHttpResp
         content_hash: CryptoHashOf::new(CryptoHash(vec![0xCD; 32])),
         content_size: 50,
         is_reject: true,
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     };
     metadata_to_share(signer_node, &metadata)
 }
@@ -7889,4 +8010,631 @@ fn mock_crypto_rejecting_signatures() -> MockCrypto {
             })
         });
     mock_crypto
+}
+
+// ===================================================================
+// Asynchronous receipts
+// ===================================================================
+
+/// A delivered (already responded to) pay-as-you-go context whose replicas each
+/// got `TEST_PER_REPLICA_ALLOWANCE`, with `refunding_nodes` already accounted for
+/// by the response that was delivered.
+fn delivered_context(
+    replication: Replication,
+    refunding_nodes: impl IntoIterator<Item = NodeId>,
+) -> CanisterHttpRequestContext {
+    let mut context = with_payg_allowance(request_context(replication), TEST_PER_REPLICA_ALLOWANCE);
+    context.refund_status.refunding_nodes = refunding_nodes.into_iter().collect();
+    context
+}
+
+/// The signers of the payload's asynchronous receipts, all of which must be for
+/// `callback_id`.
+fn async_receipt_signers(
+    payload: &CanisterHttpPayload,
+    callback_id: CallbackId,
+) -> BTreeSet<NodeId> {
+    payload
+        .async_receipts
+        .iter()
+        .map(|share| {
+            assert_eq!(share.content.id(), callback_id);
+            share.signature.signer
+        })
+        .collect()
+}
+
+/// Builds a payload against a delivered context of the given `replication` whose
+/// response was signed by `refunding_nodes`, with `shares_in_pool` many replicas
+/// having produced a share, and returns it.
+fn build_async_receipt_payload(
+    num_nodes: usize,
+    callback_id: CallbackId,
+    replication: Replication,
+    refunding_nodes: impl IntoIterator<Item = NodeId>,
+    shares_in_pool: usize,
+    past_payloads: &[PastPayload],
+) -> CanisterHttpPayload {
+    let (response, metadata) = test_response_and_metadata(callback_id.get());
+    let shares = metadata_to_shares(shares_in_pool, &metadata);
+    let mut payload = None;
+    setup_test_with_delivered_contexts(
+        num_nodes,
+        vec![(callback_id, delivered_context(replication, refunding_nodes))],
+        |payload_builder, canister_http_pool| {
+            {
+                let mut pool_access = canister_http_pool.write().unwrap();
+                if let Some(own) = shares.first() {
+                    add_own_share_to_pool(pool_access.deref_mut(), own, &response);
+                    add_received_shares_to_pool(pool_access.deref_mut(), shares[1..].to_vec());
+                }
+            }
+            let context = default_validation_context();
+            let bytes = payload_builder.build_payload(
+                Height::new(1),
+                TEST_MAX_PAYLOAD_BYTES,
+                past_payloads,
+                &context,
+            );
+            assert_matches!(
+                payload_builder.validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&context),
+                    &bytes,
+                    past_payloads,
+                ),
+                Ok(())
+            );
+            payload = Some(bytes_to_payload(&bytes).expect("parse error"));
+        },
+    );
+    payload.expect("payload was not built")
+}
+
+/// A delivered context is only reported on until it times out: from then on message
+/// routing settles whatever is left of the allowances — refunding every replica that
+/// has not been accounted for in full — and drops the context, so a receipt would
+/// only be spending block space on cycles that are refunded anyway.
+///
+/// The boundary matters: message routing applies the receipts of a block before
+/// timing out the contexts, so a receipt included exactly at the timeout would
+/// still be applied, which is precisely what the payload builder avoids here.
+#[test]
+fn async_receipt_is_not_reported_once_the_delivered_context_times_out() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::new(0);
+    let (response, metadata) = test_response_and_metadata(callback_id.get());
+    let shares = metadata_to_shares(num_nodes, &metadata);
+
+    // The context is stamped at `UNIX_EPOCH`, so the block time alone decides
+    // whether it has timed out. Check either side of the boundary, so that the
+    // negative case cannot pass just because nothing was refundable anyway.
+    for (elapsed, expect_refunds) in [
+        (
+            DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT - Duration::from_nanos(1),
+            true,
+        ),
+        (DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT, false),
+    ] {
+        setup_test_with_delivered_contexts(
+            num_nodes,
+            vec![(
+                callback_id,
+                delivered_context(Replication::FullyReplicated, []),
+            )],
+            |payload_builder, canister_http_pool| {
+                {
+                    let mut pool_access = canister_http_pool.write().unwrap();
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                    add_received_shares_to_pool(pool_access.deref_mut(), shares[1..].to_vec());
+                }
+                let context = ValidationContext {
+                    time: UNIX_EPOCH + elapsed,
+                    ..default_validation_context()
+                };
+                let payload =
+                    build_and_validate_and_parse_payload_with_context(&payload_builder, &context);
+                assert_eq!(
+                    !payload.async_receipts.is_empty(),
+                    expect_refunds,
+                    "unexpected refunds {:?} after {elapsed:?}",
+                    payload.async_receipts,
+                );
+            },
+        );
+    }
+}
+
+/// A replica is left out for either of two reasons: it was already accounted for by
+/// the delivered response, or it never produced a receipt at all — the latter is
+/// refunded in full when the delivered context times out instead.
+#[test]
+fn async_receipt_reports_the_replicas_that_answered_and_are_unaccounted_for() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::new(0);
+    // Node 0 signed the response that was delivered; nodes 1 and 2 answered too
+    // late to be part of it; node 3 never answered at all.
+    let payload = build_async_receipt_payload(
+        num_nodes,
+        callback_id,
+        Replication::FullyReplicated,
+        [node_test_id(0)],
+        /* shares_in_pool = */ 3,
+        &[],
+    );
+
+    assert_eq!(
+        async_receipt_signers(&payload, callback_id),
+        BTreeSet::from([node_test_id(1), node_test_id(2)])
+    );
+}
+
+/// Once every replica has been accounted for, there is nothing left to report.
+#[test]
+fn async_receipt_is_not_reported_when_every_replica_has_been_accounted_for() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::new(0);
+    let all_nodes: Vec<_> = (0..num_nodes as u64).map(node_test_id).collect();
+
+    let payload = build_async_receipt_payload(
+        num_nodes,
+        callback_id,
+        Replication::FullyReplicated,
+        all_nodes,
+        num_nodes,
+        &[],
+    );
+
+    assert!(payload.async_receipts.is_empty(), "{payload:?}");
+    // A payload with nothing to report is empty, i.e. not put into the block at all.
+    assert!(payload.is_empty(), "{payload:?}");
+}
+
+/// A refund reported by a payload above the certified height is not repeated, even
+/// though the certified state does not reflect it yet.
+#[test]
+fn async_receipt_is_not_repeated_after_a_past_payload_reported_it() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::new(0);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+
+    // A past payload already reported node 2.
+    let past = payload_to_bytes_max_4mb(CanisterHttpPayload {
+        async_receipts: vec![metadata_to_share(2, &metadata)],
+        ..Default::default()
+    });
+    let past_payloads = vec![PastPayload {
+        height: Height::new(1),
+        time: UNIX_EPOCH,
+        block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+        payload: &past,
+    }];
+
+    let payload = build_async_receipt_payload(
+        num_nodes,
+        callback_id,
+        Replication::FullyReplicated,
+        [node_test_id(0)],
+        num_nodes,
+        &past_payloads,
+    );
+
+    // Node 0 was accounted for by the delivered response, node 2 by the past
+    // payload; only nodes 1 and 3 are left.
+    assert_eq!(
+        async_receipt_signers(&payload, callback_id),
+        BTreeSet::from([node_test_id(1), node_test_id(3)])
+    );
+}
+
+/// The replicas an asynchronous receipt may come from are the ones the request
+/// pins: the whole subnet for a fully replicated request, the designated replica
+/// for a non-replicated one, and the recorded committee for a flexible one.
+#[test]
+fn async_receipts_are_reported_for_the_committee_of_every_replication() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::new(0);
+
+    for (replication, refunding_nodes, expected) in [
+        // The response was signed by node 0; every other replica of the subnet that
+        // answered is still unaccounted for.
+        (
+            Replication::FullyReplicated,
+            vec![node_test_id(0)],
+            BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]),
+        ),
+        // The request timed out before the designated replica answered, so nobody is
+        // accounted for yet — and only that replica can report anything.
+        (
+            Replication::NonReplicated(node_test_id(2)),
+            vec![],
+            BTreeSet::from([node_test_id(2)]),
+        ),
+        // Node 3 is not part of the flexible committee, so its share is ignored even
+        // though it is in the pool.
+        (
+            Replication::Flexible {
+                committee: BTreeSet::from([node_test_id(0), node_test_id(1), node_test_id(2)]),
+                min_responses: 2,
+                max_responses: 3,
+            },
+            vec![node_test_id(0)],
+            BTreeSet::from([node_test_id(1), node_test_id(2)]),
+        ),
+    ] {
+        let payload = build_async_receipt_payload(
+            num_nodes,
+            callback_id,
+            replication.clone(),
+            refunding_nodes,
+            /* shares_in_pool = */ num_nodes,
+            &[],
+        );
+
+        assert_eq!(
+            async_receipt_signers(&payload, callback_id),
+            expected,
+            "unexpected receipts for {replication:?}"
+        );
+    }
+}
+
+/// Receipts count towards the per-block response limit like any other message, and
+/// are collected across delivered contexts until it is reached.
+#[test]
+fn async_receipts_of_many_delivered_contexts_stop_at_the_per_block_limit() {
+    // Enough delivered contexts, each answered by every replica, to produce more
+    // receipts than a single block may carry. The subnet size deliberately does not
+    // divide the limit, so that it is reached part-way through a context.
+    let num_nodes = 3;
+    let num_contexts = CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK / num_nodes + 1;
+    let contexts: Vec<_> = (0..num_contexts as u64)
+        .map(|id| {
+            (
+                CallbackId::new(id),
+                delivered_context(Replication::FullyReplicated, []),
+            )
+        })
+        .collect();
+
+    setup_test_with_delivered_contexts(num_nodes, contexts, |payload_builder, pool| {
+        {
+            let mut pool_access = pool.write().unwrap();
+            for id in 0..num_contexts as u64 {
+                let (_, metadata) = test_response_and_metadata(id);
+                add_received_shares_to_pool(
+                    pool_access.deref_mut(),
+                    metadata_to_shares(num_nodes, &metadata),
+                );
+            }
+        }
+
+        let payload = build_and_validate_and_parse_payload(&payload_builder);
+
+        assert_eq!(
+            payload.async_receipts.len(),
+            CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
+        );
+        // The last context that fits is only partly reported, i.e. collecting stops
+        // mid-context rather than at a context boundary.
+        assert_eq!(
+            payload
+                .async_receipts
+                .iter()
+                .map(|share| share.content.id())
+                .collect::<BTreeSet<_>>()
+                .len(),
+            CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK.div_ceil(num_nodes)
+        );
+    });
+}
+
+/// An asynchronous receipt reported for a callback that has not been responded to is
+/// invalid: only a delivered context can be refunded this way.
+#[test]
+fn validate_payload_fails_for_an_async_receipt_of_an_unanswered_request() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::new(0);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    let payload = CanisterHttpPayload {
+        async_receipts: vec![metadata_to_share(0, &metadata)],
+        ..Default::default()
+    };
+
+    let mut result = None;
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(
+            callback_id,
+            delivered_context(Replication::FullyReplicated, []),
+        )],
+        |payload_builder, _pool| {
+            result = Some(payload_builder.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
+            ));
+        },
+    );
+
+    assert_matches!(
+        result.expect("validation did not run"),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::UnknownDeliveredCallbackId(id),
+            ),
+        )) if id == callback_id
+    );
+}
+
+/// Validates a payload carrying nothing but the given asynchronous receipts,
+/// against a delivered request with the given `context` and the given `past_payloads`.
+fn validate_async_receipt_payload(
+    num_nodes: usize,
+    callback_id: CallbackId,
+    context: CanisterHttpRequestContext,
+    refunds: Vec<CanisterHttpResponseShare>,
+    past_payloads: &[PastPayload],
+) -> Result<(), PayloadValidationError> {
+    validate_async_receipt_payload_at(
+        num_nodes,
+        callback_id,
+        context,
+        refunds,
+        past_payloads,
+        &default_validation_context(),
+    )
+}
+
+/// Same as [`validate_async_receipt_payload`], but for a block proposed in the
+/// given `validation_context` rather than the default one.
+fn validate_async_receipt_payload_at(
+    num_nodes: usize,
+    callback_id: CallbackId,
+    context: CanisterHttpRequestContext,
+    refunds: Vec<CanisterHttpResponseShare>,
+    past_payloads: &[PastPayload],
+    validation_context: &ValidationContext,
+) -> Result<(), PayloadValidationError> {
+    let payload = CanisterHttpPayload {
+        async_receipts: refunds,
+        ..Default::default()
+    };
+    let mut result = None;
+    setup_test_with_delivered_contexts(
+        num_nodes,
+        vec![(callback_id, context)],
+        |payload_builder, _pool| {
+            result = Some(payload_builder.validate_payload(
+                Height::new(1),
+                &test_proposal_context(validation_context),
+                &payload_to_bytes_max_4mb(payload),
+                past_payloads,
+            ));
+        },
+    );
+    result.expect("validation did not run")
+}
+
+#[test]
+fn validate_payload_fails_for_an_async_receipt_of_a_timed_out_delivered_context() {
+    let callback_id = CallbackId::new(0);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+
+    // The context is stamped at `UNIX_EPOCH`, so the block time alone decides
+    // whether it has timed out.
+    let validate_at = |elapsed| {
+        validate_async_receipt_payload_at(
+            4,
+            callback_id,
+            delivered_context(Replication::FullyReplicated, []),
+            vec![metadata_to_share(1, &metadata)],
+            &[],
+            &ValidationContext {
+                time: UNIX_EPOCH + elapsed,
+                ..default_validation_context()
+            },
+        )
+    };
+
+    // Just short of the timeout the very same receipt is still accepted, so the
+    // rejection below cannot be down to anything else about it.
+    assert_matches!(
+        validate_at(DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT - Duration::from_nanos(1)),
+        Ok(())
+    );
+    assert_matches!(
+        validate_at(DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT),
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::DeliveredCallbackTimedOut(id),
+            ),
+        )) if id == callback_id
+    );
+}
+
+fn assert_already_refunded(result: Result<(), PayloadValidationError>, expected_signer: NodeId) {
+    assert_matches!(
+        result,
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::AlreadyRefunded { signer, .. },
+            ),
+        )) if signer == expected_signer
+    );
+}
+
+/// A replica already accounted for by the delivered response must not be refunded
+/// a second time.
+#[test]
+fn validate_payload_fails_for_an_async_receipt_of_an_accounted_replica() {
+    let callback_id = CallbackId::new(0);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+
+    let result = validate_async_receipt_payload(
+        4,
+        callback_id,
+        delivered_context(Replication::FullyReplicated, [node_test_id(1)]),
+        vec![metadata_to_share(1, &metadata)],
+        &[],
+    );
+
+    assert_already_refunded(result, node_test_id(1));
+}
+
+/// A replica already reported by a payload above the certified height must not be
+/// refunded again, even though the certified state does not reflect it yet.
+#[test]
+fn validate_payload_fails_for_an_async_receipt_repeated_from_a_past_payload() {
+    let callback_id = CallbackId::new(0);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    let refund = metadata_to_share(1, &metadata);
+    let past = payload_to_bytes_max_4mb(CanisterHttpPayload {
+        async_receipts: vec![refund.clone()],
+        ..Default::default()
+    });
+    let past_payloads = vec![PastPayload {
+        height: Height::new(1),
+        time: UNIX_EPOCH,
+        block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+        payload: &past,
+    }];
+
+    let result = validate_async_receipt_payload(
+        4,
+        callback_id,
+        delivered_context(Replication::FullyReplicated, []),
+        vec![refund],
+        &past_payloads,
+    );
+
+    assert_already_refunded(result, node_test_id(1));
+}
+
+/// The same replica must not be refunded twice by the same payload, whether the two
+/// receipts are byte-identical or merely share a signer.
+#[test]
+fn validate_payload_fails_for_an_async_receipt_repeated_within_the_payload() {
+    let callback_id = CallbackId::new(0);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    let share = metadata_to_share(1, &metadata);
+    let same_signer = metadata_to_share_with_spent(1, &metadata, Cycles::new(1));
+
+    for refunds in [vec![share.clone(), share.clone()], vec![share, same_signer]] {
+        let result = validate_async_receipt_payload(
+            4,
+            callback_id,
+            delivered_context(Replication::FullyReplicated, []),
+            refunds,
+            &[],
+        );
+
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::DuplicateShareSigner { signer, .. },
+                ),
+            )) if signer == node_test_id(1)
+        );
+    }
+}
+
+/// Only the request's committee can be refunded for it.
+#[test]
+fn validate_payload_fails_for_an_async_receipt_of_a_non_committee_replica() {
+    let callback_id = CallbackId::new(0);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+    let designated = node_test_id(0);
+    let outsider = node_test_id(1);
+
+    let result = validate_async_receipt_payload(
+        4,
+        callback_id,
+        // Only the designated replica of a non-replicated request ever spends.
+        delivered_context(Replication::NonReplicated(designated), []),
+        vec![metadata_to_share(node_id_to_u64(outsider), &metadata)],
+        &[],
+    );
+
+    assert_matches!(
+        result,
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::ShareSignerNotInCommittee { signer, .. },
+            ),
+        )) if signer == outsider
+    );
+}
+
+/// A receipt claiming a spend beyond the replica's allowance is rejected here as
+/// everywhere else.
+#[test]
+fn validate_payload_fails_for_an_async_receipt_with_an_excessive_spend() {
+    let callback_id = CallbackId::new(0);
+    let (_, metadata) = test_response_and_metadata(callback_id.get());
+
+    let result = validate_async_receipt_payload(
+        4,
+        callback_id,
+        delivered_context(Replication::FullyReplicated, []),
+        vec![metadata_to_share_with_spent(
+            1,
+            &metadata,
+            TEST_PER_REPLICA_ALLOWANCE + Cycles::new(1),
+        )],
+        &[],
+    );
+
+    assert_matches!(
+        result,
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::SpentExceedsLimit { .. },
+            ),
+        ))
+    );
+}
+
+/// An asynchronous receipt reports what its replicas spent, without delivering a
+/// response: the response it belongs to is already out. Receipts are regrouped by
+/// the callback they are signed for, one report per callback.
+#[test]
+fn into_messages_emits_asynchronous_spend_reports() {
+    let (first, second) = (CallbackId::new(7), CallbackId::new(8));
+    let (_, first_metadata) = test_response_and_metadata(first.get());
+    let (_, second_metadata) = test_response_and_metadata(second.get());
+    let spent = Cycles::new(1_234);
+    let payload = CanisterHttpPayload {
+        // Deliberately interleaved, to show that the grouping does not rely on order.
+        async_receipts: vec![
+            metadata_to_share_with_spent(1, &first_metadata, spent),
+            metadata_to_share_with_spent(1, &second_metadata, Cycles::new(7)),
+            metadata_to_share_with_spent(2, &first_metadata, Cycles::zero()),
+        ],
+        ..Default::default()
+    };
+
+    let (responses, spent_report, stats) =
+        CanisterHttpPayloadBuilderImpl::into_messages(&payload_to_bytes_max_4mb(payload));
+
+    assert!(responses.is_empty(), "{responses:?}");
+    assert_eq!(stats.async_receipts, 3);
+    assert!(spent_report.initial.is_empty());
+    let reported: BTreeMap<_, _> = spent_report
+        .asynchronous
+        .iter()
+        .map(|report| (report.callback, report.shares.clone()))
+        .collect();
+    assert_eq!(
+        reported,
+        BTreeMap::from([
+            (
+                first,
+                BTreeMap::from([(node_test_id(1), spent), (node_test_id(2), Cycles::zero())])
+            ),
+            (second, BTreeMap::from([(node_test_id(1), Cycles::new(7))])),
+        ])
+    );
 }

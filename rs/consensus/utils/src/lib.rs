@@ -160,6 +160,41 @@ pub fn aggregate<
     selector: Box<dyn Fn(&Message) -> Option<KeySelector> + '_>,
     artifact_shares: Shares,
 ) -> Vec<Signed<Message, CommitteeSignature>> {
+    aggregate_with_threshold(
+        log,
+        crypto,
+        selector,
+        Box::new(|content: &Message| {
+            membership
+                .get_committee_threshold(content.height(), Message::committee())
+                .inspect_err(|err| error!(log, "MembershipError: {:?}", err))
+                .ok()
+        }),
+        artifact_shares,
+    )
+}
+
+/// Same as [`aggregate`], but with the threshold of each content provided by the caller instead of
+/// being looked up in the [`Membership`].
+///
+/// This is required whenever the committee signing the shares cannot be derived from the consensus
+/// pool, e.g. for the post-split catch-up packages, whose committee is the one of a subnet which
+/// doesn't exist yet.
+#[allow(clippy::type_complexity)]
+pub fn aggregate_with_threshold<
+    Message: Eq + Ord + Clone + std::fmt::Debug,
+    CryptoMessage,
+    Signature: Ord,
+    KeySelector,
+    CommitteeSignature,
+    Shares: Iterator<Item = Signed<Message, Signature>>,
+>(
+    log: &ReplicaLogger,
+    crypto: &dyn Aggregate<CryptoMessage, Signature, KeySelector, CommitteeSignature>,
+    selector: Box<dyn Fn(&Message) -> Option<KeySelector> + '_>,
+    threshold: Box<dyn Fn(&Message) -> Option<Threshold> + '_>,
+    artifact_shares: Shares,
+) -> Vec<Signed<Message, CommitteeSignature>> {
     group_shares(artifact_shares)
         .into_iter()
         .filter_map(|(content_ref, shares)| {
@@ -170,21 +205,21 @@ pub fn aggregate<
                 );
                 None
             })?;
-            let threshold = match membership
-                .get_committee_threshold(content_ref.height(), Message::committee())
-            {
-                Ok(threshold) => threshold,
-                Err(err) => {
-                    error!(log, "MembershipError: {:?}", err);
-                    return None;
-                }
-            };
+            let threshold = threshold(&content_ref)?;
             if shares.len() < threshold {
                 return None;
             }
             let shares_ref = shares.iter().collect();
             crypto
                 .aggregate(shares_ref, selector)
+                .inspect_err(|err| {
+                    warn!(
+                        log,
+                        "aggregate: failed to aggregate the shares of content {:?}: {:?}",
+                        content_ref,
+                        err
+                    )
+                })
                 .ok()
                 .map(|signature| {
                     let content = content_ref.clone();
@@ -295,6 +330,21 @@ pub fn active_high_threshold_nidkg_id(
                 .clone()
         })
     })
+}
+
+/// Returns the current DKG transcript with the given tag from the DKG summary of the given
+/// summary block, if there is one.
+/// This function panics if the given block is not a summary block.
+pub fn get_current_transcript_from_summary_block<'a>(
+    summary_block: &'a Block,
+    tag: &NiDkgTag,
+) -> Option<&'a NiDkgTranscript> {
+    summary_block
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg
+        .current_transcript(tag)
 }
 
 /// Return the current low transcript for the given height if it was found.
@@ -424,20 +474,6 @@ fn get_subnet_splitting_status_at_given_summary(
     } else {
         None
     }
-}
-
-/// Check if the [`ReplicaVersion`] is the current version
-///
-/// # Arguments
-///
-/// - `version`: the [`ReplicaVersion`] to check against
-///
-/// # Returns
-///
-/// - `true` if `version` matches the current version
-/// - `false` otherwise
-pub fn is_current_protocol_version(version: &ReplicaVersion) -> bool {
-    version == &ReplicaVersion::default()
 }
 
 /// Get the [`SubnetRecord`] of this subnet with the specified [`RegistryVersion`]

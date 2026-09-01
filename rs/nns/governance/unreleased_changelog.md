@@ -9,6 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
+* `UpdateCanisterSettings` and `CreateCanisterAndInstallCode` proposals can now
+  set `reserved_cycles_limit`, the upper bound on the cycles a canister may hold
+  in reserved cycles.
+
 ## Changed
 
 ## Deprecated
@@ -16,9 +20,5 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
-
-* `validate_assign_noid_payload` no longer panics when a node provider has
-  `id = None`. It now skips such providers safely, preventing all
-  `AddNodeOperator` proposal submissions from being blocked.
 
 ## Security

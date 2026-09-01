@@ -279,6 +279,7 @@ pub struct DashboardTemplate {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub minter_address: String,
+    pub sweeper_contract_address: Option<Address>,
     pub log_scrapings: LogScrapings,
     pub next_transaction_nonce: TransactionNonce,
     pub minimum_withdrawal_amount: Wei,
@@ -336,17 +337,19 @@ impl DashboardTemplate {
             .collect();
 
         let mut withdrawal_requests: Vec<_> = state
-            .eth_transactions
-            .withdrawal_requests_iter()
+            .withdrawal_transactions
+            .requests_iter()
             .cloned()
             .map(|request| match request {
-                WithdrawalRequest::CkEth(req) => DashboardWithdrawalRequest {
-                    cketh_ledger_burn_index: req.ledger_burn_index,
-                    destination: req.destination,
-                    value: req.withdrawal_amount.into(),
-                    token_symbol: CkTokenSymbol::cketh_symbol_from_state(state),
-                    created_at: req.created_at,
-                },
+                WithdrawalRequest::CkEth(req) | WithdrawalRequest::SweeperFunding(req) => {
+                    DashboardWithdrawalRequest {
+                        cketh_ledger_burn_index: req.ledger_burn_index,
+                        destination: req.destination,
+                        value: req.withdrawal_amount.into(),
+                        token_symbol: CkTokenSymbol::cketh_symbol_from_state(state),
+                        created_at: req.created_at,
+                    }
+                }
                 WithdrawalRequest::CkErc20(req) => {
                     let erc20_contract_address = &req.erc20_contract_address;
                     DashboardWithdrawalRequest {
@@ -366,7 +369,7 @@ impl DashboardTemplate {
         withdrawal_requests.sort_unstable_by_key(|req| Reverse(req.cketh_ledger_burn_index));
 
         let mut pending_transactions: Vec<_> = state
-            .eth_transactions
+            .withdrawal_transactions
             .transactions_to_sign_iter()
             .map(|(_nonce, ledger_burn_index, tx)| {
                 let (destination, value, token_symbol) = to_dashboard_transaction(tx, state);
@@ -379,25 +382,29 @@ impl DashboardTemplate {
                 }
             })
             .collect();
-        pending_transactions.extend(state.eth_transactions.sent_transactions_iter().flat_map(
-            |(_nonce, ledger_burn_index, txs)| {
-                txs.into_iter().map(|tx| {
-                    let (destination, value, token_symbol) = to_dashboard_transaction(tx, state);
-                    DashboardPendingTransaction {
-                        ledger_burn_index: *ledger_burn_index,
-                        destination,
-                        value,
-                        token_symbol,
-                        status: RetrieveEthStatus::TxSent(EthTransaction::from(tx)),
-                    }
-                })
-            },
-        ));
+        pending_transactions.extend(
+            state
+                .withdrawal_transactions
+                .sent_transactions_iter()
+                .flat_map(|(_nonce, ledger_burn_index, txs)| {
+                    txs.into_iter().map(|tx| {
+                        let (destination, value, token_symbol) =
+                            to_dashboard_transaction(tx, state);
+                        DashboardPendingTransaction {
+                            ledger_burn_index: *ledger_burn_index,
+                            destination,
+                            value,
+                            token_symbol,
+                            status: RetrieveEthStatus::TxSent(EthTransaction::from(tx)),
+                        }
+                    })
+                }),
+        );
         pending_transactions
             .sort_unstable_by_key(|pending_tx| Reverse(pending_tx.ledger_burn_index));
 
         let mut finalized_transactions: Vec<_> = state
-            .eth_transactions
+            .withdrawal_transactions
             .finalized_transactions_iter()
             .map(|(_tx_nonce, index, tx)| {
                 let (destination, value, token_symbol) = to_dashboard_transaction(tx, state);
@@ -425,7 +432,7 @@ impl DashboardTemplate {
         );
 
         let mut reimbursed_transactions: Vec<_> = state
-            .eth_transactions
+            .withdrawal_transactions
             .reimbursed_transactions_iter()
             .map(|(index, result)| {
                 let (cketh_ledger_burn_index, token_symbol) = match index {
@@ -482,9 +489,10 @@ impl DashboardTemplate {
                 .minter_address()
                 .map(|addr| addr.to_string())
                 .unwrap_or_default(),
+            sweeper_contract_address: state.sweeper_contract_address,
             log_scrapings: state.log_scrapings.clone(),
             cketh_ledger_id: state.cketh_ledger_id,
-            next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),
+            next_transaction_nonce: state.withdrawal_transactions.next_transaction_nonce(),
             minimum_withdrawal_amount: state.cketh_minimum_withdrawal_amount,
             first_synced_block: state.first_scraped_block_number,
             last_observed_block: state.last_observed_block_number,

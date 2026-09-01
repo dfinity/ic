@@ -31,7 +31,7 @@ use ic_cketh_test_utils::{
     DEFAULT_USER_SUBACCOUNT, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
     DEFAULT_WITHDRAWAL_TRANSACTION, DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE,
     ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, GAS_USED, JsonRpcProvider,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, SWEEPER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use ic_management_canister_types::CanisterStatusType;
@@ -1200,9 +1200,10 @@ fn should_retrieve_minter_info() {
     assert_eq!(
         info_at_start,
         MinterInfo {
-            // The minter derives its address from a timer scheduled at install, so a
-            // fixture that has executed no round has not derived it yet.
+            // The minter derives its addresses from a timer scheduled at install, so a
+            // fixture that has executed no round has not derived them yet.
             minter_address: None,
+            sweeper_address: None,
             smart_contract_address: Some(format_ethereum_address_to_eip_55(
                 ETH_HELPER_CONTRACT_ADDRESS
             )),
@@ -1211,6 +1212,7 @@ fn should_retrieve_minter_info() {
             )),
             erc20_helper_contract_address: None,
             deposit_with_subaccount_helper_contract_address: None,
+            sweeper_contract_address: None,
             supported_ckerc20_tokens: None,
             minimum_withdrawal_amount: Some(Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)),
             ethereum_block_height: Some(Finalized),
@@ -1218,6 +1220,7 @@ fn should_retrieve_minter_info() {
             eth_balance: Some(Nat::from(0_u8)),
             last_gas_fee_estimate: None,
             erc20_balances: None,
+            minimum_deposit_amounts: None,
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_deposit_with_subaccount_scraped_block_number: Some(
@@ -1236,6 +1239,7 @@ fn should_retrieve_minter_info() {
         info_after_deposit,
         MinterInfo {
             minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            sweeper_address: Some(format_ethereum_address_to_eip_55(SWEEPER_ADDRESS)),
             last_observed_block_number: Some(Nat::from(new_eth_scraped_block_number)),
             eth_balance: Some(Nat::from(EXPECTED_BALANCE)),
             last_eth_scraped_block_number: Some(new_eth_scraped_block_number.into()),
@@ -1267,6 +1271,24 @@ fn should_retrieve_minter_info() {
                 .map(|balance| balance - debited_amount),
             ..info_after_deposit
         }
+    );
+}
+
+#[test]
+fn should_retrieve_sweeper_contract_address_after_upgrade() {
+    const SWEEPER_CONTRACT_ADDRESS: &str = "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38";
+
+    let cketh = CkEthSetup::default();
+    assert_eq!(cketh.get_minter_info().sweeper_contract_address, None);
+
+    let cketh = cketh.check_audit_logs_and_upgrade(UpgradeArg {
+        ethereum_sweeper_contract_address: Some(SWEEPER_CONTRACT_ADDRESS.to_string()),
+        ..Default::default()
+    });
+
+    assert_eq!(
+        cketh.get_minter_info().sweeper_contract_address,
+        Some(format_ethereum_address_to_eip_55(SWEEPER_CONTRACT_ADDRESS))
     );
 }
 
