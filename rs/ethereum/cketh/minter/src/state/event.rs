@@ -11,8 +11,8 @@ use crate::state::transactions::{
 };
 use crate::timed_sized_map::Timestamp;
 use crate::tx::{
-    Eip1559TransactionRequest, SignedEip1559TransactionRequest, SignedSweepTransaction,
-    SweepTransaction, TransactionSignature,
+    AuthorizationRequest, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
+    SignedSweepTransaction, SweepTransaction, TransactionSignature,
 };
 use candid::Principal;
 use ic_ethereum_types::Address;
@@ -234,6 +234,18 @@ pub enum EventType {
         /// usable for the chain, the deposit helper and the account named here.
         #[n(0)]
         request: AttestationRequest,
+        #[n(1)]
+        signature: TransactionSignature,
+    },
+    /// A deposit address authorized the sweeper contract to run as its code. Signing costs a
+    /// threshold-ECDSA signature, so the tuple is recorded and every later sweep of the same
+    /// address reuses it rather than signing another.
+    #[n(34)]
+    AuthorizedDepositAddress {
+        /// What was signed, which is also what replay keys the authorization by: a signature is
+        /// only usable for the chain, the delegate and the nonce named here.
+        #[n(0)]
+        request: AuthorizationRequest,
         #[n(1)]
         signature: TransactionSignature,
     },

@@ -1945,7 +1945,9 @@ message InstallCode {
   optional bytes arg_hash = 7;
 
   message CanisterUpgradeOptions {
-    // Whether to skip the canister's pre_upgrade hook.
+    // Whether to skip the canister's pre_upgrade hook. This would generally be
+    // used in emergencies. See the corresponding field in the Management
+    // canister API.
     optional bool skip_pre_upgrade = 1;
 
     // Whether to retain (keep) or drop (replace) the canister's Wasm main
