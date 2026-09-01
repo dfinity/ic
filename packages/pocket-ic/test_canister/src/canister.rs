@@ -48,10 +48,10 @@ impl RejectionCode {
     }
 }
 
-/// Translates a failed call into the reject code and message `canister_http`
-/// reports back over Candid.
-fn map_call_error(err: CallError) -> (RejectionCode, String) {
-    match err {
+/// Translates a failed call into the reject code and message the endpoints below
+/// report back over Candid.
+fn map_call_error(err: impl Into<CallError>) -> (RejectionCode, String) {
+    match err.into() {
         CallError::CallRejected(rejected) => (
             RejectionCode::from_raw(rejected.raw_reject_code()),
             rejected.reject_message().to_string(),
@@ -430,6 +430,29 @@ async fn canister_http_with_transform(http_server_addr: String) -> HttpRequestRe
 }
 
 // inter-canister calls
+
+/// Proxies a call to `method` of `callee`, passing the already Candid-encoded
+/// `args` verbatim and attaching `cycles` cycles.
+///
+/// Both the argument and the reply are passed through undecoded, so a test can use
+/// the callee's authoritative Candid types instead of copies maintained here. That
+/// is what makes it possible to call a management canister endpoint
+/// `ic-cdk-management-canister` does not expose (`flexible_http_request`) or to set
+/// a field it does not expose (`http_request`'s `pricing_version`).
+#[update]
+async fn proxy_call(
+    callee: Principal,
+    method: String,
+    args: ByteBuf,
+    cycles: u128,
+) -> Result<ByteBuf, (RejectionCode, String)> {
+    Call::unbounded_wait(callee, &method)
+        .with_raw_args(&args)
+        .with_cycles(cycles)
+        .await
+        .map(|response| ByteBuf::from(response.into_bytes()))
+        .map_err(map_call_error)
+}
 
 #[update]
 async fn whoami() -> String {
