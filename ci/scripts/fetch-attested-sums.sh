@@ -60,13 +60,6 @@
 # hash for the wrong artifact. The subject names are trustworthy because the
 # pinned --signer-workflow's attest-uploads job generates them from its own
 # upload manifest.
-#
-# Negative tests (documented per the house style for download verification):
-# flipping one hex char in the downloaded SHA256SUMS, passing the commit of a
-# different build, serving another directory's SHA256SUMS at this directory's
-# URL (cross-directory substitution), or presenting an attestation minted
-# from a ref outside <source-ref-regex> each make this script exit non-zero
-# before the file is used.
 
 set -euo pipefail
 
