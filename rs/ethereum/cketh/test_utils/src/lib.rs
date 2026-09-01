@@ -1,4 +1,4 @@
-use crate::anvil::Anvil;
+use crate::anvil::{Anvil, SweepContracts};
 use crate::events::MinterEventAssert;
 use crate::flow::{
     ApprovalFlow, DepositFlow, DepositParams, LedgerTransactionAssert, WithdrawalFlow,
@@ -100,6 +100,11 @@ pub const USDC_ERC20_CONTRACT_ADDRESS: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0c
 pub const USDC_ERC20_CONTRACT_ADDRESS_LOWERCASE: &str =
     "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 pub const MINTER_ADDRESS: &str = "0x30a14171b7c4c93ff5213f82eeb74f7c7e3f1ebc";
+/// The minter's dedicated sweeper address, derived from the same test key as [`MINTER_ADDRESS`]
+/// under the sweeper derivation path. Hardcoded as the value that derivation is expected to
+/// produce, so a test can name it before the minter is installed; `MinterInfo::sweeper_address`
+/// reports what the running minter actually derived. A test that funds it asserts the sweep really
+/// was sent from here, so a stale value fails loudly.
 pub const SWEEPER_ADDRESS: &str = "0x07e326c6604e3801270fc52ffb7ad3d6c5dfe89c";
 pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
@@ -169,9 +174,15 @@ impl CkEthSetup {
     }
 
     pub fn add_support_for_subaccount(self) -> Self {
-        self.upgrade_minter_to_add_deposit_with_subaccount_helper_contract(
-            DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS.to_string(),
+        self.add_support_for_subaccount_helper(
+            Address::from_str(DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS).unwrap(),
         )
+    }
+
+    /// Points the minter at a specific deposit helper, for a harness that deploys its own rather
+    /// than mocking the mainnet one.
+    pub fn add_support_for_subaccount_helper(self, helper: Address) -> Self {
+        self.upgrade_minter_to_add_deposit_with_subaccount_helper_contract(helper.to_string())
     }
 
     pub fn deposit<T: Into<DepositParams>>(self, params: T) -> DepositFlow {
@@ -862,7 +873,13 @@ enum EthereumBackend {
     /// canisters themselves are created and installed in the same order as for
     /// [`EthereumBackend::Mocked`] — only their init args differ; [`crate::live`] is the one
     /// that switches the PocketIC instance to live outcalls, once its whole fixture is built.
-    Anvil(Arc<Anvil>),
+    ///
+    /// `sweep_contracts` are already deployed on that node when set, so the minter is installed
+    /// knowing which delegate its deposit addresses delegate to.
+    Anvil {
+        anvil: Arc<Anvil>,
+        sweep_contracts: Option<SweepContracts>,
+    },
 }
 
 impl EthereumBackend {
@@ -870,7 +887,7 @@ impl EthereumBackend {
         InstallArgs {
             override_provider: match self {
                 EthereumBackend::Mocked => None,
-                EthereumBackend::Anvil(anvil) => Some(OverrideProvider {
+                EthereumBackend::Anvil { anvil, .. } => Some(OverrideProvider {
                     override_url: Some(RegexSubstitution {
                         pattern: ".*".into(),
                         replacement: anvil.url().to_string(),
@@ -886,7 +903,17 @@ impl EthereumBackend {
             // The mocked responses replay a historical mainnet snapshot, long since finalized.
             EthereumBackend::Mocked => CandidBlockTag::Finalized,
             // A fresh anvil chain has no finalized blocks, so track its "latest" head instead.
-            EthereumBackend::Anvil(_) => CandidBlockTag::Latest,
+            EthereumBackend::Anvil { .. } => CandidBlockTag::Latest,
+        }
+    }
+
+    /// The delegate the minter sweeps through, if this backend has one deployed.
+    fn sweeper_contract_address(&self) -> Option<String> {
+        match self {
+            EthereumBackend::Mocked => None,
+            EthereumBackend::Anvil {
+                sweep_contracts, ..
+            } => sweep_contracts.map(|contracts| contracts.delegate.to_string()),
         }
     }
 
@@ -894,7 +921,7 @@ impl EthereumBackend {
         match self {
             // The block the mocked JSON-RPC responses are canned to scrape logs from onward.
             EthereumBackend::Mocked => LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
-            EthereumBackend::Anvil(_) => 0_u8.into(),
+            EthereumBackend::Anvil { .. } => 0_u8.into(),
         }
     }
 }
@@ -914,7 +941,7 @@ fn install_minter(env: &PocketIc, canisters: &CkEthCanisters, backend: &Ethereum
         minimum_withdrawal_amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
         last_scraped_block_number: backend.last_scraped_block_number(),
         evm_rpc_id: Some(canisters.evm_rpc_id),
-        ethereum_sweeper_contract_address: None,
+        ethereum_sweeper_contract_address: backend.sweeper_contract_address(),
         next_sweeper_transaction_nonce: None,
     };
     env.install_canister(

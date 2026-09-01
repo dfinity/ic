@@ -16,7 +16,9 @@ use crate::runtime::CanisterRuntime;
 use crate::state::automatic_deposits::{AutomaticDeposits, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
-use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
+use crate::state::transactions::{
+    Erc20WithdrawalRequest, SweepRequest, TransactionCallData, WithdrawalRequest,
+};
 use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::AuthorizationRequest;
 use crate::tx::GasFeeEstimate;
@@ -487,6 +489,26 @@ impl State {
         self.update_balance_upon_withdrawal(withdrawal_id, receipt);
     }
 
+    /// Finalizes a sweep: releases the deposits it held and settles what it actually cost the
+    /// sweeper address. The sweeper pipeline is never reimbursed and holds no ckETH balance, so
+    /// unlike the main pipeline there is no reimbursement tail and no ckETH accounting here.
+    pub fn record_finalized_sweeper_transaction(
+        &mut self,
+        sweep_id: &SweepId,
+        receipt: &TransactionReceipt,
+    ) {
+        let max_transaction_fee = self
+            .automatic_deposits
+            .processed_sweep_request(sweep_id)
+            .expect("BUG: missing sweep request")
+            .max_transaction_fee;
+        let finalized = self
+            .automatic_deposits
+            .record_finalized_sweep_transaction(*sweep_id, receipt);
+        self.sweeper_funding
+            .record_finalized_sweep(max_transaction_fee, &finalized);
+    }
+
     pub fn next_request_id(&mut self) -> u64 {
         let current_request_id = self.http_request_counter;
         // overflow is not an issue here because we only use `next_request_id` to correlate
@@ -502,6 +524,15 @@ impl State {
                 .erc20_balances
                 .erc20_add(event.erc20_contract_address, event.value),
         };
+    }
+
+    /// Takes the whole cost an accepted sweep can put on the sweeper address out of the balance
+    /// bound: its fee ceiling, which caps every resubmission the pipeline makes for it. An ERC-20
+    /// sweep moves its tokens through call data and carries no ETH value, so the fee is all it
+    /// can cost.
+    pub fn update_sweeper_balance_upon_accepted_sweep(&mut self, request: &SweepRequest) {
+        self.sweeper_funding
+            .record_accepted_sweep(request.max_transaction_fee);
     }
 
     fn update_balance_upon_withdrawal(
