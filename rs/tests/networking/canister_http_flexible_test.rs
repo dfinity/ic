@@ -47,17 +47,15 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
+use ic_types::{NodeId, NumBytes, PrincipalId, canister_http::Replication};
 use ic_types_cycles::CanisterCyclesCostSchedule;
-use proxy_canister::{FlexibleRemoteHttpRequest, RejectionCode};
+use proxy_canister::{
+    FlexibleRemoteHttpRequest, FlexibleResponseWithRefundedCycles, RejectionCode,
+};
 use slog::info;
+use std::time::Instant;
 
 /// The cycles attached to each flexible outcall.
-///
-/// Sized for the worst case in this suite — a 2 MiB response on a 4-node
-/// committee, which costs on the order of 10^10 cycles under pay-as-you-go — with
-/// ample headroom, while staying small enough that every test in the parallel
-/// suite can have one in flight at once against the proxy canister's balance. On
-/// a free subnet nothing is charged and the whole payment comes back.
 const CYCLES: u64 = 500_000_000_000;
 
 /// The application subnet has 4 nodes (see `setup`). With the default
@@ -170,12 +168,6 @@ fn proxy_canister_on<'a>(
 
 /// Points a transform that names the default proxy canister at the proxy the
 /// scenario is actually running against.
-///
-/// A transform has to be a method on the calling canister, and each application
-/// subnet has its own proxy. Scenarios name their own canister with
-/// [`proxy_principal`], so exactly those are retargeted; one that names a different
-/// principal on purpose — see `test_reject_invalid_transform_principal` — is left
-/// alone, which is what keeps it a negative test.
 fn retarget_transform(
     args: &mut FlexibleCanisterHttpRequestArgs,
     env: &TestEnv,
@@ -235,12 +227,27 @@ async fn send_flexible(
     args: FlexibleCanisterHttpRequestArgs,
     cycles: u64,
 ) -> Result<Result<FlexibleHttpRequestResult, (RejectionCode, String)>> {
+    send_flexible_reporting_refund(proxy, args, cycles)
+        .await
+        .map(|(result, _refunded)| result)
+}
+
+/// Like [`send_flexible`], but also reports the cycles that came back on the reply
+/// — everything the payment covered beyond the base fee and the allowances.
+async fn send_flexible_reporting_refund(
+    proxy: &Canister<'_>,
+    args: FlexibleCanisterHttpRequestArgs,
+    cycles: u64,
+) -> Result<(
+    Result<FlexibleHttpRequestResult, (RejectionCode, String)>,
+    u64,
+)> {
     // A failure here is a transport-level error talking to the proxy canister,
     // not an outcall outcome; return it so the retry loop can absorb blips.
     let res = proxy
         .update_(
             "send_flexible_request",
-            candid_one::<Result<Vec<u8>, (RejectionCode, String)>, FlexibleRemoteHttpRequest>,
+            candid_one::<FlexibleResponseWithRefundedCycles, FlexibleRemoteHttpRequest>,
             FlexibleRemoteHttpRequest {
                 request: args,
                 cycles,
@@ -249,10 +256,12 @@ async fn send_flexible(
         .await
         .map_err(|err| anyhow::anyhow!("update call to proxy canister failed: {err}"))?;
 
-    Ok(res.map(|bytes| {
+    let refunded_cycles = res.refunded_cycles;
+    let result = res.result.map(|bytes| {
         Decode!(&bytes, FlexibleHttpRequestResult)
             .expect("Failed to decode FlexibleHttpRequestResult")
-    }))
+    });
+    Ok((result, refunded_cycles))
 }
 
 /// Runs `assert_result` against the outcome of the flexible outcall built by
@@ -1611,6 +1620,27 @@ fn test_fault_tolerance(env: TestEnv) {
 /// suite asks for.
 const SMALL_MAX_RESPONSE_BYTES: u64 = 16 * 1024;
 
+/// Prices a flexible outcall to `url` the way the replica will.
+///
+/// The committee is stood in for by as many node ids as the subnet has: only its
+/// size reaches the fee formulas, not who is in it. The request's variable parts
+/// are just the URL — [`get_args`] sets no headers, body or transform.
+fn flexible_fees(url: &str, max_response_bytes: u64) -> PaygFees {
+    let committee = (0..SUBNET_NODES)
+        .map(|i| NodeId::from(PrincipalId::new_node_test_id(i as u64)))
+        .collect();
+    payg_fees(
+        &Replication::Flexible {
+            committee,
+            min_responses: DEFAULT_MIN_RESPONSES as u32,
+            max_responses: SUBNET_NODES,
+        },
+        NumBytes::from(url.len() as u64),
+        Some(NumBytes::from(max_response_bytes)),
+        SUBNET_NODES as usize,
+    )
+}
+
 /// Reads the proxy canister's own cycle balance.
 async fn cycle_balance(proxy: &Canister<'_>) -> Result<u128> {
     proxy
@@ -1668,14 +1698,29 @@ fn test_charged_and_refunded(env: TestEnv) {
                 let before = cycle_balance(&proxy).await?;
                 // Capped small on purpose: the second outcall below leaves it unset
                 // and the two charges are compared.
-                let mut args = get_args(format!("{}/ascii/priced", webserver_base(&env)));
+                let url = format!("{}/ascii/priced", webserver_base(&env));
+                let mut args = get_args(url.clone());
                 args.max_response_bytes = Some(SMALL_MAX_RESPONSE_BYTES);
-                let payloads = expect_ok(
-                    send_flexible(&proxy, args, CYCLES).await?,
-                    DEFAULT_MIN_RESPONSES,
-                    DEFAULT_MAX_RESPONSES,
-                )?;
+                let started = Instant::now();
+                let (result, refunded_cycles) =
+                    send_flexible_reporting_refund(&proxy, args, CYCLES).await?;
+                let payloads = expect_ok(result, DEFAULT_MIN_RESPONSES, DEFAULT_MAX_RESPONSES)?;
                 expect_all_bodies(&payloads, b"priced")?;
+                // Bounds the HTTP round trip the replicas were charged for.
+                let elapsed = started.elapsed();
+
+                // Everything the payment covered beyond the base fee and the
+                // allowances was never at risk, so it comes back on the reply. Unlike
+                // the charge below this is exact: it turns on no measurement.
+                let fees = flexible_fees(&url, SMALL_MAX_RESPONSE_BYTES);
+                let withheld = fees.withheld(u128::from(CYCLES));
+                let expected_refund = u128::from(CYCLES) - withheld;
+                if u128::from(refunded_cycles) != expected_refund {
+                    bail!(
+                        "the reply returned {refunded_cycles} cycles, not the {expected_refund} \
+                         left of a {CYCLES}-cycle payment once {withheld} was withheld"
+                    );
+                }
                 let after = cycle_balance(&proxy).await?;
 
                 // The refund is credited after the response is delivered, so the
@@ -1686,12 +1731,24 @@ fn test_charged_and_refunded(env: TestEnv) {
                 if charged == 0 {
                     bail!("a paid outcall on a normal cost schedule charged nothing");
                 }
-                // A small outcall costs orders of magnitude less than the payment
-                // that was attached, so most of it has to have come back.
-                if charged >= u128::from(CYCLES) / 10 {
+                // What stays charged is the base fee plus what the outcall really
+                // spent, which cannot be predicted — it counts a measured round trip
+                // and however many replicas' receipts consensus took — but is
+                // bracketed by what a canister would have been quoted for it.
+                if charged <= fees.base_fee {
                     bail!(
-                        "expected the refund to return most of the {CYCLES}-cycle payment, \
-                         but {charged} cycles were kept"
+                        "charged {charged} cycles, no more than the {} base fee — yet \
+                         delivering a response always costs something on top of it",
+                        fees.base_fee
+                    );
+                }
+                let bound = fees.quote(elapsed) + CARRIER_MESSAGE_COSTS;
+                if charged > bound {
+                    bail!(
+                        "charged {charged} cycles, more than the {bound} this should have \
+                         cost: what ic0.cost_http_request_v2 quotes for the resources it \
+                         consumed, plus the messages that carried it. {withheld} was withheld up \
+                         front, so an unrefunded allowance would show as a charge near that."
                     );
                 }
 

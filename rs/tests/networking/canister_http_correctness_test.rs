@@ -27,7 +27,6 @@ use ic_agent::{
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
-use ic_https_outcalls_pricing::MAX_RESPONSE_TIME;
 use ic_management_canister_types_private::{
     HttpHeader, HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO,
     TransformContext, TransformFunc,
@@ -45,8 +44,8 @@ use ic_system_test_driver::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
-    NumInstructions, NumberOfNodes, RegistryVersion,
-    canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES, ReplicationKind},
+    RegistryVersion,
+    canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES},
     time::UNIX_EPOCH,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
@@ -460,7 +459,7 @@ fn test_no_cycles_attached(env: TestEnv) {
                 request.clone(),
                 handlers.subnet_size,
             )),
-            _ => payg_fees(proxy, request.clone(), handlers.subnet_size).base_fee,
+            _ => fees_for(proxy, request.clone(), handlers.subnet_size).base_fee,
         });
 
         let (response, _) = block_on(submit_outcall(
@@ -2824,18 +2823,13 @@ fn pay_as_you_go_args(
     }
 }
 
-/// What pay-as-you-go withholds up front for `request` on a `subnet_size`-node
-/// subnet that charges: the base fee, the worst-case usage fee that bounds the
-/// per-replica allowances, and how many replicas share them.
-///
-/// These come from the same functions the replica prices with, so the assertions
-/// below stay correct if the fee formulas change.
-fn payg_fees(
+/// Prices `request` the way the replica will, deriving its replication and the size
+/// of its variable parts from the request itself.
+fn fees_for(
     proxy_canister: CanisterId,
     request: UnvalidatedCanisterHttpRequestArgs,
     subnet_size: usize,
 ) -> PaygFees {
-    let cm = CyclesAccountManagerBuilder::new().build();
     let max_response_bytes = request.max_response_bytes.map(NumBytes::from);
     // The replication is whatever the request asks for, which is what the fees
     // depend on; the single node stands in for the subnet only to build a context.
@@ -2852,106 +2846,14 @@ fn payg_fees(
         &mut rand::thread_rng(),
     )
     .expect("the request should be valid enough to price");
-    let subnet_nodes = NumberOfNodes::from(subnet_size as u32);
 
-    PaygFees {
-        base_fee: cm
-            .http_request_base_fee(
-                dummy_context.variable_parts_size(),
-                &dummy_context.replication,
-                CyclesAccountManagerSubnetConfig::new(
-                    subnet_size,
-                    CanisterCyclesCostSchedule::Normal,
-                    DEFAULT_REFERENCE_SUBNET_SIZE,
-                ),
-            )
-            .real()
-            .get(),
-        max_usage_fee: cm
-            .max_http_request_usage_fee(
-                &dummy_context.replication,
-                max_response_bytes,
-                subnet_nodes,
-            )
-            .get(),
-        node_count: dummy_context.replication.node_count(subnet_nodes),
-        request_size: dummy_context.variable_parts_size(),
-        replication_kind: dummy_context.replication.kind(),
+    payg_fees(
+        &dummy_context.replication,
+        dummy_context.variable_parts_size(),
+        max_response_bytes,
         subnet_size,
-    }
+    )
 }
-
-struct PaygFees {
-    /// Charged up front and never refunded.
-    base_fee: u128,
-    /// The most the outcall could ever spend beyond the base fee. Withheld as
-    /// per-replica allowances whenever the payment covers it.
-    max_usage_fee: u128,
-    /// How many replicas the allowances are split between.
-    node_count: usize,
-    /// Enough of the request to price hypothetical outcalls against it.
-    request_size: NumBytes,
-    replication_kind: ReplicationKind,
-    subnet_size: usize,
-}
-
-impl PaygFees {
-    /// What `ic0.cost_http_request_v2` quotes for an outcall. This should be an upper bound
-    /// on what the outcall actually spends.
-    ///
-    /// The round trip is bounded by how long the whole call took.
-    fn charge_ceiling(&self, elapsed: Duration) -> u128 {
-        // What the server sends back and every replica downloads: a handful of bytes
-        // of body plus httpbin's five overhead headers (see `HTTPBIN_OVERHEAD_RESPONSE_HEADERS`).
-        const RAW_RESPONSE_CEILING: u64 = 512;
-        // What the transform hands back, and so what consensus puts into a block:
-        // the same body with the headers stripped.
-        const TRANSFORMED_RESPONSE_CEILING: u64 = 64;
-        // Decoding half a kilobyte, clearing a vector and re-encoding.
-        const TRANSFORM_INSTRUCTIONS: u64 = 100_000;
-
-        CyclesAccountManagerBuilder::new()
-            .build()
-            .http_request_fee_v2(
-                self.request_size,
-                elapsed.min(MAX_RESPONSE_TIME),
-                NumBytes::from(RAW_RESPONSE_CEILING),
-                NumInstructions::from(TRANSFORM_INSTRUCTIONS),
-                NumBytes::from(TRANSFORMED_RESPONSE_CEILING),
-                self.replication_kind,
-                CyclesAccountManagerSubnetConfig::new(
-                    self.subnet_size,
-                    CanisterCyclesCostSchedule::Normal,
-                    DEFAULT_REFERENCE_SUBNET_SIZE,
-                ),
-            )
-            .real()
-            .get()
-    }
-
-    /// What the request has withheld from it up front, given a `payment` ample
-    /// enough that the worst-case usage fee is what bounds the allowances rather
-    /// than the payment itself.
-    fn withheld(&self, payment: u128) -> u128 {
-        assert!(
-            self.max_usage_fee <= payment - self.base_fee,
-            "a payment of {payment} does not cover the worst-case usage fee of {} on top of \
-             the {} base fee, so the allowances are sized by the payment instead and the \
-             expectations below do not hold",
-            self.max_usage_fee,
-            self.base_fee
-        );
-        // The allowances are a per-replica share, so the total is rounded down to a
-        // whole number of shares.
-        self.base_fee + (self.max_usage_fee / self.node_count as u128) * self.node_count as u128
-    }
-}
-
-/// What the canister pays on a charging subnet for the messages that carry an
-/// outcall, over and above the outcall itself. `ic0.cost_http_request_v2` prices
-/// the outcall alone, but the balance pays for all of it, so the check below has to
-/// allow for this on top.
-const CARRIER_MESSAGE_COSTS: u128 = 10_000_000;
 
 /// Makes a pay-as-you-go outcall and checks how the caller was charged for it.
 ///
@@ -2970,7 +2872,7 @@ async fn assert_charged_as_quoted(
     request: UnvalidatedCanisterHttpRequestArgs,
 ) -> PaygFees {
     let payment = u128::from(HTTP_REQUEST_CYCLE_PAYMENT);
-    let fees = payg_fees(
+    let fees = fees_for(
         handlers.proxy_canister().canister_id(),
         request.clone(),
         handlers.subnet_size,
@@ -3015,7 +2917,7 @@ async fn assert_charged_as_quoted(
          delivering a response always costs something on top of it",
         fees.base_fee
     );
-    let quoted = fees.charge_ceiling(elapsed);
+    let quoted = fees.quote(elapsed);
     let bound = quoted + CARRIER_MESSAGE_COSTS;
     assert!(
         charged <= bound,
@@ -3085,7 +2987,7 @@ fn test_pay_as_you_go_base_fee_threshold(env: TestEnv) {
         get_proxy_canister_id(&env),
         format!("https://[{webserver_ipv6}]/ascii/threshold"),
     );
-    let base_fee = payg_fees(
+    let base_fee = fees_for(
         handlers.proxy_canister().canister_id(),
         request.clone(),
         handlers.subnet_size,

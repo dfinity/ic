@@ -15,6 +15,9 @@ rust_library(
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         # Keep sorted.
+        "//rs/config",
+        "//rs/cycles_account_manager",
+        "//rs/https_outcalls/pricing",
         "//rs/protobuf",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",

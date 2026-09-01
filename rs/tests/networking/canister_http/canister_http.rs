@@ -1,5 +1,8 @@
 use canister_test::Canister;
 use canister_test::Runtime;
+use ic_config::subnet_config::{CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE};
+use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
+use ic_https_outcalls_pricing::MAX_RESPONSE_TIME;
 use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -14,6 +17,10 @@ use ic_system_test_driver::driver::universal_vm::*;
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::{self, create_and_install, create_and_install_with_cycles};
 pub use ic_types::{CanisterId, PrincipalId};
+use ic_types::{
+    NumBytes, NumInstructions, NumberOfNodes,
+    canister_http::{Replication, ReplicationKind},
+};
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use slog::info;
 use std::env;
@@ -589,4 +596,122 @@ pub fn get_system_proxy_canister_id(env: &TestEnv) -> PrincipalId {
 /// (only with [`setup_with_free_and_paying_subnets`]).
 pub fn get_paying_proxy_canister_id(env: &TestEnv) -> PrincipalId {
     get_proxy_canister_id_for(env, CanisterCyclesCostSchedule::Normal)
+}
+
+// ===================== Pay-as-you-go fees =====================
+
+/// What the canister pays on a charging subnet for the messages that carry an
+/// outcall, over and above the outcall itself. `ic0.cost_http_request_v2` prices
+/// the outcall alone, but the balance pays for all of it, so a charge compared
+/// against a quote has to allow for this on top. Determined empirically.
+pub const CARRIER_MESSAGE_COSTS: u128 = 10_000_000;
+
+/// What pay-as-you-go withholds up front for an outcall, and what it is quoted.
+pub struct PaygFees {
+    /// Charged up front and never refunded.
+    pub base_fee: u128,
+    /// The most the outcall could ever spend beyond the base fee. Withheld as
+    /// per-replica allowances whenever the payment covers it.
+    pub max_usage_fee: u128,
+    /// How many replicas the allowances are split between.
+    pub node_count: usize,
+    request_size: NumBytes,
+    replication_kind: ReplicationKind,
+    subnet_size: usize,
+}
+
+/// Prices an outcall of the given `replication` the way the replica does, on a
+/// `subnet_size`-node subnet that charges.
+///
+/// `request_size` is the size of the request's variable parts — its URL, headers,
+/// body and transform context — which is what the base fee is charged on.
+pub fn payg_fees(
+    replication: &Replication,
+    request_size: NumBytes,
+    max_response_bytes: Option<NumBytes>,
+    subnet_size: usize,
+) -> PaygFees {
+    let subnet_nodes = NumberOfNodes::from(subnet_size as u32);
+    let cycles_config = CyclesAccountManagerSubnetConfig::new(
+        subnet_size,
+        CanisterCyclesCostSchedule::Normal,
+        DEFAULT_REFERENCE_SUBNET_SIZE,
+    );
+
+    PaygFees {
+        base_fee: paying_cycles_account_manager()
+            .http_request_base_fee(request_size, replication, cycles_config)
+            .real()
+            .get(),
+        max_usage_fee: paying_cycles_account_manager()
+            .max_http_request_usage_fee(replication, max_response_bytes, subnet_nodes)
+            .get(),
+        node_count: replication.node_count(subnet_nodes),
+        request_size,
+        replication_kind: replication.kind(),
+        subnet_size,
+    }
+}
+
+/// A cycles account manager configured the way an application subnet that charges
+/// is, which is all the fee functions above need of it.
+fn paying_cycles_account_manager() -> CyclesAccountManager {
+    CyclesAccountManager::new(
+        NumInstructions::from(0),
+        SubnetType::Application,
+        PrincipalId::new_subnet_test_id(0).into(),
+        CyclesAccountManagerConfig::application_subnet(),
+    )
+}
+
+impl PaygFees {
+    /// What the request has withheld from it up front, given a `payment` ample
+    /// enough that the worst-case usage fee is what bounds the allowances rather
+    /// than the payment itself. Panics if it is not, since the caller's
+    /// expectations would then be wrong in a way worth failing loudly on.
+    pub fn withheld(&self, payment: u128) -> u128 {
+        assert!(
+            self.max_usage_fee <= payment - self.base_fee,
+            "a payment of {payment} does not cover the worst-case usage fee of {} on top of \
+             the {} base fee, so the allowances are sized by the payment instead and the \
+             expectations that go with this are wrong",
+            self.max_usage_fee,
+            self.base_fee
+        );
+        // The allowances are a per-replica share, so the total is rounded down to a
+        // whole number of shares.
+        self.base_fee + (self.max_usage_fee / self.node_count as u128) * self.node_count as u128
+    }
+
+    /// What `ic0.cost_http_request_v2` quotes for an outcall that took the given time.
+    pub fn quote(&self, elapsed: Duration) -> u128 {
+        // What the server sends back and every replica downloads: a handful of bytes
+        // of body plus a few overhead headers, which come to a couple of hundred
+        // bytes with their names and values.
+        const RAW_RESPONSE_CEILING: u64 = 512;
+        // What a transform hands back, and so what consensus puts into a block. This
+        // does not actually move the quote — the consensus term is floored at
+        // `MAX_CANISTER_HTTP_REJECT_BYTES`, a reject of that size being deliverable
+        // in place of any response — but it is the honest figure to quote for.
+        const TRANSFORMED_RESPONSE_CEILING: u64 = 512;
+        // Decoding half a kilobyte, clearing a vector and re-encoding.
+        const TRANSFORM_INSTRUCTIONS: u64 = 100_000;
+
+        paying_cycles_account_manager()
+            .http_request_fee_v2(
+                self.request_size,
+                elapsed.min(MAX_RESPONSE_TIME),
+                NumBytes::from(RAW_RESPONSE_CEILING),
+                NumInstructions::from(TRANSFORM_INSTRUCTIONS),
+                NumBytes::from(TRANSFORMED_RESPONSE_CEILING),
+                self.replication_kind,
+                CyclesAccountManagerSubnetConfig::new(
+                    self.subnet_size,
+                    CanisterCyclesCostSchedule::Normal,
+                    DEFAULT_REFERENCE_SUBNET_SIZE,
+                ),
+            )
+            .real()
+            .get()
+    }
 }

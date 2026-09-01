@@ -44,12 +44,21 @@ use proxy_canister::{
     RejectionCode, RemoteHttpRequest, RemoteHttpResponse, UnvalidatedCanisterHttpRequestArgs,
 };
 use slog::{Logger, info};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// The cycles attached to the outcall. Far more than it could possibly spend, so
 /// that the worst-case usage fee rather than the payment is what sizes the
 /// per-replica allowances (asserted below).
 const PAYMENT: u64 = 500_000_000_000;
+
+/// What an idle canister pays per second on the 4-node subnet these tests use.
+///
+/// `CyclesAccountManagerConfig::application_subnet` charges 10_000 per second for
+/// simply existing plus 317_500 per GiB of storage, and every fee there is quoted
+/// for a 13-node reference subnet and scaled by `subnet_size /
+/// reference_subnet_size`. That comes to a little over 3_000 per second for this
+/// canister; rounding up to 5_000 covers its storage and leaves room to spare.
+const IDLE_CYCLES_PER_SECOND: u128 = 5_000;
 
 /// How often the proxy canister's balance is polled. The delivered context is kept
 /// around for a couple of minutes, so the wait for the refund spans many polls.
@@ -191,6 +200,7 @@ fn test_unresponsive_replica_is_refunded_on_timeout(env: TestEnv) {
             "Response delivered with {withheld} cycles withheld; waiting for the \
              delivered context to time out."
         );
+        let waiting_since = Instant::now();
         let after_timeout = retry_with_msg_async!(
             "the killed replica's allowance is refunded".to_string(),
             &logger,
@@ -198,8 +208,11 @@ fn test_unresponsive_replica_is_refunded_on_timeout(env: TestEnv) {
             POLL_INTERVAL,
             || async {
                 let balance = cycle_balance(&proxy).await;
-                if balance == after_delivery {
-                    bail!("the balance has not moved from {after_delivery} yet");
+                // Strictly greater, not merely different: on a subnet that charges,
+                // the canister pays for existing every round, so the balance moves
+                // downward on its own. Only a refund adds to it.
+                if balance <= after_delivery {
+                    bail!("the balance has not risen above {after_delivery} yet");
                 }
                 Ok(balance)
             }
@@ -207,16 +220,32 @@ fn test_unresponsive_replica_is_refunded_on_timeout(env: TestEnv) {
         .await
         .expect("the killed replica's allowance was never refunded");
 
-        assert_eq!(
-            after_timeout - after_delivery,
-            allowance,
-            "expected the timed-out context to refund the killed replica's whole \
-             per-replica allowance of {allowance} cycles"
+        let refunded = after_timeout
+            .checked_sub(after_delivery)
+            .unwrap_or_else(|| panic!("balance fell from {after_delivery} to {after_timeout}"));
+        // Nothing but the refund credits the canister, so the balance cannot have
+        // risen by more than the allowance.
+        assert!(
+            refunded <= allowance,
+            "the balance rose by {refunded} cycles, more than the {allowance} allowance the \
+             killed replica had to give back"
+        );
+        // It can have risen by a little less, though: the canister goes on paying to
+        // exist for as long as we wait, and that cannot be observed separately from
+        // the refund. Bounding it by the time actually waited keeps the check to a
+        // fraction of a percent of the allowance.
+        let idle = IDLE_CYCLES_PER_SECOND * waiting_since.elapsed().as_secs() as u128;
+        assert!(
+            refunded + idle >= allowance,
+            "the balance rose by {refunded} cycles, short of the {allowance} allowance by more \
+             than the {idle} the canister could have spent existing while we waited"
         );
         // What is left charged is the base fee plus what the outcall actually cost,
         // both far below a single allowance — which is what forfeiting the killed
         // replica's allowance would have added on top.
-        let charged = before - after_timeout;
+        let charged = before
+            .checked_sub(after_timeout)
+            .unwrap_or_else(|| panic!("balance grew from {before} to {after_timeout}"));
         assert!(
             charged < allowance,
             "the outcall kept {charged} cycles, as much as the whole per-replica \
@@ -253,12 +282,15 @@ async fn settled_balance(proxy: &Canister<'_>, logger: &Logger) -> u128 {
             let first = cycle_balance(proxy).await;
             tokio::time::sleep(POLL_INTERVAL).await;
             let second = cycle_balance(proxy).await;
-            if first != second {
-                bail!("the balance is still moving: {first} -> {second}");
+            // Settled means nothing is owed any more, which is not the same as the
+            // balance holding still: it drifts down as the canister pays for
+            // existing. Refunds are the only thing that adds to it.
+            if second > first {
+                bail!("the balance is still being credited: {first} -> {second}");
             }
             Ok(second)
         }
     )
     .await
-    .expect("the proxy canister's balance never settled")
+    .expect("the proxy canister kept being credited")
 }

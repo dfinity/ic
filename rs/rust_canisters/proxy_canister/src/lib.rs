@@ -110,6 +110,16 @@ pub struct ResponseWithRefundedCycles {
     pub refunded_cycles: u64,
 }
 
+/// The reply to a flexible outcall, with the cycles that came back on it.
+///
+/// `result` is the raw Candid encoding of a `flexible_http_request_result`, or the
+/// rejection the management canister answered with.
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct FlexibleResponseWithRefundedCycles {
+    pub result: Result<Vec<u8>, (RejectionCode, String)>,
+    pub refunded_cycles: u64,
+}
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct RemoteHttpStressResponse {
     pub response: RemoteHttpResponse,
