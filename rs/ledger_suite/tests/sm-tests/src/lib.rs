@@ -1384,7 +1384,7 @@ pub fn test_archive_duplicate_controllers(ledger_wasm: Vec<u8>) {
 /// change options in. Neither `archives()` nor the `ledger_num_archives` metric
 /// distinguishes the two cases, so this is worth pinning down in a test.
 ///
-/// The final step raises the threshold back down again, to show the new value is
+/// The final step lowers the threshold again, to show the new value is
 /// actually in force rather than merely accepted by the upgrade.
 pub fn test_change_trigger_threshold_before_archive_spawned<T>(
     ledger_wasm: Vec<u8>,
