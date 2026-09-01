@@ -12,7 +12,7 @@ use ic_tracing::ReloadHandles;
 use ic_tracing_jaeger_exporter::jaeger_exporter;
 use ic_tracing_logging_layer::logging_layer;
 use ic_types::{
-    PrincipalId, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
+    PlatformVersion, PrincipalId, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
     replica_version::REPLICA_BINARY_HASH,
 };
 use nix::unistd::{Pid, setpgid};
@@ -191,6 +191,10 @@ fn main() -> io::Result<()> {
         |_| ReplicaVersion::try_from(UNKNOWN_REPLICA_VERSION).unwrap(),
         |args| args.guestos_version.clone(),
     );
+    let platform_version = PlatformVersion {
+        guestos_version,
+        replica_version: replica_version.clone(),
+    };
     // Report replica version metric
     {
         let g = metrics_registry.int_gauge_vec(
@@ -292,8 +296,7 @@ fn main() -> io::Result<()> {
             config.clone(),
             node_id,
             subnet_id,
-            guestos_version.clone(),
-            replica_version.clone(),
+            platform_version,
             registry,
             crypto,
             cup_proto,

@@ -23,7 +23,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
-    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+    Height, NodeId, PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::{CatchUpPackage, HasHeight},
     crypto::{
         canister_threshold_sig::MasterPublicKey,
@@ -94,6 +94,7 @@ pub(crate) struct Upgrade {
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
+    guestos_version: ReplicaVersion,
     replica_config_file: PathBuf,
     pub image_path: PathBuf,
     registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
@@ -116,6 +117,7 @@ impl Upgrade {
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
+        guestos_version: ReplicaVersion,
         replica_config_file: PathBuf,
         node_id: NodeId,
         registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
@@ -135,6 +137,7 @@ impl Upgrade {
             subnet_assignment,
             node_id,
             replica_version,
+            guestos_version,
             replica_config_file,
             image_path: release_content_dir.join("image.bin"),
             registry_replicator,
@@ -369,11 +372,7 @@ impl Upgrade {
         self.stop_replica_if_new_recovery_cup(&latest_cup, old_cup_height);
 
         // This will start new child processes if any of them is not running
-        self.ensure_children_are_running(
-            self.replica_version.clone(),
-            subnet_id,
-            latest_registry_version,
-        )?;
+        self.ensure_children_are_running(subnet_id, latest_registry_version)?;
 
         // This will trigger an image download if one is already scheduled but we did
         // not arrive at the corresponding CUP yet.
@@ -607,15 +606,17 @@ impl Upgrade {
     /// Start all child processes appropriate for this node.
     fn ensure_children_are_running(
         &self,
-        replica_version: ReplicaVersion,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        self.processes_manager.write().unwrap().start_all(
-            replica_version,
-            subnet_id,
-            registry_version,
-        )
+        let platform_version = PlatformVersion {
+            guestos_version: self.guestos_version.clone(),
+            replica_version: self.replica_version.clone(),
+        };
+        self.processes_manager
+            .write()
+            .unwrap()
+            .start_all(platform_version, subnet_id, registry_version)
     }
 }
 
@@ -1523,12 +1524,10 @@ mod tests {
         std::fs::write(&ic_gateway_env_file, b"TEST_KEY=TEST_VALUE").unwrap();
 
         let mut replica_runner = Box::new(FakeProcessRunner::new());
-        let replica_version = ic_test_utilities_types::ids::test_replica_version();
         let replica_process_config = ReplicaProcessConfig {
             ic_binary_dir: ic_binary_dir.clone(),
             cup_path,
             replica_config_file: replica_config_file.clone(),
-            guestos_version: replica_version.clone(),
         };
         let mut ic_gateway_runner = Box::new(FakeProcessRunner::new());
         let ic_gateway_process_config = IcGatewayProcessConfig {
@@ -1541,7 +1540,13 @@ mod tests {
                 .start(
                     ReplicaProcess::build(
                         &replica_process_config,
-                        (current_replica_version.clone(), SUBNET_1),
+                        (
+                            PlatformVersion {
+                                guestos_version: current_replica_version.clone(),
+                                replica_version: current_replica_version.clone(),
+                            },
+                            SUBNET_1,
+                        ),
                     )
                     .unwrap(),
                 )
@@ -1610,6 +1615,7 @@ mod tests {
             manageboot_runner,
             cup_provider,
             subnet_assignment,
+            current_replica_version.clone(),
             current_replica_version,
             replica_config_file,
             node_id,

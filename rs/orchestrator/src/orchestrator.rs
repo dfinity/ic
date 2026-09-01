@@ -268,7 +268,6 @@ impl Orchestrator {
             ic_binary_dir: args.ic_binary_directory.clone(),
             cup_path: local_cup_reader.get_cup_path(),
             replica_config_file: args.replica_config_file.clone(),
-            guestos_version,
         };
         let ic_gateway_process_config = IcGatewayProcessConfig {
             ic_binary_dir: args.ic_binary_directory.clone(),
@@ -305,6 +304,7 @@ impl Orchestrator {
                 cup_provider,
                 Arc::clone(&subnet_assignment),
                 replica_version.clone(),
+                guestos_version,
                 args.replica_config_file.clone(),
                 node_id,
                 Arc::clone(&registry_replicator) as _,

@@ -48,7 +48,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
 use ic_types::{
-    CanisterId, CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
+    CanisterId, CryptoHashOfPartialState, Height, PlatformVersion, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
@@ -564,8 +564,10 @@ impl HttpEndpointBuilder {
             sig_verifier,
             node_id,
             subnet_id,
-            replica_version.clone(),
-            replica_version,
+            PlatformVersion {
+                guestos_version: replica_version.clone(),
+                replica_version,
+            },
             nns_subnet_id,
             log,
             self.consensus_cache,

@@ -26,7 +26,7 @@ use ic_test_utilities_registry::{
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    Height, RegistryVersion, ReplicaVersion, SubnetId, Time,
+    Height, PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId, Time,
     batch::{BatchPayload, ValidationContext},
     consensus::{Payload, block_maker::SubnetRecords},
     replica_config::ReplicaConfig,
@@ -183,8 +183,10 @@ impl DependenciesBuilder {
                 ReplicaConfig {
                     node_id: node_test_id(0),
                     subnet_id: subnet_records[0].1,
-                    guestos_version: replica_version.clone(),
-                    replica_version,
+                    platform_version: PlatformVersion {
+                        guestos_version: replica_version.clone(),
+                        replica_version,
+                    },
                 }
             },
             sorted_subnet_records: subnet_records,
@@ -288,7 +290,7 @@ impl DependenciesBuilder {
         let pool = TestConsensusPool::new(
             self.replica_config.node_id,
             self.replica_config.subnet_id,
-            self.replica_config.replica_version.clone(),
+            self.replica_config.platform_version.replica_version.clone(),
             self.pool_config,
             time_source.clone(),
             registry.clone(),

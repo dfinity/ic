@@ -1,5 +1,5 @@
 use ic_types::{
-    CanisterId, NodeId, PrincipalId, ReplicaVersion, SubnetId, UserId,
+    CanisterId, NodeId, PlatformVersion, PrincipalId, ReplicaVersion, SubnetId, UserId,
     messages::{CallContextId, EXPECTED_MESSAGE_ID_LENGTH, MessageId},
 };
 use std::str::FromStr;
@@ -156,6 +156,13 @@ pub fn node_test_id(i: u64) -> NodeId {
 
 pub fn test_replica_version() -> ReplicaVersion {
     ReplicaVersion::from_str("cafebabe0000ffff0000ffff0000ffff0000ffff").unwrap()
+}
+
+pub fn test_platform_version() -> PlatformVersion {
+    PlatformVersion {
+        guestos_version: test_replica_version(),
+        replica_version: test_replica_version(),
+    }
 }
 
 /// Converts a [`NodeId`] to a [`u64`].

@@ -90,13 +90,13 @@ impl DkgImpl {
         let ReplicaConfig {
             node_id,
             subnet_id,
-            replica_version,
+            platform_version,
             ..
         } = replica_config;
         Self {
             node_id,
             subnet_id,
-            replica_version,
+            replica_version: platform_version.replica_version,
             registry_client,
             state_reader,
             crypto,
@@ -451,7 +451,7 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_state::get_initial_state;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_platform_version};
     use ic_types::{
         RegistryVersion, ReplicaVersion,
         batch::ValidationContext,
@@ -836,8 +836,7 @@ mod tests {
                         // Node Id = 1, who is a dealer
                         node_id: node_test_id(1),
                         subnet_id: subnet_test_id(0),
-                        guestos_version: test_replica_version(),
-                        replica_version: test_replica_version(),
+                        platform_version: test_platform_version(),
                     })
                     .without_state_manager_expectations()
                     .build();
@@ -1115,8 +1114,7 @@ mod tests {
                     .with_replica_config(ReplicaConfig {
                         node_id: node_test_id(1),
                         subnet_id: subnet_test_id(0),
-                        guestos_version: test_replica_version(),
-                        replica_version: test_replica_version(),
+                        platform_version: test_platform_version(),
                     })
                     .build();
                 let Dependencies {
@@ -1130,8 +1128,7 @@ mod tests {
                         // This is not a dealer!
                         node_id: node_test_id(0),
                         subnet_id: subnet_test_id(0),
-                        guestos_version: test_replica_version(),
-                        replica_version: test_replica_version(),
+                        platform_version: test_platform_version(),
                     })
                     .build();
                 for state_manager in [&state_manager_1, &state_manager_2] {
@@ -1579,8 +1576,7 @@ mod tests {
                         .with_replica_config(ReplicaConfig {
                             node_id: node_test_id(1),
                             subnet_id: subnet_test_id(0),
-                            guestos_version: test_replica_version(),
-                            replica_version: test_replica_version(),
+                            platform_version: test_platform_version(),
                         })
                         .without_state_manager_expectations()
                         .build();
@@ -1589,8 +1585,7 @@ mod tests {
                         .with_replica_config(ReplicaConfig {
                             node_id: node_test_id(2),
                             subnet_id: subnet_test_id(0),
-                            guestos_version: test_replica_version(),
-                            replica_version: test_replica_version(),
+                            platform_version: test_platform_version(),
                         })
                         .without_state_manager_expectations()
                         .build();
@@ -2173,8 +2168,7 @@ mod tests {
                         // Node 2 is a non-dealer receiver
                         node_id: node_test_id(2),
                         subnet_id: subnet_test_id(0),
-                        guestos_version: test_replica_version(),
-                        replica_version: test_replica_version(),
+                        platform_version: test_platform_version(),
                     })
                     .with_dkg_interval_length(dkg_interval_length)
                     .without_state_manager_expectations()
