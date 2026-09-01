@@ -733,7 +733,7 @@ mod upgrade_ledger_suite {
     };
     use crate::scheduler::{
         Task, TaskError, UpgradeLedgerSuite, UpgradeLedgerSuiteError, UpgradeLedgerSuiteSubtask,
-        pop_if_ready,
+        encode_empty_arg, pop_if_ready,
     };
     use crate::state::{
         ARCHIVE_NODE_BYTECODE, CanisterUpgrade, INDEX_BYTECODE, Index, LEDGER_BYTECODE, Ledger,
@@ -1146,6 +1146,7 @@ mod upgrade_ledger_suite {
             &mut runtime,
             INDEX_PRINCIPAL,
             INDEX_BYTECODE.to_vec(),
+            encode_empty_arg(),
             Ok(()),
         );
         expect_start_canister(&mut runtime, INDEX_PRINCIPAL, Ok(()));
@@ -1165,6 +1166,7 @@ mod upgrade_ledger_suite {
             &mut runtime,
             LEDGER_PRINCIPAL,
             LEDGER_BYTECODE.to_vec(),
+            encode_empty_arg(),
             Ok(()),
         );
         expect_start_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
@@ -1209,6 +1211,7 @@ mod upgrade_ledger_suite {
             &mut runtime,
             INDEX_PRINCIPAL,
             INDEX_BYTECODE.to_vec(),
+            encode_empty_arg(),
             Ok(()),
         );
         expect_start_canister(&mut runtime, INDEX_PRINCIPAL, Ok(()));
@@ -1229,6 +1232,7 @@ mod upgrade_ledger_suite {
             &mut runtime,
             LEDGER_PRINCIPAL,
             LEDGER_BYTECODE.to_vec(),
+            encode_empty_arg(),
             Ok(()),
         );
         expect_start_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
@@ -1277,6 +1281,7 @@ mod upgrade_ledger_suite {
                 &mut runtime,
                 archive,
                 ARCHIVE_NODE_BYTECODE.to_vec(),
+                encode_empty_arg(),
                 Ok(()),
             );
             expect_start_canister(&mut runtime, archive, Ok(()));
@@ -1315,11 +1320,14 @@ mod upgrade_ledger_suite {
         runtime: &mut MockCanisterRuntime,
         canister_id: Principal,
         wasm_module: Vec<u8>,
+        upgrade_arg: Vec<u8>,
         mocked_result: Result<(), CallError>,
     ) {
         runtime
             .expect_upgrade_canister()
-            .withf(move |&id, module| id == canister_id && module == &wasm_module)
+            .withf(move |&id, module, arg| {
+                id == canister_id && module == &wasm_module && arg == &upgrade_arg
+            })
             .times(1)
             .return_const(mocked_result);
     }
@@ -1798,7 +1806,8 @@ mod mock {
             async fn upgrade_canister(
                 &self,
                 canister_id: Principal,
-                wasm_module:Vec<u8>,
+                wasm_module: Vec<u8>,
+                arg: Vec<u8>,
             ) -> Result<(), CallError>;
 
             async fn canister_cycles(

@@ -366,11 +366,18 @@ impl UpgradeLedgerSuiteSubtask {
                 let canisters = read_state(|s| s.managed_canisters(token_id).cloned())
                     .ok_or(UpgradeLedgerSuiteError::TokenNotFound(token_id.clone()))?;
                 let canister_id = ensure_canister_is_installed(token_id, canisters.index)?;
-                upgrade_canister::<Index, _>(canister_id, compressed_wasm_hash, runtime).await
+                upgrade_canister::<Index, _>(
+                    canister_id,
+                    compressed_wasm_hash,
+                    encode_empty_arg(),
+                    runtime,
+                )
+                .await
             }
             UpgradeLedgerSuiteSubtask::UpgradeLedger {
                 token_id,
                 compressed_wasm_hash,
+                ledger_upgrade_arg,
             } => {
                 log!(
                     INFO,
@@ -381,7 +388,13 @@ impl UpgradeLedgerSuiteSubtask {
                 let canisters = read_state(|s| s.managed_canisters(token_id).cloned())
                     .ok_or(UpgradeLedgerSuiteError::TokenNotFound(token_id.clone()))?;
                 let canister_id = ensure_canister_is_installed(token_id, canisters.ledger)?;
-                upgrade_canister::<Ledger, _>(canister_id, compressed_wasm_hash, runtime).await
+                upgrade_canister::<Ledger, _>(
+                    canister_id,
+                    compressed_wasm_hash,
+                    ledger_upgrade_arg.clone().unwrap_or_else(encode_empty_arg),
+                    runtime,
+                )
+                .await
             }
             UpgradeLedgerSuiteSubtask::DiscoverArchives { token_id } => {
                 log!(INFO, "Discovering archive canister(s) for {:?}", token_id);
@@ -413,8 +426,13 @@ impl UpgradeLedgerSuiteSubtask {
                 );
                 //We expect usually 0 or 1 archive, so a simple sequential strategy is good enough.
                 for canister_id in archives {
-                    upgrade_canister::<Archive, _>(canister_id, compressed_wasm_hash, runtime)
-                        .await?;
+                    upgrade_canister::<Archive, _>(
+                        canister_id,
+                        compressed_wasm_hash,
+                        encode_empty_arg(),
+                        runtime,
+                    )
+                    .await?;
                 }
                 Ok(())
             }
@@ -1289,6 +1307,7 @@ fn ensure_canister_is_installed<T>(
 async fn upgrade_canister<T: StorableWasm, R: CanisterRuntime>(
     canister_id: Principal,
     wasm_hash: &WasmHash,
+    upgrade_arg: Vec<u8>,
     runtime: &R,
 ) -> Result<(), UpgradeLedgerSuiteError> {
     let wasm = match read_wasm_store(|s| wasm_store_try_get::<T>(s, wasm_hash)) {
@@ -1310,7 +1329,7 @@ async fn upgrade_canister<T: StorableWasm, R: CanisterRuntime>(
         wasm_hash
     );
     runtime
-        .upgrade_canister(canister_id, wasm.to_bytes())
+        .upgrade_canister(canister_id, wasm.to_bytes(), upgrade_arg)
         .await
         .map_err(UpgradeLedgerSuiteError::UpgradeCanisterError)?;
 
