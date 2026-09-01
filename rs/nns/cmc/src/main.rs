@@ -74,7 +74,7 @@ const MAX_NOTIFY_HISTORY: usize = 1_000_000;
 /// The maximum number of old notification statuses we purge in one go.
 const MAX_NOTIFY_PURGE: usize = 100_000;
 /// The maximum number of pending burns to retry on a heartbeat.
-const MAX_PENDING_BURNS_PER_HEARTBEAT: usize = 100;
+const MAX_STALLED_ICP_BURNS_PER_HEARTBEAT: usize = 100;
 /// The maximum memo length.
 const MAX_MEMO_LENGTH: usize = 32;
 
@@ -93,7 +93,7 @@ const SUBNET_RENTAL_DEFAULT_CYCLES_LIMIT: u128 = 500e15 as u128;
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
     static LIMITER_REJECT_COUNT: Cell<u64> = const { Cell::new(0_u64) };
-    static PENDING_BURNS_IN_PROGRESS: Cell<bool> = const { Cell::new(false) };
+    static STALLED_ICP_BURNS_IN_PROGRESS: RefCell<Option<()>> = const { RefCell::new(None) };
 }
 
 fn with_state<R>(f: impl FnOnce(&State) -> R) -> R {
@@ -161,9 +161,15 @@ pub struct NotMeaningfulMemo {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub struct PendingBurn {
+pub struct StalledIcpBurn {
     pub from_subaccount: Subaccount,
     pub amount: Tokens,
+}
+
+impl StalledIcpBurn {
+    async fn retry(&self) -> Result<(), String> {
+        burn_and_log(self.from_subaccount, self.amount).await
+    }
 }
 
 /// Version of the State type.
@@ -370,7 +376,15 @@ pub struct StateV3 {
     // not grow without bound.
     pub last_purged_notification: BlockIndex,
 
-    pub pending_burns: BTreeMap<BlockIndex, PendingBurn>,
+    // When an ICP burn fails, it gets enqueued here for later retry. Retries
+    // are performed by retry_stalled_icp_burns, which gets called during
+    // heartbeat. When a retry is launched, the entry remains, and is not
+    // modified. Therefore, there is no way to tell from this collection
+    // whether a stalled burn is currently in flight, or waiting to be
+    // retried. This is keyed on BlockIndex so that earlier operations are
+    // retried first. BlockIndex is just a breadcrumb here; it is not needed
+    // to actually perform the burn.
+    pub block_index_to_stalled_icp_burn: BTreeMap<BlockIndex, StalledIcpBurn>,
 
     /// The current maturity modulation in basis points (permyriad), i.e.,
     /// a value of 123 corresponds to 1.23%.
@@ -448,10 +462,11 @@ impl From<StateV2> for StateV3 {
             total_cycles_minted,
             blocks_notified,
             last_purged_notification,
-            pending_burns: BTreeMap::new(),
             maturity_modulation_permyriad,
             subnet_types_to_subnets,
             update_exchange_rate_canister_state,
+
+            block_index_to_stalled_icp_burn: BTreeMap::new(),
         }
     }
 }
@@ -475,7 +490,13 @@ impl State {
                      Please upgrade to a hotfix instead."
                 ));
             }
-            Ordering::Less if stored_state_version == StateV2::state_version() => {
+            Ordering::Less => {
+                if stored_state_version != StateV2::state_version() {
+                    return Err(format!(
+                        "[cycles] ERROR: stored state version {stored_state_version:?} is lesser than the current state \
+                         version {current_state_version:?}! Did you forget to migrate the old to the current type?"
+                    ));
+                }
                 print(format!(
                     "[cycles] INFO: stored state version {stored_state_version:?} is lower than the current state version \
                     {current_state_version:?}. Migrating stable storage ... ",
@@ -483,12 +504,6 @@ impl State {
                 let state = deserializer.get_value::<StateV2>().unwrap();
                 deserializer.done().unwrap();
                 return Ok(State::from(state));
-            }
-            Ordering::Less => {
-                return Err(format!(
-                    "[cycles] ERROR: stored state version {stored_state_version:?} is lesser than the current state \
-                     version {current_state_version:?}! Did you forget to migrate the old to the current type?"
-                ));
             }
             Ordering::Equal => print(format!(
                 "[cycles] INFO: stored state version {stored_state_version:?} equals the current state version {current_state_version:?}. \
@@ -1383,7 +1398,7 @@ async fn notify_top_up(
         Some(result) => result,
         None => {
             let result =
-                process_top_up(block_index, canister_id, from, amount, limiter_to_use).await;
+                process_top_up(canister_id, from, amount, limiter_to_use, block_index).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.insert(
@@ -2132,7 +2147,7 @@ async fn process_create_canister(
     // If refund fails, we allow to retry.
     match do_create_canister(controller, cycles, subnet_selection, settings).await {
         Ok(canister_id) => {
-            burn_or_record_pending(block_index, sub, amount).await;
+            burn_or_record_stalled_icp(block_index, sub, amount).await;
             Ok(canister_id)
         }
         Err(err) => {
@@ -2157,7 +2172,7 @@ async fn process_mint_cycles(
     let cycles = tokens_to_cycles(amount)?;
     match do_mint_cycles(to_account, cycles, deposit_memo).await {
         Ok(deposit_result) => {
-            burn_or_record_pending(block_index, sub, amount).await;
+            burn_or_record_stalled_icp(block_index, sub, amount).await;
             Ok(NotifyMintCyclesSuccess {
                 block_index: deposit_result.block_index,
                 minted: cycles.into(),
@@ -2176,11 +2191,11 @@ async fn process_mint_cycles(
 }
 
 async fn process_top_up(
-    block_index: BlockIndex,
     canister_id: CanisterId,
     from: AccountIdentifier,
     amount: Tokens,
     limiter_to_use: CyclesMintingLimiterSelector,
+    block_index: BlockIndex,
 ) -> Result<Cycles, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -2192,7 +2207,7 @@ async fn process_top_up(
 
     match deposit_cycles(canister_id, cycles, true, limiter_to_use).await {
         Ok(()) => {
-            burn_or_record_pending(block_index, sub, amount).await;
+            burn_or_record_stalled_icp(block_index, sub, amount).await;
             Ok(cycles)
         }
         Err(err) => {
@@ -2206,37 +2221,45 @@ async fn process_top_up(
     }
 }
 
-fn record_pending_burn(
+fn record_stalled_icp_burn(
     source_block_index: BlockIndex,
     from_subaccount: Subaccount,
     amount: Tokens,
 ) {
     with_state_mut(|state| {
-        state.pending_burns.insert(
+        let clobbered = state.block_index_to_stalled_icp_burn.insert(
             source_block_index,
-            PendingBurn {
+            StalledIcpBurn {
                 from_subaccount,
                 amount,
             },
         );
+        if let Some(clobbered) = clobbered {
+            print(format!(
+                "[cycles] WARNING: overwrote existing pending burn at block index \
+                 {source_block_index}: {clobbered:?}"
+            ));
+        }
     });
 }
 
-fn clear_pending_burn(source_block_index: BlockIndex) {
+fn remove_stalled_icp_burn(source_block_index: BlockIndex) {
     with_state_mut(|state| {
-        state.pending_burns.remove(&source_block_index);
+        state
+            .block_index_to_stalled_icp_burn
+            .remove(&source_block_index);
     });
 }
 
-async fn burn_or_record_pending(
+async fn burn_or_record_stalled_icp(
     source_block_index: BlockIndex,
     from_subaccount: Subaccount,
     amount: Tokens,
 ) {
     match burn_and_log(from_subaccount, amount).await {
-        Ok(()) => clear_pending_burn(source_block_index),
+        Ok(()) => remove_stalled_icp_burn(source_block_index),
         Err(err) => {
-            record_pending_burn(source_block_index, from_subaccount, amount);
+            record_stalled_icp_burn(source_block_index, from_subaccount, amount);
             print(format!(
                 "[cycles] Burn for notification block {source_block_index} will be retried: {err}"
             ));
@@ -2244,48 +2267,34 @@ async fn burn_or_record_pending(
     }
 }
 
-struct PendingBurnsGuard;
-
-impl PendingBurnsGuard {
-    fn try_acquire() -> Option<Self> {
-        if PENDING_BURNS_IN_PROGRESS.with(|in_progress| in_progress.replace(true)) {
-            None
-        } else {
-            Some(Self)
-        }
-    }
-}
-
-impl Drop for PendingBurnsGuard {
-    fn drop(&mut self) {
-        PENDING_BURNS_IN_PROGRESS.with(|in_progress| in_progress.set(false));
-    }
-}
-
-async fn retry_pending_burns() {
-    let Some(_guard) = PendingBurnsGuard::try_acquire() else {
+/// Returns right away if another call is already in progress.
+async fn retry_stalled_icp_burns() {
+    let Ok(_guard) = ic_nervous_system_lock::acquire(&STALLED_ICP_BURNS_IN_PROGRESS, ()) else {
         return;
     };
 
-    let pending_burns = with_state(|state| {
+    let stalled_icp_burn_batch = with_state(|state| {
         state
-            .pending_burns
+            .block_index_to_stalled_icp_burn
             .iter()
-            .take(MAX_PENDING_BURNS_PER_HEARTBEAT)
-            .map(|(block_index, pending_burn)| (*block_index, pending_burn.clone()))
+            .take(MAX_STALLED_ICP_BURNS_PER_HEARTBEAT)
+            .map(|(block_index, stalled_icp_burn)| (*block_index, stalled_icp_burn.clone()))
             .collect::<Vec<_>>()
     });
 
-    for (source_block_index, pending_burn) in pending_burns {
-        match burn_and_log(pending_burn.from_subaccount, pending_burn.amount).await {
+    // Burns in the batch are awaited one at a time (not concurrently). Taking
+    // only MAX_STALLED_ICP_BURNS_PER_HEARTBEAT of them here is what bounds how
+    // long this function can take per heartbeat.
+    for (source_block_index, stalled_icp_burn) in stalled_icp_burn_batch {
+        match stalled_icp_burn.retry().await {
             Ok(()) => {
-                clear_pending_burn(source_block_index);
+                remove_stalled_icp_burn(source_block_index);
                 print(format!(
-                    "[cycles] Pending burn for notification block {source_block_index} succeeded."
+                    "[cycles] Stalled ICP burn for notification block {source_block_index} succeeded."
                 ));
             }
             Err(err) => print(format!(
-                "[cycles] Pending burn for notification block {source_block_index} failed: {err}"
+                "[cycles] Stalled ICP burn for notification block {source_block_index} failed: {err}"
             )),
         }
     }
@@ -2384,7 +2393,7 @@ async fn refund_icp(
     }
 
     if burned > Tokens::ZERO {
-        burn_or_record_pending(source_block_index, from_subaccount, burned).await;
+        burn_or_record_stalled_icp(source_block_index, from_subaccount, burned).await;
     }
 
     Ok(refund_block_index)
@@ -2672,7 +2681,7 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
 
 #[heartbeat]
 async fn canister_heartbeat() {
-    retry_pending_burns().await;
+    retry_stalled_icp_burns().await;
     if with_state(|state| state.exchange_rate_canister_id.is_some()) {
         update_exchange_rate().await
     }
@@ -2729,8 +2738,8 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             "Number of notifications stored in the cache.",
         )?;
         w.encode_gauge(
-            "cmc_pending_burn_count",
-            state.pending_burns.len() as f64,
+            "cmc_stalled_icp_burns",
+            state.block_index_to_stalled_icp_burn.len() as f64,
             "Number of pending ICP burns waiting to be retried.",
         )?;
         w.encode_gauge(
@@ -2894,9 +2903,9 @@ mod tests {
             ))),
         );
         state.blocks_notified = blocks_notified;
-        state.pending_burns.insert(
+        state.block_index_to_stalled_icp_burn.insert(
             61,
-            PendingBurn {
+            StalledIcpBurn {
                 from_subaccount: Subaccount::from(&PrincipalId::new_user_test_id(5)),
                 amount: Tokens::from_e8s(123_456),
             },
@@ -2936,46 +2945,77 @@ mod tests {
         let state = State::decode(&bytes).unwrap();
 
         assert_eq!(state, State::from(state_v2));
-        assert!(state.pending_burns.is_empty());
+        assert!(state.block_index_to_stalled_icp_burn.is_empty());
     }
 
     #[test]
-    fn test_record_and_clear_pending_burn() {
+    fn test_record_and_remove_stalled_icp_burn() {
         STATE.with(|state| state.replace(Some(State::default())));
 
         let block_index = 42;
         let from_subaccount = Subaccount([1; 32]);
         let amount = Tokens::from_e8s(123_456);
-        record_pending_burn(block_index, from_subaccount, amount);
+        record_stalled_icp_burn(block_index, from_subaccount, amount);
+
+        let other_block_index = 43;
+        let other_from_subaccount = Subaccount([2; 32]);
+        let other_amount = Tokens::from_e8s(789_012);
+        record_stalled_icp_burn(other_block_index, other_from_subaccount, other_amount);
 
         assert_eq!(
-            with_state(|state| state.pending_burns.get(&block_index).cloned()),
-            Some(PendingBurn {
-                from_subaccount,
-                amount,
-            }),
+            with_state(|state| state.block_index_to_stalled_icp_burn.clone()),
+            BTreeMap::from([
+                (
+                    block_index,
+                    StalledIcpBurn {
+                        from_subaccount,
+                        amount,
+                    },
+                ),
+                (
+                    other_block_index,
+                    StalledIcpBurn {
+                        from_subaccount: other_from_subaccount,
+                        amount: other_amount,
+                    },
+                ),
+            ]),
         );
 
-        clear_pending_burn(block_index);
+        remove_stalled_icp_burn(block_index);
 
         assert_eq!(
-            with_state(|state| state.pending_burns.get(&block_index).cloned()),
-            None,
+            with_state(|state| state.block_index_to_stalled_icp_burn.clone()),
+            BTreeMap::from([(
+                other_block_index,
+                StalledIcpBurn {
+                    from_subaccount: other_from_subaccount,
+                    amount: other_amount,
+                },
+            )]),
         );
     }
 
     #[test]
-    fn test_burn_or_record_pending_records_burn_when_burn_fails() {
+    fn test_burn_or_record_stalled_icp_records_burn_when_burn_fails() {
+        // State::default() has no minting_account_id set, so the burn below fails.
         STATE.with(|state| state.replace(Some(State::default())));
 
         let block_index = 42;
         let from_subaccount = Subaccount([1; 32]);
         let amount = Tokens::from_e8s(123_456);
-        futures::executor::block_on(burn_or_record_pending(block_index, from_subaccount, amount));
+        futures::executor::block_on(burn_or_record_stalled_icp(
+            block_index,
+            from_subaccount,
+            amount,
+        ));
 
         assert_eq!(
-            with_state(|state| state.pending_burns.get(&block_index).cloned()),
-            Some(PendingBurn {
+            with_state(|state| state
+                .block_index_to_stalled_icp_burn
+                .get(&block_index)
+                .cloned()),
+            Some(StalledIcpBurn {
                 from_subaccount,
                 amount,
             }),
