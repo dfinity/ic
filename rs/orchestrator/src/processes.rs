@@ -479,10 +479,10 @@ impl MultipleProcessesManager {
                     result = result.and(self.ic_gateway_manager.stop());
                 }
                 Some(SubnetType::CloudEngine) => {
-                    result =
-                        result.and(self
-                            .ic_gateway_manager
-                            .ensure_running(platform_version.replica_version));
+                    result = result.and(
+                        self.ic_gateway_manager
+                            .ensure_running(platform_version.replica_version),
+                    );
                 }
             }
         }

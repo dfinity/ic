@@ -141,7 +141,9 @@ impl Orchestrator {
         info!(
             logger,
             "Orchestrator started: version={}, guestos_version={}, config={:?}",
-            replica_version, guestos_version, config
+            replica_version,
+            guestos_version,
+            config
         );
         UtilityCommand::notify_host(
             format!("node-id {node_id}: starting with version {replica_version}").as_str(),

@@ -9,7 +9,9 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_time::FastForwardTimeSource;
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_platform_version, test_replica_version};
+use ic_test_utilities_types::ids::{
+    node_test_id, subnet_test_id, test_platform_version, test_replica_version,
+};
 use ic_types::{Height, batch::BatchContent, crypto::CryptoHash, replica_config::ReplicaConfig};
 use rand_chacha::{ChaChaRng, rand_core::SeedableRng};
 use std::{cell::RefCell, rc::Rc, sync::Arc};

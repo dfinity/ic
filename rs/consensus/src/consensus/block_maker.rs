@@ -744,7 +744,9 @@ mod tests {
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_test_utilities_consensus::fake::FromParent;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_platform_version, test_replica_version};
+    use ic_test_utilities_types::ids::{
+        node_test_id, subnet_test_id, test_platform_version, test_replica_version,
+    };
     use ic_types::{
         consensus::{
             CatchUpContent, CatchUpPackage, HasHeight, HasVersion, HashedRandomBeacon, dkg,
@@ -1223,7 +1225,10 @@ mod tests {
             let proposal = proposal.unwrap();
             let block = proposal.content.as_ref();
             // The block still uses the old version, not the new version.
-            assert_eq!(block.version(), &replica_config.platform_version.replica_version);
+            assert_eq!(
+                block.version(),
+                &replica_config.platform_version.replica_version
+            );
             // registry version 10 becomes effective.
             assert_eq!(
                 PoolReader::new(&pool).registry_version(proposal.height()),

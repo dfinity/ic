@@ -613,10 +613,11 @@ impl Upgrade {
             guestos_version: self.guestos_version.clone(),
             replica_version: self.replica_version.clone(),
         };
-        self.processes_manager
-            .write()
-            .unwrap()
-            .start_all(platform_version, subnet_id, registry_version)
+        self.processes_manager.write().unwrap().start_all(
+            platform_version,
+            subnet_id,
+            registry_version,
+        )
     }
 }
 

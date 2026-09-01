@@ -403,7 +403,11 @@ impl CanisterHttpPoolManagerImpl {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: response.content.is_reject(),
-                            replica_version: self.replica_config.platform_version.replica_version.clone(),
+                            replica_version: self
+                                .replica_config
+                                .platform_version
+                                .replica_version
+                                .clone(),
                         },
                         payment_receipt,
                     };
@@ -491,7 +495,9 @@ impl CanisterHttpPoolManagerImpl {
                 let share = &artifact.share;
 
                 // Reject shares from different replica versions
-                if share.content.replica_version() != &self.replica_config.platform_version.replica_version {
+                if share.content.replica_version()
+                    != &self.replica_config.platform_version.replica_version
+                {
                     self.metrics
                         .observe_pool_manager_event("share_dropped_unknown_version");
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
@@ -864,7 +870,10 @@ pub mod test {
                             content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                             content_size: 0,
                             is_reject: false,
-                            replica_version: replica_config.platform_version.replica_version.clone(),
+                            replica_version: replica_config
+                                .platform_version
+                                .replica_version
+                                .clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -1730,7 +1739,10 @@ pub mod test {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: replica_config.platform_version.replica_version.clone(),
+                            replica_version: replica_config
+                                .platform_version
+                                .replica_version
+                                .clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -1794,7 +1806,10 @@ pub mod test {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: replica_config.platform_version.replica_version.clone(),
+                            replica_version: replica_config
+                                .platform_version
+                                .replica_version
+                                .clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -3322,7 +3337,10 @@ pub mod test {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: replica_config.platform_version.replica_version.clone(),
+                            replica_version: replica_config
+                                .platform_version
+                                .replica_version
+                                .clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -3384,7 +3402,10 @@ pub mod test {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: replica_config.platform_version.replica_version.clone(),
+                            replica_version: replica_config
+                                .platform_version
+                                .replica_version
+                                .clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
