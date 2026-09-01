@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-09-01: Proposal 143761
+
+http://dashboard.internetcomputer.org/proposal/143761
+
+## Added
+
+* `UpdateCanisterSettings` and `CreateCanisterAndInstallCode` proposals can now
+  set `reserved_cycles_limit`, the upper bound on the cycles a canister may hold
+  in reserved cycles.
+
+
 # 2026-08-21: Proposal 143660
 
 https://dashboard.internetcomputer.org/proposal/143660
