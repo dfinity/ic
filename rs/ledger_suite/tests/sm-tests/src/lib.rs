@@ -1373,6 +1373,108 @@ pub fn test_archive_duplicate_controllers(ledger_wasm: Vec<u8>) {
     test_controllers(vec![p100], &ledger_wasm, encode_init_args);
 }
 
+/// Raising `trigger_threshold` must work before any archive canister has been
+/// spawned, and must actually suppress archiving.
+///
+/// `ChangeArchiveOptions` requires the ledger to hold an `Archive` *struct*, not
+/// an archive *canister*: `post_upgrade` traps with "Archive options cannot be
+/// changed, since there is no archive!" when `blockchain.archive` is `None`. That
+/// field is `Some` from the moment the ledger is initialised with
+/// `archive_options`, so an empty `Archive::nodes` is a perfectly valid state to
+/// change options in. Neither `archives()` nor the `ledger_num_archives` metric
+/// distinguishes the two cases, so this is worth pinning down in a test.
+///
+/// The final step raises the threshold back down again, to show the new value is
+/// actually in force rather than merely accepted by the upgrade.
+pub fn test_change_trigger_threshold_before_archive_spawned<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // Comfortably beyond any block count this test produces. Note that
+    // `trigger_threshold` is `nat64` in Candid but `usize` in Rust, which is 32
+    // bits on wasm32, so values above `u32::MAX` fail to decode in
+    // `post_upgrade` and trap.
+    const UNREACHABLE_TRIGGER_THRESHOLD: usize = 1_000_000_000;
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let (env, ledger_id) = setup(
+        ledger_wasm.clone(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+
+    // Stay strictly below the initial trigger threshold, so no archive is
+    // spawned. The initial balance already accounts for one mint block.
+    for i in 0..(ARCHIVE_TRIGGER_THRESHOLD - 2) {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
+    }
+    assert_eq!(
+        list_archives(&env, ledger_id),
+        vec![],
+        "no archive should have been spawned yet"
+    );
+
+    // The upgrade under test: change an archive option while `Archive::nodes` is
+    // still empty.
+    let raise_threshold = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(UNREACHABLE_TRIGGER_THRESHOLD),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(
+        ledger_id,
+        ledger_wasm.clone(),
+        Encode!(&raise_threshold).unwrap(),
+    )
+    .expect("failed to raise trigger_threshold before an archive was spawned");
+
+    // Well past the original threshold, archiving must still not trigger.
+    for i in 0..(2 * ARCHIVE_TRIGGER_THRESHOLD) {
+        transfer(&env, ledger_id, p1.0, p2.0, 20_000 + i).expect("transfer failed");
+    }
+    assert_eq!(
+        list_archives(&env, ledger_id),
+        vec![],
+        "archiving should be suppressed by the raised trigger_threshold"
+    );
+    let blocks = icrc3_get_blocks(&env, ledger_id, 0, 4 * ARCHIVE_TRIGGER_THRESHOLD as usize);
+    assert!(
+        blocks.archived_blocks.is_empty(),
+        "no block should have been archived, got {:?}",
+        blocks.archived_blocks
+    );
+    assert_eq!(
+        blocks.blocks.len() as u64,
+        // one mint, then both batches of transfers
+        1 + (ARCHIVE_TRIGGER_THRESHOLD - 2) + 2 * ARCHIVE_TRIGGER_THRESHOLD,
+        "every block should still be held by the ledger"
+    );
+
+    // Lower it again: the change must be live, not just accepted.
+    let restore_threshold = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(ARCHIVE_TRIGGER_THRESHOLD as usize),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&restore_threshold).unwrap())
+        .expect("failed to restore trigger_threshold");
+
+    transfer(&env, ledger_id, p1.0, p2.0, 30_000).expect("transfer failed");
+    assert_eq!(
+        list_archives(&env, ledger_id).len(),
+        1,
+        "restoring the trigger threshold should archive the accumulated backlog"
+    );
+}
+
 pub fn test_upgrade_archive_options<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
