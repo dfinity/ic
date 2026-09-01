@@ -21,7 +21,19 @@ pub(crate) fn vector_logging_task(group_ctx: GroupContext, start_time: DateTime<
     }
 
     let mut vector_vm = VectorVm::new().with_start_time(start_time);
-    vector_vm.start(&env).expect("Failed to start Vector VM");
+    // This task supervises the whole test plan, so failing (or panicking) here
+    // would fail the entire test run just because the log-shipping VM could
+    // not be provisioned. Finishing normally, in contrast, has no effect on
+    // the supervised tasks. Vector only ships logs to Elasticsearch, so
+    // continue without it and let the logs be fetched from the nodes directly
+    // if needed.
+    if let Err(e) = vector_vm.start(&env) {
+        warn!(
+            logger,
+            "Failed to start Vector VM: {:?}. Continuing the run without vector logging.", e
+        );
+        return;
+    }
 
     loop {
         if let Err(e) = vector_vm.sync_with_vector(&env) {
