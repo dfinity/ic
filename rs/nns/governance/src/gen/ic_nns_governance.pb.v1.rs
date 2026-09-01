@@ -5550,9 +5550,8 @@ pub enum NnsFunction {
     SetDefaultInitialDkgSubnet = 58,
     /// Merge a subnet into another subnet: the canister ID ranges of the source
     /// subnet are merged into the canister ID range set of the destination subnet,
-    /// a recovery catch-up package is created for the destination subnet (whose
-    /// state is expected to have been extended with the state of the canisters of
-    /// the source subnet) and the destination subnet is brought back online.
+    /// so that all canisters that used to be hosted by the source subnet are routed
+    /// to the destination subnet.
     MergeSubnets = 59,
 }
 impl NnsFunction {
