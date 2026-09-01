@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-## 16.0.0 - 2026-08-31
+## 16.0.0 - 2026-09-01
 
 ### Added
 - The endpoint `/instances/<instance_id>/update/mock_flexible_canister_http` to mock the responses of the committee nodes
