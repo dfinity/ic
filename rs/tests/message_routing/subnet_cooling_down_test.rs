@@ -808,7 +808,8 @@ async fn run(env: TestEnv) {
     // manager of a running replica owns its state directory, even while
     // consensus is halted.
     for (node, name) in [(&m_node, "M"), (&r_node, "R")] {
-        node.block_on_bash_script("sudo systemctl stop ic-replica")
+        node.block_on_bash_script_async("sudo systemctl stop ic-replica")
+            .await
             .unwrap_or_else(|e| panic!("failed to stop the replica of subnet {name}: {e}"));
         info!(logger, "Step 13: stopped the replica of subnet {name}");
     }
@@ -885,7 +886,8 @@ async fn run(env: TestEnv) {
     // hold the canisters of `M`.
     info!(logger, "Step 16: Starting the replica of subnet R");
     r_node
-        .block_on_bash_script("sudo systemctl start ic-replica")
+        .block_on_bash_script_async("sudo systemctl start ic-replica")
+        .await
         .expect("failed to start the replica of subnet R");
     // Whether `R` resumes from the merged state or from the checkpoint it halted
     // at is not something to leave to chance: a replica that started before its
@@ -924,8 +926,19 @@ async fn run(env: TestEnv) {
         logger,
         "Step 16: R is unhalted as of registry version {unhalt_registry_version}"
     );
+    // The `_async` variant, and not the blocking one: the latter drives its
+    // request through `futures::executor::block_on`, which busy-polls a `reqwest`
+    // future that needs the runtime this thread is driving, and livelocks as soon
+    // as an attempt has to open a new connection -- which is exactly what happens
+    // here, where `R` reports `WaitingForRootDelegation` for minutes before the
+    // unhalting takes effect.
+    // The `_async` variants of the driver's SSH and status helpers are what this
+    // test uses throughout: the blocking ones drive their own future with
+    // `futures::executor::block_on`, which busy-polls a `reqwest` request that
+    // has to open a new connection instead of letting the runtime wait for it.
     r_node
-        .await_status_is_healthy()
+        .await_status_is_healthy_async()
+        .await
         .expect("subnet R did not become healthy after the merge");
     info!(logger, "Step 16 done: subnet R is healthy");
 
@@ -1978,7 +1991,8 @@ async fn await_halted_at_checkpoint(node: &IcNodeSnapshot, name: &str, logger: &
     // `from_now()` makes every poll search all entries since this point, so the
     // condition, once true, stays true.
     let journal = JournalStreamer::new(
-        node.block_on_ssh_session()
+        node.block_on_ssh_session_async()
+            .await
             .unwrap_or_else(|e| panic!("failed to open an SSH session to subnet {name}: {e}")),
     )
     .from_now()
