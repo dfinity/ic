@@ -597,7 +597,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::ProposeCup => {
-                let state_params = self.recovery.get_replay_output()?;
+                let state_params = self.recovery.get_replay_output()?.state_params;
                 let recovery_height = Recovery::get_recovery_height(state_params.height);
                 let default = vec![];
                 Ok(Box::new(self.recovery.update_recovery_cup(

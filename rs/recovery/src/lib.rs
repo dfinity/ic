@@ -23,7 +23,7 @@ use ic_protobuf::registry::replica_version::v1::{GuestLaunchMeasurements, Replic
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replay::{
     cmd::{AddRegistryContentCmd, SubCommand, UpgradeSubnetToReplicaVersionCmd},
-    player::StateParams,
+    player::ReplayOutput,
 };
 use ic_types::{Height, ReplicaVersion, SubnetId, messages::HttpStatusResponse};
 use registry_helper::RegistryPollingStrategy;
@@ -653,7 +653,7 @@ impl Recovery {
     }
 
     /// Parse and return the output of the replay step.
-    pub fn get_replay_output(&self) -> RecoveryResult<StateParams> {
+    pub fn get_replay_output(&self) -> RecoveryResult<ReplayOutput> {
         replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))
     }
 
@@ -1002,7 +1002,7 @@ impl Recovery {
         subnet_id: SubnetId,
         skip_prompts: bool,
     ) -> RecoveryResult<impl Step + use<>> {
-        let state_params = self.get_replay_output()?;
+        let state_params = self.get_replay_output()?.state_params;
         let recovery_height = Recovery::get_recovery_height(state_params.height);
         Ok(GetRecoveryCUPStep {
             subnet_id,

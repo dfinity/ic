@@ -3,7 +3,7 @@ use crate::{
     IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, OLD_IC_STATE,
     Recovery,
     admin_helper::IcAdmin,
-    cli::consent_given,
+    cli::{consent_given, read},
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_includes},
@@ -459,7 +459,10 @@ impl Step for ReplayStep {
         // it also looks exactly like a state download gone wrong, so warn about it and
         // let the operator decide.
         let consensus_pool_path = self.work_dir.join("data").join(IC_CONSENSUS_POOL_PATH);
-        if !consensus_pool_path.exists() {
+        let replica_version = if consensus_pool_path.exists() {
+            // `ic-replay` takes the replica version from the pool's finalized tip.
+            None
+        } else {
             warn!(
                 self.logger,
                 "No consensus pool found at {}: no blocks will be replayed and {}.",
@@ -471,14 +474,24 @@ impl Step for ReplayStep {
                     None => "the state will be left unchanged",
                 }
             );
-            if !self.skip_prompts
-                && !consent_given(&self.logger, "Continue without a consensus pool?")
-            {
-                return Err(RecoveryError::UnexpectedError(
-                    "Replay without a consensus pool was declined".to_string(),
-                ));
+            if self.skip_prompts {
+                None
+            } else {
+                if !consent_given(&self.logger, "Continue without a consensus pool?") {
+                    return Err(RecoveryError::UnexpectedError(
+                        "Replay without a consensus pool was declined".to_string(),
+                    ));
+                }
+                // Without a pool there is no finalized tip to take the replica version
+                // from, and it cannot be looked up in the registry either: the subnet
+                // may well be stalled on a version older than the one the latest
+                // registry version assigns to it. So ask the operator instead.
+                Some(read(
+                    &self.logger,
+                    "Enter the replica version the subnet is currently running on:",
+                ))
             }
-        }
+        };
 
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
 
@@ -494,6 +507,8 @@ impl Step for ReplayStep {
             Height::from(0)
         };
 
+        // The recovery uploads the checkpoint of the replayed state, so persist it.
+        let create_checkpoint = true;
         let state_params = block_on(replay_helper::replay(
             self.subnet_id,
             self.config.clone(),
@@ -503,10 +518,10 @@ impl Step for ReplayStep {
             self.replay_until_height,
             self.result.clone(),
             self.skip_prompts,
-            // The recovery uploads the checkpoint of the replayed state, so persist it.
-            /*create_checkpoint=*/
-            true,
-        ))?;
+            create_checkpoint,
+            replica_version,
+        ))?
+        .state_params;
 
         let latest_height = state_params.height;
         let state_hash = state_params.hash;
@@ -544,10 +559,10 @@ impl Step for ValidateReplayStep {
     fn exec(&self) -> RecoveryResult<()> {
         // `ic-replay` reports how many batches it delivered on top of the replayed
         // blocks, so that the comparison below is against the last replayed block.
-        let state_params =
+        let replay_output =
             replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?;
-        let latest_height = state_params.height;
-        let extra_batches = state_params.extra_batches;
+        let latest_height = replay_output.state_params.height;
+        let extra_batches = replay_output.extra_batches;
 
         let heights = get_available_nodes_heights_from_metrics(
             &self.logger,
@@ -634,6 +649,7 @@ impl Step for UploadStateAndRestartStep {
         if self.check_ic_replay_height {
             let replay_height =
                 replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?
+                    .state_params
                     .height;
 
             if parse_hex_str(max_checkpoint)? != replay_height.get() {
@@ -763,7 +779,8 @@ impl Step for WaitForCUPStep {
 
     fn exec(&self) -> RecoveryResult<()> {
         let state_params =
-            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?;
+            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?
+                .state_params;
         let recovery_height = Recovery::get_recovery_height(state_params.height);
 
         Recovery::wait_for_recovery_cup(
@@ -830,6 +847,10 @@ impl Step for UpdateLocalStoreStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
+        // Only the registry local store is of interest, the state is left as is.
+        let create_checkpoint = false;
+        // A consensus pool is available, so the replica version is taken from it.
+        let replica_version = None;
         block_on(replay_helper::replay(
             self.subnet_id,
             self.work_dir.join("ic.json5"),
@@ -839,9 +860,8 @@ impl Step for UpdateLocalStoreStep {
             None,
             self.work_dir.join("update_local_store.txt"),
             self.skip_prompts,
-            // Only the registry local store is of interest, the state is left as is.
-            /*create_checkpoint=*/
-            false,
+            create_checkpoint,
+            replica_version,
         ))?;
         Ok(())
     }
@@ -870,6 +890,10 @@ impl Step for GetRecoveryCUPStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
+        // The CUP is derived from the state replayed before, which is not changed.
+        let create_checkpoint = false;
+        // A consensus pool is available, so the replica version is taken from it.
+        let replica_version = None;
         block_on(replay_helper::replay(
             self.subnet_id,
             self.config.clone(),
@@ -883,9 +907,8 @@ impl Step for GetRecoveryCUPStep {
             None,
             self.result.clone(),
             self.skip_prompts,
-            // The CUP is derived from the state replayed before, which is not changed.
-            /*create_checkpoint=*/
-            false,
+            create_checkpoint,
+            replica_version,
         ))?;
         Ok(())
     }

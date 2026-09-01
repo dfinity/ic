@@ -73,15 +73,17 @@ pub enum BatchContent {
         // Used for sanity checks
         other_subnet_id: SubnetId,
     },
-    /// Creates a checkpoint without inducting, executing or routing any messages.
+    /// Persists the state produced by the preceding rounds into a checkpoint,
+    /// without inducting, executing or routing any messages.
     ///
-    /// Only produced by `ic-replay`, in order to persist the state it replayed
-    /// into a checkpoint. Since such a batch does not correspond to any block, the
-    /// round must not have any effect beyond what creating a checkpoint requires
-    /// (aborting paused executions and wiping `SystemMetadata` caches); in
-    /// particular it must not execute anything the subnet itself never executed.
+    /// The round must not have any effect beyond what creating a checkpoint
+    /// requires (aborting paused executions and wiping `SystemMetadata` caches).
+    /// In particular, and unlike `Data { requires_full_state_hash: true, .. }`, it
+    /// must not execute a round: no messages are inducted or executed and no
+    /// canister is charged for its resource allocation.
+    ///
     /// Checkpointing rounds are always checkpoint ("full state hash") rounds.
-    Checkpointing,
+    CheckpointingWithoutExecution,
 }
 
 /// The `Batch` provided to Message Routing for deterministic processing.
@@ -100,9 +102,8 @@ pub struct Batch {
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
     pub time: Time,
-    /// Information about block makers. `None` for batches that were not created
-    /// from a finalized block (i.e. the extra batches delivered by `ic-replay`),
-    /// so that no blockmaker is credited for them.
+    /// Information about block makers. `None` for batches that do not correspond
+    /// to a finalized block, so that no blockmaker is credited for them.
     pub blockmaker_metrics: Option<BlockmakerMetrics>,
     /// The current replica version.
     pub replica_version: ReplicaVersion,
@@ -119,7 +120,7 @@ impl Batch {
             } => *requires_full_state_hash,
 
             // Subnet splitting and checkpointing always require a checkpoint.
-            BatchContent::Splitting { .. } | BatchContent::Checkpointing => true,
+            BatchContent::Splitting { .. } | BatchContent::CheckpointingWithoutExecution => true,
         }
     }
 }

@@ -53,9 +53,8 @@ pub struct ReplayToolArgs {
     pub create_checkpoint: bool,
 
     /// The replica version under which the extra messages of the subcommand are
-    /// executed. Only used if no consensus pool is available, otherwise the version is taken from
-    /// its finalized tip; without a pool it defaults to the version the subnet runs according to
-    /// the local registry.
+    /// executed. Required if no consensus pool is available, otherwise the version is
+    /// taken from its finalized tip and this argument is ignored.
     #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 }

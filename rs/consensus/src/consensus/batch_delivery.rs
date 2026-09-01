@@ -220,22 +220,13 @@ pub(crate) fn deliver_batches_with_result_processor(
         };
         let (consensus_responses, canister_http_spent) =
             generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
-        // Must be derived from the block alone, never from how far the caller chose
-        // to deliver: this flag also selects `ExecutionRoundType::CheckpointRound`
-        // (see `StateMachineImpl::execute_round`), which changes execution -- it
-        // forces resource allocation charging and aborts *all* paused executions.
-        // Deriving it from `max_batch_height_to_deliver` would make the last
-        // replayed round diverge from the round the subnet actually executed at
-        // that height. `ic-replay` creates the checkpoint it is asked for by delivering
-        // an extra batch instead, see `Player::deliver_extra_batch`.
-        let requires_full_state_hash = block.payload.is_summary();
         let batch_content = match block.payload.as_ref() {
             BlockPayload::Summary(_summary_payload) => BatchContent::Data {
                 batch_messages: BatchMessages::default(),
                 chain_key_data,
                 consensus_responses,
                 canister_http_spent,
-                requires_full_state_hash,
+                requires_full_state_hash: true,
             },
             BlockPayload::Data(data_payload) => {
                 batch_stats.add_from_payload(&data_payload.batch);
@@ -252,7 +243,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                     chain_key_data,
                     consensus_responses,
                     canister_http_spent,
-                    requires_full_state_hash,
+                    requires_full_state_hash: false,
                 }
             }
         };
