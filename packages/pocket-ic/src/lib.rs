@@ -57,8 +57,9 @@ use crate::{
     common::rest::{
         AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
         HttpsConfig, IcpConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
-        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawSenderInfo,
-        RawSubnetBlockmakers, RawTickConfigs, RawTime, SubnetId, SubnetKind, SubnetSpec, Topology,
+        MockCanisterHttpResponse, MockFlexibleCanisterHttpResponse, RawEffectivePrincipal,
+        RawMessageId, RawSenderInfo, RawSubnetBlockmakers, RawTickConfigs, RawTime, SubnetId,
+        SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -104,11 +105,11 @@ pub mod nonblocking;
 
 const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
 
-const MIN_SERVER_VERSION: &str = "15.0.0";
-const MAX_SERVER_VERSION: &str = "16";
+const MIN_SERVER_VERSION: &str = "16.0.0";
+const MAX_SERVER_VERSION: &str = "17";
 
 /// Public to facilitate downloading the PocketIC server.
-pub const LATEST_SERVER_VERSION: &str = "15.0.0";
+pub const LATEST_SERVER_VERSION: &str = "16.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -1648,7 +1649,9 @@ impl PocketIc {
     /// Note that, unless a PocketIC instance is in auto progress mode,
     /// a response to the pending canister HTTP outcalls
     /// must be produced by the test driver and passed on to the PocketIC instace
-    /// using `PocketIc::mock_canister_http_response`.
+    /// using `PocketIc::mock_canister_http_response`, or, for a *flexible* outcall
+    /// (`CanisterHttpReplication::Flexible`), using
+    /// `PocketIc::mock_flexible_canister_http_response`.
     /// In auto progress mode, the PocketIC server produces a response for every
     /// pending canister HTTP outcall by actually making an HTTP request
     /// to the specified URL.
@@ -1658,7 +1661,11 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.get_canister_http().await })
     }
 
-    /// Mock a response to a pending canister HTTP outcall.
+    /// Mock a response to a pending canister HTTP outcall: the same response for
+    /// every node of the subnet, or one response per node if
+    /// `MockCanisterHttpResponse::additional_responses` is non-empty. For a
+    /// *flexible* outcall, whose committee nodes are answered individually, see
+    /// `PocketIc::mock_flexible_canister_http_response`.
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn mock_canister_http_response(
         &self,
@@ -1668,6 +1675,34 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .mock_canister_http_response(mock_canister_http_response)
+                .await
+        })
+    }
+
+    /// Mock the responses of the committee nodes of a pending *flexible* canister
+    /// HTTP outcall, i.e. one made through the `flexible_http_request` management
+    /// canister endpoint.
+    ///
+    /// This takes at most one response per node of the outcall's committee (whose
+    /// size is the `total_requests` of the outcall's `CanisterHttpReplication::Flexible`
+    /// replication). Providing fewer responses than the committee size
+    /// models the remaining committee nodes never responding: with at least
+    /// `min_responses` successful ones among them the outcall still succeeds, and
+    /// with fewer it stays pending until the time is advanced past its 60 second
+    /// timeout, at which point it fails with a timeout error.
+    ///
+    /// All responses to an outcall must be provided in a single call: once any
+    /// response to it has been mocked, the outcall no longer shows up in
+    /// `PocketIc::get_canister_http` and further responses to it cannot be mocked.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn mock_flexible_canister_http_response(
+        &self,
+        mock_flexible_canister_http_response: MockFlexibleCanisterHttpResponse,
+    ) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .mock_flexible_canister_http_response(mock_flexible_canister_http_response)
                 .await
         })
     }
@@ -2529,25 +2564,25 @@ mod test {
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic 15.0.0")
+            check_pocketic_server_version("pocket-ic 16.0.0")
                 .unwrap_err()
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 15 0 0")
+            check_pocketic_server_version("pocket-ic-server 16 0 0")
                 .unwrap_err()
                 .contains("Failed to parse PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 14.0.0")
+            check_pocketic_server_version("pocket-ic-server 15.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );
-        check_pocketic_server_version("pocket-ic-server 15.0.0").unwrap();
-        check_pocketic_server_version("pocket-ic-server 15.0.1").unwrap();
-        check_pocketic_server_version("pocket-ic-server 15.1.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 16.0.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 16.0.1").unwrap();
+        check_pocketic_server_version("pocket-ic-server 16.1.0").unwrap();
         assert!(
-            check_pocketic_server_version("pocket-ic-server 16.0.0")
+            check_pocketic_server_version("pocket-ic-server 17.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );

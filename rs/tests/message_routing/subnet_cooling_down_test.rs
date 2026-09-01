@@ -95,11 +95,16 @@ Runbook::
 14. Add the merged state to the checkpoints of `R`'s node, leaving its replica
    stopped.
 15. Submit (and adopt) a `MergeSubnets` NNS proposal for `M` and `R`, which
-   reroutes the canister ID ranges of `M` to `R`, creates a recovery CUP for `R`
-   at the merged state and brings `R` back online, all in one registry version.
-16. Start `R`'s replica and wait until it is healthy. Only now: a replica started
-   before the recovery CUP exists resumes from the checkpoint `R` halted at,
-   which does not hold the canisters of `M`.
+   reroutes the canister ID ranges of `M` to `R`, and then a `RecoverSubnet` NNS
+   proposal for `R`, which creates a recovery CUP for `R` at the merged state,
+   running a fresh DKG for `R`'s membership. Recovering a subnet that was
+   instructed to halt at its next CUP replaces that instruction with a plain
+   halt, so `R` stays halted for now.
+16. Start `R`'s replica and wait until it adopted the recovery CUP. Only now: a
+   replica started before the recovery CUP exists resumes from the checkpoint
+   `R` halted at, which does not hold the canisters of `M`. Then submit (and
+   adopt) an `UpdateConfigOfSubnet` NNS proposal unhalting `R` and wait until it
+   is healthy.
 17. Check that `U8`, now served by `R`, kept the stable memory, the snapshot and
    (up to what an idle canister burns) the cycles balance of step 4, and that
    `UR`, which `R` hosted all along, is undisturbed and can call `U8` now that
@@ -124,7 +129,7 @@ deleted.
 end::catalog[] */
 
 use anyhow::{Result, anyhow, bail};
-use candid::Principal;
+use candid::{CandidType, Principal};
 use ic_agent::{Agent, RequestId, agent::RequestStatusResponse};
 use ic_management_canister_types::{SnapshotId, TakeCanisterSnapshotArgs};
 use ic_nns_governance_api::NnsFunction;
@@ -166,6 +171,7 @@ use ic_universal_canister::{
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
 use registry_canister::mutations::do_delete_subnet::DeleteSubnetPayload;
+use registry_canister::mutations::do_recover_subnet::RecoverSubnetPayload;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use registry_canister::mutations::merge_subnets::MergeSubnetsPayload;
 use slog::{Logger, info};
@@ -838,16 +844,29 @@ async fn run(env: TestEnv) {
         hex::encode(&state_hash),
     );
 
-    // Step 15: Merge `M` into `R`: reroute `M`'s canister ID ranges to `R`,
-    // recover `R` at the merged state and bring it back online, all in one
-    // proposal.
+    // Step 15: Merge `M` into `R`: reroute `M`'s canister ID ranges to `R`, and
+    // recover `R` at the merged state.
     info!(
         logger,
         "Step 15: Submitting the MergeSubnets proposal for M -> R"
     );
-    let merge_registry_version = merge_subnets(
+    let merge_registry_version =
+        merge_subnets(&env, m_subnet.subnet_id, r_subnet.subnet_id, &logger).await;
+    info!(
+        logger,
+        "Step 15: M is merged into R as of registry version {merge_registry_version}"
+    );
+
+    // `merge_subnets` only updates the routing table: making `R` resume from the
+    // merged state is a subnet recovery like any other. The DKG of the recovery
+    // CUP is handled by the NNS subnet, which is neither of the two subnets being
+    // merged and stays available throughout.
+    info!(
+        logger,
+        "Step 15: Submitting the RecoverSubnet proposal for R at height {merged_height}"
+    );
+    let recovery_registry_version = recover_subnet(
         &env,
-        m_subnet.subnet_id,
         r_subnet.subnet_id,
         merged_height,
         merged_time,
@@ -857,7 +876,8 @@ async fn run(env: TestEnv) {
     .await;
     info!(
         logger,
-        "Step 15 done: M is merged into R as of registry version {merge_registry_version}"
+        "Step 15 done: R is recovered at the merged state as of registry version \
+         {recovery_registry_version}"
     );
 
     // Step 16: Start `R`'s replica, now that the recovery CUP exists. Starting it
@@ -889,13 +909,25 @@ async fn run(env: TestEnv) {
         .expect("the recovery CUP waiting task panicked")
         .expect("subnet R did not adopt the recovery CUP holding the merged state");
     }
+    info!(
+        logger,
+        "Step 16: subnet R adopted the recovery CUP at height {merged_height}"
+    );
+
+    // `recover_subnet` turned the "halt at the next CUP" instruction of step 12
+    // into a plain halt, so that a recovered subnet does not resume before its
+    // recovery has been checked. Lift it now that `R` came up on the merged
+    // state: a halted subnet delivers no batches, so none of the ingress
+    // messages of step 18 would complete.
+    let unhalt_registry_version = unhalt_subnet(&env, r_subnet.subnet_id, &logger).await;
+    info!(
+        logger,
+        "Step 16: R is unhalted as of registry version {unhalt_registry_version}"
+    );
     r_node
         .await_status_is_healthy()
         .expect("subnet R did not become healthy after the merge");
-    info!(
-        logger,
-        "Step 16 done: subnet R adopted the recovery CUP at height {merged_height} and is healthy"
-    );
+    info!(logger, "Step 16 done: subnet R is healthy");
 
     // Step 17: Check that the merge carried the state of `M`'s canisters over and
     // left `R`'s own canister alone.
@@ -1244,44 +1276,48 @@ fn run_local(script: &str) {
     );
 }
 
-/// Submits (and adopts) the `MergeSubnets` proposal merging `source_subnet` into
-/// `destination_subnet`, recovering the latter at the merged state.
+/// Submits (and adopts) the `MergeSubnets` proposal rerouting the canister ID
+/// ranges of `source_subnet` to `destination_subnet`, and returns the registry
+/// version it created.
 async fn merge_subnets(
     env: &TestEnv,
     source_subnet: SubnetId,
     destination_subnet: SubnetId,
+    logger: &Logger,
+) -> u64 {
+    let payload = MergeSubnetsPayload {
+        source_subnet,
+        destination_subnet,
+    };
+    submit_and_adopt_proposal(env, NnsFunction::MergeSubnets, payload, logger).await
+}
+
+/// Submits (and adopts) the `RecoverSubnet` proposal creating a recovery CUP for
+/// `subnet_id` at the given height, time and state hash, and returns the registry
+/// version it created.
+async fn recover_subnet(
+    env: &TestEnv,
+    subnet_id: SubnetId,
     height: u64,
     time_ns: u64,
     state_hash: Vec<u8>,
     logger: &Logger,
 ) -> u64 {
-    let topology = env.topology_snapshot();
-    let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance = get_governance_canister(&nns_runtime);
-
-    let payload = MergeSubnetsPayload {
-        source_subnet,
-        destination_subnet,
-        height,
-        time_ns,
-        state_hash,
+    let payload = RecoverSubnetPayload {
+        subnet_id: subnet_id.get(),
         // The NNS subnet, which is neither of the two subnets being merged and
         // stays available throughout, handles the DKG of the recovery CUP.
         initial_dkg_subnet_id: None,
+        height,
+        time_ns,
+        state_hash,
+        // The subnet keeps its membership, holds no chain key and is not becoming
+        // the NNS subnet, so there is nothing else to recover.
+        replacement_nodes: None,
+        registry_store_uri: None,
+        chain_key_config: None,
     };
-    let proposal_id =
-        submit_external_proposal_with_test_id(&governance, NnsFunction::MergeSubnets, payload)
-            .await;
-    info!(logger, "Submitted {proposal_id}");
-    vote_execute_proposal_assert_executed(&governance, proposal_id).await;
-
-    topology
-        .block_for_newer_registry_version()
-        .await
-        .expect("the registry should have a newer version after the proposal executed")
-        .get_registry_version()
-        .get()
+    submit_and_adopt_proposal(env, NnsFunction::RecoverSubnet, payload, logger).await
 }
 
 /// Submits (and adopts) the `DeleteSubnet` proposal deleting `subnet_id`, and
@@ -1671,23 +1707,30 @@ async fn submit_and_adopt_update_subnet_proposal(
     payload: UpdateSubnetPayload,
     logger: &Logger,
 ) -> u64 {
+    submit_and_adopt_proposal(env, NnsFunction::UpdateConfigOfSubnet, payload, logger).await
+}
+
+/// Submits (and adopts) `payload` as a proposal calling `nns_function`, and
+/// returns the registry version its mutations created.
+async fn submit_and_adopt_proposal<T: CandidType>(
+    env: &TestEnv,
+    nns_function: NnsFunction,
+    payload: T,
+    logger: &Logger,
+) -> u64 {
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = get_governance_canister(&nns_runtime);
 
-    let proposal_id = submit_external_proposal_with_test_id(
-        &governance,
-        NnsFunction::UpdateConfigOfSubnet,
-        payload,
-    )
-    .await;
+    let proposal_id =
+        submit_external_proposal_with_test_id(&governance, nns_function, payload).await;
     info!(logger, "Submitted proposal {proposal_id}");
     vote_execute_proposal_assert_executed(&governance, proposal_id).await;
 
-    // The proposal's single registry mutation is the newest registry version.
-    // The snapshot above was taken before the proposal was submitted, so this
-    // cannot miss the version the mutation created.
+    // The proposal's registry mutations are applied in a single registry version,
+    // which is the newest one. The snapshot above was taken before the proposal
+    // was submitted, so this cannot miss the version the mutations created.
     topology
         .block_for_newer_registry_version()
         .await
@@ -2002,6 +2045,21 @@ async fn latest_checkpoint_height(node: &IcNodeSnapshot) -> Result<u64> {
 async fn halt_subnet_at_cup_height(env: &TestEnv, subnet_id: SubnetId, logger: &Logger) -> u64 {
     let payload = UpdateSubnetPayload {
         halt_at_cup_height: Some(true),
+        ..empty_update_subnet_payload(subnet_id)
+    };
+    submit_and_adopt_update_subnet_proposal(env, payload, logger).await
+}
+
+/// Submits (and adopts) an `UpdateConfigOfSubnet` proposal clearing the
+/// `is_halted` flag of `subnet_id`, so that the subnet resumes delivering
+/// batches. Returns the registry version the proposal created.
+///
+/// This is the flag `recover_subnet` sets in place of the `halt_at_cup_height`
+/// flag it clears, so that a recovered subnet stays halted until its recovery
+/// has been checked.
+async fn unhalt_subnet(env: &TestEnv, subnet_id: SubnetId, logger: &Logger) -> u64 {
+    let payload = UpdateSubnetPayload {
+        is_halted: Some(false),
         ..empty_update_subnet_payload(subnet_id)
     };
     submit_and_adopt_update_subnet_proposal(env, payload, logger).await

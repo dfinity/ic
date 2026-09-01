@@ -311,10 +311,6 @@ type IPv4Config = record {
 type MergeSubnetsPayload = record {
   source_subnet : principal;
   destination_subnet : principal;
-  height : nat64;
-  time_ns : nat64;
-  state_hash : blob;
-  initial_dkg_subnet_id : opt principal;
 };
 
 type MigrateCanistersPayload = record {
