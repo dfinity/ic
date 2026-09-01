@@ -84,4 +84,5 @@ num-traits = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
+wat = { workspace = true }
 xrc-mock = { path = "../../rust_canisters/xrc_mock" }
