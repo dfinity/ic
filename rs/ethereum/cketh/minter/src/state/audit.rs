@@ -126,6 +126,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 request.token,
                 request.items.iter().map(|item| item.item.account),
             );
+            state.update_sweeper_balance_upon_accepted_sweep(request);
             state
                 .automatic_deposits
                 .record_sweep_request(request.clone());
@@ -158,11 +159,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             sweep_id,
             transaction_receipt,
         } => {
-            // The sweeper pipeline is never reimbursed and holds no ckETH balance, so unlike the main
-            // pipeline there is no reimbursement tail or balance update — just the finalize mechanics.
-            let _ = state
-                .automatic_deposits
-                .record_finalized_sweep_transaction(*sweep_id, transaction_receipt);
+            state.record_finalized_sweeper_transaction(sweep_id, transaction_receipt);
         }
         EventType::ReimbursedEthWithdrawal(Reimbursed {
             burn_in_block: withdrawal_id,

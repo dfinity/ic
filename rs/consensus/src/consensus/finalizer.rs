@@ -17,7 +17,7 @@
 //! into a complete finalization, at which point the block and its ancestors
 //! become finalized.
 use crate::consensus::{
-    batch_delivery::deliver_batches_with_result_processor,
+    batch_delivery::deliver_batches_for_finalizer,
     metrics::{BatchStats, BlockStats, FinalizerMetrics},
 };
 use ic_consensus_utils::{
@@ -95,17 +95,17 @@ impl Finalizer {
         }
 
         // Try to deliver finalized batches to messaging
-        let _ = deliver_batches_with_result_processor(
+        let _ = deliver_batches_for_finalizer(
             &*self.message_routing,
             &self.membership,
             pool,
             &*self.registry_client,
-            self.replica_config.subnet_id,
             &self.log,
-            None,
-            Some(&|result, block_stats, batch_stats| {
+            self.replica_config.node_id,
+            self.replica_config.subnet_id,
+            |result, block_stats, batch_stats| {
                 self.process_batch_delivery_result(result, block_stats, batch_stats)
-            }),
+            },
         );
 
         // Try to finalize rounds from finalized_height + 1 up to (and including)
