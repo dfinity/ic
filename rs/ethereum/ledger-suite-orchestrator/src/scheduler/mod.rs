@@ -4,7 +4,9 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
-use crate::candid::{AddCkErc20Token, AddErc20Arg, CyclesManagement, LedgerInitArg, UpgradeArg};
+use crate::candid::{
+    AddCkErc20Token, AddErc20Arg, CyclesManagement, LedgerInitArg, LedgerUpgradeArg, UpgradeArg,
+};
 use crate::logs::DEBUG;
 use crate::logs::INFO;
 use crate::management::IcCanisterRuntime;
@@ -24,7 +26,9 @@ use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
-use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
+use ic_icrc1_ledger::{
+    ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs,
+};
 use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
 pub use metrics::encode_orchestrator_metrics;
 use metrics::observe_task_duration;
@@ -447,11 +451,13 @@ pub struct UpgradeOrchestratorArgs {
     ledger_compressed_wasm_hash: Option<WasmHash>,
     index_compressed_wasm_hash: Option<WasmHash>,
     archive_compressed_wasm_hash: Option<WasmHash>,
+    ledger_upgrade_arg: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum InvalidUpgradeArgError {
     WasmHashError(WasmHashError),
+    LedgerUpgradeArgRequiresLedgerWasmHash,
 }
 
 impl UpgradeOrchestratorArgs {
@@ -470,10 +476,14 @@ impl UpgradeOrchestratorArgs {
             arg.archive_compressed_wasm_hash.as_deref(),
         )
         .map_err(InvalidUpgradeArgError::WasmHashError)?;
+        if arg.ledger_upgrade_arg.is_some() && ledger_compressed_wasm_hash.is_none() {
+            return Err(InvalidUpgradeArgError::LedgerUpgradeArgRequiresLedgerWasmHash);
+        }
         Ok(UpgradeOrchestratorArgs {
             ledger_compressed_wasm_hash,
             index_compressed_wasm_hash,
             archive_compressed_wasm_hash,
+            ledger_upgrade_arg: arg.ledger_upgrade_arg.map(encode_ledger_upgrade_arg),
         })
     }
 
@@ -500,10 +510,22 @@ impl UpgradeOrchestratorArgs {
     pub fn into_task(self, token_id: TokenId) -> UpgradeLedgerSuite {
         UpgradeLedgerSuite::builder(token_id)
             .ledger_wasm_hash(self.ledger_compressed_wasm_hash)
+            .ledger_upgrade_arg(self.ledger_upgrade_arg)
             .index_wasm_hash(self.index_compressed_wasm_hash)
             .archive_wasm_hash(self.archive_compressed_wasm_hash)
             .build()
     }
+}
+
+fn encode_ledger_upgrade_arg(arg: LedgerUpgradeArg) -> Vec<u8> {
+    Encode!(&Some(LedgerArgument::Upgrade(Some(
+        LedgerUpgradeArgs::from(arg)
+    ))))
+    .expect("BUG: failed to encode ledger upgrade argument")
+}
+
+fn encode_empty_arg() -> Vec<u8> {
+    Encode!(&()).expect("BUG: failed to encode empty upgrade argument")
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
