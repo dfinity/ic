@@ -17,8 +17,9 @@ use crate::{Args, Partition, crypt_name, metrics_file_path, run};
 use anyhow::{Result, anyhow};
 use guest_disk::DiskEncryption;
 use guest_disk::crypt::{
-    IC_KEY_TOKEN_TYPE, KeyslotMetadata, LUKS2_N_KEYSLOTS, LUKS2_N_TOKENS, LuksHeaderLocation,
-    deactivate_crypt_device, format_crypt_device, open_luks2_device, read_keyslot_metadata,
+    IC_KEY_TOKEN_TYPE, KeyslotToken, LUKS2_N_KEYSLOTS, LUKS2_N_TOKENS, LuksHeaderLocation,
+    SINGLE_KEYSLOT_INDEX, SINGLE_TOKEN_INDEX, deactivate_crypt_device, format_crypt_device,
+    open_luks2_device, read_single_keyslot_token,
 };
 use guest_disk::sev::{SevDiskEncryption, can_open, rekey};
 use ic_device::device_mapping::{Bytes, TempDevice};
@@ -166,40 +167,26 @@ impl<'a> PartitionView<'a> {
         }
     }
 
-    /// Reads all `ic-key-metadata` tokens from the device, verifying in passing that no
-    /// unexpected (internal or invalid) tokens are present.
-    fn read_keyslot_metadata(&self) -> Vec<KeyslotMetadata> {
+    /// Asserts that there is only a single token at index 0 and returns it.
+    fn read_keyslot_token(&self) -> KeyslotToken {
+        self.assert_single_metadata_token();
+        let token = read_single_keyslot_token(&mut self.open_crypt_device()).unwrap();
+        assert_eq!(token.keyslots, [SINGLE_KEYSLOT_INDEX.to_string()]);
+        token
+    }
+
+    /// Asserts that the device carries no token at all.
+    fn assert_no_metadata_token(&self) {
         let mut crypt_device = self.open_crypt_device();
-        let mut expected_token_count = 0;
-        // Verify that only our tokens are present. There is no reason for any other token type
-        // to be present.
         for token_id in 0..LUKS2_N_TOKENS {
-            match crypt_device.token_handle().status(token_id).unwrap() {
-                CryptTokenInfo::Invalid => {
-                    panic!("expected token {token_id} to be valid");
-                }
-                CryptTokenInfo::Inactive => { /* no-op */ }
-                CryptTokenInfo::Internal(_) | CryptTokenInfo::InternalUnknown(_) => {
-                    panic!("Did not expect internal token {token_id}")
-                }
-                CryptTokenInfo::External(_) | CryptTokenInfo::ExternalUnknown(_) => {
-                    expected_token_count += 1;
-                }
-            }
+            assert!(
+                matches!(
+                    crypt_device.token_handle().status(token_id).unwrap(),
+                    CryptTokenInfo::Inactive
+                ),
+                "did not expect token {token_id} on the device"
+            );
         }
-
-        let metadata = read_keyslot_metadata(&mut crypt_device).unwrap();
-        assert_eq!(
-            metadata.len(),
-            expected_token_count,
-            "expected to read all ic-key-metadata tokens from the device"
-        );
-
-        for entry in &metadata {
-            entry.keyslot().expect("expected keyslot to be present");
-        }
-
-        metadata
     }
 
     /// Asserts the single-token invariant: the only token on the device is the
@@ -209,7 +196,7 @@ impl<'a> PartitionView<'a> {
         let mut crypt_device = self.open_crypt_device();
         for token_id in 0..LUKS2_N_TOKENS {
             let status = crypt_device.token_handle().status(token_id).unwrap();
-            let expected = if token_id == 0 {
+            let expected = if token_id == SINGLE_TOKEN_INDEX {
                 matches!(
                     status,
                     CryptTokenInfo::ExternalUnknown(ref token_type)
@@ -610,11 +597,8 @@ fn test_generated_key_init_and_reopen() {
                 "detached Store header should not exist for {partition_name:?} with generated key"
             );
         }
-        assert_eq!(
-            partition.read_keyslot_metadata().len(),
-            0,
-            "Unexpected keyslot metadata when using generated key for {partition_name:?}"
-        );
+        // Generated-key partitions carry no metadata token.
+        partition.assert_no_metadata_token();
     }
 }
 
@@ -680,26 +664,17 @@ fn test_sev_key_init_and_reopen() {
 }
 
 #[test]
-fn test_sev_format_writes_keyslot_metadata() {
+fn test_sev_format_writes_keyslot_token() {
     for partition in [Partition::Store, Partition::Var] {
         let fixture = TestFixture::new_sev();
         fixture.partition(partition).format().unwrap();
 
-        let metadata = fixture.partition(partition).read_keyslot_metadata();
+        let token = fixture.partition(partition).read_keyslot_token();
         assert_eq!(
-            metadata.len(),
-            1,
-            "expected one metadata token for {partition:?}"
-        );
-        fixture.partition(partition).assert_single_metadata_token();
-        assert_eq!(
-            metadata[0].sev_metadata.launch_measurement_hex,
+            token.sev_metadata.launch_measurement_hex,
             default_launch_measurement_as_hex()
         );
-        assert_eq!(
-            metadata[0].sev_metadata.tcb_version,
-            default_launch_tcb_as_u64()
-        );
+        assert_eq!(token.sev_metadata.tcb_version, default_launch_tcb_as_u64());
     }
 }
 
@@ -930,15 +905,12 @@ fn test_open_store_multiple_times_with_different_keys() {
     // Each re-key replaces the old key in place: the single keyslot (always the first)
     // and the single metadata token (always the first) carry the newest GuestOS's key
     // and launch measurement.
-    let metadata = fixture.store_partition().read_keyslot_metadata();
-    assert_eq!(metadata.len(), 1);
-    assert_eq!(metadata[0].keyslot().unwrap(), 0);
+    let token = fixture.store_partition().read_keyslot_token();
     assert_eq!(
-        metadata[0].sev_metadata.launch_measurement_hex,
+        token.sev_metadata.launch_measurement_hex,
         hex::encode([5_u8; 48])
     );
     assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
-    fixture.store_partition().assert_single_metadata_token();
 }
 
 /// A legacy header carrying an extra (stale) keyslot converges back to the single first
@@ -953,7 +925,7 @@ fn test_upgrade_removes_stale_keyslots() {
     // Build the legacy layout: the previous GuestOS's key in the first keyslot, the
     // current GuestOS's (served) key in a later one.
     let served_key = fixture.derive_sev_key(Partition::Store);
-    let (mut crypt_device, _) = format_crypt_device(
+    let mut crypt_device = format_crypt_device(
         fixture.store_device_path(),
         LuksHeaderLocation::Detached(&fixture.store_header_path()),
         STALE_KEY,
@@ -971,10 +943,9 @@ fn test_upgrade_removes_stale_keyslots() {
         .expect("opening Store after the upgrade should succeed");
 
     assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
-    let metadata = fixture.store_partition().read_keyslot_metadata();
-    assert_eq!(metadata.len(), 1);
-    assert_eq!(metadata[0].keyslot().unwrap(), 0);
-    fixture.store_partition().assert_single_metadata_token();
+    // The re-key converges the legacy header back to the single token in the first
+    // position, assigned to the single keyslot.
+    fixture.store_partition().read_keyslot_token();
 }
 
 #[test]

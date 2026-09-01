@@ -88,7 +88,7 @@ fn run(
     } else {
         Box::new(GeneratedKeyDiskEncryption {
             key_path: generated_key_path,
-            metrics_registry: &metrics_registry,
+            metrics_registry: metrics_registry.clone(),
         })
     };
     let partition = args.partition();
