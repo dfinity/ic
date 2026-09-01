@@ -120,6 +120,7 @@ fn should_change_cycles_for_canister_creation() {
                     ..Default::default()
                 }),
                 manage_ledger_suites: None,
+                ledger_upgrade_arg: None,
             },
         ))
         .unwrap();
@@ -265,6 +266,7 @@ fn should_reject_upgrade_with_invalid_args() {
         archive_compressed_wasm_hash: None,
         cycles_management: None,
         manage_ledger_suites: None,
+        ledger_upgrade_arg: None,
     };
 
     test_upgrade_with_invalid_args(
@@ -549,6 +551,7 @@ fn should_not_change_ledger_suite_version_when_registering_embedded_wasms_a_seco
             archive_compressed_wasm_hash: None,
             cycles_management: None,
             manage_ledger_suites: None,
+            ledger_upgrade_arg: None,
         },
     );
 
@@ -663,6 +666,7 @@ mod upgrade {
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
                 manage_ledger_suites: None,
+                ledger_upgrade_arg: None,
             },
         );
 
@@ -818,6 +822,7 @@ mod upgrade {
                 archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                 cycles_management: None,
                 manage_ledger_suites: None,
+                ledger_upgrade_arg: None,
             },
         );
         orchestrator.advance_time_for_upgrade();
@@ -914,6 +919,7 @@ mod upgrade {
                 archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                 cycles_management: None,
                 manage_ledger_suites: None,
+                ledger_upgrade_arg: None,
             },
         );
 
@@ -985,6 +991,7 @@ mod upgrade {
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
                 manage_ledger_suites: None,
+                ledger_upgrade_arg: None,
             },
         );
 
@@ -1047,6 +1054,7 @@ mod upgrade {
                     archive_compressed_wasm_hash: None,
                     cycles_management: None,
                     manage_ledger_suites: None,
+                    ledger_upgrade_arg: None,
                 },
             );
 
@@ -1123,6 +1131,7 @@ mod upgrade {
                 archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                 cycles_management: None,
                 manage_ledger_suites: None,
+                ledger_upgrade_arg: None,
             },
         );
 
@@ -1217,6 +1226,7 @@ mod upgrade {
                     index: index.clone(),
                     archives: None,
                 }]),
+                ledger_upgrade_arg: None,
             },
         );
 
