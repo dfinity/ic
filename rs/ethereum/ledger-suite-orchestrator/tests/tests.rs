@@ -2,11 +2,13 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_http_types::{HttpRequest, HttpResponse};
+use ic_icrc1_ledger::ChangeArchiveOptions;
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, CyclesManagement, LedgerInitArg, LedgerSuiteVersion, ManagedCanisterStatus,
-    ManagedCanisters, ManagedLedgerSuite, OrchestratorArg, OrchestratorInfo,
+    AddErc20Arg, CyclesManagement, LedgerInitArg, LedgerSuiteVersion, LedgerUpgradeArg,
+    ManagedCanisterStatus, ManagedCanisters, ManagedLedgerSuite, OrchestratorArg, OrchestratorInfo,
     UpdateCyclesManagement, UpgradeArg,
 };
+use ic_ledger_suite_orchestrator_test_utils::pocket_ic::flow::ARCHIVE_TRIGGER_THRESHOLD;
 use ic_ledger_suite_orchestrator_test_utils::pocket_ic::{LedgerSuiteOrchestrator, new_pocket_ic};
 use ic_ledger_suite_orchestrator_test_utils::{
     GIT_COMMIT_HASH_UPGRADE, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL, cketh_installed_canisters,
@@ -299,6 +301,20 @@ fn should_reject_upgrade_with_invalid_args() {
                 cketh_installed_canisters(),
                 cketh_installed_canisters(), //erroneous duplicate entry
             ]),
+            ..valid_upgrade_arg.clone()
+        }),
+    );
+
+    test_upgrade_with_invalid_args(
+        &orchestrator,
+        &OrchestratorArg::UpgradeArg(UpgradeArg {
+            ledger_compressed_wasm_hash: None,
+            ledger_upgrade_arg: Some(LedgerUpgradeArg {
+                change_archive_options: Some(ChangeArchiveOptions {
+                    trigger_threshold: Some(20_000),
+                    ..Default::default()
+                }),
+            }),
             ..valid_upgrade_arg.clone()
         }),
     );
@@ -669,6 +685,81 @@ mod upgrade {
             );
             assert_eq!(status.status, CanisterStatusType::Running);
         }
+    }
+
+    #[test]
+    fn should_change_archive_options_of_ledger_without_spawned_archive() {
+        let orchestrator = LedgerSuiteOrchestrator::default().register_embedded_wasms();
+        let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+        let managed_canisters = orchestrator
+            .add_erc20_token(usdc())
+            .expect_new_ledger_and_index_canisters();
+        assert!(managed_canisters.call_ledger_archives().is_empty());
+
+        let orchestrator = managed_canisters.setup.upgrade_ledger_suite_orchestrator(
+            ledger_suite_orchestrator_wasm(),
+            UpgradeArg {
+                git_commit_hash: Some(GIT_COMMIT_HASH_UPGRADE.to_string()),
+                ledger_compressed_wasm_hash: Some(embedded_ledger_wasm_hash.to_string()),
+                index_compressed_wasm_hash: None,
+                archive_compressed_wasm_hash: None,
+                cycles_management: None,
+                manage_ledger_suites: None,
+                ledger_upgrade_arg: Some(LedgerUpgradeArg {
+                    change_archive_options: Some(ChangeArchiveOptions {
+                        trigger_threshold: Some(ARCHIVE_TRIGGER_THRESHOLD),
+                        ..Default::default()
+                    }),
+                }),
+            },
+        );
+        orchestrator.advance_time_for_upgrade();
+
+        orchestrator
+            .assert_managed_canisters(&usdc_erc20_contract())
+            .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash)
+            .trigger_creation_of_archive_by_transfers(ARCHIVE_TRIGGER_THRESHOLD);
+    }
+
+    #[test]
+    fn should_stop_archiving_when_trigger_threshold_raised() {
+        const RAISED_TRIGGER_THRESHOLD: usize = 1_000_000;
+
+        let orchestrator = LedgerSuiteOrchestrator::default().register_embedded_wasms();
+        let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+        let managed_canisters = orchestrator
+            .add_erc20_token(usdc())
+            .expect_new_ledger_and_index_canisters()
+            .trigger_creation_of_archive();
+        let archives_before = managed_canisters.call_ledger_archives();
+        assert!(!archives_before.is_empty());
+
+        let orchestrator = managed_canisters.setup.upgrade_ledger_suite_orchestrator(
+            ledger_suite_orchestrator_wasm(),
+            UpgradeArg {
+                git_commit_hash: Some(GIT_COMMIT_HASH_UPGRADE.to_string()),
+                ledger_compressed_wasm_hash: Some(embedded_ledger_wasm_hash.to_string()),
+                index_compressed_wasm_hash: None,
+                archive_compressed_wasm_hash: None,
+                cycles_management: None,
+                manage_ledger_suites: None,
+                ledger_upgrade_arg: Some(LedgerUpgradeArg {
+                    change_archive_options: Some(ChangeArchiveOptions {
+                        trigger_threshold: Some(RAISED_TRIGGER_THRESHOLD),
+                        num_blocks_to_archive: Some(RAISED_TRIGGER_THRESHOLD),
+                        ..Default::default()
+                    }),
+                }),
+            },
+        );
+        orchestrator.advance_time_for_upgrade();
+
+        let managed_canisters = orchestrator
+            .assert_managed_canisters(&usdc_erc20_contract())
+            .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash);
+        managed_canisters.make_transfers(10 * ARCHIVE_TRIGGER_THRESHOLD);
+
+        assert_eq!(managed_canisters.call_ledger_archives(), archives_before);
     }
 
     #[test]
