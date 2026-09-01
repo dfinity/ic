@@ -44,6 +44,10 @@ proxies:
       - regex: guestos_version
         actions:
           - keep
+      # Replica binary version metric.
+      - regex: binary_version
+        actions:
+          - keep
       # Clock synchronization status.
       - regex: node_timex_sync_status
         actions:
