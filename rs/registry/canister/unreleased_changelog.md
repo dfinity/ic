@@ -7,7 +7,7 @@ on the process that this file is part of, see
 
 # Next Upgrade Proposal
 
-## Added=
+## Added
 
 * A subnet-split request will now fail if a concurrent call modified the `StandardEngineReplicaVersionRecord`
   while the fresh key material was being generated for the splitting subnet.
