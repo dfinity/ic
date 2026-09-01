@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Enforce that every `hostos_version_id` matches its `HostosVersionRecord`'s registry key.
+
 ## Changed
 
 * `UpdateSubnet` can now enable SEV on an existing subnet, not only at subnet creation. Disabling SEV
