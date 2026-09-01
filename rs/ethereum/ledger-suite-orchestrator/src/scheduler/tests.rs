@@ -765,7 +765,8 @@ mod upgrade_ledger_suite {
             subtasks,
             vec![UpgradeLedger {
                 token_id: usdc_token_id(),
-                compressed_wasm_hash: ledger_wasm_hash.clone()
+                compressed_wasm_hash: ledger_wasm_hash.clone(),
+                ledger_upgrade_arg: None,
             },]
         );
 
@@ -795,7 +796,8 @@ mod upgrade_ledger_suite {
                 },
                 UpgradeLedger {
                     token_id: usdc_token_id(),
-                    compressed_wasm_hash: ledger_wasm_hash.clone()
+                    compressed_wasm_hash: ledger_wasm_hash.clone(),
+                    ledger_upgrade_arg: None,
                 },
             ]
         );
@@ -827,7 +829,8 @@ mod upgrade_ledger_suite {
             vec![
                 UpgradeLedger {
                     token_id: usdc_token_id(),
-                    compressed_wasm_hash: ledger_wasm_hash.clone()
+                    compressed_wasm_hash: ledger_wasm_hash.clone(),
+                    ledger_upgrade_arg: None,
                 },
                 DiscoverArchives {
                     token_id: usdc_token_id()
@@ -876,7 +879,8 @@ mod upgrade_ledger_suite {
                 },
                 UpgradeLedger {
                     token_id: usdc_token_id(),
-                    compressed_wasm_hash: ledger_wasm_hash.clone()
+                    compressed_wasm_hash: ledger_wasm_hash.clone(),
+                    ledger_upgrade_arg: None,
                 },
                 DiscoverArchives {
                     token_id: usdc_token_id()
@@ -887,6 +891,80 @@ mod upgrade_ledger_suite {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn should_attach_ledger_upgrade_arg_to_ledger_subtask_only() {
+        let ledger_wasm_hash = WasmHash::from([1_u8; 32]);
+        let index_wasm_hash = WasmHash::from([2_u8; 32]);
+        let archive_wasm_hash = WasmHash::from([3_u8; 32]);
+        let ledger_upgrade_arg = vec![4_u8, 5, 6];
+
+        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc_token_id())
+            .ledger_wasm_hash(ledger_wasm_hash.clone())
+            .ledger_upgrade_arg(ledger_upgrade_arg.clone())
+            .index_wasm_hash(index_wasm_hash.clone())
+            .archive_wasm_hash(archive_wasm_hash.clone())
+            .build()
+            .collect();
+
+        assert_eq!(
+            subtasks,
+            vec![
+                UpgradeIndex {
+                    token_id: usdc_token_id(),
+                    compressed_wasm_hash: index_wasm_hash
+                },
+                UpgradeLedger {
+                    token_id: usdc_token_id(),
+                    compressed_wasm_hash: ledger_wasm_hash,
+                    ledger_upgrade_arg: Some(ledger_upgrade_arg),
+                },
+                DiscoverArchives {
+                    token_id: usdc_token_id()
+                },
+                UpgradeArchives {
+                    token_id: usdc_token_id(),
+                    compressed_wasm_hash: archive_wasm_hash
+                }
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn should_upgrade_ledger_with_ledger_upgrade_arg() {
+        init_state();
+        let usdc = usdc();
+        let usdc_token_id = TokenId::from(usdc.clone());
+        mutate_state(|s| {
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata());
+            s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
+            s.record_installed_canister::<Ledger>(&usdc, WasmHash::default());
+        });
+        let mut runtime = MockCanisterRuntime::new();
+        let ledger_upgrade_arg = vec![4_u8, 5, 6];
+        let task = Task::UpgradeLedgerSuite(
+            UpgradeLedgerSuite::builder(usdc_token_id)
+                .ledger_wasm_hash(read_ledger_wasm_hash())
+                .ledger_upgrade_arg(ledger_upgrade_arg.clone())
+                .build(),
+        );
+
+        expect_stop_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
+        expect_upgrade_canister(
+            &mut runtime,
+            LEDGER_PRINCIPAL,
+            LEDGER_BYTECODE.to_vec(),
+            ledger_upgrade_arg,
+            Ok(()),
+        );
+        expect_start_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
+        runtime.expect_time().return_const(0_u64);
+
+        let result = execute_now(task.clone(), &runtime).await;
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_queue_from_state(), vec![]);
     }
 
     #[test]

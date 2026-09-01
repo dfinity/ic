@@ -233,6 +233,50 @@ pub struct UpgradeLedgerSuite {
 }
 
 impl UpgradeLedgerSuite {
+    fn builder(token_id: TokenId) -> UpgradeLedgerSuiteBuilder {
+        UpgradeLedgerSuiteBuilder::new(token_id)
+    }
+}
+
+struct UpgradeLedgerSuiteBuilder {
+    token_id: TokenId,
+    ledger_wasm_hash: Option<WasmHash>,
+    ledger_upgrade_arg: Option<Vec<u8>>,
+    index_wasm_hash: Option<WasmHash>,
+    archive_wasm_hash: Option<WasmHash>,
+}
+
+impl UpgradeLedgerSuiteBuilder {
+    fn new(token_id: TokenId) -> Self {
+        Self {
+            token_id,
+            ledger_wasm_hash: None,
+            ledger_upgrade_arg: None,
+            index_wasm_hash: None,
+            archive_wasm_hash: None,
+        }
+    }
+
+    fn ledger_wasm_hash<T: Into<Option<WasmHash>>>(mut self, ledger_wasm_hash: T) -> Self {
+        self.ledger_wasm_hash = ledger_wasm_hash.into();
+        self
+    }
+
+    fn ledger_upgrade_arg<T: Into<Option<Vec<u8>>>>(mut self, ledger_upgrade_arg: T) -> Self {
+        self.ledger_upgrade_arg = ledger_upgrade_arg.into();
+        self
+    }
+
+    fn index_wasm_hash<T: Into<Option<WasmHash>>>(mut self, index_wasm_hash: T) -> Self {
+        self.index_wasm_hash = index_wasm_hash.into();
+        self
+    }
+
+    fn archive_wasm_hash<T: Into<Option<WasmHash>>>(mut self, archive_wasm_hash: T) -> Self {
+        self.archive_wasm_hash = archive_wasm_hash.into();
+        self
+    }
+
     /// Create a new upgrade ledger suite task containing multiple subtasks
     /// depending on which canisters need to be upgraded. Due to the dependencies between the canisters of a ledger suite, e.g.,
     /// the index pulls transactions from the ledger, the order of the subtasks is important.
@@ -251,84 +295,34 @@ impl UpgradeLedgerSuite {
     /// However, this is deemed preferable to trying to do some kind of atomic upgrade,
     /// where the ledger would be stopped before upgrading the index, since this would result in 2 canisters being stopped at the same time,
     /// which could be more problematic, especially if for some unexpected reason the upgrade fails.
-    fn new(
-        token_id: TokenId,
-        ledger_compressed_wasm_hash: Option<WasmHash>,
-        index_compressed_wasm_hash: Option<WasmHash>,
-        archive_compressed_wasm_hash: Option<WasmHash>,
-    ) -> Self {
+    fn build(self) -> UpgradeLedgerSuite {
         let mut subtasks = Vec::new();
-        if let Some(index_compressed_wasm_hash) = index_compressed_wasm_hash {
+        if let Some(index_wasm_hash) = self.index_wasm_hash {
             subtasks.push(UpgradeLedgerSuiteSubtask::UpgradeIndex {
-                token_id: token_id.clone(),
-                compressed_wasm_hash: index_compressed_wasm_hash,
+                token_id: self.token_id.clone(),
+                compressed_wasm_hash: index_wasm_hash,
             });
         }
-        if let Some(ledger_compressed_wasm_hash) = ledger_compressed_wasm_hash {
+        if let Some(ledger_wasm_hash) = self.ledger_wasm_hash {
             subtasks.push(UpgradeLedgerSuiteSubtask::UpgradeLedger {
-                token_id: token_id.clone(),
-                compressed_wasm_hash: ledger_compressed_wasm_hash,
+                token_id: self.token_id.clone(),
+                compressed_wasm_hash: ledger_wasm_hash,
+                ledger_upgrade_arg: self.ledger_upgrade_arg,
             });
         }
-        if let Some(archive_compressed_wasm_hash) = archive_compressed_wasm_hash {
+        if let Some(archive_wasm_hash) = self.archive_wasm_hash {
             subtasks.push(UpgradeLedgerSuiteSubtask::DiscoverArchives {
-                token_id: token_id.clone(),
+                token_id: self.token_id.clone(),
             });
             subtasks.push(UpgradeLedgerSuiteSubtask::UpgradeArchives {
-                token_id: token_id.clone(),
-                compressed_wasm_hash: archive_compressed_wasm_hash,
+                token_id: self.token_id.clone(),
+                compressed_wasm_hash: archive_wasm_hash,
             });
         }
-        Self {
+        UpgradeLedgerSuite {
             subtasks,
             next_subtask_index: 0,
         }
-    }
-
-    fn builder(token_id: TokenId) -> UpgradeLedgerSuiteBuilder {
-        UpgradeLedgerSuiteBuilder::new(token_id)
-    }
-}
-
-struct UpgradeLedgerSuiteBuilder {
-    token_id: TokenId,
-    ledger_wasm_hash: Option<WasmHash>,
-    index_wasm_hash: Option<WasmHash>,
-    archive_wasm_hash: Option<WasmHash>,
-}
-
-impl UpgradeLedgerSuiteBuilder {
-    fn new(token_id: TokenId) -> Self {
-        Self {
-            token_id,
-            ledger_wasm_hash: None,
-            index_wasm_hash: None,
-            archive_wasm_hash: None,
-        }
-    }
-
-    fn ledger_wasm_hash<T: Into<Option<WasmHash>>>(mut self, ledger_wasm_hash: T) -> Self {
-        self.ledger_wasm_hash = ledger_wasm_hash.into();
-        self
-    }
-
-    fn index_wasm_hash<T: Into<Option<WasmHash>>>(mut self, index_wasm_hash: T) -> Self {
-        self.index_wasm_hash = index_wasm_hash.into();
-        self
-    }
-
-    fn archive_wasm_hash<T: Into<Option<WasmHash>>>(mut self, archive_wasm_hash: T) -> Self {
-        self.archive_wasm_hash = archive_wasm_hash.into();
-        self
-    }
-
-    fn build(self) -> UpgradeLedgerSuite {
-        UpgradeLedgerSuite::new(
-            self.token_id,
-            self.ledger_wasm_hash,
-            self.index_wasm_hash,
-            self.archive_wasm_hash,
-        )
     }
 }
 
@@ -341,6 +335,8 @@ pub enum UpgradeLedgerSuiteSubtask {
     UpgradeLedger {
         token_id: TokenId,
         compressed_wasm_hash: WasmHash,
+        #[serde(default)]
+        ledger_upgrade_arg: Option<Vec<u8>>,
     },
     DiscoverArchives {
         token_id: TokenId,
