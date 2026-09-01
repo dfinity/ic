@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::invariants::common::{
     InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
-    get_all_hostos_version_records_with_keys, get_all_node_records,
+    get_all_hostos_version_records, get_all_node_records,
 };
 
 /// A predicate on the HostOS version records contained in a registry
@@ -24,7 +24,7 @@ pub(crate) fn check_hostos_version_invariants(
     let versions_in_use: BTreeSet<_> = versions_in_use.iter().collect();
 
     // Get the current list of registered HostOS versions
-    let elected_versions = get_all_hostos_version_records_with_keys(snapshot);
+    let elected_versions = get_all_hostos_version_records(snapshot);
     let elected_set: BTreeSet<_> = elected_versions.keys().collect();
     assert!(
         elected_set.is_superset(&versions_in_use),
@@ -35,7 +35,7 @@ pub(crate) fn check_hostos_version_invariants(
         "Elected an empty version ID."
     );
 
-    for (key, record) in elected_versions {
+    for record in elected_versions.values() {
         // Check whether release package URLs (update image) and corresponding hash are well-formed.
         // As file-based URLs are only used in test-deployments, we disallow file:/// URLs.
         assert_valid_urls_and_hash(

@@ -4,7 +4,7 @@ use crate::{
     flags::is_blank_replica_version_id_for_cloud_engines_enabled,
     invariants::common::{
         InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
-        get_all_replica_version_records_with_keys, get_api_boundary_node_records_from_snapshot,
+        get_all_replica_version_records, get_api_boundary_node_records_from_snapshot,
         get_subnet_ids_from_snapshot, get_value_from_snapshot,
     },
 };
@@ -56,7 +56,7 @@ pub(crate) fn check_replica_version_invariants(
     // Re-collect since we can't compare `BTreeSet<String>` with `BTreeSet<&String>` with `is_superset`.
     let versions_in_use: BTreeSet<_> = versions_in_use.iter().collect();
 
-    let elected_versions = get_all_replica_version_records_with_keys(snapshot);
+    let elected_versions = get_all_replica_version_records(snapshot);
     let elected_set: BTreeSet<_> = elected_versions.keys().collect();
     assert!(
         elected_set.is_superset(&versions_in_use),
@@ -92,6 +92,8 @@ pub(crate) fn check_replica_version_invariants(
 
 fn get_subnet_record(snapshot: &RegistrySnapshot, subnet_id: SubnetId) -> SubnetRecord {
     get_value_from_snapshot(snapshot, make_subnet_record_key(subnet_id))
+        .ok()
+        .flatten()
         .unwrap_or_else(|| panic!("Could not get subnet record for subnet: {subnet_id}"))
 }
 
@@ -151,6 +153,8 @@ pub(crate) fn has_launch_measurements(
         snapshot,
         make_replica_version_key(replica_version_id),
     )
+    .ok()
+    .flatten()
     .and_then(|replica_version_record| replica_version_record.guest_launch_measurements)
     .is_some()
 }
