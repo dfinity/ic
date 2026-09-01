@@ -811,3 +811,66 @@ fn suggested_install_command(wasm_path_str: &Path, candid_arg: &Option<String>) 
         arg_suggestion,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_assemble_canister_upgrade_options_when_no_flags_are_set() {
+        let result = assemble_canister_upgrade_options(
+            false, // skip_pre_upgrade
+            None, // wasm_memory_persistence
+        );
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_assemble_canister_upgrade_options_when_only_skip_pre_upgrade_is_set() {
+        let result = assemble_canister_upgrade_options(
+            true, // skip_pre_upgrade
+            None, // wasm_memory_persistence
+        );
+
+        assert_eq!(
+            result,
+            Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(true),
+                wasm_memory_persistence: None,
+            }),
+        );
+    }
+
+    #[test]
+    fn test_assemble_canister_upgrade_options_when_only_wasm_memory_persistence_is_set() {
+        let result = assemble_canister_upgrade_options(
+            false, // skip_pre_upgrade
+            Some(WasmMemoryPersistence::Keep), // wasm_memory_persistence
+        );
+
+        assert_eq!(
+            result,
+            Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Keep as i32),
+            }),
+        );
+    }
+
+    #[test]
+    fn test_assemble_canister_upgrade_options_when_both_flags_are_set() {
+        let result = assemble_canister_upgrade_options(
+            true, // skip_pre_upgrade
+            Some(WasmMemoryPersistence::Replace), // wasm_memory_persistence
+        );
+
+        assert_eq!(
+            result,
+            Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(true),
+                wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Replace as i32),
+            }),
+        );
+    }
+}
