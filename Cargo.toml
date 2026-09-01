@@ -791,7 +791,7 @@ memchr = "2.7"
 memmap2 = "0.9.5"
 minicbor = { version = "0.22.0", features = ["alloc", "derive"] }
 minicbor-derive = "0.14.0"
-mockall = "0.13.0"
+mockall = "0.15.0"
 mockito = "1.6.1"
 more-asserts = "0.3.1"
 nftables = "0.4"
@@ -946,6 +946,7 @@ sys-mount = "3.0"
 sysinfo = "0.37"
 tar = "0.4.39"
 tempfile = "3.20"
+test-strategy = "0.4.0"
 textplots = "^0.8"
 # DO NOT upgrade to >=2.0.19 as it pulls in syn 3 whereas the rest of the
 # codebase uses syn 2.

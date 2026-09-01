@@ -20,6 +20,7 @@ use ic_registry_keys::{
     make_replica_version_key, make_standard_engine_replica_version_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key,
 };
+use ic_types::ReplicaVersion;
 use prost::Message;
 
 /// A predicate on the replica version records contained in a registry
@@ -30,6 +31,7 @@ use prost::Message;
 /// or that is used by the unassigned nodes, the following is checked:
 ///
 /// * The corresponding ReplicaVersionRecord exists.
+/// * The version ID is well-formed, i.e. it can be parsed as a ReplicaVersion.
 /// * Each URL is well-formed.
 /// * Release package hash is a well-formed hex-encoded SHA256 value.
 ///
@@ -66,6 +68,12 @@ pub(crate) fn check_replica_version_invariants(
     );
 
     for version in elected_set {
+        // Enforce that the version ID is well-formed, so that consumers reading
+        // it back out of the Registry can turn it into a ReplicaVersion.
+        if let Err(err) = ReplicaVersion::try_from(version.as_str()) {
+            panic!("Elected an invalid version ID: {err}");
+        }
+
         let r = get_replica_version_record(snapshot, &version);
 
         // Check whether release package URLs (update image) and corresponding hash are well-formed.
@@ -240,6 +248,29 @@ mod tests {
         let registry = invariant_compliant_registry(0);
 
         let mutations = elect_version_mutations(vec!["  ".into()]);
+
+        registry.check_global_state_invariants(&mutations);
+    }
+
+    #[test]
+    #[should_panic(expected = "Elected an invalid version ID")]
+    fn panic_when_electing_version_with_illegal_characters() {
+        let registry = invariant_compliant_registry(0);
+
+        let mutations = elect_version_mutations(vec!["G@RBAGE".into()]);
+
+        registry.check_global_state_invariants(&mutations);
+    }
+
+    #[test]
+    fn no_panic_when_electing_version_with_test_suffix() {
+        let registry = invariant_compliant_registry(0);
+
+        let mutations = elect_version_mutations(vec![
+            test_replica_version().to_string(),
+            // Version IDs like this are used by system-tests, so they must remain acceptable.
+            format!("{REPLICA_VERSION_ID_1}-test"),
+        ]);
 
         registry.check_global_state_invariants(&mutations);
     }

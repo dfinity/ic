@@ -104,11 +104,11 @@ pub mod nonblocking;
 
 const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
 
-const MIN_SERVER_VERSION: &str = "15.0.0";
-const MAX_SERVER_VERSION: &str = "16";
+const MIN_SERVER_VERSION: &str = "16.0.0";
+const MAX_SERVER_VERSION: &str = "17";
 
 /// Public to facilitate downloading the PocketIC server.
-pub const LATEST_SERVER_VERSION: &str = "15.0.0";
+pub const LATEST_SERVER_VERSION: &str = "16.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -491,6 +491,8 @@ impl PocketIcBuilder {
     /// Configures the new instance to make progress automatically,
     /// i.e., periodically update the time of the IC instance
     /// to the real time and execute rounds on the subnets.
+    /// Building the instance only returns after the certified time
+    /// of the IC instance has been updated for the first time.
     pub fn with_auto_progress(mut self) -> Self {
         let config = AutoProgressConfig {
             artificial_delay_ms: None,
@@ -805,6 +807,8 @@ impl PocketIc {
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
+    /// Only returns after the certified time of the IC
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
@@ -840,6 +844,8 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
+    /// Only returns after the certified time of the PocketIC instance
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
@@ -856,6 +862,8 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
+    /// Only returns after the certified time of the PocketIC instance
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
@@ -2521,25 +2529,25 @@ mod test {
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic 15.0.0")
+            check_pocketic_server_version("pocket-ic 16.0.0")
                 .unwrap_err()
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 15 0 0")
+            check_pocketic_server_version("pocket-ic-server 16 0 0")
                 .unwrap_err()
                 .contains("Failed to parse PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 14.0.0")
+            check_pocketic_server_version("pocket-ic-server 15.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );
-        check_pocketic_server_version("pocket-ic-server 15.0.0").unwrap();
-        check_pocketic_server_version("pocket-ic-server 15.0.1").unwrap();
-        check_pocketic_server_version("pocket-ic-server 15.1.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 16.0.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 16.0.1").unwrap();
+        check_pocketic_server_version("pocket-ic-server 16.1.0").unwrap();
         assert!(
-            check_pocketic_server_version("pocket-ic-server 16.0.0")
+            check_pocketic_server_version("pocket-ic-server 17.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );

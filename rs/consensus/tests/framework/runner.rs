@@ -140,6 +140,8 @@ impl<'a> ConsensusRunner<'a> {
             consensus_crypto.clone(),
             replica_logger.clone(),
             pool_reader,
+            deps.registry_client.clone(),
+            deps.replica_config.clone(),
         )));
         let malicious_flags = MaliciousFlags::default();
         let consensus = ic_consensus::consensus::ConsensusImpl::new(
