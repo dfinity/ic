@@ -21,8 +21,8 @@ use crate::wasmtime_embedder::{
 use crate::{
     MAX_WASM_STACK_SIZE, MIN_GUARD_REGION_SIZE,
     wasm_utils::instrumentation::{
-        ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME, WasmMemoryType,
-        main_memory_type,
+        ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+        PENDING_TRAP_CODE_GLOBAL_NAME, WasmMemoryType, main_memory_type,
     },
 };
 use wirm::{
@@ -42,11 +42,12 @@ use crate::WASM_PAGE_SIZE;
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
-pub const RESERVED_SYMBOLS: [&str; 6] = [
+pub const RESERVED_SYMBOLS: [&str; 7] = [
     "canister counter_instructions",
     "canister_start",
     DIRTY_PAGES_COUNTER_GLOBAL_NAME,
     ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+    PENDING_TRAP_CODE_GLOBAL_NAME,
     STABLE_MEMORY_NAME,
     STABLE_BYTEMAP_MEMORY_NAME,
 ];

@@ -79,6 +79,10 @@ use crate::checksum;
 #[cfg(feature = "sigsegv_handler_checksum")]
 use std::ops::BitXor;
 
+/// The number of OS pages in a Wasm page. Pages are accounted for a whole Wasm
+/// page at a time, so this is the granularity of the accessed page count.
+const OS_PAGES_PER_WASM_PAGE: u64 = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64;
+
 /// Metrics may vary due to non-deterministic signal delivery.
 #[derive(Default)]
 struct NonDeterministicMetrics {
@@ -182,6 +186,7 @@ impl DeterministicState {
         let MemoryLimits {
             max_memory_size,
             max_dirty_pages,
+            max_accessed_pages: _,
         } = memory_limits;
 
         let num_bytes = NumBytes::from_num_os_pages(num_os_pages);
@@ -325,6 +330,18 @@ pub struct DeterministicMemoryTracker {
     state: RefCell<DeterministicState>,
     page_overhead: u64,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
+    /// Maximum number of OS pages a single message execution may access.
+    max_accessed_os_pages: u64,
+    /// Aborts the current execution with the given trap reason. Called at most
+    /// once per execution; the callee ignores repeated calls.
+    abort_execution: Arc<SignalMutex<dyn FnMut(AbortReason) + Send>>,
+}
+
+/// The reason a memory tracker aborted the current execution.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum AbortReason {
+    /// The execution accessed more pages than `MemoryLimits::max_accessed_pages`.
+    AccessLimitExceeded,
 }
 
 impl DeterministicMemoryTracker {
@@ -347,6 +364,15 @@ impl DeterministicMemoryTracker {
 
         // Charge instructions.
         (self.subtract_instruction_counter.lock())(num_os_pages * self.page_overhead);
+
+        // Every dirty page is also counted as accessed, so this single check
+        // covers both reads and writes. The comparison is strict so that a
+        // message accessing exactly the whole limit still succeeds.
+        let accessed_os_pages =
+            state.accessed_wasm_pages_count.get() as u64 * OS_PAGES_PER_WASM_PAGE;
+        if accessed_os_pages > self.max_accessed_os_pages {
+            (self.abort_execution.lock())(AbortReason::AccessLimitExceeded);
+        }
     }
 
     /// Marks a Wasm page as dirty.
@@ -468,6 +494,7 @@ impl DeterministicMemoryTracker {
         memory_limits: MemoryLimits,
         page_overhead: u64,
         subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
+        abort_execution: Arc<SignalMutex<dyn FnMut(AbortReason) + Send>>,
     ) -> nix::Result<Self>
     where
         Self: Sized,
@@ -496,6 +523,8 @@ impl DeterministicMemoryTracker {
             state: RefCell::new(state),
             page_overhead,
             subtract_instruction_counter,
+            max_accessed_os_pages: memory_limits.max_accessed_pages.get(),
+            abort_execution,
         };
 
         let mut instructions = tracker.page_map.get_base_memory_instructions();

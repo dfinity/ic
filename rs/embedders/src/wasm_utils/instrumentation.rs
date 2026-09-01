@@ -717,6 +717,10 @@ const TABLE_STR: &str = "table";
 pub(crate) const INSTRUCTIONS_COUNTER_GLOBAL_NAME: &str = "canister counter_instructions";
 pub(crate) const DIRTY_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_dirty_pages";
 pub(crate) const ACCESSED_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_accessed_pages";
+/// Holds an `InternalErrorCode` to be raised at the next reentrant block start,
+/// or zero if no trap is pending. Written out of band by the memory tracker's
+/// signal handler, which cannot trap by itself.
+pub(crate) const PENDING_TRAP_CODE_GLOBAL_NAME: &str = "canister pending_trap_code";
 const CANISTER_START_STR: &str = "canister_start";
 
 /// There is one byte for each OS page in the memory.
@@ -797,6 +801,8 @@ pub(super) struct InjectedCounters {
     pub instructions_counter: u32,
     pub dirty_pages_counter: u32,
     pub accessed_pages_counter: u32,
+    /// Pending `InternalErrorCode`, or zero if no trap is pending.
+    pub pending_trap_code: u32,
     /// Function to decrement the instruction counter.
     pub decr_instruction_counter_fn: u32,
     /// Function to count clean pages.
@@ -950,6 +956,17 @@ fn export_additional_symbols<'a>(
     let accessed_pages_counter = *module.add_global(
         InitExpr::new(vec![InitInstr::Value(Value::I64(0))]),
         DataType::I64,
+        true,
+        false,
+    );
+
+    // Push the pending trap code. It is an i32 so that its value can be passed
+    // straight to `internal_trap`, and it starts at zero (no trap pending) on
+    // every instance; see `get_exported_globals`, which keeps it out of the
+    // globals persisted in the execution state.
+    let pending_trap_code = *module.add_global(
+        InitExpr::new(vec![InitInstr::Value(Value::I32(0))]),
+        DataType::I32,
         true,
         false,
     );
@@ -1125,6 +1142,11 @@ fn export_additional_symbols<'a>(
         accessed_pages_counter,
     );
 
+    debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&PENDING_TRAP_CODE_GLOBAL_NAME));
+    module
+        .exports
+        .add_export_global(PENDING_TRAP_CODE_GLOBAL_NAME.to_string(), pending_trap_code);
+
     if let Some(index) = module.start.map(|s| s.0) {
         // push canister_start
         debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&CANISTER_START_STR));
@@ -1138,6 +1160,7 @@ fn export_additional_symbols<'a>(
             instructions_counter,
             dirty_pages_counter,
             accessed_pages_counter,
+            pending_trap_code,
             decr_instruction_counter_fn: *decr_instruction_counter_fn_id,
             count_clean_pages_fn: *count_clean_pages_fn_id,
         },
@@ -1342,6 +1365,27 @@ fn inject_metering(
                     },
                 ]);
                 if scope == Scope::ReentrantBlockStart {
+                    // Raise a trap requested out of band by the memory tracker.
+                    // `if` branches on a non-zero i32, so no explicit compare
+                    // against zero is needed. This is checked before the
+                    // out-of-instructions check so that a memory limit
+                    // violation deterministically wins over an instruction
+                    // counter underflow in the same block.
+                    elems.extend([
+                        GlobalGet {
+                            global_index: injected_counters.pending_trap_code,
+                        },
+                        If {
+                            blockty: wirm::wasmparser::BlockType::Empty,
+                        },
+                        GlobalGet {
+                            global_index: injected_counters.pending_trap_code,
+                        },
+                        Call {
+                            function_index: injected_functions.internal_trap,
+                        },
+                        End,
+                    ]);
                     elems.extend([
                         GlobalGet {
                             global_index: injected_counters.instructions_counter,

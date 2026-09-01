@@ -113,6 +113,14 @@ const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE: NumOsPages =
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
     NumOsPages::new(GIB / (PAGE_SIZE as u64));
 
+// Maximum number of Wasm heap OS pages (4KiB) that a single message execution is
+// allowed to access, counting both reads and writes.
+//
+// This is intentionally an independent constant rather than being derived from
+// `MAX_WASM64_MEMORY_IN_BYTES`, so that raising the heap size ceiling does not
+// implicitly widen the per-message budget.
+const WASM_MEMORY_ACCESSED_PAGE_LIMIT: NumOsPages = NumOsPages::new(6 * GIB / (PAGE_SIZE as u64));
+
 /// The maximum size in bytes for an uncompressed Wasm module. This value is
 /// also used as the maximum size for the Wasm chunk store of each canister.
 pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
@@ -204,6 +212,11 @@ pub struct Config {
     // can access.
     pub stable_memory_accessed_page_limit: StableMemoryPageLimit,
 
+    /// Maximum number of Wasm heap pages that a single message execution can
+    /// access, counting both reads and writes. Dirty pages are a subset of
+    /// accessed pages, so this transitively bounds the per-message heap delta.
+    pub wasm_memory_accessed_page_limit: StableMemoryPageLimit,
+
     /// Maximum number of stable memory dirty pages that a single message
     /// execution is allowed to produce.
     pub stable_memory_dirty_page_limit: StableMemoryPageLimit,
@@ -278,6 +291,11 @@ impl Config {
                 message: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE,
                 upgrade: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_UPGRADE,
                 query: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY,
+            },
+            wasm_memory_accessed_page_limit: StableMemoryPageLimit {
+                message: WASM_MEMORY_ACCESSED_PAGE_LIMIT,
+                upgrade: WASM_MEMORY_ACCESSED_PAGE_LIMIT,
+                query: WASM_MEMORY_ACCESSED_PAGE_LIMIT,
             },
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
