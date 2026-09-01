@@ -136,7 +136,7 @@ jobs:
 
           (cd "$RUNNER_TEMP/release-canisters" && tar -cf "$GITHUB_WORKSPACE/canisters.tar" *.gz *.did)
 
-          cat "$RUNNER_TEMP/release-binaries/SHA256SUMS" >sha256sums.txt
+          cp "$RUNNER_TEMP/release-binaries/SHA256SUMS" sha256sums.txt
           sha256sum canisters.tar >>sha256sums.txt
 
           cat sha256sums.txt
