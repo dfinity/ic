@@ -6,6 +6,7 @@ use ic_crypto_test_utils_ni_dkg::{
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_vetkd::VetKdArgsOwned;
+use ic_interfaces::crypto::BasicSigner;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_interfaces::crypto::{LoadTranscriptResult, NiDkgAlgorithm};
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
@@ -16,6 +17,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTranscript};
 use ic_types::crypto::vetkd::VetKdEncryptedKey;
 use ic_types::crypto::vetkd::VetKdEncryptedKeyShare;
 use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
+use ic_types::crypto::vetkd::VetKdEncryptedKeyShareSigningContent;
 use ic_types::crypto::vetkd::VetKdKeyShareCombinationError;
 use ic_types::crypto::vetkd::VetKdKeyShareCreationError;
 use ic_types::crypto::vetkd::VetKdKeyShareVerificationError;
@@ -348,8 +350,12 @@ mod verify_key_share {
         }
     }
 
+    // PHASE-2(SIGN_REQUEST_ID_BINDING_CONTENT): once shares are signed over the
+    // request-ID-binding content, invert this test back to expecting a
+    // `VetKdKeyShareVerificationError::VerificationError` (and rename it to
+    // `should_err_if_request_id_altered`).
     #[test]
-    fn should_err_if_request_id_altered() {
+    fn should_currently_accept_shares_under_altered_request_id() {
         let mut rng = reproducible_rng();
         let server = VetKDTestServer::new(&mut rng);
         let client = VetKDTestClient::new(&mut rng, &server);
@@ -372,12 +378,72 @@ mod verify_key_share {
             let mut altered_args = vetkd_args.clone();
             altered_args.request_id = altered;
 
-            match server.verify_key_shares(&shares, &altered_args, &mut rng) {
-                Err(VetKdKeyShareVerificationError::VerificationError(_)) => { /* expected */ }
-                Ok(()) => panic!("Shares accepted under request id {altered:?}"),
-                Err(e) => panic!("Unexpected error {:?}", e),
-            }
+            // Shares are currently signed over the legacy content, which does
+            // not bind the request ID, so verification still succeeds.
+            server
+                .verify_key_shares(&shares, &altered_args, &mut rng)
+                .unwrap_or_else(|e| panic!("Shares rejected under request id {altered:?}: {e:?}"));
         }
+    }
+
+    /// Verification must accept shares signed over the legacy content (the
+    /// encrypted key share alone), independently of which content
+    /// `create_encrypted_key_share` signs: replica versions predating the
+    /// introduction of `VetKdEncryptedKeyShareSigningContent` produce such
+    /// shares, so this must keep succeeding until no elected replica version
+    /// signs the legacy content anymore (phase 3).
+    #[test]
+    fn should_verify_share_signed_over_legacy_content() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
+
+        let mut shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        for (node_id, share) in shares.iter_mut() {
+            let signature = crypto_for(*node_id, &server.env.crypto_components)
+                .sign_basic(&share.encrypted_key_share)
+                .expect("failed to sign the legacy content");
+            share.node_signature = signature.get().0;
+        }
+
+        server
+            .verify_key_shares(&shares, &vetkd_args, &mut rng)
+            .expect("Shares signed over the legacy content should verify");
+    }
+
+    /// Verification must accept shares signed over the request-ID-binding
+    /// content: this is what phase-2 signers will produce (see
+    /// `SIGN_REQUEST_ID_BINDING_CONTENT` in `rs/crypto/src/vetkd/mod.rs`), so
+    /// this pins the verification fallback that makes the phase-2 flip safe.
+    #[test]
+    fn should_verify_share_signed_over_request_id_binding_content() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
+
+        let mut shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        for (node_id, share) in shares.iter_mut() {
+            let content = VetKdEncryptedKeyShareSigningContent::new(
+                &vetkd_args.as_ref(),
+                &share.encrypted_key_share,
+            );
+            let signature = crypto_for(*node_id, &server.env.crypto_components)
+                .sign_basic(&content)
+                .expect("failed to sign the request-ID-binding content");
+            share.node_signature = signature.get().0;
+        }
+
+        server
+            .verify_key_shares(&shares, &vetkd_args, &mut rng)
+            .expect("Shares signed over the request-ID-binding content should verify");
     }
 
     #[test]

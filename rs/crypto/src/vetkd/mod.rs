@@ -31,9 +31,37 @@ use ic_types::crypto::vetkd::{
     VetKdKeyShareCombinationError, VetKdKeyShareCreationError, VetKdKeyShareVerificationError,
     VetKdKeyVerificationError,
 };
-use ic_types::crypto::{BasicSig, BasicSigOf};
+use ic_types::crypto::{BasicSig, BasicSigOf, CryptoError};
 use std::collections::BTreeMap;
 use std::fmt;
+
+/// Migration switch for the content signed by vetKD encrypted key shares
+/// (see https://github.com/dfinity/ic/pull/11333):
+///
+/// * `false` (phase 1, current): sign the legacy content (the encrypted key
+///   share alone), but accept both the legacy and the request-ID-binding
+///   content during verification. This is required for backward compatibility:
+///   replica versions released before #11333 verify only the legacy content,
+///   so signing the new content would make them permanently invalidate our
+///   shares (and vice versa) in mixed-version subnets, i.e. during every
+///   rolling upgrade of a vetKD-enabled subnet.
+/// * `true` (phase 2): sign the request-ID-binding
+///   [`VetKdEncryptedKeyShareSigningContent`], which prevents a malicious
+///   node from replaying another node's validly-signed share under a
+///   different request. Only flip this once *all* mainnet subnets run a
+///   phase-1 replica (one that verifies both contents).
+///
+/// Phase 3 (once no elected replica version signs the legacy content anymore):
+/// remove the legacy verification fallback, the legacy `Signable` impl of
+/// `VetKdEncryptedKeyShareContent`, and this constant.
+///
+/// Note that deferring the request-ID binding to phase 2 is not a security
+/// regression: it is the signing scheme vetKD launched with on mainnet, and a
+/// replayed share can never forge a key (the BLS key share itself binds the
+/// input, context, and transport key); it can merely slow down share
+/// combination, which a malicious node could equally achieve by signing
+/// garbage.
+const SIGN_REQUEST_ID_BINDING_CONTENT: bool = false;
 
 impl<C: CryptoServiceProvider, R: CryptoComponentRng> VetKdProtocol for CryptoComponentImpl<C, R> {
     #[allow(clippy::result_large_err)]
@@ -240,14 +268,21 @@ fn create_encrypted_key_share_internal(
         )
         .map_err(vetkd_key_share_creation_error_from_vault_error)?;
 
-    let node_signature = basic_sig::sign(
-        &VetKdEncryptedKeyShareSigningContent::new(&args, &encrypted_key_share),
-        vault,
-        metrics,
-    )
-    .map_err(VetKdKeyShareCreationError::KeyShareSigningError)?
-    .get()
-    .0;
+    let node_signature = if SIGN_REQUEST_ID_BINDING_CONTENT {
+        basic_sig::sign(
+            &VetKdEncryptedKeyShareSigningContent::new(&args, &encrypted_key_share),
+            vault,
+            metrics,
+        )
+        .map_err(VetKdKeyShareCreationError::KeyShareSigningError)?
+        .get()
+        .0
+    } else {
+        basic_sig::sign(&encrypted_key_share, vault, metrics)
+            .map_err(VetKdKeyShareCreationError::KeyShareSigningError)?
+            .get()
+            .0
+    };
 
     Ok(VetKdEncryptedKeyShare {
         encrypted_key_share,
@@ -296,18 +331,38 @@ fn verify_encrypted_key_share_internal<S: CspSigner>(
             )
         })?;
 
-    let signature = BasicSigOf::new(BasicSig(key_share.node_signature.clone()));
-    let signed_content =
-        VetKdEncryptedKeyShareSigningContent::new(args, &key_share.encrypted_key_share);
-    BasicSigVerifierInternal::verify_basic_sig(
+    match BasicSigVerifierInternal::verify_basic_sig(
         csp_signer,
         registry,
-        &signature,
-        &signed_content,
+        &BasicSigOf::new(BasicSig(key_share.node_signature.clone())),
+        &key_share.encrypted_key_share,
         signer,
         registry_version_from_store,
-    )
-    .map_err(VetKdKeyShareVerificationError::VerificationError)
+    ) {
+        Ok(()) => Ok(()),
+        // The signer may already sign the request-ID-binding content (see
+        // `SIGN_REQUEST_ID_BINDING_CONTENT`), so fall back to verifying that
+        // content. The fallback is limited to signature verification failures:
+        // all other errors (registry lookups, malformed keys or signatures,
+        // unsupported algorithms) do not depend on the signed bytes, so
+        // retrying with different bytes cannot succeed.
+        Err(legacy_err @ CryptoError::SignatureVerification { .. }) => {
+            let signed_content =
+                VetKdEncryptedKeyShareSigningContent::new(args, &key_share.encrypted_key_share);
+            BasicSigVerifierInternal::verify_basic_sig(
+                csp_signer,
+                registry,
+                &BasicSigOf::new(BasicSig(key_share.node_signature.clone())),
+                &signed_content,
+                signer,
+                registry_version_from_store,
+            )
+            // If both verifications fail, report the error for the legacy
+            // content since that is what phase-1 signers produce.
+            .map_err(|_| VetKdKeyShareVerificationError::VerificationError(legacy_err))
+        }
+        Err(e) => Err(VetKdKeyShareVerificationError::VerificationError(e)),
+    }
 }
 
 fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
