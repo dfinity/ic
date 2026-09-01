@@ -26,7 +26,7 @@ const PBKDF_ITERATIONS: u32 = 1000;
 pub const LUKS2_N_KEYSLOTS: u32 = 32;
 /// Number of tokens supported by LUKS2
 pub const LUKS2_N_TOKENS: u32 = 32;
-const IC_KEY_TOKEN_TYPE: &str = "ic-key-metadata";
+pub const IC_KEY_TOKEN_TYPE: &str = "ic-key-metadata";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyslotMetadata {
@@ -468,11 +468,8 @@ pub(crate) fn destroy_keyslots_except_first(crypt_device: &mut CryptDevice) -> R
     Ok(())
 }
 
-fn remove_token_ids(
-    crypt_device: &mut CryptDevice,
-    token_ids: impl IntoIterator<Item = u32>,
-) -> Result<()> {
-    for token_id in token_ids {
+fn remove_all_tokens(crypt_device: &mut CryptDevice) -> Result<()> {
+    for token_id in 0..LUKS2_N_TOKENS {
         crypt_device
             .token_handle()
             .json_set(TokenInput::RemoveToken(token_id))
@@ -521,15 +518,14 @@ pub fn add_sev_metadata(
     // TODO: Legacy headers may carry more than one IC key metadata token. Once all nodes
     // have been updated (i.e., the num_tokens metric is 1 everywhere), this removal can
     // be deleted so that only one token is written.
-    let token_ids = ic_key_token_ids(crypt_device);
-    remove_token_ids(crypt_device, token_ids)?;
+    remove_all_tokens(crypt_device)?;
 
     let json = serde_json::to_value(KeyslotMetadata::new_sev(keyslot, sev_metadata))
         .context("Failed to serialize key slot metadata")?;
 
     crypt_device
         .token_handle()
-        .json_set(TokenInput::AddToken(&json))
+        .json_set(TokenInput::ReplaceToken(0, &json))
         .context("Failed to write LUKS2 token")?;
 
     Ok(())

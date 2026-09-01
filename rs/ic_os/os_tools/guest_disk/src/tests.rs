@@ -17,8 +17,8 @@ use crate::{Args, Partition, crypt_name, metrics_file_path, run};
 use anyhow::{Result, anyhow};
 use guest_disk::DiskEncryption;
 use guest_disk::crypt::{
-    KeyslotMetadata, LUKS2_N_KEYSLOTS, LUKS2_N_TOKENS, LuksHeaderLocation, deactivate_crypt_device,
-    format_crypt_device, open_luks2_device, read_keyslot_metadata,
+    IC_KEY_TOKEN_TYPE, KeyslotMetadata, LUKS2_N_KEYSLOTS, LUKS2_N_TOKENS, LuksHeaderLocation,
+    deactivate_crypt_device, format_crypt_device, open_luks2_device, read_keyslot_metadata,
 };
 use guest_disk::sev::{SevDiskEncryption, can_open, rekey};
 use ic_device::device_mapping::{Bytes, TempDevice};
@@ -200,6 +200,30 @@ impl<'a> PartitionView<'a> {
         }
 
         metadata
+    }
+
+    /// Asserts the single-token invariant: the only token on the device is the
+    /// `{IC_KEY_TOKEN_TYPE}` token, in the first token position; all other tokens are
+    /// inactive.
+    fn assert_single_metadata_token(&self) {
+        let mut crypt_device = self.open_crypt_device();
+        for token_id in 0..LUKS2_N_TOKENS {
+            let status = crypt_device.token_handle().status(token_id).unwrap();
+            let expected = if token_id == 0 {
+                matches!(
+                    status,
+                    CryptTokenInfo::ExternalUnknown(ref token_type)
+                        if token_type == IC_KEY_TOKEN_TYPE
+                )
+            } else {
+                matches!(status, CryptTokenInfo::Inactive)
+            };
+            assert!(
+                expected,
+                "token {token_id}: expected the only token to be the {IC_KEY_TOKEN_TYPE} token \
+                 in the first position and all other positions to be inactive"
+            );
+        }
     }
 
     fn active_keyslot_count(&self) -> usize {
@@ -643,6 +667,7 @@ fn test_sev_key_init_and_reopen() {
             .expect("Failed to reopen partition with SEV key");
 
         partition.assert_payload(b"test_data");
+        partition.assert_single_metadata_token();
 
         if partition_name == Partition::Store {
             assert!(fixture.store_header_path().exists());
@@ -666,6 +691,7 @@ fn test_sev_format_writes_keyslot_metadata() {
             1,
             "expected one metadata token for {partition:?}"
         );
+        fixture.partition(partition).assert_single_metadata_token();
         assert_eq!(
             metadata[0].sev_metadata.launch_measurement_hex,
             default_launch_measurement_as_hex()
@@ -912,6 +938,7 @@ fn test_open_store_multiple_times_with_different_keys() {
         hex::encode([5_u8; 48])
     );
     assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
+    fixture.store_partition().assert_single_metadata_token();
 }
 
 /// A legacy header carrying an extra (stale) keyslot converges back to the single first
@@ -947,6 +974,7 @@ fn test_upgrade_removes_stale_keyslots() {
     let metadata = fixture.store_partition().read_keyslot_metadata();
     assert_eq!(metadata.len(), 1);
     assert_eq!(metadata[0].keyslot().unwrap(), 0);
+    fixture.store_partition().assert_single_metadata_token();
 }
 
 #[test]
