@@ -1523,10 +1523,12 @@ mod tests {
         std::fs::write(&ic_gateway_env_file, b"TEST_KEY=TEST_VALUE").unwrap();
 
         let mut replica_runner = Box::new(FakeProcessRunner::new());
+        let replica_version = ic_test_utilities_types::ids::test_replica_version();
         let replica_process_config = ReplicaProcessConfig {
             ic_binary_dir: ic_binary_dir.clone(),
             cup_path,
             replica_config_file: replica_config_file.clone(),
+            guestos_version: replica_version.clone(),
         };
         let mut ic_gateway_runner = Box::new(FakeProcessRunner::new());
         let ic_gateway_process_config = IcGatewayProcessConfig {

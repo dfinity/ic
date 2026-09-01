@@ -101,6 +101,7 @@ pub(crate) fn setup() -> (
     let replica_config = ReplicaConfig {
         node_id: NodeId::from(PrincipalId::new_node_test_id(27)),
         subnet_id,
+        guestos_version: test_replica_version(),
         replica_version: test_replica_version(),
     };
 

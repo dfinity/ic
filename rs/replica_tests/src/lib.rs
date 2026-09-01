@@ -352,6 +352,7 @@ where
                 config.clone(),
                 temp_node,
                 subnet_id,
+                replica_version.clone(),
                 replica_version,
                 registry.clone(),
                 crypto,

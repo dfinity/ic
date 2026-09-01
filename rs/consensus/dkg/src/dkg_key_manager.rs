@@ -856,6 +856,7 @@ mod tests {
                     node_id: local_node_id,
                     // The local node always starts in the source subnet.
                     subnet_id: source_subnet_id,
+                    guestos_version: test_replica_version(),
                     replica_version: test_replica_version(),
                 })
                 .build();

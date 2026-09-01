@@ -5437,6 +5437,7 @@ pub mod test {
                 .with_replica_config(ReplicaConfig {
                     node_id: validator_node_id,
                     subnet_id: SOURCE_SUBNET_ID,
+                    guestos_version: test_replica_version(),
                     replica_version: test_replica_version(),
                 })
                 .build();
@@ -5467,6 +5468,7 @@ pub mod test {
                     ReplicaConfig {
                         node_id: cup_share_node_id,
                         subnet_id: SOURCE_SUBNET_ID,
+                        guestos_version: test_replica_version(),
                         replica_version: test_replica_version(),
                     },
                     membership,
@@ -5696,6 +5698,7 @@ pub mod test {
             .with_replica_config(ReplicaConfig {
                 node_id: validator_node_id,
                 subnet_id: SOURCE_SUBNET_ID,
+                guestos_version: test_replica_version(),
                 replica_version: test_replica_version(),
             })
             .build();

@@ -111,6 +111,7 @@ fn consensus_produces_expected_batches() {
         let replica_config = ReplicaConfig {
             node_id,
             subnet_id,
+            guestos_version: replica_version.clone(),
             replica_version,
         };
         let fake_crypto = CryptoReturningOk::default();

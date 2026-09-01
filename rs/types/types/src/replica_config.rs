@@ -10,5 +10,7 @@ pub const SUBNET_ID_DEFAULT: u64 = 0;
 pub struct ReplicaConfig {
     pub node_id: NodeId,
     pub subnet_id: SubnetId,
+    /// The GuestOS version the node booted from.
+    pub guestos_version: ReplicaVersion,
     pub replica_version: ReplicaVersion,
 }

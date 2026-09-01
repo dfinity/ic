@@ -91,6 +91,7 @@ impl DkgImpl {
             node_id,
             subnet_id,
             replica_version,
+            ..
         } = replica_config;
         Self {
             node_id,
@@ -835,6 +836,7 @@ mod tests {
                         // Node Id = 1, who is a dealer
                         node_id: node_test_id(1),
                         subnet_id: subnet_test_id(0),
+                        guestos_version: test_replica_version(),
                         replica_version: test_replica_version(),
                     })
                     .without_state_manager_expectations()
@@ -1113,6 +1115,7 @@ mod tests {
                     .with_replica_config(ReplicaConfig {
                         node_id: node_test_id(1),
                         subnet_id: subnet_test_id(0),
+                        guestos_version: test_replica_version(),
                         replica_version: test_replica_version(),
                     })
                     .build();
@@ -1127,6 +1130,7 @@ mod tests {
                         // This is not a dealer!
                         node_id: node_test_id(0),
                         subnet_id: subnet_test_id(0),
+                        guestos_version: test_replica_version(),
                         replica_version: test_replica_version(),
                     })
                     .build();
@@ -1575,6 +1579,7 @@ mod tests {
                         .with_replica_config(ReplicaConfig {
                             node_id: node_test_id(1),
                             subnet_id: subnet_test_id(0),
+                            guestos_version: test_replica_version(),
                             replica_version: test_replica_version(),
                         })
                         .without_state_manager_expectations()
@@ -1584,6 +1589,7 @@ mod tests {
                         .with_replica_config(ReplicaConfig {
                             node_id: node_test_id(2),
                             subnet_id: subnet_test_id(0),
+                            guestos_version: test_replica_version(),
                             replica_version: test_replica_version(),
                         })
                         .without_state_manager_expectations()
@@ -2167,6 +2173,7 @@ mod tests {
                         // Node 2 is a non-dealer receiver
                         node_id: node_test_id(2),
                         subnet_id: subnet_test_id(0),
+                        guestos_version: test_replica_version(),
                         replica_version: test_replica_version(),
                     })
                     .with_dkg_interval_length(dkg_interval_length)

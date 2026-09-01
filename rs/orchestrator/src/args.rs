@@ -55,6 +55,10 @@ pub struct OrchestratorArgs {
     #[clap(long)]
     pub(crate) version_file: PathBuf,
 
+    /// The path to the GuestOS version file.
+    #[clap(long)]
+    pub(crate) guestos_version_file: PathBuf,
+
     /// Print the replica's current node ID.
     #[clap(long)]
     pub node_id: bool,

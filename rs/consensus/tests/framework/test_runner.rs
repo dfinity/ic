@@ -85,6 +85,7 @@ impl TestRunner {
                     .map(|(index, _)| ReplicaConfig {
                         node_id: node_test_id(index as u64),
                         subnet_id,
+                        guestos_version: test_replica_version(),
                         replica_version: test_replica_version(),
                     })
                     .collect();

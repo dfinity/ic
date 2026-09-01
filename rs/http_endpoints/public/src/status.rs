@@ -23,6 +23,7 @@ pub(crate) struct StatusService {
     replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     replica_version: ReplicaVersion,
+    guestos_version: ReplicaVersion,
 }
 
 impl StatusService {
@@ -39,6 +40,7 @@ impl StatusService {
         replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         replica_version: ReplicaVersion,
+        guestos_version: ReplicaVersion,
     ) -> Router {
         let state = Self {
             log,
@@ -47,6 +49,7 @@ impl StatusService {
             replica_health_status,
             state_reader,
             replica_version,
+            guestos_version,
         };
         Router::new().route_service(
             StatusService::route(),
@@ -79,6 +82,7 @@ pub(crate) async fn status(State(state): State<StatusService>) -> Cbor<HttpStatu
         // USE WITH EXTREME CAUTION.
         root_key: root_key.map(Blob),
         impl_version: Some(state.replica_version.to_string()),
+        guestos_version: Some(state.guestos_version.to_string()),
         impl_hash: REPLICA_BINARY_HASH.get().map(|s| s.to_string()),
         replica_health_status: Some(state.replica_health_status.load()),
         certified_height: Some(state.state_reader.latest_certified_height()),

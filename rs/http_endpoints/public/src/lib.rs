@@ -266,6 +266,7 @@ pub fn start_server(
     node_id: NodeId,
     subnet_id: SubnetId,
     replica_version: ReplicaVersion,
+    guestos_version: ReplicaVersion,
     nns_subnet_id: SubnetId,
     log: ReplicaLogger,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
@@ -387,6 +388,7 @@ pub fn start_server(
         Arc::clone(&health_status),
         state_reader.clone(),
         replica_version.clone(),
+        guestos_version,
     );
     let dashboard_router = DashboardService::new_router(
         config.clone(),

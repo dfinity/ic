@@ -176,11 +176,16 @@ impl DependenciesBuilder {
 
         Self {
             pool_config,
-            replica_config: ReplicaConfig {
-                node_id: node_test_id(0),
-                subnet_id: subnet_records[0].1,
-                replica_version: ReplicaVersion::from_str(&subnet_records[0].2.replica_version_id)
-                    .expect("Invalid replica_version_id"),
+            replica_config: {
+                let replica_version =
+                    ReplicaVersion::from_str(&subnet_records[0].2.replica_version_id)
+                        .expect("Invalid replica_version_id");
+                ReplicaConfig {
+                    node_id: node_test_id(0),
+                    subnet_id: subnet_records[0].1,
+                    guestos_version: replica_version.clone(),
+                    replica_version,
+                }
             },
             sorted_subnet_records: subnet_records,
             with_state_manager_expectations: true,

@@ -187,6 +187,10 @@ fn main() -> io::Result<()> {
         |_| ReplicaVersion::try_from(UNKNOWN_REPLICA_VERSION).unwrap(),
         |args| args.replica_version.clone(),
     );
+    let guestos_version = replica_args.as_ref().map_or_else(
+        |_| ReplicaVersion::try_from(UNKNOWN_REPLICA_VERSION).unwrap(),
+        |args| args.guestos_version.clone(),
+    );
     // Report replica version metric
     {
         let g = metrics_registry.int_gauge_vec(
@@ -288,7 +292,8 @@ fn main() -> io::Result<()> {
             config.clone(),
             node_id,
             subnet_id,
-            replica_version,
+            guestos_version.clone(),
+            replica_version.clone(),
             registry,
             crypto,
             cup_proto,

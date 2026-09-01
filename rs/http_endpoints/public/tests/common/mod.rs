@@ -564,6 +564,7 @@ impl HttpEndpointBuilder {
             sig_verifier,
             node_id,
             subnet_id,
+            replica_version.clone(),
             replica_version,
             nns_subnet_id,
             log,

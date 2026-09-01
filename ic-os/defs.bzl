@@ -80,6 +80,30 @@ def icos_build(
             tags = ["manual"],
         )
 
+    # A separate copy of the version file installed as binary_version.txt in
+    # the rootfs, holding the replica binary version. During a fast upgrade,
+    # the overlay ships a new version and the file will be mounted over.
+    # version.txt above is not mounted over so it can be used to read the base
+    # GuestOS version.
+    copy_file(
+        name = "copy_binary_version_txt",
+        src = ic_version,
+        out = "binary_version.txt",
+        allow_symlink = True,
+        visibility = ["//visibility:public"],
+        tags = ["manual"],
+    )
+
+    if upgrades:
+        native.genrule(
+            name = "test_binary_version_txt",
+            srcs = [":copy_binary_version_txt"],
+            outs = ["binary_version-test.txt"],
+            cmd = "sed -e 's/.*/&-test/' < $< > $@",
+            visibility = ["//visibility:public"],
+            tags = ["manual"],
+        )
+
     # -------------------- Build grub partition --------------------
 
     build_grub_partition("partition-grub.tzst", grub_config = image_deps.get("grub_config", default = None), tags = ["manual"])
@@ -214,6 +238,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         partition_root_hash = partition_root + "-hash"
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
         version_txt = "version" + test_suffix + ".txt"
+        binary_version_txt = "binary_version" + test_suffix + ".txt"
         boot_args = "boot" + test_suffix + "_args"
         launch_measurements = "launch-measurements" + test_suffix + ".json"
 
@@ -226,7 +251,10 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
             strip_paths = PARTITION_ROOT_STRIP_PATHS,
             extra_files = {
                 k: v
-                for k, v in (image_deps["rootfs"].items() + [(version_txt, "/opt/ic/share/version.txt:0644")])
+                for k, v in (image_deps["rootfs"].items() + [
+                    (version_txt, "/opt/ic/share/version.txt:0644"),
+                    (binary_version_txt, "/opt/ic/share/binary_version.txt:0644"),
+                ])
             },
             target_compatible_with = ["@platforms//os:linux"],
             tags = ["manual", "no-cache"],

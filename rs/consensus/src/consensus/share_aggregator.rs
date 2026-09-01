@@ -540,6 +540,7 @@ mod tests {
                 .with_replica_config(ReplicaConfig {
                     node_id: NODE_1,
                     subnet_id: SOURCE_SUBNET_ID,
+                    guestos_version: test_replica_version(),
                     replica_version: test_replica_version(),
                 })
                 .build();
@@ -591,6 +592,7 @@ mod tests {
                         ReplicaConfig {
                             node_id,
                             subnet_id: SOURCE_SUBNET_ID,
+                            guestos_version: test_replica_version(),
                             replica_version: test_replica_version(),
                         },
                         membership.clone(),

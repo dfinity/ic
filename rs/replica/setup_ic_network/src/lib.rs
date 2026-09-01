@@ -336,6 +336,7 @@ pub fn setup_consensus_and_p2p(
     node_id: NodeId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
+    guestos_version: ReplicaVersion,
     replica_version: ReplicaVersion,
     tls_config: Arc<dyn TlsConfig>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -440,6 +441,7 @@ pub fn setup_consensus_and_p2p(
         node_id,
         subnet_id,
         subnet_type,
+        guestos_version,
         replica_version,
         artifact_pools,
         channels,
@@ -472,6 +474,7 @@ fn start_consensus(
     node_id: NodeId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
+    guestos_version: ReplicaVersion,
     replica_version: ReplicaVersion,
     artifact_pools: ArtifactPools,
     abortable_broadcast_channels: AbortableBroadcastChannels,
@@ -547,6 +550,7 @@ fn start_consensus(
     let replica_config = ReplicaConfig {
         node_id,
         subnet_id,
+        guestos_version,
         replica_version,
     };
     let dkg_key_manager = Arc::new(Mutex::new(ic_consensus_dkg::DkgKeyManager::new(

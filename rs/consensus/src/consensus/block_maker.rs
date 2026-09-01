@@ -799,6 +799,7 @@ mod tests {
             .with_replica_config(ReplicaConfig {
                 node_id: node_test_id(1),
                 subnet_id,
+                guestos_version: test_replica_version(),
                 replica_version: test_replica_version(),
             })
             .build();
@@ -892,7 +893,8 @@ mod tests {
                     })
                     .unwrap(),
                 subnet_id: replica_config.subnet_id,
-                replica_version: replica_config.replica_version,
+                guestos_version: replica_config.guestos_version.clone(),
+                replica_version: replica_config.replica_version.clone(),
             };
 
             let block_maker = BlockMaker::new(
@@ -1019,7 +1021,8 @@ mod tests {
                     })
                     .unwrap(),
                 subnet_id: replica_config.subnet_id,
-                replica_version: replica_config.replica_version,
+                guestos_version: replica_config.guestos_version.clone(),
+                replica_version: replica_config.replica_version.clone(),
             };
 
             let block_maker = BlockMaker::new(
