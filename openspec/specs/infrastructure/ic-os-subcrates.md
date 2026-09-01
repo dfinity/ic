@@ -488,7 +488,7 @@ The `guest_upgrade_shared` crate defines the gRPC service protocol, constants, a
 
 ### Requirement: Guest Upgrade Client (guest_upgrade_client)
 
-The `guest_upgrade_client` crate runs inside the Upgrade Guest VM and retrieves the disk encryption key from the Default Guest VM via an attested TLS connection.
+The `guest_upgrade_client` crate runs inside the Upgrade Guest VM. It retrieves the Store partition's disk encryption key and detached LUKS header from the Default Guest VM via an attested TLS connection, then re-keys the header to its own SEV-derived key so it can adopt the Store partition after rebooting into the Default VM role.
 
 #### Scenario: Skip key exchange when not an upgrade VM
 - **WHEN** the client starts and `guest_vm_type` is not `Upgrade`
@@ -496,7 +496,7 @@ The `guest_upgrade_client` crate runs inside the Upgrade Guest VM and retrieves 
 - **AND** exits successfully
 
 #### Scenario: Skip key exchange when store can already be opened
-- **WHEN** the client can already open the store partition with existing keys
+- **WHEN** the client can already open the store partition with its own SEV-derived key against the existing detached header
 - **THEN** it does not request a new disk encryption key
 - **AND** it still signals success to the server
 
@@ -512,9 +512,10 @@ The `guest_upgrade_client` crate runs inside the Upgrade Guest VM and retrieves 
 - **AND** verifies that the custom data matches (binding both TLS public keys)
 - **AND** verifies that the chip ID matches (same physical machine)
 
-#### Scenario: Save retrieved disk encryption key
-- **WHEN** the disk encryption key is successfully retrieved
-- **THEN** it is written to the previous key path (`/var/alternative_store.keyfile`)
+#### Scenario: Adopt retrieved Store artifacts
+- **WHEN** the disk encryption key and detached Store LUKS header are successfully retrieved
+- **THEN** the header is staged next to its final path (same filesystem) and re-keyed from the old GuestOS's key (received above) to the client's own SEV-derived key
+- **AND** the re-keyed header is then moved into place at the client's own Store LUKS header path, ready for the reboot into the Default VM role
 
 #### Scenario: Shutdown after exchange
 - **WHEN** the key exchange completes (success or failure)
@@ -530,13 +531,19 @@ The `guest_upgrade_client` crate runs inside the Upgrade Guest VM and retrieves 
 
 ### Requirement: Guest Upgrade Server (guest_upgrade_server)
 
-The `guest_upgrade_server` crate runs inside the Default Guest VM and provides the disk encryption key to the Upgrade Guest VM via an attested gRPC service.
+The `guest_upgrade_server` crate runs inside the Default Guest VM and provides the disk encryption key and the Store partition's detached LUKS header to the Upgrade Guest VM via an attested gRPC service.
 
 #### Scenario: Start key exchange server
 - **WHEN** `exchange_keys` is called
 - **THEN** a self-signed TLS certificate is generated
 - **AND** blessed measurements are fetched from the NNS registry
 - **AND** the gRPC server is started on the configured port
+
+#### Scenario: Serve disk encryption key and detached header
+- **WHEN** `GetDiskEncryptionKey` is called after the client's attestation report is verified
+- **THEN** the server derives the Store disk encryption key from its own SEV measurement
+- **AND** reads the Store partition's detached LUKS header from disk
+- **AND** returns both, along with its own attestation package, in the response
 
 #### Scenario: Trigger Upgrade VM start
 - **WHEN** the server is ready
@@ -558,37 +565,35 @@ The `guest_upgrade_server` crate runs inside the Default Guest VM and provides t
 
 ### Requirement: Guest Disk Encryption (guest_disk)
 
-The `guest_disk` crate manages LUKS2-encrypted disk partitions (var and store) for GuestOS, supporting both SEV-derived and pre-shared key encryption.
+The `guest_disk` crate manages LUKS2-encrypted disk partitions (var and store) for GuestOS, supporting both SEV-derived and pre-shared key encryption. The Var partition uses an attached LUKS header; the Store partition uses a detached header stored on the Var partition, so the header itself can be transferred and re-keyed independently of the Store device during an upgrade (see `guest_upgrade_client`/`guest_upgrade_server`).
 
 #### Scenario: Open var partition with SEV-derived key
 - **WHEN** a var partition is opened with SEV encryption
 - **THEN** a key is derived from the SEV measurement using HKDF-SHA256
-- **AND** the LUKS device is activated under `/dev/mapper/var_crypt`
+- **AND** the LUKS device with its attached header is activated under `/dev/mapper/var_crypt`
 
-#### Scenario: Open store partition with previous key during upgrade
-- **WHEN** a store partition is opened and a previous key file exists
-- **THEN** the partition is first unlocked with the previous key
-- **AND** the new SEV-derived key is added to the LUKS keyslots
-- **AND** old keyslots (except the previous key and new key) are destroyed
-
-#### Scenario: Clean up previous key on first boot after upgrade
-- **WHEN** the GuestOS boots for the first time as the Default VM after an upgrade
-- **THEN** the previous key file is removed from `/var/alternative_store.keyfile`
-
-#### Scenario: Fall back to SEV key when previous key fails
-- **WHEN** the previous key file exists but fails to unlock the store partition
-- **THEN** the system falls through and attempts to open with the SEV-derived key
+#### Scenario: Open store partition with detached header
+- **WHEN** a store partition is opened with SEV encryption
+- **THEN** a key is derived from the SEV measurement
+- **AND** the LUKS device is activated using the detached header stored on the Var partition
 
 #### Scenario: Format partition with LUKS2
 - **WHEN** `format` is called on a device path
 - **THEN** a key is derived from the SEV measurement
-- **AND** the device is formatted with LUKS2 using the derived key
+- **AND** the device is formatted with LUKS2 using the derived key (attached header for Var, detached header for Store)
+- **AND** launch-measurement/TCB metadata is written to the new keyslot's LUKS2 token
+- **AND** formatting the Store partition refuses to proceed if a detached header already exists at the target path
 
-#### Scenario: Check if store can be opened
-- **WHEN** `can_open_store` is called
-- **THEN** it first checks if the previous key file exists and can unlock the device
-- **AND** if not, it checks if the SEV-derived key can unlock the device
-- **AND** returns `true` if either key works
+#### Scenario: Check if a partition can be opened with the SEV-derived key
+- **WHEN** `can_open` is called with a device path and header location
+- **THEN** it derives the SEV key and attempts to unlock the device (attached or detached header) with it
+- **AND** returns `true` only if that derived key succeeds
+
+#### Scenario: Re-key a detached header during upgrade
+- **WHEN** `rekey` is called with an old key, the device path, and header location
+- **THEN** it derives the new SEV key, opens the LUKS2 device, and replaces the passphrase in keyslot 0 from the old key to the new SEV-derived key
+- **AND** destroys any other keyslots left over from legacy headers
+- **AND** writes updated launch-measurement/TCB metadata to the keyslot's LUKS2 token
 
 #### Scenario: Var partition does not allow discards
 - **WHEN** the var partition is opened
