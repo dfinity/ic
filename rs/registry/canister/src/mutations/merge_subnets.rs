@@ -206,6 +206,18 @@ impl Registry {
             "{LOG_PREFIX}The canister ID ranges of subnet {source_subnet} were updated during the \
              `setup_initial_dkg` call",
         );
+        // A canister migration overlapping the canister ID ranges of the source subnet could have
+        // been prepared, without changing the routing table, while `setup_initial_dkg` was in
+        // flight; rerouting those ranges would break it, just like it would have before the call.
+        assert!(
+            self.get_canister_migrations(post_call_registry_version)
+                .is_none_or(|canister_migrations| are_disjoint(
+                    canister_migrations.ranges(),
+                    source_ranges.iter()
+                )),
+            "{LOG_PREFIX}Canister migrations overlapping the canister ID ranges of subnet \
+             {source_subnet} were added during the `setup_initial_dkg` call",
+        );
 
         let dkg_response = SetupInitialDKGResponse::decode(&response_bytes).unwrap();
 
