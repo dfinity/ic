@@ -138,6 +138,13 @@ impl Registry {
             .get_subnet_catch_up_package(destination_subnet, Some(pre_call_registry_version))
             .map_err(|err| format!("failed to get the CUP of {destination_subnet}: {err}"))?;
         cup_contents.registry_store_uri = None;
+        // Chain key initializations in a CUP take precedence over the chain key configuration of
+        // the subnet record, so carrying over the ones of the CUP being replaced would make the
+        // destination subnet bootstrap stale key material. The destination subnet holds no chain
+        // keys (checked above) and merging reshares none, so both fields are cleared, just like
+        // recovering a subnet without an initial chain key configuration does.
+        cup_contents.chain_key_initializations = vec![];
+        cup_contents.ecdsa_initializations = vec![];
 
         let mut subnet_record = destination_record;
 

@@ -6,10 +6,15 @@ use ic_nns_test_utils::{
     },
     registry::{initial_routing_table_mutations, prepare_registry_with_two_node_sets},
 };
-use ic_protobuf::registry::subnet::v1::{RecoveryArgs, catch_up_package_contents::CupType};
+use ic_protobuf::registry::subnet::v1::{
+    CatchUpPackageContents, ChainKeyInitialization, EcdsaInitialization, RecoveryArgs,
+    catch_up_package_contents::CupType,
+};
+use ic_registry_keys::make_catch_up_package_contents_key;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::CanisterId;
+use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::merge_subnets::MergeSubnetsPayload,
 };
@@ -45,6 +50,25 @@ fn test_merge_subnets() {
                     /* num_nodes_in_subnet = */ 4, /* num_unassigned_nodes = */ 4, true,
                 );
             let subnet_id_2 = subnet_id_2_option.unwrap();
+            // Give the destination subnet a CUP holding chain key initializations, as it
+            // would if it had once been recovered while holding chain keys. Merging must
+            // not carry them over into the recovery CUP it creates.
+            let subnet_1_mutation = {
+                let mut subnet_1_mutation = subnet_1_mutation;
+                let cup_contents_key = make_catch_up_package_contents_key(subnet_id_2).into_bytes();
+                let cup_contents_mutation = subnet_1_mutation
+                    .mutations
+                    .iter_mut()
+                    .find(|mutation| mutation.key == cup_contents_key)
+                    .expect("the destination subnet should have CUP contents");
+                let mut cup_contents =
+                    CatchUpPackageContents::decode(&cup_contents_mutation.value[..])
+                        .expect("failed to decode the CUP contents");
+                cup_contents.ecdsa_initializations = vec![EcdsaInitialization::default()];
+                cup_contents.chain_key_initializations = vec![ChainKeyInitialization::default()];
+                cup_contents_mutation.value = cup_contents.encode_to_vec();
+                subnet_1_mutation
+            };
             let rt_mutation = {
                 fn range(start: u64, end: u64) -> CanisterIdRange {
                     CanisterIdRange {
@@ -157,6 +181,11 @@ fn test_merge_subnets() {
                     .is_some(),
                 "the recovery CUP should hold a high threshold DKG transcript",
             );
+            // Chain key initializations in a CUP take precedence over the chain key
+            // configuration of the subnet record, so the stale ones seeded above must be
+            // gone: merging reshares no chain key.
+            assert_eq!(cup_contents.ecdsa_initializations, vec![]);
+            assert_eq!(cup_contents.chain_key_initializations, vec![]);
 
             let subnet_record = get_subnet_record(&registry, subnet_id_2).await;
             assert!(
