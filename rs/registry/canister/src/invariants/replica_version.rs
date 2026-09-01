@@ -56,18 +56,16 @@ pub(crate) fn check_replica_version_invariants(
     versions_in_use.append(&mut get_all_api_boundary_node_versions(snapshot));
 
     // Re-collect since we can't compare `BTreeSet<String>` with `BTreeSet<&String>` with `is_superset`.
-    let versions_in_use: BTreeSet<_> = versions_in_use.iter().collect();
+    let versions_in_use: BTreeSet<&String> = versions_in_use.iter().collect();
 
     let elected_versions = get_all_replica_version_records(snapshot);
-    let elected_set: BTreeSet<_> = elected_versions.keys().collect();
-    assert!(
-        elected_set.is_superset(&versions_in_use),
-        "Using a version that isn't elected. Elected versions: {elected_set:?}, in use: {versions_in_use:?}."
-    );
-    assert!(
-        elected_set.iter().all(|v| !v.trim().is_empty()),
-        "Elected an empty version ID."
-    );
+    let elected_set: BTreeSet<&String> = elected_versions.keys().collect();
+    if !elected_set.is_superset(&versions_in_use) {
+        panic!(
+            "Using a version that isn't elected: {:?}.",
+            versions_in_use.difference(&elected_set)
+        );
+    }
 
     for (key, record) in elected_versions {
         // Enforce that the version ID is well-formed, so that consumers reading
