@@ -1,5 +1,5 @@
 use canister_test::Wasm;
-use ic_management_canister_types_private::{CanisterInstallMode, WasmMemoryPersistence};
+use ic_management_canister_types_private::WasmMemoryPersistence;
 use ic_nervous_system_agent::{helpers::await_with_timeout, pocketic_impl::PocketIcAgent};
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
@@ -10,7 +10,10 @@ use ic_nervous_system_integration_tests::{
     },
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_protobuf::types::v1::WasmMemoryPersistence as WasmMemoryPersistenceProto;
+use ic_protobuf::types::v1::{
+    CanisterInstallMode as CanisterInstallModeProto,
+    WasmMemoryPersistence as WasmMemoryPersistenceProto,
+};
 use ic_sns_cli::{
     neuron_id_to_candid_subaccount::ParsedSnsNeuron,
     upgrade_sns_controlled_canister::{
@@ -246,7 +249,7 @@ async fn upgrade_sns_controlled_canister_with_options() {
     else {
         panic!("unexpected proposal action {action:?}");
     };
-    assert_eq!(mode, Some(CanisterInstallMode::Upgrade as i32));
+    assert_eq!(mode, Some(CanisterInstallModeProto::Upgrade as i32));
     let canister_upgrade_options = canister_upgrade_options.unwrap();
     assert_eq!(canister_upgrade_options.skip_pre_upgrade, Some(true));
     assert_eq!(
