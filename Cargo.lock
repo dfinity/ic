@@ -11336,6 +11336,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "wat",
  "xrc-mock",
 ]
 
@@ -13609,6 +13610,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-protobuf",
  "ic-sns-governance",
  "ic-sns-governance-api",
  "ic-sns-init",
