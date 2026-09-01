@@ -827,15 +827,15 @@ impl Player {
         // against the replay target height: the two differ if the state was already
         // ahead of the replayed blocks, in which case it is the latest state that the
         // checkpointing batch would checkpoint.
-        let checkpoint_batch_needed = self.create_checkpoint
-            && !self
-                .state_manager
-                .checkpoint_heights()
-                .contains(&self.state_manager.latest_state_height());
+        let latest_state_checkpointed = self
+            .state_manager
+            .checkpoint_heights()
+            .contains(&self.state_manager.latest_state_height());
+        let checkpoint_batch_needed = self.create_checkpoint && !latest_state_checkpointed;
         if no_extra_msgs && !checkpoint_batch_needed {
             println!(
                 "No extra batch delivered: {}.",
-                if self.create_checkpoint {
+                if latest_state_checkpointed {
                     "the replayed state is already checkpointed"
                 } else {
                     "the replayed state is not persisted without --create-checkpoint"

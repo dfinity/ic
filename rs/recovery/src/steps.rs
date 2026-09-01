@@ -505,8 +505,10 @@ impl Step for ReplayStep {
             // registry version assigns to it.
             if self.replica_version.is_none() {
                 return Err(RecoveryError::UnexpectedError(format!(
-                    "No consensus pool found at {}, so the replica version the subnet \
-                     is running on cannot be determined; pass it with `--replica-version`.",
+                    "No consensus pool found at {}, so the replica version the subnet is \
+                     running on cannot be determined. Restart `ic-recovery` with \
+                     `--replica-version <version>` and resume: this step will be the next \
+                     one to run.",
                     consensus_store_path.display()
                 )));
             }
