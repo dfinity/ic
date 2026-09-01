@@ -5,7 +5,7 @@ use attestation::attestation_package::{
 };
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
-use guest_disk::sev::DiskCryptoOps;
+use guest_disk::crypt::LuksHeaderLocation;
 use guest_upgrade_shared::api::disk_encryption_key_exchange_service_client::DiskEncryptionKeyExchangeServiceClient;
 use guest_upgrade_shared::api::{GetDiskEncryptionKeyRequest, SignalStatusRequest};
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
@@ -23,6 +23,8 @@ use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
+use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpStream;
@@ -38,16 +40,69 @@ const NNS_PUBLIC_KEY_PATH: &str = "/run/config/nns_public_key.pem";
 
 type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
 
+/// Wrapper around encrypted disk operations to allow testing guest upgrades without setting up
+/// block devices which requires root.
+#[mockall::automock]
+pub trait DiskCryptoOps: Send + Sync {
+    /// Returns whether the device can already be unlocked.
+    fn can_open(
+        &self,
+        device_path: &Path,
+        luks_header_path: &Path,
+        sev_firmware: &mut dyn SevGuestFirmware,
+    ) -> Result<bool>;
+
+    /// Re-keys the detached LUKS header to the SEV-derived key of the new GuestOS.
+    fn rekey(
+        &self,
+        device_path: &Path,
+        luks_header_path: &Path,
+        old_key: &[u8],
+        sev_firmware: &mut dyn SevGuestFirmware,
+    ) -> Result<()>;
+}
+
+pub struct DefaultDiskCryptoOps;
+
+impl DiskCryptoOps for DefaultDiskCryptoOps {
+    fn can_open(
+        &self,
+        device_path: &Path,
+        luks_header_path: &Path,
+        sev_firmware: &mut dyn SevGuestFirmware,
+    ) -> Result<bool> {
+        guest_disk::sev::can_open(
+            device_path,
+            LuksHeaderLocation::Detached(luks_header_path),
+            sev_firmware,
+        )
+    }
+
+    fn rekey(
+        &self,
+        device_path: &Path,
+        luks_header_path: &Path,
+        old_key: &[u8],
+        sev_firmware: &mut dyn SevGuestFirmware,
+    ) -> Result<()> {
+        guest_disk::sev::rekey(
+            device_path,
+            LuksHeaderLocation::Detached(luks_header_path),
+            old_key,
+            sev_firmware,
+        )
+    }
+}
+
 pub struct DiskEncryptionKeyExchangeClientAgent {
     guestos_config: GuestOSConfig,
     sev_firmware: Box<dyn SevGuestFirmware>,
     nns_registry_client: Arc<dyn RegistryClient>,
     store_device_path: PathBuf,
-    previous_key_path: PathBuf,
     store_luks_header_path: PathBuf,
     server_port: u16,
     sev_root_certificate_verification: SevRootCertificateVerification,
-    crypto_ops: Box<dyn DiskCryptoOps>,
+    crypto_ops: Arc<dyn DiskCryptoOps>,
 }
 
 // Allow 32MB ingress messages - we need 16MB for the LUKS header
@@ -59,9 +114,8 @@ impl DiskEncryptionKeyExchangeClientAgent {
         sev_root_certificate_verification: SevRootCertificateVerification,
         sev_firmware: Box<dyn SevGuestFirmware>,
         nns_registry_client: Arc<dyn RegistryClient>,
-        crypto_ops: Box<dyn DiskCryptoOps>,
+        crypto_ops: Arc<dyn DiskCryptoOps>,
         store_device_path: PathBuf,
-        previous_key_path: PathBuf,
         store_luks_header_path: PathBuf,
         server_port: u16,
     ) -> Self {
@@ -70,7 +124,6 @@ impl DiskEncryptionKeyExchangeClientAgent {
             sev_firmware,
             nns_registry_client,
             store_device_path,
-            previous_key_path,
             store_luks_header_path,
             server_port,
             sev_root_certificate_verification,
@@ -105,9 +158,8 @@ impl DiskEncryptionKeyExchangeClientAgent {
         // If we can already open the store, we don't need to run the key exchange.
         // (We still have to call signal_status, since the server is expecting us to signal
         // success)
-        let can_open_store = self.crypto_ops.can_open_store(
+        let can_open_store = self.crypto_ops.can_open(
             &self.store_device_path,
-            &self.previous_key_path,
             &self.store_luks_header_path,
             self.sev_firmware.as_mut(),
         )?;
@@ -202,37 +254,40 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .luks_header
             .context("Server did not send a Store LUKS header")?;
 
-        self.persist_disk_encryption_artifacts(disk_encryption_key, luks_header)
-            .await?;
+        self.adopt_store_artifacts(disk_encryption_key, luks_header)?;
 
         Ok(())
     }
 
-    async fn persist_disk_encryption_artifacts(
-        &self,
-        disk_encryption_key: Vec<u8>,
-        luks_header: Vec<u8>,
-    ) -> Result<()> {
-        let disk_encryption_key =
-            String::from_utf8(disk_encryption_key).context("Key is not valid UTF-8")?;
+    /// Copies the received Store LUKS header to our Var partition and re-keys it: the old
+    /// GuestOS's key (received above) is replaced with our own SEV-derived key, which the
+    /// default VM we become after the reboot can re-derive.
+    fn adopt_store_artifacts(&mut self, old_key: Vec<u8>, luks_header: Vec<u8>) -> Result<()> {
+        // Staged next to the final path, so moving it into place stays on the same
+        // filesystem. The permissions must allow the orchestrator (running as
+        // ic-replica) to read the header.
+        let mut staged_header = tempfile::Builder::new()
+            .permissions(std::fs::Permissions::from_mode(0o644))
+            .tempfile_in(
+                self.store_luks_header_path
+                    .parent()
+                    .context("Store LUKS header path has no parent directory")?,
+            )
+            .context("Failed to create staged Store LUKS header")?;
+        staged_header
+            .write_all(&luks_header)
+            .context("Failed to write staged Store LUKS header")?;
 
-        tokio::fs::write(&self.store_luks_header_path, &luks_header)
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to write Store LUKS header to {}",
-                    self.store_luks_header_path.display()
-                )
-            })?;
+        self.crypto_ops.rekey(
+            &self.store_device_path,
+            staged_header.path(),
+            &old_key,
+            self.sev_firmware.as_mut(),
+        )?;
 
-        tokio::fs::write(&self.previous_key_path, disk_encryption_key)
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to write key to {}",
-                    self.previous_key_path.display()
-                )
-            })?;
+        staged_header
+            .persist(&self.store_luks_header_path)
+            .context("Failed to move the staged Store LUKS header into place")?;
 
         Ok(())
     }

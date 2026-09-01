@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 16.0.0 - 2026-09-01
+
 ### Added
 - The endpoint `/instances/<instance_id>/update/mock_flexible_canister_http` to mock the responses of the committee nodes
   of a pending *flexible* canister HTTP outcall, i.e. one made through the `flexible_http_request` management canister endpoint.
@@ -25,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which an `http_request` can select through its `pricing_version` field.
 
 ### Changed
+- The endpoint `/instances/<instance_id>/auto_progress` (and creating an instance with automatic progress enabled)
+  only returns after the certified time of the PocketIC instance has been updated for the first time.
 - Mocked canister HTTP responses report the cycles their node actually spent on the outcall, instead of reporting no spend at
   all. This applies to `/instances/<instance_id>/update/mock_canister_http` and
   `/instances/<instance_id>/update/mock_flexible_canister_http`. The spend is derived from the size of the mocked response;
@@ -34,14 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reported.
 - A node that cannot pay for gossiping its mocked reject reports an out-of-cycles reject instead of the mocked one, matching
   what a node of a real subnet does under pay-as-you-go pricing.
-
-
-
-## 16.0.0 - 2026-08-31
-
-### Changed
-- The endpoint `/instances/<instance_id>/auto_progress` (and creating an instance with automatic progress enabled)
-  only returns after the certified time of the PocketIC instance has been updated for the first time.
 
 
 
