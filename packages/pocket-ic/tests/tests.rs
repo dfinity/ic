@@ -2848,10 +2848,12 @@ fn test_canister_http_derived_spend_is_only_charged_under_pay_as_you_go() {
 /// Which outcalls are available, and which pricing model they end up with, on the
 /// three kinds of instance a test can build: one with beta features, a plain one,
 /// and one whose subnet does not charge for HTTP outcalls.
+///
+/// The pay-as-you-go pricing model is enabled on every subnet, so all three offer
+/// flexible outcalls and price them the same way; what differs between them is
+/// only whether anything is actually charged.
 #[test]
 fn test_canister_http_availability_and_pricing() {
-    // (label, instance, canister, whether the pay-as-you-go pricing model is
-    // enabled, whether HTTP outcalls are free)
     let beta = flexible_outcalls_pic();
     let beta_canister = deploy_test_canister(&beta);
     let default = PocketIc::new();
@@ -2862,10 +2864,10 @@ fn test_canister_http_availability_and_pricing() {
     system.add_cycles(system_canister, INIT_CYCLES);
     system.install_canister(system_canister, test_canister_wasm(), vec![], None);
 
-    for (env, pic, canister_id, pay_as_you_go_enabled, outcalls_are_free) in [
-        ("beta features", &beta, beta_canister, true, false),
-        ("default instance", &default, default_canister, false, false),
-        ("system subnet", &system, system_canister, false, true),
+    for (env, pic, canister_id) in [
+        ("beta features", &beta, beta_canister),
+        ("default instance", &default, default_canister),
+        ("system subnet", &system, system_canister),
     ] {
         for outcall in [
             Outcall::FullyReplicated {
@@ -2883,38 +2885,9 @@ fn test_canister_http_availability_and_pricing() {
             })),
         ] {
             let label = format!("{env}, {}", outcall.label());
-            // A flexible outcall is only offered where the pay-as-you-go pricing
-            // model is enabled or where HTTP outcalls are free.
-            if outcall.is_flexible() && !pay_as_you_go_enabled && !outcalls_are_free {
-                let (method, args) = outcall.call(None);
-                let reply = pic
-                    .update_call(
-                        canister_id,
-                        Principal::anonymous(),
-                        "proxy_call",
-                        proxy_call_arg(method, args, OUTCALL_CYCLES),
-                    )
-                    .unwrap();
-                let (reject_code, message) = decode_sync_rejection(&reply);
-                assert!(
-                    matches!(reject_code, RejectionCode::CanisterError),
-                    "{label}: unexpected reject code {reject_code:?} ({message})"
-                );
-                assert!(
-                    message.contains("This API is not enabled on this subnet"),
-                    "{label}: unexpected rejection message {message:?}"
-                );
-                continue;
-            }
             // `submit_outcall` asserts the reported replication and pricing model.
-            let (call_id, request) = submit_outcall(
-                pic,
-                canister_id,
-                &outcall,
-                None,
-                OUTCALL_CYCLES,
-                pay_as_you_go_enabled,
-            );
+            let (call_id, request) =
+                submit_outcall(pic, canister_id, &outcall, None, OUTCALL_CYCLES, true);
             let body = b"hello".to_vec();
             if outcall.is_flexible() {
                 mock_committee(
