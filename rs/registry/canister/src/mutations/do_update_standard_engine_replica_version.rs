@@ -24,10 +24,11 @@ use serde::Serialize;
 /// 1. Change deployment_progress (usually increase, but decrease is allowed).
 /// 2. Start a new deployment.
 ///
-/// The latter is only allowed if the previous/current deployment is complete
-/// (deployment_progress == 1.0, or there is no previous deployment). The new
-/// deployment must start where the previous one left off, i.e. the new
-/// old_replica_version_id must match the current/old new_replica_version_id.
+/// The latter is only allowed when the fleet is not previously split. That is,
+/// the previous deployment_progress must be either 1.0 or 0.0. Typically, it
+/// would be 1.0, but 0.0 is also allowed in order to support rolling back.
+/// Either way, we say that there is a "unique" standard engine replica version.
+/// Furthermore, the next old_replica_version_id must be this unique version.
 impl Registry {
     pub fn do_update_standard_engine_replica_version(
         &mut self,
@@ -68,21 +69,25 @@ impl Registry {
             return;
         }
 
-        if old_record.deployment_progress < 1.0 {
-            panic!(
-                "Invalid StandardEngineReplicaVersionRecord transition: the current deployment \
-                 is still in progress, so a new deployment cannot be started yet. Current \
-                 record: {old_record:?}. Proposed new record: {new_record:?}.",
-            );
-        }
+        // Starting a new deployment is only allowed once the current one has
+        // fully settled onto one of its two versions.
+        let currently_running_replica_version_id = match old_record.deployment_progress {
+            1.0 => &old_record.new_replica_version_id,
+            0.0 => &old_record.old_replica_version_id,
+            _ => panic!(
+                "Invalid standard engine replica version transition: the fleet is \
+                 currently split. Current record: {old_record:?}. Proposed new \
+                 record: {new_record:?}.",
+            ),
+        };
 
         // Based on deployment_progress, looks like we are starting a new deployment.
         // Here, we check the new old_replica_version_id.
         assert_eq!(
-            new_record.old_replica_version_id, old_record.new_replica_version_id,
+            &new_record.old_replica_version_id, currently_running_replica_version_id,
             "Invalid StandardEngineReplicaVersionRecord transition: cannot skip a version. The \
-             next deployment's old_replica_version_id must equal the current deployment's \
-             new_replica_version_id.",
+             next deployment's old_replica_version_id must equal the previous (unique) standard \
+             engine replica version.",
         );
     }
 
@@ -283,7 +288,7 @@ mod tests {
         // Step 1: Prepare the world.
         let mut registry = REGISTRY.clone();
 
-        // Step 1.1: v2 is fully deployed (previously, we were on Replica v1).
+        // Step 1.1: v2 is fully deployed (previously, we were on replica v1).
         registry.do_update_standard_engine_replica_version(
             UpdateStandardEngineReplicaVersionPayload {
                 new_replica_version_id: "v2".into(),
@@ -321,7 +326,77 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "the current deployment is still in progress")]
+    fn should_allow_starting_a_different_deployment_once_fully_rolled_back() {
+        // Step 1: Prepare the world.
+        let mut registry = REGISTRY.clone();
+
+        // Step 1.1: Fully roll back v1 -> v2 (deployment_progress goes to 0.0,
+        // i.e. all engines are back on v1).
+        registry.do_update_standard_engine_replica_version(
+            UpdateStandardEngineReplicaVersionPayload {
+                new_replica_version_id: "v2".into(),
+                old_replica_version_id: "v1".into(),
+                deployment_progress: 0.0,
+            },
+        );
+
+        // Step 2: Run the code under test. Start a different deployment:
+        // v1 -> v3 (not v2, since v2 was abandoned).
+        registry.do_update_standard_engine_replica_version(
+            UpdateStandardEngineReplicaVersionPayload {
+                new_replica_version_id: "v3".into(),
+                old_replica_version_id: "v1".into(),
+                deployment_progress: 0.1,
+            },
+        );
+
+        // Step 3: Verify result(s).
+
+        // Step 3.1: The previous statement did not panic, even though the
+        // versions changed. This is allowed, because previously,
+        // deployment_progress was 0.0, i.e. all engines had settled back
+        // onto v1.
+
+        // Step 3.2: The contents of registry reflects the change we tried to make.
+        assert_standard_engine_replica_version_record_eq(
+            &registry,
+            StandardEngineReplicaVersionRecord {
+                new_replica_version_id: "v3".to_string(),
+                old_replica_version_id: "v1".to_string(),
+                deployment_progress: 0.1,
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "fleet is currently split")]
+    fn should_panic_when_changing_versions_while_partially_rolled_back() {
+        // Step 1: Prepare the world. Partially roll back v1 -> v2 (progress
+        // is neither 0.0 nor 1.0).
+        let mut registry = REGISTRY.clone();
+        registry.do_update_standard_engine_replica_version(
+            UpdateStandardEngineReplicaVersionPayload {
+                new_replica_version_id: "v2".into(),
+                old_replica_version_id: "v1".into(),
+                deployment_progress: 0.5,
+            },
+        );
+
+        // Step 2: Run the code under test. Try to switch to v1 -> v3 instead.
+        registry.do_update_standard_engine_replica_version(
+            UpdateStandardEngineReplicaVersionPayload {
+                new_replica_version_id: "v3".into(),
+                old_replica_version_id: "v1".into(),
+                deployment_progress: 0.1,
+            },
+        );
+
+        // Step 3: Verify result(s).
+        // The assertion is at the top: #[should_panic(...)].
+    }
+
+    #[test]
+    #[should_panic(expected = "fleet is currently split")]
     fn should_panic_when_changing_versions_before_fully_deployed() {
         // Step 1: Prepare the world. Partially deploy v1 -> v2
         // (deployment_progress isn't 1.0 yet).
