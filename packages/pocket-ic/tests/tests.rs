@@ -2689,7 +2689,7 @@ fn test_canister_http_out_of_cycles() {
         } else {
             let (reject_code, message) = expect_http_rejection(outcome, &label);
             assert!(
-                matches!(reject_code, RejectionCode::SysTransient),
+                matches!(reject_code, RejectionCode::CanisterReject),
                 "{label}: unexpected reject code {reject_code:?} ({message})"
             );
             assert!(
