@@ -57,12 +57,6 @@ jobs:
       # Pinning the release-testing.yml signer
       # also enforces that a release-* tag can only ship commits that went
       # through the release-qualification pipeline.
-      #
-      # NOTE: the OS images (setup-os disk-img, guest-os update-img) are
-      # deliberately not part of this release. They had silently never been
-      # attached (the download step saved *.tar.zst while the publish step
-      # listed *.tar.gz) and their canonical distribution channel is the CDN
-      # plus the NNS election proposal hash, verified by ci/scripts/repro-check.
       - name: Download and verify release binaries
         uses: ./.github/actions/fetch-verified-artifacts
         with:
@@ -140,15 +134,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Bare globs keep the tar member names identical to previous
-          # releases; the emitted SHA256SUMS in this directory matches
-          # neither glob. The fetch-verified-artifacts action guarantees
-          # every filename starts with an alphanumeric character.
           (cd "$RUNNER_TEMP/release-canisters" && tar -cf "$GITHUB_WORKSPACE/canisters.tar" *.gz *.did)
 
-          # The binary checksums are the verified build-time hashes from the
-          # attested SHA256SUMS, not re-hashes of the downloads; canisters.tar
-          # was assembled locally from per-file-verified wasms and dids.
           cat "$RUNNER_TEMP/release-binaries/SHA256SUMS" >sha256sums.txt
           sha256sum canisters.tar >>sha256sums.txt
 
