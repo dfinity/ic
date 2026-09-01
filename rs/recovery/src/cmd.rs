@@ -34,7 +34,9 @@ pub struct RecoveryToolArgs {
     /// NNS subnet.
     pub nns_url: Url,
 
-    /// replica version of ic-admin binary
+    /// Replica version of the `ic-admin` binary. It is also the version
+    /// `ic-replay` is run with when no consensus pool was downloaded, in which
+    /// case `ic-replay` cannot determine it on its own.
     #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 

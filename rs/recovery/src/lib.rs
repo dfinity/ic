@@ -126,6 +126,13 @@ pub struct Recovery {
     pub admin_key_file: Option<PathBuf>,
     pub ssh_confirmation: bool,
 
+    /// The replica version passed on the command line, if any.
+    ///
+    /// Besides selecting the `ic-admin` binary to download, it is the version
+    /// `ic-replay` is run with when no consensus pool was downloaded; see
+    /// [`Recovery::get_replay_step`].
+    pub replica_version: Option<ReplicaVersion>,
+
     pub logger: Logger,
 }
 
@@ -192,10 +199,10 @@ impl Recovery {
                 if local_ic_admin_path.exists() {
                     // env var not set, but local ic admin was found, so use that
                     local_ic_admin_path
-                } else if let Some(version) = args.replica_version {
+                } else if let Some(version) = &args.replica_version {
                     block_on(download_binary(
                         &logger,
-                        &version,
+                        version,
                         String::from("ic-admin"),
                         &binary_dir,
                     ))?;
@@ -228,6 +235,7 @@ impl Recovery {
             registry_helper,
             admin_key_file: args.admin_key_file,
             ssh_confirmation,
+            replica_version: args.replica_version,
             logger,
         })
     }
@@ -546,6 +554,7 @@ impl Recovery {
             replay_until_height,
             result: self.work_dir.join(replay_helper::OUTPUT_FILE_NAME),
             skip_prompts,
+            replica_version: self.replica_version.clone(),
         }
     }
 
@@ -990,10 +999,10 @@ impl Recovery {
         skip_prompts: bool,
     ) -> impl Step + use<> {
         UpdateLocalStoreStep {
-            logger: self.logger.clone(),
             subnet_id,
             work_dir: self.work_dir.clone(),
             skip_prompts,
+            replica_version: self.replica_version.clone(),
         }
     }
 
@@ -1006,7 +1015,6 @@ impl Recovery {
         let state_params = self.get_replay_output()?.state_params;
         let recovery_height = Recovery::get_recovery_height(state_params.height);
         Ok(GetRecoveryCUPStep {
-            logger: self.logger.clone(),
             subnet_id,
             config: self.work_dir.join("ic.json5"),
             result: self.work_dir.join("set_recovery_cup.txt"),
@@ -1014,6 +1022,7 @@ impl Recovery {
             work_dir: self.work_dir.clone(),
             recovery_height,
             skip_prompts,
+            replica_version: self.replica_version.clone(),
         })
     }
 

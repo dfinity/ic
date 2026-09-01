@@ -903,7 +903,7 @@ fn test_checkpointing_without_execution() {
     let canisters_before = fixture
         .initial_state
         .canister_states()
-        .all_keys()
+        .all_values()
         .cloned()
         .collect::<Vec<_>>();
     let checkpointing_batch = Batch {
@@ -948,7 +948,7 @@ fn test_checkpointing_without_execution() {
         canisters_before,
         state_after_checkpointing
             .canister_states()
-            .all_keys()
+            .all_values()
             .cloned()
             .collect::<Vec<_>>()
     );

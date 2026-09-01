@@ -226,7 +226,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                         player.update_registry_local_store();
                         Ok(ReplayOutput {
                             state_params: player.get_latest_state_params(None, Vec::new()),
-                            ..replay_output
+                            extra_batches: replay_output.extra_batches,
                         })
                     } else {
                         Ok(replay_output)
