@@ -44,6 +44,7 @@ filegroup(
             "//rs/phantom_newtype",
             "//rs/types/management_canister_types",
             "//rs/utils/ensure",
+            "//rs/utils/thousands",
             "@crate_index//:candid",
             "@crate_index//:ethnum",
             "@crate_index//:evm_rpc_client",
@@ -68,7 +69,6 @@ filegroup(
             "@crate_index//:serde_json",
             "@crate_index//:strum",
             "@crate_index//:thiserror",
-            "@crate_index//:thousands",
         ] + extra_deps,
     )
     for (name, features, extra_deps) in [
