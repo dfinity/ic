@@ -155,8 +155,8 @@ impl StateMachine for StateMachineImpl {
 
             // Consensus is telling us to checkpoint the state as it is, without
             // executing a round: only abort paused executions and wipe
-            // `SystemMetadata` caches, so that the checkpoint holds exactly the
-            // state produced by the preceding rounds.
+            // `SystemMetadata` caches, so that the checkpoint holds the state
+            // produced by the preceding rounds.
             BatchContent::CheckpointingWithoutExecution => {
                 self.scheduler
                     .checkpoint_round_with_no_execution(&mut state);

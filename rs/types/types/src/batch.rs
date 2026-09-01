@@ -76,11 +76,17 @@ pub enum BatchContent {
     /// Persists the state produced by the preceding rounds into a checkpoint,
     /// without inducting, executing or routing any messages.
     ///
-    /// The round must not have any effect beyond what creating a checkpoint
-    /// requires (aborting paused executions and wiping `SystemMetadata` caches).
-    /// In particular, and unlike `Data { requires_full_state_hash: true, .. }`, it
-    /// must not execute a round: no messages are inducted or executed and no
-    /// canister is charged for its resource allocation.
+    /// Unlike `Data { requires_full_state_hash: true, .. }`, no round is executed:
+    /// no messages are inducted or executed and no canister is charged for its
+    /// resource allocation. All the state machine does is what creating a
+    /// checkpoint requires, namely aborting paused executions and wiping
+    /// `SystemMetadata` caches.
+    ///
+    /// The per-round bookkeeping that message routing applies around the state
+    /// machine is not skipped, though: the batch time advances, the state is
+    /// canonicalized and the subnet metrics are refreshed as they are for any
+    /// other checkpoint round. The result is therefore a checkpoint of the state
+    /// the preceding rounds produced, not a byte-for-byte copy of it.
     ///
     /// Checkpointing rounds are always checkpoint ("full state hash") rounds.
     CheckpointingWithoutExecution,
