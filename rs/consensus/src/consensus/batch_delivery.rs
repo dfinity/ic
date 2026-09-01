@@ -9,7 +9,7 @@ use crate::consensus::{
 use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_consensus_idkg::utils::get_idkg_subnet_public_keys_and_pre_signatures;
-use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader, subnet_splitting};
 use ic_error_types::RejectCode;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
@@ -24,20 +24,18 @@ use ic_protobuf::{
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
 use ic_types::{
-    Height, PrincipalId, SubnetId,
+    Height, NodeId, PrincipalId, SubnetId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
         ChainKeyData, ConsensusResponse,
     },
-    consensus::{
-        Block, BlockPayload, HasVersion,
-        dkg::RemoteTranscriptResult,
-        idkg::{self},
-    },
-    crypto::randomness_from_crypto_hashable,
-    crypto::threshold_sig::{
-        ThresholdSigPublicKey,
-        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+    consensus::{Block, BlockPayload, HasVersion, dkg::RemoteTranscriptResult, idkg},
+    crypto::{
+        randomness_from_crypto_hashable,
+        threshold_sig::{
+            ThresholdSigPublicKey,
+            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+        },
     },
     messages::{CallbackId, Payload, RejectContext},
 };
@@ -46,46 +44,73 @@ use std::collections::BTreeMap;
 /// Deliver all finalized blocks from
 /// `message_routing.expected_batch_height` to `finalized_height` via
 /// `MessageRouting` and return the last delivered batch height.
-pub fn deliver_batches(
+///
+/// To be used exclusively by the ic-replay tool
+pub fn deliver_batches_for_ic_replay(
     message_routing: &dyn MessageRouting,
     membership: &Membership,
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
-    subnet_id: SubnetId,
     log: &ReplicaLogger,
-    // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
-    // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
-    // deliver all bathes up to the height `min(h, finalized_height)`.
+    subnet_id: SubnetId,
+    // If set to `None`, we will deliver all batches until the finalized height.
+    // If set to `Some(h)`, we will deliver all batches up to the height `min(h, finalized_height)`.
     max_batch_height_to_deliver: Option<Height>,
 ) -> Result<Height, MessageRoutingError> {
-    deliver_batches_with_result_processor(
+    deliver_batches(
         message_routing,
         membership,
         pool,
         registry_client,
-        subnet_id,
         log,
+        /*maybe_node_id=*/ None,
+        subnet_id,
         max_batch_height_to_deliver,
-        /*result_processor=*/ None,
+        /*result_processor=*/ |_, _, _| {},
     )
 }
 
 /// Deliver all finalized blocks from
 /// `message_routing.expected_batch_height` to `finalized_height` via
 /// `MessageRouting` and return the last delivered batch height.
-#[allow(clippy::type_complexity)]
-pub(crate) fn deliver_batches_with_result_processor(
+///
+/// To be called by the finalizer.
+pub(crate) fn deliver_batches_for_finalizer(
     message_routing: &dyn MessageRouting,
     membership: &Membership,
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
-    subnet_id: SubnetId,
     log: &ReplicaLogger,
-    // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
-    // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
-    // deliver all bathes up to the height `min(h, finalized_height)`.
+    node_id: NodeId,
+    subnet_id: SubnetId,
+    result_processor: impl FnMut(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
+) -> Result<Height, MessageRoutingError> {
+    deliver_batches(
+        message_routing,
+        membership,
+        pool,
+        registry_client,
+        log,
+        Some(node_id),
+        subnet_id,
+        /*max_batch_height_to_deliver=*/ None,
+        result_processor,
+    )
+}
+
+/// Deliver all finalized blocks from
+/// `message_routing.expected_batch_height` to `finalized_height` via
+/// `MessageRouting` and return the last delivered batch height.
+fn deliver_batches(
+    message_routing: &dyn MessageRouting,
+    membership: &Membership,
+    pool: &PoolReader<'_>,
+    registry_client: &dyn RegistryClient,
+    log: &ReplicaLogger,
+    maybe_node_id: Option<NodeId>,
+    subnet_id: SubnetId,
     max_batch_height_to_deliver: Option<Height>,
-    result_processor: Option<&dyn Fn(&Result<(), MessageRoutingError>, BlockStats, BatchStats)>,
+    mut result_processor: impl FnMut(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
 ) -> Result<Height, MessageRoutingError> {
     let finalized_height = pool.get_finalized_height();
     // If `max_batch_height_to_deliver` is specified and smaller than
@@ -122,7 +147,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             );
             break;
         };
-        let replica_version = block.version().clone();
+        let replica_version = block.version();
         let mut block_stats = BlockStats::from(&block);
         debug!(
             every_n_seconds => 5,
@@ -131,7 +156,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             consensus => ConsensusLogEntry {
                 height: Some(height.get()),
                 hash: Some(block_stats.block_hash.clone()),
-                replica_version: Some(String::from(&replica_version))
+                replica_version: Some(replica_version.to_string())
             }
         );
 
@@ -163,6 +188,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                 registry_client,
                 subnet_id,
                 pool,
+                replica_version,
                 log,
             ) {
                 Some(Status::Halting | Status::Halted) => {
@@ -224,13 +250,50 @@ pub(crate) fn deliver_batches_with_result_processor(
         let persist_batch = Some(height) == max_batch_height_to_deliver;
         let requires_full_state_hash = block.payload.is_summary() || persist_batch;
         let batch_content = match block.payload.as_ref() {
-            BlockPayload::Summary(_summary_payload) => BatchContent::Data {
-                batch_messages: BatchMessages::default(),
-                chain_key_data,
-                consensus_responses,
-                canister_http_spent,
-                requires_full_state_hash,
-            },
+            BlockPayload::Summary(_summary_payload) => {
+                if let Some(scheduled) = subnet_splitting::is_split_scheduled(&block) {
+                    let node_id =
+                        maybe_node_id.expect("Subnet splitting not yet supported in ic-replay");
+                    let subnet_splitting::PostSplitAssignment {
+                        new_subnet_id,
+                        other_subnet_id,
+                    } = match subnet_splitting::get_post_split_subnet_assignment(
+                        node_id,
+                        &block,
+                        registry_client,
+                        scheduled,
+                    ) {
+                        Ok(assignment) => assignment,
+                        Err(err) => {
+                            warn!(
+                                every_n_seconds => 30,
+                                log,
+                                "Error getting new subnet assignment: {}",
+                                err
+                            );
+                            break;
+                        }
+                    };
+
+                    info!(
+                        log,
+                        "Delivering splitting block. New subnet assignment: {}", new_subnet_id
+                    );
+
+                    BatchContent::Splitting {
+                        new_subnet_id,
+                        other_subnet_id,
+                    }
+                } else {
+                    BatchContent::Data {
+                        batch_messages: BatchMessages::default(),
+                        chain_key_data,
+                        consensus_responses,
+                        canister_http_spent,
+                        requires_full_state_hash,
+                    }
+                }
+            }
             BlockPayload::Data(data_payload) => {
                 batch_stats.add_from_payload(&data_payload.batch);
                 BatchContent::Data {
@@ -296,13 +359,11 @@ pub(crate) fn deliver_batches_with_result_processor(
             registry_version: block.context.registry_version,
             time: block.context.time,
             blockmaker_metrics,
-            replica_version,
+            replica_version: replica_version.clone(),
         };
 
         let result = message_routing.deliver_batch(batch);
-        if let Some(f) = result_processor {
-            f(&result, block_stats, batch_stats);
-        }
+        result_processor(&result, block_stats, batch_stats);
         if let Err(err) = result {
             warn!(every_n_seconds => 5, log, "Batch delivery failed: {:?}", err);
             return Err(err);
@@ -577,16 +638,19 @@ mod tests {
     //! Finalizer unit tests
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_remote_dkgs;
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
-    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_test_utilities::message_routing::FakeMessageRouting;
+    use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
     use ic_types::{
         PrincipalId, RegistryVersion, SubnetId,
         batch::{BatchPayload, ValidationContext},
         consensus::{
-            DataPayload, Payload as ConsensusPayload, Rank,
-            dkg::{DkgDataPayload, RemoteTranscriptResult},
+            DataPayload, HashedBlock, Payload as ConsensusPayload, Rank,
+            dkg::{DkgDataPayload, RemoteTranscriptResult, SplittingArgs, SubnetSplittingStatus},
         },
         crypto::{
             CryptoHash, CryptoHashOf,
@@ -595,9 +659,15 @@ mod tests {
             },
         },
         messages::{CallbackId, Payload},
+        replica_config::ReplicaConfig,
         time::UNIX_EPOCH,
     };
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_1, SUBNET_2};
+    use rstest::rstest;
     use std::str::FromStr;
+
+    const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
+    const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
 
     const TARGET_ID: NiDkgTargetId = NiDkgTargetId::new([8; 32]);
 
@@ -744,6 +814,7 @@ mod tests {
                 certified_height: Height::from(0),
                 time: UNIX_EPOCH,
             },
+            test_replica_version(),
         );
 
         let mut batch_stats = BatchStats::new(Height::from(1));
@@ -780,5 +851,107 @@ mod tests {
             initial_response.fresh_subnet_id,
             SubnetId::from(PrincipalId::from_str(EXPECTED_FRESH_SUBNET_ID_STR).unwrap())
         );
+    }
+
+    #[rstest]
+    #[case::node_on_source_subnet(NODE_1, SOURCE_SUBNET_ID, DESTINATION_SUBNET_ID)]
+    #[case::node_on_destination_subnet(NODE_4, DESTINATION_SUBNET_ID, SOURCE_SUBNET_ID)]
+    fn test_deliver_splitting_batch(
+        #[case] node_id: NodeId,
+        #[case] expected_new_subnet_id: SubnetId,
+        #[case] expected_other_subnet_id: SubnetId,
+    ) {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
+            const INTERVAL_LENGTH: u64 = 9;
+            let summary_height = Height::from(INTERVAL_LENGTH + 1);
+
+            let Dependencies {
+                mut pool,
+                membership,
+                registry,
+                replica_config,
+                ..
+            } = DependenciesBuilder::multiple_subnets(
+                pool_config,
+                vec![
+                    (
+                        1,
+                        SOURCE_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4])
+                            .with_dkg_interval_length(INTERVAL_LENGTH)
+                            .build(),
+                    ),
+                    (
+                        SPLITTING_REGISTRY_VERSION.get(),
+                        SOURCE_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_1, NODE_3])
+                            .with_dkg_interval_length(INTERVAL_LENGTH)
+                            .build(),
+                    ),
+                    (
+                        SPLITTING_REGISTRY_VERSION.get(),
+                        DESTINATION_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_2, NODE_4])
+                            .with_dkg_interval_length(INTERVAL_LENGTH)
+                            .build(),
+                    ),
+                ],
+            )
+            .with_replica_config(ReplicaConfig {
+                node_id,
+                subnet_id: SOURCE_SUBNET_ID,
+                replica_version: test_replica_version(),
+            })
+            .build();
+
+            pool.advance_round_normal_operation_n(INTERVAL_LENGTH);
+
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            block.context.registry_version = SPLITTING_REGISTRY_VERSION;
+            let mut payload = block.payload.as_ref().as_summary().clone();
+            payload.dkg.subnet_splitting_status = SubnetSplittingStatus::Scheduled(SplittingArgs {
+                source_subnet_id: SOURCE_SUBNET_ID,
+                destination_subnet_id: DESTINATION_SUBNET_ID,
+            });
+            block.payload = ConsensusPayload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(payload),
+            );
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            pool.insert_validated(proposal.clone());
+            pool.notarize(&proposal);
+            pool.finalize(&proposal);
+            pool.insert_random_tape(summary_height);
+
+            let message_routing = FakeMessageRouting::new();
+            *message_routing.next_batch_height.write().unwrap() = summary_height;
+
+            let result = deliver_batches_for_finalizer(
+                &message_routing,
+                &membership,
+                &PoolReader::new(&pool),
+                registry.as_ref(),
+                &no_op_logger(),
+                replica_config.node_id,
+                replica_config.subnet_id,
+                |_, _, _| {},
+            );
+
+            assert_eq!(result, Ok(summary_height));
+            let batches = message_routing.batches.read().unwrap();
+            assert_eq!(batches.len(), 1);
+            match &batches[0].content {
+                BatchContent::Splitting {
+                    new_subnet_id,
+                    other_subnet_id,
+                } => {
+                    assert_eq!(*new_subnet_id, expected_new_subnet_id);
+                    assert_eq!(*other_subnet_id, expected_other_subnet_id);
+                }
+                other => panic!("Expected BatchContent::Splitting, got: {other:?}"),
+            }
+        })
     }
 }

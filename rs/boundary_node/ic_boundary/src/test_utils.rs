@@ -28,9 +28,9 @@ use ic_registry_keys::{
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable as RoutingTableIC};
 use ic_registry_subnet_type::SubnetType;
+use ic_test_utilities_types::ids::test_replica_version;
 use ic_types::{
-    CanisterId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
-    replica_version::ReplicaVersion, time::Time,
+    CanisterId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey, time::Time,
 };
 
 use crate::routes::ProxyRouter;
@@ -111,7 +111,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
         initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
-        replica_version_id: ReplicaVersion::default().into(),
+        replica_version_id: test_replica_version().to_string(),
         dkg_interval_length: 59,
         dkg_dealings_per_block: 1,
         start_as_nns: false,

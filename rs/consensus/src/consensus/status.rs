@@ -40,6 +40,7 @@ pub(crate) fn get_status(
     registry_client: &(impl RegistryClient + ?Sized),
     subnet_id: SubnetId,
     pool: &PoolReader<'_>,
+    replica_version: &ReplicaVersion,
     logger: &ReplicaLogger,
 ) -> Option<Status> {
     if should_halt(
@@ -48,6 +49,7 @@ pub(crate) fn get_status(
         registry_client,
         subnet_id,
         pool,
+        replica_version,
         logger,
     )
     .warn_if_none(logger, "Failed to check if the subnet is halting!")?
@@ -60,6 +62,7 @@ pub(crate) fn get_status(
             registry_client,
             subnet_id,
             pool,
+            replica_version,
             logger,
         )
         .warn_if_none(logger, "Failed to check if the subnet is halted!")
@@ -80,6 +83,7 @@ pub(crate) fn should_halt(
     registry_client: &(impl RegistryClient + ?Sized),
     subnet_id: SubnetId,
     pool: &PoolReader<'_>,
+    my_replica_version: &ReplicaVersion,
     logger: &ReplicaLogger,
 ) -> Option<bool> {
     let registry_version = pool.registry_version(height).warn_if_none(
@@ -89,7 +93,7 @@ pub(crate) fn should_halt(
 
     let should_halt_due_to_upgrading =
         lookup_replica_version(registry_client, subnet_id, logger, registry_version)
-            .map(|replica_version| replica_version != ReplicaVersion::default())
+            .map(|replica_version_in_registry| &replica_version_in_registry != my_replica_version)
             .warn_if_none(logger, "Failed to check if the upgrade is pending!");
 
     let should_halt_due_to_subnet_splitting = last_summary_block.map(|summary_block| {
@@ -175,6 +179,7 @@ mod tests {
     };
     use ic_types_test_utils::ids::{SUBNET_0, SUBNET_1};
     use rstest::rstest;
+    use std::str::FromStr;
 
     use super::*;
 
@@ -185,7 +190,7 @@ mod tests {
         pool_config: ArtifactPoolConfig,
         subnet_id: SubnetId,
         certified_height: Height,
-        replica_version: ReplicaVersion,
+        replica_version_in_subnet_record: ReplicaVersion,
         halt_at_cup_height: bool,
     ) -> (TestConsensusPool, Arc<FakeRegistryClient>) {
         let node_ids = [node_test_id(0)];
@@ -205,7 +210,7 @@ mod tests {
                     10,
                     SubnetRecordBuilder::from(&node_ids)
                         .with_dkg_interval_length(DKG_LENGTH)
-                        .with_replica_version(replica_version.as_ref())
+                        .with_replica_version(replica_version_in_subnet_record.as_ref())
                         .with_halt_at_cup_height(halt_at_cup_height)
                         .build(),
                 ),
@@ -225,7 +230,7 @@ mod tests {
     struct TestCase {
         certified_height: Height,
         current_height: Height,
-        replica_version: ReplicaVersion,
+        replica_version_in_subnet_record: ReplicaVersion,
         halt_at_cup_height: bool,
         subnet_splitting_status: Option<SubnetSplittingStatus>,
         subnet_id: SubnetId,
@@ -236,7 +241,7 @@ mod tests {
     #[case::upgrade_finalized(TestCase{
         certified_height: CUP_HEIGHT,
         current_height: CUP_HEIGHT,
-        replica_version: ReplicaVersion::try_from("new_replica_version").unwrap(),
+        replica_version_in_subnet_record: ReplicaVersion::from_str("new_replica_version").unwrap(),
         halt_at_cup_height: false,
         subnet_splitting_status: None,
         subnet_id: SUBNET_0,
@@ -245,7 +250,7 @@ mod tests {
     #[case::upgrade_pending(TestCase{
         certified_height: CUP_HEIGHT.decrement(),
         current_height: CUP_HEIGHT,
-        replica_version: ReplicaVersion::try_from("new_replica_version").unwrap(),
+        replica_version_in_subnet_record: ReplicaVersion::from_str("new_replica_version").unwrap(),
         halt_at_cup_height: false,
         subnet_splitting_status: None,
         subnet_id: SUBNET_0,
@@ -254,7 +259,7 @@ mod tests {
     #[case::subnet_splitting_finalized(TestCase{
         certified_height: CUP_HEIGHT,
         current_height: CUP_HEIGHT,
-        replica_version: ReplicaVersion::default(),
+        replica_version_in_subnet_record: ReplicaVersion::from_str("current_replica_version").unwrap(),
         halt_at_cup_height: false,
         subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_1, source_subnet_id: SUBNET_0 })),
         subnet_id: SUBNET_0,
@@ -263,7 +268,7 @@ mod tests {
     #[case::subnet_splitting_pending(TestCase{
         certified_height: CUP_HEIGHT.decrement(),
         current_height: CUP_HEIGHT,
-        replica_version: ReplicaVersion::default(),
+        replica_version_in_subnet_record: ReplicaVersion::from_str("current_replica_version").unwrap(),
         halt_at_cup_height: false,
         subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_1, source_subnet_id: SUBNET_0 })),
         subnet_id: SUBNET_0,
@@ -272,7 +277,7 @@ mod tests {
     #[case::post_subnet_splitting_old_subnet_id(TestCase{
         certified_height: CUP_HEIGHT,
         current_height: CUP_HEIGHT,
-        replica_version: ReplicaVersion::default(),
+        replica_version_in_subnet_record: ReplicaVersion::from_str("current_replica_version").unwrap(),
         halt_at_cup_height: false,
         subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SUBNET_1 })),
         subnet_id: SUBNET_0,
@@ -281,7 +286,7 @@ mod tests {
     #[case::post_subnet_splitting_new_subnet_id(TestCase{
         certified_height: CUP_HEIGHT,
         current_height: CUP_HEIGHT,
-        replica_version: ReplicaVersion::default(),
+        replica_version_in_subnet_record: ReplicaVersion::from_str("current_replica_version").unwrap(),
         halt_at_cup_height: false,
         subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id: SUBNET_1 })),
         subnet_id: SUBNET_1,
@@ -290,7 +295,7 @@ mod tests {
     #[case::halt_at_cup_height(TestCase{
         certified_height: CUP_HEIGHT,
         current_height: CUP_HEIGHT,
-        replica_version: ReplicaVersion::default(),
+        replica_version_in_subnet_record: ReplicaVersion::from_str("current_replica_version").unwrap(),
         halt_at_cup_height: true,
         subnet_splitting_status: None,
         subnet_id: SUBNET_0,
@@ -299,7 +304,7 @@ mod tests {
     #[case::halting_at_cup_height(TestCase{
         certified_height: CUP_HEIGHT.decrement(),
         current_height: CUP_HEIGHT,
-        replica_version: ReplicaVersion::default(),
+        replica_version_in_subnet_record: ReplicaVersion::from_str("current_replica_version").unwrap(),
         halt_at_cup_height: true,
         subnet_splitting_status: None,
         subnet_id: SUBNET_0,
@@ -308,20 +313,21 @@ mod tests {
     #[case::running(TestCase{
         certified_height: CUP_HEIGHT,
         current_height: CUP_HEIGHT,
-        replica_version: ReplicaVersion::default(),
+        replica_version_in_subnet_record: ReplicaVersion::from_str("current_replica_version").unwrap(),
         halt_at_cup_height: false,
         subnet_splitting_status: None,
         subnet_id: SUBNET_0,
         expected_status: Some(Status::Running),
     })]
     fn status_test(#[case] test_case: TestCase) {
+        let current_replica_version = ReplicaVersion::from_str("current_replica_version").unwrap();
         with_test_replica_logger(|logger| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let (pool, registry_client) = set_up(
                     pool_config,
                     test_case.subnet_id,
                     test_case.certified_height,
-                    test_case.replica_version,
+                    test_case.replica_version_in_subnet_record,
                     test_case.halt_at_cup_height,
                 );
                 let mut last_summary_block =
@@ -339,6 +345,7 @@ mod tests {
                     registry_client.as_ref(),
                     test_case.subnet_id,
                     &PoolReader::new(&pool),
+                    &current_replica_version,
                     &logger,
                 );
 

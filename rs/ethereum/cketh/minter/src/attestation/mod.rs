@@ -13,54 +13,64 @@ mod tests;
 use crate::deposit_address::{DepositAddressSchema, deposit_derivation_path};
 use crate::eth_logs::encode_principal;
 use crate::eth_rpc::Hash;
+use crate::runtime::CanisterRuntime;
 use crate::tx::{TransactionSignature, sign_digest};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
+use minicbor::{Decode, Encode};
+use serde_bytes::ByteBuf;
 
 /// Domain separator of the attestation preimage. Its first byte (`0x63`) cannot collide with any
 /// other preimage the minter's key signs: typed transactions start `0x00`-`0x04`, EIP-7702
 /// authorizations `0x05`, EIP-191/712 `0x19` and legacy-transaction RLP `>= 0xc0`.
 const DOMAIN_SEPARATOR: &[u8] = b"ck-deposit-owner";
 
-/// What a deposit address attests to: the account its funds are credited to, bound to one chain and
-/// one deposit-helper deployment.
+/// What a ckERC20 deposit address attests to: the account its funds are credited to, bound to one
+/// chain and one deposit-helper deployment.
 ///
-/// The fields are private and must come from one configuration: a chain id, helper or schema that
-/// does not match what the minter runs against yields a well-formed signature the delegate's
+/// The fields are private and must come from one configuration: a chain id or a helper that does
+/// not match what the minter runs against yields a well-formed signature the delegate's
 /// `ecrecover` rejects, and nothing notices until the sweep reverts on chain.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
 pub struct AttestationRequest {
     /// Prevents replaying the attestation onto another chain.
+    #[n(0)]
     chain_id: u64,
     /// The **deposit helper** contract, the one whose deposit events name the account an address
     /// credits — not the sweeper delegate, whose own address is `address(this)` in the delegate
     /// call and is deliberately absent from the preimage.
+    #[n(1)]
     deposit_helper: Address,
+    #[n(2)]
     account: Account,
-    /// Which deposit-address scheme derives the key that signs, so the signing path cannot
-    /// disagree with the digest.
-    schema: DepositAddressSchema,
 }
 
 impl AttestationRequest {
-    /// Prefer [`crate::state::State::attestation_request`], which takes the chain and the helper
-    /// from the configuration the minter actually runs against.
-    pub(crate) fn new(
-        chain_id: u64,
-        deposit_helper: Address,
-        schema: DepositAddressSchema,
-        account: Account,
-    ) -> Self {
+    /// Prefer [`crate::state::State::attestation_request`], which is the only caller that composes
+    /// a request out of a chain and a helper; everything else reconstructs a request the minter
+    /// already built (event replay, the Candid layer, tests).
+    pub fn new(chain_id: u64, deposit_helper: Address, account: Account) -> Self {
         Self {
             chain_id,
             deposit_helper,
             account,
-            schema,
         }
+    }
+
+    pub fn chain_id(&self) -> u64 {
+        self.chain_id
+    }
+
+    pub fn deposit_helper(&self) -> &Address {
+        &self.deposit_helper
     }
 
     pub fn account(&self) -> &Account {
         &self.account
+    }
+
+    pub fn derivation_path(&self) -> Vec<ByteBuf> {
+        deposit_derivation_path(DepositAddressSchema::CkErc20, &self.account)
     }
 
     /// `"ck-deposit-owner" || chain_id || deposit_helper || principal || subaccount`, exactly what
@@ -86,17 +96,15 @@ impl AttestationRequest {
     }
 }
 
-/// Sign `request` with the deposit address' own derived key. The delegate wants the signature as
-/// `(r, s, v)`, which is where [`crate::sweeper_contract`] encodes it.
+/// Sign `request` with the deposit address' own derived key. Only ckERC20 deposit addresses are
+/// ever attested, so that is the schema whose derivation path signs. The delegate wants the
+/// signature as `(r, s, v)`, which is where [`crate::sweeper_contract`] encodes it.
 ///
 /// # Errors
 /// * a description of why the threshold-ECDSA signature could not be produced.
-pub async fn sign_attestation(
+pub async fn sign_attestation<R: CanisterRuntime>(
     request: &AttestationRequest,
+    runtime: &R,
 ) -> Result<TransactionSignature, String> {
-    sign_digest(
-        &request.digest(),
-        &deposit_derivation_path(request.schema, &request.account),
-    )
-    .await
+    sign_digest(&request.digest(), &request.derivation_path(), runtime).await
 }

@@ -1,5 +1,5 @@
 {
-  "checksum": "9cb8107bbffe0c12d79395ab33e0d176425c3e09b084c8c79e8cf0ebf9bcf237",
+  "checksum": "46fa585d9d126d7755a96f3eb31c92d29410378db6c3d1424d19da222e5e0925",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -3175,6 +3175,96 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "asn1-rs 0.6.2": {
+      "name": "asn1-rs",
+      "version": "0.6.2",
+      "package_url": "https://github.com/rusticata/asn1-rs.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/asn1-rs/0.6.2/download",
+          "sha256": "5493c3bedbacf7fd7382c6346bbd66687d12bbaad3a89a2d2c303ee6cf20b048"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "asn1_rs",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "asn1_rs",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "datetime",
+            "default",
+            "std",
+            "time"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "nom 7.1.3",
+              "target": "nom"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "rusticata-macros 4.1.0",
+              "target": "rusticata_macros"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            },
+            {
+              "id": "time 0.3.47",
+              "target": "time"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "asn1-rs-derive 0.5.1",
+              "target": "asn1_rs_derive"
+            },
+            {
+              "id": "asn1-rs-impl 0.2.0",
+              "target": "asn1_rs_impl"
+            },
+            {
+              "id": "displaydoc 0.2.4",
+              "target": "displaydoc"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.6.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "asn1-rs 0.7.1": {
       "name": "asn1-rs",
       "version": "0.7.1",
@@ -3257,6 +3347,66 @@
           "selects": {}
         },
         "version": "0.7.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "asn1-rs-derive 0.5.1": {
+      "name": "asn1-rs-derive",
+      "version": "0.5.1",
+      "package_url": "https://github.com/rusticata/asn1-rs.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/asn1-rs-derive/0.5.1/download",
+          "sha256": "965c2d33e53cb6b267e148a4cb0760bc01f4904c1cd4bb4002a085bb016d1490"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "asn1_rs_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "asn1_rs_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            },
+            {
+              "id": "synstructure 0.13.1",
+              "target": "synstructure"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.5.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -18063,6 +18213,88 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "der-parser 9.0.0": {
+      "name": "der-parser",
+      "version": "9.0.0",
+      "package_url": "https://github.com/rusticata/der-parser.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/der-parser/9.0.0/download",
+          "sha256": "5cd0a5c643689626bec213c4d8bd4d96acc8ffdb4ad4bb6bc16abf27d5f4b553"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "der_parser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "der_parser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "bigint",
+            "default",
+            "num-bigint",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "asn1-rs 0.6.2",
+              "target": "asn1_rs"
+            },
+            {
+              "id": "nom 7.1.3",
+              "target": "nom"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "rusticata-macros 4.1.0",
+              "target": "rusticata_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "displaydoc 0.2.4",
+              "target": "displaydoc"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "9.0.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "der-parser 10.0.0": {
       "name": "der-parser",
       "version": "10.0.0",
@@ -18260,6 +18492,66 @@
         "MIT"
       ],
       "license_file": "LICENSE-Apache"
+    },
+    "derive-ex 0.1.8": {
+      "name": "derive-ex",
+      "version": "0.1.8",
+      "package_url": "https://github.com/frozenlib/derive-ex",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/derive-ex/0.1.8/download",
+          "sha256": "bba95f299f6b9cd47f68a847eca2ae9060a2713af532dc35c342065544845407"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "derive_ex",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "derive_ex",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "structmeta 0.3.0",
+              "target": "structmeta"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.8"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
     },
     "derive-new 0.7.0": {
       "name": "derive-new",
@@ -20106,7 +20398,7 @@
               "target": "minicbor"
             },
             {
-              "id": "mockall 0.13.1",
+              "id": "mockall 0.15.0",
               "target": "mockall"
             },
             {
@@ -20915,7 +21207,7 @@
               "target": "strum_macros"
             },
             {
-              "id": "test-strategy 0.3.1",
+              "id": "test-strategy 0.4.5",
               "target": "test_strategy"
             }
           ],
@@ -45470,14 +45762,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "mockall 0.13.1": {
+    "mockall 0.15.0": {
       "name": "mockall",
-      "version": "0.13.1",
+      "version": "0.15.0",
       "package_url": "https://github.com/asomers/mockall",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/mockall/0.13.1/download",
-          "sha256": "39a6bfcc6c8c7eed5ee98b9c3e33adc726054389233e201c95dab2d41a3839d2"
+          "url": "https://static.crates.io/crates/mockall/0.15.0/download",
+          "sha256": "1a6ceddfe3ce334925e96bf420fdb2dcee5bed6c632a168ece622676dadeaf8a"
         }
       },
       "targets": [
@@ -45485,6 +45777,18 @@
           "Library": {
             "crate_name": "mockall",
             "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -45514,6 +45818,10 @@
               "target": "fragile"
             },
             {
+              "id": "mockall 0.15.0",
+              "target": "build_script_build"
+            },
+            {
               "id": "predicates 3.1.2",
               "target": "predicates"
             },
@@ -45528,13 +45836,24 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "mockall_derive 0.13.1",
+              "id": "mockall_derive 0.15.0",
               "target": "mockall_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.13.1"
+        "version": "0.15.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -45543,14 +45862,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "mockall_derive 0.13.1": {
+    "mockall_derive 0.15.0": {
       "name": "mockall_derive",
-      "version": "0.13.1",
+      "version": "0.15.0",
       "package_url": "https://github.com/asomers/mockall",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/mockall_derive/0.13.1/download",
-          "sha256": "25ca3004c2efe9011bd4e461bd8256445052b9615405b4f7ea43fc8ca5c20898"
+          "url": "https://static.crates.io/crates/mockall_derive/0.15.0/download",
+          "sha256": "9cfe16fbe8a314aeec0b861ac24e60b1e123e97634bab045475b9d6a18416fd8"
         }
       },
       "targets": [
@@ -45591,7 +45910,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "mockall_derive 0.13.1",
+              "id": "mockall_derive 0.15.0",
               "target": "build_script_build"
             },
             {
@@ -45610,7 +45929,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.13.1"
+        "version": "0.15.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -49112,6 +49431,97 @@
         ]
       },
       "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "oid-registry 0.7.1": {
+      "name": "oid-registry",
+      "version": "0.7.1",
+      "package_url": "https://github.com/rusticata/oid-registry.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/oid-registry/0.7.1/download",
+          "sha256": "a8d8034d9489cdaf79228eb9f6a3b8d7bb32ba00d6645ebd48eef4077ceb5bd9"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "oid_registry",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "oid_registry",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "crypto",
+            "default",
+            "kdf",
+            "nist_algs",
+            "pkcs1",
+            "pkcs12",
+            "pkcs7",
+            "pkcs9",
+            "registry",
+            "x509",
+            "x962"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "asn1-rs 0.6.2",
+              "target": "asn1_rs"
+            },
+            {
+              "id": "oid-registry 0.7.1",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.7.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -58878,6 +59288,7 @@
             "default",
             "pem",
             "ring",
+            "x509-parser",
             "zeroize"
           ],
           "selects": {}
@@ -58904,6 +59315,10 @@
             {
               "id": "time 0.3.47",
               "target": "time"
+            },
+            {
+              "id": "x509-parser 0.16.0",
+              "target": "x509_parser"
             },
             {
               "id": "yasna 0.5.2",
@@ -70302,71 +70717,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "structmeta 0.2.0": {
-      "name": "structmeta",
-      "version": "0.2.0",
-      "package_url": "https://github.com/frozenlib/structmeta",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/structmeta/0.2.0/download",
-          "sha256": "78ad9e09554f0456d67a69c1584c9798ba733a5b50349a6c0d0948710523922d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "structmeta",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "structmeta",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.119",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "structmeta-derive 0.2.0",
-              "target": "structmeta_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.2.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
     "structmeta 0.3.0": {
       "name": "structmeta",
       "version": "0.3.0",
@@ -70424,62 +70774,6 @@
           "selects": {}
         },
         "version": "0.3.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
-    "structmeta-derive 0.2.0": {
-      "name": "structmeta-derive",
-      "version": "0.2.0",
-      "package_url": "https://github.com/frozenlib/structmeta",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/structmeta-derive/0.2.0/download",
-          "sha256": "a60bcaff7397072dca0017d1db428e30d5002e00b6847703e2e42005c95fbe00"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "structmeta_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "structmeta_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.119",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.2.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -73166,14 +73460,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "test-strategy 0.3.1": {
+    "test-strategy 0.4.5": {
       "name": "test-strategy",
-      "version": "0.3.1",
+      "version": "0.4.5",
       "package_url": "https://github.com/frozenlib/test-strategy",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/test-strategy/0.3.1/download",
-          "sha256": "b8361c808554228ad09bfed70f5c823caf8a3450b6881cc3a38eb57e8c08c1d9"
+          "url": "https://static.crates.io/crates/test-strategy/0.4.5/download",
+          "sha256": "8f7fd1eb9efb36942b85a290c4201d317980fe09bc88d34dd48aaaae03075c6a"
         }
       },
       "targets": [
@@ -73206,7 +73500,7 @@
               "target": "quote"
             },
             {
-              "id": "structmeta 0.2.0",
+              "id": "structmeta 0.3.0",
               "target": "structmeta"
             },
             {
@@ -73217,7 +73511,16 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.1"
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "derive-ex 0.1.8",
+              "target": "derive_ex"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.4.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -89615,6 +89918,98 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "x509-parser 0.16.0": {
+      "name": "x509-parser",
+      "version": "0.16.0",
+      "package_url": "https://github.com/rusticata/x509-parser.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/x509-parser/0.16.0/download",
+          "sha256": "fcbc162f30700d6f3f82a24bf7cc62ffe7caea42c0b2cba8bf7f3ae50cf51f69"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "x509_parser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "x509_parser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "ring",
+            "verify"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "asn1-rs 0.6.2",
+              "target": "asn1_rs"
+            },
+            {
+              "id": "data-encoding 2.11.0",
+              "target": "data_encoding"
+            },
+            {
+              "id": "der-parser 9.0.0",
+              "target": "der_parser"
+            },
+            {
+              "id": "lazy_static 1.5.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "nom 7.1.3",
+              "target": "nom"
+            },
+            {
+              "id": "oid-registry 0.7.1",
+              "target": "oid_registry"
+            },
+            {
+              "id": "ring 0.17.14",
+              "target": "ring"
+            },
+            {
+              "id": "rusticata-macros 4.1.0",
+              "target": "rusticata_macros"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            },
+            {
+              "id": "time 0.3.47",
+              "target": "time"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.16.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "x509-parser 0.18.1": {
       "name": "x509-parser",
       "version": "0.18.1",
@@ -91660,7 +92055,7 @@
     "memmap2 0.9.5",
     "minicbor 0.22.0",
     "minicbor-derive 0.14.0",
-    "mockall 0.13.1",
+    "mockall 0.15.0",
     "mockito 1.7.0",
     "moka 0.12.15",
     "more-asserts 0.3.1",
@@ -91789,7 +92184,7 @@
     "tar 0.4.46",
     "tarpc 0.37.0",
     "tempfile 3.23.0",
-    "test-strategy 0.3.1",
+    "test-strategy 0.4.5",
     "textplots 0.8.4",
     "thiserror 2.0.18",
     "thousands 0.2.0",

@@ -100,7 +100,7 @@ impl CkErc20Setup {
     }
 
     /// Activates the ckERC20 feature on an existing ckETH fixture: the balance-scan harness in
-    /// [`crate::live_scan`] supplies one backed by a live anvil node rather than the mocked default.
+    /// [`crate::live`] supplies one backed by a live anvil node rather than the mocked default.
     pub(crate) fn with_cketh(cketh: CkEthSetup) -> Self {
         let mut ckerc20 = Self::without_ckerc20_active(cketh);
         ckerc20.cketh = ckerc20
@@ -173,6 +173,11 @@ impl CkErc20Setup {
 
     pub fn add_support_for_subaccount(mut self) -> Self {
         self.cketh = self.cketh.add_support_for_subaccount();
+        self
+    }
+
+    pub fn add_support_for_subaccount_helper(mut self, helper: Address) -> Self {
+        self.cketh = self.cketh.add_support_for_subaccount_helper(helper);
         self
     }
 

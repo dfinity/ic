@@ -8,10 +8,9 @@ use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
 use crate::state::transactions::{Reimbursed, ReimbursementIndex, WithdrawalRequest};
 use crate::storage::{record_event, with_event_iter};
+use crate::time::TimeProvider;
 
 /// Updates the state to reflect the given state transition.
-// public because it's used in tests since process_event
-// requires canister infrastructure to retrieve time
 pub fn apply_state_transition(state: &mut State, payload: &EventType) {
     match payload {
         EventType::Init(init_arg) => {
@@ -112,43 +111,55 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         } => {
             state.record_finalized_transaction(withdrawal_id, transaction_receipt);
         }
+        EventType::AttestedDepositAddress { request, signature } => {
+            state.record_attestation(request.clone(), signature.clone());
+        }
+        EventType::AuthorizedDepositAddress { request, signature } => {
+            state
+                .automatic_deposits
+                .record_authorization(request.clone(), signature.clone());
+        }
         EventType::AcceptedSweepRequest(request) => {
             state.next_sweep_id = request.id.next();
-            state.sweeper_transactions.record_request(request.clone());
+            state.automatic_deposits.record_sweep_scheduled(
+                request.id,
+                request.token,
+                request.items.iter().map(|item| item.item.account),
+            );
+            state.update_sweeper_balance_upon_accepted_sweep(request);
+            state
+                .automatic_deposits
+                .record_sweep_request(request.clone());
         }
         EventType::CreatedSweeperTransaction {
             sweep_id,
             transaction,
         } => {
             state
-                .sweeper_transactions
-                .record_created_transaction(*sweep_id, transaction.clone());
+                .automatic_deposits
+                .record_created_sweep_transaction(*sweep_id, transaction.clone());
         }
         EventType::SignedSweeperTransaction {
             sweep_id: _,
             transaction,
         } => {
             state
-                .sweeper_transactions
-                .record_signed_transaction(transaction.clone());
+                .automatic_deposits
+                .record_signed_sweep_transaction(transaction.clone());
         }
         EventType::ReplacedSweeperTransaction {
             sweep_id: _,
             transaction,
         } => {
             state
-                .sweeper_transactions
-                .record_resubmit_transaction(transaction.clone());
+                .automatic_deposits
+                .record_resubmit_sweep_transaction(transaction.clone());
         }
         EventType::FinalizedSweeperTransaction {
             sweep_id,
             transaction_receipt,
         } => {
-            // The sweeper pipeline is never reimbursed and holds no ckETH balance, so unlike the main
-            // pipeline there is no reimbursement tail or balance update — just the finalize mechanics.
-            let _ = state
-                .sweeper_transactions
-                .record_finalized_transaction(*sweep_id, transaction_receipt);
+            state.record_finalized_sweeper_transaction(sweep_id, transaction_receipt);
         }
         EventType::ReimbursedEthWithdrawal(Reimbursed {
             burn_in_block: withdrawal_id,
@@ -225,9 +236,9 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
 }
 
 /// Records the given event payload in the event log and updates the state to reflect the change.
-pub fn process_event(state: &mut State, payload: EventType) {
+pub fn process_event<T: TimeProvider>(state: &mut State, payload: EventType, time_provider: &T) {
     apply_state_transition(state, &payload);
-    record_event(payload);
+    record_event(payload, time_provider);
 }
 
 /// Recomputes the minter state from the event log.

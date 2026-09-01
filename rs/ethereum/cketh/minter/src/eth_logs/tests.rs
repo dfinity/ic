@@ -257,7 +257,7 @@ mod scraping {
         use crate::lifecycle::EthereumNetwork;
         use crate::numeric::BlockNumber;
         use crate::state::eth_logs_scraping::LogScrapingId;
-        use crate::test_fixtures::initial_state;
+        use crate::test_fixtures::{initial_state, state_with_deposit_helper};
         use evm_rpc_types::Hex32;
         use hex_literal::hex;
         use ic_ethereum_types::Address;
@@ -276,11 +276,7 @@ mod scraping {
         fn should_always_contain_the_zero_address_in_second_topic() {
             let last_scraped_block_number = BlockNumber::from(6_970_446_u32);
             let state = {
-                let mut state = initial_state();
-                state.log_scrapings.set_contract_address(
-                    LogScrapingId::EthOrErc20DepositWithSubaccount,
-                    CONTRACT_ADDRESS,
-                );
+                let mut state = state_with_deposit_helper(CONTRACT_ADDRESS);
                 state.log_scrapings.set_last_scraped_block_number(
                     LogScrapingId::EthOrErc20DepositWithSubaccount,
                     last_scraped_block_number,

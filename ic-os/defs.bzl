@@ -22,6 +22,7 @@ def icos_build(
         image_deps_func,
         mode = None,
         malicious = False,
+        build_alternative_guestos_image = False,
         upgrades = True,
         vuln_scan = True,
         visibility = None,
@@ -36,6 +37,7 @@ def icos_build(
       image_deps_func: Function to be used to generate image manifest
       mode: dev or prod. If not specified, will use the value of `name`
       malicious: if True, bundle the `malicious_replica`
+      build_alternative_guestos_image: if True, build the proposal-aware alternative GuestOS image variant, e.g. for a recovery
       upgrades: if True, build upgrade images as well
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
@@ -133,21 +135,52 @@ def icos_build(
         tags = ["manual"],
     )
 
-    # Extract initrd and kernel for SEV measurement
-    tar_extract(
-        name = "extracted_initrd.img",
-        src = "rootfs-tree.tar",
-        path = "boot/initrd.img-*",
-        wildcards = True,
-        tags = ["manual"],
+    # Extract the bootfs tree from the base GuestOS update image. The image is
+    # supplied by build-sev-recovery as a source file `base-update-img.tar.zst`,
+    # a symlink to a version-named `update-img-<version>.tar.zst`
+    # (see //ic-os/guestos/envs/sev-recovery:build-sev-recovery).
+    native.genrule(
+        name = "alternative_guestos_base_bootfs_tree_tar",
+        srcs = [":base-update-img.tar.zst"],
+        outs = ["alternative_guestos_base_bootfs_tree.tar"],
+        cmd = """
+set -euo pipefail
+
+tmpdir=$$(mktemp -d)
+mounted=0
+cleanup() {
+  set +e
+  if [[ $$mounted -eq 1 ]]; then
+    fusermount3 -u "$$tmpdir/bootfs" || fusermount -u "$$tmpdir/bootfs" || umount "$$tmpdir/bootfs"
+  fi
+  rm -rf "$$tmpdir"
+}
+trap cleanup EXIT
+
+# Extract boot.img from the base GuestOS update image.
+tar --extract --zstd --to-stdout --file "$<" boot.img > "$$tmpdir/boot.img"
+
+mkdir "$$tmpdir/bootfs"
+$(location //:fuse2fs) -o ro,norecovery,fakeroot "$$tmpdir/boot.img" "$$tmpdir/bootfs"
+mounted=1
+tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
+""",
+        message = "Extracting base GuestOS boot partition via fuse2fs",
+        tags = ["manual", "no-cache"],
+        target_compatible_with = ["@platforms//os:linux"],
+        tools = ["//:fuse2fs"],
     )
 
-    tar_extract(
-        name = "extracted_vmlinuz",
-        src = "rootfs-tree.tar",
-        path = "boot/vmlinuz-*",
-        wildcards = True,
-        tags = ["manual"],
+    ext4_image(
+        name = "partition-boot-alternative.tzst",
+        src = ":alternative_guestos_base_bootfs_tree_tar",
+        file_contexts = ":file_contexts",
+        partition_size = image_deps["bootfs_size"],
+        target_compatible_with = ["@platforms//os:linux"],
+        extra_files = {
+            ":alternative_guestos_proposal.cbor": "/alternative_guestos_proposal.cbor:0644",
+        },
+        tags = ["manual", "no-cache"],
     )
 
     # -------------------- Extract root and boot partitions --------------------
@@ -219,9 +252,47 @@ def icos_build(
             tags = ["manual", "no-cache"],
         )
 
-        # The kernel command line (boot args) is generated from boot_args_template:
+        # Extract individual files (boot args, initrd, vmlinuz, OVMF firmware) from the
+        # boot partition image for use in launch measurement generation and boot arg aliasing.
+        extracted_boot_args = "extracted_boot" + test_suffix + "_args"
+        extracted_initrd = "extracted_initrd" + test_suffix + ".img"
+        extracted_vmlinuz = "extracted_vmlinuz" + test_suffix
+        extracted_ovmf_sev = "extracted_OVMF_SEV" + test_suffix + ".fd"
+
+        native.genrule(
+            name = "extract_boot_partition_files" + test_suffix,
+            srcs = [":partition-boot-alternative.tzst" if build_alternative_guestos_image else ":" + partition_boot_tzst],
+            outs = [
+                extracted_boot_args,
+                extracted_initrd,
+                extracted_vmlinuz,
+                extracted_ovmf_sev,
+            ],
+            cmd = """
+                tmpdir="$$(mktemp -d)"
+                trap 'rm -rf "$$tmpdir"' EXIT
+
+                tar --extract -a --file "$<" --directory "$$tmpdir"
+
+                # initrd and vmlinuz are symlinks, first extract the symlink targets
+                initrd_target="$$($(location //:debugfs) -R "stat /initrd.img" "$$tmpdir/partition.img" | sed -n 's/^Fast link dest: "\\(.*\\)"$$/\\1/p')"
+                vmlinuz_target="$$($(location //:debugfs) -R "stat /vmlinuz" "$$tmpdir/partition.img" | sed -n 's/^Fast link dest: "\\(.*\\)"$$/\\1/p')"
+
+                $(location //:debugfs) -R "dump /boot_args $(@D)/""" + extracted_boot_args + """" "$$tmpdir/partition.img"
+                $(location //:debugfs) -R "dump /OVMF_SEV.fd $(@D)/""" + extracted_ovmf_sev + """" "$$tmpdir/partition.img"
+                $(location //:debugfs) -R "dump /$$initrd_target $(@D)/""" + extracted_initrd + """" "$$tmpdir/partition.img"
+                $(location //:debugfs) -R "dump /$$vmlinuz_target $(@D)/""" + extracted_vmlinuz + """" "$$tmpdir/partition.img"
+            """,
+            message = "Extracting files from boot partition",
+            tags = ["manual"],
+            target_compatible_with = ["@platforms//os:linux"],
+            tools = ["//:debugfs"],
+        )
+
+        # The kernel command line (boot args) is usually generated from boot_args_template:
         # - For OS requiring root signing: Template includes ROOT_HASH placeholder that gets substituted with dm-verity hash
         # - For OS not requiring root signing: Template is used as-is without ROOT_HASH substitution
+        # - For alternative GuestOS image builds: The base release boot_args file is reused as-is
         #
         # This provides:
         # - Consistent boot argument handling across all OS types
@@ -251,6 +322,7 @@ def icos_build(
                 tags = ["manual", "no-cache"],
                 visibility = ["//rs/tests:__subpackages__", "//ic-os:__subpackages__"],
             )
+
             native.genrule(
                 name = "generate-" + boot_args,
                 outs = [boot_args],
@@ -280,22 +352,26 @@ def icos_build(
             # Supported CPU types for sev-snp-measure, one per AMD EPYC generation.
             vcpu_types = ["EPYC-v4", "EPYC-Genoa", "EPYC-Turin"]
 
-            native.genrule(
-                name = "generate-" + launch_measurements,
-                outs = [launch_measurements],
-                srcs = ["//:ovmfsev_code", boot_args, ":extracted_initrd.img", ":extracted_vmlinuz"],
-                visibility = visibility,
-                tools = ["//ic-os:sev-snp-measure"],
-                tags = ["manual"],
-                cmd = r"""
-                    source $(execpath """ + boot_args + """)
+            # Build the genrule inputs and command conditionally.  When building an
+            # alternative GuestOS image (e.g. for recovery), the generated measurements
+            # are validated against the proposal *in the same genrule* so that the
+            # validation can never become a leaf target that is silently skipped.
+            measurement_srcs = [
+                ":" + extracted_ovmf_sev,
+                ":" + extracted_boot_args,
+                ":" + extracted_initrd,
+                ":" + extracted_vmlinuz,
+            ]
+            measurement_tools = ["//ic-os:sev-snp-measure"]
+            measurement_cmd = r"""
+                    source $(execpath :""" + extracted_boot_args + r""")
                     # Create GuestLaunchMeasurements JSON for each CPU generation, vCPU count, and boot slot
                     (for vcpu_type in """ + " ".join(vcpu_types) + """; do
                         for vcpus in """ + vcpu_configs + """; do
                             # Note: We only create launch measurements for the TEE boot arg variants
                             # (BOOT_ARGS_TEE_A and BOOT_ARGS_TEE_B)
                             for cmdline in "$$BOOT_ARGS_TEE_A" "$$BOOT_ARGS_TEE_B"; do
-                                hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus $$vcpus --ovmf "$(execpath //:ovmfsev_code)" --vcpu-type "$$vcpu_type" --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
+                                hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus $$vcpus --ovmf "$(execpath """ + extracted_ovmf_sev + """)" --vcpu-type "$$vcpu_type" --append "$$cmdline" --initrd "$(location """ + extracted_initrd + """)" --kernel "$(location """ + extracted_vmlinuz + """)")
                                 # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
                                 measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
                                 jq -na --arg cmd "$$cmdline" --arg m "$$measurement" --arg vcpu_type "$$vcpu_type" '{
@@ -305,7 +381,31 @@ def icos_build(
                             done
                         done
                     done) | jq -sc "{guest_launch_measurements: .}" > $@
-                """,
+                """
+
+            # When building an alternative GuestOS image, verify that the generated launch measurements correspond
+            # to those from the proposal. We keep this inside the same build rule, otherwise the check could be skipped
+            # by Bazel.
+            if build_alternative_guestos_image:
+                measurement_srcs.append(":alternative_guestos_proposal.cbor")
+                measurement_tools.append(
+                    "//rs/ic_os/build_tools/alternative_guestos",
+                )
+                measurement_cmd += r"""
+                    # Validate the generated measurements against the alternative GuestOS proposal
+                    $(execpath //rs/ic_os/build_tools/alternative_guestos) validate-measurements \
+                      --proposal-path $(location :alternative_guestos_proposal.cbor) \
+                      --local-measurements-path $@
+                """
+
+            native.genrule(
+                name = "generate-" + launch_measurements,
+                outs = [launch_measurements],
+                srcs = measurement_srcs,
+                visibility = visibility,
+                tools = measurement_tools,
+                tags = ["manual"],
+                cmd = measurement_cmd,
             )
 
     component_file_references_test(
@@ -330,7 +430,7 @@ def icos_build(
     partitions = [
         "//ic-os/bootloader:partition-esp.tzst",
         ":partition-grub.tzst",
-        ":partition-boot.tzst",
+        ":partition-boot-alternative.tzst" if build_alternative_guestos_image else ":partition-boot.tzst",
         ":partition-root.tzst",
     ] + custom_partitions
 
@@ -375,7 +475,7 @@ def icos_build(
 
             upgrade_image(
                 name = update_image_tar,
-                boot_partition = ":partition-boot" + test_suffix + ".tzst",
+                boot_partition = ":partition-boot-alternative.tzst" if build_alternative_guestos_image else ":partition-boot" + test_suffix + ".tzst",
                 root_partition = ":partition-root" + test_suffix + ".tzst",
                 tags = ["manual", "no-cache"],
                 target_compatible_with = ["@platforms//os:linux"],

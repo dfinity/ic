@@ -55,7 +55,8 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
-    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, CanisterHttpRequestArgs,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO, CanisterHttpRequestArgs,
     DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod,
     PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, TransformContext,
 };
@@ -664,6 +665,7 @@ impl CanisterHttpRequestContext {
         registry_version: RegistryVersion,
         cost_schedule: CanisterCyclesCostSchedule,
         rng: &mut dyn RngCore,
+        pay_as_you_go_enabled: bool,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
         validate_url_length(&args.url)?;
@@ -715,9 +717,14 @@ impl CanisterHttpRequestContext {
             time,
             replication,
             pricing_version: {
+                let allowed_versions = if pay_as_you_go_enabled {
+                    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO
+                } else {
+                    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS
+                };
                 let final_version_u32 = args
                     .pricing_version
-                    .filter(|v| ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS.contains(v))
+                    .filter(|v| allowed_versions.contains(v))
                     .unwrap_or(DEFAULT_HTTP_OUTCALLS_PRICING_VERSION);
                 PricingVersion::from_repr(final_version_u32).unwrap_or(PricingVersion::Legacy)
             },
@@ -1438,6 +1445,7 @@ mod tests {
     };
     use ic_types_test_utils::ids::node_test_id;
     use rstest::rstest;
+    use std::str::FromStr;
     use strum::IntoEnumIterator;
 
     /// The signed bytes of a [`CanisterHttpResponseReceipt`] must round-trip, for
@@ -1478,7 +1486,7 @@ mod tests {
                     content_hash: CryptoHashOf::new(CryptoHash(vec![0; 32])),
                     content_size: 0,
                     is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: ReplicaVersion::from_str("foobar_version").unwrap(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt { spent },
             }
@@ -2279,6 +2287,7 @@ mod tests {
             RegistryVersion::from(1),
             CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
+            /* pay_as_you_go_enabled = */ false,
         )
     }
 
