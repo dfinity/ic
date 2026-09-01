@@ -820,7 +820,7 @@ mod tests {
     fn test_assemble_canister_upgrade_options_when_no_flags_are_set() {
         let result = assemble_canister_upgrade_options(
             false, // skip_pre_upgrade
-            None, // wasm_memory_persistence
+            None,  // wasm_memory_persistence
         );
 
         assert_eq!(result, None);
@@ -845,7 +845,7 @@ mod tests {
     #[test]
     fn test_assemble_canister_upgrade_options_when_only_wasm_memory_persistence_is_set() {
         let result = assemble_canister_upgrade_options(
-            false, // skip_pre_upgrade
+            false,                             // skip_pre_upgrade
             Some(WasmMemoryPersistence::Keep), // wasm_memory_persistence
         );
 
@@ -861,7 +861,7 @@ mod tests {
     #[test]
     fn test_assemble_canister_upgrade_options_when_both_flags_are_set() {
         let result = assemble_canister_upgrade_options(
-            true, // skip_pre_upgrade
+            true,                                 // skip_pre_upgrade
             Some(WasmMemoryPersistence::Replace), // wasm_memory_persistence
         );
 
