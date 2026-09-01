@@ -12,10 +12,6 @@ description: |
   files' local names, ready to be published as release verification data —
   the published checksums are the verified build-time values, not re-hashes
   of whatever was downloaded.
-
-  Requires the dfinity/ic repository to be checked out (the verification
-  script is read from the workspace, so it travels with the ref being
-  released).
 inputs:
   commit:
     required: true
@@ -33,8 +29,7 @@ inputs:
       Regex (anchored by the verifier) that the attestation's source git ref
       must match: "refs/heads/master" for master commits,
       "refs/heads/(rc--|hotfix-)[^/]+" for release-qualification
-      branches. The signer-workflow pin alone fixes which workflow signed,
-      not from which ref it ran — see ci/scripts/fetch-attested-sums.sh.
+      branches.
   files:
     required: true
     description: |
@@ -102,20 +97,13 @@ runs:
         GH_TOKEN: ${{ inputs.gh-token }}
       run: |
         set -euo pipefail
-        # Command-substitution subshells do not inherit errexit by default,
-        # which would let a failing command inside $(...) go unnoticed.
         shopt -s inherit_errexit
 
         out_dir="${OUT_DIR:-$(mktemp -d)}"
         mkdir -p "$out_dir"
         # The out-dir's contract is "exactly the files this invocation
         # verified": refuse a non-empty directory rather than mixing stale,
-        # unverified files in with the verified ones — a consumer publishing
-        # the directory with a glob would otherwise publish those too.
-        # -H follows a symlink given as the start point (the writes below
-        # follow it too, so its target's contents are what matter), while
-        # entries below are not followed — a child symlink counts as an
-        # entry and is rejected.
+        # unverified files in with the verified ones.
         if [ -n "$(find -H "$out_dir" -mindepth 1 -print -quit)" ]; then
           echo "ERROR: out-dir '$out_dir' is not empty" >&2
           exit 1
@@ -133,10 +121,7 @@ runs:
         # download for a verified one.
         ensure_verified_sums_for_dir() { # <cdn-subdir>; sets $sums
           local dir="$1"
-          # Key the cache by a hash of the exact directory string: flattening
-          # the separator (s|/|_|) is not injective — "foo/bar_baz" and
-          # "foo_bar/baz" would share a key, letting one directory silently
-          # reuse another's verified sums.
+          # Key the cache by a hash of the exact directory string.
           sums="$sums_cache/$(printf '%s' "$dir" | sha256sum | cut -d' ' -f1).SHA256SUMS"
           if ! [ -f "$sums" ]; then
             "$GITHUB_WORKSPACE/ci/scripts/fetch-attested-sums.sh" \
