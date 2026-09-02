@@ -235,6 +235,14 @@ fn test_upgrade() {
 // }
 
 #[test]
+fn test_change_trigger_threshold_before_archive_spawned() {
+    ic_ledger_suite_state_machine_tests::test_change_trigger_threshold_before_archive_spawned(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_upgrade_archive_options() {
     ic_ledger_suite_state_machine_tests::test_upgrade_archive_options(
         ledger_wasm(),
