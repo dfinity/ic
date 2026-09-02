@@ -883,10 +883,6 @@ jobs:
     timeout-minutes: 30
     # The docker leg is informational until it has been seen green.
     continue-on-error: ${{ matrix.experimental == true }}
-    env:
-      # Fail closed: never fall back to a local build or an unverified cached
-      # image here (a registry hiccup must be a fast error, not a 30-minute build).
-      CONTAINER_RUN_REQUIRE_PINNED: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -921,8 +917,8 @@ jobs:
             command: "true"
             expect: "refusing to pull an unpinned image"
             runtime: podman
-          # A well-formed pin the registry does not serve: the pull fails and no
-          # local build is attempted (CONTAINER_RUN_REQUIRE_PINNED).
+          # A well-formed pin the registry does not serve: the pull fails and, by
+          # default, neither a local build nor a cached image is used.
           - name: unknown digest refused
             setup: printf 'sha256:%064d\n' 0 > ci/container/ic-dev.digest
             command: "true"
@@ -1019,8 +1015,9 @@ jobs:
           CI_PULL_REQUEST: ${{ github.event_name == 'pull_request' || inputs.pull-request }}
         run: |
           # When TAG is out of sync there is no reviewed digest for the working
-          # tree and container-run.sh builds the image locally (30+ minutes, which
-          # would time this job out). On a pull request that state is transient:
+          # tree and container-run.sh refuses to run (it only builds locally with
+          # CONTAINER_RUN_ALLOW_UNPINNED=1), so every leg below would fail. On a
+          # pull request that state is transient:
           # the container-autobuild.yml bot commit brings TAG and *.digest in sync
           # and re-triggers CI (on fork PRs it cannot, and they build locally).
           # Anywhere else (push to master, the merge queue, release-testing on
@@ -1052,7 +1049,7 @@ jobs:
             exit 0
           fi
           # A tampered pin must fail fast: not succeed, not hit the timeout, and
-          # not fall through to a 30-minute local build that merely times the job out.
+          # not fall through to a local build that merely times the job out.
           set +e
           out="$(timeout 300 ./ci/container/container-run.sh ${{ matrix.command }} 2>&1)"
           rc=$?

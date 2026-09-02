@@ -13,8 +13,9 @@ container for everyone. If the dev container image genuinely
 needs to change (e.g. `ci/container/Dockerfile` was edited), let that workflow
 bump them — don't do it in your commit. Until its bot commit lands (this
 includes the sanctioned trick of putting a random string in `TAG` to force a
-rebuild), `TAG` does not match the working tree and `container-run.sh` builds
-the image locally instead of pulling it.
+rebuild), `TAG` does not match the working tree and `container-run.sh` refuses
+to run; `CONTAINER_RUN_ALLOW_UNPINNED=1` makes it build the image locally from
+the checkout instead.
 
 # Rust
 
