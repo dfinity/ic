@@ -601,6 +601,14 @@ impl ReplicatedStateMetrics {
         // only ever charged, never refunded, and a deleted canister's consumption is
         // moved into `consumed_cycles_by_deleted_canisters`), so it can be added to
         // the canisters' counters as-is.
+        //
+        // The one thing that can lower this total is an online subnet split, which
+        // hands the canisters migrating to the other subnet -- and with them their
+        // consumption -- over to that subnet. Consumers see a counter reset, which
+        // they handle. Retaining the migrated canisters' consumption here instead
+        // would count it on both subnets, and this total deliberately mirrors the
+        // certified `consumed_cycles_total_including_canisters`, which drops for the
+        // same reason.
         let consumed_cycles_as_counter = state.metadata.subnet_metrics.consumed_cycles_total()
             + consumed_cycles_by_canisters_as_counter;
         self.consumed_cycles_as_counter.reset();

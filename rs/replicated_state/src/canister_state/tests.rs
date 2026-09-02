@@ -1807,6 +1807,68 @@ fn drops_aborted_canister_install_after_split() {
     assert_eq!(expected_state, canister_state);
 }
 
+/// The cycles prepaid for an `install_code` that a subnet split drops are not
+/// returned to the canister, so they must be settled as consumed. Otherwise the
+/// prepayment would be left in the gauge with nothing in the state to account for
+/// it, breaking the invariant on `SystemState::outstanding_prepayments`.
+#[test]
+fn settles_prepayment_of_aborted_canister_install_dropped_after_split() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let prepaid = CompoundCycles::<Instructions>::new(Cycles::new(1000), cost_schedule);
+    let mut canister_state = CanisterStateFixture::new().canister_state;
+
+    let system_state = &mut canister_state.system_state;
+    system_state.consume_cycles(prepaid);
+    system_state
+        .task_queue
+        .enqueue(ExecutionTask::AbortedInstallCode {
+            message: CanisterCall::Request(Arc::new(RequestBuilder::new().build())),
+            call_id: InstallCodeCallId::new(0),
+            prepaid_execution_cycles: prepaid,
+        });
+
+    // The prepayment is outstanding, so it is in the gauge but not on the counter.
+    assert_eq!(
+        system_state.outstanding_prepayments(),
+        Some(prepaid.nominal())
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        prepaid.nominal()
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles_as_counter(),
+        NominalCycles::zero()
+    );
+    let balance_before = system_state.balance();
+
+    canister_state.drop_in_progress_management_calls_after_split();
+
+    // Nothing is refunded, so the balance and the gauge are unchanged. But the
+    // prepayment is no longer outstanding, so it must have moved onto the counters.
+    let system_state = &canister_state.system_state;
+    assert_eq!(system_state.balance(), balance_before);
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        prepaid.nominal()
+    );
+    assert_eq!(
+        system_state.outstanding_prepayments(),
+        Some(NominalCycles::zero())
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles_as_counter(),
+        prepaid.nominal()
+    );
+    assert_eq!(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters()
+            .get(&CyclesUseCase::Instructions),
+        Some(&prepaid.nominal())
+    );
+}
+
 #[test]
 fn reverts_stopping_status_after_split() {
     let mut canister_state = CanisterStateFixture::new().canister_state;

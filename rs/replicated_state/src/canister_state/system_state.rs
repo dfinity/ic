@@ -1673,7 +1673,22 @@ impl SystemState {
         //
         // Note that this cannot be a paused install code task, because we abort all
         // paused tasks before triggering the split.
-        self.task_queue.remove_aborted_install_code_task();
+        //
+        // The cycles prepaid for the dropped execution are not returned to the
+        // canister, so settle them as fully consumed. This leaves the balance and the
+        // consumed cycles gauges untouched (the refund is zero) and only accounts for
+        // the prepayment on the monotonic counters, which is where a prepayment is
+        // recorded once its refund is known. Without this the prepayment would remain
+        // in the gauges with nothing left in the state to account for it, breaking the
+        // invariant on `Self::outstanding_prepayments`.
+        if let Some(prepaid_execution_cycles) = self.task_queue.remove_aborted_install_code_task() {
+            // Zero is zero under either cost schedule.
+            let zero_refund = CompoundCycles::<Instructions>::new(
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Normal,
+            );
+            self.refund_cycles(prepaid_execution_cycles, zero_refund);
+        }
 
         // Roll back `Stopping` canister states to `Running` and drop all their stop
         // contexts (the calls corresponding to the dropped stop contexts will be
@@ -2270,6 +2285,10 @@ impl SystemState {
     ///    `prepayment_for_call_transmission`); or
     ///  * in the `prepaid_execution_cycles` of a paused / aborted execution or
     ///    `install_code`.
+    ///
+    /// The one place where such a prepayment leaves the state without a refund is an
+    /// aborted `install_code` dropped by a subnet split; that path settles it onto
+    /// the counters, see `Self::drop_in_progress_management_calls_after_split`.
     ///
     /// Together with how the two metrics are updated, this yields the invariant
     ///
