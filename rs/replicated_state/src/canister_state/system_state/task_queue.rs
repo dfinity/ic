@@ -170,7 +170,8 @@ impl TaskQueue {
     }
 
     /// Removes the aborted install code task, if any, returning the execution cycles
-    /// that were prepaid for it. The caller is responsible for settling them.
+    /// that were prepaid for it. The caller is responsible for settling them, as the
+    /// execution they paid for will not happen.
     pub fn remove_aborted_install_code_task(&mut self) -> Option<CompoundCycles<Instructions>> {
         match &self.paused_or_aborted_task {
             Some(ExecutionTask::AbortedInstallCode {

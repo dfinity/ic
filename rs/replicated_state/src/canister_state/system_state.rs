@@ -2284,12 +2284,18 @@ impl SystemState {
     ///  * in the `Callback` of a call whose response has not been executed yet
     ///    (`prepayment_for_response_execution` and
     ///    `prepayment_for_call_transmission`); or
-    ///  * in the `prepaid_execution_cycles` of a paused / aborted execution or
+    ///  * in the `prepaid_execution_cycles` of an aborted execution or an aborted
     ///    `install_code`.
     ///
-    /// The one place where such a prepayment leaves the state without a refund is an
-    /// aborted `install_code` dropped by a subnet split; that path settles it onto
-    /// the counters, see `Self::drop_in_progress_management_calls_after_split`.
+    /// (A paused execution records no prepayment of its own: a paused response
+    /// execution is paid for by the callback that the task carries, and any other
+    /// paused execution holds its prepayment in memory only, which is why this
+    /// method returns `None` for it. See below.)
+    ///
+    /// The only way such a prepayment leaves the state other than through the refund
+    /// that its execution or response issues is an aborted `install_code` dropped by
+    /// a subnet split; that path refunds it in full, see
+    /// `Self::drop_in_progress_management_calls_after_split`.
     ///
     /// Together with how the two metrics are updated, this yields the invariant
     ///
