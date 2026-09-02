@@ -760,9 +760,32 @@ mod upgrade {
         let managed_canisters = orchestrator
             .assert_managed_canisters(&usdc_erc20_contract())
             .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash);
-        managed_canisters.make_transfers(10 * ARCHIVE_TRIGGER_THRESHOLD);
+        let log_length_before = managed_canisters
+            .call_ledger_icrc3_get_blocks(&Vec::new())
+            .log_length;
+        let number_of_transfers = 10 * ARCHIVE_TRIGGER_THRESHOLD;
+        managed_canisters.make_transfers(number_of_transfers);
 
         assert_eq!(managed_canisters.call_ledger_archives(), archives_before);
+        let new_blocks = managed_canisters.call_ledger_icrc3_get_blocks(&vec![GetBlocksRequest {
+            start: log_length_before.clone(),
+            length: Nat::from(number_of_transfers),
+        }]);
+        assert_eq!(
+            new_blocks.log_length,
+            log_length_before.clone() + Nat::from(number_of_transfers)
+        );
+        assert!(new_blocks.archived_blocks.is_empty());
+        assert_eq!(
+            new_blocks
+                .blocks
+                .iter()
+                .map(|block| block.id.clone())
+                .collect::<Vec<_>>(),
+            (0..number_of_transfers)
+                .map(|i| log_length_before.clone() + Nat::from(i))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
