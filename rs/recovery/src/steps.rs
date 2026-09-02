@@ -473,26 +473,12 @@ impl Step for ReplayStep {
             .join("data")
             .join(IC_CONSENSUS_POOL_PATH)
             .join("consensus");
-        let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
-
         // Without a consensus pool, `ic-replay` replays no blocks: it only executes the
         // subcommand's extra batch, if any, on top of the latest local checkpoint. That
         // is legitimate when no node could be reached over SSH to download the pool, but
         // it also looks exactly like a state download gone wrong, so warn about it and
         // let the operator decide.
         if !consensus_store_path.exists() {
-            // With no local checkpoint either there is nothing to replay onto: the
-            // replay would fall back to genesis and persist a checkpoint of the empty
-            // initial state, which the rest of the recovery would then treat as the
-            // subnet's own. Refuse, rather than let the operator confirm that.
-            if !checkpoint_path.exists() {
-                return Err(RecoveryError::UnexpectedError(format!(
-                    "Found neither a consensus pool at {} nor a checkpoint at {}, so \
-                     there is no state to replay on top of.",
-                    consensus_store_path.display(),
-                    checkpoint_path.display()
-                )));
-            }
             warn!(
                 self.logger,
                 "No consensus pool found at {}: no blocks will be replayed and {}.",
@@ -512,6 +498,8 @@ impl Step for ReplayStep {
                 ));
             }
         }
+
+        let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
 
         let checkpoint_height = if checkpoint_path.exists() {
             Recovery::remove_all_but_highest_checkpoints(&checkpoint_path, &self.logger)?
@@ -1240,7 +1228,7 @@ impl Step for UploadAndHostTarStep {
 mod tests {
     use ic_crypto_tree_hash::{Digest, Witness};
     use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         consensus::certification::{Certification, CertificationContent, CertificationShare},
         crypto::{CryptoHash, Signed},
@@ -1333,34 +1321,6 @@ mod tests {
         assert!(
             !pool_root.join("consensus").exists(),
             "the merge step should not have created a consensus store"
-        );
-    }
-
-    /// Without a consensus pool there are no blocks to replay, and without a local
-    /// checkpoint there is no state to replay them onto. The replay must not fall back
-    /// to genesis there and persist a checkpoint of the empty initial state, which the
-    /// recovery would go on to upload as if it were the subnet's own.
-    #[test]
-    fn replay_without_a_consensus_pool_or_a_checkpoint_is_refused() {
-        let logger = crate::util::make_logger();
-        let tmp = tempfile::tempdir().expect("Could not create a temp dir");
-        let work_dir = tmp.path().to_path_buf();
-
-        let replay_step = ReplayStep {
-            logger: logger.clone(),
-            subnet_id: subnet_test_id(0),
-            work_dir: work_dir.clone(),
-            config: work_dir.join("ic.json5"),
-            subcmd: None,
-            canister_caller_id: None,
-            replay_until_height: None,
-            result: work_dir.join(replay_helper::OUTPUT_FILE_NAME),
-            skip_prompts: true,
-            replica_version: None,
-        };
-        assert_matches::assert_matches!(
-            replay_step.exec(),
-            Err(RecoveryError::UnexpectedError(e)) if e.contains("no state to replay on top of")
         );
     }
 
