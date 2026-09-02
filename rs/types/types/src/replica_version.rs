@@ -57,7 +57,7 @@ impl TryFrom<&str> for ReplicaVersion {
     type Error = ReplicaVersionParseError;
 
     fn try_from(version_str: &str) -> Result<Self, Self::Error> {
-        if !version_str.chars().all(is_valid_version_symbol) {
+        if version_str.is_empty() || !version_str.chars().all(is_valid_version_symbol) {
             Err(ReplicaVersionParseError(version_str.to_string()))
         } else {
             Ok(ReplicaVersion {
@@ -82,7 +82,7 @@ impl fmt::Display for ReplicaVersionParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "version must contain only alpha-numeric characters, dots(.), dashes(-) and underscores(_), got {}",
+            "version must not be empty, and contain only alpha-numeric characters, dots(.), dashes(-) and underscores(_), got '{}'",
             self.0
         )
     }
@@ -100,5 +100,6 @@ mod test {
         assert!(ReplicaVersion::from_str("1.2.1").is_ok());
         assert!(ReplicaVersion::from_str("8aefz17q_1").is_ok());
         assert!(ReplicaVersion::from_str("?+").is_err());
+        assert!(ReplicaVersion::from_str("").is_err());
     }
 }

@@ -216,10 +216,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                 },
                 Some("guest_launch_measurements are invalid"),
             ),
-            (
-                elect_version_payload(""),
-                Some("Elected an empty version ID"),
-            ),
+            (elect_version_payload(""), Some("must not be empty")),
             (
                 update_versions_payload(
                     Some(version_to_elect.into()),

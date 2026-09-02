@@ -32,7 +32,7 @@ pub(crate) fn check_hostos_version_invariants(
     if !elected_set.is_superset(&versions_in_use) {
         panic!(
             "Using a version that isn't elected: {:?}.",
-            versions_in_use.difference(&elected_set)
+            versions_in_use.difference(&elected_set).collect::<Vec<_>>()
         );
     }
 
