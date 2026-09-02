@@ -84,8 +84,17 @@ sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=
   --mount type=bind,source=/home/john/.local/share/fish,target=/home/ubuntu/.local/share/fish \
   --mount type=bind,source=/home/john/.zsh_history,target=/home/ubuntu/.zsh_history \
   -v /tmp/ssh-XXXXQAO7kF/agent.113731:/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent -w /ic \
-  ghcr.io/dfinity/ic-dev:221b79c4f4a966eae67a3f9ef7f20f4c5583d5bc38df17c94128804687a84c29 /usr/bin/fish
+  --pull=never \
+  ghcr.io/dfinity/ic-dev@sha256:3e028a468490dddda2b255da986c8ea2fe9c2dd2a143d4557c9bd5bb68c8218a /usr/bin/fish
 ```
+
+### Image pinning
+
+`container-run.sh` never pulls an image by registry tag: the tags on `ghcr.io/dfinity/ic-dev` and `ghcr.io/dfinity/ic-build` are mutable and can be re-pointed without review. Instead it pulls `ghcr.io/dfinity/<image>@sha256:...` using the digest committed in [ic-dev.digest](ic-dev.digest) / [ic-build.digest](ic-build.digest), checks that the local image carries that digest, and starts it with `--pull=never`. Like [TAG](TAG), the `.digest` files are written only by the `container-autobuild.yml` workflow. Never edit them by hand: a malformed pin makes the script refuse to run, and a digest the registry does not serve cannot be pulled (the script then falls back as described below, or refuses with `CONTAINER_RUN_REQUIRE_PINNED=1`).
+
+`TAG` is the hash of `Dockerfile`, `init.sh` and `files/*`. If your working tree hashes to something else (you edited one of those files, or the autobuild's bot commit has not landed on your branch yet) no reviewed digest exists for it, so the script builds the image locally instead of pulling (slow, and it needs network). Once the bot commit lands, `git pull` and re-run to get the registry image. The autobuild cannot publish for pull requests from forks, so contributors working on a fork always build locally after touching those files.
+
+Set `CONTAINER_RUN_REQUIRE_PINNED=1` to fail instead of ever running an image that is not verified against the pin: no local build, and no reuse of a cached image when the pinned pull fails (e.g. offline). CI sets it; so should anyone verifying release artifacts who never wants a silently different image.
 
 ### How to use custom config
 
