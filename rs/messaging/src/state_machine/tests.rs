@@ -900,12 +900,7 @@ fn test_checkpointing_without_execution() {
         .batch_time
         .checked_add(Duration::from_secs(1))
         .unwrap();
-    let canisters_before = fixture
-        .initial_state
-        .canister_states()
-        .all_values()
-        .cloned()
-        .collect::<Vec<_>>();
+    let canisters_before = fixture.initial_state.canister_states().clone();
     let checkpointing_batch = Batch {
         batch_number: Height::from(0),
         batch_summary: None,
@@ -945,12 +940,8 @@ fn test_checkpointing_without_execution() {
     );
     assert_eq!(batch_time, state_after_checkpointing.metadata.batch_time);
     assert_eq!(
-        canisters_before,
-        state_after_checkpointing
-            .canister_states()
-            .all_values()
-            .cloned()
-            .collect::<Vec<_>>()
+        &canisters_before,
+        state_after_checkpointing.canister_states()
     );
 }
 
