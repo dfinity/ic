@@ -283,8 +283,8 @@ impl Player {
             // a version older than the one the latest registry version assigns to it.
             replica_version.unwrap_or_else(|| {
                 panic!(
-                    "No consensus pool found at {} and no replica version was given; \
-                     one of the two is required.",
+                    "No consensus pool found at {}, so the replica version the subnet is \
+                     running on has to be given with `--replica-version`.",
                     consensus_store_path.display()
                 )
             })

@@ -440,8 +440,6 @@ pub(crate) struct ReplayStep {
     pub replay_until_height: Option<u64>,
     pub result: PathBuf,
     pub skip_prompts: bool,
-    /// The replica version to run `ic-replay` with, needed only without a
-    /// consensus pool; see [`ReplayStep::exec`].
     pub replica_version: Option<ReplicaVersion>,
 }
 
@@ -498,19 +496,6 @@ impl Step for ReplayStep {
                 return Err(RecoveryError::UnexpectedError(
                     "Replay without a consensus pool was declined".to_string(),
                 ));
-            }
-            // `ic-replay` takes the replica version from the pool's finalized tip, so
-            // without a pool it has to be given. The registry is no substitute: the
-            // subnet may well be stalled on a version older than the one the latest
-            // registry version assigns to it.
-            if self.replica_version.is_none() {
-                return Err(RecoveryError::UnexpectedError(format!(
-                    "No consensus pool found at {}, so the replica version the subnet is \
-                     running on cannot be determined. Restart `ic-recovery` with \
-                     `--replica-version <version>` and resume: this step will be the next \
-                     one to run.",
-                    consensus_store_path.display()
-                )));
             }
         }
 
@@ -856,8 +841,6 @@ pub(crate) struct UpdateLocalStoreStep {
     pub subnet_id: SubnetId,
     pub work_dir: PathBuf,
     pub skip_prompts: bool,
-    /// The replica version to run `ic-replay` with, needed only without a
-    /// consensus pool; see [`ReplayStep::exec`].
     pub replica_version: Option<ReplicaVersion>,
 }
 
@@ -898,8 +881,6 @@ pub(crate) struct GetRecoveryCUPStep {
     pub result: PathBuf,
     pub work_dir: PathBuf,
     pub skip_prompts: bool,
-    /// The replica version to run `ic-replay` with, needed only without a
-    /// consensus pool; see [`ReplayStep::exec`].
     pub replica_version: Option<ReplicaVersion>,
 }
 
@@ -1247,7 +1228,7 @@ impl Step for UploadAndHostTarStep {
 mod tests {
     use ic_crypto_tree_hash::{Digest, Witness};
     use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         consensus::certification::{Certification, CertificationContent, CertificationShare},
         crypto::{CryptoHash, Signed},
@@ -1314,11 +1295,12 @@ mod tests {
     }
 
     /// `MergeCertificationPoolsStep` creates the root that the consensus and the
-    /// certification store share, so that root existing must not be taken for a
-    /// downloaded consensus pool: the replay would then be run without the replica
-    /// version that it needs in the absence of a pool.
+    /// certification store share, without creating a consensus store. Whether a
+    /// consensus pool was downloaded is therefore decided by the consensus store
+    /// alone, both in `ReplayStep::exec()` and in `ic-replay`'s `Player::new()`;
+    /// testing the shared root instead would take these certifications for a pool.
     #[test]
-    fn merged_certifications_are_not_mistaken_for_a_consensus_pool() {
+    fn merged_certifications_do_not_create_a_consensus_store() {
         let logger = crate::util::make_logger();
         let (tmp, pool1, _pool2) = setup_merge_certs(&logger);
         let work_dir = tmp.path().to_path_buf();
@@ -1330,26 +1312,15 @@ mod tests {
         }
         .exec()
         .expect("Failed to merge the certification pools");
+
+        let pool_root = work_dir.join("data").join(IC_CONSENSUS_POOL_PATH);
         assert!(
-            work_dir.join("data").join(IC_CONSENSUS_POOL_PATH).exists(),
+            pool_root.exists(),
             "the merge step should have created the shared pool root"
         );
-
-        let replay_step = ReplayStep {
-            logger: logger.clone(),
-            subnet_id: subnet_test_id(0),
-            work_dir: work_dir.clone(),
-            config: work_dir.join("ic.json5"),
-            subcmd: None,
-            canister_caller_id: None,
-            replay_until_height: None,
-            result: work_dir.join(replay_helper::OUTPUT_FILE_NAME),
-            skip_prompts: true,
-            replica_version: None,
-        };
-        assert_matches::assert_matches!(
-            replay_step.exec(),
-            Err(RecoveryError::UnexpectedError(e)) if e.contains("No consensus pool found")
+        assert!(
+            !pool_root.join("consensus").exists(),
+            "the merge step should not have created a consensus store"
         );
     }
 
