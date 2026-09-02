@@ -14,7 +14,7 @@ mod tests;
 
 use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::numeric::Wei;
-use crate::tx::{Finalized, SweepTransaction};
+use crate::tx::{Finalized, FinalizedEip1559Transaction, SweepTransaction};
 
 /// How much ckETH has been burned for sweeping and how much of it has actually been spent — the two
 /// sides of the invariant above — along with the sweeper address' own ETH balance, which the
@@ -111,22 +111,16 @@ impl SweeperFundingAccounting {
             .expect("BUG: overflow in cumulative burned for sweeping");
     }
 
-    /// Records a finalized funding transaction: `amount` is what its transfer carried and
-    /// `transaction_fee` what it paid for gas, which it did either way.
+    /// Records a finalized funding transaction: what its transfer carried, and the gas it paid for
+    /// either way, both read off the transaction.
     ///
-    /// The outcome decides both the count and whether the transfer landed, so it is one call.
     /// A failure is counted rather than trapped: the burn simply goes unspent, and the count is the
     /// only signal that something believed impossible has happened.
-    pub fn record_finalized_funding(
-        &mut self,
-        status: &TransactionStatus,
-        amount: Wei,
-        transaction_fee: Wei,
-    ) {
-        let transferred = match status {
+    pub fn record_finalized_funding(&mut self, funding: &FinalizedEip1559Transaction) {
+        let transferred = match funding.transaction_status() {
             TransactionStatus::Success => {
                 self.successful_fundings = self.successful_fundings.saturating_add(1);
-                amount
+                *funding.transaction_amount()
             }
             TransactionStatus::Failure => {
                 self.failed_fundings = self.failed_fundings.saturating_add(1);
@@ -139,15 +133,17 @@ impl SweeperFundingAccounting {
             .expect("BUG: overflow in cumulative transferred to the sweeper");
         self.cumulative_transaction_fees = self
             .cumulative_transaction_fees
-            .checked_add(transaction_fee)
+            .checked_add(funding.effective_transaction_fee())
             .expect("BUG: overflow in cumulative sweeper funding fees");
         self.sweeper_balance.credit(transferred);
-        // The checked helper, not the saturating getter: a violation traps at the transition that
-        // caused it rather than being smoothed over on the next scrape.
-        self.checked_burned_not_yet_spent().expect(
-            "BUG: more ETH spent on sweeping than ckETH burned for it, \
-             meaning ckETH is under-backed",
-        );
+        // Traps here, at the transition that caused it, rather than being smoothed over by the
+        // saturating getter on the next scrape.
+        self.cumulative_burned
+            .checked_sub(self.cumulative_spent())
+            .expect(
+                "BUG: more ETH spent on sweeping than ckETH burned for it, \
+                 meaning ckETH is under-backed",
+            );
     }
 
     pub fn successful_fundings(&self) -> u64 {
@@ -228,13 +224,9 @@ impl SweeperFundingAccounting {
     /// Saturates: the metrics and the dashboard read it from a query, and an under-backed minter is
     /// exactly when those surfaces must stay up. The state transition traps instead.
     pub fn burned_not_yet_spent(&self) -> Wei {
-        self.checked_burned_not_yet_spent().unwrap_or(Wei::ZERO)
-    }
-
-    /// `None` if more ETH has been spent on sweeping than ckETH was burned for it, which would mean
-    /// ckETH is under-backed.
-    fn checked_burned_not_yet_spent(&self) -> Option<Wei> {
-        self.cumulative_burned.checked_sub(self.cumulative_spent())
+        self.cumulative_burned
+            .checked_sub(self.cumulative_spent())
+            .unwrap_or(Wei::ZERO)
     }
 }
 

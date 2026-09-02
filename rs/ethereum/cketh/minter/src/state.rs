@@ -487,7 +487,6 @@ impl State {
         self.withdrawal_transactions
             .record_finalized_transaction(*withdrawal_id, receipt.clone());
         self.update_balance_upon_withdrawal(withdrawal_id, receipt);
-        self.update_sweeper_funding_upon_withdrawal(withdrawal_id, receipt);
     }
 
     /// Finalizes a sweep: releases the deposits it held and settles what it actually cost the
@@ -525,31 +524,6 @@ impl State {
                 .erc20_balances
                 .erc20_add(event.erc20_contract_address, event.value),
         };
-    }
-
-    fn update_sweeper_funding_upon_withdrawal(
-        &mut self,
-        withdrawal_id: &LedgerBurnIndex,
-        receipt: &TransactionReceipt,
-    ) {
-        let request = self
-            .withdrawal_transactions
-            .get_processed_request(withdrawal_id)
-            .expect("BUG: missing withdrawal request");
-        if !matches!(request, WithdrawalRequest::SweeperFunding(_)) {
-            return;
-        }
-        let amount = self
-            .withdrawal_transactions
-            .get_finalized_transaction(withdrawal_id)
-            .expect("BUG: missing finalized transaction")
-            .transaction()
-            .amount;
-        self.sweeper_funding.record_finalized_funding(
-            &receipt.status,
-            amount,
-            receipt.effective_transaction_fee(),
-        );
     }
 
     /// Takes the whole cost an accepted sweep can put on the sweeper address out of the balance
@@ -596,6 +570,13 @@ impl State {
         self.eth_balance.eth_balance_sub(debited_amount);
         self.eth_balance.total_effective_tx_fees_add(tx_fee);
         self.eth_balance.total_unspent_tx_fees_add(unspent_tx_fee);
+
+        match withdrawal_request {
+            WithdrawalRequest::SweeperFunding(_) => {
+                self.sweeper_funding.record_finalized_funding(tx)
+            }
+            WithdrawalRequest::CkEth(_) | WithdrawalRequest::CkErc20(_) => {}
+        }
 
         if receipt.status == TransactionStatus::Success && !tx.transaction_data().is_empty() {
             let TransactionCallData::Erc20Transfer { to: _, value } = TransactionCallData::decode(
