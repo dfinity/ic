@@ -1977,13 +1977,21 @@ dependencies = [
 name = "canister_http"
 version = "0.9.0"
 dependencies = [
+ "candid",
  "canister-test",
+ "ic-config",
+ "ic-cycles-account-manager",
+ "ic-https-outcalls-pricing",
  "ic-protobuf",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
+ "ic-test-utilities-types",
  "ic-types",
  "ic-types-cycles",
+ "proxy_canister",
+ "rand 0.8.6",
+ "serde",
  "slog",
  "tokio",
 ]
