@@ -125,12 +125,12 @@ pub(crate) fn get_api_boundary_node_records_from_snapshot(
         .collect()
 }
 
-pub(crate) fn get_value_from_snapshot<T: Message + Default>(
+pub(crate) fn get_value_from_snapshot<T: Message + Default, U: AsRef<str>>(
     snapshot: &RegistrySnapshot,
-    key: String,
+    key: U,
 ) -> Result<Option<T>, InvariantCheckError> {
     snapshot
-        .get(key.as_bytes())
+        .get(key.as_ref().as_bytes())
         .map(|v| {
             T::decode(v.as_slice()).map_err(|err| InvariantCheckError {
                 msg: format!("Deserialize registry value failed with {err}"),
@@ -145,11 +145,11 @@ pub(crate) fn get_node_record_from_snapshot(
     key: NodeId,
     snapshot: &RegistrySnapshot,
 ) -> Result<Option<NodeRecord>, InvariantCheckError> {
-    get_value_from_snapshot::<NodeRecord>(snapshot, make_node_record_key(key))
+    get_value_from_snapshot::<NodeRecord, _>(snapshot, make_node_record_key(key))
 }
 
 pub(crate) fn get_subnet_ids_from_snapshot(snapshot: &RegistrySnapshot) -> BTreeSet<SubnetId> {
-    get_value_from_snapshot::<SubnetListRecord>(snapshot, make_subnet_list_record_key())
+    get_value_from_snapshot::<SubnetListRecord, _>(snapshot, make_subnet_list_record_key())
         .unwrap()
         .map(|r| {
             r.subnets
@@ -239,6 +239,6 @@ mod tests {
             vec![0],                  // incorrect value, not an encoded ApiBoundaryNodeRecord
         );
         // this call should panic when decoding the ApiBoundaryNodeRecord
-        get_value_from_snapshot::<ApiBoundaryNodeRecord>(&snapshot, key).unwrap();
+        get_value_from_snapshot::<ApiBoundaryNodeRecord, _>(&snapshot, key).unwrap();
     }
 }

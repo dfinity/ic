@@ -19,7 +19,7 @@ use ic_registry_keys::make_standard_engine_replica_version_record_key;
 pub(crate) fn check_standard_engine_replica_version_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    let Some(record) = get_value_from_snapshot::<StandardEngineReplicaVersionRecord>(
+    let Some(record) = get_value_from_snapshot::<StandardEngineReplicaVersionRecord, _>(
         snapshot,
         make_standard_engine_replica_version_record_key(),
     )?

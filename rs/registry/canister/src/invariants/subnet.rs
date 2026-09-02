@@ -198,7 +198,7 @@ pub(crate) fn check_subnet_invariants(
 fn check_default_initial_dkg_subnet_invariant(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    let Some(subnet_id_proto) = get_value_from_snapshot::<SubnetIdProto>(
+    let Some(subnet_id_proto) = get_value_from_snapshot::<SubnetIdProto, _>(
         snapshot,
         make_default_initial_dkg_subnet_id_key(),
     )?

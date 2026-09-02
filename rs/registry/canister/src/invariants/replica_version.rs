@@ -155,7 +155,7 @@ pub(crate) fn has_launch_measurements(
     replica_version_id: &str,
     snapshot: &RegistrySnapshot,
 ) -> bool {
-    get_value_from_snapshot::<ReplicaVersionRecord>(
+    get_value_from_snapshot::<ReplicaVersionRecord, _>(
         snapshot,
         make_replica_version_key(replica_version_id),
     )
