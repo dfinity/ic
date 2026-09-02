@@ -131,7 +131,13 @@ DIGEST_FILE="$REPO_ROOT/ci/container/$IMAGE_NAME.digest"
 # the committed digest pin. CONTAINER_RUN_ALLOW_UNPINNED=1 opts out for this run:
 # build the image locally from the checkout when no reviewed pin exists for the
 # working tree, or reuse an existing local image when the pinned pull fails.
-ALLOW_UNPINNED="${CONTAINER_RUN_ALLOW_UNPINNED:-}"
+# Only the exact value 1 opts out, so that 0, false or a typo cannot silently
+# disable the check.
+case "${CONTAINER_RUN_ALLOW_UNPINNED:-}" in
+    "") ALLOW_UNPINNED="" ;;
+    1) ALLOW_UNPINNED=1 ;;
+    *) die "CONTAINER_RUN_ALLOW_UNPINNED must be unset or exactly '1' (got '${CONTAINER_RUN_ALLOW_UNPINNED}')" ;;
+esac
 # Set when the image about to run is NOT verified against a reviewed digest pin
 # (built locally, or an existing local image reused because the pull failed).
 LOCAL_IMAGE=false

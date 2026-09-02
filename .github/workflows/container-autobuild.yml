@@ -45,8 +45,9 @@ jobs:
           if grep $image_tag ci/container/TAG; then
             echo "build_image=false" >> "$GITHUB_OUTPUT"
             echo "Update with this image already in this PR!"
-            echo "Modify ci/container/TAG with a random string to trigger a new build; until this"
-            echo "workflow's commit lands, container-run.sh on that commit builds the image locally."
+            echo "Modify ci/container/TAG with a random string to trigger a new build. Until this"
+            echo "workflow's commit lands, container-run.sh on that commit refuses to run because no"
+            echo "reviewed digest exists for it; set CONTAINER_RUN_ALLOW_UNPINNED=1 to build the image locally instead."
           else
             echo "build_image=true" >> "$GITHUB_OUTPUT"
             echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"

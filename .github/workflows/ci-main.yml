@@ -984,21 +984,23 @@ jobs:
               exit 1
             fi
           done
-          # Collect every reference (":tag" or "@digest", well-formed or not) so
-          # that a reference changed to a mutable tag or a malformed digest is
-          # rejected too, not only a mismatching well-formed one.
-          dev_refs="$(grep -oE "${prefix}ic-dev[:@][^\"'[:space:]]+" .devcontainer/devcontainer.json | sort -u)"
-          if [ "$dev_refs" != "${prefix}ic-dev@$dev_digest" ]; then
-            echo "::error file=ci/container/ic-dev.digest::every ic-dev reference in .devcontainer/devcontainer.json must be ${prefix}ic-dev@$dev_digest (ci/container/ic-dev.digest; both are written by container-autobuild.yml), found:"
-            echo "${dev_refs:-<none>}"
-            exit 1
-          fi
-          build_refs="$(grep -rhoE "${prefix}ic-build[:@][^\"'[:space:]]+" .github/workflows/ | sort -u)"
-          if [ "$build_refs" != "${prefix}ic-build@$build_digest" ]; then
-            echo "::error file=ci/container/ic-build.digest::every ic-build reference under .github/workflows/ must be ${prefix}ic-build@$build_digest (ci/container/ic-build.digest; all are written by container-autobuild.yml), found:"
-            echo "${build_refs:-<none>}"
-            exit 1
-          fi
+          # Every reference to either image (":tag" or "@digest", well-formed or
+          # not) in both consumer locations must be exactly the pinned digest
+          # reference, so a reference changed to a mutable tag or a malformed
+          # digest is rejected too, not only a mismatching well-formed one. At
+          # least one reference per image must exist (it does today), which also
+          # guards against the grep pattern going stale.
+          check_refs() { # $1 = image, $2 = pinned digest
+            local refs
+            refs="$(grep -rhoE "${prefix}$1[:@][^\"'[:space:]]+" .devcontainer .github/workflows | sort -u)"
+            if [ "$refs" != "${prefix}$1@$2" ]; then
+              echo "::error file=ci/container/$1.digest::every $1 reference in .devcontainer/ and .github/workflows/ must be ${prefix}$1@$2 (ci/container/$1.digest; all are written by container-autobuild.yml), found:"
+              echo "${refs:-<none>}"
+              exit 1
+            fi
+          }
+          check_refs ic-dev "$dev_digest"
+          check_refs ic-build "$build_digest"
       - name: Check ci/container/TAG matches the container inputs
         id: sync
         if: steps.decide.outputs.run == 'true'
