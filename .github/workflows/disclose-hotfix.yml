@@ -1,0 +1,275 @@
+name: Disclose Hotfix
+
+# The environment's required reviewers approve the run BEFORE any step
+# executes, and GitHub shows workflow_dispatch inputs neither in the run list
+# nor in the approval dialog — the run title is the only surface telling the
+# reviewer WHAT they are approving, so it must carry the inputs.
+run-name: "Disclose ${{ inputs.branch }} @ ${{ inputs.commit }} (confirm=${{ inputs.confirm }})"
+
+# Publish ("disclose") a security hotfix that was built and deployed from the
+# private dfinity/ic-private repository: push its exact elected commit to this
+# repository as the same hotfix-* branch. The push triggers the Release
+# Testing workflow, which re-builds the commit, re-uploads its artifacts to
+# the CDN (rclone --checksum --immutable: identical bytes are a no-op,
+# differing bytes fail the run) and mints the build-provenance attestation
+# that release workflows and the mainnet-revisions updater verify their CDN
+# downloads against.
+#
+# Invariants:
+#   - The pushed tip must be EXACTLY the requested commit: the attestation
+#     binds to the branch tip, so a descendant or different commit would
+#     attest the wrong sha. The push is create-only (--force-with-lease with
+#     an empty expected value): it can create the branch but never move an
+#     existing one.
+#   - Fail closed: the branch already existing at the requested commit is a
+#     successful no-op; existing at any other commit is a hard failure that
+#     needs manual investigation.
+#   - A downstream "immutable file modified" upload failure means the public
+#     rebuild differs from the CDN bytes that were deployed — an incident
+#     signal for the infra team. Never retry around it and never
+#     delete/overwrite CDN objects to make it pass.
+#   - Do not push further commits to the branch until its attest-uploads job
+#     is green: Release Testing cancels in-flight runs per ref, and a new tip
+#     would attest a different sha.
+#
+# The DISCLOSE_HOTFIX environment gates the "Push to RC Branch" app
+# credentials: required reviewers (DRE / Infra) approve each run, and the environment's
+# deployment branch policy (master only) prevents dispatching a modified copy
+# of this workflow from an unreviewed branch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'hotfix-* branch name on dfinity/ic-private (created here under the same name)'
+        required: true
+      commit:
+        description: 'Full 40-hex commit sha the branch tip must be at (the elected/deployed build)'
+        required: true
+      confirm:
+        description: 'Check this box to confirm the hotfix has been deployed, so it can safely be disclosed'
+        required: true
+        type: boolean
+
+# Queued re-runs for the same branch re-validate and converge to a no-op or a
+# conflict failure instead of racing each other.
+concurrency:
+  group: disclose-hotfix-${{ inputs.branch }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  disclose-hotfix:
+    name: Disclose Hotfix
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The synced copy of this workflow in ic-private must stay inert.
+    if: github.repository == 'dfinity/ic'
+    environment: DISCLOSE_HOTFIX
+    env:
+      GIT_TERMINAL_PROMPT: "0"
+    steps:
+      - name: Validate inputs
+        shell: bash
+        env:
+          BRANCH: ${{ inputs.branch }}
+          COMMIT: ${{ inputs.commit }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+
+          # For boolean workflow_dispatch inputs, 'required: true' does not
+          # enforce that the box is ticked, so check it here.
+          if [ "$CONFIRM" != "true" ]; then
+            echo "confirm must be checked: it acknowledges the hotfix has been deployed and can safely be disclosed" >&2
+            exit 1
+          fi
+
+          # Only branch names of this exact shape trigger Release Testing, are
+          # push-restricted and are accepted by attestation verification. The
+          # charset also keeps '/', whitespace, '..', refspec metacharacters
+          # and a leading '-' out of the git invocations below.
+          if ! [[ "$BRANCH" =~ ^hotfix-[A-Za-z0-9._-]+$ ]]; then
+            echo "branch must match hotfix-<suffix> with <suffix> of [A-Za-z0-9._-], got: $BRANCH" >&2
+            exit 1
+          fi
+          # Independent second gate for anything the regex might miss.
+          git check-ref-format "refs/heads/$BRANCH"
+
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "commit must be a full 40-hex lowercase sha, got: $COMMIT" >&2
+            exit 1
+          fi
+
+      - name: Create GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        with:
+          app-id: ${{ vars.PUSH_TO_RC_BRANCH_APP_ID }}
+          private-key: ${{ secrets.PUSH_TO_RC_BRANCH_PRIVATE_KEY }}
+          owner: dfinity
+          repositories: |
+            ic
+            ic-private
+
+      - name: Validate branch state on both repositories
+        id: precheck
+        shell: bash
+        env:
+          BRANCH: ${{ inputs.branch }}
+          COMMIT: ${{ inputs.commit }}
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          ref="refs/heads/$BRANCH"
+
+          # ls-remote prints TAB-separated "<sha> <refname>" lines; require
+          # the exact refname.
+          private_tip="$(git ls-remote "https://x-access-token:${TOKEN}@github.com/dfinity/ic-private.git" "$ref" \
+            | awk -v ref="$ref" '$2 == ref {print $1}')"
+          if [ -z "$private_tip" ]; then
+            echo "branch $BRANCH does not exist on dfinity/ic-private" >&2
+            exit 1
+          fi
+          if [ "$private_tip" != "$COMMIT" ]; then
+            echo "dfinity/ic-private $BRANCH is at $private_tip, not at $COMMIT:" >&2
+            echo "the tip must be EXACTLY the disclosed commit" >&2
+            exit 1
+          fi
+
+          public_tip="$(git ls-remote "https://github.com/dfinity/ic.git" "$ref" \
+            | awk -v ref="$ref" '$2 == ref {print $1}')"
+          if [ -z "$public_tip" ]; then
+            echo "already_disclosed=false" >>"$GITHUB_OUTPUT"
+          elif [ "$public_tip" = "$COMMIT" ]; then
+            echo "dfinity/ic $BRANCH is already at $COMMIT — nothing to do"
+            echo "already_disclosed=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "refusing to move dfinity/ic $BRANCH (at $public_tip): the attestation" >&2
+            echo "binds to the branch tip — investigate manually" >&2
+            exit 1
+          fi
+
+      - name: Checkout dfinity/ic
+        if: steps.precheck.outputs.already_disclosed != 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: dfinity/ic
+          ref: master
+          # Full history, so that the fetch from ic-private below only
+          # transfers the hotfix delta and the push pack stays minimal.
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Fetch, verify and push the hotfix commit
+        if: steps.precheck.outputs.already_disclosed != 'true'
+        shell: bash
+        env:
+          BRANCH: ${{ inputs.branch }}
+          COMMIT: ${{ inputs.commit }}
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          ref="refs/heads/$BRANCH"
+
+          # Fetch the branch, not the sha (fetching an arbitrary sha needs
+          # server-side opt-in), and re-check the tip: this closes the race
+          # with the validation step above.
+          git fetch --no-tags "https://x-access-token:${TOKEN}@github.com/dfinity/ic-private.git" "$ref"
+          fetched="$(git rev-parse FETCH_HEAD)"
+          if [ "$fetched" != "$COMMIT" ]; then
+            echo "dfinity/ic-private $BRANCH moved to $fetched since validation; re-run" >&2
+            exit 1
+          fi
+          if [ "$(git cat-file -t "$COMMIT")" != "commit" ]; then
+            echo "$COMMIT is not a commit object" >&2
+            exit 1
+          fi
+
+          # Match the top-level job key at the jobs indent level so a comment,
+          # a needs: reference or a commented-out job doesn't count.
+          if ! git show "$COMMIT:.github/workflows/release-testing.yml" 2>/dev/null | grep -qE '^  attest-uploads:'; then
+            echo "::warning::the tree of $COMMIT has no attest-uploads job in release-testing.yml: the triggered run cannot mint an attestation"
+          fi
+
+          # --force-with-lease with an explicitly EMPTY expected value means
+          # "the remote ref must not exist": the push can only create the
+          # branch, never move one (a plain push would silently fast-forward
+          # a branch that exists at an ancestor commit).
+          if ! git push origin "$COMMIT:$ref" --force-with-lease="$ref:"; then
+            # A concurrent disclosure may have created the branch at the same
+            # commit, which is a benign race.
+            current="$(git ls-remote origin "$ref" | awk -v ref="$ref" '$2 == ref {print $1}')"
+            if [ "$current" = "$COMMIT" ]; then
+              echo "$BRANCH was concurrently created at $COMMIT — nothing left to do"
+            else
+              echo "push rejected; dfinity/ic $BRANCH is at: ${current:-<absent>}" >&2
+              exit 1
+            fi
+          fi
+
+          verified="$(git ls-remote origin "$ref" | awk -v ref="$ref" '$2 == ref {print $1}')"
+          if [ "$verified" != "$COMMIT" ]; then
+            echo "post-push verification failed: dfinity/ic $BRANCH is at ${verified:-<absent>}, expected $COMMIT" >&2
+            exit 1
+          fi
+
+      - name: Report
+        if: always()
+        shell: bash
+        env:
+          BRANCH: ${{ inputs.branch }}
+          COMMIT: ${{ inputs.commit }}
+          ALREADY_DISCLOSED: ${{ steps.precheck.outputs.already_disclosed }}
+          JOB_STATUS: ${{ job.status }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Disclose Hotfix"
+            echo
+            echo "- branch: \`$BRANCH\`"
+            echo "- commit: \`$COMMIT\`"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+          if [ "$JOB_STATUS" != "success" ]; then
+            echo "- outcome: **failed** — see the step logs; nothing was pushed unless the push step reports otherwise" >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "$ALREADY_DISCLOSED" = "true" ]; then
+            echo "- outcome: no-op — the branch was already at this commit" >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "- outcome: **branch created; Release Testing takes over**" >>"$GITHUB_STEP_SUMMARY"
+
+          run_url=""
+          for _ in $(seq 24); do
+            # branch and event=push narrow the match: head_sha alone could
+            # select a run for another branch or a prior workflow_dispatch
+            # at the same commit.
+            run_url="$(gh api "repos/dfinity/ic/actions/workflows/release-testing.yml/runs?head_sha=$COMMIT&branch=$BRANCH&event=push" \
+              --jq '.workflow_runs[0].html_url // empty' 2>/dev/null || true)"
+            if [ -n "$run_url" ]; then
+              break
+            fi
+            sleep 5
+          done
+          if [ -z "$run_url" ]; then
+            run_url="https://github.com/dfinity/ic/actions/workflows/release-testing.yml?query=branch%3A$BRANCH"
+          fi
+          {
+            echo "- Release Testing: $run_url"
+            echo
+            echo "Watch the run's upload steps: rclone must report the uploads as"
+            echo "no-ops (byte-identical to what the private build published). An"
+            echo "\"immutable file modified\" failure means the public rebuild"
+            echo "differs from the deployed CDN bytes — an incident signal for the"
+            echo "infra team; never retry around it and never delete or"
+            echo "overwrite CDN objects. Do not push further commits to the branch"
+            echo "until its attest-uploads job is green."
+          } >>"$GITHUB_STEP_SUMMARY"
