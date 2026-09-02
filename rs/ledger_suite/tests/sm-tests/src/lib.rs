@@ -1516,6 +1516,70 @@ pub fn test_archive_and_dedup_config_metrics<T>(
     );
 }
 
+/// The ledger's archive settings describe archives it will spawn from now on.
+/// An archive that already exists keeps what it was installed with, so it has to
+/// report its own effective settings.
+pub fn test_archive_reports_its_own_config_metrics<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let (env, ledger_id) = setup(
+        ledger_wasm.clone(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+    for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
+    }
+    let archives = list_archives(&env, ledger_id);
+    assert_eq!(archives.len(), 1);
+    let archive_id = CanisterId::unchecked_from_principal(archives[0].canister_id.into());
+
+    let ledger_cap = parse_metric(&env, ledger_id, "ledger_archive_node_max_memory_size_bytes");
+    let archive_cap = parse_metric(&env, archive_id, "archive_max_memory_size_bytes");
+    assert_eq!(
+        archive_cap, ledger_cap,
+        "the archive was just spawned, so its cap should match what the ledger would pass"
+    );
+    assert_eq!(
+        parse_metric(&env, archive_id, "archive_max_transactions_per_response"),
+        DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE
+    );
+
+    // Changing the ledger's settings must not change what the existing archive
+    // enforces.
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            node_max_memory_size_bytes: Some(ledger_cap + 4096),
+            max_transactions_per_response: Some(7),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
+        .expect("failed to change the archive options");
+
+    assert_eq!(
+        parse_metric(&env, ledger_id, "ledger_archive_node_max_memory_size_bytes"),
+        ledger_cap + 4096
+    );
+    assert_eq!(
+        parse_metric(&env, archive_id, "archive_max_memory_size_bytes"),
+        archive_cap,
+        "an existing archive keeps the cap it was installed with"
+    );
+    assert_eq!(
+        parse_metric(&env, archive_id, "archive_max_transactions_per_response"),
+        DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE,
+        "an existing archive keeps the response limit it was installed with"
+    );
+}
+
 pub fn test_upgrade_archive_options<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,

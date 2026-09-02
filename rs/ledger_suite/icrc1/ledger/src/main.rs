@@ -313,8 +313,14 @@ fn encode_dedup_config_metrics<LD: LedgerData>(
 }
 
 /// Exposes the archiving configuration that is otherwise not observable from
-/// outside the canister. All values are the effective ones in force, i.e. with
-/// the defaults of the optional `ArchiveOptions` fields already applied.
+/// outside the canister, with the defaults of the optional `ArchiveOptions`
+/// fields already applied.
+///
+/// `trigger_threshold`, `num_blocks_to_archive` and `max_message_size_bytes`
+/// govern the ledger's own behaviour and take effect immediately. The remaining
+/// settings are only used when the ledger spawns a *new* archive: an archive
+/// that already exists keeps the values it was installed with, and reports them
+/// through its own metrics.
 fn encode_archive_config_metrics<Rt, Wasm>(
     w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
     archive: &Archive<Rt, Wasm>,
@@ -336,7 +342,9 @@ where
     w.encode_gauge(
         "ledger_archive_node_max_memory_size_bytes",
         archive.node_max_memory_size_bytes as f64,
-        "Maximum number of bytes an archive canister of this ledger may store.",
+        "Maximum number of bytes an archive spawned from now on may store. Existing \
+         archives keep the cap they were created with, reported by their own \
+         archive_max_memory_size_bytes metric.",
     )?;
     w.encode_gauge(
         "ledger_archive_max_message_size_bytes",
@@ -346,12 +354,14 @@ where
     w.encode_gauge(
         "ledger_archive_cycles_for_archive_creation",
         archive.cycles_for_archive_creation as f64,
-        "Cycles attached to the call creating a new archive canister.",
+        "Cycles that will be attached to the call creating the next archive canister.",
     )?;
     w.encode_gauge(
         "ledger_archive_max_transactions_per_response",
         archive.effective_max_transactions_per_response() as f64,
-        "Maximum number of transactions an archive returns per response.",
+        "Maximum number of transactions an archive spawned from now on will return \
+         per response. Existing archives keep the limit they were created with, \
+         reported by their own archive_max_transactions_per_response metric.",
     )?;
     Ok(())
 }

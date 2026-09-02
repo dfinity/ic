@@ -8,8 +8,8 @@ use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::{Tokens, block::BlockType};
 use ic_ledger_suite_state_machine_helpers::{
-    AllowanceProvider, balance_of, icrc21_consent_message, parse_metric, send_approval,
-    send_transfer, send_transfer_from, supported_standards, total_supply, transfer,
+    AllowanceProvider, balance_of, icrc21_consent_message, parse_metric, retrieve_metrics,
+    send_approval, send_transfer, send_transfer_from, supported_standards, total_supply, transfer,
 };
 use ic_ledger_suite_state_machine_tests::archiving::icp_archives;
 use ic_ledger_suite_state_machine_tests::{
@@ -2631,7 +2631,6 @@ fn test_archive_and_dedup_config_metrics() {
     const NODE_MAX_MEMORY_SIZE_BYTES: u64 = 123_456;
     const MAX_MESSAGE_SIZE_BYTES: u64 = 64 * 1024;
     const CYCLES_FOR_ARCHIVE_CREATION: u64 = 7_000_000_000;
-    const MAX_TRANSACTIONS_PER_RESPONSE: u64 = 99;
     const TRANSACTION_WINDOW: Duration = Duration::from_secs(3600);
 
     let env = StateMachine::new();
@@ -2649,7 +2648,7 @@ fn test_archive_and_dedup_config_metrics() {
             controller_id: PrincipalId::new_user_test_id(100),
             more_controller_ids: None,
             cycles_for_archive_creation: Some(CYCLES_FOR_ARCHIVE_CREATION),
-            max_transactions_per_response: Some(MAX_TRANSACTIONS_PER_RESPONSE),
+            max_transactions_per_response: None,
         })
         .build()
         .unwrap();
@@ -2679,9 +2678,12 @@ fn test_archive_and_dedup_config_metrics() {
         metric("ledger_archive_cycles_for_archive_creation"),
         CYCLES_FOR_ARCHIVE_CREATION
     );
-    assert_eq!(
-        metric("ledger_archive_max_transactions_per_response"),
-        MAX_TRANSACTIONS_PER_RESPONSE
+    assert!(
+        !retrieve_metrics(&env, ledger_id)
+            .iter()
+            .any(|line| line.starts_with("ledger_archive_max_transactions_per_response")),
+        "the ICP archive has no max_transactions_per_response setting, so the ICP ledger must not \
+         advertise one"
     );
 
     assert_eq!(

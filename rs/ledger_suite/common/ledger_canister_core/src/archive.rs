@@ -15,10 +15,17 @@ use ic_ledger_core::block::EncodedBlock;
 /// 10 trillion cycles.
 pub const DEFAULT_CYCLES_FOR_ARCHIVE_CREATION: u64 = 10_000_000_000_000;
 
-/// The default maximum number of transactions returned by an archive's
+/// The default maximum number of transactions returned by an ICRC archive's
 /// `get_transactions` endpoint, applied when `max_transactions_per_response` is
-/// not set. Shared with the archive canister so that the effective value the
-/// ledger reports cannot drift from the one the archive enforces.
+/// not set. Shared with the ICRC archive canister so that the value the ledger
+/// would pass to a new archive cannot drift from the one that archive applies.
+///
+/// This bears only on archives the ledger spawns from now on. An archive that
+/// already exists was installed with whatever value was configured, and with
+/// whatever default the archive Wasm of the day applied, and keeps using it.
+/// The ICP archive has no such setting at all: its `init` takes only the ledger
+/// id, the block height offset and the memory cap, so the fourth argument
+/// `send_blocks_to_archive` encodes is silently ignored there.
 pub const DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE: u64 = 2000;
 
 fn default_cycles_for_archive_creation() -> u64 {
@@ -206,8 +213,10 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Archive<Rt, Wasm> {
         &self.nodes
     }
 
-    /// The maximum number of transactions an archive of this ledger returns per
-    /// response, with the default applied when the option is unset.
+    /// The maximum number of transactions a *newly spawned* ICRC archive of this
+    /// ledger will return per response, with the default applied when the option
+    /// is unset. Existing archives are unaffected by later changes to this
+    /// setting; see [`DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE`].
     pub fn effective_max_transactions_per_response(&self) -> u64 {
         self.max_transactions_per_response
             .unwrap_or(DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE)

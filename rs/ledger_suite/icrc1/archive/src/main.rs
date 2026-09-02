@@ -423,6 +423,19 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     w.gauge_vec("cycle_balance", "Cycle balance on this canister.")?
         .value(&[("canister", "icrc1-archive")], cycle_balance)?;
 
+    with_archive_opts(|opts| {
+        w.encode_gauge(
+            "archive_max_memory_size_bytes",
+            opts.max_memory_size_bytes as f64,
+            "Maximum number of bytes this archive can use to store encoded blocks.",
+        )?;
+        w.encode_gauge(
+            "archive_max_transactions_per_response",
+            opts.max_transactions_per_response as f64,
+            "Maximum number of transactions this archive returns per response.",
+        )
+    })?;
+
     w.encode_gauge(
         "archive_stored_blocks",
         with_blocks(|blocks| blocks.len()) as f64,
