@@ -898,6 +898,7 @@ pub fn fees_for(
         RegistryVersion::from(1),
         CanisterCyclesCostSchedule::Normal,
         &mut rand::thread_rng(),
+        /* pay_as_you_go_enabled = */ true,
     )
     .expect("the request should be valid enough to price");
 
