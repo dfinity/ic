@@ -84,19 +84,50 @@ where
             .collect()
     }
 
-    fn last_timestamp_per_subnet(&self, subnets: Vec<SubnetId>) -> BTreeMap<SubnetId, UnixTsNanos> {
+    /// Where to resume each subnet's fetch from: its last stored timestamp, or the epoch for a
+    /// subnet nothing has been stored for yet. Collapsing "no data" to 0 is what belongs here, and
+    /// is exactly what must NOT happen in [`Self::last_day_fully_synced`].
+    fn last_timestamp_per_subnet(&self, subnets: &[SubnetId]) -> BTreeMap<SubnetId, UnixTsNanos> {
         subnets
-            .into_iter()
+            .iter()
             .map(|subnet| {
                 let last_timestamp = self
                     .last_timestamp_per_subnet
                     .borrow()
-                    .get(&subnet.into())
+                    .get(&(*subnet).into())
                     .unwrap_or_default();
 
-                (subnet, last_timestamp)
+                (*subnet, last_timestamp)
             })
             .collect()
+    }
+
+    /// The last day the stored metrics cover for *every* subnet in `subnets`: the earliest of the
+    /// per-subnet last stored timestamps, as a UTC day. `None` if not one of them has any metrics
+    /// stored.
+    ///
+    /// This is the minimum, not the maximum, because it is what `last_day_synced` — and through it
+    /// the reward period validation in the canister — treats as "metrics are complete up to here".
+    /// A `node_metrics_history` call can succeed and still return nothing past an older day: the
+    /// management canister omits the running (current-day) snapshot, so a subnet that has produced
+    /// no block since day D-2 answers with records only through D-3 while healthy subnets answer
+    /// through D-1. Reporting the maximum there would declare D-1 synced and let rewards be
+    /// computed for two days on which that subnet contributed no metrics at all — its nodes then
+    /// read as unassigned and are paid on an extrapolated (or, for a provider with no other
+    /// assigned node, a zero) failure rate. Not advancing on partial data is the same stance
+    /// [`Self::update_subnets_metrics`] already takes when a call outright fails; the maximum made
+    /// that stance depend on which code path the missing data arrived by.
+    ///
+    /// Subnets with nothing stored are skipped rather than counted as stuck at the epoch. A subnet
+    /// created today has no completed day yet, and letting it drag the minimum to 1970-01-01 would
+    /// block every reward calculation network-wide until its first day closed.
+    fn last_day_fully_synced(&self, subnets: &[SubnetId]) -> Option<NaiveDate> {
+        let stored = self.last_timestamp_per_subnet.borrow();
+        subnets
+            .iter()
+            .filter_map(|subnet| stored.get(&(*subnet).into()))
+            .map(|ts| DateTime::from_timestamp_nanos(ts as i64).date_naive())
+            .min()
     }
 
     /// Updates the stored subnets metrics from remote management canisters.
@@ -110,7 +141,7 @@ where
         subnets: Vec<SubnetId>,
     ) -> Result<NaiveDate, String> {
         let mut failures: Vec<(SubnetId, String)> = Vec::new();
-        let last_timestamp_per_subnet = self.last_timestamp_per_subnet(subnets.clone());
+        let last_timestamp_per_subnet = self.last_timestamp_per_subnet(&subnets);
         let subnets_metrics = self.fetch_subnets_metrics(&last_timestamp_per_subnet).await;
         for (subnet_id, call_result) in subnets_metrics {
             match call_result {
@@ -175,20 +206,72 @@ where
                 MAX_LOGGED_FAILURES,
                 sample,
             );
+
+            return Err("Failed to update metrics".to_string());
         }
 
-        if failures.is_empty() {
-            let max_ts_update = self
-                .last_timestamp_per_subnet(subnets)
-                .into_values()
-                .max()
-                .unwrap_or_default();
-            let last_day_update = DateTime::from_timestamp_nanos(max_ts_update as i64).date_naive();
+        let last_day_update = self.last_day_fully_synced(&subnets).ok_or_else(|| {
+            "No subnet has any stored metrics: refusing to record a synced day".to_string()
+        })?;
 
-            Ok(last_day_update)
-        } else {
-            Err("Failed to update metrics".to_string())
+        // A subnet whose data stops short now holds the synced day back for everyone, so say which
+        // one and by how much. Without this the only symptom is reward calculation quietly
+        // refusing every day past `last_day_update`, with nothing naming the cause.
+        self.log_subnets_lagging_behind(&subnets, last_day_update);
+
+        Ok(last_day_update)
+    }
+
+    /// Logs which subnets are holding `last_day_update` back, when some subnets have got further
+    /// than others. The subnets at the minimum are the ones that decide it, so those are the ones
+    /// named — knowing that the rest are further along is no help in fixing it.
+    ///
+    /// Bounded the same way the failure log above is, and for the same reason: whatever keeps a
+    /// subnet behind tends to keep it behind for many syncs in a row.
+    fn log_subnets_lagging_behind(&self, subnets: &[SubnetId], last_day_update: NaiveDate) {
+        let stored = self.last_timestamp_per_subnet.borrow();
+        let days: Vec<(SubnetId, NaiveDate)> = subnets
+            .iter()
+            .filter_map(|subnet| {
+                stored.get(&(*subnet).into()).map(|ts| {
+                    (
+                        *subnet,
+                        DateTime::from_timestamp_nanos(ts as i64).date_naive(),
+                    )
+                })
+            })
+            .collect();
+
+        // Every subnet with metrics stopped on the same day, so none of them is behind another and
+        // there is nothing to report. This is the healthy case.
+        let Some(furthest) = days.iter().map(|(_, day)| *day).max() else {
+            return;
+        };
+        if furthest == last_day_update {
+            return;
         }
+
+        let holding_back: Vec<&(SubnetId, NaiveDate)> = days
+            .iter()
+            .filter(|(_, day)| *day == last_day_update)
+            .collect();
+        let sample = holding_back
+            .iter()
+            .take(MAX_LOGGED_FAILURES)
+            .map(|(subnet_id, _)| subnet_id.to_string())
+            .join(", ");
+        ic_cdk::println!(
+            "Metrics are synced up to {} rather than {}: {} of {} subnets have nothing stored past \
+             {} (showing up to {}): {}. Rewards cannot be computed for any later day until they \
+             catch up.",
+            last_day_update,
+            furthest,
+            holding_back.len(),
+            subnets.len(),
+            last_day_update,
+            MAX_LOGGED_FAILURES,
+            sample,
+        );
     }
 
     /// Computes daily node metrics for a specific date.

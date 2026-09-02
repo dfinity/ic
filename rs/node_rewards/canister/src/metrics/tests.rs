@@ -468,3 +468,125 @@ async fn daily_metrics_correct_overlapping_days() {
     assert_eq!(overlapping_sub_2.num_blocks_proposed, 4);
     assert_eq!(overlapping_sub_2.num_blocks_failed, 4);
 }
+
+/// The synced day must be the day every subnet has metrics for, not the day the furthest-along
+/// subnet has reached.
+///
+/// A `node_metrics_history` call can succeed and still stop short: the management canister leaves
+/// out the running (current-day) snapshot, so a subnet that has produced no block for a while
+/// answers with older records than a healthy one. Reporting the furthest day would let rewards be
+/// computed for days the lagging subnet contributed nothing to, on which its nodes read as
+/// unassigned and are paid on an extrapolated failure rate rather than their own.
+#[tokio::test]
+async fn synced_day_is_the_day_every_subnet_covers() {
+    let lagging = subnet_id(1);
+    let healthy = subnet_id(2);
+
+    let mut mock = mock::MockCanisterClient::new();
+    mock.expect_node_metrics_history().returning(move |args| {
+        let days = if SubnetId::from(PrincipalId::from(args.subnet_id)) == lagging {
+            // Stalled after day 1: no snapshot has closed since, so nothing newer comes back.
+            2
+        } else {
+            5
+        };
+        Ok(node_metrics_history_gen(days))
+    });
+    let mm = MetricsManager::new_test(mock);
+
+    let synced_day = mm
+        .update_subnets_metrics(vec![lagging, healthy])
+        .await
+        .unwrap();
+
+    // node_metrics_history_gen puts day n at n * ONE_DAY_NANOS from the epoch, so the lagging
+    // subnet's last record is day 1 and the healthy one's is day 4.
+    let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+    assert_eq!(
+        synced_day,
+        add_days(&epoch, 1),
+        "the synced day must not run ahead of the lagging subnet"
+    );
+}
+
+/// Once the lagging subnet catches up, the synced day advances with it — the minimum holds the day
+/// back, it does not pin it down.
+#[tokio::test]
+async fn synced_day_advances_once_every_subnet_catches_up() {
+    let subnet_1 = subnet_id(1);
+    let subnet_2 = subnet_id(2);
+    let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+
+    let mut mock = mock::MockCanisterClient::new();
+    mock.expect_node_metrics_history()
+        .return_const(Ok(node_metrics_history_gen(5)));
+    let mm = MetricsManager::new_test(mock);
+
+    // Put subnet_1 two days behind before the sync, the way a previous sync would have left it.
+    mm.last_timestamp_per_subnet
+        .borrow_mut()
+        .insert(subnet_1.into(), 2 * ONE_DAY_NANOS);
+    mm.last_timestamp_per_subnet
+        .borrow_mut()
+        .insert(subnet_2.into(), 4 * ONE_DAY_NANOS);
+    assert_eq!(
+        mm.last_day_fully_synced(&[subnet_1, subnet_2]),
+        Some(add_days(&epoch, 2))
+    );
+
+    let synced_day = mm
+        .update_subnets_metrics(vec![subnet_1, subnet_2])
+        .await
+        .unwrap();
+
+    assert_eq!(synced_day, add_days(&epoch, 4));
+}
+
+/// A subnet with nothing stored — one created today, whose first day has not closed yet — must not
+/// drag the synced day back to the epoch. Doing so would block every reward calculation
+/// network-wide until that subnet's first day closed.
+#[tokio::test]
+async fn subnet_with_no_metrics_at_all_does_not_hold_the_synced_day_back() {
+    let with_metrics = subnet_id(1);
+    let brand_new = subnet_id(2);
+
+    let mut mock = mock::MockCanisterClient::new();
+    mock.expect_node_metrics_history().returning(move |args| {
+        if SubnetId::from(PrincipalId::from(args.subnet_id)) == brand_new {
+            Ok(vec![])
+        } else {
+            Ok(node_metrics_history_gen(5))
+        }
+    });
+    let mm = MetricsManager::new_test(mock);
+
+    let synced_day = mm
+        .update_subnets_metrics(vec![with_metrics, brand_new])
+        .await
+        .unwrap();
+
+    let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+    assert_eq!(synced_day, add_days(&epoch, 4));
+    assert!(
+        mm.last_timestamp_per_subnet
+            .borrow()
+            .get(&brand_new.into())
+            .is_none(),
+        "a subnet that returned no records should have no stored timestamp"
+    );
+}
+
+/// With nothing stored for any subnet there is no day to report as synced. Recording the epoch
+/// instead — what `unwrap_or_default` used to do — reads as a successful sync of 1970-01-01.
+#[tokio::test]
+async fn no_synced_day_is_recorded_when_no_subnet_has_metrics() {
+    let mut mock = mock::MockCanisterClient::new();
+    mock.expect_node_metrics_history().return_const(Ok(vec![]));
+    let mm = MetricsManager::new_test(mock);
+
+    let result = mm
+        .update_subnets_metrics(vec![subnet_id(1), subnet_id(2)])
+        .await;
+
+    assert!(result.is_err(), "got {result:?}");
+}
