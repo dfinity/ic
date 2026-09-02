@@ -67,10 +67,10 @@ pub(crate) fn check_replica_version_invariants(
         );
     }
 
-    for (key, record) in elected_versions {
+    for (version, record) in elected_versions {
         // Enforce that the version ID is well-formed, so that consumers reading
         // it back out of the Registry can turn it into a ReplicaVersion.
-        if let Err(err) = ReplicaVersion::try_from(key.as_str()) {
+        if let Err(err) = ReplicaVersion::try_from(version.as_str()) {
             panic!("Elected an invalid version ID: {err}");
         }
 
@@ -89,7 +89,7 @@ pub(crate) fn check_replica_version_invariants(
 
         // Enforce that the stored version always matches the key
         if let Some(replica_version_id) = record.replica_version_id {
-            assert_eq!(replica_version_id, key);
+            assert_eq!(replica_version_id, version);
         }
     }
 

@@ -36,10 +36,10 @@ pub(crate) fn check_hostos_version_invariants(
         );
     }
 
-    for (key, record) in elected_versions {
+    for (version, record) in elected_versions {
         // Enforce that the version ID is well-formed, so that consumers reading
         // it back out of the Registry can turn it into a HostosVersion.
-        if let Err(err) = HostosVersion::try_from(key.as_str()) {
+        if let Err(err) = HostosVersion::try_from(version.as_str()) {
             panic!("Registered an invalid HostOS version ID: {err}");
         }
 
