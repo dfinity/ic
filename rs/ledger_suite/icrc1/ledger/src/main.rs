@@ -17,7 +17,7 @@ use ic_icrc1_ledger::{
     InitArgs, LEDGER_VERSION, Ledger, LedgerArgument, UPGRADES_MEMORY, balances_len,
     get_allowances, read_first_balance, wasm_token_type,
 };
-use ic_ledger_canister_core::archive::{Archive, ArchiveCanisterWasm};
+use ic_ledger_canister_core::archive::{Archive, ArchiveCanisterWasm, ICRC_ARCHIVE_MEMORY_LIMIT};
 use ic_ledger_canister_core::ledger::{
     LedgerAccess, LedgerContext, LedgerData, TransferError as CoreTransferError, apply_transaction,
     archive_blocks,
@@ -341,7 +341,9 @@ where
     )?;
     w.encode_gauge(
         "ledger_archive_node_max_memory_size_bytes",
-        archive.node_max_memory_size_bytes as f64,
+        archive
+            .node_max_memory_size_bytes
+            .min(ICRC_ARCHIVE_MEMORY_LIMIT) as f64,
         "Maximum number of bytes an archive spawned from now on may store. Existing \
          archives keep the cap they were created with, reported by their own \
          archive_max_memory_size_bytes metric.",
@@ -349,7 +351,9 @@ where
     w.encode_gauge(
         "ledger_archive_max_message_size_bytes",
         archive.max_message_size_bytes as f64,
-        "Maximum size in bytes of a message sent to an archive canister.",
+        "Archive option limiting the size in bytes of a message sent to an archive. \
+         The size actually used is the smaller of this and the ledger's own \
+         ledger_max_message_size_bytes.",
     )?;
     w.encode_gauge(
         "ledger_archive_cycles_for_archive_creation",
@@ -496,6 +500,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             "ledger_num_approvals",
             ledger.approvals().get_num_approvals() as f64,
             "Total number of approvals.",
+        )?;
+        w.encode_gauge(
+            "ledger_max_message_size_bytes",
+            MAX_MESSAGE_SIZE as f64,
+            "Maximum inter-canister message size in bytes.",
         )?;
         encode_dedup_config_metrics(w, &*ledger)?;
         Ok(())

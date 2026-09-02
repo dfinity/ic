@@ -1167,7 +1167,9 @@ where
     w.encode_gauge(
         "ledger_archive_max_message_size_bytes",
         archive.max_message_size_bytes as f64,
-        "Maximum size in bytes of a message sent to an archive canister.",
+        "Archive option limiting the size in bytes of a message sent to an archive. \
+         The size actually used is the smaller of this and the ledger's own \
+         ledger_max_message_size_bytes.",
     )?;
     w.encode_gauge(
         "ledger_archive_cycles_for_archive_creation",

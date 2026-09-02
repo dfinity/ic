@@ -12,7 +12,9 @@ use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, valid_transactions_strategy,
 };
-use ic_ledger_canister_core::archive::{ArchiveOptions, DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE};
+use ic_ledger_canister_core::archive::{
+    ArchiveOptions, DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE, ICRC_ARCHIVE_MEMORY_LIMIT,
+};
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
@@ -1481,7 +1483,11 @@ pub fn test_archive_and_dedup_config_metrics<T>(
     assert_eq!(
         metric("ledger_archive_max_message_size_bytes"),
         2 * 1024 * 1024,
-        "setup() leaves max_message_size_bytes unset, so the effective value should be the default"
+        "setup() leaves max_message_size_bytes unset, so the archive option should be the default"
+    );
+    assert!(
+        metric("ledger_max_message_size_bytes") <= metric("ledger_archive_max_message_size_bytes"),
+        "the size actually used when archiving is the smaller of the two, so both have to be visible"
     );
     assert_eq!(metric("ledger_archive_cycles_for_archive_creation"), 0);
     assert_eq!(
@@ -1503,12 +1509,33 @@ pub fn test_archive_and_dedup_config_metrics<T>(
         }),
         ..UpgradeArgs::default()
     }));
-    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
-        .expect("failed to change the archive options");
+    env.upgrade_canister(
+        ledger_id,
+        ledger_wasm.clone(),
+        Encode!(&upgrade_args).unwrap(),
+    )
+    .expect("failed to change the archive options");
 
     assert_eq!(metric("ledger_archive_trigger_threshold"), 1234);
     assert_eq!(metric("ledger_archive_node_max_memory_size_bytes"), 5678);
     assert_eq!(metric("ledger_archive_max_transactions_per_response"), 42);
+
+    // An ICRC archive clamps its memory cap, so configuring more than it accepts
+    // must not be reported as if the archive would honour it.
+    let above_cap = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            node_max_memory_size_bytes: Some(ICRC_ARCHIVE_MEMORY_LIMIT * 2),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&above_cap).unwrap())
+        .expect("failed to change the archive options");
+    assert_eq!(
+        metric("ledger_archive_node_max_memory_size_bytes"),
+        ICRC_ARCHIVE_MEMORY_LIMIT,
+        "the reported cap must not exceed what an ICRC archive will accept"
+    );
     assert_eq!(
         metric("ledger_archive_num_blocks_to_archive"),
         NUM_BLOCKS_TO_ARCHIVE,

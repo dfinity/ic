@@ -34,7 +34,7 @@ const WASM_PAGE_SIZE: u64 = 65536;
 const GIB: u64 = 1024 * 1024 * 1024;
 
 /// How much memory do we want to allocate for raw blocks.
-const DEFAULT_MEMORY_LIMIT: u64 = 3 * GIB;
+use ic_ledger_canister_core::archive::ICRC_ARCHIVE_MEMORY_LIMIT as DEFAULT_MEMORY_LIMIT;
 
 /// The maximum number of blocks to return in a single get_transactions request.
 use ic_ledger_canister_core::archive::DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE;

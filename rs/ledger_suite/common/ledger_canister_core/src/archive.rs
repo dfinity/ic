@@ -28,6 +28,15 @@ pub const DEFAULT_CYCLES_FOR_ARCHIVE_CREATION: u64 = 10_000_000_000_000;
 /// `send_blocks_to_archive` encodes is silently ignored there.
 pub const DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE: u64 = 2000;
 
+/// The hard upper bound an ICRC archive places on the number of bytes it will
+/// use to store encoded blocks. Its `init` both defaults to and clamps to this
+/// value, so a larger `node_max_memory_size_bytes` configured on the ledger has
+/// no effect: the archive will still store at most this much. Shared so the
+/// ledger can report the cap that will actually apply.
+///
+/// The ICP archive has no equivalent bound; it takes whatever cap it is given.
+pub const ICRC_ARCHIVE_MEMORY_LIMIT: u64 = 3 * 1024 * 1024 * 1024;
+
 fn default_cycles_for_archive_creation() -> u64 {
     0
 }
