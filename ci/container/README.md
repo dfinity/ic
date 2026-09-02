@@ -85,7 +85,7 @@ sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=
   --mount type=bind,source=/home/john/.zsh_history,target=/home/ubuntu/.zsh_history \
   -v /tmp/ssh-XXXXQAO7kF/agent.113731:/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent -w /ic \
   --pull=never \
-  ghcr.io/dfinity/ic-dev@sha256:3e028a468490dddda2b255da986c8ea2fe9c2dd2a143d4557c9bd5bb68c8218a /usr/bin/fish
+  ghcr.io/dfinity/ic-dev@$(cat ci/container/ic-dev.digest) /usr/bin/fish
 ```
 
 ### Image pinning
