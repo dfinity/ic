@@ -1360,7 +1360,9 @@ fn online_split() {
     take_shapshot(CANISTER_1);
     take_shapshot(CANISTER_2);
 
-    // Add aborted `install_code` tasks to both canisters.
+    // Add aborted `install_code` tasks to both canisters, with the same prepayment.
+    let prepaid_install_code_cycles =
+        CompoundCycles::<Instructions>::new(Cycles::new(3), CanisterCyclesCostSchedule::Normal);
     let mut add_aborted_install_code_task = |canister_id| {
         let canister = fixture.state.canister_state_make_mut(&canister_id).unwrap();
         canister
@@ -1369,10 +1371,7 @@ fn online_split() {
             .enqueue(ExecutionTask::AbortedInstallCode {
                 message: CanisterCall::Request(RequestBuilder::default().build().into()),
                 call_id: InstallCodeCallId::new(3_u64),
-                prepaid_execution_cycles: CompoundCycles::new(
-                    Cycles::new(3),
-                    CanisterCyclesCostSchedule::Normal,
-                ),
+                prepaid_execution_cycles: prepaid_install_code_cycles,
             });
         // Canister must be in the subnet schedule.
         fixture.state.canister_priority_mut(canister_id);
@@ -1432,8 +1431,12 @@ fn online_split() {
     canister_state
         .system_state
         .split_input_schedules(&CANISTER_2, expected.canister_states());
-    // The in-progress `install_code` task should have been silently dropped.
+    // The in-progress `install_code` task should have been dropped, with the cycles
+    // prepaid for it refunded in full.
     canister_state.system_state.task_queue = Default::default();
+    canister_state
+        .system_state
+        .refund_cycles(prepaid_install_code_cycles, prepaid_install_code_cycles);
     expected.put_canister_state(canister_state_arc);
 
     // Streams, subnet queues and refunds should be empty.

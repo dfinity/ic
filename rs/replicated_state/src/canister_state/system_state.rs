@@ -1674,20 +1674,21 @@ impl SystemState {
         // Note that this cannot be a paused install code task, because we abort all
         // paused tasks before triggering the split.
         //
-        // The cycles prepaid for the dropped execution are not returned to the
-        // canister, so settle them as fully consumed. This leaves the balance and the
-        // consumed cycles gauges untouched (the refund is zero) and only accounts for
-        // the prepayment on the monotonic counters, which is where a prepayment is
-        // recorded once its refund is known. Without this the prepayment would remain
-        // in the gauges with nothing left in the state to account for it, breaking the
-        // invariant on `Self::outstanding_prepayments`.
+        // Refund the execution cycles prepaid for the dropped `install_code` in full.
+        // The canister has nothing to show for them: an aborted execution discards the
+        // slices it had already run and starts over when retried, and this one is
+        // never retried -- subnet A' rejects the corresponding call, unwinding the
+        // operation there as well.
+        //
+        // This also keeps the consumed cycles metrics consistent. Dropping the task
+        // without refunding would leave the prepayment in the gauges with nothing left
+        // in the state to account for it, breaking the invariant on
+        // `Self::outstanding_prepayments`; and the monotonic counters, which only
+        // account for a prepayment once its refund is known, would never see it at
+        // all. A full refund lowers the gauges by the prepayment and adds nothing to
+        // the counters, which is exactly right: nothing was consumed.
         if let Some(prepaid_execution_cycles) = self.task_queue.remove_aborted_install_code_task() {
-            // Zero is zero under either cost schedule.
-            let zero_refund = CompoundCycles::<Instructions>::new(
-                Cycles::zero(),
-                CanisterCyclesCostSchedule::Normal,
-            );
-            self.refund_cycles(prepaid_execution_cycles, zero_refund);
+            self.refund_cycles(prepaid_execution_cycles, prepaid_execution_cycles);
         }
 
         // Roll back `Stopping` canister states to `Running` and drop all their stop
