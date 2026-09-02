@@ -100,6 +100,7 @@ impl LedgerSuiteOrchestrator {
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
                 manage_ledger_suites: None,
+                ledger_upgrade_arg: None,
             },
         ))
     }
@@ -176,6 +177,7 @@ impl LedgerSuiteOrchestrator {
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
                 manage_ledger_suites: Some(manage_installed_canister),
+                ledger_upgrade_arg: None,
             },
         ))
     }

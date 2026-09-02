@@ -46,6 +46,8 @@ impl AddErc20TokenFlow {
     }
 }
 
+pub const ARCHIVE_TRIGGER_THRESHOLD: usize = 10;
+
 pub struct ManagedCanistersAssert {
     pub setup: LedgerSuiteOrchestrator,
     pub canister_ids: ManagedCanisterIds,
@@ -78,8 +80,6 @@ impl ManagedCanistersAssert {
     }
 
     pub fn trigger_creation_of_archive(self) -> Self {
-        const ARCHIVE_TRIGGER_THRESHOLD: usize = 10;
-
         // The productive value for `trigger_threshold` is `2_000`,
         // which would require `2_000` transfers to trigger the creation of an archive.
         // We set this value to an artificially low number to speed up the test.
@@ -87,28 +87,17 @@ impl ManagedCanistersAssert {
             trigger_threshold: Some(ARCHIVE_TRIGGER_THRESHOLD),
             ..Default::default()
         });
+        self.trigger_creation_of_archive_by_transfers(ARCHIVE_TRIGGER_THRESHOLD)
+    }
+
+    pub fn trigger_creation_of_archive_by_transfers(self, number_of_transfers: usize) -> Self {
         let archive_ids_before: BTreeSet<_> = self
             .call_ledger_archives()
             .into_iter()
             .map(|info| info.canister_id)
             .collect();
 
-        for _i in 0..ARCHIVE_TRIGGER_THRESHOLD {
-            let from = MINTER_PRINCIPAL;
-            let to = Principal::management_canister();
-            self.call_ledger_icrc1_transfer(
-                from,
-                &TransferArg {
-                    from_subaccount: None,
-                    to: to.into(),
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                    amount: Nat::from(1_u8),
-                },
-            )
-            .expect("BUG: fail to make a transfer to trigger archive creation");
-        }
+        self.make_transfers(number_of_transfers);
 
         let archive_ids_after: BTreeSet<_> = self
             .call_ledger_archives()
@@ -129,6 +118,25 @@ impl ManagedCanistersAssert {
                 index: self.canister_ids.index,
                 archives: Vec::from_iter(archive_ids_after),
             },
+        }
+    }
+
+    pub fn make_transfers(&self, number_of_transfers: usize) {
+        for _i in 0..number_of_transfers {
+            let from = MINTER_PRINCIPAL;
+            let to = Principal::management_canister();
+            self.call_ledger_icrc1_transfer(
+                from,
+                &TransferArg {
+                    from_subaccount: None,
+                    to: to.into(),
+                    fee: None,
+                    created_at_time: None,
+                    memo: None,
+                    amount: Nat::from(1_u8),
+                },
+            )
+            .expect("BUG: fail to make a transfer");
         }
     }
 
@@ -283,7 +291,7 @@ impl ManagedCanistersAssert {
         .expect("failed to decode icrc3_get_blocks response")
     }
 
-    fn call_ledger_archives(&self) -> Vec<ArchiveInfo> {
+    pub fn call_ledger_archives(&self) -> Vec<ArchiveInfo> {
         Decode!(
             &self
                 .setup
