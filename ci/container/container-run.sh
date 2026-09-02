@@ -179,10 +179,6 @@ if [ "$IMAGE_TAG" = "$PINNED_TAG" ]; then
         eprintln "Local image $IMAGE_REPO:$IMAGE_TAG is not verified against the pin (e.g. built locally); pulling the pinned image $IMAGE instead (one-time download)."
     fi
     if image_exists "$IMAGE" || "${CONTAINER_CMD[@]}" pull "$IMAGE"; then
-        # Pulling by digest is self-verifying in both runtimes (a manifest that
-        # does not hash to the requested digest is refused), and a local lookup
-        # by digest reference only resolves content recorded from such a pull,
-        # so the image is verified by construction.
         # Alias the verified image under its tag: readable `images` output, and
         # `docker image prune` would otherwise delete an image that has no tag.
         # This also re-points a tag that a different local image was squatting
