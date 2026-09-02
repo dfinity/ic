@@ -750,7 +750,6 @@ mod upgrade {
                 ledger_upgrade_arg: Some(LedgerUpgradeArg {
                     change_archive_options: Some(ChangeArchiveOptions {
                         trigger_threshold: Some(RAISED_TRIGGER_THRESHOLD),
-                        num_blocks_to_archive: Some(RAISED_TRIGGER_THRESHOLD),
                         ..Default::default()
                     }),
                 }),
