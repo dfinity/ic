@@ -1,3 +1,4 @@
+use candid::{CandidType, Decode, Deserialize, Encode};
 use canister_test::Canister;
 use canister_test::Runtime;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE};
@@ -16,13 +17,19 @@ use ic_system_test_driver::driver::test_env_api::{
 use ic_system_test_driver::driver::universal_vm::*;
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::{self, create_and_install, create_and_install_with_cycles};
+use ic_test_utilities_types::messages::RequestBuilder;
+use ic_types::RegistryVersion;
+use ic_types::canister_http::CanisterHttpRequestContext;
+use ic_types::time::UNIX_EPOCH;
 pub use ic_types::{CanisterId, PrincipalId};
 use ic_types::{
     NumBytes, NumInstructions, NumberOfNodes,
     canister_http::{Replication, ReplicationKind},
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use slog::info;
+use std::collections::BTreeSet;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
@@ -598,13 +605,230 @@ pub fn get_paying_proxy_canister_id(env: &TestEnv) -> PrincipalId {
     get_proxy_canister_id_for(env, CanisterCyclesCostSchedule::Normal)
 }
 
-// ===================== Pay-as-you-go fees =====================
+// ================ Consumed cycles, by use case ================
 
-/// What the canister pays on a charging subnet for the messages that carry an
-/// outcall, over and above the outcall itself. `ic0.cost_http_request_v2` prices
-/// the outcall alone, but the balance pays for all of it, so a charge compared
-/// against a quote has to allow for this on top. Determined empirically.
-pub const CARRIER_MESSAGE_COSTS: u128 = 10_000_000;
+/// Nominal cycles consumed by a canister, by use case.
+#[derive(CandidType, Deserialize, Debug, Clone, Default, PartialEq, Eq)]
+pub struct ConsumedCycles {
+    pub memory: u128,
+    pub compute_allocation: u128,
+    pub ingress_induction: u128,
+    pub instructions: u128,
+    pub request_and_response_transmission: u128,
+    pub uninstall: u128,
+    pub canister_creation: u128,
+    pub http_outcalls: u128,
+    pub burned_cycles: u128,
+}
+
+impl ConsumedCycles {
+    /// Everything the canister has been charged for, whatever the reason.
+    pub fn total(&self) -> u128 {
+        self.memory
+            + self.compute_allocation
+            + self.ingress_induction
+            + self.instructions
+            + self.request_and_response_transmission
+            + self.uninstall
+            + self.canister_creation
+            + self.http_outcalls
+            + self.burned_cycles
+    }
+
+    /// What was charged for everything other than outcalls themselves.
+    pub fn carrier(&self) -> u128 {
+        self.total() - self.http_outcalls
+    }
+
+    /// What has been charged since `earlier`.
+    pub fn since(&self, earlier: &ConsumedCycles) -> ConsumedCycles {
+        let field = |name: &str, now: u128, before: u128| {
+            now.checked_sub(before)
+                .unwrap_or_else(|| panic!("consumed cycles for {name} fell from {before} to {now}"))
+        };
+        ConsumedCycles {
+            memory: field("memory", self.memory, earlier.memory),
+            compute_allocation: field(
+                "compute_allocation",
+                self.compute_allocation,
+                earlier.compute_allocation,
+            ),
+            ingress_induction: field(
+                "ingress_induction",
+                self.ingress_induction,
+                earlier.ingress_induction,
+            ),
+            instructions: field("instructions", self.instructions, earlier.instructions),
+            request_and_response_transmission: field(
+                "request_and_response_transmission",
+                self.request_and_response_transmission,
+                earlier.request_and_response_transmission,
+            ),
+            uninstall: field("uninstall", self.uninstall, earlier.uninstall),
+            canister_creation: field(
+                "canister_creation",
+                self.canister_creation,
+                earlier.canister_creation,
+            ),
+            http_outcalls: field("http_outcalls", self.http_outcalls, earlier.http_outcalls),
+            burned_cycles: field("burned_cycles", self.burned_cycles, earlier.burned_cycles),
+        }
+    }
+
+    /// Checks that the change in canister cycle balance `balance_diff` is consistent
+    /// with the change in cycles consumption counters `self`, within the bounds of what the
+    /// canister was charged for existing.
+    pub fn check_against_balance(&self, balance_diff: u128) -> Result<(), String> {
+        let total_diff = self.total();
+        if balance_diff > total_diff {
+            return Err(format!(
+                "took {balance_diff} cycles out of the balance but recorded only {total_diff} as \
+                 consumed ({} of it for the outcall itself, {} for the messages carrying \
+                 it) — cycles left the balance that nothing was charged for",
+                self.http_outcalls,
+                self.carrier(),
+            ));
+        }
+        // The cycles that were charged to the canister for existing.
+        let drift = self.memory + self.compute_allocation;
+        if balance_diff < total_diff - drift {
+            return Err(format!(
+                "recorded {total_diff} cycles as consumed ({} of it for the outcall itself, {} \
+                 for the messages carrying it) but took only {balance_diff} out of the balance, \
+                 a discrepancy beyond the {drift} charged for occupying memory across the \
+                 window",
+                self.http_outcalls,
+                self.carrier(),
+            ));
+        }
+        // total_diff - drift <= balance_diff <= total_diff
+        Ok(())
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+struct CanisterMetricsReply {
+    cycles_consumed: ConsumedCycles,
+}
+
+#[derive(CandidType)]
+struct CanisterMetricsRequest {
+    canister_id: candid::Principal,
+}
+
+/// Reads what `canister` has been charged for, broken down by use case.
+pub async fn consumed_cycles(
+    node: &IcNodeSnapshot,
+    canister: PrincipalId,
+) -> Result<ConsumedCycles, String> {
+    let agent = node.build_default_agent_async().await;
+    let canister: candid::Principal = canister.into();
+    let bytes = agent
+        .query(
+            &candid::Principal::management_canister(),
+            "canister_metrics",
+        )
+        .with_effective_canister_id(canister)
+        .with_arg(
+            Encode!(&CanisterMetricsRequest {
+                canister_id: canister
+            })
+            .unwrap(),
+        )
+        .call()
+        .await
+        .map_err(|err| format!("querying canister_metrics for {canister} failed: {err}"))?;
+
+    Decode!(&bytes, CanisterMetricsReply)
+        .map_err(|err| format!("decoding the canister_metrics reply failed: {err}"))
+        .map(|reply| reply.cycles_consumed)
+}
+
+/// Reads `canister`'s own cycle balance.
+pub async fn cycle_balance(node: &IcNodeSnapshot, canister: PrincipalId) -> Result<u128, String> {
+    let agent = node.build_default_agent_async().await;
+    let bytes = agent
+        .query(&canister.0, "cycle_balance")
+        .with_arg(Encode!(&()).unwrap())
+        .call()
+        .await
+        .map_err(|err| format!("querying {canister}'s cycle balance failed: {err}"))?;
+
+    Decode!(&bytes, u128).map_err(|err| format!("decoding the cycle balance failed: {err}"))
+}
+
+/// Reads `canister`'s balance once nothing is owed to it any more.
+///
+/// Waiting for the balance to stop *rising* rather than to stop moving is
+/// deliberate: on a subnet that charges, the balance drifts downwards on its own as
+/// the canister pays to exist, so "holding still" never happens. A refund is the
+/// only thing that adds to it.
+pub async fn settled_balance(node: &IcNodeSnapshot, canister: PrincipalId) -> Result<u128, String> {
+    /// Long enough to outlast a delivered request context, after which nothing can
+    /// still be owed.
+    const ATTEMPTS: usize = 10;
+    const INTERVAL: Duration = Duration::from_secs(10);
+
+    let mut previous = cycle_balance(node, canister).await?;
+    for _ in 0..ATTEMPTS {
+        tokio::time::sleep(INTERVAL).await;
+        let current = cycle_balance(node, canister).await?;
+        if current <= previous {
+            return Ok(current);
+        }
+        previous = current;
+    }
+    Err(format!(
+        "{canister} kept being credited, last seen at {previous}"
+    ))
+}
+
+/// A baseline to measure an outcall against, taken once the balance has settled.
+///
+/// Reads the consumption counters *before* the balance, which is what makes the
+/// span they cover a superset of the span the balance covers — see
+/// [`ConsumedCycles::check_against_balance`]. Pair it with [`settled_outcome`],
+/// which reads them the other way round.
+pub async fn settled_baseline(
+    node: &IcNodeSnapshot,
+    canister: PrincipalId,
+) -> Result<(ConsumedCycles, u128), String> {
+    settled_balance(node, canister).await?;
+    let consumed = consumed_cycles(node, canister).await?;
+    let balance = cycle_balance(node, canister).await?;
+    Ok((consumed, balance))
+}
+
+/// The far end of a window opened by [`settled_baseline`]: the balance once it has
+/// settled, then the consumption counters.
+pub async fn settled_outcome(
+    node: &IcNodeSnapshot,
+    canister: PrincipalId,
+) -> Result<(u128, ConsumedCycles), String> {
+    let balance = settled_balance(node, canister).await?;
+    let consumed = consumed_cycles(node, canister).await?;
+    Ok((balance, consumed))
+}
+
+/// What an out-of-cycles rejection reports the replicas collectively spent.
+///
+/// Tying that figure to the caller's accounting is what makes a failed outcall
+/// checkable at all: nothing else says how much of the withheld allowance was
+/// actually used before the outcall gave up.
+pub fn reported_spend(reject_message: &str) -> u128 {
+    const PREFIX: &str = "collective spend of ";
+    reject_message
+        .split_once(PREFIX)
+        .and_then(|(_, rest)| rest.split_whitespace().next())
+        // `Cycles` renders with underscore separators.
+        .map(|cycles| cycles.replace('_', ""))
+        .and_then(|cycles| cycles.parse().ok())
+        .unwrap_or_else(|| {
+            panic!("expected a rejection naming what was spent, got: '{reject_message}'")
+        })
+}
+
+// ===================== Pay-as-you-go fees =====================
 
 /// What pay-as-you-go withholds up front for an outcall, and what it is quoted.
 pub struct PaygFees {
@@ -653,6 +877,38 @@ pub fn payg_fees(
     }
 }
 
+/// Prices the non-flexible `request` the way the replica will, deriving its replication and
+/// the size of its variable parts from the request itself.
+pub fn fees_for(
+    proxy_canister: CanisterId,
+    request: UnvalidatedCanisterHttpRequestArgs,
+    subnet_size: usize,
+) -> PaygFees {
+    let max_response_bytes = request.max_response_bytes.map(NumBytes::from);
+    // The replication is whatever the request asks for, which is what the fees
+    // depend on; the single node stands in for the subnet only to build a context.
+    let dummy_context = CanisterHttpRequestContext::generate_from_args(
+        UNIX_EPOCH,
+        &RequestBuilder::default()
+            .receiver(CanisterId::from(1))
+            .sender(proxy_canister)
+            .build(),
+        request.into(),
+        &BTreeSet::from([PrincipalId::new_node_test_id(0).into()]),
+        RegistryVersion::from(1),
+        CanisterCyclesCostSchedule::Normal,
+        &mut rand::thread_rng(),
+    )
+    .expect("the request should be valid enough to price");
+
+    payg_fees(
+        &dummy_context.replication,
+        dummy_context.variable_parts_size(),
+        max_response_bytes,
+        subnet_size,
+    )
+}
+
 /// A cycles account manager configured the way an application subnet that charges
 /// is, which is all the fee functions above need of it.
 fn paying_cycles_account_manager() -> CyclesAccountManager {
@@ -665,22 +921,90 @@ fn paying_cycles_account_manager() -> CyclesAccountManager {
 }
 
 impl PaygFees {
-    /// What the request has withheld from it up front, given a `payment` ample
-    /// enough that the worst-case usage fee is what bounds the allowances rather
-    /// than the payment itself. Panics if it is not, since the caller's
-    /// expectations would then be wrong in a way worth failing loudly on.
+    /// What the request has withheld from it up front out of a `payment`: the base
+    /// fee, plus one allowance for each replica.
     pub fn withheld(&self, payment: u128) -> u128 {
-        assert!(
-            self.max_usage_fee <= payment - self.base_fee,
-            "a payment of {payment} does not cover the worst-case usage fee of {} on top of \
-             the {} base fee, so the allowances are sized by the payment instead and the \
-             expectations that go with this are wrong",
-            self.max_usage_fee,
-            self.base_fee
-        );
         // The allowances are a per-replica share, so the total is rounded down to a
         // whole number of shares.
-        self.base_fee + (self.max_usage_fee / self.node_count as u128) * self.node_count as u128
+        self.base_fee + self.allowance(payment) * self.node_count as u128
+    }
+
+    /// What each replica may spend on the outcall, out of a `payment`.
+    /// This is `min(payment - base_fee, max_usage_fee) / node_count`.
+    pub fn allowance(&self, payment: u128) -> u128 {
+        let refundable = payment.checked_sub(self.base_fee).unwrap_or_else(|| {
+            panic!(
+                "a payment of {payment} does not even cover the {} base fee",
+                self.base_fee
+            )
+        });
+        refundable.min(self.max_usage_fee) / self.node_count as u128
+    }
+
+    /// Checks what the reply refunded, against what the request withheld.
+    /// Everything that wasn't withheld should be refunded.
+    pub fn check_reply_refund(&self, payment: u128, refunded: u128) -> Result<(), String> {
+        let withheld = self.withheld(payment);
+        let expected = payment - withheld;
+        if refunded == expected {
+            return Ok(());
+        }
+        Err(format!(
+            "returned {refunded} cycles on the reply, not the {expected} left of a \
+             {payment}-cycle payment once {withheld} was withheld as {} allowances of {} each",
+            self.node_count,
+            self.allowance(payment),
+        ))
+    }
+
+    /// Checks what a *successful* outcall was priced at: more than the base fee,
+    /// which is taken at admission, and no more than `ic0.cost_http_request_v2`
+    /// quotes for a round trip of `elapsed`.
+    ///
+    /// Separate from [`Self::check_charge`] because both hold where outcalls are
+    /// free, while the balance never moves there. A failed outcall can exceed the
+    /// quote — it pays for work that produced nothing deliverable — so assert it
+    /// against `base_fee + `[`reported_spend`] instead, which is exact.
+    pub fn check_consumption(
+        &self,
+        consumed_diff: &ConsumedCycles,
+        elapsed: Duration,
+    ) -> Result<(), String> {
+        let outcall = consumed_diff.http_outcalls;
+        if outcall <= self.base_fee {
+            return Err(format!(
+                "consumed {outcall} cycles, no more than the {} base fee taken at admission — \
+                 so the spend the replicas reported on delivery was never priced",
+                self.base_fee
+            ));
+        }
+        let quoted = self.quote(elapsed);
+        if outcall > quoted {
+            return Err(format!(
+                "consumed {outcall} cycles, more than the {quoted} that \
+                 ic0.cost_http_request_v2 recommended"
+            ));
+        }
+        Ok(())
+    }
+
+    /// [`Self::check_consumption`], plus [`ConsumedCycles::check_against_balance`].
+    /// `balance_diff` and `consumed_diff` must span the same window. A failed outcall
+    /// wants the latter on its own.
+    pub fn check_charge(
+        &self,
+        consumed_diff: &ConsumedCycles,
+        balance_diff: u128,
+        elapsed: Duration,
+    ) -> Result<(), String> {
+        self.check_consumption(consumed_diff, elapsed)?;
+        consumed_diff.check_against_balance(balance_diff)
+    }
+
+    /// Whether the `payment` is ample enough that the worst-case usage fee, rather
+    /// than the payment itself, is what sizes the allowances.
+    pub fn payment_is_ample(&self, payment: u128) -> bool {
+        self.base_fee + self.max_usage_fee <= payment
     }
 
     /// What `ic0.cost_http_request_v2` quotes for an outcall that took the given time.
