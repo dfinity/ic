@@ -447,6 +447,38 @@ type node_metrics_history_result = vec record {
     node_metrics : vec node_metrics;
 };
 
+type subnet_metrics_args = record {
+    subnet_id : principal;
+};
+
+// This API is EXPERIMENTAL and may evolve in a non-backward-compatible way.
+//
+// Only `block_height` is current as of the block in which the call is executed.
+// The other four fields are read from the subnet's aggregated metrics, which the
+// replica updates at the *end* of a round, so they describe the state as of an
+// earlier block; see the individual fields.
+type subnet_metrics_result = record {
+    // Height of the block in whose execution this call is processed.
+    // Monotonically non-decreasing for a given subnet; the heights of different
+    // subnets are unrelated.
+    block_height : nat;
+    // Number of canisters on the subnet, as of the end of the previous round.
+    num_canisters : nat;
+    // Total size in bytes of the state taken by the canisters on the subnet, as
+    // of the end of the previous round. Recomputed only every 10 rounds, because
+    // summing it over every canister is expensive and it does not need to be
+    // exact, so it can be up to ten rounds stale and reads as 0 for the first
+    // rounds after the subnet is created.
+    canister_state_bytes : nat;
+    // Total cycles removed from circulation on the subnet by all current and
+    // deleted canisters, as of the end of the previous round.
+    consumed_cycles_total : nat;
+    // Total number of transactions processed on the subnet, i.e. the total
+    // number of messages executed in replicated mode, as of the end of the
+    // previous round.
+    update_transactions_total : nat;
+};
+
 type subnet_info_args = record {
     subnet_id : principal;
 };
@@ -709,6 +741,7 @@ service ic : {
 
     // metrics interface
     node_metrics_history : (node_metrics_history_args) -> (node_metrics_history_result);
+    subnet_metrics : (subnet_metrics_args) -> (subnet_metrics_result);
 
     // subnet info
     subnet_info : (subnet_info_args) -> (subnet_info_result);
