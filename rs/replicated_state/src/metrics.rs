@@ -14,7 +14,8 @@ use ic_types::{
 };
 use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use prometheus::{
-    CounterVec, Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntGauge, IntGaugeVec,
+    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntGauge,
+    IntGaugeVec,
 };
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -55,6 +56,7 @@ pub struct ReplicatedStateMetrics {
     registered_canisters: IntGaugeVec,
     available_canister_ids: IntGauge,
     consumed_cycles: Gauge,
+    consumed_cycles_as_counter: Counter,
     consumed_cycles_by_use_case: GaugeVec,
     consumed_cycles_by_use_case_as_counters: CounterVec,
     input_queue_messages: IntGaugeVec,
@@ -165,6 +167,15 @@ impl ReplicatedStateMetrics {
             consumed_cycles: metrics_registry.gauge(
                 "replicated_state_consumed_cycles_since_replica_started",
                 "Number of cycles consumed",
+            ),
+            consumed_cycles_as_counter: metrics_registry.register(
+                Counter::new(
+                    "replicated_state_consumed_cycles_since_replica_started_as_counter",
+                    "Number of cycles consumed, as a counter. Unlike its gauge \
+                     counterpart, this is only increased, by the actually consumed \
+                     amount once the refund of a prepayment is known.",
+                )
+                .unwrap(),
             ),
             consumed_cycles_by_use_case: metrics_registry.gauge_vec(
                 "replicated_state_consumed_cycles_from_replica_start",
@@ -416,6 +427,7 @@ impl ReplicatedStateMetrics {
 
         let mut consumed_cycles_total_by_use_case = BTreeMap::new();
         let mut consumed_cycles_total_by_use_case_as_counters = BTreeMap::new();
+        let mut consumed_cycles_by_canisters_as_counter = NominalCycles::zero();
 
         let mut ingress_queue_message_count = 0;
         let mut ingress_queue_size_bytes = 0;
@@ -480,6 +492,10 @@ impl ReplicatedStateMetrics {
                     .canister_metrics()
                     .consumed_cycles_by_use_cases(),
             );
+            consumed_cycles_by_canisters_as_counter += canister
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_as_counter();
             // For the purpose of exporting the total counters to prometheus, filter out HTTPS
             // outcalls from canister level metrics as they will be added later from the subnet level metrics.
             // This only applies for the counter version of metrics as the gauge version only updates
@@ -580,6 +596,16 @@ impl ReplicatedStateMetrics {
                 .consumed_cycles_total_including_canisters()
                 .get() as f64,
         );
+
+        // The subnet-level aggregate is monotonic already (subnet-level use cases are
+        // only ever charged, never refunded, and a deleted canister's consumption is
+        // moved into `consumed_cycles_by_deleted_canisters`), so it can be added to
+        // the canisters' counters as-is.
+        let consumed_cycles_as_counter = state.metadata.subnet_metrics.consumed_cycles_total()
+            + consumed_cycles_by_canisters_as_counter;
+        self.consumed_cycles_as_counter.reset();
+        self.consumed_cycles_as_counter
+            .inc_by(consumed_cycles_as_counter.get() as f64);
 
         self.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
         self.observe_consumed_cycles_by_use_case_as_counters(

@@ -24,7 +24,7 @@ use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, Syste
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
 use ic_test_utilities_metrics::{
-    HistogramStats, MetricVec, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
+    HistogramStats, MetricVec, fetch_counter, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
     fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec,
     metric_vec, nonzero_values,
 };
@@ -1104,6 +1104,141 @@ fn threshold_signature_agreements_metric_is_updated() {
     assert!(sign_with_threshold_contexts.is_empty());
 }
 
+/// Asserts the invariant that ties `CanisterMetrics::consumed_cycles` to its
+/// monotonic counterpart: the gauge exceeds the counter by exactly the prepayments
+/// whose refund is still outstanding. Returns the latter.
+fn assert_consumed_cycles_invariant(
+    test: &SchedulerTest,
+    canister_id: CanisterId,
+) -> NominalCycles {
+    let system_state = &test.canister_state(canister_id).system_state;
+    let outstanding = system_state
+        .outstanding_prepayments()
+        .expect("Canister has a paused execution");
+    let metrics = system_state.canister_metrics();
+    assert_eq!(
+        metrics.consumed_cycles() - outstanding,
+        metrics.consumed_cycles_as_counter(),
+        "consumed cycles gauge {} minus the {outstanding} outstanding prepayments \
+         must equal the counter {}",
+        metrics.consumed_cycles(),
+        metrics.consumed_cycles_as_counter(),
+    );
+    outstanding
+}
+
+/// Opens a call to an xnet canister, so that the caller is left with an outstanding
+/// prepayment for the response.
+fn call_xnet_canister(test: &mut SchedulerTest, canister: CanisterId) {
+    let xnet_canister = test.xnet_canister_id();
+    test.send_ingress(
+        canister,
+        ingress(1).call(other_side(xnet_canister, 1), on_response(1)),
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+}
+
+#[test]
+fn consumed_cycles_as_counter_matches_the_gauge_net_of_outstanding_prepayments() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    call_xnet_canister(&mut test, canister);
+
+    let outstanding = assert_consumed_cycles_invariant(&test, canister);
+    assert_ne!(outstanding, NominalCycles::zero());
+    assert_ne!(
+        test.canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_as_counter(),
+        NominalCycles::zero()
+    );
+}
+
+#[test]
+fn checkpoint_round_backfills_consumed_cycles_as_counter() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    call_xnet_canister(&mut test, canister);
+    let outstanding = assert_consumed_cycles_invariant(&test, canister);
+    assert_ne!(outstanding, NominalCycles::zero());
+
+    // Pretend the canister was loaded from a checkpoint predating the counter.
+    test.canister_state_mut(canister)
+        .system_state
+        .reset_consumed_cycles_as_counter();
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_as_counter(),
+        NominalCycles::zero()
+    );
+
+    // An ordinary round does not backfill the counter, a checkpoint round does.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_as_counter(),
+        NominalCycles::zero()
+    );
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+    assert_consumed_cycles_invariant(&test, canister);
+    assert_ne!(
+        test.canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_as_counter(),
+        NominalCycles::zero()
+    );
+}
+
+/// A paused execution holds a prepayment that is not part of the replicated state,
+/// so it cannot be backfilled; but a checkpoint round aborts all paused executions
+/// before backfilling, materializing their prepayments into the task queues.
+#[test]
+fn checkpoint_round_backfills_consumed_cycles_as_counter_of_paused_canister() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(1000),
+            max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+    let canister = test.create_canister();
+
+    test.send_ingress(canister, ingress(1000));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.canister_state(canister).has_paused_execution());
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .outstanding_prepayments(),
+        None
+    );
+
+    // Pretend the canister was loaded from a checkpoint predating the counter.
+    test.canister_state_mut(canister)
+        .system_state
+        .reset_consumed_cycles_as_counter();
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+
+    assert!(test.canister_state(canister).has_aborted_execution());
+    let outstanding = assert_consumed_cycles_invariant(&test, canister);
+    // The aborted execution's prepayment is outstanding, and is not part of the
+    // backfilled counter.
+    assert_ne!(outstanding, NominalCycles::zero());
+}
+
 #[test]
 fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
     for cost_schedule in [
@@ -1432,6 +1567,33 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
             ),]),
         );
     }
+}
+
+/// The exported total counter is the subnet-level aggregate (already monotonic)
+/// plus the canisters' `consumed_cycles_as_counter`; i.e. the gauge it mirrors, net
+/// of the outstanding prepayments.
+#[test]
+fn consumed_cycles_total_as_counter_is_exported() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    call_xnet_canister(&mut test, canister);
+    let outstanding = assert_consumed_cycles_invariant(&test, canister);
+    assert_ne!(outstanding, NominalCycles::zero());
+
+    observe_state_metrics(&mut test, 0);
+
+    let gauge = fetch_gauge(
+        test.metrics_registry(),
+        "replicated_state_consumed_cycles_since_replica_started",
+    )
+    .unwrap();
+    let counter = fetch_counter(
+        test.metrics_registry(),
+        "replicated_state_consumed_cycles_since_replica_started_as_counter",
+    )
+    .unwrap();
+    assert_eq!(gauge - outstanding.get() as f64, counter);
 }
 
 #[test]
