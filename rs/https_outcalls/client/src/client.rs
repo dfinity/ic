@@ -69,6 +69,9 @@ pub struct CanisterHttpAdapterClientImpl {
     metrics: Metrics,
     pricing_factory: PricingFactory,
     log: ReplicaLogger,
+    /// The response time to charge for instead of the time an outcall actually
+    /// took, if any. See [`Self::without_response_time_charge`].
+    charged_response_time: Option<Duration>,
 }
 
 impl CanisterHttpAdapterClientImpl {
@@ -92,7 +95,21 @@ impl CanisterHttpAdapterClientImpl {
             metrics,
             pricing_factory,
             log,
+            charged_response_time: None,
         }
+    }
+
+    /// Charges every outcall as if its response had arrived instantaneously,
+    /// instead of charging for the time it actually took.
+    ///
+    /// The time an outcall took is wall-clock time, so what it is charged for
+    /// depends on how fast and how loaded the machine running it is. A test
+    /// framework that answers outcalls itself has no meaningful response time to
+    /// charge for, and wants the cost of an outcall to be reproducible, so it
+    /// charges for none.
+    pub fn without_response_time_charge(mut self) -> Self {
+        self.charged_response_time = Some(Duration::ZERO);
+        self
     }
 }
 
@@ -128,6 +145,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let metrics = self.metrics.clone();
         let pricing_factory = self.pricing_factory.clone();
         let log = self.log.clone();
+        let charged_response_time = self.charged_response_time;
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
         // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.
@@ -174,6 +192,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     request_body,
                     socks_proxy_addrs,
                     &mut *budget,
+                    charged_response_time,
                 )
                 .await?;
 
@@ -343,6 +362,7 @@ async fn execute_http_request(
     body: Option<Vec<u8>>,
     socks_proxy_addrs: Vec<String>,
     budget: &mut dyn BudgetTracker,
+    charged_response_time: Option<Duration>,
 ) -> Result<(HttpsOutcallResponse, NumBytes, Duration), CanisterHttpReject> {
     let AdapterLimits {
         max_response_size,
@@ -404,7 +424,9 @@ async fn execute_http_request(
     budget
         .subtract_network_usage(NetworkUsage {
             response_size: downloaded_bytes,
-            response_time: elapsed,
+            // The measured time is still what the metrics and the log report; only
+            // what the request is charged for can be overridden.
+            response_time: charged_response_time.unwrap_or(elapsed),
         })
         .map_err(|PricingError::InsufficientCycles| CanisterHttpReject {
             reject_code: RejectCode::CanisterReject,
@@ -745,6 +767,7 @@ mod tests {
             None,
             Vec::new(),
             budget,
+            None,
         )
         .await
     }

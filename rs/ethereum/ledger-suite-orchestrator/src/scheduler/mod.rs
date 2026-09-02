@@ -4,7 +4,9 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
-use crate::candid::{AddCkErc20Token, AddErc20Arg, CyclesManagement, LedgerInitArg, UpgradeArg};
+use crate::candid::{
+    AddCkErc20Token, AddErc20Arg, CyclesManagement, LedgerInitArg, LedgerUpgradeArg, UpgradeArg,
+};
 use crate::logs::DEBUG;
 use crate::logs::INFO;
 use crate::management::IcCanisterRuntime;
@@ -24,7 +26,9 @@ use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
-use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
+use ic_icrc1_ledger::{
+    ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs,
+};
 use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
 pub use metrics::encode_orchestrator_metrics;
 use metrics::observe_task_duration;
@@ -229,6 +233,50 @@ pub struct UpgradeLedgerSuite {
 }
 
 impl UpgradeLedgerSuite {
+    fn builder(token_id: TokenId) -> UpgradeLedgerSuiteBuilder {
+        UpgradeLedgerSuiteBuilder::new(token_id)
+    }
+}
+
+struct UpgradeLedgerSuiteBuilder {
+    token_id: TokenId,
+    ledger_wasm_hash: Option<WasmHash>,
+    ledger_upgrade_arg: Option<Vec<u8>>,
+    index_wasm_hash: Option<WasmHash>,
+    archive_wasm_hash: Option<WasmHash>,
+}
+
+impl UpgradeLedgerSuiteBuilder {
+    fn new(token_id: TokenId) -> Self {
+        Self {
+            token_id,
+            ledger_wasm_hash: None,
+            ledger_upgrade_arg: None,
+            index_wasm_hash: None,
+            archive_wasm_hash: None,
+        }
+    }
+
+    fn ledger_wasm_hash<T: Into<Option<WasmHash>>>(mut self, ledger_wasm_hash: T) -> Self {
+        self.ledger_wasm_hash = ledger_wasm_hash.into();
+        self
+    }
+
+    fn ledger_upgrade_arg<T: Into<Option<Vec<u8>>>>(mut self, ledger_upgrade_arg: T) -> Self {
+        self.ledger_upgrade_arg = ledger_upgrade_arg.into();
+        self
+    }
+
+    fn index_wasm_hash<T: Into<Option<WasmHash>>>(mut self, index_wasm_hash: T) -> Self {
+        self.index_wasm_hash = index_wasm_hash.into();
+        self
+    }
+
+    fn archive_wasm_hash<T: Into<Option<WasmHash>>>(mut self, archive_wasm_hash: T) -> Self {
+        self.archive_wasm_hash = archive_wasm_hash.into();
+        self
+    }
+
     /// Create a new upgrade ledger suite task containing multiple subtasks
     /// depending on which canisters need to be upgraded. Due to the dependencies between the canisters of a ledger suite, e.g.,
     /// the index pulls transactions from the ledger, the order of the subtasks is important.
@@ -247,84 +295,34 @@ impl UpgradeLedgerSuite {
     /// However, this is deemed preferable to trying to do some kind of atomic upgrade,
     /// where the ledger would be stopped before upgrading the index, since this would result in 2 canisters being stopped at the same time,
     /// which could be more problematic, especially if for some unexpected reason the upgrade fails.
-    fn new(
-        token_id: TokenId,
-        ledger_compressed_wasm_hash: Option<WasmHash>,
-        index_compressed_wasm_hash: Option<WasmHash>,
-        archive_compressed_wasm_hash: Option<WasmHash>,
-    ) -> Self {
+    fn build(self) -> UpgradeLedgerSuite {
         let mut subtasks = Vec::new();
-        if let Some(index_compressed_wasm_hash) = index_compressed_wasm_hash {
+        if let Some(index_wasm_hash) = self.index_wasm_hash {
             subtasks.push(UpgradeLedgerSuiteSubtask::UpgradeIndex {
-                token_id: token_id.clone(),
-                compressed_wasm_hash: index_compressed_wasm_hash,
+                token_id: self.token_id.clone(),
+                compressed_wasm_hash: index_wasm_hash,
             });
         }
-        if let Some(ledger_compressed_wasm_hash) = ledger_compressed_wasm_hash {
+        if let Some(ledger_wasm_hash) = self.ledger_wasm_hash {
             subtasks.push(UpgradeLedgerSuiteSubtask::UpgradeLedger {
-                token_id: token_id.clone(),
-                compressed_wasm_hash: ledger_compressed_wasm_hash,
+                token_id: self.token_id.clone(),
+                compressed_wasm_hash: ledger_wasm_hash,
+                ledger_upgrade_arg: self.ledger_upgrade_arg,
             });
         }
-        if let Some(archive_compressed_wasm_hash) = archive_compressed_wasm_hash {
+        if let Some(archive_wasm_hash) = self.archive_wasm_hash {
             subtasks.push(UpgradeLedgerSuiteSubtask::DiscoverArchives {
-                token_id: token_id.clone(),
+                token_id: self.token_id.clone(),
             });
             subtasks.push(UpgradeLedgerSuiteSubtask::UpgradeArchives {
-                token_id: token_id.clone(),
-                compressed_wasm_hash: archive_compressed_wasm_hash,
+                token_id: self.token_id.clone(),
+                compressed_wasm_hash: archive_wasm_hash,
             });
         }
-        Self {
+        UpgradeLedgerSuite {
             subtasks,
             next_subtask_index: 0,
         }
-    }
-
-    fn builder(token_id: TokenId) -> UpgradeLedgerSuiteBuilder {
-        UpgradeLedgerSuiteBuilder::new(token_id)
-    }
-}
-
-struct UpgradeLedgerSuiteBuilder {
-    token_id: TokenId,
-    ledger_wasm_hash: Option<WasmHash>,
-    index_wasm_hash: Option<WasmHash>,
-    archive_wasm_hash: Option<WasmHash>,
-}
-
-impl UpgradeLedgerSuiteBuilder {
-    fn new(token_id: TokenId) -> Self {
-        Self {
-            token_id,
-            ledger_wasm_hash: None,
-            index_wasm_hash: None,
-            archive_wasm_hash: None,
-        }
-    }
-
-    fn ledger_wasm_hash<T: Into<Option<WasmHash>>>(mut self, ledger_wasm_hash: T) -> Self {
-        self.ledger_wasm_hash = ledger_wasm_hash.into();
-        self
-    }
-
-    fn index_wasm_hash<T: Into<Option<WasmHash>>>(mut self, index_wasm_hash: T) -> Self {
-        self.index_wasm_hash = index_wasm_hash.into();
-        self
-    }
-
-    fn archive_wasm_hash<T: Into<Option<WasmHash>>>(mut self, archive_wasm_hash: T) -> Self {
-        self.archive_wasm_hash = archive_wasm_hash.into();
-        self
-    }
-
-    fn build(self) -> UpgradeLedgerSuite {
-        UpgradeLedgerSuite::new(
-            self.token_id,
-            self.ledger_wasm_hash,
-            self.index_wasm_hash,
-            self.archive_wasm_hash,
-        )
     }
 }
 
@@ -337,6 +335,8 @@ pub enum UpgradeLedgerSuiteSubtask {
     UpgradeLedger {
         token_id: TokenId,
         compressed_wasm_hash: WasmHash,
+        #[serde(default)]
+        ledger_upgrade_arg: Option<Vec<u8>>,
     },
     DiscoverArchives {
         token_id: TokenId,
@@ -366,11 +366,18 @@ impl UpgradeLedgerSuiteSubtask {
                 let canisters = read_state(|s| s.managed_canisters(token_id).cloned())
                     .ok_or(UpgradeLedgerSuiteError::TokenNotFound(token_id.clone()))?;
                 let canister_id = ensure_canister_is_installed(token_id, canisters.index)?;
-                upgrade_canister::<Index, _>(canister_id, compressed_wasm_hash, runtime).await
+                upgrade_canister::<Index, _>(
+                    canister_id,
+                    compressed_wasm_hash,
+                    encode_empty_arg(),
+                    runtime,
+                )
+                .await
             }
             UpgradeLedgerSuiteSubtask::UpgradeLedger {
                 token_id,
                 compressed_wasm_hash,
+                ledger_upgrade_arg,
             } => {
                 log!(
                     INFO,
@@ -381,7 +388,13 @@ impl UpgradeLedgerSuiteSubtask {
                 let canisters = read_state(|s| s.managed_canisters(token_id).cloned())
                     .ok_or(UpgradeLedgerSuiteError::TokenNotFound(token_id.clone()))?;
                 let canister_id = ensure_canister_is_installed(token_id, canisters.ledger)?;
-                upgrade_canister::<Ledger, _>(canister_id, compressed_wasm_hash, runtime).await
+                upgrade_canister::<Ledger, _>(
+                    canister_id,
+                    compressed_wasm_hash,
+                    ledger_upgrade_arg.clone().unwrap_or_else(encode_empty_arg),
+                    runtime,
+                )
+                .await
             }
             UpgradeLedgerSuiteSubtask::DiscoverArchives { token_id } => {
                 log!(INFO, "Discovering archive canister(s) for {:?}", token_id);
@@ -413,8 +426,13 @@ impl UpgradeLedgerSuiteSubtask {
                 );
                 //We expect usually 0 or 1 archive, so a simple sequential strategy is good enough.
                 for canister_id in archives {
-                    upgrade_canister::<Archive, _>(canister_id, compressed_wasm_hash, runtime)
-                        .await?;
+                    upgrade_canister::<Archive, _>(
+                        canister_id,
+                        compressed_wasm_hash,
+                        encode_empty_arg(),
+                        runtime,
+                    )
+                    .await?;
                 }
                 Ok(())
             }
@@ -447,11 +465,13 @@ pub struct UpgradeOrchestratorArgs {
     ledger_compressed_wasm_hash: Option<WasmHash>,
     index_compressed_wasm_hash: Option<WasmHash>,
     archive_compressed_wasm_hash: Option<WasmHash>,
+    ledger_upgrade_arg: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum InvalidUpgradeArgError {
     WasmHashError(WasmHashError),
+    LedgerUpgradeArgRequiresLedgerWasmHash,
 }
 
 impl UpgradeOrchestratorArgs {
@@ -470,10 +490,14 @@ impl UpgradeOrchestratorArgs {
             arg.archive_compressed_wasm_hash.as_deref(),
         )
         .map_err(InvalidUpgradeArgError::WasmHashError)?;
+        if arg.ledger_upgrade_arg.is_some() && ledger_compressed_wasm_hash.is_none() {
+            return Err(InvalidUpgradeArgError::LedgerUpgradeArgRequiresLedgerWasmHash);
+        }
         Ok(UpgradeOrchestratorArgs {
             ledger_compressed_wasm_hash,
             index_compressed_wasm_hash,
             archive_compressed_wasm_hash,
+            ledger_upgrade_arg: arg.ledger_upgrade_arg.map(encode_ledger_upgrade_arg),
         })
     }
 
@@ -500,10 +524,22 @@ impl UpgradeOrchestratorArgs {
     pub fn into_task(self, token_id: TokenId) -> UpgradeLedgerSuite {
         UpgradeLedgerSuite::builder(token_id)
             .ledger_wasm_hash(self.ledger_compressed_wasm_hash)
+            .ledger_upgrade_arg(self.ledger_upgrade_arg)
             .index_wasm_hash(self.index_compressed_wasm_hash)
             .archive_wasm_hash(self.archive_compressed_wasm_hash)
             .build()
     }
+}
+
+fn encode_ledger_upgrade_arg(arg: LedgerUpgradeArg) -> Vec<u8> {
+    Encode!(&Some(LedgerArgument::Upgrade(Some(
+        LedgerUpgradeArgs::from(arg)
+    ))))
+    .expect("BUG: failed to encode ledger upgrade argument")
+}
+
+fn encode_empty_arg() -> Vec<u8> {
+    Encode!(&()).expect("BUG: failed to encode empty upgrade argument")
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -1271,6 +1307,7 @@ fn ensure_canister_is_installed<T>(
 async fn upgrade_canister<T: StorableWasm, R: CanisterRuntime>(
     canister_id: Principal,
     wasm_hash: &WasmHash,
+    upgrade_arg: Vec<u8>,
     runtime: &R,
 ) -> Result<(), UpgradeLedgerSuiteError> {
     let wasm = match read_wasm_store(|s| wasm_store_try_get::<T>(s, wasm_hash)) {
@@ -1292,7 +1329,7 @@ async fn upgrade_canister<T: StorableWasm, R: CanisterRuntime>(
         wasm_hash
     );
     runtime
-        .upgrade_canister(canister_id, wasm.to_bytes())
+        .upgrade_canister(canister_id, wasm.to_bytes(), upgrade_arg)
         .await
         .map_err(UpgradeLedgerSuiteError::UpgradeCanisterError)?;
 

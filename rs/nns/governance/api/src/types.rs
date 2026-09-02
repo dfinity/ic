@@ -2590,7 +2590,6 @@ pub mod install_code {
         candid::Deserialize,
         serde::Serialize,
         Clone,
-        Copy,
         Debug,
         PartialEq,
         Eq,
@@ -2598,7 +2597,9 @@ pub mod install_code {
         Default,
     )]
     pub struct CanisterUpgradeOptions {
-        /// Whether to skip the canister's pre_upgrade hook.
+        /// Whether to skip the canister's pre_upgrade hook. This would generally be
+        /// used in emergencies. See the corresponding field in the Management
+        /// canister API.
         pub skip_pre_upgrade: Option<bool>,
         /// Whether to retain (keep) or drop (replace) the canister's Wasm main
         /// memory across the upgrade. When the previous WASM had a custom
@@ -2748,6 +2749,7 @@ pub struct CanisterSettings {
     pub snapshot_visibility: Option<i32>,
     pub wasm_memory_limit: Option<u64>,
     pub wasm_memory_threshold: Option<u64>,
+    pub reserved_cycles_limit: Option<u64>,
 }
 
 /// Nested message and enum types in `CanisterSettings`.

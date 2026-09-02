@@ -3465,6 +3465,10 @@ fn expected_cycle_cost(
         RegistryVersion::from(1),
         CanisterCyclesCostSchedule::Normal,
         &mut rand::thread_rng(),
+        // Only the request size is read off this context, so the pricing model it
+        // would be charged with does not matter.
+        /* pay_as_you_go_enabled = */
+        false,
     )
     .unwrap();
     let req_size = dummy_context.variable_parts_size();

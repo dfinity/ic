@@ -13,7 +13,6 @@ on:
     paths:
       - '.github/workflows/update-mainnet-canister-revisions.yaml'
 
-
 defaults:
   run:
     shell: bash
@@ -21,6 +20,10 @@ defaults:
 jobs:
   # IMPORTANT: See note at the top of this file.
   update-nervous-system-wasms:
+    # for dfinity/ic: run on all events except on PRs from forks;
+    # never run on other repos such as dfinity/ic-private
+    if: |
+      github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on:
       labels: dind-small
     environment: CREATE_PR

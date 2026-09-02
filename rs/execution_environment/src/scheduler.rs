@@ -435,6 +435,18 @@ impl SchedulerImpl {
         //      - Update the ingress history with the resulting ingress statuses.
         //      - Induct messages on the same subnet.
         let mut state = loop {
+            // In every iteration after the first, recompute the subnet available
+            // memory from the state.
+            //
+            // The memory consumed by the previous iteration's parallel execution
+            // threads is not subtracted from `scheduler_round_limits` (see
+            // `execute_canisters_in_inner_round()`), so this recomputation is what
+            // brings the subnet available memory back in sync with the state.
+            if !is_first_iteration {
+                scheduler_round_limits.subnet_available_memory =
+                    self.exec_env.scaled_subnet_available_memory(&state);
+            }
+
             // Execute subnet messages.
             // If new messages are inducted into the subnet input queues,
             // they are processed until the subnet messages' instruction limit is reached.
@@ -494,14 +506,7 @@ impl SchedulerImpl {
             }
             drop(scheduling_timer);
 
-            // In every iteration after the first, recompute the subnet available memory,
-            // before taking out the canisters.
             let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
-            if !is_first_iteration {
-                round_limits.subnet_available_memory =
-                    self.exec_env.scaled_subnet_available_memory(&state);
-            }
-
             let canisters = state.take_canister_states();
             let (active_canisters_partitioned_by_cores, inactive_canisters) =
                 iteration_schedule.partition_canisters_to_cores(canisters);
@@ -754,8 +759,9 @@ impl SchedulerImpl {
         // Deduct all created callbacks from the available callbacks limit. This is a
         // pessimistic estimate, as it ignores any closed callbacks.
         round_limits.subnet_available_callbacks -= callbacks_created;
-        // `subnet_available_memory` will be recomputed at the beginning of the next
-        // iteration.
+        // The memory consumed by the threads is not deducted from
+        // `subnet_available_memory`; it is recomputed from the state at the very
+        // beginning of the next iteration instead (see `inner_round()`).
 
         IterationResult {
             canisters,
@@ -1928,6 +1934,7 @@ fn get_instruction_limits_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | NodeMetricsHistory
+            | SubnetMetrics
             | SubnetInfo
             | FetchCanisterLogs
             | ProvisionalCreateCanisterWithCycles
