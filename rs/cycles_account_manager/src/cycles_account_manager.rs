@@ -907,10 +907,8 @@ impl CyclesAccountManager {
     ///
     /// Unlike `adjust_prepayment_for_response_execution`, which uses this function to
     /// handle an excessive prepayment, this never withdraws cycles from the canister's
-    /// balance and hence it cannot fail. It is thus also used on its own for responses
-    /// whose callback is not executed at all, where topping up the prepayment would
-    /// be pointless because the additional cycles would be refunded right away.
-    pub fn refund_excess_prepayment_for_response_execution(
+    /// balance and hence it cannot fail.
+    fn refund_excess_prepayment_for_response_execution(
         &self,
         system_state: &mut SystemState,
         prepayment_for_response_execution: CompoundCycles<Instructions>,
@@ -926,6 +924,41 @@ impl CyclesAccountManager {
         let excess = prepayment_for_response_execution - required;
         system_state.refund_cycles(excess, excess);
         required
+    }
+
+    /// Settles the cycles prepaid for the execution of a response whose callback is
+    /// not executed at all: the canister is charged the fixed per-message execution
+    /// fee and the rest of the prepayment is refunded to it.
+    ///
+    /// Since no instructions are executed, the fixed per-message execution fee is all
+    /// that is due, no matter which Wasm execution mode the cycles were prepaid for
+    /// and which one the canister has now. In particular, the canister keeps the rest
+    /// of its prepayment even if the prepayment falls short of the cycles that
+    /// executing the response in its current Wasm execution mode would require.
+    ///
+    /// Note that the prepayment is never topped up for such a response: the additional
+    /// cycles would be refunded right away and, unlike this refund, the withdrawal
+    /// could fail.
+    pub fn settle_prepayment_for_unexecuted_response(
+        &self,
+        system_state: &mut SystemState,
+        prepayment_for_response_execution: CompoundCycles<Instructions>,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+        execution_mode: WasmExecutionMode,
+    ) {
+        // Executing no instructions costs the fixed per-message execution fee only.
+        let base_fee = self.execution_cost(
+            NumInstructions::from(0),
+            subnet_cycles_config,
+            execution_mode,
+        );
+        // The prepayment covers the fixed per-message execution fee, but clamp the
+        // charge to it so that no more than the prepayment is ever charged.
+        let charge = base_fee.min(prepayment_for_response_execution);
+        system_state.refund_cycles(
+            prepayment_for_response_execution,
+            prepayment_for_response_execution - charge,
+        );
     }
 
     /// Returns the amount of cycles required for transmitting the largest

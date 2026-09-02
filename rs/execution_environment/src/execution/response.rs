@@ -133,7 +133,7 @@ struct ResponseHelper {
     /// executed, `adjust_prepayment_for_response_execution()` replaces this with the
     /// cycles required for executing the response in the canister's current Wasm
     /// execution mode; for responses whose callback is not executed at all,
-    /// `early_finish()` only refunds an excessive prepayment.
+    /// `early_finish()` settles the prepayment in full instead.
     prepayment_for_response_execution: CompoundCycles<Instructions>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
@@ -735,13 +735,15 @@ impl ResponseHelper {
     /// Completes execution of the response and cleanup callbacks without
     /// consuming any instructions and without producing any heap delta.
     ///
-    /// No Wasm code is executed at all: the part of the prepayment exceeding what the
-    /// canister's current Wasm execution mode requires is refunded here.
+    /// No Wasm code is executed at all, hence the fixed per-message execution fee is
+    /// all that is due: it is charged here and the rest of the cycles prepaid for the
+    /// response execution is refunded, independently of the Wasm execution mode the
+    /// cycles were prepaid for and of the one the canister has now. In particular,
+    /// the canister keeps the rest of its prepayment even if the prepayment falls
+    /// short of what its current Wasm execution mode requires.
     ///
-    /// The remaining prepayment is settled by `finish()` as usual, which leaves the
-    /// canister charged the fixed per-message execution fee. Note that the prepayment
-    /// is never topped up here: the additional cycles would be refunded right away
-    /// and, unlike this refund, the withdrawal could fail.
+    /// Note that the prepayment is never topped up here: the additional cycles would
+    /// be refunded right away and, unlike this refund, the withdrawal could fail.
     fn early_finish(
         mut self,
         result: Result<Option<WasmResult>, HypervisorError>,
@@ -750,14 +752,18 @@ impl ResponseHelper {
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         let execution_mode = self.wasm_execution_mode();
-        self.prepayment_for_response_execution = round
+        round
             .cycles_account_manager
-            .refund_excess_prepayment_for_response_execution(
+            .settle_prepayment_for_unexecuted_response(
                 &mut self.canister.system_state,
                 self.prepayment_for_response_execution,
                 original.subnet_cycles_config,
                 execution_mode,
             );
+        // The prepayment has been settled in full, hence there is nothing left for
+        // `finish()` to settle.
+        self.prepayment_for_response_execution =
+            CompoundCycles::new(Cycles::zero(), original.subnet_cycles_config.cost_schedule);
 
         self.finish(
             result,
