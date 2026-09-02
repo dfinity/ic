@@ -867,7 +867,7 @@ impl Validator {
         artifact: &S,
     ) -> ValidationResult<ValidatorError> {
         let version = artifact.version();
-        let expected_version = &self.replica_config.platform_version.replica_version;
+        let expected_version = self.replica_config.replica_version();
         if version != expected_version {
             return Err(InvalidArtifactReason::ReplicaVersionMismatch.into());
         }
@@ -988,7 +988,7 @@ impl Validator {
         T: NotaryIssued + HasVersion,
     {
         let version = notary_issued.content.version();
-        let expected_version = &self.replica_config.platform_version.replica_version;
+        let expected_version = self.replica_config.replica_version();
         if version != expected_version {
             return Some(ChangeAction::RemoveFromUnvalidated(
                 notary_issued.into_message(),
@@ -1298,7 +1298,7 @@ impl Validator {
             self.registry_client.as_ref(),
             self.replica_config.subnet_id,
             pool_reader,
-            &self.replica_config.platform_version.replica_version,
+            self.replica_config.replica_version(),
             &self.log,
         ) else {
             return Err(ValidationFailure::FailedToGetConsensusStatus.into());
@@ -2823,7 +2823,7 @@ pub mod test {
             // validated
             let tape_1 = RandomTape::fake(RandomTapeContent::new(
                 Height::from(1),
-                replica_config.platform_version.replica_version.clone(),
+                replica_config.replica_version().clone(),
             ));
             pool.insert_validated(tape_1);
 
@@ -2853,10 +2853,8 @@ pub mod test {
             pool.apply(changeset);
 
             // Insert random tape at height 4, check if it is ignored
-            let content = RandomTapeContent::new(
-                Height::from(4),
-                replica_config.platform_version.replica_version.clone(),
-            );
+            let content =
+                RandomTapeContent::new(Height::from(4), replica_config.replica_version().clone());
             let signature = ThresholdSignature::fake();
             let tape_4 = RandomTape { content, signature };
             pool.insert_unvalidated(tape_4.clone());
@@ -2879,10 +2877,8 @@ pub mod test {
             pool.apply(changeset);
 
             // Set expected batch height to height 4, check if tape_3 is ignored
-            let content = RandomTapeContent::new(
-                Height::from(3),
-                replica_config.platform_version.replica_version,
-            );
+            let content =
+                RandomTapeContent::new(Height::from(3), replica_config.replica_version().clone());
             let signature = ThresholdSignature::fake();
             let tape_3 = RandomTape { content, signature };
             pool.insert_unvalidated(tape_3);
@@ -3122,7 +3118,7 @@ pub mod test {
                     registry.as_ref(),
                     replica_config.subnet_id,
                     &PoolReader::new(&pool),
-                    &replica_config.platform_version.replica_version,
+                    replica_config.replica_version(),
                     &no_op_logger()
                 ),
                 Some(Status::Halting | Status::Halted)
@@ -3715,7 +3711,7 @@ pub mod test {
                     registry.as_ref(),
                     replica_config.subnet_id,
                     &PoolReader::new(&pool),
-                    &replica_config.platform_version.replica_version,
+                    replica_config.replica_version(),
                     &no_op_logger(),
                 ),
                 Some(Status::Halting | Status::Halted)
@@ -4248,10 +4244,10 @@ pub mod test {
                     certified_height: Height::from(42),
                     time: ic_types::time::UNIX_EPOCH,
                 },
-                replica_config.platform_version.replica_version.clone(),
+                replica_config.replica_version().clone(),
             );
             let fake_beacon = RandomBeacon::fake(RandomBeaconContent {
-                version: replica_config.platform_version.replica_version,
+                version: replica_config.replica_version().clone(),
                 height: cup_height,
                 parent: CryptoHashOf::from(CryptoHash(vec![])),
             });
@@ -4578,7 +4574,7 @@ pub mod test {
             let content = NotarizationContent::new(
                 block.height(),
                 ic_types::crypto::crypto_hash(block.as_ref()),
-                replica_config.platform_version.replica_version,
+                replica_config.replica_version().clone(),
             );
             let mut notarization = Notarization::fake(content);
             notarization.signature.signers =
@@ -4819,7 +4815,7 @@ pub mod test {
             let mut notarization = Notarization::fake(NotarizationContent::new(
                 block.height(),
                 block.content.get_hash().clone(),
-                replica_config.platform_version.replica_version,
+                replica_config.replica_version().clone(),
             ));
             notarization.signature.signers =
                 vec![node_test_id(1), node_test_id(2), node_test_id(3)];
@@ -5275,7 +5271,7 @@ pub mod test {
                         let content = NotarizationContent::new(
                             block.height(),
                             block.content.get_hash().clone(),
-                            replica_config.platform_version.replica_version.clone(),
+                            replica_config.replica_version().clone(),
                         );
                         let mut notarization = Notarization::fake(content);
                         let random_beacon = PoolReader::new(&pool).get_random_beacon_tip();

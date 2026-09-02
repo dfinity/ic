@@ -32,7 +32,7 @@ use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{ReplicaVersion, SubnetId, hostos_version::HostosVersion};
+use ic_types::{PlatformVersion, ReplicaVersion, SubnetId, hostos_version::HostosVersion};
 use std::{
     collections::HashMap,
     convert::TryFrom,
@@ -134,10 +134,14 @@ impl Orchestrator {
         .unwrap()?;
 
         let metrics_registry = MetricsRegistry::global();
-        let replica_version = load_version_from_file(&logger, &args.version_file)
+        let replica_version = load_version_from_file(&logger, &args.replica_version_file)
             .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
         let guestos_version = load_version_from_file(&logger, &args.guestos_version_file)
             .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
+        let platform_version = PlatformVersion {
+            guestos_version: guestos_version.clone(),
+            replica_version: replica_version.clone(),
+        };
         info!(
             logger,
             "Orchestrator started: replica_version={}, guestos_version={}, config={:?}",
@@ -305,8 +309,7 @@ impl Orchestrator {
                 manageboot_runner,
                 cup_provider,
                 Arc::clone(&subnet_assignment),
-                replica_version.clone(),
-                guestos_version,
+                platform_version,
                 args.replica_config_file.clone(),
                 node_id,
                 Arc::clone(&registry_replicator) as _,

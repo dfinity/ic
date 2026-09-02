@@ -200,10 +200,15 @@ fn main() -> io::Result<()> {
         let g = metrics_registry.int_gauge_vec(
             "ic_replica_info",
             "version info for the internet computer replica running.",
-            &["ic_active_version", "ic_replica_binary_hash"],
+            &[
+                "ic_active_version",
+                "ic_guestos_version",
+                "ic_replica_binary_hash",
+            ],
         );
         g.with_label_values(&[
             replica_version.as_ref(),
+            platform_version.guestos_version.as_ref(),
             &get_replica_binary_hash()
                 .map(|x| x.1)
                 .unwrap_or_else(|_| "na".to_string()),

@@ -174,20 +174,17 @@ impl DependenciesBuilder {
         // order when inserting them into the registry.
         subnet_records.sort_by_key(|(version, _, _)| *version);
 
+        let replica_version = ReplicaVersion::from_str(&subnet_records[0].2.replica_version_id)
+            .expect("Invalid replica_version_id");
         Self {
             pool_config,
-            replica_config: {
-                let replica_version =
-                    ReplicaVersion::from_str(&subnet_records[0].2.replica_version_id)
-                        .expect("Invalid replica_version_id");
-                ReplicaConfig {
-                    node_id: node_test_id(0),
-                    subnet_id: subnet_records[0].1,
-                    platform_version: PlatformVersion {
-                        guestos_version: replica_version.clone(),
-                        replica_version,
-                    },
-                }
+            replica_config: ReplicaConfig {
+                node_id: node_test_id(0),
+                subnet_id: subnet_records[0].1,
+                platform_version: PlatformVersion {
+                    guestos_version: replica_version.clone(),
+                    replica_version,
+                },
             },
             sorted_subnet_records: subnet_records,
             with_state_manager_expectations: true,
@@ -290,7 +287,7 @@ impl DependenciesBuilder {
         let pool = TestConsensusPool::new(
             self.replica_config.node_id,
             self.replica_config.subnet_id,
-            self.replica_config.platform_version.replica_version.clone(),
+            self.replica_config.replica_version().clone(),
             self.pool_config,
             time_source.clone(),
             registry.clone(),

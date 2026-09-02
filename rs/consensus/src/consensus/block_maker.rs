@@ -379,7 +379,7 @@ impl BlockMaker {
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
                         pool,
-                        &self.replica_config.platform_version.replica_version,
+                        self.replica_config.replica_version(),
                         &self.log,
                     )? {
                         // Don't propose any block if the replica is halted.
@@ -445,7 +445,7 @@ impl BlockMaker {
             height,
             rank,
             context,
-            self.replica_config.platform_version.replica_version.clone(),
+            self.replica_config.replica_version().clone(),
         );
         let hashed_block = hashed::Hashed::new(ic_types::crypto::crypto_hash, block);
         let metadata = BlockMetadata::from_block(&hashed_block, self.replica_config.subnet_id);
@@ -871,7 +871,7 @@ mod tests {
                 next_height,
                 Rank(4),
                 expected_context.clone(),
-                replica_config.platform_version.replica_version.clone(),
+                replica_config.replica_version().clone(),
             );
 
             payload_builder
@@ -1225,10 +1225,7 @@ mod tests {
             let proposal = proposal.unwrap();
             let block = proposal.content.as_ref();
             // The block still uses the old version, not the new version.
-            assert_eq!(
-                block.version(),
-                &replica_config.platform_version.replica_version
-            );
+            assert_eq!(block.version(), replica_config.replica_version());
             // registry version 10 becomes effective.
             assert_eq!(
                 PoolReader::new(&pool).registry_version(proposal.height()),

@@ -495,9 +495,7 @@ impl CanisterHttpPoolManagerImpl {
                 let share = &artifact.share;
 
                 // Reject shares from different replica versions
-                if share.content.replica_version()
-                    != &self.replica_config.platform_version.replica_version
-                {
+                if share.content.replica_version() != self.replica_config.replica_version() {
                     self.metrics
                         .observe_pool_manager_event("share_dropped_unknown_version");
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
@@ -969,7 +967,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1189,7 +1187,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1317,7 +1315,7 @@ pub mod test {
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1506,7 +1504,7 @@ pub mod test {
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1603,7 +1601,7 @@ pub mod test {
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1911,7 +1909,7 @@ pub mod test {
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: true,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1999,7 +1997,7 @@ pub mod test {
                         content_hash: dishonest_hash,
                         content_size: dishonest_response.content.count_bytes() as u32,
                         is_reject: true,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2103,7 +2101,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
                         content_size: limit as u32 + 1,
                         is_reject: false,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2327,7 +2325,7 @@ pub mod test {
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: true,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2404,7 +2402,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2811,7 +2809,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2977,7 +2975,7 @@ pub mod test {
                         content_hash: crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -3075,7 +3073,7 @@ pub mod test {
                         content_hash: crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -3580,7 +3578,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt {
                         spent: Cycles::new(200),
@@ -3687,7 +3685,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: replica_config.platform_version.replica_version.clone(),
+                        replica_version: replica_config.replica_version().clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt {
                         spent: Cycles::new(200),

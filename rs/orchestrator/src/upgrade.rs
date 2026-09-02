@@ -93,8 +93,7 @@ pub(crate) struct Upgrade {
     manageboot_runner: Box<dyn ManagebootRunner>,
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
-    replica_version: ReplicaVersion,
-    guestos_version: ReplicaVersion,
+    platform_version: PlatformVersion,
     replica_config_file: PathBuf,
     pub image_path: PathBuf,
     registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
@@ -116,8 +115,7 @@ impl Upgrade {
         manageboot_runner: Box<dyn ManagebootRunner>,
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
-        replica_version: ReplicaVersion,
-        guestos_version: ReplicaVersion,
+        platform_version: PlatformVersion,
         replica_config_file: PathBuf,
         node_id: NodeId,
         registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
@@ -136,8 +134,7 @@ impl Upgrade {
             cup_provider,
             subnet_assignment,
             node_id,
-            replica_version,
-            guestos_version,
+            platform_version,
             replica_config_file,
             image_path: release_content_dir.join("image.bin"),
             registry_replicator,
@@ -342,7 +339,7 @@ impl Upgrade {
         let new_replica_version = self
             .registry
             .get_replica_version(subnet_id, cup_registry_version)?;
-        if new_replica_version != self.replica_version {
+        if new_replica_version != *self.replica_version() {
             self.ensure_upgrade_should_be_executed(
                 subnet_id,
                 latest_registry_version,
@@ -353,7 +350,7 @@ impl Upgrade {
                 self.logger,
                 "Starting version upgrade at CUP registry version {}: {} -> {}",
                 cup_registry_version,
-                self.replica_version,
+                self.replica_version(),
                 new_replica_version
             );
             // Only downloads the new image if it doesn't already exists locally, i.e. it
@@ -475,12 +472,12 @@ impl Upgrade {
         let expected_replica_version = self
             .registry
             .get_replica_version(subnet_id, registry_version)?;
-        if expected_replica_version != self.replica_version {
+        if expected_replica_version != *self.replica_version() {
             info!(
                 self.logger,
                 "Replica version upgrade detected at registry version {}: {} -> {}",
                 registry_version,
-                self.replica_version,
+                self.replica_version(),
                 expected_replica_version
             );
             self.prepare_upgrade(&expected_replica_version).await?
@@ -503,14 +500,14 @@ impl Upgrade {
                 err => Err(err),
             })?;
 
-        if self.replica_version == replica_version {
+        if *self.replica_version() == replica_version {
             return Ok(OrchestratorControlFlow::Unassigned);
         }
 
         info!(
             self.logger,
             "Replica upgrade on unassigned node detected: old version {}, new version {}",
-            self.replica_version,
+            self.replica_version(),
             replica_version
         );
 
@@ -609,15 +606,15 @@ impl Upgrade {
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        let platform_version = PlatformVersion {
-            guestos_version: self.guestos_version.clone(),
-            replica_version: self.replica_version.clone(),
-        };
         self.processes_manager.write().unwrap().start_all(
-            platform_version,
+            self.platform_version.clone(),
             subnet_id,
             registry_version,
         )
+    }
+
+    fn replica_version(&self) -> &ReplicaVersion {
+        &self.platform_version.replica_version
     }
 }
 
@@ -1616,8 +1613,10 @@ mod tests {
             manageboot_runner,
             cup_provider,
             subnet_assignment,
-            current_replica_version.clone(),
-            current_replica_version,
+            PlatformVersion {
+                guestos_version: current_replica_version.clone(),
+                replica_version: current_replica_version.clone(),
+            },
             replica_config_file,
             node_id,
             Arc::new(registry_replicator),

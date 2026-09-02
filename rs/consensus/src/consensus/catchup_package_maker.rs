@@ -197,7 +197,7 @@ impl CatchUpPackageMaker {
                 self.membership.registry_client.as_ref(),
                 self.membership.subnet_id,
                 pool,
-                &self.replica_config.platform_version.replica_version,
+                self.replica_config.replica_version(),
                 &self.log,
             ) == Some(true)
         };

@@ -88,15 +88,12 @@ impl DkgImpl {
         logger: ReplicaLogger,
     ) -> Self {
         let ReplicaConfig {
-            node_id,
-            subnet_id,
-            platform_version,
-            ..
+            node_id, subnet_id, ..
         } = replica_config;
         Self {
             node_id,
             subnet_id,
-            replica_version: platform_version.replica_version,
+            replica_version: replica_config.replica_version().clone(),
             registry_client,
             state_reader,
             crypto,
