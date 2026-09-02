@@ -61,7 +61,7 @@ Enumerates all management canister methods. Key categories:
 `TakeCanisterSnapshot`, `LoadCanisterSnapshot`, `ListCanisterSnapshots`, `DeleteCanisterSnapshot`, `ReadCanisterSnapshotMetadata`, `ReadCanisterSnapshotData`, `UploadCanisterSnapshotMetadata`, `UploadCanisterSnapshotData`
 
 **Subnet Information:**
-`NodeMetricsHistory`, `SubnetInfo`, `FetchCanisterLogs`
+`NodeMetricsHistory`, `SubnetInfo`, `SubnetMetrics`, `FetchCanisterLogs`
 
 **Test-Only:**
 `ProvisionalCreateCanisterWithCycles`, `ProvisionalTopUpCanister`
