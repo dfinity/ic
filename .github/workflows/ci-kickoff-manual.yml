@@ -95,7 +95,6 @@ jobs:
     with:
       commit-sha: ${{ inputs.commit-sha }}
       release-build: 'false'
-      pull-request: true
     permissions:
       actions: write
       contents: read

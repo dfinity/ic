@@ -12,11 +12,6 @@ on:
         required: false
         default: ''
         type: string
-      pull-request:
-        description: Whether this run is CI for a pull request even though the event is not pull_request (ci-kickoff-manual.yml dispatches CI for reviewed PRs, including fork PRs).
-        required: false
-        default: false
-        type: boolean
     outputs:
       release-build:
         description: Whether this run was a release build, i.e. uploaded artifacts to the CDN.
@@ -1010,25 +1005,23 @@ jobs:
       - name: Check ci/container/TAG matches the container inputs
         id: sync
         if: steps.decide.outputs.run == 'true'
-        env:
-          # pull_request events, and CI dispatched for a PR by ci-kickoff-manual.yml
-          CI_PULL_REQUEST: ${{ github.event_name == 'pull_request' || inputs.pull-request }}
         run: |
           # When TAG is out of sync there is no reviewed digest for the working
           # tree and container-run.sh refuses to run (it only builds locally with
           # CONTAINER_RUN_ALLOW_UNPINNED=1), so every leg below would fail. On a
-          # pull request that state is transient:
-          # the container-autobuild.yml bot commit brings TAG and *.digest in sync
-          # and re-triggers CI (on fork PRs it cannot, and they build locally).
+          # pull request that state is transient: the container-autobuild.yml bot
+          # commit brings TAG and *.digest in sync and re-triggers CI. (PRs from
+          # forks cannot change the container inputs: touching ci/* closes them
+          # automatically, see .github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST.)
           # Anywhere else (push to master, the merge queue, release-testing on
-          # rc--/hotfix-, a manual run for a branch) it means that commit never
-          # landed, so fail.
+          # rc--/hotfix-, a manual dispatch) it means that commit never landed,
+          # so fail.
           set -euo pipefail
           computed="$(ci/container/get-image-tag.sh)"
           pinned="$(cat ci/container/TAG)"
           if [ "$computed" = "$pinned" ]; then
             echo "in_sync=true" >> "$GITHUB_OUTPUT"
-          elif [ "$CI_PULL_REQUEST" = true ]; then
+          elif [ "$CI_EVENT_NAME" = pull_request ]; then
             echo "::notice file=ci/container/TAG::ci/container/TAG ($pinned) does not match the container inputs (computed $computed); skipping the container-run tests: the Container IC Build Image workflow will commit TAG and *.digest to this branch and re-trigger CI"
             echo "in_sync=false" >> "$GITHUB_OUTPUT"
           else
