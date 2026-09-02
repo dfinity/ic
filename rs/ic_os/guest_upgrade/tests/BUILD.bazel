@@ -22,6 +22,7 @@ rust_test(
         "//rs/test_utilities/registry",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:der",
         "@crate_index//:futures",
         "@crate_index//:rand",
         "@crate_index//:rustls",

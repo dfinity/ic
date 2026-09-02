@@ -5229,6 +5229,7 @@ dependencies = [
  "anyhow",
  "attestation",
  "config_types",
+ "der",
  "futures",
  "guest_disk",
  "guest_upgrade_client",
