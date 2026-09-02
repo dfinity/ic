@@ -9,6 +9,7 @@ use ic_cdk::init;
 use ic_cdk::stable::StableReader;
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_icrc1::archive_limits::{ARCHIVE_MEMORY_LIMIT, DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE};
 use ic_icrc1::{
     Operation, Transaction,
     endpoints::{StandardRecord, convert_transfer_error},
@@ -17,7 +18,7 @@ use ic_icrc1_ledger::{
     InitArgs, LEDGER_VERSION, Ledger, LedgerArgument, UPGRADES_MEMORY, balances_len,
     get_allowances, read_first_balance, wasm_token_type,
 };
-use ic_ledger_canister_core::archive::{Archive, ArchiveCanisterWasm, ICRC_ARCHIVE_MEMORY_LIMIT};
+use ic_ledger_canister_core::archive::{Archive, ArchiveCanisterWasm};
 use ic_ledger_canister_core::ledger::{
     LedgerAccess, LedgerContext, LedgerData, TransferError as CoreTransferError, apply_transaction,
     archive_blocks,
@@ -341,9 +342,7 @@ where
     )?;
     w.encode_gauge(
         "ledger_archive_node_max_memory_size_bytes",
-        archive
-            .node_max_memory_size_bytes
-            .min(ICRC_ARCHIVE_MEMORY_LIMIT) as f64,
+        archive.node_max_memory_size_bytes.min(ARCHIVE_MEMORY_LIMIT) as f64,
         "Maximum number of bytes an archive spawned from now on may store. Existing \
          archives keep the cap they were created with, reported by their own \
          archive_max_memory_size_bytes metric.",
@@ -362,7 +361,9 @@ where
     )?;
     w.encode_gauge(
         "ledger_archive_max_transactions_per_response",
-        archive.effective_max_transactions_per_response() as f64,
+        archive
+            .max_transactions_per_response
+            .unwrap_or(DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE) as f64,
         "Maximum number of transactions an archive spawned from now on will return \
          per response. Existing archives keep the limit they were created with, \
          reported by their own archive_max_transactions_per_response metric.",

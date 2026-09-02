@@ -34,10 +34,10 @@ const WASM_PAGE_SIZE: u64 = 65536;
 const GIB: u64 = 1024 * 1024 * 1024;
 
 /// How much memory do we want to allocate for raw blocks.
-use ic_ledger_canister_core::archive::ICRC_ARCHIVE_MEMORY_LIMIT as DEFAULT_MEMORY_LIMIT;
+use ic_icrc1::archive_limits::ARCHIVE_MEMORY_LIMIT as DEFAULT_MEMORY_LIMIT;
 
 /// The maximum number of blocks to return in a single get_transactions request.
-use ic_ledger_canister_core::archive::DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE;
+use ic_icrc1::archive_limits::DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE;
 
 /// The maximum number of Wasm pages that we allow to use for the stable storage.
 const NUM_WASM_PAGES: u64 = 4 * GIB / WASM_PAGE_SIZE;

@@ -1,3 +1,4 @@
+pub mod archive_limits;
 pub mod blocks;
 mod compact_account;
 pub mod endpoints;

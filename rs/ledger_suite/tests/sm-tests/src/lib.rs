@@ -6,15 +6,14 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::UserError;
 use ic_http_types::{HttpRequest, HttpResponse};
+use ic_icrc1::archive_limits::{ARCHIVE_MEMORY_LIMIT, DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE};
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
 use ic_icrc1::{Block, Operation, Transaction, hash::Hash};
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, valid_transactions_strategy,
 };
-use ic_ledger_canister_core::archive::{
-    ArchiveOptions, DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE, ICRC_ARCHIVE_MEMORY_LIMIT,
-};
+use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
@@ -1524,7 +1523,7 @@ pub fn test_archive_and_dedup_config_metrics<T>(
     // must not be reported as if the archive would honour it.
     let above_cap = LedgerArgument::Upgrade(Some(UpgradeArgs {
         change_archive_options: Some(ChangeArchiveOptions {
-            node_max_memory_size_bytes: Some(ICRC_ARCHIVE_MEMORY_LIMIT * 2),
+            node_max_memory_size_bytes: Some(ARCHIVE_MEMORY_LIMIT * 2),
             ..Default::default()
         }),
         ..UpgradeArgs::default()
@@ -1533,7 +1532,7 @@ pub fn test_archive_and_dedup_config_metrics<T>(
         .expect("failed to change the archive options");
     assert_eq!(
         metric("ledger_archive_node_max_memory_size_bytes"),
-        ICRC_ARCHIVE_MEMORY_LIMIT,
+        ARCHIVE_MEMORY_LIMIT,
         "the reported cap must not exceed what an ICRC archive will accept"
     );
     assert_eq!(
