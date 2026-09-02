@@ -103,10 +103,10 @@ pub struct StateParams {
 pub struct ReplayOutput {
     /// The params of the state the replay ended up with -- but only if that state is
     /// checkpointed. `get_latest_state_params()` can hash only a checkpointed state,
-    /// and falls back to the latest CUP's height and hash for a tip that exists in
-    /// memory alone, which is what a replay without `--create-checkpoint` leaves
-    /// behind unless the last replayed block was a summary block. Both fields can
-    /// therefore be older than the last replayed height.
+    /// and falls back to the latest persisted one for a tip that exists in memory
+    /// alone, which is what a replay without `--create-checkpoint` leaves behind
+    /// unless the last replayed block was a summary block. Both fields can therefore
+    /// be older than the last replayed height.
     pub state_params: StateParams,
     /// Number of batches delivered on top of the replayed blocks, i.e. the batches
     /// carrying the extra ingress messages and the one creating the checkpoint. Zero
@@ -711,11 +711,29 @@ impl Player {
             self.wait_for_state(height);
             if let Ok(hash_raw) = self.state_manager.get_state_hash_at(height) {
                 (height, hash_raw)
-            } else {
-                // If the latest state height corresponds to an in-memory state only, we return the
-                // state hash of the latest CUP
+            } else if self.consensus_pool.is_some() {
+                // The latest state exists in memory only, so it has no hash. Report the
+                // latest CUP's state instead, which is checkpointed by construction.
                 let last_cup = self.get_latest_cup();
                 (last_cup.height(), last_cup.content.state_hash)
+            } else {
+                // Same, except that without a consensus pool there is no CUP to fall back
+                // on, so report the highest checkpoint: the latest state that was
+                // persisted, which is what the in-memory tip was computed on top of.
+                let height = self
+                    .state_manager
+                    .checkpoint_heights()
+                    .into_iter()
+                    .max()
+                    .expect(
+                        "Neither a consensus pool nor a checkpoint is available, so there \
+                         is no persisted state to report",
+                    );
+                let hash_raw = self
+                    .state_manager
+                    .get_state_hash_at(height)
+                    .expect("Failed to get the hash of the highest checkpoint");
+                (height, hash_raw)
             }
         };
         let hash = hex::encode(hash_raw.get().0);
