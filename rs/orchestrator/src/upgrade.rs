@@ -1478,11 +1478,11 @@ mod tests {
         let UpgradeTestScenario {
             node_id,
             subnet_type,
-            current_replica_version,
             has_local_cup,
             initial_subnet_assignment,
             ..
         } = test_scenario.clone();
+        let platform_version = test_scenario.platform_version();
 
         let registry_client = Arc::new(FakeRegistryClient::new(data_provider));
         registry_client.update_to_latest_version();
@@ -1538,13 +1538,7 @@ mod tests {
                 .start(
                     ReplicaProcess::build(
                         &replica_process_config,
-                        (
-                            PlatformVersion {
-                                guestos_version: current_replica_version.clone(),
-                                replica_version: current_replica_version.clone(),
-                            },
-                            SUBNET_1,
-                        ),
+                        (platform_version.clone(), SUBNET_1),
                     )
                     .unwrap(),
                 )
@@ -1554,7 +1548,7 @@ mod tests {
                     .start(
                         IcGatewayProcess::build(
                             &ic_gateway_process_config,
-                            current_replica_version.clone(),
+                            platform_version.replica_version.clone(),
                         )
                         .unwrap(),
                     )
@@ -1613,10 +1607,7 @@ mod tests {
             manageboot_runner,
             cup_provider,
             subnet_assignment,
-            PlatformVersion {
-                guestos_version: current_replica_version.clone(),
-                replica_version: current_replica_version.clone(),
-            },
+            platform_version,
             replica_config_file,
             node_id,
             Arc::new(registry_replicator),
@@ -1704,6 +1695,9 @@ mod tests {
         subnet_type: SubnetType,
         // Current replica version of the running orchestrator
         current_replica_version: ReplicaVersion,
+        // GuestOS version of the running orchestrator, if different from the
+        // replica version (e.g. mid fast upgrade); defaults to the replica version.
+        guestos_version: Option<ReplicaVersion>,
         // Whether the node is assigned to a subnet (<=> presence of local CUP)
         // `Some` includes some parameters for the local CUP.
         // `None` means no local CUP, i.e. unassigned.
@@ -1732,6 +1726,16 @@ mod tests {
     }
 
     impl UpgradeTestScenario {
+        fn platform_version(&self) -> PlatformVersion {
+            PlatformVersion {
+                guestos_version: self
+                    .guestos_version
+                    .clone()
+                    .unwrap_or_else(|| self.current_replica_version.clone()),
+                replica_version: self.current_replica_version.clone(),
+            }
+        }
+
         // Returns the CUP with the highest height among local and registry CUPs, if any.
         fn highest_cup(&self) -> Option<&CUPScenario> {
             match (&self.has_local_cup, &self.has_registry_cup) {
@@ -2739,6 +2743,7 @@ mod tests {
         #[values(NODE_1)] node_id: NodeId,
         #[values(SubnetType::Application, SubnetType::CloudEngine)] subnet_type: SubnetType,
         #[values(ReplicaVersion::from_str("replica_version_0.1").unwrap())] current_replica_version: ReplicaVersion,
+        #[values(None)] guestos_version: Option<ReplicaVersion>,
         #[values(
             None,
             Some(CUPScenario {
@@ -2816,6 +2821,7 @@ mod tests {
             node_id,
             subnet_type,
             current_replica_version,
+            guestos_version,
             has_local_cup,
             has_registry_cup,
             initial_subnet_assignment,
@@ -2863,6 +2869,7 @@ mod tests {
             node_id: NODE_1,
             subnet_type: SubnetType::System,
             current_replica_version: ReplicaVersion::from_str("replica_version_0.1").unwrap(),
+            guestos_version: None,
             has_local_cup: Some(CUPScenario {
                 height: Height::from(100),
                 // Set as the NNS subnet in `setup_registry`
@@ -2906,6 +2913,7 @@ mod tests {
             node_id: NODE_1,
             subnet_type: SubnetType::Application,
             current_replica_version: ReplicaVersion::from_str("replica_version_0.1").unwrap(),
+            guestos_version: None,
             has_local_cup: Some(CUPScenario {
                 height: Height::from(100),
                 subnet_id: SUBNET_1,
