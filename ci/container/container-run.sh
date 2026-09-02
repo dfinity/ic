@@ -205,8 +205,10 @@ if [ "$IMAGE_TAG" = "$PINNED_TAG" ]; then
         fi
         # Alias the verified image under its tag: readable `images` output, and
         # `docker image prune` would otherwise delete an image that has no tag.
-        # This also re-points a tag that a different local image was squatting on.
-        "${CONTAINER_CMD[@]}" tag "$IMAGE" "$IMAGE_REPO:$IMAGE_TAG" || true
+        # This also re-points a tag that a different local image was squatting
+        # on, so a failure here is not ignored.
+        "${CONTAINER_CMD[@]}" tag "$IMAGE" "$IMAGE_REPO:$IMAGE_TAG" \
+            || die "Failed to tag the verified image $IMAGE as $IMAGE_REPO:$IMAGE_TAG"
     elif [ -n "$ALLOW_UNPINNED" ] && image_exists "$IMAGE_REPO:$IMAGE_TAG"; then
         warn "Pinned image $IMAGE could not be pulled (offline?); reusing the existing local image $IMAGE_REPO:$IMAGE_TAG, which is NOT verified against the pin (CONTAINER_RUN_ALLOW_UNPINNED is set)."
         IMAGE="$IMAGE_REPO:$IMAGE_TAG"

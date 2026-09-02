@@ -992,7 +992,9 @@ jobs:
           # guards against the grep pattern going stale.
           check_refs() { # $1 = image, $2 = pinned digest
             local refs
-            refs="$(grep -rhoE "${prefix}$1[:@][^\"'[:space:]]+" .devcontainer .github/workflows | sort -u)"
+            # grep exits 1 when nothing matches; treat that as an empty set so the
+            # comparison below reports it instead of pipefail aborting the step.
+            refs="$({ grep -rhoE "${prefix}$1[:@][^\"'[:space:]]+" .devcontainer .github/workflows || true; } | sort -u)"
             if [ "$refs" != "${prefix}$1@$2" ]; then
               echo "::error file=ci/container/$1.digest::every $1 reference in .devcontainer/ and .github/workflows/ must be ${prefix}$1@$2 (ci/container/$1.digest; all are written by container-autobuild.yml), found:"
               echo "${refs:-<none>}"
