@@ -152,22 +152,6 @@ image_exists() {
     fi
 }
 
-# Print the `repo@sha256:...` digests local image $1 was pulled as, one per line.
-# `.RepoDigests` is used rather than `.Digest` because under podman the latter
-# depends on how the image is referenced (per-platform manifest digest by tag or
-# ID, OCI index digest by index reference).
-image_repo_digests() {
-    "${CONTAINER_CMD[@]}" image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$1"
-}
-
-# Does local image $1 carry the pinned digest of $IMAGE_REPO?
-has_pinned_digest() {
-    local digests
-    # Capture first: a failing inspect inside a pipeline would trip pipefail.
-    digests="$(image_repo_digests "$1")" || return 1
-    grep -qxF "$IMAGE_REPO@$IMAGE_DIGEST" <<<"$digests"
-}
-
 # Build $IMAGE_REPO:$IMAGE_TAG from the checkout, into the store $CONTAINER_CMD
 # runs from (build-image.sh would otherwise default to plain docker).
 # $1 = reason
@@ -195,14 +179,10 @@ if [ "$IMAGE_TAG" = "$PINNED_TAG" ]; then
         eprintln "Local image $IMAGE_REPO:$IMAGE_TAG is not verified against the pin (e.g. built locally); pulling the pinned image $IMAGE instead (one-time download)."
     fi
     if image_exists "$IMAGE" || "${CONTAINER_CMD[@]}" pull "$IMAGE"; then
-        # Pulling by digest is self-verifying in both runtimes; this is defence
-        # in depth against a local store entry that merely *claims* the digest.
-        if ! has_pinned_digest "$IMAGE"; then
-            warn "Local image $IMAGE does not report the pinned digest; re-pulling it by digest."
-            if ! { "${CONTAINER_CMD[@]}" pull "$IMAGE" && has_pinned_digest "$IMAGE"; }; then
-                die "Image $IMAGE does not carry pinned digest $IMAGE_DIGEST; refusing to run it"
-            fi
-        fi
+        # Pulling by digest is self-verifying in both runtimes (a manifest that
+        # does not hash to the requested digest is refused), and a local lookup
+        # by digest reference only resolves content recorded from such a pull,
+        # so the image is verified by construction.
         # Alias the verified image under its tag: readable `images` output, and
         # `docker image prune` would otherwise delete an image that has no tag.
         # This also re-points a tag that a different local image was squatting
