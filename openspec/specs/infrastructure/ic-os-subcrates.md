@@ -508,9 +508,11 @@ The `guest_upgrade_client` crate runs inside the Upgrade Guest VM. It retrieves 
 
 #### Scenario: Verify server attestation report
 - **WHEN** the server's attestation package is received
-- **THEN** the client verifies the server's measurement against blessed measurements from the NNS registry
+- **THEN** the client excludes its own launch measurement from the elected measurements before checking, so a malicious peer cannot pass verification by simply mirroring the client's own attestation package back to it
+- **AND** verifies the server's measurement against the (filtered) blessed measurements from the NNS registry
 - **AND** verifies that the custom data matches (binding both TLS public keys)
 - **AND** verifies that the chip ID matches (same physical machine)
+- **AND** verifies the server's guest policy
 
 #### Scenario: Adopt retrieved Store artifacts
 - **WHEN** the disk encryption key and detached Store LUKS header are successfully retrieved
@@ -605,7 +607,7 @@ The `guest_disk` crate manages LUKS2-encrypted disk partitions (var and store) f
 
 #### Scenario: Derive key from SEV measurement
 - **WHEN** `derive_key_from_sev_measurement` is called
-- **THEN** the SEV firmware provides a 32-byte derived key based on the guest measurement
+- **THEN** the SEV firmware provides a 32-byte derived key bound to both the guest launch measurement and the guest policy (`GuestFieldSelect` with `measurement` and `guest_policy` set)
 - **AND** HKDF-SHA256 is used with an info string including the device path
 - **AND** the result is returned as a base64-encoded string
 
@@ -728,10 +730,10 @@ The `sev_guest` crate provides guest-side SEV-SNP operations including key deriv
 - **AND** the report is combined with the certificate chain from the TEE config
 - **AND** the resulting package can be verified by remote parties
 
-#### Scenario: Key derivation uses measurement binding
+#### Scenario: Key derivation uses measurement and guest policy binding
 - **WHEN** a key is derived via `derive_key_from_sev_measurement`
-- **THEN** `GuestFieldSelect::measurement` is set to true
-- **AND** the derived key is unique per guest measurement (code identity)
+- **THEN** `GuestFieldSelect::measurement` and `GuestFieldSelect::guest_policy` are both set to true
+- **AND** the derived key is unique per guest measurement (code identity) and per guest policy
 
 ---
 
