@@ -14,9 +14,12 @@ use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::endpoints::{StandardRecord, convert_transfer_error};
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerData};
-use ic_ledger_canister_core::runtime::{Runtime, heap_memory_size_bytes};
+use ic_ledger_canister_core::metrics::{
+    encode_archive_config_metrics, encode_dedup_config_metrics,
+};
+use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_canister_core::{
-    archive::{Archive, ArchiveCanisterWasm, ArchiveOptions},
+    archive::{Archive, ArchiveOptions},
     ledger::{
         LedgerAccess, TransferError as CoreTransferError, apply_transaction, archive_blocks,
         block_locations, find_block_in_archive,
@@ -1130,79 +1133,6 @@ fn get_nodes_() {
     })
 }
 
-/// Exposes the archiving configuration that is otherwise not observable from
-/// outside the canister, with the defaults of the optional `ArchiveOptions`
-/// fields already applied.
-///
-/// `trigger_threshold`, `num_blocks_to_archive` and `max_message_size_bytes`
-/// govern the ledger's own behaviour and take effect immediately. The remaining
-/// settings are only used when the ledger spawns a *new* archive: an archive
-/// that already exists keeps the values it was installed with, and reports them
-/// through its own metrics.
-fn encode_archive_config_metrics<Rt, Wasm>(
-    w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
-    archive: &Archive<Rt, Wasm>,
-) -> std::io::Result<()>
-where
-    Rt: Runtime,
-    Wasm: ArchiveCanisterWasm,
-{
-    w.encode_gauge(
-        "ledger_archive_trigger_threshold",
-        archive.trigger_threshold as f64,
-        "The number of blocks which, when exceeded, triggers archiving.",
-    )?;
-    w.encode_gauge(
-        "ledger_archive_num_blocks_to_archive",
-        archive.num_blocks_to_archive as f64,
-        "The number of blocks archived when the trigger threshold is exceeded.",
-    )?;
-    w.encode_gauge(
-        "ledger_archive_node_max_memory_size_bytes",
-        archive.node_max_memory_size_bytes as f64,
-        "Maximum number of bytes an archive spawned from now on may store. Existing \
-         archives keep the cap they were created with, reported by their own \
-         archive_node_max_memory_size_bytes metric.",
-    )?;
-    w.encode_gauge(
-        "ledger_archive_max_message_size_bytes",
-        archive.max_message_size_bytes as f64,
-        "Archive option limiting the size in bytes of a message sent to an archive. \
-         The size actually used is the smaller of this and the ledger's own \
-         ledger_max_message_size_bytes.",
-    )?;
-    w.encode_gauge(
-        "ledger_archive_cycles_for_archive_creation",
-        archive.cycles_for_archive_creation as f64,
-        "Cycles that will be attached to the call creating the next archive canister.",
-    )?;
-    Ok(())
-}
-
-/// Exposes the transaction-deduplication configuration, which is not observable
-/// from outside the canister.
-fn encode_dedup_config_metrics<LD: LedgerData>(
-    w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
-    ledger: &LD,
-) -> std::io::Result<()> {
-    w.encode_gauge(
-        "ledger_transaction_window_seconds",
-        ledger.transaction_window().as_secs() as f64,
-        "Length of the transaction deduplication window in seconds.",
-    )?;
-    w.encode_gauge(
-        "ledger_max_transactions_in_window",
-        ledger.max_transactions_in_window() as f64,
-        "Maximum number of transactions retained in the deduplication window.",
-    )?;
-    w.encode_gauge(
-        "ledger_max_transactions_to_purge",
-        ledger.max_transactions_to_purge() as f64,
-        "Maximum number of transactions purged from the deduplication window per operation.",
-    )?;
-    Ok(())
-}
-
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     let ledger = LEDGER
         .try_read()
@@ -1218,7 +1148,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Maximum inter-canister message size in bytes.",
     )?;
     if let Some(archive) = archive_guard.as_ref() {
-        encode_archive_config_metrics(w, archive)?;
+        encode_archive_config_metrics(w, archive, archive.node_max_memory_size_bytes)?;
     }
     encode_dedup_config_metrics(w, &*ledger)?;
     w.encode_gauge(
