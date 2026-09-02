@@ -1380,6 +1380,10 @@ pub fn test_change_trigger_threshold_before_archive_spawned<T>(
     T: CandidType,
 {
     const UNREACHABLE_TRIGGER_THRESHOLD: usize = 1_000_000_000;
+    assert!(
+        UNREACHABLE_TRIGGER_THRESHOLD as u64 > ARCHIVE_TRIGGER_THRESHOLD * 10,
+        "UNREACHABLE_TRIGGER_THRESHOLD shall be at least 10x larger than ARCHIVE_TRIGGER_THRESHOLD"
+    );
 
     let p1 = PrincipalId::new_user_test_id(1);
     let p2 = PrincipalId::new_user_test_id(2);
