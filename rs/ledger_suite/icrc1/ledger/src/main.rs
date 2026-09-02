@@ -506,7 +506,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             MAX_MESSAGE_SIZE as f64,
             "Maximum inter-canister message size in bytes.",
         )?;
-        encode_dedup_config_metrics(w, &*ledger)?;
+        encode_dedup_config_metrics(w, ledger)?;
         Ok(())
     })
 }
