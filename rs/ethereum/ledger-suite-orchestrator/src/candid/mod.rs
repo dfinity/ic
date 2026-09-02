@@ -45,8 +45,11 @@ pub struct LedgerUpgradeArg {
 
 impl From<LedgerUpgradeArg> for ic_icrc1_ledger::UpgradeArgs {
     fn from(arg: LedgerUpgradeArg) -> Self {
+        let LedgerUpgradeArg {
+            change_archive_options,
+        } = arg;
         ic_icrc1_ledger::UpgradeArgs {
-            change_archive_options: arg.change_archive_options,
+            change_archive_options,
             ..ic_icrc1_ledger::UpgradeArgs::default()
         }
     }
