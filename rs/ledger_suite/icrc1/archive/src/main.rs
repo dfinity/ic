@@ -37,7 +37,7 @@ const GIB: u64 = 1024 * 1024 * 1024;
 const DEFAULT_MEMORY_LIMIT: u64 = 3 * GIB;
 
 /// The maximum number of blocks to return in a single get_transactions request.
-const DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE: u64 = 2000;
+use ic_ledger_canister_core::archive::DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE;
 
 /// The maximum number of Wasm pages that we allow to use for the stable storage.
 const NUM_WASM_PAGES: u64 = 4 * GIB / WASM_PAGE_SIZE;
@@ -108,7 +108,7 @@ impl Default for ArchiveConfig {
             max_memory_size_bytes: 0,
             block_index_offset: 0,
             ledger_id: Principal::management_canister(),
-            max_transactions_per_response: DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE,
+            max_transactions_per_response: DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE,
             token_type: wasm_token_type(),
         }
     }
@@ -165,8 +165,8 @@ fn init(
         let max_memory_size_bytes = max_memory_size_bytes
             .unwrap_or(DEFAULT_MEMORY_LIMIT)
             .min(DEFAULT_MEMORY_LIMIT);
-        let max_transactions_per_response = max_transactions_per_response
-            .unwrap_or(DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE);
+        let max_transactions_per_response =
+            max_transactions_per_response.unwrap_or(DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE);
         cell.borrow_mut()
             .set(ArchiveConfig {
                 max_memory_size_bytes,

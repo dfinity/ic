@@ -15,6 +15,12 @@ use ic_ledger_core::block::EncodedBlock;
 /// 10 trillion cycles.
 pub const DEFAULT_CYCLES_FOR_ARCHIVE_CREATION: u64 = 10_000_000_000_000;
 
+/// The default maximum number of transactions returned by an archive's
+/// `get_transactions` endpoint, applied when `max_transactions_per_response` is
+/// not set. Shared with the archive canister so that the effective value the
+/// ledger reports cannot drift from the one the archive enforces.
+pub const DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE: u64 = 2000;
+
 fn default_cycles_for_archive_creation() -> u64 {
     0
 }
@@ -198,6 +204,13 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Archive<Rt, Wasm> {
 
     pub fn nodes(&self) -> &[CanisterId] {
         &self.nodes
+    }
+
+    /// The maximum number of transactions an archive of this ledger returns per
+    /// response, with the default applied when the option is unset.
+    pub fn effective_max_transactions_per_response(&self) -> u64 {
+        self.max_transactions_per_response
+            .unwrap_or(DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE)
     }
 }
 

@@ -243,6 +243,14 @@ fn test_change_trigger_threshold_before_archive_spawned() {
 }
 
 #[test]
+fn test_archive_and_dedup_config_metrics() {
+    ic_ledger_suite_state_machine_tests::test_archive_and_dedup_config_metrics(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_upgrade_archive_options() {
     ic_ledger_suite_state_machine_tests::test_upgrade_archive_options(
         ledger_wasm(),

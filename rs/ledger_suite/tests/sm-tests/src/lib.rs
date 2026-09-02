@@ -12,7 +12,7 @@ use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, valid_transactions_strategy,
 };
-use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_canister_core::archive::{ArchiveOptions, DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE};
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
@@ -1452,6 +1452,67 @@ pub fn test_change_trigger_threshold_before_archive_spawned<T>(
         list_archives(&env, ledger_id).len(),
         1,
         "restoring the trigger threshold should archive the accumulated backlog"
+    );
+}
+
+pub fn test_archive_and_dedup_config_metrics<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let (env, ledger_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+
+    let metric = |name: &str| parse_metric(&env, ledger_id, name);
+
+    assert_eq!(
+        metric("ledger_archive_trigger_threshold"),
+        ARCHIVE_TRIGGER_THRESHOLD
+    );
+    assert_eq!(
+        metric("ledger_archive_num_blocks_to_archive"),
+        NUM_BLOCKS_TO_ARCHIVE
+    );
+    assert_eq!(
+        metric("ledger_archive_node_max_memory_size_bytes"),
+        1024 * 1024 * 1024,
+        "setup() leaves node_max_memory_size_bytes unset, so the effective value should be the default"
+    );
+    assert_eq!(
+        metric("ledger_archive_max_message_size_bytes"),
+        2 * 1024 * 1024,
+        "setup() leaves max_message_size_bytes unset, so the effective value should be the default"
+    );
+    assert_eq!(metric("ledger_archive_cycles_for_archive_creation"), 0);
+    assert_eq!(
+        metric("ledger_archive_max_transactions_per_response"),
+        DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE,
+        "setup() leaves max_transactions_per_response unset, so the effective value should be the default"
+    );
+
+    assert_eq!(metric("ledger_transaction_window_seconds"), 24 * 60 * 60);
+    assert!(metric("ledger_max_transactions_in_window") > 0);
+    assert!(metric("ledger_max_transactions_to_purge") > 0);
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(1234),
+            node_max_memory_size_bytes: Some(5678),
+            max_transactions_per_response: Some(42),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
+        .expect("failed to change the archive options");
+
+    assert_eq!(metric("ledger_archive_trigger_threshold"), 1234);
+    assert_eq!(metric("ledger_archive_node_max_memory_size_bytes"), 5678);
+    assert_eq!(metric("ledger_archive_max_transactions_per_response"), 42);
+    assert_eq!(
+        metric("ledger_archive_num_blocks_to_archive"),
+        NUM_BLOCKS_TO_ARCHIVE,
+        "options not named in ChangeArchiveOptions must be left alone"
     );
 }
 
