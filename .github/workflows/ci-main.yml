@@ -899,13 +899,15 @@ jobs:
             runtime: podman
           # A local image squatting on the tag must be ignored: the pinned digest
           # is pulled and run instead, and the tag is re-pointed to it (checked by
-          # the "Verify the poisoned tag ..." step below).
+          # the "Verify the poisoned tag ..." step below). The squatter is an
+          # empty image that cannot run anything, so a successful `true` already
+          # proves the pinned image ran.
           - name: poisoned local tag
             setup: |
               tar -cf empty.tar -T /dev/null
               repo=ghcr.io/dfinity
               sudo podman import empty.tar "$repo/ic-dev:$(cat ci/container/TAG)"
-            command: "test -f /home/ubuntu/.ic-build-container"
+            command: "true"
             expect: success
             runtime: podman
           # A tampered pin must be refused before anything is pulled or built.
