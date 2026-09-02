@@ -4269,14 +4269,15 @@ fn execute_flexible_canister_http_request_disabled() {
 
 #[test]
 fn execute_flexible_canister_http_request_disabled_falls_back_to_legacy_when_free() {
-    // Turning the flag off does not take flexible outcalls away from subnets
-    // where they are free: there they fall back to legacy pricing, which is moot
-    // when nothing is charged. This is the one path that still distinguishes the
-    // flag being off from it being on.
+    // A disabled flag does not take flexible outcalls away from subnets where
+    // they are free: there they fall back to legacy pricing, which is moot when
+    // nothing is charged. These fallbacks are what still distinguishes the flag
+    // being off from it being on.
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(10);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
         .with_cost_schedule(CanisterCyclesCostSchedule::Free)
         .with_flexible_http_requests_disabled()
         .build();
@@ -4410,6 +4411,7 @@ fn execute_flexible_canister_http_request_disabled_by_subnet_feature() {
         assert_eq!(
             get_reject_message(test.xnet_messages()[0].clone()),
             "This API is not enabled on this subnet",
+            "unexpected rejection message for {available:?}"
         );
     }
 }
