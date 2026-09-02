@@ -101,7 +101,12 @@ pub struct StateParams {
 /// The result of a successful replay.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ReplayOutput {
-    /// The params of the state the replay ended up with.
+    /// The params of the state the replay ended up with -- but only if that state is
+    /// checkpointed. `get_latest_state_params()` can hash only a checkpointed state,
+    /// and falls back to the latest CUP's height and hash for a tip that exists in
+    /// memory alone, which is what a replay without `--create-checkpoint` leaves
+    /// behind unless the last replayed block was a summary block. Both fields can
+    /// therefore be older than the last replayed height.
     pub state_params: StateParams,
     /// Number of batches delivered on top of the replayed blocks, i.e. the batches
     /// carrying the extra ingress messages and the one creating the checkpoint. Zero
