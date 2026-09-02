@@ -876,8 +876,6 @@ jobs:
     name: Test Container Run ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # The docker leg is informational until it has been seen green.
-    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -924,7 +922,6 @@ jobs:
             command: "true"
             expect: success
             runtime: docker
-            experimental: true
     steps:
       - *checkout
       - name: Workaround for actions/runner-images#14473 (crun pinning)
