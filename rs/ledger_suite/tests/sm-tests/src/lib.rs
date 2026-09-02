@@ -1519,8 +1519,6 @@ pub fn test_archive_and_dedup_config_metrics<T>(
     assert_eq!(metric("ledger_archive_node_max_memory_size_bytes"), 5678);
     assert_eq!(metric("ledger_archive_max_transactions_per_response"), 42);
 
-    // An ICRC archive clamps its memory cap, so configuring more than it accepts
-    // must not be reported as if the archive would honour it.
     let above_cap = LedgerArgument::Upgrade(Some(UpgradeArgs {
         change_archive_options: Some(ChangeArchiveOptions {
             node_max_memory_size_bytes: Some(ARCHIVE_MEMORY_LIMIT * 2),
@@ -1542,9 +1540,6 @@ pub fn test_archive_and_dedup_config_metrics<T>(
     );
 }
 
-/// The ledger's archive settings describe archives it will spawn from now on.
-/// An archive that already exists keeps what it was installed with, so it has to
-/// report its own effective settings.
 pub fn test_archive_reports_its_own_config_metrics<T>(
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
@@ -1577,8 +1572,6 @@ pub fn test_archive_reports_its_own_config_metrics<T>(
         DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE
     );
 
-    // Changing the ledger's settings must not change what the existing archive
-    // enforces.
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
         change_archive_options: Some(ChangeArchiveOptions {
             node_max_memory_size_bytes: Some(ledger_cap + 4096),
