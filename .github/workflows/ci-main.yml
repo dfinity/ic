@@ -12,6 +12,11 @@ on:
         required: false
         default: ''
         type: string
+      pull-request:
+        description: Whether this run is CI for a pull request even though the event is not pull_request (ci-kickoff-manual.yml dispatches CI for reviewed PRs, including fork PRs).
+        required: false
+        default: false
+        type: boolean
     outputs:
       release-build:
         description: Whether this run was a release build, i.e. uploaded artifacts to the CDN.
@@ -991,37 +996,42 @@ jobs:
               exit 1
             fi
           done
-          if ! grep -qF "${prefix}ic-dev@$dev_digest" .devcontainer/devcontainer.json; then
-            echo "::error file=ci/container/ic-dev.digest::ci/container/ic-dev.digest ($dev_digest) does not match the ic-dev pin in .devcontainer/devcontainer.json; both are written by container-autobuild.yml"
+          # Collect every reference (":tag" or "@digest", well-formed or not) so
+          # that a reference changed to a mutable tag or a malformed digest is
+          # rejected too, not only a mismatching well-formed one.
+          dev_refs="$(grep -oE "${prefix}ic-dev[:@][^\"'[:space:]]+" .devcontainer/devcontainer.json | sort -u)"
+          if [ "$dev_refs" != "${prefix}ic-dev@$dev_digest" ]; then
+            echo "::error file=ci/container/ic-dev.digest::every ic-dev reference in .devcontainer/devcontainer.json must be ${prefix}ic-dev@$dev_digest (ci/container/ic-dev.digest; both are written by container-autobuild.yml), found:"
+            echo "${dev_refs:-<none>}"
             exit 1
           fi
-          pins="$(grep -rhoE "${prefix}ic-build@sha256:[0-9a-f]{64}" .github/workflows/ | sort -u)"
-          if [ -z "$pins" ]; then
-            echo "::error::no ${prefix}ic-build@sha256:... pin found under .github/workflows/"
-            exit 1
-          fi
-          if [ "$pins" != "${prefix}ic-build@$build_digest" ]; then
-            echo "::error file=ci/container/ic-build.digest::ci/container/ic-build.digest ($build_digest) does not match every ic-build pin under .github/workflows/ (all are written by container-autobuild.yml):"
-            echo "$pins"
+          build_refs="$(grep -rhoE "${prefix}ic-build[:@][^\"'[:space:]]+" .github/workflows/ | sort -u)"
+          if [ "$build_refs" != "${prefix}ic-build@$build_digest" ]; then
+            echo "::error file=ci/container/ic-build.digest::every ic-build reference under .github/workflows/ must be ${prefix}ic-build@$build_digest (ci/container/ic-build.digest; all are written by container-autobuild.yml), found:"
+            echo "${build_refs:-<none>}"
             exit 1
           fi
       - name: Check ci/container/TAG matches the container inputs
         id: sync
         if: steps.decide.outputs.run == 'true'
+        env:
+          # pull_request events, and CI dispatched for a PR by ci-kickoff-manual.yml
+          CI_PULL_REQUEST: ${{ github.event_name == 'pull_request' || inputs.pull-request }}
         run: |
           # When TAG is out of sync there is no reviewed digest for the working
           # tree and container-run.sh builds the image locally (30+ minutes, which
           # would time this job out). On a pull request that state is transient:
           # the container-autobuild.yml bot commit brings TAG and *.digest in sync
-          # and re-triggers CI. Anywhere else (push to master, the merge queue,
-          # release-testing on rc--/hotfix-, manual dispatch) it means that commit
-          # never landed, so fail.
+          # and re-triggers CI (on fork PRs it cannot, and they build locally).
+          # Anywhere else (push to master, the merge queue, release-testing on
+          # rc--/hotfix-, a manual run for a branch) it means that commit never
+          # landed, so fail.
           set -euo pipefail
           computed="$(ci/container/get-image-tag.sh)"
           pinned="$(cat ci/container/TAG)"
           if [ "$computed" = "$pinned" ]; then
             echo "in_sync=true" >> "$GITHUB_OUTPUT"
-          elif [ "$CI_EVENT_NAME" = pull_request ]; then
+          elif [ "$CI_PULL_REQUEST" = true ]; then
             echo "::notice file=ci/container/TAG::ci/container/TAG ($pinned) does not match the container inputs (computed $computed); skipping the container-run tests: the Container IC Build Image workflow will commit TAG and *.digest to this branch and re-trigger CI"
             echo "in_sync=false" >> "$GITHUB_OUTPUT"
           else
