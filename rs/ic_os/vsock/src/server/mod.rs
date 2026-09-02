@@ -101,8 +101,9 @@ impl VsockServer {
                 }
             };
 
+            let tracker_handle = tracker.clone();
             tracker.spawn(async move {
-                match timeout(REQUEST_TIMEOUT, process_connection(stream)).await {
+                match timeout(REQUEST_TIMEOUT, process_connection(stream, tracker_handle)).await {
                     Err(e) => println!("Connection {peer} timed out: {e:#}"),
                     Ok(Err(e)) => println!("Connection {peer} failed: {e:#}"),
                     Ok(Ok(())) => {}
@@ -118,13 +119,16 @@ impl VsockServer {
             () = tracker.wait() => {},
             // Allow remaining connections to close
             () = sleep(REQUEST_TIMEOUT + Duration::from_secs(5)) => {
-                println!("Some connections didn't close, shutting down anyway");
+                println!("Some tasks didn't finish, shutting down anyway");
             }
         }
     }
 }
 
-async fn process_connection(mut stream: VsockStream) -> Result<(), VsockServerError> {
+async fn process_connection(
+    mut stream: VsockStream,
+    tracker: TaskTracker,
+) -> Result<(), VsockServerError> {
     let mut buffer = Vec::new();
     timeout(
         CONNECTION_TIMEOUT,
@@ -169,7 +173,7 @@ async fn process_connection(mut stream: VsockStream) -> Result<(), VsockServerEr
         Command::AttachHSM => attach_hsm(),
         Command::DetachHSM => detach_hsm(),
         Command::Upgrade(upgrade_data) => upgrade_hostos(upgrade_data).await,
-        Command::Notify(notify_data) => notify(notify_data).await,
+        Command::Notify(notify_data) => notify(notify_data, tracker).await,
         Command::GetVsockProtocol => get_hostos_vsock_version(),
         Command::GetHostOSVersion => get_hostos_version(),
         Command::StartUpgradeGuestVM => start_upgrade_guest_vm(),

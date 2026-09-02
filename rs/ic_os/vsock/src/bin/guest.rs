@@ -1,3 +1,6 @@
+use std::fs::OpenOptions;
+use std::io::Write;
+
 use vsock_lib::client::{LinuxVsockClient, VsockClient};
 use vsock_lib::protocol::{Command as ProtocolCommand, NotifyData, Payload, UpgradeData};
 
@@ -57,6 +60,7 @@ fn main() -> Result<()> {
             target_hash: hash,
         }),
         Command::Notify { message, count } => {
+            duplicate_to_guest_console(&message);
             ProtocolCommand::Notify(NotifyData { message, count })
         }
     };
@@ -74,4 +78,14 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Echo notify messages to the local GuestOS console so they are visible in
+/// cloud environments where the host console is not accessible.
+fn duplicate_to_guest_console(message: &str) {
+    for path in ["/dev/tty1", "/dev/ttyS0"] {
+        if let Ok(mut tty) = OpenOptions::new().write(true).open(path) {
+            let _ = writeln!(tty, "\n{}", message);
+        }
+    }
 }

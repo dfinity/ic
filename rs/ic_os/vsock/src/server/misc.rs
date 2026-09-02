@@ -5,6 +5,7 @@ use super::{VSOCK_VERSION, VsockServerError};
 use crate::protocol::{NotifyData, Payload};
 
 use tokio::time::sleep;
+use tokio_util::task::TaskTracker;
 
 const HOSTOS_VERSION_FILE_PATH: &str = "/opt/ic/share/version.txt";
 
@@ -21,15 +22,10 @@ pub(crate) fn get_hostos_vsock_version() -> Result<Payload, VsockServerError> {
     Ok(Payload::HostOSVsockVersion(VSOCK_VERSION))
 }
 
-pub(crate) async fn notify(notify_data: &NotifyData) -> Result<Payload, VsockServerError> {
-    // Echo notify messages to the local GuestOS console so they are visible
-    // in cloud environments where the host console is not accessible.
-    for path in ["/dev/tty1", "/dev/ttyS0"] {
-        if let Ok(mut tty) = OpenOptions::new().write(true).open(path) {
-            let _ = writeln!(tty, "\n{}", notify_data.message);
-        }
-    }
-
+pub(crate) async fn notify(
+    notify_data: &NotifyData,
+    tracker: TaskTracker,
+) -> Result<Payload, VsockServerError> {
     // Skip logging to host if manual recovery TUI is running to avoid interfering with the display
     if procfs::process::all_processes().is_ok_and(|processes| {
         processes.flatten().any(|process| {
@@ -44,24 +40,19 @@ pub(crate) async fn notify(notify_data: &NotifyData) -> Result<Payload, VsockSer
 
     let message_output_count = std::cmp::min(notify_data.count, 10);
     let message = notify_data.message.clone();
-    let mut handles = Vec::new();
 
     for device_path in &["/dev/tty1", "/dev/ttyS0"] {
         let mut terminal_device_file = OpenOptions::new().write(true).open(device_path)?;
 
         let message_clone = message.clone();
-        handles.push(tokio::spawn(async move {
+        tracker.spawn(async move {
             for _ in 0..message_output_count {
                 terminal_device_file.write_all(format!("\n{message_clone}\n").as_bytes())?;
                 sleep(std::time::Duration::from_secs(2)).await;
             }
 
             Ok::<(), VsockServerError>(())
-        }));
-    }
-
-    for handle in handles {
-        handle.await??;
+        });
     }
 
     Ok(Payload::NoPayload)
