@@ -140,7 +140,7 @@ impl Orchestrator {
             .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
         info!(
             logger,
-            "Orchestrator started: version={}, guestos_version={}, config={:?}",
+            "Orchestrator started: replica_version={}, guestos_version={}, config={:?}",
             replica_version,
             guestos_version,
             config
