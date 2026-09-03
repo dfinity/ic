@@ -30,7 +30,7 @@ use ic_cketh_minter::sweeper_contract::SweepItem;
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::{
     AccessList, AccessListItem, AuthorizationRequest, DelegatingSweep, Eip1559TransactionRequest,
-    SignedAuthorization, SignedEip1559TransactionRequest, SignedEip7702TransactionRequest,
+    Eip7702TransactionRequest, SignedAuthorization, SignedEip1559TransactionRequest,
     SignedSweepTransaction, SweepTransaction, TransactionSignature,
 };
 use ic_stable_structures::Memory;
@@ -175,20 +175,55 @@ fn map_eip_1559_transaction(transaction: &alloy_consensus::TxEip1559) -> Eip1559
         ),
         amount: CheckedAmountOf::from_be_bytes(transaction.value.to_be_bytes()),
         data: transaction.input.to_vec(),
-        access_list: AccessList(
-            transaction
-                .access_list
-                .iter()
-                .map(|item| AccessListItem {
-                    address: map_address(&item.address),
-                    storage_keys: item
-                        .storage_keys
-                        .iter()
-                        .map(|key| ic_cketh_minter::tx::StorageKey(key.0))
-                        .collect(),
-                })
-                .collect(),
-        ),
+        access_list: map_access_list(&transaction.access_list),
+    }
+}
+
+fn map_eip_7702_transaction(transaction: &alloy_consensus::TxEip7702) -> Eip7702TransactionRequest {
+    Eip7702TransactionRequest {
+        chain_id: transaction.chain_id,
+        nonce: transaction.nonce.into(),
+        max_priority_fee_per_gas: transaction.max_priority_fee_per_gas.into(),
+        max_fee_per_gas: transaction.max_fee_per_gas.into(),
+        gas_limit: transaction.gas_limit.into(),
+        destination: map_address(&transaction.to),
+        amount: CheckedAmountOf::from_be_bytes(transaction.value.to_be_bytes()),
+        data: transaction.input.to_vec(),
+        access_list: map_access_list(&transaction.access_list),
+        authorization_list: transaction
+            .authorization_list
+            .iter()
+            .map(map_signed_authorization)
+            .collect(),
+    }
+}
+
+fn map_access_list(access_list: &alloy_eips::eip2930::AccessList) -> AccessList {
+    AccessList(
+        access_list
+            .iter()
+            .map(|item| AccessListItem {
+                address: map_address(&item.address),
+                storage_keys: item
+                    .storage_keys
+                    .iter()
+                    .map(|key| ic_cketh_minter::tx::StorageKey(key.0))
+                    .collect(),
+            })
+            .collect(),
+    )
+}
+
+fn map_signed_authorization(
+    authorization: &alloy_eips::eip7702::SignedAuthorization,
+) -> SignedAuthorization {
+    SignedAuthorization {
+        chain_id: authorization.chain_id.to::<u64>(),
+        delegate: map_address(&authorization.address),
+        nonce: authorization.nonce.into(),
+        y_parity: authorization.y_parity() == 1,
+        r: ethnum::u256::from_be_bytes(authorization.r().to_be_bytes()),
+        s: ethnum::u256::from_be_bytes(authorization.s().to_be_bytes()),
     }
 }
 
@@ -207,23 +242,27 @@ fn map_address(address: &alloy_primitives::Address) -> ic_ethereum_types::Addres
 }
 
 fn map_signed_sweep_transaction(raw_transaction: &str) -> SignedSweepTransaction {
-    const EIP_7702_TRANSACTION_TYPE: u8 = 4;
+    use alloy_consensus::TxEnvelope;
+    use alloy_eips::eip2718::Decodable2718;
 
     let raw_bytes = hex::decode(raw_transaction.trim_start_matches("0x"))
         .expect("BUG: sent sweep transaction is not hex-encoded");
-    if raw_bytes.first() == Some(&EIP_7702_TRANSACTION_TYPE) {
-        let signed = SignedEip7702TransactionRequest::decode(&raw_bytes)
-            .expect("BUG: failed to deserialize sent EIP-7702 sweep transaction");
-        return SignedSweepTransaction::from((
+    match TxEnvelope::decode_2718(&mut raw_bytes.as_slice())
+        .expect("BUG: failed to deserialize sent sweep transaction")
+    {
+        TxEnvelope::Eip1559(signed) => SignedSweepTransaction::from((
+            SweepTransaction::Eip1559(map_eip_1559_transaction(signed.tx())),
+            map_signature(signed.signature()),
+        )),
+        TxEnvelope::Eip7702(signed) => SignedSweepTransaction::from((
             SweepTransaction::Eip7702(
-                DelegatingSweep::new(signed.transaction().clone())
+                DelegatingSweep::new(map_eip_7702_transaction(signed.tx()))
                     .expect("BUG: sent EIP-7702 sweep installs no delegation"),
             ),
-            signed.signature().clone(),
-        ));
+            map_signature(signed.signature()),
+        )),
+        transaction => panic!("BUG: unexpected sent sweep transaction type {transaction:?}"),
     }
-    let (transaction, signature) = decode_signed_transaction(raw_transaction);
-    SignedSweepTransaction::from((SweepTransaction::Eip1559(transaction), signature))
 }
 
 fn map_unsigned_sweeper_transaction(tx: UnsignedSweeperTransaction) -> SweepTransaction {
