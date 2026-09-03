@@ -875,8 +875,7 @@ jobs:
   test-container-run-preflight:
     # Decides once whether the test-container-run matrix below runs at all, so
     # its legs only allocate runners when the container tooling changed (or on
-    # master and the release branches), and the pin and TAG checks run once
-    # instead of once per leg.
+    # master and the release branches).
     name: Test Container Run preflight
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -913,12 +912,7 @@ jobs:
         run: |
           # ci/container/*.digest, the ic-dev pin in .devcontainer/ and the ic-build
           # pins in the workflows are all written by container-autobuild.yml and
-          # must agree. Never compare against what the registry serves under
-          # ci/container/TAG: that would make the mutable tag the oracle again.
-          #
-          # container-autobuild.yml rewrites every "<prefix>ic-build[:@]..." string
-          # under .github/workflows/ with sed, so the image names below are kept
-          # in a variable to keep this script from being rewritten too.
+          # must agree.
           set -euo pipefail
           prefix="ghcr.io/dfinity/"
           dev_digest="$(< ci/container/ic-dev.digest)"
