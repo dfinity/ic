@@ -552,6 +552,8 @@ fn ic_replay(env: &TestEnv, mut mutate_cmd: impl FnMut(&mut Command)) -> Output 
         .arg(subnet_id.to_string())
         .arg("--data-root")
         .arg(&nns_state_dir)
+        .arg("--replica-version")
+        .arg(get_mainnet_nns_revision().unwrap().to_string())
         .arg(&ic_config_file);
     mutate_cmd(&mut cmd);
     info!(logger, "{cmd:?} ...");
