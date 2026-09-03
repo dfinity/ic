@@ -13,12 +13,15 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterStatus,
     metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
+    testing::SystemStateTesting,
 };
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_metrics::{fetch_counter, fetch_histogram_vec_buckets};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::messages::{CallbackId, Payload, RejectContext};
+use ic_types::messages::{
+    CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
+};
 use ic_types::time::{UNIX_EPOCH, expiry_time_from_now};
 use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
@@ -439,6 +442,81 @@ fn can_timeout_stop_canister_requests() {
         CanisterStatus::Stopping { stop_contexts, .. } => {
             // The first two stop_contexts should have expired, 1 is still active.
             assert_eq!(stop_contexts.len(), 1);
+        }
+        CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
+            unreachable!("Expected the canister to be in stopping mode");
+        }
+    }
+}
+
+/// Stop contexts without a call id (i.e. from before call ids were introduced)
+/// have no recorded time to expire against, so they are timed out immediately,
+/// without waiting for `STOP_CANISTER_TIMEOUT_DURATION`.
+#[test]
+fn can_timeout_stop_canister_requests_without_call_id() {
+    let batch_time = Time::from_nanos_since_unix_epoch(u64::MAX / 2);
+    let mut test = SchedulerTestBuilder::new()
+        .with_batch_time(batch_time)
+        .build();
+
+    let canister = test.create_canister();
+
+    // Open a call context by calling a cross-net canister, so that the canister
+    // is not ready to stop.
+    test.send_ingress(
+        canister,
+        ingress(1).call(other_side(test.xnet_canister_id(), 1), on_response(1)),
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // A stop request with a call id, which is subject to the regular timeout.
+    let arg = Encode!(&CanisterIdRecord::from(canister)).unwrap();
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        arg,
+        Cycles::zero(),
+        test.xnet_canister_id(),
+        InputQueueType::RemoteSubnet,
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Plus an old stop request, from before call ids were introduced.
+    test.canister_state_mut(canister)
+        .system_state
+        .add_stop_context(StopCanisterContext::Ingress {
+            sender: user_test_id(1),
+            message_id: message_test_id(1),
+            call_id: None,
+        });
+
+    match test.canister_state(canister).system_state.get_status() {
+        CanisterStatus::Stopping { stop_contexts, .. } => {
+            assert_eq!(stop_contexts.len(), 2);
+        }
+        CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
+            unreachable!("Expected the canister to be in stopping mode");
+        }
+    }
+
+    // Without advancing the time, so the stop request with a call id has not yet
+    // timed out.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let system_state = &test.canister_state(canister).system_state;
+
+    // Due to the open call context the canister still cannot be stopped.
+    assert!(!system_state.ready_to_stop());
+
+    match system_state.get_status() {
+        CanisterStatus::Stopping { stop_contexts, .. } => {
+            // The stop context without a call id has expired, the other one has not.
+            assert_eq!(stop_contexts.len(), 1);
+            assert_eq!(
+                stop_contexts[0].call_id(),
+                &Some(StopCanisterCallId::new(0))
+            );
         }
         CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
             unreachable!("Expected the canister to be in stopping mode");
