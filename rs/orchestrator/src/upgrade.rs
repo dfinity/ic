@@ -302,8 +302,8 @@ impl Upgrade {
             info!(
                 self.logger,
                 "The latest CUP (registry version={}, height={}) is for a different subnet (subnet_id={}) \
-                than the local CUP (subnet_id={}), indicating that the node has been reassigned to a
-                different subnet. This is normal in case of subnet splitting.",
+                than the local CUP (subnet_id={}), indicating that this orchestrator has detected that it \
+                was part of the destination nodes of a subnet split.",
                 latest_cup.content.registry_version(),
                 latest_cup.height(),
                 subnet_id,
