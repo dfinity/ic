@@ -406,13 +406,15 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
     let sweeper = setup.await_sweeper_address();
     setup.await_minter_log("[fund_sweeper]: SKIPPING: failed to burn");
 
-    // PUSH1 0, PUSH1 0, REVERT — reverts on any call, with no return data.
+    // Any non-empty code does it: all 21'000 gas of a bare transfer is intrinsic, so the first
+    // opcode is already out of gas. PUSH1 0, PUSH1 0, REVERT is what is placed here, so that the
+    // call would fail on its own terms too if it were ever reached with gas to spare.
     setup.set_code(&sweeper, &[0x60, 0x00, 0x60, 0x00, 0xfd]);
     // Read back rather than assumed: an arrangement placed on the wrong account makes the whole
     // test vacuous, and the transfer then simply succeeds.
     assert!(
         !setup.code(&sweeper).is_empty(),
-        "the reverting code must be at {sweeper}"
+        "the code must be at {sweeper}"
     );
 
     // Deposited, not minted: the fee account is credited the way production credits it, which means
