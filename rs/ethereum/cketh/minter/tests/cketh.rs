@@ -1340,6 +1340,35 @@ fn decode_ledger_memo_smoke() {
     );
 }
 
+#[test]
+fn should_export_the_sweeper_funding_metrics() {
+    CkEthSetup::default()
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_cketh_burned_total 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_eth_spent_total 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeper_funding_finalized_total\{status="success"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeper_funding_finalized_total\{status="failure"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_burned_not_yet_spent 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_gas_balance 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_low_water_mark \d+ \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_target \d+ \d+")
+        .assert_contains_metric_matching(
+            r"cketh_minter_sweeper_funding_in_flight_age_seconds 0 \d+",
+        );
+}
+
+#[test]
+fn should_export_the_stored_attestation_and_authorization_metrics() {
+    CkEthSetup::default()
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_stored_attestations 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_stored_authorizations 0 \d+");
+}
+
 /// Tests with the EVM RPC canister
 mod cketh_evm_rpc {
     use super::*;
