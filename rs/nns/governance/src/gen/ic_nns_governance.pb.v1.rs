@@ -3025,6 +3025,8 @@ pub struct CanisterSettings {
         tag = "8"
     )]
     pub snapshot_visibility: ::core::option::Option<i32>,
+    #[prost(uint64, optional, tag = "9")]
+    pub reserved_cycles_limit: ::core::option::Option<u64>,
 }
 /// Nested message and enum types in `CanisterSettings`.
 pub mod canister_settings {

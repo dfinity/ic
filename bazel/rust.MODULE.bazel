@@ -63,6 +63,38 @@ crate.spec(
 )
 crate.spec(
     features = [
+        "k256",
+        "serde",
+    ],
+    package = "alloy-consensus",
+    version = "^1.8.3",
+)
+crate.spec(
+    features = [
+        "k256",
+        "serde",
+    ],
+    package = "alloy-eips",
+    version = "^1.8.3",
+)
+crate.spec(
+    features = [
+        "k256",
+        "serde",
+    ],
+    package = "alloy-primitives",
+    version = "^1.6.0",
+)
+crate.spec(
+    package = "alloy-rpc-types-eth",
+    version = "^1.8.3",
+)
+crate.spec(
+    package = "alloy-sol-types",
+    version = "^1.6.0",
+)
+crate.spec(
+    features = [
         "std",
     ],
     package = "aes-gcm",
@@ -1749,10 +1781,6 @@ crate.spec(
     version = "=2.0.18",
 )
 crate.spec(
-    package = "thousands",
-    version = "^0.2.0",
-)
-crate.spec(
     package = "threadpool",
     version = "^1.8.1",
 )
@@ -2020,10 +2048,6 @@ crate.spec(
     features = ["parallel"],
     package = "wirm",
     version = "4.0.4",
-)
-crate.spec(
-    package = "wsl",
-    version = "^0.1.0",
 )
 crate.spec(
     default_features = False,

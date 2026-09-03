@@ -571,13 +571,11 @@ impl State {
         self.eth_balance.total_effective_tx_fees_add(tx_fee);
         self.eth_balance.total_unspent_tx_fees_add(unspent_tx_fee);
 
-        if matches!(withdrawal_request, WithdrawalRequest::SweeperFunding(_)) {
-            let transferred = match receipt.status {
-                TransactionStatus::Success => tx.transaction().amount,
-                TransactionStatus::Failure => Wei::ZERO,
-            };
-            self.sweeper_funding
-                .record_finalized_funding(transferred, tx_fee);
+        match withdrawal_request {
+            WithdrawalRequest::SweeperFunding(_) => {
+                self.sweeper_funding.record_finalized_funding(tx)
+            }
+            WithdrawalRequest::CkEth(_) | WithdrawalRequest::CkErc20(_) => {}
         }
 
         if receipt.status == TransactionStatus::Success && !tx.transaction_data().is_empty() {
