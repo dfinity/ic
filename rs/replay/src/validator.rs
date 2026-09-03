@@ -27,7 +27,7 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, PlatformVersion, PrincipalId, ReplicaVersion, SubnetId,
+    Height, NodeId, PlatformVersion, PrincipalId, SubnetId,
     artifact::ConsensusMessageId,
     consensus::{
         Block, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasBlockHash,
@@ -103,7 +103,7 @@ impl ReplayValidator {
     pub fn new(
         cfg: Config,
         subnet_id: SubnetId,
-        replica_version: ReplicaVersion,
+        platform_version: PlatformVersion,
         consensus_crypto: Arc<dyn ConsensusCrypto>,
         certification_crypto: Arc<dyn CertificationCrypto>,
         verifier: Arc<dyn Verifier>,
@@ -129,10 +129,7 @@ impl ReplayValidator {
         let replica_cfg = ReplicaConfig {
             node_id,
             subnet_id,
-            platform_version: PlatformVersion {
-                guestos_version: replica_version.clone(),
-                replica_version,
-            },
+            platform_version,
         };
         let thread_pool = ThreadPoolBuilder::new()
             .num_threads(MAX_VALIDATION_THREADS)
