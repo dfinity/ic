@@ -1466,7 +1466,7 @@ mod withdraw_erc20 {
 
     #[test]
     fn should_process_withdrawal_when_price_increases_moderately() {
-        fn test_when_tx_fee<F: FnMut(&mut ethers_core::types::FeeHistory)>(
+        fn test_when_tx_fee<F: FnMut(&mut alloy_rpc_types_eth::FeeHistory)>(
             tx_fee_increase: &mut F,
         ) -> FeeHistoryProcessWithdrawal<CkErc20Setup, RetrieveErc20Request> {
             let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
@@ -1695,20 +1695,20 @@ mod withdraw_erc20 {
             .retrieve_fee_history(move |mock| {
                 mock.modify_response(
                     JsonRpcProvider::Provider1,
-                    &mut |response: &mut ethers_core::types::FeeHistory| {
-                        response.oldest_block = 0x17740742_u64.into()
+                    &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                        response.oldest_block = 0x17740742_u64
                     },
                 )
                 .modify_response(
                     JsonRpcProvider::Provider2,
-                    &mut |response: &mut ethers_core::types::FeeHistory| {
-                        response.oldest_block = 0x17740743_u64.into()
+                    &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                        response.oldest_block = 0x17740743_u64
                     },
                 )
                 .modify_response(
                     JsonRpcProvider::Provider3,
-                    &mut |response: &mut ethers_core::types::FeeHistory| {
-                        response.oldest_block = 0x17740744_u64.into()
+                    &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                        response.oldest_block = 0x17740744_u64
                     },
                 )
             })
@@ -2042,7 +2042,7 @@ fn should_block_deposit_from_corrupted_principal() {
     ckerc20
         .deposit(DepositCkErc20Params::new(ONE_USDC, ckusdc))
         .with_override_erc20_log_entry(|mut entry| {
-            entry.topics[3] = invalid_principal.parse().unwrap();
+            entry.inner.data.topics_mut()[3] = invalid_principal.parse().unwrap();
             entry
         })
         .expect_no_mint()
