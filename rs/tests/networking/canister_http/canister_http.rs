@@ -823,10 +823,6 @@ pub struct OutOfCyclesReport {
     pub spent: u128,
 }
 
-pub fn reported_spend(reject_message: &str) -> Result<u128, String> {
-    reported_out_of_cycles(reject_message).map(|report| report.spent)
-}
-
 pub fn reported_out_of_cycles(reject_message: &str) -> Result<OutOfCyclesReport, String> {
     let malformed =
         || format!("expected a rejection naming what was spent, got: '{reject_message}'");

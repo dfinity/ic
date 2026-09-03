@@ -3086,13 +3086,16 @@ fn test_pay_as_you_go_funded_by_the_quote(env: TestEnv) {
         // The allowance does not merely cap the download, it pays for it: every
         // replica spends its share down to the cycle before giving up, and the
         // receipt each one reports is capped at exactly that share.
-        let spent = fatal(reported_spend(&rejection.reject_message).map_err(anyhow::Error::msg));
-        let withheld_for_replicas = oversized_allowance * oversized_fees.node_count as u128;
-        assert_eq!(spent, withheld_for_replicas);
+        let report =
+            fatal(reported_out_of_cycles(&rejection.reject_message).map_err(anyhow::Error::msg));
+        assert_eq!(report.spent, oversized_allowance * report.replicas as u128);
 
         let charge = settled_charge(&handlers, &baseline).await;
-        let expected = oversized_fees.base_fee + spent;
-        assert_eq!(charge.consumed.http_outcalls, expected);
+        if let Err(wrong) =
+            oversized_fees.check_failed_consumption(&charge.consumed, &report, payment)
+        {
+            panic!("an outcall larger than its allowance affords {wrong}");
+        }
     });
 }
 
