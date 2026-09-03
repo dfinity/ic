@@ -392,7 +392,7 @@ pub fn start_server(
         config.clone(),
         subnet_type,
         state_reader.clone(),
-        platform_version.replica_version,
+        platform_version.clone(),
     );
     let catchup_router = CatchUpPackageService::new_router(consensus_pool_cache.clone());
 
