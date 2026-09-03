@@ -86,6 +86,7 @@ type RejectionCode = variant {
   DestinationInvalid;
   CanisterReject;
   CanisterError;
+  SysUnknown;
   Unknown;
 };
 type HttpResponseResult = variant {

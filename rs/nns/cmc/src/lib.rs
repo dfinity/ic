@@ -3,11 +3,13 @@ pub use ic_management_canister_types::CanisterSettings;
 use candid::{CandidType, Nat};
 use ic_cdk::{
     api::msg_caller,
-    call::{Call, Error as IcCdkCallError, RejectCode},
+    call::{Call, RejectCode},
 };
 use std::time::{Duration, SystemTime};
 
 use dfn_protobuf::{ProtoBuf, ToProto};
+
+pub use ic_nervous_system_runtime::into_reject_code_and_message;
 
 use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
@@ -63,38 +65,6 @@ pub fn ic0_mint_cycles128(amount: Cycles) -> Cycles {
 /// caller that returns principalId instead of Principal
 pub fn caller() -> PrincipalId {
     PrincipalId::from(msg_caller())
-}
-
-/// Translates a failed call into the `(reject code, message)` pair that [`call_protobuf`]
-/// and this canister's error messages report.
-///
-/// The match is deliberately exhaustive (rather than using a catch-all arm) so
-/// that a new [`IcCdkCallError`] variant forces us to revisit this mapping
-/// instead of silently misclassifying it.
-pub fn into_reject_code_and_message(err: IcCdkCallError) -> (i32, String) {
-    match err {
-        // The system (or the callee) already rejected the call and assigned a reject
-        // code; surface it unchanged.
-        IcCdkCallError::CallRejected(rejected) => (
-            rejected.raw_reject_code() as i32,
-            rejected.reject_message().to_string(),
-        ),
-        // The callee replied, but its response did not decode into the expected type,
-        // so it did not honor its interface: treat it as a canister-side error.
-        IcCdkCallError::CandidDecodeFailed(err) => {
-            (RejectCode::CanisterError as i32, err.to_string())
-        }
-        // This canister lacks the liquid cycles to perform the call, so the call was
-        // never sent; an immediate retry cannot add cycles, hence fatal, not transient.
-        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
-            (RejectCode::SysFatal as i32, err.to_string())
-        }
-        // `ic0.call_perform` could not enqueue the call (e.g. a full output queue),
-        // a transient system condition that a later retry may clear.
-        IcCdkCallError::CallPerformFailed(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
-    }
 }
 
 /// A Protobuf codec failure is not a reject, so no `RejectCode` really describes it.

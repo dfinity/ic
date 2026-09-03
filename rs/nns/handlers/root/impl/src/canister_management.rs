@@ -2,7 +2,7 @@ use crate::PROXIED_CANISTER_CALLS_TRACKER;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
     api::{debug_print, msg_caller},
-    call::{Call, CallFailed, Error as IcCdkCallError, RejectCode},
+    call::{Call, CallFailed, Error as IcCdkCallError},
 };
 use ic_management_canister_types_private::{
     self as management_canister, CanisterInstallMode::Install, CanisterSettingsArgsBuilder,
@@ -17,7 +17,7 @@ use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracke
 use ic_nervous_system_root::change_canister::{
     AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest, start_canister, stop_canister,
 };
-use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_nervous_system_runtime::{CdkRuntime, Runtime, into_reject_code_and_message};
 use ic_nervous_system_string::humanize_blob;
 use ic_nns_common::{
     registry::{get_value, mutate_registry},
@@ -339,30 +339,7 @@ pub async fn create_canister_and_install_code(
 /// [`try_to_create_and_install_canister`] reports. Reports the same numeric codes
 /// that the deprecated `ic_cdk::api::call` did.
 fn format_call_error(err: IcCdkCallError) -> String {
-    let (code, message) = match err {
-        // The system (or the callee) already rejected the call and assigned a reject
-        // code; surface it unchanged.
-        IcCdkCallError::CallRejected(rejected) => (
-            rejected.raw_reject_code() as i32,
-            rejected.reject_message().to_string(),
-        ),
-        // The callee replied, but its response did not decode into the expected type,
-        // so it did not honor its interface: treat it as a canister-side error.
-        IcCdkCallError::CandidDecodeFailed(err) => {
-            (RejectCode::CanisterError as i32, err.to_string())
-        }
-        // This canister lacks the liquid cycles to perform the call, so the call was
-        // never sent; an immediate retry cannot add cycles, hence fatal, not transient.
-        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
-            (RejectCode::SysFatal as i32, err.to_string())
-        }
-        // `ic0.call_perform` could not enqueue the call (e.g. a full output queue),
-        // a transient system condition that a later retry may clear.
-        IcCdkCallError::CallPerformFailed(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
-    };
-
+    let (code, message) = into_reject_code_and_message(err);
     format!("error code {code}: {message}")
 }
 

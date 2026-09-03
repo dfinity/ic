@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_cdk::call::{Call, Error as IcCdkCallError, RejectCode};
+use ic_cdk::call::{Call, Error as IcCdkCallError};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_management_canister_types_private::{
     CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
@@ -10,7 +10,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResultV2, CanisterStatusType, canister_status},
 };
-use ic_nervous_system_runtime::CdkRuntime;
+use ic_nervous_system_runtime::{CdkRuntime, into_reject_code_and_message};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root_interface::client::NnsRootCanisterClientImpl;
 use ic_sns_wasm::{
@@ -204,38 +204,6 @@ impl CanisterApi for CanisterApiImpl {
             .map_err(handle_call_error(format!(
                 "Failed to send cycles to canister {target}"
             )))
-    }
-}
-
-/// Translates a failed call into the `(reject code, message)` pair that the error messages
-/// below report.
-///
-/// The match is deliberately exhaustive (rather than using a catch-all arm) so
-/// that a new [`IcCdkCallError`] variant forces us to revisit this mapping
-/// instead of silently misclassifying it.
-fn into_reject_code_and_message(err: IcCdkCallError) -> (i32, String) {
-    match err {
-        // The system (or the callee) already rejected the call and assigned a reject
-        // code; surface it unchanged.
-        IcCdkCallError::CallRejected(rejected) => (
-            rejected.raw_reject_code() as i32,
-            rejected.reject_message().to_string(),
-        ),
-        // The callee replied, but its response did not decode into the expected type,
-        // so it did not honor its interface: treat it as a canister-side error.
-        IcCdkCallError::CandidDecodeFailed(err) => {
-            (RejectCode::CanisterError as i32, err.to_string())
-        }
-        // This canister lacks the liquid cycles to perform the call, so the call was
-        // never sent; an immediate retry cannot add cycles, hence fatal, not transient.
-        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
-            (RejectCode::SysFatal as i32, err.to_string())
-        }
-        // `ic0.call_perform` could not enqueue the call (e.g. a full output queue),
-        // a transient system condition that a later retry may clear.
-        IcCdkCallError::CallPerformFailed(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
     }
 }
 
