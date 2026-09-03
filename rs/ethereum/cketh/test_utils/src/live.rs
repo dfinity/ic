@@ -882,16 +882,23 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
     /// *next* run of the withdrawal timer, and a single jump — however large — only ever makes a due
     /// timer fire once.
     ///
-    /// Watched through the spend counter, which only a finalized funding moves — a mined transaction
-    /// pays its gas whether it succeeded or failed. The age gauge beside it would not do: it reads
-    /// zero both when nothing is outstanding and when a funding was accepted less than a second of
-    /// instance time ago, which is every moment between the burn and the next tick.
+    /// Watched through the minter's own record of the finalization, whatever the transaction's
+    /// outcome — the point of this wait is the fundings that fail. A state the minter is either in
+    /// or not, rather than a change against a baseline: `process_retrieve_eth_requests` finalizes in
+    /// the same pass that sends, so a baseline read after the transfer appears on chain could
+    /// already carry the very finalization being waited for, and the wait would then sit out its
+    /// whole budget waiting for a second one. The age gauge would not do either: it reads zero both
+    /// when nothing is outstanding and when a funding was accepted less than a second of instance
+    /// time ago, which is every moment between the burn and the next tick.
     pub fn await_funding_finalized(&self, max_ticks: u32) {
-        let spent_before = self.metric_value(SWEEPER_ETH_SPENT);
         self.drive_until(
             max_ticks,
             |_| "the funding had not finalized".to_string(),
-            |setup| setup.metric_value(SWEEPER_ETH_SPENT) > spent_before,
+            |setup| {
+                setup.minter_events().iter().any(|event| {
+                    matches!(&event.payload, EventPayload::FinalizedTransaction { .. })
+                })
+            },
         );
     }
 
