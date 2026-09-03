@@ -2,7 +2,6 @@
 
 All commands should be run from the repository root (`/ic`).
 
-
 Never manually edit `ci/container/TAG`, `ci/container/ic-dev.digest` or
 `ci/container/ic-build.digest`. They are written only by the
 `container-autobuild.yml` GitHub Actions workflow, which builds the new
