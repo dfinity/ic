@@ -10,6 +10,7 @@ use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use rewards_calculation::types::NodeMetricsDailyRaw;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod mock {
     use super::{CallResult, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
@@ -43,6 +44,9 @@ impl MetricsManager<VM> {
             subnets_metrics: RefCell::new(crate::storage::stable_btreemap_init(MemoryId::new(0))),
             last_timestamp_per_subnet: RefCell::new(crate::storage::stable_btreemap_init(
                 MemoryId::new(2),
+            )),
+            baseline_day_per_subnet: RefCell::new(crate::storage::stable_btreemap_init(
+                MemoryId::new(3),
             )),
         }
     }
@@ -574,6 +578,13 @@ async fn subnet_with_no_metrics_at_all_does_not_hold_the_synced_day_back() {
             .is_none(),
         "a subnet that returned no records should have no stored timestamp"
     );
+    // It is credited with the day the reporting subnet reached, not skipped: that is what stops
+    // the synced day advancing past it if it never reports.
+    assert_eq!(
+        mm.day_covered_by(brand_new),
+        Some(add_days(&epoch, 4)),
+        "a subnet seen for the first time should be credited with the days that predate it"
+    );
 }
 
 /// With nothing stored for any subnet there is no day to report as synced. Recording the epoch
@@ -589,4 +600,115 @@ async fn no_synced_day_is_recorded_when_no_subnet_has_metrics() {
         .await;
 
     assert!(result.is_err(), "got {result:?}");
+}
+
+/// Being skipped for having no metrics is a state a subnet does not necessarily grow out of: one
+/// that stalls before closing its first daily snapshot answers with an empty history for good,
+/// because the management canister keeps that snapshot as running stats and `node_metrics_history`
+/// never returns running stats. Once the subnets that do report move past the day it came in on,
+/// the synced day has to stop with it — otherwise the very gap the minimum exists to close is
+/// reopened for its nodes.
+#[tokio::test]
+async fn subnet_whose_history_stays_empty_stops_holding_the_synced_day_from_the_day_it_appeared() {
+    let reporting = subnet_id(1);
+    let never_reports = subnet_id(2);
+    let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+
+    // The reporting subnet gets three days further along between the two syncs.
+    let sync_count = AtomicUsize::new(0);
+    let mut mock = mock::MockCanisterClient::new();
+    mock.expect_node_metrics_history().returning(move |args| {
+        if SubnetId::from(PrincipalId::from(args.subnet_id)) == never_reports {
+            return Ok(vec![]);
+        }
+        // Both subnets are fetched per sync, so count the reporting one only.
+        let days = match sync_count.fetch_add(1, Ordering::SeqCst) {
+            0 => 3,
+            _ => 6,
+        };
+        Ok(node_metrics_history_gen(days))
+    });
+    let mm = MetricsManager::new_test(mock);
+
+    let first = mm
+        .update_subnets_metrics(vec![reporting, never_reports])
+        .await
+        .unwrap();
+    assert_eq!(
+        first,
+        add_days(&epoch, 2),
+        "on the first sync the subnet with no metrics has nothing to answer for yet"
+    );
+
+    let second = mm
+        .update_subnets_metrics(vec![reporting, never_reports])
+        .await
+        .unwrap();
+    assert_eq!(
+        mm.day_covered_by(reporting),
+        Some(add_days(&epoch, 5)),
+        "the reporting subnet should have moved on"
+    );
+    assert_eq!(
+        second,
+        add_days(&epoch, 2),
+        "the synced day must stay at the day the silent subnet appeared, not follow the other one"
+    );
+}
+
+/// The baseline records where a subnet came in, so a later sync must not move it forward — that
+/// would let it drift along behind the reporting subnets and never hold anything back.
+#[tokio::test]
+async fn baseline_of_a_subnet_without_metrics_is_not_moved_by_later_syncs() {
+    let reporting = subnet_id(1);
+    let never_reports = subnet_id(2);
+    let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+
+    let sync_count = AtomicUsize::new(0);
+    let mut mock = mock::MockCanisterClient::new();
+    mock.expect_node_metrics_history().returning(move |args| {
+        if SubnetId::from(PrincipalId::from(args.subnet_id)) == never_reports {
+            return Ok(vec![]);
+        }
+        let days = match sync_count.fetch_add(1, Ordering::SeqCst) {
+            0 => 3,
+            _ => 6,
+        };
+        Ok(node_metrics_history_gen(days))
+    });
+    let mm = MetricsManager::new_test(mock);
+
+    for _ in 0..3 {
+        mm.update_subnets_metrics(vec![reporting, never_reports])
+            .await
+            .unwrap();
+    }
+
+    assert_eq!(mm.day_covered_by(never_reports), Some(add_days(&epoch, 2)));
+}
+
+/// A subnet that reports after having been credited with a baseline is judged on what it reported,
+/// even when that is an earlier day: a subnet stalled since day D finally closes the snapshot D was
+/// still running in, which is genuinely all it has.
+#[tokio::test]
+async fn a_reported_day_overrides_the_baseline_even_when_it_is_earlier() {
+    let subnet = subnet_id(1);
+    let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+
+    let mut mock = mock::MockCanisterClient::new();
+    mock.expect_node_metrics_history().return_const(Ok(vec![]));
+    let mm = MetricsManager::new_test(mock);
+
+    mm.baseline_day_per_subnet
+        .borrow_mut()
+        .insert(subnet.into(), 5 * ONE_DAY_NANOS);
+    mm.last_timestamp_per_subnet
+        .borrow_mut()
+        .insert(subnet.into(), 2 * ONE_DAY_NANOS);
+
+    assert_eq!(mm.day_covered_by(subnet), Some(add_days(&epoch, 2)));
+    assert_eq!(
+        mm.last_day_fully_synced(&[subnet]),
+        Some(add_days(&epoch, 2))
+    );
 }

@@ -15,6 +15,7 @@ const REGISTRY_STORE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const SUBNETS_METRICS_MEMORY_ID: MemoryId = MemoryId::new(1);
 const LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID: MemoryId = MemoryId::new(2);
 const LAST_DAY_SYNCED_MEMORY_ID: MemoryId = MemoryId::new(3);
+const BASELINE_DAY_PER_SUBNET_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 pub type VM = VirtualMemory<DefaultMemoryImpl>;
 
@@ -39,6 +40,12 @@ thread_local! {
             client: Box::new(ICCanisterClient),
             subnets_metrics: RefCell::new(stable_btreemap_init(SUBNETS_METRICS_MEMORY_ID)),
             last_timestamp_per_subnet: RefCell::new(stable_btreemap_init(LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID)),
+            // Empty on the first sync after this was introduced, so every subnet that has never
+            // reported gets its baseline pinned then, at the day the rest have reached. That is
+            // more generous than a real first-sight baseline for a subnet already stalled by then,
+            // but only over days that were minted under the previous behaviour anyway; from that
+            // sync on it holds the synced day back like any other.
+            baseline_day_per_subnet: RefCell::new(stable_btreemap_init(BASELINE_DAY_PER_SUBNET_MEMORY_ID)),
         };
 
         Rc::new(metrics_manager)

@@ -51,6 +51,9 @@ where
     pub(crate) subnets_metrics:
         RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, Memory>>,
     pub(crate) last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, Memory>>,
+    /// Per subnet, the day it counts as covering for as long as it has never reported any metrics
+    /// at all. See [`MetricsManager::record_baseline_for_subnets_without_metrics`].
+    pub(crate) baseline_day_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, Memory>>,
 }
 
 impl<Memory> MetricsManager<Memory>
@@ -102,9 +105,22 @@ where
             .collect()
     }
 
+    /// The day `subnet`'s stored metrics cover: its own last stored timestamp, or — for a subnet
+    /// that has never reported any — the baseline it was credited with when first seen.
+    ///
+    /// Its own timestamp always wins. A subnet that has reported before says exactly how far it
+    /// covers, including when it reports an older day than its baseline, which happens when a
+    /// long-stalled subnet finally closes a snapshot keyed to the day it stalled on.
+    fn day_covered_by(&self, subnet: SubnetId) -> Option<NaiveDate> {
+        let key = SubnetIdKey::from(subnet);
+        let reported = self.last_timestamp_per_subnet.borrow().get(&key);
+        reported
+            .or_else(|| self.baseline_day_per_subnet.borrow().get(&key))
+            .map(|ts| DateTime::from_timestamp_nanos(ts as i64).date_naive())
+    }
+
     /// The last day the stored metrics cover for *every* subnet in `subnets`: the earliest of the
-    /// per-subnet last stored timestamps, as a UTC day. `None` if not one of them has any metrics
-    /// stored.
+    /// per-subnet covered days. `None` if not one of them covers any day.
     ///
     /// This is the minimum, not the maximum, because it is what `last_day_synced` — and through it
     /// the reward period validation in the canister — treats as "metrics are complete up to here".
@@ -117,17 +133,68 @@ where
     /// assigned node, a zero) failure rate. Not advancing on partial data is the same stance
     /// [`Self::update_subnets_metrics`] already takes when a call outright fails; the maximum made
     /// that stance depend on which code path the missing data arrived by.
-    ///
-    /// Subnets with nothing stored are skipped rather than counted as stuck at the epoch. A subnet
-    /// created today has no completed day yet, and letting it drag the minimum to 1970-01-01 would
-    /// block every reward calculation network-wide until its first day closed.
     fn last_day_fully_synced(&self, subnets: &[SubnetId]) -> Option<NaiveDate> {
-        let stored = self.last_timestamp_per_subnet.borrow();
         subnets
             .iter()
-            .filter_map(|subnet| stored.get(&(*subnet).into()))
-            .map(|ts| DateTime::from_timestamp_nanos(ts as i64).date_naive())
+            .filter_map(|subnet| self.day_covered_by(*subnet))
             .min()
+    }
+
+    /// Credits every subnet that has never reported any metrics with covering the furthest day the
+    /// subnets that have reported have reached, and remembers it.
+    ///
+    /// Without this, a subnet with no metrics at all had to be left out of the minimum entirely:
+    /// counting it as covering nothing would pin the minimum to 1970-01-01 and block every reward
+    /// calculation network-wide. But leaving it out is only right for as long as there is genuinely
+    /// nothing it owes us, and that is not a state it necessarily grows out of. A subnet that
+    /// stalls before closing its first daily snapshot answers with an empty history indefinitely:
+    /// the management canister keeps that snapshot as running stats and only closes it once a later
+    /// block arrives, and `node_metrics_history` never returns running stats. Such a subnet would
+    /// be skipped forever while the healthy ones kept advancing `last_day_synced` — exactly the gap
+    /// the minimum is here to close, reopened for its nodes.
+    ///
+    /// Pinning the baseline at first sight closes that. The days before a subnet showed up are not
+    /// its to account for, so it is credited with all of them; every day after is, so the moment
+    /// the rest move past its baseline the minimum stops advancing and stays put until the subnet
+    /// reports something. The baseline comes from what the other subnets have reached rather than
+    /// from the clock, because that is the same quantity `last_day_synced` is measured in: a
+    /// wall-clock "today" would have to guess how far behind the metrics normally run.
+    ///
+    /// Nothing is recorded while no subnet has reported at all — there is no day to credit anyone
+    /// with, and `update_subnets_metrics` fails on that below. Nor is an existing baseline ever
+    /// moved: it records where a subnet came in, which does not change.
+    fn record_baseline_for_subnets_without_metrics(&self, subnets: &[SubnetId]) {
+        let furthest_reported = subnets
+            .iter()
+            .filter_map(|subnet| {
+                self.last_timestamp_per_subnet
+                    .borrow()
+                    .get(&SubnetIdKey::from(*subnet))
+            })
+            .max();
+        let Some(furthest_reported) = furthest_reported else {
+            return;
+        };
+
+        for subnet in subnets {
+            let key = SubnetIdKey::from(*subnet);
+            let unseen = self.last_timestamp_per_subnet.borrow().get(&key).is_none()
+                && self.baseline_day_per_subnet.borrow().get(&key).is_none();
+            if !unseen {
+                continue;
+            }
+
+            self.baseline_day_per_subnet
+                .borrow_mut()
+                .insert(key, furthest_reported);
+            let baseline = DateTime::from_timestamp_nanos(furthest_reported as i64).date_naive();
+            ic_cdk::println!(
+                "Subnet {} has no metrics at all; counting it as covering up to {}. Metrics will \
+                 not be considered synced past that day until it reports.",
+                subnet,
+                baseline,
+            );
+        }
     }
 
     /// Updates the stored subnets metrics from remote management canisters.
@@ -210,6 +277,9 @@ where
             return Err("Failed to update metrics".to_string());
         }
 
+        // Before taking the minimum, so that a subnet seen here for the first time is part of it.
+        self.record_baseline_for_subnets_without_metrics(&subnets);
+
         let last_day_update = self.last_day_fully_synced(&subnets).ok_or_else(|| {
             "No subnet has any stored metrics: refusing to record a synced day".to_string()
         })?;
@@ -229,17 +299,9 @@ where
     /// Bounded the same way the failure log above is, and for the same reason: whatever keeps a
     /// subnet behind tends to keep it behind for many syncs in a row.
     fn log_subnets_lagging_behind(&self, subnets: &[SubnetId], last_day_update: NaiveDate) {
-        let stored = self.last_timestamp_per_subnet.borrow();
         let days: Vec<(SubnetId, NaiveDate)> = subnets
             .iter()
-            .filter_map(|subnet| {
-                stored.get(&(*subnet).into()).map(|ts| {
-                    (
-                        *subnet,
-                        DateTime::from_timestamp_nanos(ts as i64).date_naive(),
-                    )
-                })
-            })
+            .filter_map(|subnet| self.day_covered_by(*subnet).map(|day| (*subnet, day)))
             .collect();
 
         // Every subnet with metrics stopped on the same day, so none of them is behind another and
