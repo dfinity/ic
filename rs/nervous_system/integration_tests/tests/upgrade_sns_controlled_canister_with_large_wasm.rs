@@ -158,6 +158,8 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         )
         .unwrap(),
         summary: "Upgrade Image Classification canister.".to_string(),
+        skip_pre_upgrade: false,
+        wasm_memory_persistence: None,
     };
 
     // 2. Submit the upgrade proposal.

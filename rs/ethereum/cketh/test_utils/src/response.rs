@@ -2,12 +2,10 @@ use crate::{
     DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
     EFFECTIVE_GAS_PRICE, GAS_USED, MINTER_ADDRESS, USDC_ERC20_CONTRACT_ADDRESS,
 };
-use ethers_core::abi::AbiDecode;
-use ethers_core::utils::rlp;
 use serde_json::{Value, json};
 use std::str::FromStr;
 
-pub fn empty_logs() -> Vec<ethers_core::types::Log> {
+pub fn empty_logs() -> Vec<alloy_rpc_types_eth::Log> {
     vec![]
 }
 
@@ -29,57 +27,46 @@ pub fn balance_scan_response(balances: &[u128]) -> String {
     format!("0x{}", hex::encode(words))
 }
 
-pub fn multi_logs_for_single_transaction<Entry: Clone + Into<ethers_core::types::Log>>(
+pub fn multi_logs_for_single_transaction<Entry: Clone + Into<alloy_rpc_types_eth::Log>>(
     log_entry: Entry,
     num_logs: usize,
-) -> Vec<ethers_core::types::Log> {
+) -> Vec<alloy_rpc_types_eth::Log> {
     let mut logs = Vec::with_capacity(num_logs);
     for log_index in 0..num_logs {
         let mut log = log_entry.clone().into();
-        log.log_index = Some(log_index.into());
+        log.log_index = Some(log_index as u64);
         logs.push(log);
     }
     logs
 }
 
-pub fn send_raw_transaction_response() -> ethers_core::types::TxHash {
-    ethers_core::types::TxHash::decode_hex(
-        "0x0e59bd032b9b22aca5e2784e4cf114783512db00988c716cf17a1cc755a0a93d",
-    )
-    .unwrap()
+pub fn send_raw_transaction_response() -> alloy_primitives::TxHash {
+    "0x0e59bd032b9b22aca5e2784e4cf114783512db00988c716cf17a1cc755a0a93d"
+        .parse()
+        .unwrap()
 }
 
-pub fn block_response(block_number: u64) -> ethers_core::types::Block<ethers_core::types::TxHash> {
-    use ethers_core::types::{H64, H256};
+pub fn block_response(block_number: u64) -> alloy_rpc_types_eth::Block {
+    use alloy_primitives::U256;
 
-    let mut hash = [0_u8; 32];
-    hex::decode_to_slice(&DEFAULT_BLOCK_HASH[2..], &mut hash).unwrap();
-
-    let mut log_blooms = [0_u8; 256];
-    hex::decode_to_slice(&"0x93ab55f727ed7f7f7ffa47b6e520df221dce71f165d0f470a71d051cfd36ab0ad4015725f16938bb3798fb4fc58fd3d95e23a8689ba06ae3ce16ffba95afbedcfece0dcdce2f1e7f6eb6573a92c5a8feadec65bd2655296a5ff07ecee9ae5b2abfddd7b2877ed3f5ac7bf4d95061bd5d6f8e37fb87995ea0904d58d6d8cbb86f9fef7af0364e834154dbb74a2ff7c6355a43ac1d73d9bcf9f5a9ed756492fffdfbffd1e7ffdf7f274e36fbc4e9e3bdf9e56fdad089dd582fd7e5fc733fcc63753762f4f7c49dbffeb5a196ae6a3fddd749f1f26effedd1df23ad5d23b9d2fc2f19ffa5513504a53155d477f1f155b966ddadfa195b4c6bdafb9df97ff065debf"[2..], &mut log_blooms).unwrap();
-
-    let mut miner = [0_u8; 20];
-    hex::decode_to_slice(
-        &"0x1f9090aae28b8a3dceadf281b0f12828e676c326"[2..],
-        &mut miner,
-    )
-    .unwrap();
-
-    ethers_core::types::Block::<ethers_core::types::TxHash> {
-        hash: Some(hash.into()),
-        number: Some(block_number.into()),
-        base_fee_per_gas: Some(0x3e4f64de7_u64.into()),
-        nonce: Some(H64::zero()),
-        logs_bloom: Some(log_blooms.into()),
-        total_difficulty: Some(0xc70d815d562d3cfa955_u128.into()),
-        mix_hash: Some(H256::zero()),
-        author: Some(miner.into()),
-        size: Some(0x19eea_u64.into()),
+    alloy_rpc_types_eth::Block {
+        header: alloy_rpc_types_eth::Header {
+            hash: DEFAULT_BLOCK_HASH.parse().unwrap(),
+            inner: alloy_consensus::Header {
+                number: block_number,
+                base_fee_per_gas: Some(0x3e4f64de7),
+                logs_bloom: "0x93ab55f727ed7f7f7ffa47b6e520df221dce71f165d0f470a71d051cfd36ab0ad4015725f16938bb3798fb4fc58fd3d95e23a8689ba06ae3ce16ffba95afbedcfece0dcdce2f1e7f6eb6573a92c5a8feadec65bd2655296a5ff07ecee9ae5b2abfddd7b2877ed3f5ac7bf4d95061bd5d6f8e37fb87995ea0904d58d6d8cbb86f9fef7af0364e834154dbb74a2ff7c6355a43ac1d73d9bcf9f5a9ed756492fffdfbffd1e7ffdf7f274e36fbc4e9e3bdf9e56fdad089dd582fd7e5fc733fcc63753762f4f7c49dbffeb5a196ae6a3fddd749f1f26effedd1df23ad5d23b9d2fc2f19ffa5513504a53155d477f1f155b966ddadfa195b4c6bdafb9df97ff065debf".parse().unwrap(),
+                beneficiary: "0x1f9090aae28b8a3dceadf281b0f12828e676c326".parse().unwrap(),
+                ..Default::default()
+            },
+            total_difficulty: Some(U256::from(0xc70d815d562d3cfa955_u128)),
+            size: Some(U256::from(0x19eea)),
+        },
         ..Default::default()
     }
 }
 
-pub fn transaction_receipt(transaction_hash: String) -> ethers_core::types::TransactionReceipt {
+pub fn transaction_receipt(transaction_hash: String) -> alloy_rpc_types_eth::TransactionReceipt {
     let json_value = json!({
         "blockHash": DEFAULT_BLOCK_HASH,
         "blockNumber": format!("{:#x}", DEFAULT_BLOCK_NUMBER),
@@ -103,7 +90,7 @@ pub fn transaction_count_response(count: u32) -> String {
     format!("{count:#x}")
 }
 
-pub fn fee_history() -> ethers_core::types::FeeHistory {
+pub fn fee_history() -> alloy_rpc_types_eth::FeeHistory {
     let json_value = fee_history_json_value();
     serde_json::from_value(json_value).expect("BUG: invalid fee history")
 }
@@ -136,105 +123,103 @@ pub fn fee_history_json_value() -> Value {
     })
 }
 
-pub fn default_signed_eip_1559_transaction() -> (
-    ethers_core::types::Eip1559TransactionRequest,
-    ethers_core::types::Signature,
-) {
-    let tx = ethers_core::types::Eip1559TransactionRequest::new()
-        .from(minter_address())
-        .to(DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS
-            .parse::<ethers_core::types::NameOrAddress>()
-            .unwrap())
-        .nonce(0_u64)
-        .value(99_306_922_126_581_990_u64)
-        .gas(21_000_u64)
-        .max_priority_fee_per_gas(1_500_000_000_u64)
-        .max_fee_per_gas(33_003_708_258_u64)
-        .chain_id(1_u64);
-    let sig = ethers_core::types::Signature {
-        r: ethers_core::types::U256::from_dec_str(
+pub fn default_signed_eip_1559_transaction()
+-> (alloy_consensus::TxEip1559, alloy_primitives::Signature) {
+    let tx = alloy_consensus::TxEip1559 {
+        chain_id: 1,
+        nonce: 0,
+        gas_limit: 21_000,
+        max_fee_per_gas: 33_003_708_258,
+        max_priority_fee_per_gas: 1_500_000_000,
+        to: alloy_primitives::TxKind::Call(DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap()),
+        value: alloy_primitives::U256::from(99_306_922_126_581_990_u64),
+        access_list: Default::default(),
+        input: alloy_primitives::Bytes::new(),
+    };
+    let sig = alloy_primitives::Signature::new(
+        alloy_primitives::U256::from_str(
             "78378320896144165623306772901883835881146801392437857873186382435197931981331",
         )
         .unwrap(),
-        s: ethers_core::types::U256::from_dec_str(
+        alloy_primitives::U256::from_str(
             "11573774696968647626294885286453366440757932248598190533848223153778081228091",
         )
         .unwrap(),
-        v: 1,
-    };
+        true,
+    );
     (tx, sig)
 }
 
-pub fn default_erc20_signed_eip_1559_transaction() -> (
-    ethers_core::types::Eip1559TransactionRequest,
-    ethers_core::types::Signature,
-) {
-    let tx = ethers_core::types::Eip1559TransactionRequest::new()
-        .from(minter_address())
-        .to(USDC_ERC20_CONTRACT_ADDRESS
-            .parse::<ethers_core::types::NameOrAddress>()
-            .unwrap())
-        .nonce(0_u64)
-        .value(0_u64)
-        .gas(65_000_u64)
-        .data(hex::decode(&"0xa9059cbb000000000000000000000000221e931fbfcb9bd54ddd26ce6f5e29e98add01c000000000000000000000000000000000000000000000000000000000001e8480"[2..]).unwrap())
-        .max_priority_fee_per_gas(1_500_000_000_u64)
-        .max_fee_per_gas(33_003_708_258_u64)
-        .chain_id(1_u64);
-    let sig = ethers_core::types::Signature {
-        r: ethers_core::types::U256::from_str_radix(
-            "da4f476ede0aaf7da633371a938d5e2525a65a23699b55761779871a313f8cb3",
-            16,
-        )
-        .unwrap(),
-        s: ethers_core::types::U256::from_str_radix(
-            "45833d409eba50e3e9b145d04ea294ee791c14465503818f8b325a881938ddc1",
-            16,
-        )
-        .unwrap(),
-        v: 0,
+pub fn default_erc20_signed_eip_1559_transaction()
+-> (alloy_consensus::TxEip1559, alloy_primitives::Signature) {
+    let tx = alloy_consensus::TxEip1559 {
+        chain_id: 1,
+        nonce: 0,
+        gas_limit: 65_000,
+        max_fee_per_gas: 33_003_708_258,
+        max_priority_fee_per_gas: 1_500_000_000,
+        to: alloy_primitives::TxKind::Call(USDC_ERC20_CONTRACT_ADDRESS.parse().unwrap()),
+        value: alloy_primitives::U256::ZERO,
+        access_list: Default::default(),
+        input: alloy_primitives::Bytes::from_str("0xa9059cbb000000000000000000000000221e931fbfcb9bd54ddd26ce6f5e29e98add01c000000000000000000000000000000000000000000000000000000000001e8480").unwrap(),
     };
+    let sig = alloy_primitives::Signature::from_scalars_and_parity(
+        "0xda4f476ede0aaf7da633371a938d5e2525a65a23699b55761779871a313f8cb3"
+            .parse()
+            .unwrap(),
+        "0x45833d409eba50e3e9b145d04ea294ee791c14465503818f8b325a881938ddc1"
+            .parse()
+            .unwrap(),
+        false,
+    );
     (tx, sig)
 }
 
-fn minter_address() -> [u8; 20] {
-    ethers_core::types::Bytes::from_str(MINTER_ADDRESS)
-        .unwrap()
-        .to_vec()
-        .try_into()
-        .unwrap()
+pub fn minter_address() -> alloy_primitives::Address {
+    MINTER_ADDRESS.parse().unwrap()
 }
 
 pub fn encode_transaction(
-    tx: ethers_core::types::Eip1559TransactionRequest,
-    sig: ethers_core::types::Signature,
+    tx: alloy_consensus::TxEip1559,
+    sig: alloy_primitives::Signature,
 ) -> String {
-    ethers_core::types::transaction::eip2718::TypedTransaction::Eip1559(tx)
-        .rlp_signed(&sig)
-        .to_string()
+    use alloy_eips::eip2718::Encodable2718;
+    format!(
+        "0x{}",
+        hex::encode(sign_transaction(tx, sig).encoded_2718())
+    )
 }
 
-pub fn decode_transaction(
-    tx: &str,
-) -> (
-    ethers_core::types::Eip1559TransactionRequest,
-    ethers_core::types::Signature,
-) {
-    use ethers_core::types::transaction::eip2718::TypedTransaction;
+/// Decodes the payload a signed EIP-1559 transaction is broadcast as, so that a transaction the
+/// minter built and signed itself can be checked against an independent decoder.
+///
+/// # Panics
+/// * if `tx` is not the payload of a signed EIP-1559 transaction.
+pub fn decode_transaction(tx: &str) -> alloy_consensus::Signed<alloy_consensus::TxEip1559> {
+    use alloy_consensus::TxEnvelope;
+    use alloy_eips::eip2718::Decodable2718;
 
-    TypedTransaction::decode_signed(&rlp::Rlp::new(
-        &ethers_core::types::Bytes::from_str(tx).unwrap(),
-    ))
-    .map(|(tx, sig)| match tx {
-        TypedTransaction::Eip1559(eip1559_tx) => (eip1559_tx, sig),
-        _ => panic!("BUG: unexpected sent ETH transaction type {tx:?}"),
-    })
-    .expect("BUG: failed to deserialize sent ETH transaction")
+    let raw_bytes =
+        hex::decode(tx.trim_start_matches("0x")).expect("BUG: transaction is not hex-encoded");
+    match TxEnvelope::decode_2718(&mut raw_bytes.as_slice())
+        .expect("BUG: failed to deserialize sent ETH transaction")
+    {
+        TxEnvelope::Eip1559(signed) => signed,
+        transaction => panic!("BUG: unexpected sent ETH transaction type {transaction:?}"),
+    }
 }
 
 pub fn hash_transaction(
-    tx: ethers_core::types::Eip1559TransactionRequest,
-    sig: ethers_core::types::Signature,
-) -> ethers_core::types::TxHash {
-    ethers_core::types::transaction::eip2718::TypedTransaction::Eip1559(tx).hash(&sig)
+    tx: alloy_consensus::TxEip1559,
+    sig: alloy_primitives::Signature,
+) -> alloy_primitives::TxHash {
+    *sign_transaction(tx, sig).hash()
+}
+
+fn sign_transaction(
+    tx: alloy_consensus::TxEip1559,
+    sig: alloy_primitives::Signature,
+) -> alloy_consensus::Signed<alloy_consensus::TxEip1559> {
+    use alloy_consensus::SignableTransaction;
+    tx.into_signed(sig)
 }

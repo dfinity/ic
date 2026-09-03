@@ -63,6 +63,38 @@ crate.spec(
 )
 crate.spec(
     features = [
+        "k256",
+        "serde",
+    ],
+    package = "alloy-consensus",
+    version = "^1.8.3",
+)
+crate.spec(
+    features = [
+        "k256",
+        "serde",
+    ],
+    package = "alloy-eips",
+    version = "^1.8.3",
+)
+crate.spec(
+    features = [
+        "k256",
+        "serde",
+    ],
+    package = "alloy-primitives",
+    version = "^1.6.0",
+)
+crate.spec(
+    package = "alloy-rpc-types-eth",
+    version = "^1.8.3",
+)
+crate.spec(
+    package = "alloy-sol-types",
+    version = "^1.6.0",
+)
+crate.spec(
+    features = [
         "std",
     ],
     package = "aes-gcm",
