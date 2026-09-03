@@ -61,9 +61,9 @@ alloy-consensus = { workspace = true }
 alloy-eips = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
+alloy-sol-types = { workspace = true }
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
-ethers-core = { workspace = true }
 flate2 = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
