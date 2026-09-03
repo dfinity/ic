@@ -30,19 +30,12 @@ use anyhow::{Result, bail};
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
-use ic_management_canister_types_private::{
-    HttpMethod, PRICING_VERSION_PAY_AS_YOU_GO, TransformContext, TransformFunc,
-};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasVm, IcNodeSnapshot, READY_WAIT_TIMEOUT,
-};
+use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, READY_WAIT_TIMEOUT};
 use ic_system_test_driver::util::block_on;
 use ic_system_test_driver::{retry_with_msg_async, systest};
-use proxy_canister::{
-    RemoteHttpRequest, ResponseWithRefundedCycles, UnvalidatedCanisterHttpRequestArgs,
-};
+use proxy_canister::{RemoteHttpRequest, ResponseWithRefundedCycles};
 use slog::info;
 use std::time::{Duration, Instant};
 
@@ -51,15 +44,24 @@ use std::time::{Duration, Instant};
 /// per-replica allowances (asserted below).
 const PAYMENT: u64 = 500_000_000_000;
 
-/// How often the proxy canister's balance is polled. The delivered context is kept
-/// around for a minute, so the wait for the refund spans many polls.
+/// How often the proxy canister's accounting is polled.
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 /// How long to wait for the replicas that did report their spend to be refunded.
-/// They are refunded a round or two after the response is delivered, so this only
-/// has to outlast a hiccup — and it has to stay well inside the delivered
-/// context's own 60-second timeout, which is what the test measures afterwards.
-const SURVIVOR_REFUND_TIMEOUT: Duration = Duration::from_secs(20);
+const SURVIVOR_REFUND_TIMEOUT: Duration = Duration::from_secs(30);
+
+// A gate that only closed after the context had already timed out would leave
+// nothing for the second half of the test to observe.
+const _: () = assert!(
+    SURVIVOR_REFUND_TIMEOUT.as_secs() * 2
+        <= DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT.as_secs()
+);
+
+/// How long to wait for the refund that timing out triggers. The context's own
+/// timeout runs from the moment the response was delivered, so this only has to
+/// outlast what is left of it plus the rounds that apply the refund.
+const TIMEOUT_REFUND_TIMEOUT: Duration =
+    Duration::from_secs(DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT.as_secs() + 30);
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -99,24 +101,10 @@ fn test_unresponsive_replica_is_refunded_on_timeout(env: TestEnv) {
     let proxy_id = get_proxy_canister_id(&env);
     let proxy = Canister::new(&runtime, CanisterId::unchecked_from_principal(proxy_id));
 
-    let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{webserver_ipv6}]/ascii/unresponsive"),
-        headers: vec![],
-        method: HttpMethod::GET,
-        body: Some(vec![]),
-        // httpbin stamps a `Date` header, which differs between replicas; dropping
-        // the headers is what lets the surviving ones agree on a response.
-        transform: Some(TransformContext {
-            function: TransformFunc(candid::Func {
-                principal: proxy_id.into(),
-                method: "transform".to_string(),
-            }),
-            context: vec![],
-        }),
-        max_response_bytes: None,
-        is_replicated: None,
-        pricing_version: Some(PRICING_VERSION_PAY_AS_YOU_GO),
-    };
+    let request = pay_as_you_go_args(
+        proxy_id,
+        format!("https://[{webserver_ipv6}]/ascii/unresponsive"),
+    );
 
     // The allowance the killed node would forfeit if it were not refunded on timeout.
     let fees = fees_for(
@@ -125,7 +113,9 @@ fn test_unresponsive_replica_is_refunded_on_timeout(env: TestEnv) {
         subnet_size,
     );
     let payment = u128::from(PAYMENT);
-    assert!(fees.payment_is_ample(payment),);
+    assert!(
+        fees.payment_is_ample(payment)
+    );
     let allowance = fees.allowance(payment);
 
     info!(logger, "Killing one application node.");
@@ -135,12 +125,11 @@ fn test_unresponsive_replica_is_refunded_on_timeout(env: TestEnv) {
         .expect("the killed node did not become unavailable");
 
     block_on(async {
-        let before_consumed = read_consumed(healthy_node, proxy_id).await;
-        let before = balance(healthy_node, proxy_id).await;
+        let baseline = fatal(settled_baseline(healthy_node, proxy_id).await);
         info!(
             logger,
-            "Node is down; making a pay-as-you-go outcall with a balance of {before} \
-             and an allowance of {allowance} per replica."
+            "Node is down; making a pay-as-you-go outcall with an allowance of \
+             {allowance} per replica."
         );
 
         let started = Instant::now();
@@ -158,45 +147,42 @@ fn test_unresponsive_replica_is_refunded_on_timeout(env: TestEnv) {
             )
             .await
             .expect("calling the proxy canister failed");
-        // Bounds the round trip the surviving replicas were charged for: it happened
-        // strictly inside this call.
+        // Bounds the round trip the surviving replicas were charged for
         let elapsed = started.elapsed();
         let response = result.expect("the outcall did not succeed with a node down");
         assert_eq!(
-            response.status, 200,
-            "unexpected response status: {response:?}"
+            (response.status, response.body.as_str()),
+            (200, "unresponsive"),
         );
         // Everything the payment covered beyond the base fee and the allowances comes
-        // straight back on the reply, whether or not a replica later reports what it
-        // spent. Exact, since it turns on no measurement.
+        // straight back on the reply.
         if let Err(wrong) = fees.check_reply_refund(payment, u128::from(refunded_cycles)) {
             panic!("an outcall with a replica down {wrong}");
         }
 
         // The three surviving replicas report their spend on delivery and are
         // refunded the rest of their allowances a round or two later, leaving exactly
-        // one — the killed replica's — withheld. That is the state the timeout acts
-        // on, so wait for it before reading the balance the refund is measured
-        // against.
-        let after_delivery = retry_with_msg_async!(
+        // one — the killed replica's — withheld. We wait until the cycles unaccounted
+        // for are exactly that allowance, which proves the refunded replicas were
+        // credited and the killed replica's allowance is still withheld.
+        let (consumed_at_delivery, after_delivery) = retry_with_msg_async!(
             "the replicas that reported their spend are refunded".to_string(),
             &logger,
             SURVIVOR_REFUND_TIMEOUT,
             POLL_INTERVAL,
             || async {
-                let consumed = read_consumed(healthy_node, proxy_id).await;
-                let balance = balance(healthy_node, proxy_id).await;
-                let withheld = before
-                    .checked_sub(balance)
-                    .unwrap_or_else(|| panic!("balance grew from {before} to {balance}"));
-                // Two allowances sits halfway between the four withheld while those
-                // refunds are outstanding and the one left once they have landed,
-                // so it tells the two apart with a whole allowance of margin either
-                // side of the threshold.
-                if withheld >= 2 * allowance {
+                let balance = cycle_balance(healthy_node, proxy_id).await?;
+                let consumed = consumed_cycles(healthy_node, proxy_id).await?;
+                let Some(withheld) = baseline.balance.checked_sub(balance) else {
+                    bail!("balance grew to {balance}");
+                };
+                let unaccounted =
+                    withheld.saturating_sub(consumed.since(&baseline.consumed).total());
+                if unaccounted > allowance {
                     bail!(
-                        "{withheld} cycles are still withheld, so the replicas that \
-                         reported their spend have not been refunded yet"
+                        "{unaccounted} cycles are withheld with nothing charged for them, \
+                         more than the killed replica's single allowance of {allowance} — so \
+                         the replicas that did report their spend have not been refunded yet"
                     );
                 }
                 Ok((consumed, balance))
@@ -204,10 +190,10 @@ fn test_unresponsive_replica_is_refunded_on_timeout(env: TestEnv) {
         )
         .await
         .expect("the replicas that reported their spend were never refunded");
-        let (consumed_at_delivery, after_delivery) = after_delivery;
-        let withheld = before
+        let withheld = baseline
+            .balance
             .checked_sub(after_delivery)
-            .unwrap_or_else(|| panic!("balance grew from {before} to {after_delivery}"));
+            .unwrap_or_else(|| panic!("balance grew to {after_delivery}"));
         assert!(
             withheld >= allowance,
             "expected at least the killed replica's allowance of {allowance} cycles \
@@ -223,10 +209,10 @@ fn test_unresponsive_replica_is_refunded_on_timeout(env: TestEnv) {
         let after_timeout = retry_with_msg_async!(
             "the killed replica's allowance is refunded".to_string(),
             &logger,
-            READY_WAIT_TIMEOUT,
+            TIMEOUT_REFUND_TIMEOUT,
             POLL_INTERVAL,
             || async {
-                let balance = balance(healthy_node, proxy_id).await;
+                let balance = cycle_balance(healthy_node, proxy_id).await?;
                 // Strictly greater, not merely different: on a subnet that charges,
                 // the canister pays for existing every round, so the balance moves
                 // downward on its own. Only a refund adds to it.
@@ -250,44 +236,25 @@ fn test_unresponsive_replica_is_refunded_on_timeout(env: TestEnv) {
              killed replica had to give back"
         );
         // It rises by a little less: the canister keeps paying to exist while this
-        // waits, and the balance nets that against the refund. No slack factor is
-        // needed — the reads are ordered so the counters' window contains the
-        // balance's, so every cycle lost to existing is inside `while_waiting`.
-        let at_timeout = read_consumed(healthy_node, proxy_id).await;
+        // waits, and the balance nets that against the refund.
+        let at_timeout = fatal(consumed_cycles(healthy_node, proxy_id).await);
         let while_waiting = at_timeout.since(&consumed_at_delivery).total();
         assert!(
             allowance <= refunded + while_waiting,
             "the balance rose by {refunded} cycles, short of the {allowance} allowance by \
-             more than the {while_waiting} the canister was charged for existing while we \
-             waited"
+             more than the {while_waiting} the canister was charged for existing."
         );
         // And what stays charged is what the outcall cost.
-        let charged = before
-            .checked_sub(after_timeout)
-            .unwrap_or_else(|| panic!("balance grew from {before} to {after_timeout}"));
-        let consumed = at_timeout.since(&before_consumed);
-        if let Err(wrong) = fees.check_charge(&consumed, charged, elapsed) {
+        let charge = fatal(settled_charge(healthy_node, proxy_id, &baseline).await);
+        let delivered = DeliveredResponse::transformed(b"unresponsive");
+        if let Err(wrong) = fees.check_consumption(&charge.consumed, &delivered, elapsed) {
             panic!("an outcall with a replica down {wrong}");
         }
-        info!(
-            logger,
-            "The killed replica refunded its allowance of {allowance}; the outcall \
-             cost {charged} cycles in total."
-        );
     });
 }
 
-/// Reads the proxy canister's balance, treating a failed query as fatal: this test
-/// has no outer retry to absorb one.
-async fn balance(node: &IcNodeSnapshot, canister: PrincipalId) -> u128 {
-    cycle_balance(node, canister)
-        .await
-        .unwrap_or_else(|err| panic!("{err}"))
-}
-
-/// The same for the per-use-case breakdown.
-async fn read_consumed(node: &IcNodeSnapshot, canister: PrincipalId) -> ConsumedCycles {
-    consumed_cycles(node, canister)
-        .await
-        .unwrap_or_else(|err| panic!("{err}"))
+/// A failed accounting read is fatal in this suite: the assertions below measure a
+/// single outcall, so there is no outer retry to absorb one.
+fn fatal<T>(read: Result<T>) -> T {
+    read.unwrap_or_else(|err| panic!("{err:#}"))
 }

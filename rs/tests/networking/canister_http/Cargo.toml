@@ -7,20 +7,23 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-config = { path = "../../../config" }
 ic-cycles-account-manager = { path = "../../../cycles_account_manager" }
 ic-https-outcalls-pricing = { path = "../../../https_outcalls/pricing" }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-replicated-state = { path = "../../../replicated_state" }
 ic-system-test-driver = { path = "../../driver" }
 ic-test-utilities-types = { path = "../../../test_utilities/types" }
+ic-types = { path = "../../../types/types" }
+ic-types-cycles = { path = "../../../types/cycles" }
 proxy_canister = { path = "../../../rust_canisters/proxy_canister" }
 rand = { workspace = true }
-ic-types-cycles = { path = "../../../types/cycles" }
-ic-types = { path = "../../../types/types" }
 serde = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }

@@ -1,12 +1,19 @@
+use anyhow::{Result, bail};
 use candid::{CandidType, Decode, Deserialize, Encode};
 use canister_test::Canister;
 use canister_test::Runtime;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE};
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
-use ic_https_outcalls_pricing::MAX_RESPONSE_TIME;
+pub use ic_https_outcalls_pricing::MAX_RESPONSE_TIME;
+use ic_https_outcalls_pricing::fees::{consensus_fee, gossip_usage_fee};
+use ic_management_canister_types_private::{
+    CanisterHttpResponsePayload, HttpMethod, PRICING_VERSION_PAY_AS_YOU_GO, Payload,
+    TransformContext, TransformFunc,
+};
 use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+pub use ic_replicated_state::metadata_state::subnet_call_context_manager::DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::simulate_network::ProductionSubnetTopology;
@@ -24,7 +31,7 @@ use ic_types::time::UNIX_EPOCH;
 pub use ic_types::{CanisterId, PrincipalId};
 use ic_types::{
     NumBytes, NumInstructions, NumberOfNodes,
-    canister_http::{Replication, ReplicationKind},
+    canister_http::{Replication, ReplicationKind, canister_http_threshold},
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
@@ -32,7 +39,7 @@ use slog::info;
 use std::collections::BTreeSet;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 pub const EXPIRATION: Duration = Duration::from_secs(120);
@@ -372,12 +379,11 @@ pub fn whitelist_nodes_access_to_apibns(env: &TestEnv) {
     );
 }
 
+/// The nodes of the only application subnet.
+///
+/// Panics where there is more than one.
 pub fn get_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-    env.topology_snapshot()
-        .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-        .expect("there is no application subnet")
-        .nodes()
+    get_app_subnet_node_snapshots_with_schedule(env, sole_app_subnet_schedule(env))
 }
 
 /// The `TestEnv` key under which the proxy canister of the application subnet on
@@ -578,9 +584,6 @@ pub fn get_proxy_canister_id_with_name(env: &TestEnv, name: &str) -> PrincipalId
 }
 
 /// The proxy canister of the only application subnet.
-///
-/// Setups with more than one ([`setup_with_free_and_paying_subnets`]) have to name
-/// the cost schedule instead — see [`get_proxy_canister_id_for`].
 pub fn get_proxy_canister_id(env: &TestEnv) -> PrincipalId {
     get_proxy_canister_id_for(env, sole_app_subnet_schedule(env))
 }
@@ -593,16 +596,9 @@ pub fn get_proxy_canister_id_for(
     get_proxy_canister_id_with_name(env, &proxy_canister_id_path(schedule))
 }
 
-/// The proxy canister installed on the system subnet (available only with a
-/// setup that enables HTTP outcalls there, e.g. [`setup_with_free_cost_schedule`]).
+/// The proxy canister installed on the system subnet.
 pub fn get_system_proxy_canister_id(env: &TestEnv) -> PrincipalId {
     get_proxy_canister_id_with_name(env, SYSTEM_PROXY_CANISTER_ID_PATH)
-}
-
-/// The proxy canister on the application subnet that charges for HTTP outcalls
-/// (only with [`setup_with_free_and_paying_subnets`]).
-pub fn get_paying_proxy_canister_id(env: &TestEnv) -> PrincipalId {
-    get_proxy_canister_id_for(env, CanisterCyclesCostSchedule::Normal)
 }
 
 // ================ Consumed cycles, by use case ================
@@ -633,11 +629,6 @@ impl ConsumedCycles {
             + self.canister_creation
             + self.http_outcalls
             + self.burned_cycles
-    }
-
-    /// What was charged for everything other than outcalls themselves.
-    pub fn carrier(&self) -> u128 {
-        self.total() - self.http_outcalls
     }
 
     /// What has been charged since `earlier`.
@@ -682,23 +673,15 @@ impl ConsumedCycles {
         let total_diff = self.total();
         if balance_diff > total_diff {
             return Err(format!(
-                "took {balance_diff} cycles out of the balance but recorded only {total_diff} as \
-                 consumed ({} of it for the outcall itself, {} for the messages carrying \
-                 it) — cycles left the balance that nothing was charged for",
-                self.http_outcalls,
-                self.carrier(),
+                "took {balance_diff} cycles out of the balance but recorded only {total_diff} as consumed"
             ));
         }
         // The cycles that were charged to the canister for existing.
         let drift = self.memory + self.compute_allocation;
         if balance_diff < total_diff - drift {
             return Err(format!(
-                "recorded {total_diff} cycles as consumed ({} of it for the outcall itself, {} \
-                 for the messages carrying it) but took only {balance_diff} out of the balance, \
-                 a discrepancy beyond the {drift} charged for occupying memory across the \
-                 window",
-                self.http_outcalls,
-                self.carrier(),
+                "recorded {total_diff} cycles as consumed but took only {balance_diff} out of the balance, \
+                 a discrepancy beyond the {drift} charged for existing",
             ));
         }
         // total_diff - drift <= balance_diff <= total_diff
@@ -720,7 +703,7 @@ struct CanisterMetricsRequest {
 pub async fn consumed_cycles(
     node: &IcNodeSnapshot,
     canister: PrincipalId,
-) -> Result<ConsumedCycles, String> {
+) -> Result<ConsumedCycles> {
     let agent = node.build_default_agent_async().await;
     let canister: candid::Principal = canister.into();
     let bytes = agent
@@ -737,85 +720,116 @@ pub async fn consumed_cycles(
         )
         .call()
         .await
-        .map_err(|err| format!("querying canister_metrics for {canister} failed: {err}"))?;
+        .map_err(|err| anyhow::anyhow!("querying canister_metrics for {canister} failed: {err}"))?;
 
     Decode!(&bytes, CanisterMetricsReply)
-        .map_err(|err| format!("decoding the canister_metrics reply failed: {err}"))
+        .map_err(|err| anyhow::anyhow!("decoding the canister_metrics reply failed: {err}"))
         .map(|reply| reply.cycles_consumed)
 }
 
 /// Reads `canister`'s own cycle balance.
-pub async fn cycle_balance(node: &IcNodeSnapshot, canister: PrincipalId) -> Result<u128, String> {
+pub async fn cycle_balance(node: &IcNodeSnapshot, canister: PrincipalId) -> Result<u128> {
     let agent = node.build_default_agent_async().await;
     let bytes = agent
         .query(&canister.0, "cycle_balance")
         .with_arg(Encode!(&()).unwrap())
         .call()
         .await
-        .map_err(|err| format!("querying {canister}'s cycle balance failed: {err}"))?;
+        .map_err(|err| anyhow::anyhow!("querying {canister}'s cycle balance failed: {err}"))?;
 
-    Decode!(&bytes, u128).map_err(|err| format!("decoding the cycle balance failed: {err}"))
+    Decode!(&bytes, u128).map_err(|err| anyhow::anyhow!("decoding the cycle balance failed: {err}"))
 }
 
-/// Reads `canister`'s balance once nothing is owed to it any more.
-///
-/// Waiting for the balance to stop *rising* rather than to stop moving is
-/// deliberate: on a subnet that charges, the balance drifts downwards on its own as
-/// the canister pays to exist, so "holding still" never happens. A refund is the
-/// only thing that adds to it.
-pub async fn settled_balance(node: &IcNodeSnapshot, canister: PrincipalId) -> Result<u128, String> {
-    /// Long enough to outlast a delivered request context, after which nothing can
-    /// still be owed.
-    const ATTEMPTS: usize = 10;
-    const INTERVAL: Duration = Duration::from_secs(10);
+/// How frequently the balance is re-read while waiting for it to settle.
+const SETTLE_INTERVAL: Duration = Duration::from_secs(2);
 
-    let mut previous = cycle_balance(node, canister).await?;
-    for _ in 0..ATTEMPTS {
-        tokio::time::sleep(INTERVAL).await;
+/// How long to keep waiting for the balance to settle.
+const SETTLE_BUDGET: Duration =
+    Duration::from_secs(DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT.as_secs() + 10);
+
+/// How long the balance has to not increase for it to be considered settled.
+const SETTLE_QUIET: Duration = Duration::from_secs(15);
+
+/// Waits for `canister`'s cycle balance to stop increasing, then returns it.
+pub async fn settled_balance(node: &IcNodeSnapshot, canister: PrincipalId) -> Result<u128> {
+    let deadline = Instant::now() + SETTLE_BUDGET;
+    let mut high_water = cycle_balance(node, canister).await?;
+    let mut last_rise = Instant::now();
+    loop {
+        tokio::time::sleep(SETTLE_INTERVAL).await;
         let current = cycle_balance(node, canister).await?;
-        if current <= previous {
+        if current > high_water {
+            high_water = current;
+            last_rise = Instant::now();
+        } else if last_rise.elapsed() >= SETTLE_QUIET {
             return Ok(current);
         }
-        previous = current;
+        if Instant::now() >= deadline {
+            bail!("{canister} was still being credited after {SETTLE_BUDGET:?}");
+        }
     }
-    Err(format!(
-        "{canister} kept being credited, last seen at {previous}"
-    ))
 }
 
-/// A baseline to measure an outcall against, taken once the balance has settled.
-///
-/// Reads the consumption counters *before* the balance, which is what makes the
-/// span they cover a superset of the span the balance covers — see
-/// [`ConsumedCycles::check_against_balance`]. Pair it with [`settled_outcome`],
-/// which reads them the other way round.
-pub async fn settled_baseline(
-    node: &IcNodeSnapshot,
-    canister: PrincipalId,
-) -> Result<(ConsumedCycles, u128), String> {
+/// The consumed cycles and balance before an outcall is made.
+pub struct Baseline {
+    pub consumed: ConsumedCycles,
+    pub balance: u128,
+}
+
+/// Opens a measurement window on `canister`, once nothing is owed to it any more.
+pub async fn settled_baseline(node: &IcNodeSnapshot, canister: PrincipalId) -> Result<Baseline> {
     settled_balance(node, canister).await?;
     let consumed = consumed_cycles(node, canister).await?;
     let balance = cycle_balance(node, canister).await?;
-    Ok((consumed, balance))
+    Ok(Baseline { consumed, balance })
 }
 
-/// The far end of a window opened by [`settled_baseline`]: the balance once it has
-/// settled, then the consumption counters.
-pub async fn settled_outcome(
+/// What one outcall cost its caller, over a window opened by [`settled_baseline`].
+pub struct SettledCharge {
+    /// What the caller consumed over the window, by use case.
+    pub consumed: ConsumedCycles,
+    /// What left its balance over the window.
+    pub charged: u128,
+}
+
+/// Closes the window opened by `baseline`: reads the balance and the consumption
+/// counters until the two agree, i.e. until every refund the outcall still owed has
+/// been credited.
+///
+/// A per-replica allowance that has not been refunded yet has left the caller's balance
+/// with nothing recording it as consumed. This is exactly the discrepancy
+/// [`ConsumedCycles::check_against_balance`] rejects.
+pub async fn settled_charge(
     node: &IcNodeSnapshot,
     canister: PrincipalId,
-) -> Result<(u128, ConsumedCycles), String> {
-    let balance = settled_balance(node, canister).await?;
-    let consumed = consumed_cycles(node, canister).await?;
-    Ok((balance, consumed))
+    baseline: &Baseline,
+) -> Result<SettledCharge> {
+    let deadline = Instant::now() + SETTLE_BUDGET;
+    loop {
+        let balance = cycle_balance(node, canister).await?;
+        let consumed = consumed_cycles(node, canister)
+            .await?
+            .since(&baseline.consumed);
+        let disagreement = match baseline.balance.checked_sub(balance) {
+            Some(charged) => match consumed.check_against_balance(charged) {
+                Ok(()) => return Ok(SettledCharge { consumed, charged }),
+                Err(disagreement) => disagreement,
+            },
+            None => format!(
+                "was credited cycles it never paid: its balance grew from {} to {balance}",
+                baseline.balance
+            ),
+        };
+        if Instant::now() >= deadline {
+            bail!("after {SETTLE_BUDGET:?} of waiting: {canister} {disagreement}");
+        }
+        tokio::time::sleep(SETTLE_INTERVAL).await;
+    }
 }
 
 /// What an out-of-cycles rejection reports the replicas collectively spent.
-///
-/// Tying that figure to the caller's accounting is what makes a failed outcall
-/// checkable at all: nothing else says how much of the withheld allowance was
-/// actually used before the outcall gave up.
-pub fn reported_spend(reject_message: &str) -> u128 {
+/// Determined by parsing the reject message.
+pub fn reported_spend(reject_message: &str) -> Result<u128, String> {
     const PREFIX: &str = "collective spend of ";
     reject_message
         .split_once(PREFIX)
@@ -823,9 +837,103 @@ pub fn reported_spend(reject_message: &str) -> u128 {
         // `Cycles` renders with underscore separators.
         .map(|cycles| cycles.replace('_', ""))
         .and_then(|cycles| cycles.parse().ok())
-        .unwrap_or_else(|| {
-            panic!("expected a rejection naming what was spent, got: '{reject_message}'")
+        .ok_or_else(|| {
+            format!("expected a rejection naming what was spent, got: '{reject_message}'")
         })
+}
+
+/// Base arguments for a `GET` outcall to `url` that opts into pay-as-you-go
+pub fn pay_as_you_go_args(
+    proxy_canister: PrincipalId,
+    url: String,
+) -> UnvalidatedCanisterHttpRequestArgs {
+    UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers: vec![],
+        method: HttpMethod::GET,
+        body: Some(vec![]),
+        // Strip all headers, so consensus can be reached
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: proxy_canister.into(),
+                method: "transform".to_string(),
+            }),
+            context: vec![],
+        }),
+        max_response_bytes: None,
+        is_replicated: None,
+        pricing_version: Some(PRICING_VERSION_PAY_AS_YOU_GO),
+    }
+}
+
+/// How much the response headers of the httpbin under test may add on top of the
+/// body it was asked for.
+const HTTPBIN_RESPONSE_HEADER_BYTES: u64 = 512;
+
+/// What a test knows about the response(s) an outcall delivered.
+pub struct DeliveredResponse {
+    /// A lower bound on what each replica fetched from the server.
+    downloaded_at_least: NumBytes,
+    /// An upper bound on what each replica fetched from the server.
+    downloaded_at_most: NumBytes,
+    /// The smallest of the Candid-encoded responses that reached a block, which a
+    /// lower bound on the consensus fee is computed from.
+    smallest: NumBytes,
+    /// The largest of them, which an upper bound is computed from. The same as
+    /// `smallest` wherever the replicas had to agree on a single response.
+    largest: NumBytes,
+    /// How many replicas included a response of their own.
+    ///
+    /// `None` for non-flexible outcalls.
+    delivered_by: Option<u32>,
+}
+
+impl DeliveredResponse {
+    /// The response the proxy canister's `transform` method makes of the `body` a
+    /// non-flexible outcall delivered.
+    pub fn transformed(body: &[u8]) -> Self {
+        let content = NumBytes::from(
+            CanisterHttpResponsePayload {
+                status: 200,
+                headers: vec![],
+                body: body.to_vec(),
+            }
+            .encode()
+            .len() as u64,
+        );
+        let body = body.len() as u64;
+        Self {
+            downloaded_at_least: NumBytes::from(body),
+            downloaded_at_most: NumBytes::from(body + HTTPBIN_RESPONSE_HEADER_BYTES),
+            smallest: content,
+            largest: content,
+            delivered_by: None,
+        }
+    }
+
+    /// The `payloads` a flexible outcall with no transform delivered, read off the
+    /// responses themselves.
+    pub fn untransformed(payloads: &[CanisterHttpResponsePayload]) -> Self {
+        let downloaded: Vec<u64> = payloads
+            .iter()
+            .map(|p| {
+                let headers: u64 = p
+                    .headers
+                    .iter()
+                    .map(|h| (h.name.len() + h.value.len()) as u64)
+                    .sum();
+                headers + p.body.len() as u64
+            })
+            .collect();
+        let encoded: Vec<u64> = payloads.iter().map(|p| p.encode().len() as u64).collect();
+        Self {
+            downloaded_at_least: NumBytes::from(downloaded.iter().copied().min().unwrap_or(0)),
+            downloaded_at_most: NumBytes::from(downloaded.iter().copied().max().unwrap_or(0)),
+            smallest: NumBytes::from(encoded.iter().copied().min().unwrap_or(0)),
+            largest: NumBytes::from(encoded.iter().copied().max().unwrap_or(0)),
+            delivered_by: Some(payloads.len() as u32),
+        }
+    }
 }
 
 // ===================== Pay-as-you-go fees =====================
@@ -846,9 +954,6 @@ pub struct PaygFees {
 
 /// Prices an outcall of the given `replication` the way the replica does, on a
 /// `subnet_size`-node subnet that charges.
-///
-/// `request_size` is the size of the request's variable parts — its URL, headers,
-/// body and transform context — which is what the base fee is charged on.
 pub fn payg_fees(
     replication: &Replication,
     request_size: NumBytes,
@@ -885,8 +990,7 @@ pub fn fees_for(
     subnet_size: usize,
 ) -> PaygFees {
     let max_response_bytes = request.max_response_bytes.map(NumBytes::from);
-    // The replication is whatever the request asks for, which is what the fees
-    // depend on; the single node stands in for the subnet only to build a context.
+    // Dummy context to determine the request size and replication.
     let dummy_context = CanisterHttpRequestContext::generate_from_args(
         UNIX_EPOCH,
         &RequestBuilder::default()
@@ -910,8 +1014,18 @@ pub fn fees_for(
     )
 }
 
-/// A cycles account manager configured the way an application subnet that charges
-/// is, which is all the fee functions above need of it.
+/// Estimate of what a transform of a `body`-byte response costs.
+fn transform_instructions_at_most(body: NumBytes) -> u64 {
+    /// Entering the query, decoding a `TransformArgs` header and re-encoding a
+    /// response record.
+    const ENTRY: u64 = 2_000_000;
+    /// Moving each byte of the response through the decode and the re-encode.
+    const PER_BYTE: u64 = 200;
+
+    ENTRY.saturating_add(PER_BYTE.saturating_mul(body.get()))
+}
+
+/// A cycles account manager for a charging subnet..
 fn paying_cycles_account_manager() -> CyclesAccountManager {
     CyclesAccountManager::new(
         NumInstructions::from(0),
@@ -925,8 +1039,6 @@ impl PaygFees {
     /// What the request has withheld from it up front out of a `payment`: the base
     /// fee, plus one allowance for each replica.
     pub fn withheld(&self, payment: u128) -> u128 {
-        // The allowances are a per-replica share, so the total is rounded down to a
-        // whole number of shares.
         self.base_fee + self.allowance(payment) * self.node_count as u128
     }
 
@@ -951,55 +1063,85 @@ impl PaygFees {
             return Ok(());
         }
         Err(format!(
-            "returned {refunded} cycles on the reply, not the {expected} left of a \
-             {payment}-cycle payment once {withheld} was withheld as {} allowances of {} each",
-            self.node_count,
-            self.allowance(payment),
+            "returned {refunded} cycles on the reply, instead of the {expected} expected.",
         ))
     }
 
-    /// Checks what a *successful* outcall was priced at: more than the base fee,
-    /// which is taken at admission, and no more than `ic0.cost_http_request_v2`
-    /// quotes for a round trip of `elapsed`.
-    ///
-    /// Separate from [`Self::check_charge`] because both hold where outcalls are
-    /// free, while the balance never moves there. A failed outcall can exceed the
-    /// quote — it pays for work that produced nothing deliverable — so assert it
-    /// against `base_fee + `[`reported_spend`] instead, which is exact.
+    /// Checks what a *successful* outcall was priced at: no less than the parts of
+    /// the price the caller can work out from `delivered`, and no more than
+    /// `ic0.cost_http_request_v2` quotes for a round trip of `elapsed` that
+    /// delivered it.
     pub fn check_consumption(
         &self,
         consumed_diff: &ConsumedCycles,
+        delivered: &DeliveredResponse,
         elapsed: Duration,
     ) -> Result<(), String> {
         let outcall = consumed_diff.http_outcalls;
-        if outcall <= self.base_fee {
+        let floor = self.floor_of(delivered);
+        if outcall < floor {
             return Err(format!(
-                "consumed {outcall} cycles, no more than the {} base fee taken at admission — \
-                 so the spend the replicas reported on delivery was never priced",
-                self.base_fee
+                "consumed {outcall} cycles, less than the {floor} floor price derived \
+                from the response"
             ));
         }
-        let quoted = self.quote(elapsed);
-        if outcall > quoted {
+        let ceiling = self.quote_of(delivered, elapsed);
+        if outcall > ceiling {
             return Err(format!(
-                "consumed {outcall} cycles, more than the {quoted} that \
-                 ic0.cost_http_request_v2 recommended"
+                "consumed {outcall} cycles, more than the {ceiling} that \
+                 ic0.cost_http_request_v2 recommends for the response it delivered"
             ));
         }
         Ok(())
     }
 
-    /// [`Self::check_consumption`], plus [`ConsumedCycles::check_against_balance`].
-    /// `balance_diff` and `consumed_diff` must span the same window. A failed outcall
-    /// wants the latter on its own.
-    pub fn check_charge(
-        &self,
-        consumed_diff: &ConsumedCycles,
-        balance_diff: u128,
-        elapsed: Duration,
-    ) -> Result<(), String> {
-        self.check_consumption(consumed_diff, elapsed)?;
-        consumed_diff.check_against_balance(balance_diff)
+    /// The least a *successful* outcall delivering `delivered` can have been
+    /// charged: its base fee, the consensus fee for the bytes that reached a block,
+    /// and the bytes the replicas that delivered them had to download.
+    pub fn floor_of(&self, delivered: &DeliveredResponse) -> u128 {
+        self.base_fee
+            + self.consensus_floor(delivered)
+            + self.delivering_replicas(delivered)
+                * (self.byte_fee(delivered.downloaded_at_least.get())
+                    + self.gossip_floor(delivered))
+    }
+
+    /// What one replica that delivered a response was charged for gossiping it to
+    /// the rest of the subnet.
+    fn gossip_floor(&self, delivered: &DeliveredResponse) -> u128 {
+        match self.replication_kind {
+            ReplicationKind::FullyReplicated => 0,
+            ReplicationKind::NonReplicated | ReplicationKind::Flexible { .. } => gossip_usage_fee(
+                delivered.smallest,
+                NumberOfNodes::from(self.subnet_size as u32),
+            )
+            .get(),
+        }
+    }
+
+    /// How many replicas had to fetch the response for it to be delivered, and were
+    /// therefore charged for downloading it.
+    fn delivering_replicas(&self, delivered: &DeliveredResponse) -> u128 {
+        delivered
+            .delivered_by
+            .map_or(canister_http_threshold(self.node_count) as u128, u128::from)
+    }
+
+    /// The least consensus can have charged for putting `delivered` into a block.
+    fn consensus_floor(&self, delivered: &DeliveredResponse) -> u128 {
+        let in_block = delivered.delivered_by.map_or(1, u128::from);
+        consensus_fee(
+            in_block * delivered.smallest.get() as u128,
+            NumberOfNodes::from(self.subnet_size as u32),
+        )
+        .get()
+    }
+
+    /// What one replica is charged for downloading `bytes` from the server.
+    /// Read out of `ic0.cost_http_request_v2` as the difference between two quotes.
+    fn byte_fee(&self, bytes: u64) -> u128 {
+        (self.priced_at(Duration::ZERO, bytes, 0, 0) - self.priced_at(Duration::ZERO, 0, 0, 0))
+            / self.node_count as u128
     }
 
     /// Whether the `payment` is ample enough that the worst-case usage fee, rather
@@ -1008,27 +1150,63 @@ impl PaygFees {
         self.base_fee + self.max_usage_fee <= payment
     }
 
-    /// What `ic0.cost_http_request_v2` quotes for an outcall that took the given time.
+    /// What `ic0.cost_http_request_v2` quotes for an outcall that took the given
+    /// time and fetched a short response.
     pub fn quote(&self, elapsed: Duration) -> u128 {
         // What the server sends back and every replica downloads: a handful of bytes
         // of body plus a few overhead headers, which come to a couple of hundred
         // bytes with their names and values.
         const RAW_RESPONSE_CEILING: u64 = 512;
-        // What a transform hands back, and so what consensus puts into a block. This
-        // does not actually move the quote — the consensus term is floored at
-        // `MAX_CANISTER_HTTP_REJECT_BYTES`, a reject of that size being deliverable
-        // in place of any response — but it is the honest figure to quote for.
+        // What a transform hands back, and so what consensus puts into a block.
         const TRANSFORMED_RESPONSE_CEILING: u64 = 512;
-        // Decoding half a kilobyte, clearing a vector and re-encoding.
-        const TRANSFORM_INSTRUCTIONS: u64 = 100_000;
 
+        self.priced_at(
+            elapsed,
+            RAW_RESPONSE_CEILING,
+            transform_instructions_at_most(NumBytes::from(RAW_RESPONSE_CEILING)),
+            TRANSFORMED_RESPONSE_CEILING,
+        )
+    }
+
+    /// What `ic0.cost_http_request_v2` quotes for an outcall that took `elapsed` and
+    /// delivered `delivered`.
+    pub fn quote_of(&self, delivered: &DeliveredResponse, elapsed: Duration) -> u128 {
+        self.priced_at(
+            elapsed,
+            delivered.downloaded_at_most.get(),
+            transform_instructions_at_most(delivered.downloaded_at_most),
+            delivered.largest.get(),
+        )
+    }
+
+    /// The least the replicas that delivered `delivered` can have been charged for
+    /// a round trip that took at least `response_time`.
+    pub fn time_floor(&self, delivered: &DeliveredResponse, response_time: Duration) -> u128 {
+        self.delivering_replicas(delivered) * self.time_fee(response_time)
+    }
+
+    /// What one replica is charged for a round trip of `response_time`.
+    /// Read out of `ic0.cost_http_request_v2` as the difference between two quotes.
+    fn time_fee(&self, response_time: Duration) -> u128 {
+        (self.priced_at(response_time, 0, 0, 0) - self.priced_at(Duration::ZERO, 0, 0, 0))
+            / self.node_count as u128
+    }
+
+    /// `ic0.cost_http_request_v2` for an outcall with exactly these resource usages.
+    fn priced_at(
+        &self,
+        elapsed: Duration,
+        raw_response_bytes: u64,
+        transform_instructions: u64,
+        transformed_response_bytes: u64,
+    ) -> u128 {
         paying_cycles_account_manager()
             .http_request_fee_v2(
                 self.request_size,
                 elapsed.min(MAX_RESPONSE_TIME),
-                NumBytes::from(RAW_RESPONSE_CEILING),
-                NumInstructions::from(TRANSFORM_INSTRUCTIONS),
-                NumBytes::from(TRANSFORMED_RESPONSE_CEILING),
+                NumBytes::from(raw_response_bytes),
+                NumInstructions::from(transform_instructions),
+                NumBytes::from(transformed_response_bytes),
                 self.replication_kind,
                 CyclesAccountManagerSubnetConfig::new(
                     self.subnet_size,

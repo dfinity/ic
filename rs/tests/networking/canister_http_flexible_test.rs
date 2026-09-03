@@ -5,9 +5,9 @@ Goal:: Exhaustively exercise the `flexible_http_request` management canister
 endpoint, both where HTTP outcalls are free and where they are actually paid for
 under pay-as-you-go.
 
-Every scenario runs against both application subnets: what a caller observes must
-not depend on whether it was charged. The scenarios that are *about* being charged
-run only against the paying subnet.
+A scenario whose outcome must not depend on whether the caller was charged runs
+against both application subnets. A scenario about the charge itself, and the
+destructive fault-tolerance one, is pinned to the single subnet it is about.
 
 Runbook::
 0. Instantiate a universal VM with a webserver (httpbin).
@@ -23,6 +23,7 @@ Runbook::
    - adapter-level per-node failures,
    - an outcall on the system subnet,
    - pay-as-you-go charging, refunding and running out of cycles,
+   - a free cost schedule pricing an outcall and then waiving the charge,
    - fault tolerance: an outcall still succeeds with a subnet node killed.
 
 Success::
@@ -53,7 +54,7 @@ use proxy_canister::{
     FlexibleRemoteHttpRequest, FlexibleResponseWithRefundedCycles, RejectionCode,
 };
 use slog::info;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// The cycles attached to each flexible outcall.
 const CYCLES: u64 = 500_000_000_000;
@@ -125,10 +126,9 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_custom_max_response_bytes_exceeded))
                 .add_test(systest!(test_custom_max_response_bytes_within_limits)),
         )
-        // Only meaningful where outcalls are paid for, so these run against the
-        // paying subnet alone. `test_charged_and_refunded` measures the proxy
-        // canister's balance across a single outcall, which any concurrent outcall
-        // from the same canister would perturb, so they run sequentially.
+        // These read one proxy canister's accounting across a single outcall, which
+        // any concurrent outcall from the same canister would perturb, so they run
+        // sequentially rather than in the parallel suite above.
         .add_test(systest!(test_charged_and_refunded))
         .add_test(systest!(test_free_schedule_records_the_price_it_waives))
         .add_test(systest!(test_out_of_cycles))
@@ -143,28 +143,39 @@ fn main() -> Result<()> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Returns a runtime for a node of the application subnet on `schedule`.
-fn app_runtime_on(env: &TestEnv, schedule: CanisterCyclesCostSchedule) -> Runtime {
-    let node = get_app_subnet_node_snapshots_with_schedule(env, schedule)
-        .next()
-        .expect("there is no application node");
-    get_runtime_from_node(&node)
+/// Everything a scenario needs to reach one application subnet's proxy canister:
+/// a node to talk to, a runtime built on it, and the proxy's principal.
+struct AppSubnet {
+    node: IcNodeSnapshot,
+    runtime: Runtime,
+    proxy_id: PrincipalId,
 }
 
-/// The principal of the proxy canister on the application subnet running on
-/// `schedule`.
-fn proxy_principal_on(env: &TestEnv, schedule: CanisterCyclesCostSchedule) -> PrincipalId {
-    get_proxy_canister_id_for(env, schedule)
-}
+impl AppSubnet {
+    /// The application subnet running on `schedule`.
+    fn on(env: &TestEnv, schedule: CanisterCyclesCostSchedule) -> Self {
+        let nodes: Vec<_> = get_app_subnet_node_snapshots_with_schedule(env, schedule).collect();
+        assert_eq!(
+            nodes.len(),
+            SUBNET_NODES as usize
+        );
+        let node = nodes
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| panic!("there is no application node on a {schedule:?} subnet"));
+        Self {
+            runtime: get_runtime_from_node(&node),
+            node,
+            proxy_id: get_proxy_canister_id_for(env, schedule),
+        }
+    }
 
-/// Returns the proxy canister on the application subnet running on `schedule`.
-fn proxy_canister_on<'a>(
-    env: &TestEnv,
-    runtime: &'a Runtime,
-    schedule: CanisterCyclesCostSchedule,
-) -> Canister<'a> {
-    let principal_id = proxy_principal_on(env, schedule);
-    Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
+    fn proxy(&self) -> Canister<'_> {
+        Canister::new(
+            &self.runtime,
+            CanisterId::unchecked_from_principal(self.proxy_id),
+        )
+    }
 }
 
 /// Points a transform that names the default proxy canister at the proxy the
@@ -195,10 +206,9 @@ fn system_proxy_canister<'a>(env: &TestEnv, runtime: &'a Runtime) -> Canister<'a
     Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
 }
 
-/// The principal of the proxy canister (the sender of the outcalls), used as the
-/// valid transform principal.
+/// The principal the `make_args` closures name as their transform principal.
 fn proxy_principal(env: &TestEnv) -> Principal {
-    proxy_principal_on(env, CanisterCyclesCostSchedule::Free).0
+    get_proxy_canister_id_for(env, CanisterCyclesCostSchedule::Free).0
 }
 
 fn webserver_base(env: &TestEnv) -> String {
@@ -321,9 +331,8 @@ fn run_flexible_test_on<M, A>(
     A: Fn(Result<FlexibleHttpRequestResult, (RejectionCode, String)>) -> Result<()>,
 {
     let logger = env.logger();
-    let runtime = app_runtime_on(env, schedule);
-    let proxy = proxy_canister_on(env, &runtime, schedule);
-    let proxy_id = proxy_principal_on(env, schedule);
+    let subnet = AppSubnet::on(env, schedule);
+    let proxy = subnet.proxy();
     let description = format!("{description} (on a {schedule:?} cost schedule)");
 
     block_on(async {
@@ -334,7 +343,7 @@ fn run_flexible_test_on<M, A>(
             RETRY_BACKOFF,
             || async {
                 let mut args = make_args(env);
-                retarget_transform(&mut args, env, proxy_id);
+                retarget_transform(&mut args, env, subnet.proxy_id);
                 let result = send_flexible(&proxy, args, cycles).await?;
                 assert_result(result)
             }
@@ -1572,7 +1581,10 @@ fn test_fault_tolerance(env: TestEnv) {
     // The proxy canister lives on the subnet, so reach it through a node that
     // stays up.
     let runtime = get_runtime_from_node(&healthy_node);
-    let proxy = proxy_canister_on(&env, &runtime, SCHEDULE);
+    let proxy = Canister::new(
+        &runtime,
+        CanisterId::unchecked_from_principal(get_proxy_canister_id_for(&env, SCHEDULE)),
+    );
 
     info!(logger, "Killing one application node.");
     killed_node.vm().kill();
@@ -1621,6 +1633,9 @@ fn test_fault_tolerance(env: TestEnv) {
 /// suite asks for.
 const SMALL_MAX_RESPONSE_BYTES: u64 = 16 * 1024;
 
+/// The body the pay-as-you-go scenarios ask the server for.
+const PAYG_BODY_BYTES: usize = 8 * 1024;
+
 /// Prices a flexible outcall to `url` the way the replica will.
 ///
 /// The committee is stood in for by as many node ids as the subnet has: only its
@@ -1640,42 +1655,6 @@ fn flexible_fees(url: &str, max_response_bytes: Option<u64>) -> PaygFees {
         max_response_bytes.map(NumBytes::from),
         SUBNET_NODES as usize,
     )
-}
-
-/// Reads the proxy canister's own cycle balance.
-async fn balance(node: &IcNodeSnapshot, canister: PrincipalId) -> Result<u128> {
-    cycle_balance(node, canister)
-        .await
-        .map_err(|err| anyhow::anyhow!("{err}"))
-}
-
-/// The same for the per-use-case breakdown.
-/// A baseline to measure a *paid* outcall against, taken once the balance has
-/// settled. Reads the counters before the balance — see
-/// [`ConsumedCycles::check_against_balance`] for why the order matters.
-async fn settled_baseline(
-    node: &IcNodeSnapshot,
-    canister: PrincipalId,
-) -> Result<(ConsumedCycles, u128)> {
-    canister_http::settled_baseline(node, canister)
-        .await
-        .map_err(|err| anyhow::anyhow!("{err}"))
-}
-
-/// The far end of a window opened by [`settled_baseline`].
-async fn settled_outcome(
-    node: &IcNodeSnapshot,
-    canister: PrincipalId,
-) -> Result<(u128, ConsumedCycles)> {
-    canister_http::settled_outcome(node, canister)
-        .await
-        .map_err(|err| anyhow::anyhow!("{err}"))
-}
-
-async fn read_consumed(node: &IcNodeSnapshot, canister: PrincipalId) -> Result<ConsumedCycles> {
-    consumed_cycles(node, canister)
-        .await
-        .map_err(|err| anyhow::anyhow!("{err}"))
 }
 
 /// An outcall with nothing attached succeeds where outcalls are free and is
@@ -1712,12 +1691,8 @@ fn test_free_schedule_records_the_price_it_waives(env: TestEnv) {
     const SCHEDULE: CanisterCyclesCostSchedule = CanisterCyclesCostSchedule::Free;
 
     let logger = env.logger();
-    let runtime = app_runtime_on(&env, SCHEDULE);
-    let proxy = proxy_canister_on(&env, &runtime, SCHEDULE);
-    let node = get_app_subnet_node_snapshots_with_schedule(&env, SCHEDULE)
-        .next()
-        .expect("there is no application node on a free cost schedule");
-    let proxy_id = proxy_principal_on(&env, SCHEDULE);
+    let subnet = AppSubnet::on(&env, SCHEDULE);
+    let proxy = subnet.proxy();
 
     block_on(async {
         ic_system_test_driver::retry_with_msg_async!(
@@ -1726,8 +1701,9 @@ fn test_free_schedule_records_the_price_it_waives(env: TestEnv) {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                let before_consumed = read_consumed(&node, proxy_id).await?;
-                let before = balance(&node, proxy_id).await?;
+                // Read raw rather than settled: where outcalls are free nothing is ever withheld
+                let before_consumed = consumed_cycles(&subnet.node, subnet.proxy_id).await?;
+                let before = cycle_balance(&subnet.node, subnet.proxy_id).await?;
 
                 let url = format!("{}/ascii/waived", webserver_base(&env));
                 let fees = flexible_fees(&url, None);
@@ -1740,15 +1716,16 @@ fn test_free_schedule_records_the_price_it_waives(env: TestEnv) {
                 let elapsed = started.elapsed();
                 expect_all_bodies(&payloads, b"waived")?;
 
-                let after = balance(&node, proxy_id).await?;
+                let after = cycle_balance(&subnet.node, subnet.proxy_id).await?;
                 if after != before {
                     bail!("a free outcall moved the balance from {before} to {after}");
                 }
-                let consumed = read_consumed(&node, proxy_id)
+                let consumed = consumed_cycles(&subnet.node, subnet.proxy_id)
                     .await?
                     .since(&before_consumed);
-                // Priced exactly as on a subnet that charges — only the charge is waived.
-                fees.check_consumption(&consumed, elapsed)
+                // Priced exactly as on a subnet that charges, only the charge is waived.
+                let delivered = DeliveredResponse::untransformed(&payloads);
+                fees.check_consumption(&consumed, &delivered, elapsed)
                     .map_err(|wrong| anyhow::anyhow!("a free outcall {wrong}"))?;
                 Ok(())
             }
@@ -1761,14 +1738,20 @@ fn test_free_schedule_records_the_price_it_waives(env: TestEnv) {
 /// A successful outcall costs the caller something, but nowhere near the payment
 /// it attached: the unspent part of the per-replica allowances is refunded.
 fn test_charged_and_refunded(env: TestEnv) {
+    const SCHEDULE: CanisterCyclesCostSchedule = CanisterCyclesCostSchedule::Normal;
+
     let logger = env.logger();
-    let runtime = app_runtime_on(&env, CanisterCyclesCostSchedule::Normal);
-    let proxy = proxy_canister_on(&env, &runtime, CanisterCyclesCostSchedule::Normal);
-    let node =
-        get_app_subnet_node_snapshots_with_schedule(&env, CanisterCyclesCostSchedule::Normal)
-            .next()
-            .expect("there is no application node");
-    let proxy_id = proxy_principal_on(&env, CanisterCyclesCostSchedule::Normal);
+    let subnet = AppSubnet::on(&env, SCHEDULE);
+    let proxy = subnet.proxy();
+
+    let url = format!("{}/bytes/{PAYG_BODY_BYTES}", webserver_base(&env));
+    let expected_body = vec![b'x'; PAYG_BODY_BYTES];
+    let withheld_capped =
+        flexible_fees(&url, Some(SMALL_MAX_RESPONSE_BYTES)).withheld(u128::from(CYCLES));
+    let withheld_uncapped = flexible_fees(&url, None).withheld(u128::from(CYCLES));
+    assert!(
+        withheld_capped < withheld_uncapped
+    );
 
     block_on(async {
         ic_system_test_driver::retry_with_msg_async!(
@@ -1777,9 +1760,8 @@ fn test_charged_and_refunded(env: TestEnv) {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                let (before_consumed, before) = settled_baseline(&node, proxy_id).await?;
+                let baseline = settled_baseline(&subnet.node, subnet.proxy_id).await?;
 
-                let url = format!("{}/ascii/priced", webserver_base(&env));
                 let mut args = get_args(url.clone());
                 // Capped small on purpose: the second outcall below leaves it unset
                 // and the two charges are compared.
@@ -1791,35 +1773,25 @@ fn test_charged_and_refunded(env: TestEnv) {
                 // Bounds the HTTP round trip the replicas were charged for.
                 let elapsed = started.elapsed();
                 let payloads = expect_ok(result, DEFAULT_MIN_RESPONSES, DEFAULT_MAX_RESPONSES)?;
-                expect_all_bodies(&payloads, b"priced")?;
+                expect_all_bodies(&payloads, &expected_body)?;
 
                 // Everything the payment covered beyond the base fee and the
                 // allowances was never at risk, so it comes back on the reply.
                 let fees = flexible_fees(&url, Some(SMALL_MAX_RESPONSE_BYTES));
-                let withheld = fees.withheld(u128::from(CYCLES));
                 fees.check_reply_refund(u128::from(CYCLES), u128::from(refunded_cycles))
                     .map_err(|wrong| anyhow::anyhow!("the outcall {wrong}"))?;
 
-                let (after, after_consumed) = settled_outcome(&node, proxy_id).await?;
-                let Some(charged) = before.checked_sub(after) else {
-                    bail!("balance grew from {before} to {after} across a paid outcall");
-                };
-                // What the outcall itself consumed, rather than what the balance lost
-                let consumed = after_consumed.since(&before_consumed);
-                fees.check_charge(&consumed, charged, elapsed)
+                // Settling reconciles the balance against the counters, so all that
+                // is left to check is what the outcall was priced at.
+                let charge = settled_charge(&subnet.node, subnet.proxy_id, &baseline).await?;
+                let delivered = DeliveredResponse::untransformed(&payloads);
+                fees.check_consumption(&charge.consumed, &delivered, elapsed)
                     .map_err(|wrong| anyhow::anyhow!("the outcall {wrong}"))?;
 
-                // The same response, but asking for the largest one allowed. 
+                // The same response, but asking for the largest one allowed.
                 let uncapped_fees = flexible_fees(&url, None);
-                // A larger cap withholds more cycles.
-                let withheld_uncapped = uncapped_fees.withheld(u128::from(CYCLES));
-                if withheld_uncapped <= withheld {
-                    bail!(
-                        "allowing the largest response withheld {withheld_uncapped} cycles, not more than {withheld} for the smaller response"
-                    );
-                }
 
-                let (before_max_consumed, before_max) = settled_baseline(&node, proxy_id).await?;
+                let baseline_max = settled_baseline(&subnet.node, subnet.proxy_id).await?;
                 let mut args = get_args(url.clone());
                 args.max_response_bytes = None;
                 let started_max = Instant::now();
@@ -1827,24 +1799,36 @@ fn test_charged_and_refunded(env: TestEnv) {
                     send_flexible_reporting_refund(&proxy, args, CYCLES).await?;
                 let elapsed_max = started_max.elapsed();
                 let payloads = expect_ok(result, DEFAULT_MIN_RESPONSES, DEFAULT_MAX_RESPONSES)?;
-                expect_all_bodies(&payloads, b"priced")?;
-                let (after_max, after_max_consumed) = settled_outcome(&node, proxy_id).await?;
-                let consumed_max = after_max_consumed.since(&before_max_consumed);
-                let Some(charged_max) = before_max.checked_sub(after_max) else {
-                    bail!("balance grew from {before_max} to {after_max} across a paid outcall");
-                };
+                expect_all_bodies(&payloads, &expected_body)?;
+                let charge_max =
+                    settled_charge(&subnet.node, subnet.proxy_id, &baseline_max).await?;
                 // More was withheld, so *less* comes back on the reply.
                 uncapped_fees
                     .check_reply_refund(u128::from(CYCLES), u128::from(refunded_max))
                     .map_err(|wrong| {
                         anyhow::anyhow!("an outcall allowed the largest response {wrong}")
                     })?;
-                // And yet it is held to the same quote as the capped outcall above.
+                // And yet it is priced for the same response as the capped outcall
+                // above: what the cap changes is what is withheld, not what the
+                // outcall delivered.
+                let delivered_max = DeliveredResponse::untransformed(&payloads);
                 uncapped_fees
-                    .check_charge(&consumed_max, charged_max, elapsed_max)
+                    .check_consumption(&charge_max.consumed, &delivered_max, elapsed_max)
                     .map_err(|wrong| {
                         anyhow::anyhow!("an outcall allowed the largest response {wrong}")
                     })?;
+                // Fetching the same response twice should cost about the same either
+                // way: what the cap changes is how much is *withheld*, not what the
+                // outcall ends up paying.
+                if charge_max.consumed.http_outcalls > 2 * charge.consumed.http_outcalls {
+                    bail!(
+                        "allowing the largest response cost {} cycles, more than twice the {} \
+                         the same response cost under a {SMALL_MAX_RESPONSE_BYTES}-byte cap — \
+                         a cap should bound the allowances, not the charge",
+                        charge_max.consumed.http_outcalls,
+                        charge.consumed.http_outcalls
+                    );
+                }
                 Ok(())
             }
         )
@@ -1863,12 +1847,8 @@ fn test_out_of_cycles(env: TestEnv) {
     const SCHEDULE: CanisterCyclesCostSchedule = CanisterCyclesCostSchedule::Normal;
 
     let logger = env.logger();
-    let runtime = app_runtime_on(&env, SCHEDULE);
-    let proxy = proxy_canister_on(&env, &runtime, SCHEDULE);
-    let node = get_app_subnet_node_snapshots_with_schedule(&env, SCHEDULE)
-        .next()
-        .expect("there is no application node");
-    let proxy_id = proxy_principal_on(&env, SCHEDULE);
+    let subnet = AppSubnet::on(&env, SCHEDULE);
+    let proxy = subnet.proxy();
     let payment = u128::from(PAYMENT);
 
     block_on(async {
@@ -1878,7 +1858,7 @@ fn test_out_of_cycles(env: TestEnv) {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                let (before_consumed, before) = settled_baseline(&node, proxy_id).await?;
+                let baseline = settled_baseline(&subnet.node, subnet.proxy_id).await?;
 
                 let url = format!("{}/bytes/{BODY_SIZE}", webserver_base(&env));
                 let mut args = get_args(url.clone());
@@ -1901,7 +1881,7 @@ fn test_out_of_cycles(env: TestEnv) {
                         if !message.contains("Out of cycles") {
                             bail!("unexpected out-of-cycles message: '{message}'");
                         }
-                        reported_spend(&message)
+                        reported_spend(&message).map_err(anyhow::Error::msg)?
                     }
                     other => bail!("expected an OutOfCycles error, got: {other:?}"),
                 };
@@ -1913,23 +1893,16 @@ fn test_out_of_cycles(env: TestEnv) {
                 // Failing does not forfeit the allowances: each replica is charged
                 // what it reported spending, the rest is credited back, and the base
                 // fee stays.
-                let (after, after_consumed) = settled_outcome(&node, proxy_id).await?;
-                let consumed = after_consumed.since(&before_consumed);
+                let charge = settled_charge(&subnet.node, subnet.proxy_id, &baseline).await?;
                 let expected = fees.base_fee + spent;
-                if consumed.http_outcalls != expected {
+                if charge.consumed.http_outcalls != expected {
                     bail!(
                         "a failed outcall consumed {} cycles, not the {expected} its {} base \
                          fee and the {spent} reported spent come to",
-                        consumed.http_outcalls,
+                        charge.consumed.http_outcalls,
                         fees.base_fee
                     );
                 }
-                let Some(charged) = before.checked_sub(after) else {
-                    bail!("balance grew from {before} to {after} across a failed outcall");
-                };
-                consumed
-                    .check_against_balance(charged)
-                    .map_err(|wrong| anyhow::anyhow!("a failed outcall {wrong}"))?;
                 Ok(())
             }
         )

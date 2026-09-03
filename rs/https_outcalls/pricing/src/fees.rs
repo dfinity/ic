@@ -173,10 +173,7 @@ pub(crate) fn max_transform_instructions(budget: Cycles) -> NumInstructions {
 /// all `subnet_size` nodes of the subnet. Only gossiping (flexible and
 /// non-replicated) outcalls are charged this; for fully-replicated ones,
 /// disseminating the response is a consensus cost instead.
-pub(crate) fn gossip_usage_fee(
-    transformed_response_size: NumBytes,
-    subnet_size: NumberOfNodes,
-) -> Cycles {
+pub fn gossip_usage_fee(transformed_response_size: NumBytes, subnet_size: NumberOfNodes) -> Cycles {
     FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE
         * transformed_response_size.get()
         * (subnet_size.get() as u64)
