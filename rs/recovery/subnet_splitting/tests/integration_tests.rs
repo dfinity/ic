@@ -199,7 +199,7 @@ fn load_metrics_e2e_test() {
         // Accept up to 10% error. The precise values are not important here and they're very sensitive
         // to the changes to the replicated state / execution. It's mostly a sanity check that the
         // returned values are not too ridiculous and they might have to be updated once in a while.
-        //These metrics are near-symmetric, so they do not pin down the orientation; the
+        // These metrics are near-symmetric, so they do not pin down the orientation; the
         // orientation is determined and checked for consistency by the exact `assert_eq_oriented`
         // checks below, and these `assert_near` checks pass in either orientation.
         assert_near!(
