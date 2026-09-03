@@ -894,7 +894,7 @@ mod tests {
                     })
                     .unwrap(),
                 subnet_id: replica_config.subnet_id,
-                platform_version: replica_config.platform_version.clone(),
+                platform_version: replica_config.platform_version,
             };
 
             let block_maker = BlockMaker::new(
@@ -1021,7 +1021,7 @@ mod tests {
                     })
                     .unwrap(),
                 subnet_id: replica_config.subnet_id,
-                platform_version: replica_config.platform_version.clone(),
+                platform_version: replica_config.platform_version,
             };
 
             let block_maker = BlockMaker::new(
