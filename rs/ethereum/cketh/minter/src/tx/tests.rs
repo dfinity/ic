@@ -301,9 +301,7 @@ mod eip7702 {
     #[test]
     fn should_recover_authority_from_signed_authorization() {
         use crate::address::ecdsa_public_key_to_address;
-        use ethers_core::types::{
-            H256, RecoveryMessage, Signature as EthSignature, U256 as EthU256,
-        };
+        use alloy_primitives::{B256, Signature};
         use ic_secp256k1::PrivateKey;
 
         let private_key = PrivateKey::deserialize_sec1(&[0x46_u8; 32]).unwrap();
@@ -336,15 +334,15 @@ mod eip7702 {
             s: u256::from_be_bytes(s_bytes),
         };
 
-        let recovered = EthSignature {
-            r: EthU256::from_big_endian(&r_bytes),
-            s: EthU256::from_big_endian(&s_bytes),
-            v: 27 + tuple.y_parity as u64,
-        }
-        .recover(RecoveryMessage::Hash(H256(hash.0)))
+        let recovered = Signature::from_scalars_and_parity(
+            B256::from(r_bytes),
+            B256::from(s_bytes),
+            tuple.y_parity,
+        )
+        .recover_address_from_prehash(&B256::from(hash.0))
         .unwrap();
 
-        assert_eq!(recovered.as_bytes(), authority.as_ref());
+        assert_eq!(recovered.as_slice(), authority.as_ref());
     }
 
     // Known-answer recovery vector reproducing the viem recoverAuthorizationAddress fixture: the
@@ -359,9 +357,7 @@ mod eip7702 {
     #[test]
     fn should_recover_viem_authority_from_signed_authorization() {
         use crate::address::ecdsa_public_key_to_address;
-        use ethers_core::types::{
-            H256, RecoveryMessage, Signature as EthSignature, U256 as EthU256,
-        };
+        use alloy_primitives::{B256, Signature};
         use ic_secp256k1::PrivateKey;
 
         let private_key = PrivateKey::deserialize_sec1(
@@ -389,15 +385,15 @@ mod eip7702 {
         assert!(!recovery_id.is_x_reduced());
 
         let (r_bytes, s_bytes) = super::super::split_in_two(signature);
-        let recovered = EthSignature {
-            r: EthU256::from_big_endian(&r_bytes),
-            s: EthU256::from_big_endian(&s_bytes),
-            v: 27 + recovery_id.is_y_odd() as u64,
-        }
-        .recover(RecoveryMessage::Hash(H256(hash.0)))
+        let recovered = Signature::from_scalars_and_parity(
+            B256::from(r_bytes),
+            B256::from(s_bytes),
+            recovery_id.is_y_odd(),
+        )
+        .recover_address_from_prehash(&B256::from(hash.0))
         .unwrap();
 
-        assert_eq!(recovered.as_bytes(), authority.as_ref());
+        assert_eq!(recovered.as_slice(), authority.as_ref());
     }
 
     #[test]
