@@ -1,5 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
+use ic_config::embedders::{MemoryPageLimit, MeteringType};
 use ic_config::{
     embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
     execution_environment::Config,
@@ -2814,7 +2814,7 @@ impl ExecutionTestBuilder {
 
     pub fn with_stable_memory_dirty_page_limit(
         mut self,
-        stable_memory_dirty_page_limit: StableMemoryPageLimit,
+        stable_memory_dirty_page_limit: MemoryPageLimit,
     ) -> Self {
         self.execution_config
             .embedders_config
@@ -2825,7 +2825,7 @@ impl ExecutionTestBuilder {
 
     pub fn with_stable_memory_access_limit(
         mut self,
-        stable_memory_access_limit: StableMemoryPageLimit,
+        stable_memory_access_limit: MemoryPageLimit,
     ) -> Self {
         self.execution_config
             .embedders_config
@@ -2836,7 +2836,7 @@ impl ExecutionTestBuilder {
 
     pub fn with_wasm_memory_access_limit(
         mut self,
-        wasm_memory_access_limit: StableMemoryPageLimit,
+        wasm_memory_access_limit: MemoryPageLimit,
     ) -> Self {
         self.execution_config
             .embedders_config

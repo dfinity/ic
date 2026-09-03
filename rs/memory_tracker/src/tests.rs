@@ -633,7 +633,7 @@ fn access_limit_exceeded_aborts_once(
     );
     assert_eq!(
         *aborts.lock().unwrap(),
-        vec![AbortReason::AccessLimitExceeded]
+        vec![AbortReason::WasmPagesAccessLimitExceeded]
     );
 
     // Faults after the violation report it again; the embedder keeps only the
@@ -646,8 +646,8 @@ fn access_limit_exceeded_aborts_once(
     assert_eq!(
         *aborts.lock().unwrap(),
         vec![
-            AbortReason::AccessLimitExceeded,
-            AbortReason::AccessLimitExceeded
+            AbortReason::WasmPagesAccessLimitExceeded,
+            AbortReason::WasmPagesAccessLimitExceeded
         ]
     );
 }

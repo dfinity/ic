@@ -18,7 +18,7 @@ use ic_universal_canister::{call_args, wasm};
 use more_asserts::assert_gt;
 use std::time::Duration;
 
-use ic_config::embedders::StableMemoryPageLimit;
+use ic_config::embedders::MemoryPageLimit;
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status,
 };
@@ -120,7 +120,7 @@ fn with_update_and_replicated_query<F: Fn(&str)>(test: F) {
 #[test]
 fn can_write_to_each_page_in_stable_memory() {
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(10),
             message: NumOsPages::new(10),
             query: NumOsPages::new(10),
@@ -565,7 +565,7 @@ fn dirty_pages_cost_the_same_on_app_and_system_subnets() {
 fn hitting_page_delta_limit_fails_message() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages),
             message: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages),
@@ -592,7 +592,7 @@ fn hitting_page_delta_limit_fails_message() {
 fn hitting_page_delta_limit_fails_message_system_subnet() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages),
             message: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages),
@@ -622,7 +622,7 @@ fn hitting_page_delta_limit_fails_for_install_code() {
     // A large enough limit that will never be triggered.
     let no_pages_other_messages = no_pages_upgrade * 10_000_000;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages_upgrade),
             message: NumOsPages::new(no_pages_other_messages),
             query: NumOsPages::new(no_pages_other_messages),
@@ -654,7 +654,7 @@ fn hitting_page_delta_limit_fails_for_install_code() {
 fn hitting_page_delta_limit_fails_non_replicated_query() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages),
             message: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages - 1),
@@ -678,7 +678,7 @@ fn hitting_page_delta_limit_fails_non_replicated_query() {
 fn hitting_page_delta_limit_fails_replicated_query() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages),
             message: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages - 1),
@@ -700,7 +700,7 @@ fn hitting_page_delta_limit_fails_replicated_query() {
 fn hitting_access_limit_fails_non_replicated_query() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_access_limit(StableMemoryPageLimit {
+        .with_stable_memory_access_limit(MemoryPageLimit {
             message: NumOsPages::new(no_pages),
             upgrade: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages - 1),
@@ -756,7 +756,7 @@ fn wat_touching_each_heap_page(export: &str, wasm_pages: u64) -> String {
     )
 }
 
-fn expected_heap_access_error(canister_id: CanisterId, limit: &StableMemoryPageLimit) -> String {
+fn expected_heap_access_error(canister_id: CanisterId, limit: &MemoryPageLimit) -> String {
     format!(
         "Error from Canister {canister_id}: Canister exceeded memory access \
         limits: Exceeded the limit for the number of accessed pages in the heap \
@@ -773,7 +773,7 @@ fn expected_heap_access_error(canister_id: CanisterId, limit: &StableMemoryPageL
 #[test]
 fn heap_access_at_the_limit_succeeds() {
     let wasm_pages = 4;
-    let limit = StableMemoryPageLimit {
+    let limit = MemoryPageLimit {
         message: NumOsPages::new(wasm_pages * OS_PAGES_PER_WASM_PAGE),
         upgrade: NumOsPages::new(wasm_pages * OS_PAGES_PER_WASM_PAGE),
         query: NumOsPages::new(wasm_pages * OS_PAGES_PER_WASM_PAGE),
@@ -789,7 +789,7 @@ fn heap_access_at_the_limit_succeeds() {
 #[test]
 fn hitting_heap_access_limit_fails_message() {
     let limit_wasm_pages = 2;
-    let limit = StableMemoryPageLimit {
+    let limit = MemoryPageLimit {
         message: NumOsPages::new(limit_wasm_pages * OS_PAGES_PER_WASM_PAGE),
         upgrade: NumOsPages::new(limit_wasm_pages * OS_PAGES_PER_WASM_PAGE),
         query: NumOsPages::new(limit_wasm_pages * OS_PAGES_PER_WASM_PAGE),
@@ -812,7 +812,7 @@ fn hitting_heap_access_limit_fails_message() {
 fn hitting_heap_access_limit_commits_no_heap_delta() {
     let limit_wasm_pages = 2;
     let mut test = ExecutionTestBuilder::new()
-        .with_wasm_memory_access_limit(StableMemoryPageLimit {
+        .with_wasm_memory_access_limit(MemoryPageLimit {
             message: NumOsPages::new(limit_wasm_pages * OS_PAGES_PER_WASM_PAGE),
             upgrade: NumOsPages::new(limit_wasm_pages * OS_PAGES_PER_WASM_PAGE),
             // Large enough for the `read` query below to succeed.
@@ -836,7 +836,7 @@ fn hitting_heap_access_limit_fails_for_install_code() {
     let limit_wasm_pages = 2;
     // A large enough limit for the other message types that it never triggers.
     let other_messages_limit = limit_wasm_pages * OS_PAGES_PER_WASM_PAGE * 10_000;
-    let limit = StableMemoryPageLimit {
+    let limit = MemoryPageLimit {
         message: NumOsPages::new(other_messages_limit),
         upgrade: NumOsPages::new(limit_wasm_pages * OS_PAGES_PER_WASM_PAGE),
         query: NumOsPages::new(other_messages_limit),
@@ -860,7 +860,7 @@ fn hitting_heap_access_limit_fails_for_install_code() {
 fn hitting_heap_access_limit_fails_non_replicated_query() {
     let limit_wasm_pages = 2;
     let other_messages_limit = limit_wasm_pages * OS_PAGES_PER_WASM_PAGE * 10_000;
-    let limit = StableMemoryPageLimit {
+    let limit = MemoryPageLimit {
         message: NumOsPages::new(other_messages_limit),
         upgrade: NumOsPages::new(other_messages_limit),
         query: NumOsPages::new(limit_wasm_pages * OS_PAGES_PER_WASM_PAGE),

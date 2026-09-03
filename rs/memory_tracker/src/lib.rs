@@ -78,10 +78,10 @@ pub use deterministic::{AbortReason, DeterministicMemoryTracker};
 #[derive(Clone, Copy, Default)]
 pub struct MemoryLimits {
     pub max_memory_size: NumBytes,
-    /// Capacity hint for the list of dirty pages. Not enforced.
+    // Currently not enforced, because we limit accesses. Dirty pages are a subset of that.
     pub max_dirty_pages: NumOsPages,
-    /// Maximum number of pages a single message execution may access, counting
-    /// both reads and writes. Exceeding it aborts the execution.
+    /// Maximum number of pages a single message execution may access (read or write).
+    /// Exceeding it aborts the execution.
     pub max_accessed_pages: NumOsPages,
 }
 

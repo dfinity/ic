@@ -329,9 +329,8 @@ pub struct DeterministicMemoryTracker {
     pub metrics: MemoryTrackerMetrics,
     state: RefCell<DeterministicState>,
     page_overhead: u64,
+    max_accessable_os_pages_per_message: u64,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
-    /// Maximum number of OS pages a single message execution may access.
-    max_accessed_os_pages: u64,
     /// Aborts the current execution with the given trap reason. Called at most
     /// once per execution; the callee ignores repeated calls.
     abort_execution: Arc<SignalMutex<dyn FnMut(AbortReason) + Send>>,
@@ -341,7 +340,8 @@ pub struct DeterministicMemoryTracker {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum AbortReason {
     /// The execution accessed more pages than `MemoryLimits::max_accessed_pages`.
-    AccessLimitExceeded,
+    WasmPagesAccessLimitExceeded,
+    // might add a stable variant later.
 }
 
 impl DeterministicMemoryTracker {
@@ -365,13 +365,13 @@ impl DeterministicMemoryTracker {
         // Charge instructions.
         (self.subtract_instruction_counter.lock())(num_os_pages * self.page_overhead);
 
-        // Every dirty page is also counted as accessed, so this single check
-        // covers both reads and writes. The comparison is strict so that a
-        // message accessing exactly the whole limit still succeeds.
+        // If the number of accessed OS pages exceeds the limit, abort the execution by
+        // setting an exported Wasm global "pending_trap_code".
+        // The instrumentation will check it (at the next reentrant block) and trap.
         let accessed_os_pages =
             state.accessed_wasm_pages_count.get() as u64 * OS_PAGES_PER_WASM_PAGE;
-        if accessed_os_pages > self.max_accessed_os_pages {
-            (self.abort_execution.lock())(AbortReason::AccessLimitExceeded);
+        if accessed_os_pages > self.max_accessable_os_pages_per_message {
+            (self.abort_execution.lock())(AbortReason::WasmPagesAccessLimitExceeded);
         }
     }
 
@@ -522,8 +522,8 @@ impl DeterministicMemoryTracker {
             metrics: MemoryTrackerMetrics::default(),
             state: RefCell::new(state),
             page_overhead,
+            max_accessable_os_pages_per_message: memory_limits.max_accessed_pages.get(),
             subtract_instruction_counter,
-            max_accessed_os_pages: memory_limits.max_accessed_pages.get(),
             abort_execution,
         };
 

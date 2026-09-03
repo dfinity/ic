@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use ic_config::{
-    embedders::{Config, StableMemoryPageLimit},
+    embedders::{Config, MemoryPageLimit},
     flag_status::FlagStatus,
 };
 use ic_embedders::{
@@ -723,7 +723,7 @@ fn stable_read_accessed_pages_allowance() {
     use HypervisorError::*;
 
     let config = Config {
-        stable_memory_accessed_page_limit: StableMemoryPageLimit {
+        stable_memory_accessed_page_limit: MemoryPageLimit {
             message: ic_types::NumOsPages::new(3),
             upgrade: ic_types::NumOsPages::new(3),
             query: ic_types::NumOsPages::new(3),
@@ -817,7 +817,7 @@ fn stable64_read_accessed_pages_allowance() {
     use HypervisorError::*;
 
     let config = Config {
-        stable_memory_accessed_page_limit: StableMemoryPageLimit {
+        stable_memory_accessed_page_limit: MemoryPageLimit {
             message: ic_types::NumOsPages::new(3),
             upgrade: ic_types::NumOsPages::new(3),
             query: ic_types::NumOsPages::new(3),

@@ -717,9 +717,8 @@ const TABLE_STR: &str = "table";
 pub(crate) const INSTRUCTIONS_COUNTER_GLOBAL_NAME: &str = "canister counter_instructions";
 pub(crate) const DIRTY_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_dirty_pages";
 pub(crate) const ACCESSED_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_accessed_pages";
-/// Holds an `InternalErrorCode` to be raised at the next reentrant block start,
-/// or zero if no trap is pending. Written out of band by the memory tracker's
-/// signal handler, which cannot trap by itself.
+/// Holds an `InternalErrorCode` to be raised at the next reentrant block start, or zero if
+/// no trap is pending. Written by the memory tracker when the page limit is exceeded.
 pub(crate) const PENDING_TRAP_CODE_GLOBAL_NAME: &str = "canister pending_trap_code";
 const CANISTER_START_STR: &str = "canister_start";
 
@@ -961,9 +960,7 @@ fn export_additional_symbols<'a>(
     );
 
     // Push the pending trap code. It is an i32 so that its value can be passed
-    // straight to `internal_trap`, and it starts at zero (no trap pending) on
-    // every instance; see `get_exported_globals`, which keeps it out of the
-    // globals persisted in the execution state.
+    // straight to `internal_trap`, and it starts at zero (no trap pending).
     let pending_trap_code = *module.add_global(
         InitExpr::new(vec![InitInstr::Value(Value::I32(0))]),
         DataType::I32,
@@ -1365,12 +1362,7 @@ fn inject_metering(
                     },
                 ]);
                 if scope == Scope::ReentrantBlockStart {
-                    // Raise a trap requested out of band by the memory tracker.
-                    // `if` branches on a non-zero i32, so no explicit compare
-                    // against zero is needed. This is checked before the
-                    // out-of-instructions check so that a memory limit
-                    // violation deterministically wins over an instruction
-                    // counter underflow in the same block.
+                    // Trap if we accessed too many pages.
                     elems.extend([
                         GlobalGet {
                             global_index: injected_counters.pending_trap_code,
@@ -1386,6 +1378,7 @@ fn inject_metering(
                         },
                         End,
                     ]);
+                    // Trap if we are out of instructions.
                     elems.extend([
                         GlobalGet {
                             global_index: injected_counters.instructions_counter,

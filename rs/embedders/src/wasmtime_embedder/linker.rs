@@ -8,7 +8,7 @@ use crate::{
     },
 };
 use ic_config::{
-    embedders::{FeatureFlags, StableMemoryPageLimit},
+    embedders::{FeatureFlags, MemoryPageLimit},
     flag_status::FlagStatus,
 };
 use ic_interfaces::execution_environment::{
@@ -234,9 +234,9 @@ pub fn syscalls<
 >(
     linker: &mut Linker<StoreData>,
     feature_flags: FeatureFlags,
-    stable_memory_dirty_page_limit: StableMemoryPageLimit,
-    stable_memory_access_page_limit: StableMemoryPageLimit,
-    wasm_memory_access_page_limit: StableMemoryPageLimit,
+    stable_memory_dirty_page_limit: MemoryPageLimit,
+    stable_memory_access_page_limit: MemoryPageLimit,
+    wasm_memory_access_page_limit: MemoryPageLimit,
     main_memory_type: WasmMemoryType,
 ) where
     <I as TryInto<usize>>::Error: std::fmt::Display,

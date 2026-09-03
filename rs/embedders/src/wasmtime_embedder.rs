@@ -166,9 +166,6 @@ fn get_exported_globals<T>(instance: &Instance, store: &mut Store<T>) -> Vec<was
     const TO_IGNORE: &[&str] = &[
         DIRTY_PAGES_COUNTER_GLOBAL_NAME,
         ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
-        // Kept out of the persisted globals so that adding it does not change
-        // the number of globals recorded in existing execution states, and so
-        // that every instance starts with no trap pending.
         PENDING_TRAP_CODE_GLOBAL_NAME,
     ];
 
@@ -669,7 +666,9 @@ impl WasmtimeEmbedder {
 
             Arc::new(SignalMutex::new(move |reason: AbortReason| {
                 let code = match reason {
-                    AbortReason::AccessLimitExceeded => InternalErrorCode::HeapAccessLimitExceeded,
+                    AbortReason::WasmPagesAccessLimitExceeded => {
+                        InternalErrorCode::HeapAccessLimitExceeded
+                    }
                 };
                 // SAFETY: Accessing the Store and Global from the signal handler.
                 unsafe {
