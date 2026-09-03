@@ -917,6 +917,18 @@ jobs:
             command: "true"
             expect: "refusing to build an unpinned image locally"
             runtime: podman
+          # The same failed pull while a local image squats on the tag: the cached
+          # mutable-tag image must not be run either (only
+          # CONTAINER_RUN_ALLOW_UNPINNED=1 permits that), so this still refuses.
+          - name: unknown digest with poisoned local tag refused
+            setup: |
+              tar -cf empty.tar -T /dev/null
+              repo=ghcr.io/dfinity
+              sudo podman import empty.tar "$repo/ic-dev:$(cat ci/container/TAG)"
+              printf 'sha256:%064d\n' 0 > ci/container/ic-dev.digest
+            command: "true"
+            expect: "refusing to build an unpinned image locally"
+            runtime: podman
           - name: docker runtime
             setup: ""
             command: "true"
@@ -1044,6 +1056,11 @@ jobs:
           fi
           # A tampered pin must fail fast: not succeed, not hit the timeout, and
           # not fall through to a local build that merely times the job out.
+          # Snapshot the store first: a refusal must leave it untouched (nothing
+          # pulled or built) and must not have run anything, in particular not an
+          # image the setup step cached under the mutable tag.
+          images_before="$(sudo podman images --no-trunc -q | sort -u)"
+          containers_before="$(sudo podman ps -aq)"
           set +e
           out="$(timeout 300 ./ci/container/container-run.sh ${{ matrix.command }} 2>&1)"
           rc=$?
@@ -1057,9 +1074,12 @@ jobs:
             echo "::error::expected the output to contain '${{ matrix.expect }}'"
             exit 1
           fi
-          repo=ghcr.io/dfinity
-          if [ -n "$(sudo podman images -q "$repo/ic-dev")" ]; then
-            echo "::error::an ic-dev image was pulled or built despite the refusal"
+          if [ "$(sudo podman images --no-trunc -q | sort -u)" != "$images_before" ]; then
+            echo "::error::an image was pulled or built despite the refusal"
+            exit 1
+          fi
+          if [ "$(sudo podman ps -aq)" != "$containers_before" ]; then
+            echo "::error::a container was run despite the refusal"
             exit 1
           fi
       - name: Verify the poisoned tag was re-pointed to the verified image
