@@ -4292,7 +4292,6 @@ dependencies = [
  "webpki-roots 1.0.6",
  "which",
  "wirm",
- "wsl",
  "wycheproof",
  "x509-cert",
  "x509-parser 0.18.1",
@@ -15691,12 +15690,6 @@ name = "writeable"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e9df38ee2d2c3c5948ea468a8406ff0db0b29ae1ffde1bcf20ef305bcc95c51"
-
-[[package]]
-name = "wsl"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8dab7ac864710bdea6594becbea5b5050333cf34fefb0dc319567eb347950d4"
 
 [[package]]
 name = "wycheproof"
