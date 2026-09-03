@@ -361,7 +361,9 @@ impl Orchestrator {
         let boundary_node = BoundaryNodeManager::new(
             Arc::clone(&registry),
             ic_boundary_manager,
-            replica_version.clone(),
+            // Boundary nodes don't run fast upgrades, the corresponding binary is not
+            // overlaid.
+            guestos_version.clone(),
             node_id,
             logger.clone(),
         );
