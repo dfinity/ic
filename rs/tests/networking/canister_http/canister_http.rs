@@ -103,13 +103,6 @@ pub fn setup_with_free_and_paying_subnets(env: TestEnv) {
 /// Sets up an IC with a 1-node system subnet and one 4-node application subnet per
 /// entry in `app_subnets`, which gives each its cost schedule.
 ///
-/// HTTP outcalls are enabled on every subnet, including the system one, which is
-/// free for outcalls despite its normal cost schedule. Every subnet gets a proxy
-/// canister: the system subnet's is reached through
-/// [`get_system_proxy_canister_id`] and each application subnet's through
-/// [`get_proxy_canister_id_for`], or through [`get_proxy_canister_id`] when there
-/// is only one.
-///
 /// Cost schedules in `app_subnets` must be distinct.
 pub fn setup_with_app_subnets(env: TestEnv, app_subnets: &[CanisterCyclesCostSchedule]) {
     std::thread::scope(|s| {
@@ -388,9 +381,6 @@ pub fn get_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapsh
 
 /// The `TestEnv` key under which the proxy canister of the application subnet on
 /// `schedule` is recorded.
-///
-/// Derived from the schedule rather than from the order the subnets were created,
-/// so a setup with more than one application subnet cannot mix their proxies up.
 fn proxy_canister_id_path(schedule: CanisterCyclesCostSchedule) -> String {
     format!("proxy_canister_id_{schedule:?}")
 }
@@ -432,10 +422,6 @@ fn sole_app_subnet_schedule(env: &TestEnv) -> CanisterCyclesCostSchedule {
 }
 
 /// The nodes of the application subnet running on the given cost schedule.
-///
-/// A setup with more than one application subnet
-/// ([`setup_with_free_and_paying_subnets`]) tells them apart this way rather than
-/// by position, which the topology does not promise to preserve.
 pub fn get_app_subnet_node_snapshots_with_schedule(
     env: &TestEnv,
     cost_schedule: CanisterCyclesCostSchedule,

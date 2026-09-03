@@ -226,11 +226,6 @@ async fn check_response(
 }
 
 /// This canister's own cycle balance.
-///
-/// Under pay-as-you-go pricing an HTTP outcall's payment is taken up front and
-/// the unspent part is credited back to the balance afterwards, rather than
-/// returned as `msg_cycles_refunded` on the reply. Tests therefore observe what
-/// an outcall actually cost by watching this.
 #[query]
 fn cycle_balance() -> u128 {
     ic_cdk::api::canister_cycle_balance()

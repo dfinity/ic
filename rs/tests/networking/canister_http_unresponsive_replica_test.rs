@@ -32,7 +32,7 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, READY_WAIT_TIMEOUT};
+use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm};
 use ic_system_test_driver::util::block_on;
 use ic_system_test_driver::{retry_with_msg_async, systest};
 use proxy_canister::{RemoteHttpRequest, ResponseWithRefundedCycles};
@@ -251,8 +251,6 @@ fn test_unresponsive_replica_is_refunded_on_timeout(env: TestEnv) {
     });
 }
 
-/// A failed accounting read is fatal in this suite: the assertions below measure a
-/// single outcall, so there is no outer retry to absorb one.
 fn fatal<T>(read: Result<T>) -> T {
     read.unwrap_or_else(|err| panic!("{err:#}"))
 }

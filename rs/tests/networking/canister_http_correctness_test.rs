@@ -234,10 +234,9 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_max_response_bytes_too_large))
                 .add_test(systest!(test_max_response_bytes_2_mb_returns_ok)),
         )
-        // Pay-as-you-go pricing, which a caller opts into per request. These run
-        // sequentially: `test_pay_as_you_go_charges_and_refunds` measures the proxy
-        // canister's balance across a single outcall, which any concurrent outcall
-        // from the same canister would perturb.
+        // Pay-as-you-go pricing, which a caller opts into per request. These run sequentially,
+        // because they measure the proxy canister's balance across a single outcall, which any
+        // concurrent outcall from the same canister would perturb.
         .add_test(systest!(test_legacy_charges_the_estimate_and_nothing_else))
         .add_test(systest!(test_pay_as_you_go_charges_and_refunds))
         .add_test(systest!(test_pay_as_you_go_non_replicated))
@@ -249,7 +248,6 @@ fn main() -> Result<()> {
         .add_test(systest!(test_pay_as_you_go_refunds_concurrent_outcalls))
         .add_test(systest!(test_pay_as_you_go_base_fee_threshold))
         .add_test(systest!(test_pay_as_you_go_out_of_cycles))
-        // Reads the proxy canister's balance too, on the system subnet.
         .add_test(systest!(test_free_subnet_charges_nothing))
         .execute_from_args()?;
 

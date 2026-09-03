@@ -54,7 +54,7 @@ use proxy_canister::{
     FlexibleRemoteHttpRequest, FlexibleResponseWithRefundedCycles, RejectionCode,
 };
 use slog::info;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// The cycles attached to each flexible outcall.
 const CYCLES: u64 = 500_000_000_000;
