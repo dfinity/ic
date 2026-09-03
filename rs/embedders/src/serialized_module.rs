@@ -73,6 +73,8 @@ pub struct SerializedModule {
     pub compilation_cost: NumInstructions,
     /// Imported System API functions that are deprecated, should become deprecated, or should only be used by NNS canisters.
     pub imports_details: WasmImportsDetails,
+    /// Boolean value that indicates whether this module declares a Wasm memory or not.
+    pub declares_wasm_memory: bool,
     /// Boolean value that indicates whether this is a Wasm64 module or not.
     pub is_wasm64: bool,
 }
@@ -82,6 +84,7 @@ impl SerializedModule {
         module: &Module,
         instrumentation_output: InstrumentationOutput,
         validation_details: WasmValidationDetails,
+        declares_wasm_memory: bool,
         is_wasm64: bool,
     ) -> HypervisorResult<Self> {
         let bytes = SerializedModuleBytes::try_from(module)?;
@@ -92,6 +95,7 @@ impl SerializedModule {
             wasm_metadata: validation_details.wasm_metadata,
             compilation_cost: instrumentation_output.compilation_cost,
             imports_details: validation_details.imports_details,
+            declares_wasm_memory,
             is_wasm64,
         })
     }
@@ -144,6 +148,8 @@ pub struct OnDiskSerializedModule {
     pub compilation_cost: NumInstructions,
     /// Imported System API functions that are deprecated, should become deprecated, or should only be used by NNS canisters.
     pub imports_details: WasmImportsDetails,
+    /// Boolean value that indicates whether this module declares a Wasm memory or not.
+    pub declares_wasm_memory: bool,
     /// Boolean value that indicates whether this is a Wasm64 module or not.
     pub is_wasm64: bool,
 }
@@ -224,6 +230,7 @@ impl OnDiskSerializedModule {
             initial_state_data: initial_state_file,
             compilation_cost: serialized_module.compilation_cost,
             imports_details: serialized_module.imports_details,
+            declares_wasm_memory: serialized_module.declares_wasm_memory,
             is_wasm64: serialized_module.is_wasm64,
         }
     }
@@ -334,6 +341,7 @@ mod test {
             imports_msg_cycles_refunded: bool,
             imports_msg_cycles_accept: bool,
             imports_mint_cycles: bool,
+            declares_wasm_memory: bool,
             is_wasm64: bool,
         ) {
             let bytes = Arc::new(SerializedModuleBytes(bytes));
@@ -355,6 +363,7 @@ mod test {
                 wasm_metadata,
                 compilation_cost,
                 imports_details,
+                declares_wasm_memory,
                 is_wasm64,
             };
 
@@ -376,6 +385,7 @@ mod test {
             assert_eq!(module.wasm_metadata, initial_state_data.wasm_metadata);
             assert_eq!(module.compilation_cost, on_disk.compilation_cost);
             assert_eq!(module.imports_details, on_disk.imports_details);
+            assert_eq!(module.declares_wasm_memory, on_disk.declares_wasm_memory);
             assert_eq!(module.is_wasm64, on_disk.is_wasm64);
         }
 
@@ -406,6 +416,7 @@ mod test {
                 wasm_metadata,
                 compilation_cost,
                 imports_details,
+                declares_wasm_memory: true,
                 is_wasm64: false,
             };
 
@@ -451,6 +462,7 @@ mod test {
                 imports_msg_cycles_accept: false,
                 imports_mint_cycles: false,
             },
+            declares_wasm_memory: true,
             is_wasm64: false,
         };
 

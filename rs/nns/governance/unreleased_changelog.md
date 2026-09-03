@@ -17,8 +17,4 @@ on the process that this file is part of, see
 
 ## Fixed
 
-* `validate_assign_noid_payload` no longer panics when a node provider has
-  `id = None`. It now skips such providers safely, preventing all
-  `AddNodeOperator` proposal submissions from being blocked.
-
 ## Security

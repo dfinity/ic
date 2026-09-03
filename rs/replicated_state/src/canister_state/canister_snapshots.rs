@@ -5,6 +5,7 @@ use crate::{
         execution_state::Memory,
         system_state::wasm_chunk_store::{self, ValidatedChunk, WasmChunkStore},
     },
+    metadata_state::UnflushedCheckpointOps,
     page_map::{Buffer, PageAllocatorFileDescriptor, PersistenceError},
 };
 use ic_config::embedders::{MAX_GLOBALS, WASM_MAX_SIZE};
@@ -100,20 +101,37 @@ impl CanisterSnapshots {
         self.snapshots.iter_mut()
     }
 
-    /// Remove snapshot identified by `snapshot_id` from the collection of snapshots.
-    pub fn remove(&mut self, snapshot_id: SnapshotId) {
+    /// Removes the snapshot identified by `snapshot_id` from the collection of
+    /// snapshots; and records the removal in `unflushed_checkpoint_ops`, so that the
+    /// snapshot's directory is also deleted from the tip.
+    ///
+    /// Takes `unflushed_checkpoint_ops` (rather than having the caller record the
+    /// operation) so that the operation cannot be forgotten. Callers with no access to
+    /// `SystemMetadata` (e.g. `CanisterManager`, which only mutates a single
+    /// `CanisterState`) can pass in a temporary `UnflushedCheckpointOps` and have it
+    /// merged into the state's operations via `UnflushedCheckpointOps::extend()`.
+    pub fn remove(
+        &mut self,
+        snapshot_id: SnapshotId,
+        unflushed_checkpoint_ops: &mut UnflushedCheckpointOps,
+    ) {
         if let Some(snapshot) = self.snapshots.remove(&snapshot_id) {
             self.memory_usage -= snapshot.size();
+            unflushed_checkpoint_ops.delete_snapshot(snapshot_id);
         }
     }
 
-    /// Remove all snapshots from the collections of snapshots.
-    /// Returns the list of deleted snapshots.
-    pub fn delete_snapshots(&mut self) -> Vec<SnapshotId> {
-        let result = self.snapshots.keys().cloned().collect();
+    /// Removes all snapshots from the collection of snapshots; and records the removals
+    /// in `unflushed_checkpoint_ops`, so that the snapshots' directories are also
+    /// deleted from the tip.
+    ///
+    /// See `remove()` for why this takes `unflushed_checkpoint_ops`.
+    pub fn delete_snapshots(&mut self, unflushed_checkpoint_ops: &mut UnflushedCheckpointOps) {
+        for snapshot_id in self.snapshots.keys() {
+            unflushed_checkpoint_ops.delete_snapshot(*snapshot_id);
+        }
         self.snapshots.clear();
         self.memory_usage = NumBytes::new(0);
-        result
     }
 
     /// Lists all snapshots.
@@ -667,7 +685,7 @@ mod tests {
 
         assert_eq!(snapshot_manager.snapshots.len(), 1);
 
-        snapshot_manager.remove(snapshot_id);
+        snapshot_manager.remove(snapshot_id, &mut UnflushedCheckpointOps::default());
         assert_eq!(snapshot_manager.snapshots.len(), 0);
     }
 
@@ -702,14 +720,14 @@ mod tests {
         );
 
         // Deleting a snapshot updates the `memory_usage`.
-        snapshot_manager.remove(first_snapshot_id);
+        snapshot_manager.remove(first_snapshot_id, &mut UnflushedCheckpointOps::default());
         assert_eq!(
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot2_size)
         );
 
         // Deleting the second snapshot brings us back to 0 memory taken.
-        snapshot_manager.remove(second_snapshot_id);
+        snapshot_manager.remove(second_snapshot_id, &mut UnflushedCheckpointOps::default());
         assert_eq!(snapshot_manager.memory_taken(), NumBytes::from(0));
     }
 }

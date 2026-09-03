@@ -8,15 +8,21 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+candid = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
+dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
+futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
+ic-canister-client = { path = "../../../canister_client" }
+ic-engine-controller = { path = "../../../engine_controller" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
+ic-nervous-system-common-test-keys = { path = "../../../nervous_system/common/test_keys" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-nns-governance-api = { path = "../../../nns/governance/api" }
 ic-protobuf = { path = "../../../protobuf" }
-ic-recovery = { path = "../../../recovery" }
+ic-registry-client-helpers = { path = "../../../registry/helpers" }
 ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
@@ -24,13 +30,13 @@ ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 ic_consensus_system_test_node_registration_test_common = { path = "../node_registration_test_common" }
+ic_consensus_system_test_upgrade_common = { path = "../upgrade", package = "consensus-upgrade-system-tests" }
 ic_consensus_system_test_utils = { path = "../utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 registry-canister = { path = "../../../registry/canister" }
 reqwest = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
-tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 
@@ -41,6 +47,10 @@ path = "cup_compatibility_test.rs"
 [[bin]]
 name = "ic-systest-cloud-engine-ic-gateway-test"
 path = "cloud_engine_ic_gateway_test.rs"
+
+[[bin]]
+name = "ic-systest-standard-engine-replica-version-test"
+path = "standard_engine_replica_version_test.rs"
 
 [[bin]]
 name = "ic-systest-node-reassignment-test"

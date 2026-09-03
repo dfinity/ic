@@ -45,7 +45,7 @@ def system_test(
         logs = True,
         vm_allocation_mode = None,
         cpus = None,
-        cpus_oversubscription_factor = 4,
+        cpus_oversubscription_factor = 3,
         **kwargs):
     """Declares a system-test.
 
@@ -315,6 +315,19 @@ def system_test(
     # writable varstore template.
     _local_only_deps["ENV_DEPS__OVMF_CODE_PATH"] = "//:OVMF_CODE_4M.fd"
     _local_only_deps["ENV_DEPS__OVMF_VARS_PATH"] = "//:OVMF_VARS_4M.fd"
+
+    # The dev root CA, which the local backend's ic-gateway uses to issue its TLS
+    # certificate: every dev IC-OS image installs this CA into
+    # /usr/local/share/ca-certificates in the `output_dev` stage of the GuestOS and
+    # HostOS Dockerfiles, so a node trusts the gateway with no node-side config.
+    # See `IcGatewayVm::load_or_create_local_playnet`.
+    #
+    # Local-only on purpose. The Farm backend uses a playnet certificate and never
+    # reads these, and a runtime dep reaches *every* variant's runfiles -- which for
+    # a colocated test means being tarred up and copied to the driver's UVM. There
+    # is no reason to ship a CA signing key to Farm, public though this one is.
+    _local_only_deps["ENV_DEPS__DEV_ROOT_CA_CERT_PATH"] = "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert"
+    _local_only_deps["ENV_DEPS__DEV_ROOT_CA_KEY_PATH"] = "//ic-os/components:networking/dev-certs/canister_http_test_ca.key"
 
     local_dep_env = {
         name: "$(rootpath {})".format(dep)

@@ -11,6 +11,40 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-09-01: Proposal 143761
+
+http://dashboard.internetcomputer.org/proposal/143761
+
+## Added
+
+* `UpdateCanisterSettings` and `CreateCanisterAndInstallCode` proposals can now
+  set `reserved_cycles_limit`, the upper bound on the cycles a canister may hold
+  in reserved cycles.
+
+
+# 2026-08-21: Proposal 143660
+
+https://dashboard.internetcomputer.org/proposal/143660
+
+## Changed
+
+* Relaxed requirements on replica versions used in
+  UpdateStandardEngineReplicaVersion. The motivation is just to facilitate
+  testing. Previously, 40 character hexadecimal was required. Now, whatever
+  ReplicaVersion::try_from accepts is accepted.
+
+
+# 2026-08-14: Proposal 143577
+
+http://dashboard.internetcomputer.org/proposal/143577
+
+## Fixed
+
+* `validate_assign_noid_payload` no longer panics when a node provider has
+  `id = None`. It now skips such providers safely, preventing all
+  `AddNodeOperator` proposal submissions from being blocked.
+
+
 # 2026-08-07: Proposal 143410
 
 http://dashboard.internetcomputer.org/proposal/143410

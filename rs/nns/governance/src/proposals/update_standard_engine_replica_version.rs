@@ -9,8 +9,8 @@ use crate::{
 
 use candid::Encode;
 use ic_base_types::CanisterId;
-use ic_nervous_system_ids::is_potential_full_git_commit_id;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_types::ReplicaVersion;
 use registry_canister::mutations::do_update_standard_engine_replica_version::UpdateStandardEngineReplicaVersionPayload;
 
 impl UpdateStandardEngineReplicaVersion {
@@ -24,17 +24,15 @@ impl UpdateStandardEngineReplicaVersion {
             deployment_progress,
         } = self;
 
-        // Replica version IDs must be plausible full git commit IDs.
-        if !is_potential_full_git_commit_id(new_replica_version_id) {
+        // Replica version IDs must be valid.
+        if let Err(err) = ReplicaVersion::try_from(new_replica_version_id.as_str()) {
             return Err(invalid_proposal_error(&format!(
-                "new_replica_version_id is not a 40-character hexadecimal string (it was {:?})",
-                new_replica_version_id,
+                "new_replica_version_id is invalid: {err}"
             )));
         }
-        if !is_potential_full_git_commit_id(old_replica_version_id) {
+        if let Err(err) = ReplicaVersion::try_from(old_replica_version_id.as_str()) {
             return Err(invalid_proposal_error(&format!(
-                "old_replica_version_id is not a 40-character hexadecimal string (it was {:?})",
-                old_replica_version_id,
+                "old_replica_version_id is invalid: {err}"
             )));
         }
 

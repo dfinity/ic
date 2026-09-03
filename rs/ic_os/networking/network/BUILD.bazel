@@ -10,6 +10,10 @@ rust_library(
     aliases = {},
     crate_name = "network",
     proc_macro_deps = [],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = [
         # Keep sorted.
         "//rs/ic_os/config/types:config_types",

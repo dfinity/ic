@@ -165,6 +165,8 @@ members = [
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/build_tools/partition_tools",
+    "rs/ic_os/build_tools/alternative_guestos",
+    "rs/ic_os/alternative_guestos",
     "rs/ic_os/command_runner",
     "rs/ic_os/config/tool",
     "rs/ic_os/config/types",
@@ -199,9 +201,7 @@ members = [
     "rs/ic_os/sev/guest/testing",
     "rs/ic_os/sev/host",
     "rs/ic_os/utils",
-    "rs/ic_os/vsock/guest",
-    "rs/ic_os/vsock/host",
-    "rs/ic_os/vsock/vsock_lib",
+    "rs/ic_os/vsock",
     "rs/ingress_manager",
     "rs/interfaces",
     "rs/interfaces/adapter_client",
@@ -510,7 +510,6 @@ members = [
     "rs/tests/nns/sns/lib",
     "rs/tests/node",
     "rs/tests/query_stats/lib",
-    "rs/tests/sdk",
     "rs/tests/test_canisters/http_counter",
     "rs/tests/test_canisters/kv_store",
     "rs/tests/test_canisters/message",
@@ -648,7 +647,9 @@ clap = { version = "4.5.20", features = ["derive", "string"] }
 colored = "^2.0.0"
 # Fork of `comparable` migrated to syn 2 (upstream still uses syn 1), so it no
 # longer forces a duplicate syn 1.0 into the dependency graph.
-comparable = { git = "https://github.com/dfinity/comparable", rev = "8338f595496454f9e770389e2edc0d96e137a4e9", features = ["derive"] }
+comparable = { git = "https://github.com/dfinity/comparable", rev = "8338f595496454f9e770389e2edc0d96e137a4e9", features = [
+    "derive",
+] }
 crc32fast = "^1.2.0"
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"
@@ -711,7 +712,12 @@ ic-certified-map = "^0.3.1"
 ic-metrics-encoder = "^1.1.1"
 ic0 = "1.0.0"
 ic-agent = { version = "0.49.1", features = ["pem"] }
-ic-bn-lib = { version = "0.5.0", features = ["acme-alpn", "pubsub"] }
+ic-bn-lib = { version = "0.7.0", features = [
+    "acme-alpn",
+    "acme-dns",
+    "pubsub",
+    "clients-hyper",
+] }
 ic-btc-interface = "0.4.0"
 ic-canister-runtime = "0.2.3"
 ic-canister-sig-creation = "1.3.1"
@@ -723,7 +729,9 @@ ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
 ic-certification = "3"
 ic-doge-interface = "0.3.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "3e015f17b8ad302a42fd1ac68b7b139867b71c5f", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", tag = "v0.6.5", features = [
+    "acme",
+] }
 ic-http-certification = "3.0.3"
 ic-identity-hsm = { version = "0.49.1" }
 ic-management-canister-types = "0.8.0"
@@ -783,11 +791,23 @@ memchr = "2.7"
 memmap2 = "0.9.5"
 minicbor = { version = "0.22.0", features = ["alloc", "derive"] }
 minicbor-derive = "0.14.0"
-mockall = "0.13.0"
+mockall = "0.15.0"
 mockito = "1.6.1"
 more-asserts = "0.3.1"
 nftables = "0.4"
-nix = { version = "0.31.3", features = ["fs", "ioctl", "mman", "net", "process", "ptrace", "signal", "socket", "time", "user", "zerocopy"] }
+nix = { version = "0.31.3", features = [
+    "fs",
+    "ioctl",
+    "mman",
+    "net",
+    "process",
+    "ptrace",
+    "signal",
+    "socket",
+    "time",
+    "user",
+    "zerocopy",
+] }
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
 num_cpus = "1.16.0"
@@ -847,7 +867,7 @@ rand_distr = "^0.4"
 rand_pcg = "^0.3.1"
 ratatui = "0.29"
 rayon = "1.10.0"
-rcgen = { version = "0.13.1", features = ["zeroize"] }
+rcgen = { version = "0.13.1", features = ["x509-parser", "zeroize"] }
 regex = "1.11.0"
 regex-lite = "0.1.8"
 rexpect = "0.6"
@@ -867,7 +887,9 @@ rsa = { version = "0.9.6", features = ["sha2", "getrandom"] }
 rstest = "0.19.0"
 rusqlite = "0.37.0"
 rust-ini = "0.21.1"
-rust_decimal = { version = "^1.42", default-features = false, features = ["serde"] }
+rust_decimal = { version = "^1.42", default-features = false, features = [
+    "serde",
+] }
 rust_decimal_macros = "^1.40"
 rustc-demangle = { version = "0.1.16" }
 rustc-hash = "^1.1.0"
@@ -924,6 +946,7 @@ sys-mount = "3.0"
 sysinfo = "0.37"
 tar = "0.4.39"
 tempfile = "3.20"
+test-strategy = "0.4.0"
 textplots = "^0.8"
 # DO NOT upgrade to >=2.0.19 as it pulls in syn 3 whereas the rest of the
 # codebase uses syn 2.
@@ -980,10 +1003,18 @@ walkdir = "2.3.3"
 walrus = "0.26.4"
 warp = { version = "0.3.7", features = ["tls"] }
 wasm-encoder = { version = "0.252.0", features = ["wasmparser"] }
-wasm-smith = { version = "0.252.0", default-features = false, features = ["wasmparser"] }
+wasm-smith = { version = "0.252.0", default-features = false, features = [
+    "wasmparser",
+] }
 wasmparser = "0.252.0"
 wasmprinter = "0.252.0"
-wasmtime = { version = "47.0.3", default-features = false, features = ["cranelift", "gc", "gc-null", "parallel-compilation", "runtime"] }
+wasmtime = { version = "47.0.3", default-features = false, features = [
+    "cranelift",
+    "gc",
+    "gc-null",
+    "parallel-compilation",
+    "runtime",
+] }
 wast = "252.0.0"
 wat = "~1.252.0"
 webpki-roots = "1.0.6"

@@ -45,9 +45,16 @@ RUN ln -sf "$(command -v ld.lld)" "$(realpath /usr/bin/ld)"
 
 # Add motoko compiler
 # This is only used by Cargo; Bazel pulls its own via rules_motoko
-# NOTE: keep version in line with rules_motoko
+# NOTE: keep version in line with rules_motoko (`motoko.toolchain` in MODULE.bazel)
+#       and update motoko_sha whenever motoko_version changes
 ARG motoko_version=1.11.0
-RUN curl -fsSL https://github.com/caffeinelabs/motoko/releases/download/${motoko_version}/motoko-Linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
+ARG motoko_sha=f84e566d9d7c255677c753ebe8e7319f60cce04f9ea761e6a55472886d0e5d56
+RUN motoko_tar="$(mktemp)" && \
+    curl -fsSL "https://github.com/caffeinelabs/motoko/releases/download/${motoko_version}/motoko-Linux-x86_64-${motoko_version}.tar.gz" -o "$motoko_tar" && \
+    echo "$motoko_sha $motoko_tar" | sha256sum --check && \
+    tar -xzf "$motoko_tar" -C /usr/local/bin && \
+    rm -f "$motoko_tar" && \
+    chmod +x /usr/local/bin/moc
 
 # Install AFLplusplus (`make install` puts the executables in /usr/local/bin/)
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c

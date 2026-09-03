@@ -3,7 +3,7 @@ use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
-use ic_nervous_system_common::{ONE_HOUR_SECONDS, ONE_MONTH_SECONDS};
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_HOUR_SECONDS};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -396,8 +396,11 @@ fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
 
 mod sanity_check {
     use super::*;
+    use chrono::{Datelike, NaiveDate};
     use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
     use ic_nns_governance_api::DateUtc;
+    use ic_types::Time;
+    use std::time::SystemTime;
 
     /// Metrics fetched from canisters either before or after testing.
     pub struct Metrics {
@@ -423,11 +426,23 @@ mod sanity_check {
         state_machine: &StateMachine,
         before: Metrics,
     ) {
-        let before_timestamp = before
+        let most_recent_node_provider_rewards_timestamp_seconds = before
             .governance_most_recent_monthly_node_provider_rewards
             .timestamp;
-        advance_time_to_allow_for_voting_and_node_rewards(state_machine, before_timestamp);
+        advance_until_new_node_provider_rewards_distributed(
+            state_machine,
+            most_recent_node_provider_rewards_timestamp_seconds,
+        );
+
+        // Advance time to ensure at least one set of voting rewards, which
+        // happen once per day. This is usually not necessary, since most of the
+        // time, the previous statement advances by more than 1 day. But since
+        // it does not ALWAYS do that, we also do this.
+        advance_for_voting_rewards(state_machine);
+
         let after = fetch_metrics(state_machine);
+
+        // Log the (new) latest node provider rewards.
         let after_start_date = after
             .governance_most_recent_monthly_node_provider_rewards
             .start_date
@@ -438,54 +453,102 @@ mod sanity_check {
             .end_date
             .clone()
             .unwrap();
+        println!(
+            "new node provider rewards date range: {:?} - {:?}",
+            after_start_date, after_end_date,
+        );
 
-        println!("node provider rewards start_date {:?}", after_start_date);
-        println!("node provider rewards end_date {:?}", after_end_date);
         MetricsBeforeAndAfter { before, after }.check_all();
     }
 
-    fn advance_time_to_allow_for_voting_and_node_rewards(
+    /// Runs state_machine until a new set of node provider rewards has been
+    /// distributed.
+    ///
+    /// The new node provider rewards is supposed to occur 1 "month" after the
+    /// most recent one. This advances past that somewhat to allow the actual
+    /// work of distributing node provider rewards to be performed.
+    ///
+    /// Panics if no node provider rewards occurs after a generous amount of
+    /// time.
+    fn advance_until_new_node_provider_rewards_distributed(
         state_machine: &StateMachine,
-        before_timestamp: u64,
+        most_recent_node_provider_rewards_timestamp_seconds: u64,
     ) {
-        // Advance time in the state machine to just before the next node provider
-        // rewards distribution time.
-        // Important to reach the exact moment when node provider rewards are distributed!
-        //
-        // It is possible that node provider rewards are already due, e.g. because this
-        // test runs shortly after they were supposed to have been distributed.
-        let seconds_to_node_provider_reward_distribution = before_timestamp
-            .saturating_add(NODE_PROVIDER_REWARD_PERIOD_SECONDS)
-            .saturating_sub(state_machine.get_time().as_secs_since_unix_epoch());
+        let expected_new_node_provider_rewards_timestamp_seconds =
+            most_recent_node_provider_rewards_timestamp_seconds
+                .checked_add(NODE_PROVIDER_REWARD_PERIOD_SECONDS)
+                .unwrap();
+        let expected_new_node_provider_rewards_timestamp =
+            Time::from_secs_since_unix_epoch(expected_new_node_provider_rewards_timestamp_seconds)
+                .unwrap();
+
+        // Arrive at slightly before the next node provider rewards.
         advance_time_gradually(
             state_machine,
-            seconds_to_node_provider_reward_distribution.saturating_sub(1),
+            expected_new_node_provider_rewards_timestamp
+                // Saturation happens when this test runs shortly after node
+                // provider rewards are due in real life. This is uncommon, of
+                // course, since node provider rewards only happens once per
+                // month, but it does happen every so often.
+                .saturating_duration_since(state_machine.get_time())
+                .as_secs()
+                .saturating_sub(1),
         );
 
-        // Node provider rewards are minted by the governance heartbeat, but only once
-        // the node-rewards canister has synced its node metrics up to the requested
-        // period (its sync runs on an hourly timer) and the minting call has fully
-        // completed. That call makes one inter-canister call per day in the reward
-        // period and one ledger transfer per node provider, so the number of ticks it
-        // needs grows with how far the golden state's last reward is behind the current
-        // time. A fixed number of ticks is therefore not enough, so we tick until the
-        // reward is actually distributed (i.e. its timestamp increases). If the cap is
-        // hit without a new reward, the assertion in `check_all` surfaces the failure.
-        tick_until_node_provider_rewards_distributed(state_machine, before_timestamp);
+        // Advance with much finer granularity, because node provider rewards
+        // (the thing we want to accomplish) requires lots of canister calls.
+        const NODE_PROVIDER_REWARDS_TIMEOUT_SECONDS: usize = 3600;
+        // Do NOT spam the Governance canister with requests, because that will
+        // impede its progress on the very thing we want it to accomplish,
+        // distributing node provider rewards.
+        const NODE_PROVIDER_REWARDS_FETCH_INTERVAL: usize = 60;
+        for tick in 0..NODE_PROVIDER_REWARDS_TIMEOUT_SECONDS {
+            state_machine.advance_time(std::time::Duration::from_secs(1));
+            state_machine.tick();
 
-        // Advance time in the state machine by one month to ensure that voting rewards
-        // are also distributed.
+            if (tick + 1) % NODE_PROVIDER_REWARDS_FETCH_INTERVAL == 0 {
+                let timestamp = nns_get_most_recent_monthly_node_provider_rewards(state_machine)
+                    .unwrap()
+                    .timestamp;
+                if timestamp >= expected_new_node_provider_rewards_timestamp_seconds {
+                    // Success!
+                    return;
+                }
+            }
+        }
+
+        let time_since_due = state_machine
+            .get_time()
+            .saturating_duration_since(expected_new_node_provider_rewards_timestamp)
+            .as_secs();
+        panic!(
+            "No new node provider rewards appeared. (A reasonable amount of time \
+             was given. They were supposed to occur at \
+             {expected_new_node_provider_rewards_timestamp}, {time_since_due} seconds ago.)",
+        );
+    }
+
+    // Advances time by slightly more than 1 day, because voting rewards happen
+    // once per day.
+    fn advance_for_voting_rewards(state_machine: &StateMachine) {
         advance_time_gradually(
             state_machine,
-            ONE_MONTH_SECONDS.saturating_sub(seconds_to_node_provider_reward_distribution),
+            ONE_DAY_SECONDS
+                // Put us slightly past the line. This probably isn't
+                // necessary, but also isn't harmful.
+                .saturating_add(10),
         );
-        for _ in 0..100 {
+
+        // This is to make sure that voting rewards have a chance to run.
+        for _ in 0..50 {
             state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
         }
     }
 
     fn advance_time_gradually(state_machine: &StateMachine, total_seconds: u64) {
+        let start_real_time = SystemTime::now();
+
         const STEP_SECONDS: u64 = 6 * ONE_HOUR_SECONDS;
         let mut remaining_seconds = total_seconds;
         while remaining_seconds > 0 {
@@ -494,37 +557,28 @@ mod sanity_check {
             state_machine.tick();
             remaining_seconds -= step_seconds;
         }
+
+        let end_real_time = SystemTime::now();
+        println!(
+            "Advanced simulated time by {} s. \
+             This took {:?} of real time (from {:?} to {:?}).",
+            total_seconds,
+            end_real_time.duration_since(start_real_time).unwrap(),
+            start_real_time,
+            end_real_time,
+        );
     }
 
-    /// Ticks the state machine (advancing time by one second per tick) until a new
-    /// monthly node provider reward has been distributed, i.e. its timestamp has
-    /// increased past `before_timestamp`, up to a generous cap on the number of ticks.
-    fn tick_until_node_provider_rewards_distributed(
-        state_machine: &StateMachine,
-        before_timestamp: u64,
-    ) {
-        // Generous upper bound. Reaching the reward distribution requires the
-        // node-rewards canister to sync (hourly timer) plus a minting call whose length
-        // scales with the reward period and the number of node providers, so this needs
-        // to comfortably exceed a few hundred rounds. Since each tick advances time by
-        // one second, this keeps trying for one hour of simulated time, which is an
-        // improbably long time for the distribution to take.
-        const MAX_TICKS: usize = 3600;
-        // Only poll periodically, since each poll is an ingress call to governance.
-        const POLL_EVERY_TICKS: usize = 25;
+    // E.g. passing 2025-12-31 returns 2026-01-01.
+    fn next_date(date: &DateUtc) -> DateUtc {
+        let naive_date = NaiveDate::from_ymd_opt(date.year as i32, date.month, date.day).unwrap();
 
-        for tick in 0..MAX_TICKS {
-            state_machine.advance_time(std::time::Duration::from_secs(1));
-            state_machine.tick();
+        let result = naive_date.succ_opt().unwrap();
 
-            if (tick + 1) % POLL_EVERY_TICKS == 0 {
-                let timestamp = nns_get_most_recent_monthly_node_provider_rewards(state_machine)
-                    .unwrap()
-                    .timestamp;
-                if timestamp > before_timestamp {
-                    return;
-                }
-            }
+        DateUtc {
+            year: result.year() as u32,
+            month: result.month(),
+            day: result.day(),
         }
     }
 
@@ -603,6 +657,7 @@ mod sanity_check {
                 },
             );
 
+            // This is redundant vs. advance_until_new_node_provider_rewards_distributed.
             self.check_metric(
                 |metrics| {
                     metrics
@@ -614,23 +669,19 @@ mod sanity_check {
                 },
             );
 
-            // Check node provider rewards cover contiguous periods.
+            // Check that the new node provider rewards start on the day after
+            // the previous one ends.
             let before_end_date = self
                 .before
                 .governance_most_recent_monthly_node_provider_rewards
                 .end_date
                 .clone()
                 .unwrap();
-            let expected_after_start_date = DateUtc {
-                year: before_end_date.year,
-                month: before_end_date.month,
-                day: before_end_date.day + 1,
-            };
             assert_eq!(
                 self.after
                     .governance_most_recent_monthly_node_provider_rewards
                     .start_date,
-                Some(expected_after_start_date)
+                Some(next_date(&before_end_date)),
             );
         }
 

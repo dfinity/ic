@@ -338,6 +338,7 @@ impl SystemStateModifications {
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Ic00Method::NodeMetricsHistory)
+            | Ok(Ic00Method::SubnetMetrics)
             | Ok(Ic00Method::SubnetInfo)
             | Ok(Ic00Method::FetchCanisterLogs)
             | Ok(Ic00Method::UploadChunk)
@@ -393,16 +394,10 @@ impl SystemStateModifications {
     ) -> HypervisorResult<RequestMetadataStats> {
         // Append delta logs.
         if !self.canister_log.is_empty() {
-            // TODO(DSM-11): Move this into append_delta_log() once there is only one of it.
             metrics.observe_delta_log_size(self.canister_log.bytes_used());
         }
         system_state
             .log_memory_store
-            .append_delta_log(&mut self.canister_log.clone());
-        // Keep the legacy `canister_log` store up to date so that checkpoints
-        // remain readable by replicas that predate the log memory store.
-        system_state
-            .canister_log
             .append_delta_log(&mut self.canister_log);
 
         // Verify total cycle change is not positive and update cycles balance.

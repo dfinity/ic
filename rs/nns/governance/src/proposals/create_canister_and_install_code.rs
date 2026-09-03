@@ -178,6 +178,7 @@ impl TryFrom<&crate::pb::v1::CanisterSettings> for RootCanisterSettings {
             snapshot_visibility,
             wasm_memory_limit,
             wasm_memory_threshold,
+            reserved_cycles_limit,
         } = original;
 
         let controllers = controllers.as_ref().map(|c| c.controllers.clone());
@@ -205,7 +206,7 @@ impl TryFrom<&crate::pb::v1::CanisterSettings> for RootCanisterSettings {
             compute_allocation: compute_allocation.map(Nat::from),
             memory_allocation: memory_allocation.map(Nat::from),
             freezing_threshold: freezing_threshold.map(Nat::from),
-            reserved_cycles_limit: None,
+            reserved_cycles_limit: reserved_cycles_limit.map(Nat::from),
             log_visibility,
             snapshot_visibility,
             wasm_memory_limit: wasm_memory_limit.map(Nat::from),

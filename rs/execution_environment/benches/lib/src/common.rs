@@ -2,12 +2,11 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::{
     CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, SUBNET_CALLBACK_SOFT_LIMIT,
     SUBNET_MEMORY_RESERVATION,
 };
-use ic_config::subnet_config::{DEFAULT_DIRTY_PAGE_OVERHEAD, SubnetConfig};
+use ic_config::subnet_config::{DEFAULT_PAGE_OVERHEAD, SubnetConfig};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::RejectCode;
@@ -21,14 +20,16 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
+use ic_replicated_state::{
+    CallOrigin, CanisterState, NetworkTopology, canister_state::WASM_PAGE_SIZE_IN_BYTES,
+};
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
-    MemoryAllocation, NumBytes, NumInstructions, Time,
+    MAX_WASM64_MEMORY_IN_BYTES, MemoryAllocation, NumBytes, NumInstructions, Time,
     messages::{CallbackId, CanisterMessage, NO_DEADLINE, Payload, RejectContext},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
@@ -53,6 +54,13 @@ pub enum Wasm64 {
     Disabled,
 }
 
+/// The largest heap a Wasm64 canister module may declare, in Wasm pages: a
+/// module declaring more is rejected when its execution state is created.
+///
+/// This is the heap declared by the Wasm64 benchmark modules.
+pub const MAX_WASM64_HEAP_NUM_PAGES: u64 =
+    MAX_WASM64_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64;
+
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
         SubnetAvailableMemory::new_for_testing(
@@ -67,24 +75,12 @@ lazy_static! {
 /// (e.g. read-only accesses or non-replicated execution).
 ///
 /// Each first-accessed Wasm page (64 KiB) triggers `mark_wasm_page_accessed`,
-/// which charges one instruction per OS page in-band via the SIGSEGV handler
-/// when the deterministic memory tracker is enabled.  The number of OS pages
-/// per Wasm page varies by platform (4 KiB pages on Linux, 16 KiB on
-/// arm64-darwin).
+/// which charges `page_overhead` instructions per OS page in-band via the
+/// SIGSEGV handler.  The number of OS pages per Wasm page varies by platform
+/// (4 KiB pages on Linux, 16 KiB on arm64-darwin).
 pub fn deterministic_tracker_overhead(n_wasm_pages: u64) -> u64 {
-    use ic_config::flag_status::FlagStatus;
     const WASM_PAGE_SIZE: u64 = 65536;
-    if EmbeddersConfig::default()
-        .feature_flags
-        .deterministic_memory_tracker
-        == FlagStatus::Enabled
-    {
-        n_wasm_pages
-            * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64)
-            * DEFAULT_DIRTY_PAGE_OVERHEAD.get()
-    } else {
-        0
-    }
+    n_wasm_pages * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64) * DEFAULT_PAGE_OVERHEAD.get()
 }
 
 /// Returns the extra instruction overhead charged by the deterministic memory
@@ -92,8 +88,8 @@ pub fn deterministic_tracker_overhead(n_wasm_pages: u64) -> u64 {
 /// execution (DirtyPageTracking::Track).
 ///
 /// Each first-written Wasm page triggers both `mark_wasm_page_accessed` and
-/// `mark_wasm_page_dirty` via the SIGSEGV handler, charging two instructions
-/// per OS page when the deterministic memory tracker is enabled.
+/// `mark_wasm_page_dirty` via the SIGSEGV handler, charging `page_overhead`
+/// instructions twice per OS page.
 pub fn deterministic_tracker_write_overhead(n_wasm_pages: u64) -> u64 {
     2 * deterministic_tracker_overhead(n_wasm_pages)
 }
@@ -285,16 +281,9 @@ where
     let own_subnet_type = SubnetType::Application;
     let subnet_configs = SubnetConfig::new(own_subnet_type);
 
-    let embedders_config = EmbeddersConfig {
-        // Set up larger heap, of 8GB for the Wasm64 feature.
-        max_wasm64_memory_size: NumBytes::from(8 * 1024 * 1024 * 1024),
-        ..EmbeddersConfig::default()
-    };
-
-    let config = Config {
-        embedders_config,
-        ..Default::default()
-    };
+    // The default embedders config already allows the largest Wasm64 heap
+    // (`MAX_WASM64_HEAP_NUM_PAGES` pages) declared by the Wasm64 benchmark modules.
+    let config = Config::default();
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
     let metrics_registry = MetricsRegistry::new();

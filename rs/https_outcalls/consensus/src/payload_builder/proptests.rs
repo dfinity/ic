@@ -4,9 +4,9 @@ use crate::payload_builder::tests::{
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
-use ic_test_utilities_types::ids::{canister_test_id, node_test_id};
+use ic_test_utilities_types::ids::{node_test_id, test_replica_version};
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion, Time,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, Time,
     batch::ValidationContext,
     canister_http::{
         CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpReject, CanisterHttpRequestContext,
@@ -276,7 +276,6 @@ fn build_fully_replicated(
 ) -> Scenario {
     let response = CanisterHttpResponse {
         id: callback_id,
-        canister_id: canister_test_id(0),
         content,
     };
     let metadata = make_metadata(&response);
@@ -316,7 +315,6 @@ fn build_non_replicated(
         .map(|content| {
             let response = CanisterHttpResponse {
                 id: callback_id,
-                canister_id: canister_test_id(0),
                 content,
             };
             let share = metadata_to_share(designated_node, &make_metadata(&response));
@@ -345,7 +343,6 @@ fn build_flexible(
             let content = maybe_content?;
             let response = CanisterHttpResponse {
                 id: callback_id,
-                canister_id: canister_test_id(0),
                 content,
             };
             let share = metadata_to_share(idx as u64, &make_metadata(&response));
@@ -370,7 +367,7 @@ fn make_metadata(response: &CanisterHttpResponse) -> CanisterHttpResponseMetadat
         content_hash: crypto_hash(response),
         content_size: response.content.count_bytes() as u32,
         is_reject: response.content.is_reject(),
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     }
 }
 
@@ -516,7 +513,7 @@ fn prop_random_metadata() -> impl Strategy<Value = CanisterHttpResponseMetadata>
             content_hash: CryptoHashOf::new(CryptoHash(hash.to_vec())),
             content_size,
             is_reject,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         }
     })
 }

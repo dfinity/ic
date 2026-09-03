@@ -308,7 +308,9 @@ impl IDkgPayload {
     }
 
     /// Updates the height of all the transcript refs to the given height.
-    pub fn update_refs(&mut self, height: Height) {
+    pub fn update_refs(&mut self, height: Height) -> Result<(), IDkgTranscriptIdError> {
+        self.uid_generator.update_height(height)?;
+
         for obj in self.available_pre_signatures.values_mut() {
             obj.update(height);
         }
@@ -319,8 +321,10 @@ impl IDkgPayload {
             obj.as_mut().update(height);
         }
         for obj in self.key_transcripts.values_mut() {
-            obj.update_refs(height)
+            obj.update_refs(height);
         }
+
+        Ok(())
     }
 
     /// Return the oldest registry version required to keep nodes in the subnet

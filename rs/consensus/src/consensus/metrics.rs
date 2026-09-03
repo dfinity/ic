@@ -190,7 +190,7 @@ pub(crate) struct FinalizerMetrics {
     pub canister_http_out_of_cycles_delivered: IntCounter,
     pub canister_http_async_receipts_delivered: IntCounter,
     pub canister_http_flexible_candid_failures: IntCounter,
-    pub canister_http_flexible_errors_delivered: IntCounter,
+    pub canister_http_flexible_errors_delivered: IntCounterVec,
     pub canister_http_payload_bytes_delivered: Histogram,
 }
 
@@ -313,9 +313,10 @@ impl FinalizerMetrics {
                 "canister_http_flexible_candid_failures",
                 "Total number of flexible canister http responses skipped due to candid encoding/decoding failures",
             ),
-            canister_http_flexible_errors_delivered: metrics_registry.int_counter(
+            canister_http_flexible_errors_delivered: metrics_registry.int_counter_vec(
                 "canister_http_flexible_errors_delivered",
-                "Total number of flexible canister http errors delivered",
+                "Total number of flexible canister http errors delivered, by kind of error",
+                &["type"],
             ),
             canister_http_payload_bytes_delivered: metrics_registry.histogram(
                 "canister_http_payload_bytes_delivered",
@@ -387,8 +388,11 @@ impl FinalizerMetrics {
         self.canister_http_flexible_candid_failures
             .inc_by(flexible_ok_candid_failures + flexible_error_candid_failures);
 
-        self.canister_http_flexible_errors_delivered
-            .inc_by(batch_stats.canister_http.flexible_errors as u64);
+        for (kind, count) in &batch_stats.canister_http.flexible_errors {
+            self.canister_http_flexible_errors_delivered
+                .with_label_values(&[kind])
+                .inc_by(*count as u64);
+        }
         self.canister_http_payload_bytes_delivered
             .observe(batch_stats.canister_http.payload_bytes as f64);
 

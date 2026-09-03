@@ -62,6 +62,7 @@ BASE_DEPENDENCIES = [
         "//rs/rust_canisters/xrc_mock",
         "//rs/state_machine_tests",
         "//rs/test_utilities",
+        "//rs/test_utilities/types",
         "//packages/ic-error-types",
         "//rs/types/management_canister_types",
         "//rs/types/types",

@@ -2918,6 +2918,7 @@ impl From<pb::CanisterSettings> for api::CanisterSettings {
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
             snapshot_visibility: item.snapshot_visibility,
+            reserved_cycles_limit: item.reserved_cycles_limit,
         }
     }
 }
@@ -2933,6 +2934,7 @@ impl From<api::CanisterSettings> for pb::CanisterSettings {
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
             snapshot_visibility: item.snapshot_visibility,
+            reserved_cycles_limit: item.reserved_cycles_limit,
         }
     }
 }

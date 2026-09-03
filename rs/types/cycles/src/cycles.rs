@@ -86,6 +86,16 @@ impl Cycles {
     pub fn checked_mul(self, rhs: u64) -> Option<Self> {
         self.0.checked_mul(rhs as u128).map(Cycles::from)
     }
+
+    /// Divides by `rhs`, rounding up, i.e. the smallest amount of cycles such that
+    /// `rhs` of them cover `self`. The `Div` impls truncate instead.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rhs` is zero.
+    pub fn div_ceil(self, rhs: u128) -> Self {
+        Self(self.0.div_ceil(rhs))
+    }
 }
 
 impl From<u128> for Cycles {
@@ -399,6 +409,30 @@ mod test {
     fn test_division_usize() {
         assert_eq!(Cycles::zero() / usize::MAX, Cycles::zero());
         assert_eq!(Cycles::from(u128::MAX) / 1_usize, Cycles::from(u128::MAX));
+    }
+
+    #[test]
+    fn test_div_ceil() {
+        assert_eq!(Cycles::zero().div_ceil(u128::MAX), Cycles::zero());
+        assert_eq!(Cycles::from(u128::MAX).div_ceil(1), Cycles::from(u128::MAX));
+        // Anything but an exact multiple of the divisor is rounded up, so that the
+        // divisor covers the dividend rather than falling a cycle short.
+        assert_eq!(Cycles::from(9_u128).div_ceil(3), Cycles::from(3_u128));
+        assert_eq!(Cycles::from(10_u128).div_ceil(3), Cycles::from(4_u128));
+        assert_eq!(Cycles::from(12_u128).div_ceil(3), Cycles::from(4_u128));
+        // Including a divisor larger than the dividend: a single cycle is the smallest
+        // amount of which `rhs` cover a non-zero `self`.
+        assert_eq!(Cycles::from(1_u128).div_ceil(3), Cycles::from(1_u128));
+        assert_eq!(Cycles::from(u128::MAX).div_ceil(u128::MAX), Cycles::new(1));
+        // Which is what tells it apart from the truncating `Div`.
+        assert_eq!(Cycles::from(10_u128) / 3_u128, Cycles::from(3_u128));
+        assert_eq!(Cycles::from(1_u128) / 3_u128, Cycles::zero());
+    }
+
+    #[test]
+    #[should_panic(expected = "divide by zero")]
+    fn test_div_ceil_by_zero_panics() {
+        let _ = Cycles::from(1_u128).div_ceil(0);
     }
 
     #[test]

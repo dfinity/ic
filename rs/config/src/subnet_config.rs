@@ -138,8 +138,8 @@ pub const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 /// Reference subnet size for SEV-enabled application subnets.
 pub const SEV_REFERENCE_SUBNET_SIZE: usize = 7;
 
-/// Costs for each newly created dirty page in stable memory.
-pub const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(5_000);
+/// Cost of touching a single OS page of canister memory.
+pub const DEFAULT_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(5_000);
 
 /// Accumulated priority reset interval, rounds.
 ///
@@ -169,6 +169,16 @@ pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
 /// The cost is based on the benchmarks: rs/execution_environment/benches/management_canister/
 pub const DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS: NumInstructions =
     NumInstructions::new(5_000_000);
+
+/// Instructions charged per byte of stored log data when resizing the canister
+/// log memory.
+///
+/// When the log memory limit changes, all existing records must be read from
+/// the old ring buffer into heap memory, re-encoded, and written into a newly
+/// allocated ring buffer. The cost is proportional to the bytes currently
+/// stored (not the allocated capacity).
+pub const DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE: NumInstructions =
+    NumInstructions::new(32);
 
 /// The cycle cost overhead of executing canister instructions when running in Wasm64 mode.
 /// This overhead is a multiplier over the cost of executing the same instructions
@@ -266,8 +276,10 @@ pub struct SchedulerConfig {
     /// rounds until they are back under the allowed rate.
     pub install_code_rate_limit: NumInstructions,
 
-    /// Cost for each newly created dirty page in stable memory.
-    pub dirty_page_overhead: NumInstructions,
+    /// The number of instructions to charge for every OS page of heap or stable
+    /// memory that a message touches: once when the page is first accessed and
+    /// once more when it is first written to.
+    pub page_overhead: NumInstructions,
 
     /// Accumulated priority reset interval, rounds.
     pub accumulated_priority_reset_interval: ExecutionRound,
@@ -280,6 +292,10 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when uploading or downloading binary snapshot data.
     pub canister_snapshot_data_baseline_instructions: NumInstructions,
+
+    /// Number of instructions to count per byte of stored log data when resizing
+    /// the canister log memory.
+    pub canister_log_resize_instructions_per_byte: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -304,13 +320,15 @@ impl SchedulerConfig {
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
-            dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
+            page_overhead: DEFAULT_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
             canister_snapshot_baseline_instructions:
                 DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
             canister_snapshot_data_baseline_instructions:
                 DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS,
+            canister_log_resize_instructions_per_byte:
+                DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE,
         }
     }
 
@@ -350,11 +368,12 @@ impl SchedulerConfig {
             // This limit should be high enough (1000T) to effectively disable
             // rate-limiting for the system subnets.
             install_code_rate_limit: NumInstructions::from(1_000_000_000_000_000),
-            dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
+            page_overhead: DEFAULT_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
             canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
+            canister_log_resize_instructions_per_byte: NumInstructions::from(0),
         }
     }
 

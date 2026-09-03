@@ -880,7 +880,6 @@ pub fn load_canister_state(
         canister_state_bits.log_visibility,
         canister_state_bits.snapshot_visibility,
         canister_state_bits.status_visibility,
-        canister_state_bits.canister_log,
         log_memory_store_data,
         canister_state_bits.log_memory_store_persistent_next_idx,
         canister_state_bits.wasm_memory_limit,

@@ -167,17 +167,19 @@ use ic_nns_test_utils::{
 };
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
-    node::v1 as pb_node, replica_version::v1::ReplicaVersionRecord, subnet::v1 as pb_subnet,
-    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
+    firewall::v1::FirewallRule, node::v1 as pb_node, replica_version::v1::ReplicaVersionRecord,
+    subnet::v1 as pb_subnet, unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
+    firewall::FirewallRegistry,
     node::NodeRegistry,
     replica_version::ReplicaVersionRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
     unassigned_nodes::UnassignedNodeRegistry,
 };
+use ic_registry_keys::FirewallRulesScope;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -524,6 +526,22 @@ impl TopologySnapshot {
         self.local_registry
             .get_all_replica_version_records(self.registry_version)?
             .context("get_all_replica_version_records always returns Some (and it did not)")
+    }
+
+    /// The firewall rules currently registered for `scope`, in their registered
+    /// order, or an empty vector when the scope has no rules.
+    ///
+    /// A test that proposes a change to a rule set needs these: the registry
+    /// canister rejects the proposal unless it carries a hash of the rule set
+    /// the change is meant to apply to. The set is not necessarily empty to
+    /// begin with — the local backend, for instance, seeds a global rule that
+    /// lets the test driver reach the nodes from outside their `/64`.
+    pub fn firewall_rules(&self, scope: &FirewallRulesScope) -> Result<Vec<FirewallRule>> {
+        Ok(self
+            .local_registry
+            .get_firewall_rules(scope, self.registry_version)?
+            .map(|rule_set| rule_set.entries)
+            .unwrap_or_default())
     }
 
     /// The subnet id of the root subnet.
@@ -1418,16 +1436,6 @@ pub fn get_mainnet_application_subnet_revision() -> Result<ReplicaVersion> {
     )?;
 
     Ok(replica_version)
-}
-
-pub fn get_empty_disk_img_url() -> Result<Url> {
-    let url = Url::parse(&std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?)?;
-
-    Ok(url)
-}
-
-pub fn get_empty_disk_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
 pub fn get_build_setupos_config_image_tool() -> PathBuf {
@@ -2806,6 +2814,12 @@ pub async fn install_nns_canisters(
             .unwrap_or_default()
         {
             builder.enable_swapping_feature_for_subnet(subnet);
+        }
+        if registry_canister_init_payload
+            .is_blank_replica_version_id_for_cloud_engines_enabled
+            .unwrap_or_default()
+        {
+            builder.enable_blank_replica_version_id_for_cloud_engines();
         }
 
         builder

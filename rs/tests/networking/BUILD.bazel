@@ -131,22 +131,9 @@ system_test_nns(
     ],
 )
 
-# NOTE: This test is currently non-functional because API boundary nodes running GuestOS on Farm VMs do not support IPv4.
 system_test_nns(
     name = "canister_http_socks_test",
-    # TODO: support this test on the local backend (drop `backend = "farm"`).
-    # The test makes a canister HTTP outcall to a `nip.io` hostname (which encodes
-    # the httpbin UVM's IPv6 address), but the IC nodes' canister-http adapter
-    # cannot resolve `nip.io` on the local backend because the nodes have no
-    # external network/DNS access:
-    #
-    #   Http request failed response: Err((SysTransient, "Connecting to
-    #   <ipv6>.ipv6.nip.io failed: ... dns error ..."))
-    #
-    # Supporting this locally needs the nip.io-style hostname to be resolvable by
-    # the nodes (e.g. via a local DNS resolver).
-    backend = "farm",
-    cpus = MIN_LOCAL_CPUS + 7 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 7 IC Node VMs (1 system + 4 app + 2 API BN) + 1 UVM (httpbin), 6 vCPUs each.
+    cpus = MIN_LOCAL_CPUS + 11 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 11 IC Node VMs (1 system + 4 app + 4 cloud engine + 2 API BN) + 1 UVM (httpbin), 6 vCPUs each.
     enable_uvm = True,
     tags = [
         "dynamic_testnet",
@@ -299,7 +286,11 @@ rust_binary(
 
 system_test_nns(
     name = "nns_delegation_mainnet_nns_version_test",
-    backend = "farm",  # Requires API boundary node playnet (with_api_boundary_nodes_playnet), unsupported on the local backend.
+    # The nodes run the mainnet GuestOS, whose replica predates
+    # `extra_api_boundary_node_trust_anchors_pem`. It therefore only trusts
+    # publicly issued API boundary node certificates, which rules out the local
+    # backend's own CA. Drop this once the field has reached mainnet.
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 4 single-node subnets + 1 API BN, 6 vCPUs each.
     guestos = "mainnet_nns",
     guestos_update = True,
@@ -314,7 +305,6 @@ system_test_nns(
 
 system_test_nns(
     name = "nns_delegation_branch_nns_version_test",
-    backend = "farm",  # Requires API boundary node playnet (with_api_boundary_nodes_playnet), unsupported on the local backend.
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 4 single-node subnets + 1 API BN, 6 vCPUs each.
     guestos_update = True,
     tags = [

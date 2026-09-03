@@ -1161,6 +1161,7 @@ mod tests {
     use rand::RngCore;
     use rstest::rstest;
     use slog::Level;
+    use std::str::FromStr;
     use std::{
         collections::{BTreeMap, BTreeSet},
         ffi::OsStr,
@@ -1233,6 +1234,7 @@ mod tests {
 
     // Helper function to create a CUP with given height and summary payload.
     fn make_cup_with_summary(height: Height, summary_payload: SummaryPayload) -> CatchUpPackage {
+        let replica_version = ReplicaVersion::from_str("replica_version_for_cup").unwrap();
         let block = Block::new(
             CryptoHashOf::from(CryptoHash(Vec::new())),
             Payload::new(
@@ -1246,6 +1248,7 @@ mod tests {
                 certified_height: Height::from(42),
                 time: UNIX_EPOCH,
             },
+            replica_version.clone(),
         );
 
         CatchUpPackage::fake(CatchUpContent::new(
@@ -1255,6 +1258,7 @@ mod tests {
                 RandomBeacon::fake(RandomBeaconContent::new(
                     height,
                     CryptoHashOf::from(CryptoHash(Vec::new())),
+                    replica_version,
                 )),
             ),
             CryptoHashOf::from(CryptoHash(Vec::new())),
@@ -2049,7 +2053,7 @@ mod tests {
             add_replica_version_to_provider(
                 &data_provider,
                 max_registry_version,
-                &ReplicaVersion::try_from("dummy_replica_version").unwrap(),
+                &ReplicaVersion::from_str("dummy_replica_version").unwrap(),
             );
 
             data_provider
@@ -2726,7 +2730,7 @@ mod tests {
     async fn test_upgrade_scenarios(
         #[values(NODE_1)] node_id: NodeId,
         #[values(SubnetType::Application, SubnetType::CloudEngine)] subnet_type: SubnetType,
-        #[values(ReplicaVersion::try_from("replica_version_0.1").unwrap())] current_replica_version: ReplicaVersion,
+        #[values(ReplicaVersion::from_str("replica_version_0.1").unwrap())] current_replica_version: ReplicaVersion,
         #[values(
             None,
             Some(CUPScenario {
@@ -2781,7 +2785,7 @@ mod tests {
         )]
         is_leaving: Option<RegistryVersion>,
         #[values(false, true)] does_upgrade: bool,
-        #[values(ReplicaVersion::try_from("replica_version_0.2").unwrap())] upgrade_replica_version: ReplicaVersion,
+        #[values(ReplicaVersion::from_str("replica_version_0.2").unwrap())] upgrade_replica_version: ReplicaVersion,
         #[values(
             RegistryVersion::from(3),
             RegistryVersion::from(5),
@@ -2850,7 +2854,7 @@ mod tests {
         let test_scenario = UpgradeTestScenario {
             node_id: NODE_1,
             subnet_type: SubnetType::System,
-            current_replica_version: ReplicaVersion::try_from("replica_version_0.1").unwrap(),
+            current_replica_version: ReplicaVersion::from_str("replica_version_0.1").unwrap(),
             has_local_cup: Some(CUPScenario {
                 height: Height::from(100),
                 // Set as the NNS subnet in `setup_registry`
@@ -2861,7 +2865,7 @@ mod tests {
             initial_subnet_assignment: SubnetAssignment::Unknown,
             is_leaving: None,
             upgrade_to: Some(ReplicaUpgradeScenario {
-                replica_version: ReplicaVersion::try_from("replica_version_0.2").unwrap(),
+                replica_version: ReplicaVersion::from_str("replica_version_0.2").unwrap(),
                 registry_version: RegistryVersion::from(10),
                 is_recalled: true,
                 has_replicated_versions_before_init: false,
@@ -2893,7 +2897,7 @@ mod tests {
         let test_scenario = UpgradeTestScenario {
             node_id: NODE_1,
             subnet_type: SubnetType::Application,
-            current_replica_version: ReplicaVersion::try_from("replica_version_0.1").unwrap(),
+            current_replica_version: ReplicaVersion::from_str("replica_version_0.1").unwrap(),
             has_local_cup: Some(CUPScenario {
                 height: Height::from(100),
                 subnet_id: SUBNET_1,
@@ -2903,7 +2907,7 @@ mod tests {
             initial_subnet_assignment: SubnetAssignment::Unknown,
             is_leaving: None,
             upgrade_to: Some(ReplicaUpgradeScenario {
-                replica_version: ReplicaVersion::try_from("replica_version_0.2").unwrap(),
+                replica_version: ReplicaVersion::from_str("replica_version_0.2").unwrap(),
                 registry_version: RegistryVersion::from(10),
                 is_recalled: true,
                 has_replicated_versions_before_init: false,

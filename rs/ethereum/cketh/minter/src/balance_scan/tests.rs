@@ -2,6 +2,7 @@ use super::*;
 use crate::deposit_address::DepositAddress;
 use crate::state::automatic_deposits::{DepositRequest, ScanProgress};
 use crate::test_fixtures;
+use crate::test_fixtures::mock::MockTimeProvider;
 use evm_rpc_types::{ConsensusStrategy, Hex, MultiRpcResult, RpcServices};
 use ic_canister_runtime::{IcError, StubRuntime};
 use icrc_ledger_types::icrc1::account::Account;
@@ -96,7 +97,7 @@ async fn should_skip_without_scanning() {
         seed_state(case.latest_block, MIN_DEPOSITS[0].0, &case.holders, now);
 
         // No stub responses: the scan must short-circuit before any outcall.
-        scan(now, stub_client(vec![])).await;
+        scan(now, stub_client(vec![]), &records_no_event()).await;
 
         // A skipped scan advances no watchlist entry.
         for (account, _) in &case.holders {
@@ -119,7 +120,12 @@ async fn should_advance_scanned_non_candidate_pairs() {
 
     // Both balances are below the minimum, so neither is a candidate: they advance the schedule
     // and nothing is moved to the sweep queue.
-    scan(now, stub_client(vec![ok_balances(&[below_min, below_min])])).await;
+    scan(
+        now,
+        stub_client(vec![ok_balances(&[below_min, below_min])]),
+        &records_no_event(),
+    )
+    .await;
 
     for (account, _) in [a, b] {
         let entry = live_entry(now, &account, token);
@@ -156,6 +162,7 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
             ok_balances(&vec![below_min; MAX_CALLS_PER_BATCH]),
             ok_balances(&vec![below_min; extra]),
         ]),
+        &records_no_event(),
     )
     .await;
 
@@ -198,7 +205,7 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
         let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
         seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
 
-        scan(now, stub_client(vec![case.response])).await;
+        scan(now, stub_client(vec![case.response]), &records_no_event()).await;
 
         let entry = live_entry(now, &holder.0, MIN_DEPOSITS[0].0);
         assert_eq!(
@@ -285,6 +292,36 @@ fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<ScanTarget> {
             .scan_targets_iter(now, latest)
             .collect()
     })
+}
+
+#[tokio::test]
+async fn should_timestamp_a_detected_deposit_with_the_current_time() {
+    const DETECTED_AT_NANOS: u64 = 1_620_328_630_000_000_000;
+    let now = ts();
+    let latest = BlockNumber::new(1_000);
+    let (token, min) = MIN_DEPOSITS[0];
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
+    seed_state(Some(latest), token, &[holder], now);
+    let mut time_provider = MockTimeProvider::new();
+    time_provider
+        .expect_time()
+        .times(1)
+        .return_const(DETECTED_AT_NANOS);
+
+    scan(now, stub_client(vec![ok_balances(&[min])]), &time_provider).await;
+
+    let recorded = last_recorded_event().expect("the detected deposit should be recorded");
+    assert_eq!(recorded.timestamp, DETECTED_AT_NANOS);
+}
+
+fn last_recorded_event() -> Option<crate::state::event::Event> {
+    crate::storage::with_event_iter(|events| events.last())
+}
+
+/// A [`TimeProvider`] for scans that must not record any event: it has no expectation, so
+/// reading the time at all fails the test.
+fn records_no_event() -> MockTimeProvider {
+    MockTimeProvider::new()
 }
 
 fn ts() -> Timestamp {

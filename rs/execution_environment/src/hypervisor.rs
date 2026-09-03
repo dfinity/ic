@@ -5,7 +5,7 @@ use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnet
 use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
     WasmtimeEmbedder,
-    wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
+    wasm_executor::{CreatedExecutionState, WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
     wasm_utils::decoding::decoded_wasm_size,
     wasmtime_embedder::system_api::{
         ApiType, ExecutionParameters, sandbox_safe_system_state::SandboxSafeSystemState,
@@ -19,11 +19,14 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{binary_buckets_with_zero, decimal_buckets_with_zero, linear_buckets};
-use ic_replicated_state::{ExecutionState, Memory, NetworkTopology, ReplicatedState, SystemState};
+use ic_replicated_state::{
+    ExecutionState, Memory, NetworkTopology, NumWasmPages, ReplicatedState, SystemState,
+    canister_state::{execution_state::WasmExecutionMode, num_bytes_try_from},
+};
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
-    CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
-    methods::FuncRef,
+    CanisterId, DiskBytes, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES, NumBytes,
+    NumInstructions, SubnetId, Time, messages::RequestMetadata, methods::FuncRef,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
@@ -236,7 +239,12 @@ impl Hypervisor {
             Arc::clone(&self.compilation_cache),
         );
         match creation_result {
-            Ok((mut execution_state, compilation_cost, compilation_result)) => {
+            Ok(CreatedExecutionState {
+                mut execution_state,
+                compilation_cost,
+                compilation_result,
+                declares_wasm_memory,
+            }) => {
                 if let Some(compilation_result) = compilation_result {
                     self.metrics.observe_compilation_metrics(
                         &compilation_result,
@@ -244,6 +252,10 @@ impl Hypervisor {
                         self.compilation_cache.disk_bytes(),
                     );
                 }
+                // The Wasm memory of the freshly created execution state is the
+                // module's initial memory, i.e. its declared minimum memory.
+                let declared_wasm_memory_size =
+                    declares_wasm_memory.then_some(execution_state.wasm_memory.size);
                 // Stamp the deployment-round install time onto the freshly
                 // created execution state. This is the single choke point for
                 // creating execution states, so every install/upgrade/snapshot
@@ -255,8 +267,11 @@ impl Hypervisor {
                 match new_memories {
                     MemorySource::Fresh => {}
                     MemorySource::Preserve { old, handling } => {
-                        // Cloning a `Memory` is cheap: its page delta is a
-                        // persistent map and its sandbox handle is an `Arc`.
+                        // Cloning a `Memory` is cheap: cloning its page delta,
+                        // a persistent map, only clones the root node of its
+                        // tree, whose subtrees are `Arc`s, and its checkpoint
+                        // files, page allocator and sandbox handle are `Arc`s
+                        // as well.
                         if handling.stable_memory_handling == MemoryHandling::Keep {
                             execution_state.stable_memory = old.stable_memory.clone();
                         }
@@ -275,7 +290,10 @@ impl Hypervisor {
                 let total_cost = self.create_execution_state_base_cost
                     + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
                 round_limits.instructions -= as_round_instructions(total_cost);
-                (total_cost, Ok(execution_state))
+                let result =
+                    Self::validate_wasm_memory(&execution_state, declared_wasm_memory_size)
+                        .map(|()| execution_state);
+                (total_cost, result)
             }
             Err(err) => {
                 let total_cost = self.create_execution_state_base_cost + compilation_cost;
@@ -285,19 +303,71 @@ impl Hypervisor {
         }
     }
 
+    /// Checks that the Wasm memory of a newly created execution state is
+    /// compatible with the Wasm module that the execution state was created for.
+    /// `declared_wasm_memory_size` is the minimum memory size declared by the
+    /// module and `None` if the module declares no Wasm memory.
+    fn validate_wasm_memory(
+        execution_state: &ExecutionState,
+        declared_wasm_memory_size: Option<NumWasmPages>,
+    ) -> HypervisorResult<()> {
+        let max_wasm_memory_size = match execution_state.wasm_execution_mode {
+            WasmExecutionMode::Wasm32 => NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
+            WasmExecutionMode::Wasm64 => NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
+        };
+        let wasm_memory_size = execution_state.wasm_memory_usage();
+        if wasm_memory_size > max_wasm_memory_size {
+            return Err(HypervisorError::InvalidWasmMemory {
+                message: format!(
+                    "the Wasm memory ({wasm_memory_size} bytes) exceeds the maximum \
+                     Wasm memory ({max_wasm_memory_size} bytes) allowed for the Wasm \
+                     execution mode of the canister module."
+                ),
+            });
+        }
+
+        match declared_wasm_memory_size {
+            None => {
+                if wasm_memory_size.get() != 0 {
+                    return Err(HypervisorError::InvalidWasmMemory {
+                        message: format!(
+                            "the Wasm memory ({wasm_memory_size} bytes) is not empty \
+                             although the canister module declares no Wasm memory."
+                        ),
+                    });
+                }
+            }
+            Some(declared_wasm_memory_size) => {
+                let declared_wasm_memory_size = num_bytes_try_from(declared_wasm_memory_size)
+                    .expect("could not convert from wasm memory number of pages to bytes");
+                if wasm_memory_size < declared_wasm_memory_size {
+                    return Err(HypervisorError::InvalidWasmMemory {
+                        message: format!(
+                            "the Wasm memory ({wasm_memory_size} bytes) is smaller than \
+                             the minimum Wasm memory ({declared_wasm_memory_size} bytes) \
+                             declared by the canister module."
+                        ),
+                    });
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn new(
         config: Config,
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        dirty_page_overhead: NumInstructions,
+        page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
-        embedder_config.dirty_page_overhead = dirty_page_overhead;
+        embedder_config.page_overhead = page_overhead;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => {

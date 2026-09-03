@@ -35,7 +35,7 @@ use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::upsert;
-use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
 use ic_types::ReplicaVersion;
 use pocket_ic::nonblocking::PocketIc;
 use prost::Message;
@@ -61,12 +61,12 @@ pub async fn get_subnet_record(registry: &Canister<'_>, subnet_id: SubnetId) -> 
 pub fn get_subnet_holding_chain_keys(
     key_ids: Vec<MasterPublicKeyId>,
     node_ids: Vec<NodeId>,
+    replica_version_id: ReplicaVersion,
 ) -> SubnetRecord {
     let unit_delay_millis = 10;
-    let replica_version_id = String::from(ReplicaVersion::default());
     let mut subnet_record = SubnetRecord::from(CreateSubnetPayload {
         unit_delay_millis,
-        replica_version_id,
+        replica_version_id: replica_version_id.to_string(),
         node_ids,
         ..Default::default()
     });
@@ -237,7 +237,7 @@ pub fn prepare_registry_with_cloud_engine_subnet(
     let subnet_record = SubnetRecord {
         subnet_type: i32::from(SubnetType::CloudEngine),
         canister_cycles_cost_schedule: i32::from(CanisterCyclesCostSchedule::Free),
-        replica_version_id: ReplicaVersion::default().to_string(),
+        replica_version_id: test_replica_version().to_string(),
         unit_delay_millis: 600,
         ..Default::default()
     };
@@ -258,7 +258,7 @@ pub fn prepare_registry_with_application_subnet(
 
     let subnet_record = SubnetRecord {
         subnet_type: i32::from(SubnetType::Application),
-        replica_version_id: ReplicaVersion::default().to_string(),
+        replica_version_id: test_replica_version().to_string(),
         unit_delay_millis: 600,
         ..Default::default()
     };

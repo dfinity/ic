@@ -33,6 +33,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SubnetSchedule;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
+use ic_replicated_state::metadata_state::UnflushedCheckpointOps;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     CanisterState, CanisterStates, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
@@ -434,6 +435,18 @@ impl SchedulerImpl {
         //      - Update the ingress history with the resulting ingress statuses.
         //      - Induct messages on the same subnet.
         let mut state = loop {
+            // In every iteration after the first, recompute the subnet available
+            // memory from the state.
+            //
+            // The memory consumed by the previous iteration's parallel execution
+            // threads is not subtracted from `scheduler_round_limits` (see
+            // `execute_canisters_in_inner_round()`), so this recomputation is what
+            // brings the subnet available memory back in sync with the state.
+            if !is_first_iteration {
+                scheduler_round_limits.subnet_available_memory =
+                    self.exec_env.scaled_subnet_available_memory(&state);
+            }
+
             // Execute subnet messages.
             // If new messages are inducted into the subnet input queues,
             // they are processed until the subnet messages' instruction limit is reached.
@@ -493,14 +506,7 @@ impl SchedulerImpl {
             }
             drop(scheduling_timer);
 
-            // In every iteration after the first, recompute the subnet available memory,
-            // before taking out the canisters.
             let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
-            if !is_first_iteration {
-                round_limits.subnet_available_memory =
-                    self.exec_env.scaled_subnet_available_memory(&state);
-            }
-
             let canisters = state.take_canister_states();
             let (active_canisters_partitioned_by_cores, inactive_canisters) =
                 iteration_schedule.partition_canisters_to_cores(canisters);
@@ -753,8 +759,9 @@ impl SchedulerImpl {
         // Deduct all created callbacks from the available callbacks limit. This is a
         // pessimistic estimate, as it ignores any closed callbacks.
         round_limits.subnet_available_callbacks -= callbacks_created;
-        // `subnet_available_memory` will be recomputed at the beginning of the next
-        // iteration.
+        // The memory consumed by the threads is not deducted from
+        // `subnet_available_memory`; it is recomputed from the state at the very
+        // beginning of the next iteration instead (see `inner_round()`).
 
         IterationResult {
             canisters,
@@ -840,6 +847,11 @@ impl SchedulerImpl {
                 .duration_between_allocation_charges(),
         );
         let mut all_rejects = Vec::new();
+        // The deletions of the snapshots of the canisters uninstalled below, recorded
+        // so that their directories are also deleted from the tip. Accumulated here
+        // because `state.metadata` is not accessible from within the closure; merged
+        // into the state's operations after the loop.
+        let mut unflushed_checkpoint_ops = UnflushedCheckpointOps::default();
         // TODO(DSM-103): Charge all canisters every N rounds / seconds (and otherwise
         // do nothing). Ensure that paused execution canisters are charged eventually.
         state.canisters_for_each_mut(|_id, canister| {
@@ -885,7 +897,9 @@ impl SchedulerImpl {
                 canister
                     .system_state
                     .burn_remaining_balance_for_uninstall(cost_schedule);
-                canister.canister_snapshots.delete_snapshots();
+                canister
+                    .canister_snapshots
+                    .delete_snapshots(&mut unflushed_checkpoint_ops);
 
                 info!(
                     self.log,
@@ -895,6 +909,11 @@ impl SchedulerImpl {
                 self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
             }
         });
+
+        state
+            .metadata
+            .unflushed_checkpoint_ops
+            .extend(unflushed_checkpoint_ops);
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
         for rejects in all_rejects.into_iter() {
@@ -1085,6 +1104,17 @@ impl SchedulerImpl {
     //
     // TODO(DSM-103): Consider only aborting actually scheduled canisters.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
+        // Backfill the HTTP/ECDSA outcall cycles from the legacy scalar fields of
+        // `SubnetMetrics` into the corresponding entries of its by-use-case map.
+        // This must run regardless of subnet activity: the subnet-level use cases
+        // are only observed on outcalls, canister deletion and dropped messages,
+        // so tying the migration to an observation would leave the entries stale
+        // forever on a subnet that does none of these.
+        state
+            .metadata
+            .subnet_metrics
+            .migrate_outcalls_cycles_to_use_cases();
+
         let cost_schedule = state.get_own_cost_schedule();
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
@@ -1904,6 +1934,7 @@ fn get_instruction_limits_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | NodeMetricsHistory
+            | SubnetMetrics
             | SubnetInfo
             | FetchCanisterLogs
             | ProvisionalCreateCanisterWithCycles

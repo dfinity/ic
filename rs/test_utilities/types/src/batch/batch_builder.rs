@@ -1,5 +1,5 @@
 use ic_types::{
-    Height, Randomness, RegistryVersion, ReplicaVersion, Time,
+    Height, Randomness, RegistryVersion, Time,
     batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics},
     time::UNIX_EPOCH,
 };
@@ -26,7 +26,7 @@ impl Default for BatchBuilder {
                 registry_version: RegistryVersion::from(1),
                 time: UNIX_EPOCH,
                 blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-                replica_version: ReplicaVersion::default(),
+                replica_version: crate::ids::test_replica_version(),
             },
         }
     }

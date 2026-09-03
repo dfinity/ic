@@ -222,9 +222,10 @@ fn should_cbor_encoding_be_stable() {
 mod eip7702 {
     use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
     use crate::tx::{
-        AccessList, Authorization, Eip7702TransactionRequest, SignedAuthorization,
-        SignedEip7702TransactionRequest, TransactionSignature,
+        AccessList, AccessListItem, Authorization, Eip7702TransactionRequest, SignedAuthorization,
+        SignedEip7702TransactionRequest, StorageKey, TransactionSignature,
     };
+    use assert_matches::assert_matches;
     use ethnum::u256;
     use ic_ethereum_types::Address;
     use std::str::FromStr;
@@ -399,6 +400,81 @@ mod eip7702 {
         assert_eq!(recovered.as_bytes(), authority.as_ref());
     }
 
+    #[test]
+    fn should_decode_the_raw_bytes_it_encoded() {
+        for signed_tx in [
+            sample_signed_transaction(),
+            sample_signed_transaction_with_access_list(),
+        ] {
+            let decoded =
+                SignedEip7702TransactionRequest::decode(&signed_tx.raw_transaction_bytes())
+                    .unwrap();
+
+            assert_eq!(decoded, signed_tx);
+            assert_eq!(decoded.hash(), signed_tx.hash());
+        }
+    }
+
+    #[test]
+    fn should_refuse_to_decode_a_transaction_of_another_type() {
+        let mut raw_transaction = sample_signed_transaction().raw_transaction_bytes();
+        raw_transaction[0] = 2;
+
+        assert_matches!(
+            SignedEip7702TransactionRequest::decode(&raw_transaction),
+            Err(e) if e.contains("got type 2")
+        );
+    }
+
+    #[test]
+    fn should_refuse_to_decode_a_transaction_without_authorizations() {
+        use rlp::{Rlp, RlpStream};
+
+        const AUTHORIZATION_LIST_INDEX: usize = 9;
+        const FIELD_COUNT: usize = 13;
+
+        let raw_transaction = sample_signed_transaction().raw_transaction_bytes();
+        let (transaction_type, payload) = raw_transaction.split_first().unwrap();
+        let fields = Rlp::new(payload);
+        let mut stream = RlpStream::new_list(FIELD_COUNT);
+        for index in 0..FIELD_COUNT {
+            if index == AUTHORIZATION_LIST_INDEX {
+                stream.begin_list(0);
+            } else {
+                stream.append_raw(fields.at(index).unwrap().as_raw(), 1);
+            }
+        }
+        let mut without_authorizations = vec![*transaction_type];
+        without_authorizations.extend(stream.out());
+
+        assert_matches!(
+            SignedEip7702TransactionRequest::decode(&without_authorizations),
+            Err(e) if e.contains("non-empty authorization list")
+        );
+    }
+
+    #[test]
+    fn should_refuse_to_decode_an_empty_transaction() {
+        assert_matches!(
+            SignedEip7702TransactionRequest::decode(&[]),
+            Err(e) if e.contains("empty transaction")
+        );
+    }
+
+    /// The sample transaction carries an empty access list, so decoding it exercises neither the
+    /// nested storage keys nor the address inside an access-list item.
+    fn sample_signed_transaction_with_access_list() -> SignedEip7702TransactionRequest {
+        let signed_tx = sample_signed_transaction();
+        let transaction = Eip7702TransactionRequest {
+            access_list: AccessList(vec![AccessListItem {
+                address: Address::from_str("0x0303030303030303030303030303030303030303").unwrap(),
+                storage_keys: vec![StorageKey([0x11; 32]), StorageKey([0x22; 32])],
+            }]),
+            ..signed_tx.transaction().clone()
+        };
+        SignedEip7702TransactionRequest::from((transaction, sample_transaction_signature()))
+    }
+
     fn sample_signed_transaction() -> SignedEip7702TransactionRequest {
         let authorization = SignedAuthorization {
             chain_id: 6,
@@ -426,7 +502,11 @@ mod eip7702 {
             access_list: AccessList::new(),
             authorization_list: vec![authorization],
         };
-        let signature = TransactionSignature {
+        SignedEip7702TransactionRequest::from((transaction, sample_transaction_signature()))
+    }
+
+    fn sample_transaction_signature() -> TransactionSignature {
+        TransactionSignature {
             signature_y_parity: false,
             r: u256::from_str_hex(
                 "0xd93fc9ae934d4f72db91cb149e7e84b50ca83b5a8a7b873b0fdb009546e3af47",
@@ -436,8 +516,7 @@ mod eip7702 {
                 "0x786bfaf31af61eea6471dbb1bec7d94f73fb90887e4f04d0e9b85676c47ab02a",
             )
             .unwrap(),
-        };
-        SignedEip7702TransactionRequest::from((transaction, signature))
+        }
     }
 
     #[test]
@@ -489,6 +568,203 @@ mod eip7702 {
     }
 }
 
+mod sweep {
+    use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
+    use crate::tx::{
+        AccessList, DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest,
+        SignableTransaction, SignedAuthorization, SignedEip1559TransactionRequest,
+        SignedEip7702TransactionRequest, SignedSweepTransaction, SweepTransaction,
+        TransactionSignature,
+    };
+    use assert_matches::assert_matches;
+    use ethnum::u256;
+    use ic_ethereum_types::Address;
+    use std::str::FromStr;
+
+    const EIP1559_TX_ID: u8 = 2;
+    const SET_CODE_TX_ID: u8 = 4;
+
+    #[test]
+    fn should_sign_a_plain_sweep_as_its_eip1559_transaction() {
+        let transaction = sweep_transaction();
+        let sweep = SweepTransaction::new(transaction.clone(), vec![]);
+
+        assert_eq!(sweep.transaction_type(), EIP1559_TX_ID);
+        assert_eq!(sweep.authorizations(), &[]);
+        assert_eq!(sweep.hash(), transaction.hash());
+        assert_eq!(
+            SignedSweepTransaction::from((sweep, signature())).raw_transaction_hex_string(),
+            SignedEip1559TransactionRequest::from((transaction, signature()))
+                .raw_transaction_hex_string()
+        );
+    }
+
+    #[test]
+    fn should_sign_a_delegating_sweep_as_its_eip7702_transaction() {
+        let sweep = SweepTransaction::new(sweep_transaction(), vec![authorization()]);
+        let SweepTransaction::Eip7702(transaction) = sweep.clone() else {
+            panic!("BUG: a sweep with an authorization must be a type-0x04 transaction");
+        };
+
+        assert_eq!(sweep.transaction_type(), SET_CODE_TX_ID);
+        assert_eq!(sweep.authorizations(), &[authorization()]);
+        let transaction = transaction.transaction().clone();
+        assert_eq!(sweep.hash(), transaction.hash());
+        assert_eq!(
+            SignedSweepTransaction::from((sweep, signature())).raw_transaction_hex_string(),
+            SignedEip7702TransactionRequest::from((transaction, signature()))
+                .raw_transaction_hex_string()
+        );
+    }
+
+    #[test]
+    fn should_cbor_encoding_of_sweep_transaction_be_stable() {
+        let expected: [(SweepTransaction, Vec<u8>); 2] = [
+            (
+                SweepTransaction::new(sweep_transaction(), vec![]),
+                vec![
+                    130, 0, 129, 137, 26, 0, 170, 54, 167, 6, 26, 89, 104, 47, 0, 26, 89, 134, 83,
+                    205, 26, 0, 1, 134, 160, 84, 180, 75, 94, 117, 106, 137, 71, 117, 252, 50, 237,
+                    223, 51, 20, 187, 27, 25, 68, 220, 52, 0, 66, 18, 52, 128,
+                ],
+            ),
+            (
+                SweepTransaction::new(sweep_transaction(), vec![authorization()]),
+                vec![
+                    130, 1, 129, 138, 26, 0, 170, 54, 167, 6, 26, 89, 104, 47, 0, 26, 89, 134, 83,
+                    205, 26, 0, 1, 134, 160, 84, 180, 75, 94, 117, 106, 137, 71, 117, 252, 50, 237,
+                    223, 51, 20, 187, 27, 25, 68, 220, 52, 0, 66, 18, 52, 128, 129, 134, 26, 0,
+                    170, 54, 167, 84, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+                    0, 244, 194, 88, 32, 66, 85, 108, 79, 42, 63, 78, 78, 99, 156, 202, 82, 77, 29,
+                    167, 14, 96, 136, 20, 23, 212, 100, 62, 83, 130, 237, 17, 10, 82, 113, 158,
+                    175, 194, 88, 32, 23, 47, 89, 26, 42, 118, 61, 11, 214, 177, 61, 4, 45, 140,
+                    94, 182, 110, 135, 241, 41, 201, 220, 119, 173, 166, 107, 96, 65, 1, 45, 178,
+                    179,
+                ],
+            ),
+        ];
+        for (sweep, expected_encoding) in expected {
+            let mut encoded: Vec<u8> = Vec::new();
+            minicbor::encode(&sweep, &mut encoded).unwrap();
+
+            assert_eq!(encoded, expected_encoding);
+
+            let decoded: SweepTransaction = minicbor::decode(&encoded).unwrap();
+            assert_eq!(decoded, sweep);
+        }
+    }
+
+    #[test]
+    fn should_refuse_a_delegating_sweep_that_installs_nothing() {
+        let SweepTransaction::Eip7702(sweep) =
+            SweepTransaction::new(sweep_transaction(), vec![authorization()])
+        else {
+            panic!("BUG: a sweep with an authorization must be a type-0x04 transaction");
+        };
+
+        assert_eq!(
+            DelegatingSweep::new(Eip7702TransactionRequest {
+                authorization_list: vec![],
+                ..sweep.transaction().clone()
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn should_refuse_to_decode_a_delegating_sweep_that_installs_nothing() {
+        let SweepTransaction::Eip7702(sweep) =
+            SweepTransaction::new(sweep_transaction(), vec![authorization()])
+        else {
+            panic!("BUG: a sweep with an authorization must be a type-0x04 transaction");
+        };
+        let empty = Eip7702TransactionRequest {
+            authorization_list: vec![],
+            ..sweep.transaction().clone()
+        };
+        let encoded = minicbor::to_vec(&empty).unwrap();
+
+        assert_matches!(
+            minicbor::decode::<DelegatingSweep>(&encoded),
+            Err(e) if e.to_string().contains("empty authorization list")
+        );
+        assert_eq!(
+            minicbor::decode::<DelegatingSweep>(&minicbor::to_vec(sweep.transaction()).unwrap())
+                .unwrap(),
+            sweep
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "BUG: authorization for another chain")]
+    fn should_trap_on_an_authorization_for_another_chain() {
+        let other_chain = SignedAuthorization {
+            chain_id: sweep_transaction().chain_id + 1,
+            ..authorization()
+        };
+
+        let _ = SweepTransaction::new(sweep_transaction(), vec![other_chain]);
+    }
+
+    #[test]
+    fn should_accept_an_authorization_valid_on_every_chain() {
+        let any_chain = SignedAuthorization {
+            chain_id: 0,
+            ..authorization()
+        };
+
+        let sweep = SweepTransaction::new(sweep_transaction(), vec![any_chain.clone()]);
+
+        assert_eq!(sweep.transaction_type(), SET_CODE_TX_ID);
+        assert_eq!(sweep.authorizations(), &[any_chain]);
+    }
+
+    fn sweep_transaction() -> Eip1559TransactionRequest {
+        Eip1559TransactionRequest {
+            chain_id: 11155111,
+            nonce: TransactionNonce::from(6_u8),
+            max_priority_fee_per_gas: WeiPerGas::new(0x59682f00),
+            max_fee_per_gas: WeiPerGas::new(0x598653cd),
+            gas_limit: GasAmount::new(100_000),
+            destination: Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap(),
+            amount: Wei::ZERO,
+            data: hex::decode("1234").unwrap(),
+            access_list: AccessList::new(),
+        }
+    }
+
+    fn authorization() -> SignedAuthorization {
+        SignedAuthorization {
+            chain_id: 11155111,
+            delegate: Address::from_str("0x0202020202020202020202020202020202020202").unwrap(),
+            nonce: TransactionNonce::ZERO,
+            y_parity: false,
+            r: u256::from_str_hex(
+                "0x42556c4f2a3f4e4e639cca524d1da70e60881417d4643e5382ed110a52719eaf",
+            )
+            .unwrap(),
+            s: u256::from_str_hex(
+                "0x172f591a2a763d0bd6b13d042d8c5eb66e87f129c9dc77ada66b6041012db2b3",
+            )
+            .unwrap(),
+        }
+    }
+
+    fn signature() -> TransactionSignature {
+        TransactionSignature {
+            signature_y_parity: true,
+            r: u256::from_str_hex(
+                "0x7d097b81dc8bf5ad313f8d6656146d4723d0e6bb3fb35f1a709e6a3d4426c0f3",
+            )
+            .unwrap(),
+            s: u256::from_str_hex(
+                "0x4f8a618d959e7d96e19156f0f5f2ed321b34e2004a0c8fdb7f02bc7d08b74441",
+            )
+            .unwrap(),
+        }
+    }
+}
+
 fn arb_transaction_price() -> impl Strategy<Value = TransactionPrice> {
     use crate::numeric::WeiPerGas;
     use crate::test_fixtures::arb::arb_checked_amount_of;
@@ -514,4 +790,51 @@ fn arb_gas_fee_estimate() -> impl Strategy<Value = GasFeeEstimate> {
             max_priority_fee_per_gas: WeiPerGas::from(max_priority_fee_per_gas),
         }
     })
+}
+
+mod sign_digest {
+    use crate::eth_rpc::Hash;
+    use crate::test_fixtures::mock::MockCanisterRuntime;
+    use crate::test_fixtures::{init_state, initial_state};
+    use crate::tx::{TransactionSignature, sign_digest, split_in_two};
+    use ethnum::u256;
+    use ic_cdk_management_canister::EcdsaPublicKeyResult;
+    use ic_secp256k1::PrivateKey;
+
+    #[tokio::test]
+    async fn should_sign_digest_through_the_runtime() {
+        let private_key = PrivateKey::deserialize_sec1(&[0x46_u8; 32]).unwrap();
+        let digest = Hash([0x11_u8; 32]);
+        let signature = private_key.sign_digest_with_ecdsa(&digest.0);
+        let public_key = EcdsaPublicKeyResult {
+            public_key: private_key.public_key().serialize_sec1(true),
+            chain_code: vec![0_u8; 32],
+        };
+        init_state(initial_state());
+        let mut runtime = MockCanisterRuntime::new();
+        runtime
+            .expect_ecdsa_public_key()
+            .times(1)
+            .return_once(move |_, _| Ok(public_key));
+        runtime
+            .expect_sign_with_ecdsa()
+            .times(1)
+            .return_once(move |_, _, _| Ok(signature));
+
+        let signed = sign_digest(&digest, &[], &runtime).await.unwrap();
+
+        let (r_bytes, s_bytes) = split_in_two(signature);
+        let recovery_id = private_key
+            .public_key()
+            .try_recovery_from_digest(&digest.0, &signature)
+            .unwrap();
+        assert_eq!(
+            signed,
+            TransactionSignature {
+                signature_y_parity: recovery_id.is_y_odd(),
+                r: u256::from_be_bytes(r_bytes),
+                s: u256::from_be_bytes(s_bytes),
+            }
+        );
+    }
 }

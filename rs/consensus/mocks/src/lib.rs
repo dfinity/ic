@@ -1,4 +1,5 @@
 //! Contains mocks for traits internal to consensus
+
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl, dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
 };
@@ -25,13 +26,13 @@ use ic_test_utilities_registry::{
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    Height, RegistryVersion, SubnetId, Time,
+    Height, RegistryVersion, ReplicaVersion, SubnetId, Time,
     batch::{BatchPayload, ValidationContext},
     consensus::{Payload, block_maker::SubnetRecords},
     replica_config::ReplicaConfig,
 };
-use mockall::predicate::*;
 use mockall::*;
+use std::str::FromStr;
 use std::{
     collections::BTreeSet,
     sync::{Arc, RwLock},
@@ -178,6 +179,8 @@ impl DependenciesBuilder {
             replica_config: ReplicaConfig {
                 node_id: node_test_id(0),
                 subnet_id: subnet_records[0].1,
+                replica_version: ReplicaVersion::from_str(&subnet_records[0].2.replica_version_id)
+                    .expect("Invalid replica_version_id"),
             },
             sorted_subnet_records: subnet_records,
             with_state_manager_expectations: true,
@@ -280,6 +283,7 @@ impl DependenciesBuilder {
         let pool = TestConsensusPool::new(
             self.replica_config.node_id,
             self.replica_config.subnet_id,
+            self.replica_config.replica_version.clone(),
             self.pool_config,
             time_source.clone(),
             registry.clone(),

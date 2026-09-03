@@ -14,7 +14,6 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-management-canister-types = { workspace = true }
-ic-recovery = { path = "../../recovery" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }

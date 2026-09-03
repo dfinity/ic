@@ -71,6 +71,7 @@ pub struct ReplicatedStateMetrics {
     canisters_with_old_open_call_contexts: IntGaugeVec,
     subnet_call_contexts: IntGaugeVec,
     pending_refunds: IntGauge,
+    pending_refunds_cycles: Gauge,
     total_canister_balance: Gauge,
     total_canister_reserved_balance: Gauge,
     canister_paused_execution: Histogram,
@@ -236,6 +237,10 @@ impl ReplicatedStateMetrics {
             pending_refunds: metrics_registry.int_gauge(
                 "replicated_state_pending_refunds",
                 "Number of pending anonymous refunds, i.e. refunds accumulated at the subnet level, not yet routed into streams.",
+            ),
+            pending_refunds_cycles: metrics_registry.gauge(
+                "replicated_state_pending_refunds_cycles",
+                "Total value in Cycles of pending anonymous refunds, i.e. refunds accumulated at the subnet level, not yet routed into streams.",
             ),
             total_canister_balance: metrics_registry.gauge(
                 "scheduler_canister_balance_cycles_total",
@@ -409,7 +414,6 @@ impl ReplicatedStateMetrics {
         let mut num_paused_install = 0;
         let mut num_aborted_install = 0;
 
-        let mut consumed_cycles_total = NominalCycles::zero();
         let mut consumed_cycles_total_by_use_case = BTreeMap::new();
         let mut consumed_cycles_total_by_use_case_as_counters = BTreeMap::new();
 
@@ -469,7 +473,6 @@ impl ReplicatedStateMetrics {
                 | Some(ExecutionTask::OnLowWasmMemory)
                 | None => {}
             }
-            consumed_cycles_total += canister.system_state.canister_metrics().consumed_cycles();
             join_consumed_cycles_by_use_case(
                 &mut consumed_cycles_total_by_use_case,
                 canister
@@ -552,12 +555,6 @@ impl ReplicatedStateMetrics {
         self.current_heap_delta
             .set(state.metadata.heap_delta_estimate.get() as i64);
 
-        // Add the consumed cycles by canisters that were deleted.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_by_deleted_canisters();
-
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
             state
@@ -573,34 +570,16 @@ impl ReplicatedStateMetrics {
                 .get_consumed_cycles_by_use_case(),
         );
 
-        // Add the consumed cycles in ecdsa outcalls.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_ecdsa_outcalls();
-
-        // Add the consumed cycles in http outcalls.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_http_outcalls();
-
-        // Add the remaining subnet-level use cases. Unlike ECDSA/HTTP outcalls
-        // and deleted canisters, these have no dedicated scalar field, but their
-        // getters read the by-use-case map. The canister-level use cases in that
-        // map originate from deleted canisters and are already covered by
-        // `get_consumed_cycles_by_deleted_canisters()`.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_schnorr_outcalls();
-        consumed_cycles_total += state.metadata.subnet_metrics.get_consumed_cycles_vetkd();
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_dropped_messages();
-
-        self.consumed_cycles.set(consumed_cycles_total.get() as f64);
+        // Read from the shared definition rather than re-folding, so the gauge cannot
+        // drift from the certified state tree. The per-use-case breakdowns below do
+        // still fold over the canisters, as no aggregate holds them.
+        self.consumed_cycles.set(
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters()
+                .get() as f64,
+        );
 
         self.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
         self.observe_consumed_cycles_by_use_case_as_counters(
@@ -676,7 +655,7 @@ impl ReplicatedStateMetrics {
 
         self.ingress_history_length
             .set(state.metadata.ingress_history.len() as i64);
-        for (ingress_state, count) in state.metadata.ingress_history.state_counts().iter() {
+        for (ingress_state, count) in state.metadata.ingress_history.state_counts() {
             self.ingress_history_length_by_state
                 .with_label_values(&[ingress_state])
                 .set(count as i64);
@@ -689,6 +668,8 @@ impl ReplicatedStateMetrics {
         }
 
         self.pending_refunds.set(state.refunds().len() as i64);
+        self.pending_refunds_cycles
+            .set(state.refunds().total().get() as f64);
 
         self.canisters_not_in_routing_table
             .set(canisters_not_in_routing_table);

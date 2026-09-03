@@ -1,3 +1,4 @@
+use crate::anvil::{Anvil, SweepContracts};
 use crate::events::MinterEventAssert;
 use crate::flow::{
     ApprovalFlow, DepositFlow, DepositParams, LedgerTransactionAssert, WithdrawalFlow,
@@ -5,6 +6,7 @@ use crate::flow::{
 use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
+use evm_rpc_types::{InstallArgs, OverrideProvider, RegexSubstitution};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
@@ -36,13 +38,14 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::SystemTime;
 
 pub mod anvil;
 pub mod ckerc20;
 pub mod events;
 mod evm_rpc_provider;
 pub mod flow;
-pub mod live_scan;
+pub mod live;
 pub mod mock;
 pub mod response;
 
@@ -97,6 +100,12 @@ pub const USDC_ERC20_CONTRACT_ADDRESS: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0c
 pub const USDC_ERC20_CONTRACT_ADDRESS_LOWERCASE: &str =
     "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 pub const MINTER_ADDRESS: &str = "0x30a14171b7c4c93ff5213f82eeb74f7c7e3f1ebc";
+/// The minter's dedicated sweeper address, derived from the same test key as [`MINTER_ADDRESS`]
+/// under the sweeper derivation path. Hardcoded as the value that derivation is expected to
+/// produce, so a test can name it before the minter is installed; `MinterInfo::sweeper_address`
+/// reports what the running minter actually derived. A test that funds it asserts the sweep really
+/// was sent from here, so a stale value fails loudly.
+pub const SWEEPER_ADDRESS: &str = "0x07e326c6604e3801270fc52ffb7ad3d6c5dfe89c";
 pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
 pub const ETH_HELPER_CONTRACT_ADDRESS: &str = "0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1";
@@ -122,7 +131,7 @@ pub struct CkEthSetup {
 
 impl Default for CkEthSetup {
     fn default() -> Self {
-        Self::new(Arc::new(new_pocket_ic()))
+        Self::new(EthereumBackend::Mocked)
     }
 }
 
@@ -143,51 +152,37 @@ impl PocketIcHttpQuery for &CkEthSetup {
 }
 
 impl CkEthSetup {
-    pub fn new(env: Arc<PocketIc>) -> Self {
-        // Create minter canister first to match canister ID and Ethereum address hardcoded in tests.
-        let minter_id = env.create_canister();
-        env.add_cycles(minter_id, u128::MAX);
-        let ledger_id = env.create_canister();
-        env.add_cycles(ledger_id, u128::MAX);
-        let evm_rpc_id = env.create_canister();
-        env.add_cycles(evm_rpc_id, u128::MAX);
+    /// Builds a fresh PocketIC instance (fiduciary subnet only, non-live) and installs the minter,
+    /// its ckETH ledger and the EVM RPC canister on it — each under the anonymous controller —
+    /// against `backend`. [`Default`] uses [`EthereumBackend::Mocked`]; [`crate::live`] passes
+    /// [`EthereumBackend::Anvil`] for the live balance-scan harness.
+    fn new(backend: EthereumBackend) -> Self {
+        let env = Arc::new(new_env());
+        let canisters = create_cketh_canisters(&env);
+        install_ledger(&env, &canisters);
+        install_evm_rpc(&env, &canisters, &backend);
+        install_minter(&env, &canisters, &backend);
 
-        env.install_canister(
-            ledger_id,
-            ledger_wasm(),
-            Encode!(&LedgerArgument::Init(
-                LedgerInitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
-                    .with_minting_account(minter_id)
-                    .with_transfer_fee(CKETH_TRANSFER_FEE)
-                    .with_max_memo_length(80)
-                    .with_decimals(18)
-                    .with_feature_flags(ic_icrc1_ledger::FeatureFlags {
-                        icrc2: true,
-                        icrc152: false
-                    })
-                    .build(),
-            ))
-            .unwrap(),
-            None,
-        );
-        install_evm_rpc(&env, evm_rpc_id);
-        let minter_id = install_minter(&env, ledger_id, minter_id, evm_rpc_id);
-
-        let caller = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID);
         Self {
             env,
-            caller,
-            ledger_id,
-            minter_id,
-            evm_rpc_id,
+            caller: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID),
+            ledger_id: canisters.ledger_id,
+            minter_id: canisters.minter_id,
+            evm_rpc_id: canisters.evm_rpc_id,
             support_subaccount: false,
         }
     }
 
     pub fn add_support_for_subaccount(self) -> Self {
-        self.upgrade_minter_to_add_deposit_with_subaccount_helper_contract(
-            DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS.to_string(),
+        self.add_support_for_subaccount_helper(
+            Address::from_str(DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS).unwrap(),
         )
+    }
+
+    /// Points the minter at a specific deposit helper, for a harness that deploys its own rather
+    /// than mocking the mainnet one.
+    pub fn add_support_for_subaccount_helper(self, helper: Address) -> Self {
+        self.upgrade_minter_to_add_deposit_with_subaccount_helper_contract(helper.to_string())
     }
 
     pub fn deposit<T: Into<DepositParams>>(self, params: T) -> DepositFlow {
@@ -747,11 +742,27 @@ impl CkEthSetup {
     }
 }
 
-pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
-    Address::from_str(address).unwrap().to_string()
+/// Switches a fixture built against [`EthereumBackend::Anvil`] to live outcalls, so that from here
+/// on the EVM RPC canister's requests reach anvil for real. Both steps are load-bearing and both
+/// have bitten this crate; [`crate::live`]'s module documentation explains them at length.
+///
+/// In short: the in-flight outcalls from construction are answered while their request time is still
+/// current, because the clock jump below would otherwise time them all out and leave the minter's
+/// timer guards held; and the jump itself is applied synchronously, so an ingress message submitted
+/// once this returns cannot be stamped behind `auto_progress`'s own asynchronous time-set and then
+/// be retroactively expired.
+pub(crate) fn switch_to_live(cketh: &CkEthSetup) {
+    cketh.stop_ongoing_https_outcalls();
+    cketh.env.set_certified_time(SystemTime::now().into());
+    cketh.env.auto_progress();
 }
 
-pub fn new_pocket_ic() -> PocketIc {
+/// Builds the PocketIC instance for [`CkEthSetup::new`]: the fiduciary subnet every ckETH fixture
+/// needs for the secp256k1 `key_1` used by the minter. Always a non-live (manual-round) instance,
+/// even for [`EthereumBackend::Anvil`]: [`crate::live`] builds its whole fixture here first and
+/// only switches to live outcalls once construction is complete, so `await_call` ticks
+/// deterministically for every setup call in between.
+fn new_env() -> PocketIc {
     PocketIcBuilder::new()
         .with_fiduciary_subnet()
         .with_icp_config(IcpConfig {
@@ -759,6 +770,10 @@ pub fn new_pocket_ic() -> PocketIc {
             ..Default::default()
         })
         .build()
+}
+
+pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
+    Address::from_str(address).unwrap().to_string()
 }
 
 fn ledger_wasm() -> Vec<u8> {
@@ -791,37 +806,159 @@ fn evm_rpc_wasm() -> Vec<u8> {
     )
 }
 
-fn install_minter(
-    env: &PocketIc,
-    ledger_id: Principal,
+/// The minter, its ckETH ledger and the EVM RPC canister it calls out to. Built by
+/// [`create_cketh_canisters`] and installed by
+/// [`install_ledger`]/[`install_minter`]/[`install_evm_rpc`] in the same order for every backend;
+/// only the init args differ.
+struct CkEthCanisters {
     minter_id: Principal,
+    ledger_id: Principal,
     evm_rpc_id: Principal,
-) -> Principal {
-    let args = MinterInitArgs {
-        ecdsa_key_name: "key_1".parse().unwrap(),
-        ethereum_network: EthereumNetwork::Mainnet,
-        ledger_id,
-        next_transaction_nonce: 0_u8.into(),
-        ethereum_block_height: CandidBlockTag::Finalized,
-        ethereum_contract_address: Some(ETH_HELPER_CONTRACT_ADDRESS.to_string()),
-        minimum_withdrawal_amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
-        last_scraped_block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
-        evm_rpc_id: Some(evm_rpc_id),
-        ethereum_sweeper_contract_address: None,
-    };
-    let minter_arg = MinterArg::InitArg(args);
-    env.install_canister(
-        minter_id,
-        minter_wasm(),
-        Encode!(&minter_arg).unwrap(),
-        None,
-    );
-    minter_id
 }
 
-fn install_evm_rpc(env: &PocketIc, evm_rpc_id: Principal) {
-    let args = evm_rpc_types::InstallArgs::default();
-    env.install_canister(evm_rpc_id, evm_rpc_wasm(), Encode!(&args).unwrap(), None);
+/// Cycles every canister this fixture creates is funded with — mocked and live fixtures alike,
+/// deliberately the same amount rather than a second constant scoped to the live backend.
+/// `u128::MAX`, the natural "as much as possible" choice, reproducibly crashes the live harness'
+/// PocketIC replica with a cycle-accounting assertion failure (`Invalid cycle change`) on the
+/// minter's first HTTPS outcall, because a canister already at the saturating `Cycles` balance
+/// ceiling cannot observe any further addition; this amount leaves headroom below that ceiling.
+const CANISTER_CYCLES: u128 = u64::MAX as u128;
+
+fn create_cketh_canisters(env: &PocketIc) -> CkEthCanisters {
+    // Create minter canister first to match canister ID and Ethereum address hardcoded in tests.
+    let minter_id = env.create_canister();
+    env.add_cycles(minter_id, CANISTER_CYCLES);
+    let ledger_id = env.create_canister();
+    env.add_cycles(ledger_id, CANISTER_CYCLES);
+    let evm_rpc_id = env.create_canister();
+    env.add_cycles(evm_rpc_id, CANISTER_CYCLES);
+    CkEthCanisters {
+        minter_id,
+        ledger_id,
+        evm_rpc_id,
+    }
+}
+
+fn install_ledger(env: &PocketIc, canisters: &CkEthCanisters) {
+    env.install_canister(
+        canisters.ledger_id,
+        ledger_wasm(),
+        Encode!(&LedgerArgument::Init(
+            LedgerInitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
+                .with_minting_account(canisters.minter_id)
+                .with_transfer_fee(CKETH_TRANSFER_FEE)
+                .with_max_memo_length(80)
+                .with_decimals(18)
+                .with_feature_flags(ic_icrc1_ledger::FeatureFlags {
+                    icrc2: true,
+                    icrc152: false
+                })
+                .build(),
+        ))
+        .unwrap(),
+        None,
+    );
+}
+
+/// The Ethereum chain under test: which JSON-RPC endpoint the EVM RPC canister's outcalls reach,
+/// and the corresponding minter init/upgrade assumptions about that chain's state (the block height
+/// to track, and where its log-scraping cursor starts).
+enum EthereumBackend {
+    /// Canned JSON-RPC mocks pinned to a historical mainnet snapshot.
+    Mocked,
+    /// A live anvil node, reached over HTTP at its own URL: a fresh chain with no finalized blocks
+    /// yet. `Arc` because this is a clone shared with the harness that started the node and keeps
+    /// it running for the fixture's lifetime; this particular clone is dropped once
+    /// [`CkEthSetup::new`] returns, having done its job of computing the install args below. The
+    /// canisters themselves are created and installed in the same order as for
+    /// [`EthereumBackend::Mocked`] — only their init args differ; [`crate::live`] is the one
+    /// that switches the PocketIC instance to live outcalls, once its whole fixture is built.
+    ///
+    /// `sweep_contracts` are already deployed on that node when set, so the minter is installed
+    /// knowing which delegate its deposit addresses delegate to.
+    Anvil {
+        anvil: Arc<Anvil>,
+        sweep_contracts: Option<SweepContracts>,
+    },
+}
+
+impl EthereumBackend {
+    fn install_args(&self) -> InstallArgs {
+        InstallArgs {
+            override_provider: match self {
+                EthereumBackend::Mocked => None,
+                EthereumBackend::Anvil { anvil, .. } => Some(OverrideProvider {
+                    override_url: Some(RegexSubstitution {
+                        pattern: ".*".into(),
+                        replacement: anvil.url().to_string(),
+                    }),
+                }),
+            },
+            ..Default::default()
+        }
+    }
+
+    fn ethereum_block_height(&self) -> CandidBlockTag {
+        match self {
+            // The mocked responses replay a historical mainnet snapshot, long since finalized.
+            EthereumBackend::Mocked => CandidBlockTag::Finalized,
+            // A fresh anvil chain has no finalized blocks, so track its "latest" head instead.
+            EthereumBackend::Anvil { .. } => CandidBlockTag::Latest,
+        }
+    }
+
+    /// The delegate the minter sweeps through, if this backend has one deployed.
+    fn sweeper_contract_address(&self) -> Option<String> {
+        match self {
+            EthereumBackend::Mocked => None,
+            EthereumBackend::Anvil {
+                sweep_contracts, ..
+            } => sweep_contracts.map(|contracts| contracts.delegate.to_string()),
+        }
+    }
+
+    fn last_scraped_block_number(&self) -> Nat {
+        match self {
+            // The block the mocked JSON-RPC responses are canned to scrape logs from onward.
+            EthereumBackend::Mocked => LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
+            EthereumBackend::Anvil { .. } => 0_u8.into(),
+        }
+    }
+}
+
+/// PocketIC's fiduciary subnet holds the secp256k1 test key under this name, the key the minter
+/// derives deposit addresses from.
+const ECDSA_KEY_NAME: &str = "key_1";
+
+fn install_minter(env: &PocketIc, canisters: &CkEthCanisters, backend: &EthereumBackend) {
+    let args = MinterInitArgs {
+        ecdsa_key_name: ECDSA_KEY_NAME.to_string(),
+        ethereum_network: EthereumNetwork::Mainnet,
+        ledger_id: canisters.ledger_id,
+        next_transaction_nonce: 0_u8.into(),
+        ethereum_block_height: backend.ethereum_block_height(),
+        ethereum_contract_address: Some(ETH_HELPER_CONTRACT_ADDRESS.to_string()),
+        minimum_withdrawal_amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
+        last_scraped_block_number: backend.last_scraped_block_number(),
+        evm_rpc_id: Some(canisters.evm_rpc_id),
+        ethereum_sweeper_contract_address: backend.sweeper_contract_address(),
+        next_sweeper_transaction_nonce: None,
+    };
+    env.install_canister(
+        canisters.minter_id,
+        minter_wasm(),
+        Encode!(&MinterArg::InitArg(args)).unwrap(),
+        None,
+    );
+}
+
+fn install_evm_rpc(env: &PocketIc, canisters: &CkEthCanisters, backend: &EthereumBackend) {
+    env.install_canister(
+        canisters.evm_rpc_id,
+        evm_rpc_wasm(),
+        Encode!(&backend.install_args()).unwrap(),
+        None,
+    );
 }
 
 fn fail_as_timed_out(env: &PocketIc, request: &CanisterHttpRequest) {

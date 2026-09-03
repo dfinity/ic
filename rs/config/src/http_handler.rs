@@ -66,6 +66,16 @@ pub struct Config {
 
     /// Serving at most `max_tracing_flamegraph_concurrent_requests` requests concurrently for all endpoints under `/_/tracing/flamegraph`.
     pub max_tracing_flamegraph_concurrent_requests: usize,
+
+    /// PEM-encoded certificates to trust, in addition to the public roots
+    /// compiled into the replica, when connecting to an API boundary node.
+    ///
+    /// A cloud engine subnet fetches its NNS delegation from an API boundary
+    /// node over TLS. In a testnet that node's certificate comes from a
+    /// throw-away CA rather than a public one, so that CA has to be handed to
+    /// the replica. Left unset in production, where the public roots are the
+    /// only trust anchors. To be used in system tests only.
+    pub extra_api_boundary_node_trust_anchors_pem: Option<String>,
 }
 
 impl Default for Config {
@@ -87,6 +97,7 @@ impl Default for Config {
             max_pprof_concurrent_requests: 5,
             ingress_message_certificate_timeout_seconds: 10,
             max_tracing_flamegraph_concurrent_requests: 5,
+            extra_api_boundary_node_trust_anchors_pem: None,
         }
     }
 }

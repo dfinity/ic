@@ -57,7 +57,7 @@ fn canister_status(_: CanisterStatusArgs) -> CanisterStatusResult {
     unimplemented!()
 }
 
-#[candid_method(update)]
+#[candid_method(query)]
 fn canister_info(_: CanisterInfoArgs) -> CanisterInfoResult {
     unimplemented!()
 }
@@ -129,6 +129,11 @@ fn vetkd_derive_key(_: VetKDDeriveKeyArgs) -> VetKDDeriveKeyResult {
 
 #[candid_method(update)]
 fn node_metrics_history(_: NodeMetricsHistoryArgs) -> NodeMetricsHistoryResult {
+    unimplemented!()
+}
+
+#[candid_method(update)]
+fn subnet_metrics(_: SubnetMetricsArgs) -> SubnetMetricsResult {
     unimplemented!()
 }
 

@@ -33,8 +33,7 @@ message SubnetTopology {
   repeated types.v1.MasterPublicKeyId chain_keys_held = 6;
   registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 7;
   repeated types.v1.PrincipalId subnet_admins = 8;
-  // Whether the subnet is "cooling down", i.e. quiescing: it inducts no ingress
-  // messages.
+  // Whether the subnet is "cooling down", i.e. quiescing.
   //
   // See `ic_replicated_state::SubnetTopology::cooling_down` for the exact
   // semantics.
@@ -52,23 +51,16 @@ message ChainKeySubnetEntry {
 }
 
 message NetworkTopology {
+  reserved 5, 9;
   repeated SubnetsEntry subnets = 1;
   registry.routing_table.v1.RoutingTable routing_table = 2;
   types.v1.SubnetId nns_subnet_id = 3;
   registry.routing_table.v1.CanisterMigrations canister_migrations = 4;
-  reserved 5;
-  reserved "ecdsa_signing_subnets";
   repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
   repeated ChainKeySubnetEntry chain_key_enabled_subnets = 8;
-  FullTopology full_topology = 9;
   types.v1.SubnetId default_initial_dkg_subnet_id = 10;
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 11;
-}
-
-message FullTopology {
-  repeated SubnetsEntry subnets = 1;
-  registry.routing_table.v1.RoutingTable routing_table = 2;
 }
 
 message SetupInitialDkgContext {

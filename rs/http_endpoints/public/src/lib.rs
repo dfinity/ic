@@ -78,7 +78,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_tracing::ReloadHandles;
 use ic_types::{
-    Height, NodeId, SubnetId,
+    Height, NodeId, ReplicaVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     malicious_flags::MaliciousFlags,
     messages::{MessageId, QueryResponseHash, ReplicaHealthStatus, SignedIngress},
@@ -265,6 +265,7 @@ pub fn start_server(
     ingress_verifier: Arc<dyn IngressSigVerifier>,
     node_id: NodeId,
     subnet_id: SubnetId,
+    replica_version: ReplicaVersion,
     nns_subnet_id: SubnetId,
     log: ReplicaLogger,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
@@ -385,9 +386,14 @@ pub fn start_server(
         Arc::clone(&registry_client),
         Arc::clone(&health_status),
         state_reader.clone(),
+        replica_version.clone(),
     );
-    let dashboard_router =
-        DashboardService::new_router(config.clone(), subnet_type, state_reader.clone());
+    let dashboard_router = DashboardService::new_router(
+        config.clone(),
+        subnet_type,
+        state_reader.clone(),
+        replica_version,
+    );
     let catchup_router = CatchUpPackageService::new_router(consensus_pool_cache.clone());
 
     let pprof_home_router = PprofHomeService::new_router();

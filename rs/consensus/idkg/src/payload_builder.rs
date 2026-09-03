@@ -362,7 +362,6 @@ fn create_summary_payload_helper(
         .ongoing_xnet_reshares
         .retain(|request, _| !new_key_transcripts.contains(&request.master_key_id));
 
-    idkg_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut idkg_summary, block_reader)?;
 
     Ok(Some(idkg_summary))
@@ -376,7 +375,7 @@ fn update_summary_refs(
     // Gather the refs and update them to point to the new
     // summary block height.
     let prev_refs = summary.active_transcripts();
-    summary.update_refs(height);
+    summary.update_refs(height)?;
 
     // Resolve the transcript refs pointing into the parent chain,
     // copy the resolved transcripts into the summary block.
@@ -728,7 +727,9 @@ mod tests {
         idkg::*,
     };
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id, subnet_test_id, test_replica_version, user_test_id,
+    };
     use ic_types::{
         Height, Randomness, RegistryVersion,
         batch::BatchPayload,
@@ -782,6 +783,7 @@ mod tests {
                 Height::from(100),
                 height,
                 BTreeMap::new(),
+                Default::default(),
             ),
             idkg: Some(idkg_summary),
         })
@@ -1153,6 +1155,120 @@ mod tests {
     }
 
     #[test]
+    fn test_create_summary_payload_updates_refs_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_create_summary_payload_updates_refs(&key_id);
+        }
+    }
+
+    /// The summary payload is the new anchor of the chain: the blocks of the previous
+    /// DKG interval are purged, so a summary that still points into them dangles.
+    /// Therefore `create_summary_payload_helper` must re-point every transcript ref of
+    /// the parent payload to the height of the new summary block, copy the resolved
+    /// transcripts into `idkg_transcripts`, and advance the UID generator's height.
+    fn test_create_summary_payload_updates_refs(key_id: &IDkgMasterPublicKeyId) {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let mut rng = reproducible_rng();
+            let Dependencies { registry, .. } = DependenciesBuilder::new(pool_config, 1).build();
+            let subnet_id = subnet_test_id(1);
+            let parent_height = Height::from(10);
+            let summary_height = Height::from(11);
+
+            let env = CanisterThresholdSigTestEnvironment::new(4, &mut rng);
+            let mut block_reader = TestIDkgBlockReader::new();
+
+            // Both the current key transcript and the transcript being reshared to another
+            // subnet live in the parent chain, i.e. their refs point to `parent_height`.
+            let (key_transcript, key_transcript_ref, current_key_transcript) =
+                generate_key_transcript(key_id, &env, &mut rng, parent_height);
+            block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
+
+            let (reshare_key_transcript, reshare_key_transcript_ref, _) =
+                generate_key_transcript(key_id, &env, &mut rng, parent_height);
+            let reshare_params = idkg::ReshareOfUnmaskedParams::new(
+                create_transcript_id(1001),
+                BTreeSet::new(),
+                RegistryVersion::from(1001),
+                &reshare_key_transcript,
+                reshare_key_transcript_ref,
+            );
+            block_reader
+                .add_transcript(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
+
+            let mut parent_payload =
+                empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+            *parent_payload.single_key_transcript_mut() = idkg::MasterKeyTranscript {
+                current: Some(current_key_transcript.clone()),
+                next_in_creation: idkg::KeyTranscriptCreation::Created(key_transcript_ref),
+                master_key_id: key_id.clone(),
+            };
+            parent_payload
+                .ongoing_xnet_reshares
+                .insert(create_reshare_request(key_id.clone(), 1, 1), reshare_params);
+
+            // Sanity check: nothing points at the new summary height yet.
+            for transcript_ref in parent_payload.active_transcripts() {
+                assert_eq!(transcript_ref.height, parent_height);
+            }
+
+            // Keep the registry version unchanged, so that no new key transcript is
+            // created and the ongoing xnet reshares aren't purged from the summary.
+            let registry_version = current_key_transcript.registry_version();
+            let summary = create_summary_payload_helper(
+                subnet_id,
+                std::slice::from_ref(key_id),
+                registry.as_ref(),
+                &block_reader,
+                summary_height,
+                registry_version,
+                registry_version,
+                &parent_payload,
+                None,
+                &no_op_logger(),
+            )
+            .unwrap()
+            .unwrap();
+
+            // All the refs of the parent payload were carried over, and re-pointed to the
+            // height of the new summary block.
+            let active_transcripts = summary.active_transcripts();
+            assert_eq!(
+                active_transcripts
+                    .iter()
+                    .map(|transcript_ref| transcript_ref.transcript_id)
+                    .collect::<BTreeSet<_>>(),
+                parent_payload
+                    .active_transcripts()
+                    .iter()
+                    .map(|transcript_ref| transcript_ref.transcript_id)
+                    .collect::<BTreeSet<_>>()
+            );
+            for transcript_ref in &active_transcripts {
+                assert_eq!(transcript_ref.height, summary_height);
+            }
+
+            // The referenced transcripts were resolved against the parent chain and copied
+            // into the summary block, such that they survive the purging of that chain.
+            assert_eq!(summary.idkg_transcripts.len(), active_transcripts.len());
+            for transcript_ref in &active_transcripts {
+                let transcript = summary
+                    .idkg_transcripts
+                    .get(&transcript_ref.transcript_id)
+                    .expect("transcript should have been copied into the summary block");
+                assert_eq!(transcript.algorithm_id, AlgorithmId::from(key_id.inner()));
+            }
+
+            // The UID generator hands out transcript IDs anchored at the new summary height.
+            let mut uid_generator = summary.uid_generator.clone();
+            assert_eq!(
+                uid_generator.next_transcript_id().source_height(),
+                summary_height
+            );
+        })
+    }
+
+    #[test]
     fn test_summary_proto_conversion_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
@@ -1369,6 +1485,7 @@ mod tests {
                     certified_height: Height::from(42),
                     time: UNIX_EPOCH,
                 },
+                test_replica_version(),
             );
             assert_proposal_conversion(b);
 

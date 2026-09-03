@@ -114,6 +114,11 @@ type InitArg = record {
 
     // Address of the sweeper smart contract.
     ethereum_sweeper_contract_address : opt text;
+
+    // Nonce of the next transaction to be sent from the dedicated sweeper address (its own nonce
+    // sequence, kept separate from the main address' so a stuck sweep cannot delay a withdrawal).
+    // Defaults to 0, which is correct for a sweeper address that has never sent a transaction.
+    next_sweeper_transaction_nonce : opt nat;
 };
 
 type UpgradeArg = record {
@@ -151,6 +156,11 @@ type UpgradeArg = record {
 
     // Change the sweeper smart contract address.
     ethereum_sweeper_contract_address : opt text;
+
+    // Change the nonce of the next transaction sent from the dedicated sweeper address (its own
+    // nonce sequence, kept separate from the main address' so a stuck sweep cannot delay a
+    // withdrawal).
+    next_sweeper_transaction_nonce : opt nat;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
@@ -197,6 +207,10 @@ type MinterInfo = record {
     // Ethereum address controlled by the minter via threshold ECDSA.
     minter_address: opt text;
 
+    // Dedicated Ethereum address controlled by the minter via threshold ECDSA, whose ETH
+    // balance is the prepaid gas available for sweeping funded deposit addresses.
+    sweeper_address: opt text;
+
     // (Deprecated) Address of the ETH helper smart contract.
     // Use `eth_helper_contract_address`.
     smart_contract_address: opt text;
@@ -236,6 +250,10 @@ type MinterInfo = record {
     // This might be less that the actual amount available on the `minter_address()`.
     erc20_balances : opt vec record { erc20_contract_address: text; balance: nat};
 
+    // Minimum balance, in each token's own units, that a deposit address must hold for the
+    // balance scan to treat it as a deposit candidate. A smaller balance is never detected.
+    minimum_deposit_amounts : opt vec record { erc20_contract_address: text; minimum_deposit_amount: nat};
+
     // Last scraped block number for logs of the ETH helper contract.
     last_eth_scraped_block_number: opt nat;
 
@@ -252,7 +270,6 @@ type MinterInfo = record {
     // with the Ethereum blockchain.
     evm_rpc_id : opt principal;
 };
-
 
 type GasFeeEstimate = record {
     // Maximum amount of Wei per gas unit that the transaction is willing to pay in total.
@@ -415,6 +432,16 @@ type DepositMode = variant {
 type DepositErc20Response = record {
     // The Ethereum deposit address derived for the caller.
     address : text;
+    // Minimum balance, in the token's own units, that the deposit address must hold for the
+    // balance scan to detect it. The scan reads the address' whole balance for the token, so
+    // several smaller transfers count together; the funds stay undetected only while their
+    // total is below this.
+    //
+    // A supported token with no configured minimum reports 2^256 - 1, which no real balance can
+    // reach: a deposit of that token would never be detected. Frontends should treat such a value
+    // as "deposits unavailable for this token" and warn the user, rather than display it as an
+    // amount to send.
+    minimum_deposit_amount : nat;
     // Where the deposit stands in the detect-and-sweep pipeline.
     status : DepositStatus;
 };
@@ -551,6 +578,46 @@ type UnsignedTransaction = record {
     access_list : vec record { address : text; storage_keys : vec blob };
 };
 
+// A secp256k1 signature: the two 32-byte components and the parity recovering
+// the signing key from them.
+type TransactionSignature = record {
+    y_parity : bool;
+    // 32-byte signature components.
+    r : blob;
+    s : blob;
+};
+
+// An EIP-7702 authorization tuple: a deposit address' signed consent to delegate
+// its code to `delegate`, signed by the address itself.
+type SignedAuthorization = record {
+    chain_id : nat;
+    delegate : text;
+    nonce : nat;
+    signature : TransactionSignature;
+};
+
+// One deposit a sweep moves: the address the funds sit at, the account they are
+// credited to, the attestation binding the two, and the delegation letting the
+// sweeper's code run there.
+type AuthorizedSweepItem = record {
+    deposit : text;
+    owner : principal;
+    subaccount : opt blob;
+    // The attestation signed by the deposit address itself.
+    attestation : TransactionSignature;
+    // The delegation installed on the way, absent if the address is already
+    // delegated.
+    authorization : opt SignedAuthorization;
+};
+
+// A sweep transaction the minter has created but not yet signed: a transaction,
+// plus the delegations it installs on the way. With none it is sent as a plain
+// EIP-1559 (0x02) transaction, and otherwise as an EIP-7702 (0x04) one.
+type UnsignedSweeperTransaction = record {
+    transaction : UnsignedTransaction;
+    authorization_list : vec SignedAuthorization;
+};
+
 type Event = record {
     timestamp : nat64;
     payload : variant {
@@ -590,6 +657,14 @@ type Event = record {
             from_subaccount : opt blob;
             created_at: opt nat64;
         };
+        AcceptedSweeperFundingRequest : record {
+            withdrawal_amount : nat;
+            destination : text;
+            ledger_burn_index : nat;
+            from : principal;
+            from_subaccount : opt blob;
+            created_at: opt nat64;
+        };
         CreatedTransaction : record {
             withdrawal_id : nat;
             transaction : UnsignedTransaction;
@@ -604,6 +679,32 @@ type Event = record {
         };
         FinalizedTransaction : record {
             withdrawal_id : nat;
+            transaction_receipt : TransactionReceipt;
+        };
+        AcceptedSweepRequest : record {
+            sweep_id : nat;
+            destination : text;
+            // The single ERC-20 contract this sweep moves.
+            token : text;
+            // The deposits the sweep moves, one per account.
+            items : vec AuthorizedSweepItem;
+            max_transaction_fee : nat;
+            created_at : nat64;
+        };
+        CreatedSweeperTransaction : record {
+            sweep_id : nat;
+            transaction : UnsignedSweeperTransaction;
+        };
+        SignedSweeperTransaction : record {
+            sweep_id : nat;
+            raw_transaction : text;
+        };
+        ReplacedSweeperTransaction : record {
+            sweep_id : nat;
+            transaction : UnsignedSweeperTransaction;
+        };
+        FinalizedSweeperTransaction : record {
+            sweep_id : nat;
             transaction_receipt : TransactionReceipt;
         };
         ReimbursedEthWithdrawal : record {
@@ -691,6 +792,28 @@ type Event = record {
             last_scanned_block : nat;
             scan_count : nat64;
             scanned_balance : nat;
+        };
+        // A ckERC20 deposit address attested to the account it credits. Recorded
+        // on its own because signing costs a threshold-ECDSA signature: the
+        // attestation outlives the sweep that needed it and every later one
+        // reuses it.
+        AttestedDepositAddress : record {
+            chain_id : nat;
+            // The deposit helper the attestation names; it is only valid against
+            // this deployment.
+            deposit_helper : text;
+            owner : principal;
+            subaccount : opt blob;
+            // The attestation signed by the deposit address itself.
+            attestation : TransactionSignature;
+        };
+        AuthorizedDepositAddress : record {
+            owner : principal;
+            subaccount : opt blob;
+            // The tuple the deposit address signed, delegating its code to the
+            // sweeper contract. Its nonce is always zero: the delegation is
+            // installed the first time the tuple is applied.
+            authorization : SignedAuthorization;
         };
     };
 };
@@ -823,7 +946,8 @@ service : (MinterArg) -> {
     // Derive and register the ckERC20 deposit address for the caller.
     // The account is derived from the caller's principal and the subaccount in the argument.
     // Returns the EIP-55 checksummed deposit address together with `valid_until`, the timestamp
-    // (nanoseconds since the Unix epoch) until which a deposit to it is guaranteed to be noticed.
+    // (nanoseconds since the Unix epoch) until which a deposit to it is guaranteed to be noticed,
+    // and the minimum balance of the requested token the address must hold to be noticed.
     deposit_erc20 : (DepositErc20Arg) -> (variant { Ok : DepositErc20Response; Err : DepositErc20Error });
 
     // Retrieve the status of a Eth withdrawal request.

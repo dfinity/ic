@@ -1,5 +1,6 @@
 use crate::{
-    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, CheckpointError, NUMBER_OF_CHECKPOINT_THREADS,
+    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, CRITICAL_ERROR_TIP_CANISTERS_FILTERED,
+    CRITICAL_ERROR_TIP_SNAPSHOTS_FILTERED, CheckpointError, NUMBER_OF_CHECKPOINT_THREADS,
     PageMapType, SharedState, StateManagerMetrics,
     checkpoint::validate_and_finalize_checkpoint_and_remove_unverified_marker,
     compute_bundled_manifest,
@@ -105,6 +106,15 @@ pub(crate) enum TipRequest {
         >,
     },
     /// Filter canisters and snapshots in tip. Remove ones not present in the sets.
+    ///
+    /// Canisters deleted during execution and canisters dropped by a subnet split are
+    /// removed from tip via `UnflushedCheckpointOp::DeleteCanister`; snapshots deleted
+    /// during execution (explicitly, or along with their canister) are removed from tip
+    /// via `UnflushedCheckpointOp::DeleteSnapshot`. So this is only a safety net for
+    /// canisters and snapshots that disappeared from the state without a corresponding
+    /// operation. Actually removing a canister or snapshot directory here therefore
+    /// raises the `CRITICAL_ERROR_TIP_CANISTERS_FILTERED` resp.
+    /// `CRITICAL_ERROR_TIP_SNAPSHOTS_FILTERED` critical error.
     ///
     /// State: `tip_folder_state.has_filtered_canisters = true`
     FilterTipCanisters {
@@ -297,7 +307,7 @@ pub(crate) fn spawn_tip_thread(
                             let _timer = request_timer(&metrics, "filter_tip_canisters");
                             debug_assert!(!tip_state.tip_folder_state.has_filtered_canisters);
                             tip_state.tip_folder_state.has_filtered_canisters = true;
-                            tip_handler
+                            let filtered_canister_ids = tip_handler
                                 .filter_tip_canisters(height, &canister_ids)
                                 .unwrap_or_else(|err| {
                                     fatal!(
@@ -307,7 +317,20 @@ pub(crate) fn spawn_tip_thread(
                                         err
                                     )
                                 });
-                            tip_handler
+                            if !filtered_canister_ids.is_empty() {
+                                // Every canister directory removal should be covered by an
+                                // explicit `UnflushedCheckpointOp::DeleteCanister`, making this
+                                // a mere safety net.
+                                error!(
+                                    log,
+                                    "{}: Removed canister directories without a corresponding checkpoint operation at height @{}: {:?}",
+                                    CRITICAL_ERROR_TIP_CANISTERS_FILTERED,
+                                    height,
+                                    filtered_canister_ids,
+                                );
+                                metrics.checkpoint_metrics.tip_canisters_filtered.inc();
+                            }
+                            let filtered_snapshot_ids = tip_handler
                                 .filter_tip_snapshots(height, &snapshot_ids)
                                 .unwrap_or_else(|err| {
                                     fatal!(
@@ -317,6 +340,19 @@ pub(crate) fn spawn_tip_thread(
                                         err
                                     )
                                 });
+                            if !filtered_snapshot_ids.is_empty() {
+                                // Every snapshot directory removal should be covered by an
+                                // explicit `UnflushedCheckpointOp::DeleteSnapshot`, making this
+                                // a mere safety net.
+                                error!(
+                                    log,
+                                    "{}: Removed snapshot directories without a corresponding checkpoint operation at height @{}: {:?}",
+                                    CRITICAL_ERROR_TIP_SNAPSHOTS_FILTERED,
+                                    height,
+                                    filtered_snapshot_ids,
+                                );
+                                metrics.checkpoint_metrics.tip_snapshots_filtered.inc();
+                            }
                         }
 
                         TipRequest::TipToCheckpointAndSwitch {
@@ -819,7 +855,7 @@ fn switch_to_checkpoint(
 }
 
 /// Update the tip directory files with the most recent checkpoint operations.
-/// `operations` is an ordered list of all created/restored snapshots and renamed canisters since the last flush.
+/// `operations` is an ordered list of all created/restored/deleted snapshots and renamed or deleted canisters since the last flush.
 fn flush_unflushed_checkpoint_ops(
     log: &ReplicaLogger,
     tip_handler: &mut TipHandler,
@@ -837,6 +873,12 @@ fn flush_unflushed_checkpoint_ops(
             }
             UnflushedCheckpointOp::RenameCanister(src, dst) => {
                 tip_handler.move_canister_directory(height, src, dst)?;
+            }
+            UnflushedCheckpointOp::DeleteCanister(canister_id) => {
+                tip_handler.delete_canister_directory(height, canister_id)?;
+            }
+            UnflushedCheckpointOp::DeleteSnapshot(snapshot_id) => {
+                tip_handler.delete_snapshot_directory(height, snapshot_id)?;
             }
         }
     }
@@ -1243,8 +1285,9 @@ fn serialize_protos_to_checkpoint_readwrite(
 /// with no logs.
 ///
 /// Any page deltas (for canisters or snapshots) have already been persisted via
-/// a `FlushPageMapDelta` request by this point. And files for deleted canisters
-/// and snapshots have been deleted via `FilterTipCanisters`.
+/// a `FlushPageMapDelta` request by this point. And the directories of deleted
+/// canisters and snapshots have been deleted by the flush of the corresponding
+/// `UnflushedCheckpointOp`s (with `FilterTipCanisters` as a safety net).
 fn serialize_wasm_binaries(
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
@@ -1424,13 +1467,6 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             snapshot_visibility: canister_state.system_state.snapshot_visibility.clone(),
             status_visibility: canister_state.system_state.status_visibility.clone(),
             log_memory_limit: canister_state.log_memory_limit(),
-            canister_log: canister_state.system_state.canister_log.clone(),
-            next_canister_log_record_idx: canister_state.system_state.canister_log.next_idx(),
-            // The one-time migration from `CanisterLog` to `LogMemoryStore`
-            // completed on all subnets, so this is always `true`. The field is
-            // still serialized (rather than dropped) so checkpoints remain
-            // readable by replicas that predate the log memory store.
-            log_memory_store_migrated: true,
             log_memory_store_persistent_next_idx: canister_state
                 .system_state
                 .log_memory_store

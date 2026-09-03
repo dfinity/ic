@@ -67,6 +67,7 @@ table ip6 filter {
     nd-router-advert,
     nd-neighbor-solicit,
     nd-neighbor-advert,
+    mld-listener-query,
   }
 
   set rate_limit {

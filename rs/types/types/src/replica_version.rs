@@ -5,42 +5,16 @@ use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
+use std::sync::Arc;
+
+pub static REPLICA_BINARY_HASH: OnceCell<String> = OnceCell::new();
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ReplicaVersion {
-    version_id: String,
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc_str")]
+    version_id: Arc<str>,
 }
-
-static DEFAULT_VERSION_ID: OnceCell<String> = OnceCell::new();
-pub static REPLICA_BINARY_HASH: OnceCell<String> = OnceCell::new();
-
-/// The default replica version can be initialized only once to prevent
-/// accidental mistakes. Otherwise its value is taken from environment
-/// CARGO_PKG_VERSION at compile time.
-impl ReplicaVersion {
-    /// Set the default value, which can only be set once.
-    /// Return error when it is already set.
-    pub fn set_default_version(
-        version: ReplicaVersion,
-    ) -> Result<(), DefaultVersionAlreadySetError> {
-        DEFAULT_VERSION_ID
-            .set(version.version_id)
-            .map_err(|_| DefaultVersionAlreadySetError)
-    }
-}
-
-impl Default for ReplicaVersion {
-    fn default() -> Self {
-        ReplicaVersion {
-            version_id: DEFAULT_VERSION_ID
-                .get_or_init(|| env!("CARGO_PKG_VERSION").to_string())
-                .clone(),
-        }
-    }
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct DefaultVersionAlreadySetError;
 
 impl std::fmt::Display for ReplicaVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -56,7 +30,7 @@ impl From<ReplicaVersion> for String {
 
 impl From<&ReplicaVersion> for String {
     fn from(version: &ReplicaVersion) -> String {
-        version.version_id.clone()
+        version.version_id.to_string()
     }
 }
 
@@ -87,7 +61,7 @@ impl TryFrom<&str> for ReplicaVersion {
             Err(ReplicaVersionParseError(version_str.to_string()))
         } else {
             Ok(ReplicaVersion {
-                version_id: version_str.to_string(),
+                version_id: version_str.into(),
             })
         }
     }
@@ -122,31 +96,9 @@ mod test {
 
     #[test]
     fn test_parse_replica_version() {
-        assert!(ReplicaVersion::try_from("2020-09-25.0.1").is_ok());
-        assert!(ReplicaVersion::try_from("1.2.1").is_ok());
-        assert!(ReplicaVersion::try_from("8aefz17q_1").is_ok());
-        assert!(ReplicaVersion::try_from("?+").is_err());
-        assert!(ReplicaVersion::try_from(ReplicaVersion::default().as_ref()).is_ok());
-    }
-
-    #[test]
-    fn test_replica_default_version() {
-        assert_eq!(
-            ReplicaVersion::default().as_ref(),
-            env!("CARGO_PKG_VERSION")
-        );
-        let version = ReplicaVersion::try_from("1.2.1").unwrap();
-        assert!(ReplicaVersion::set_default_version(version).is_err());
-    }
-
-    use rusty_fork::rusty_fork_test;
-    rusty_fork_test! {
-        #[test]
-        fn test_replica_default_version_can_be_set_once() {
-            let version = ReplicaVersion::try_from("1.2.1").unwrap();
-            assert!(ReplicaVersion::set_default_version(version.clone()).is_ok());
-            assert_eq!(ReplicaVersion::default(), version);
-            assert!(ReplicaVersion::set_default_version(version).is_err());
-        }
+        assert!(ReplicaVersion::from_str("2020-09-25.0.1").is_ok());
+        assert!(ReplicaVersion::from_str("1.2.1").is_ok());
+        assert!(ReplicaVersion::from_str("8aefz17q_1").is_ok());
+        assert!(ReplicaVersion::from_str("?+").is_err());
     }
 }

@@ -87,7 +87,7 @@ pub fn sweeper_address(master_public_key: &PublicKey, chain_code: &[u8; 32]) -> 
     derive_address(master_public_key, chain_code, sweeper_derivation_path())
 }
 
-fn deposit_derivation_path(schema: DepositAddressSchema, account: &Account) -> Vec<ByteBuf> {
+pub fn deposit_derivation_path(schema: DepositAddressSchema, account: &Account) -> Vec<ByteBuf> {
     vec![
         ByteBuf::from(vec![schema.tag()]),
         ByteBuf::from(account.owner.as_slice().to_vec()),
@@ -95,7 +95,7 @@ fn deposit_derivation_path(schema: DepositAddressSchema, account: &Account) -> V
     ]
 }
 
-fn sweeper_derivation_path() -> Vec<ByteBuf> {
+pub(crate) fn sweeper_derivation_path() -> Vec<ByteBuf> {
     vec![ByteBuf::from(vec![SWEEPER_SCHEMA_TAG])]
 }
 
@@ -104,13 +104,32 @@ fn derive_address(
     chain_code: &[u8; 32],
     derivation_path: Vec<ByteBuf>,
 ) -> Address {
+    ecdsa_public_key_to_address(&derive_public_key(
+        master_public_key,
+        chain_code,
+        &derivation_path,
+    ))
+}
+
+/// The public key the minter signs with under `derivation_path`, derived non-hardened from its
+/// master threshold-ECDSA key.
+///
+/// Every address in the derivation tree is this key's address, and every signature the minter makes
+/// under that path verifies against it — which is why recovering a signature's parity must use it
+/// and not the master key (an empty path derives to the master key itself, so the main address is
+/// the one case where the two coincide).
+pub fn derive_public_key(
+    master_public_key: &PublicKey,
+    chain_code: &[u8; 32],
+    derivation_path: &[ByteBuf],
+) -> PublicKey {
     let derivation_path = DerivationPath::new(
         derivation_path
-            .into_iter()
-            .map(|index| DerivationIndex(index.into_vec()))
+            .iter()
+            .map(|index| DerivationIndex(index.to_vec()))
             .collect(),
     );
-    let (derived_public_key, _derived_chain_code) =
-        master_public_key.derive_subkey_with_chain_code(&derivation_path, chain_code);
-    ecdsa_public_key_to_address(&derived_public_key)
+    master_public_key
+        .derive_subkey_with_chain_code(&derivation_path, chain_code)
+        .0
 }

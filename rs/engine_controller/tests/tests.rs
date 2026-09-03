@@ -25,7 +25,7 @@ use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content;
 use ic_registry_transport::{deserialize_get_value_response, serialize_get_value_request};
-use ic_types::ReplicaVersion;
+use ic_test_utilities_types::ids::test_replica_version;
 use pocket_ic::PocketIcBuilder;
 use pocket_ic::nonblocking::PocketIc;
 use prost::Message;
@@ -36,11 +36,6 @@ use std::convert::TryFrom;
 
 // Must match the principal hard-coded in `engine_controller`.
 const AUTHORIZED_CALLER: &str = "bct5z-vccu4-6q4t2-3lb6l-wm43p-ulppt-o5sqq-w6het-rthdz-qp4yn-fqe";
-
-/// Replica version that the registry test fixtures have already elected.
-fn test_replica_version() -> String {
-    ReplicaVersion::default().to_string()
-}
 
 fn authorized() -> Principal {
     Principal::from_text(AUTHORIZED_CALLER).unwrap()
@@ -233,7 +228,7 @@ async fn create_engine_then_delete_engine_succeeds() {
     let create_args = CreateEngineArgs {
         node_ids: node_principals(&node_ids),
         subnet_admins: vec![],
-        replica_version_id: test_replica_version(),
+        replica_version_id: test_replica_version().to_string(),
     };
 
     let new_subnet = call_create_engine(&pic, authorized(), &create_args)
@@ -289,7 +284,7 @@ async fn create_engine_caller_must_be_authorized() {
     let args = CreateEngineArgs {
         node_ids: node_principals(&node_ids),
         subnet_admins: vec![],
-        replica_version_id: test_replica_version(),
+        replica_version_id: test_replica_version().to_string(),
     };
     let err = call_create_engine(&pic, attacker, &args).await.unwrap_err();
     assert!(err.contains("not authorized"), "unexpected error: {err}");
@@ -306,7 +301,7 @@ async fn create_engine_rejects_fewer_than_four_nodes() {
         &CreateEngineArgs {
             node_ids: nodes,
             subnet_admins: vec![],
-            replica_version_id: test_replica_version(),
+            replica_version_id: test_replica_version().to_string(),
         },
     )
     .await
@@ -324,7 +319,7 @@ async fn create_engine_accepts_more_than_four_nodes() {
     let create_args = CreateEngineArgs {
         node_ids: node_principals(&node_ids),
         subnet_admins: vec![],
-        replica_version_id: test_replica_version(),
+        replica_version_id: test_replica_version().to_string(),
     };
 
     let initial_subnets = subnet_list(&pic).await;
@@ -351,7 +346,7 @@ async fn create_engine_rejects_duplicates() {
         &CreateEngineArgs {
             node_ids: nodes,
             subnet_admins: vec![],
-            replica_version_id: test_replica_version(),
+            replica_version_id: test_replica_version().to_string(),
         },
     )
     .await
@@ -401,7 +396,7 @@ async fn init_arg_overrides_authorized_caller_and_survives_upgrade() {
     let args = CreateEngineArgs {
         node_ids: node_principals(&node_ids),
         subnet_admins: vec![],
-        replica_version_id: test_replica_version(),
+        replica_version_id: test_replica_version().to_string(),
     };
     let err = call_create_engine(&pic, authorized(), &args)
         .await

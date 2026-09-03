@@ -5,7 +5,6 @@
 use crate::metrics::CanisterHttpPoolManagerMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
-    is_current_protocol_version,
     membership::{Membership, MembershipError},
 };
 use ic_interfaces::{
@@ -22,7 +21,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, NodeId, ReplicaVersion, canister_http::*, crypto::Signed, messages::CallbackId,
+    CountBytes, NodeId, canister_http::*, crypto::Signed, messages::CallbackId,
     replica_config::ReplicaConfig,
 };
 use std::{
@@ -192,11 +191,15 @@ impl CanisterHttpPoolManagerImpl {
             }
         };
 
-        allowed_boundary_nodes
-            .unwrap_or_else(|e| {
-                warn!(self.log, "Failed to get API boundary node IDs: {:?}", e);
-                Vec::new()
-            })
+        let allowed_boundary_nodes = allowed_boundary_nodes.unwrap_or_else(|e| {
+            warn!(self.log, "Failed to get API boundary node IDs: {:?}", e);
+            self.metrics
+                .observe_pool_manager_error("boundary_node_ids_lookup_failed");
+            Vec::new()
+        });
+        let num_boundary_nodes = allowed_boundary_nodes.len();
+
+        let addrs = allowed_boundary_nodes
             .into_iter()
             .filter_map(|id| {
                 self.registry_client
@@ -222,7 +225,13 @@ impl CanisterHttpPoolManagerImpl {
                     })
                     .map(|http_info| format!("socks5h://[{0}]:1080", http_info.ip_addr))
             })
-            .collect::<Vec<String>>()
+            .collect::<Vec<String>>();
+
+        if addrs.len() != num_boundary_nodes {
+            self.metrics
+                .observe_pool_manager_error("socks_proxy_addrs_unresolved");
+        }
+        addrs
     }
 
     /// Returns whether `node_id` belongs to the committee responsible for the
@@ -253,6 +262,8 @@ impl CanisterHttpPoolManagerImpl {
                         context.registry_version,
                         e
                     );
+                    self.metrics
+                        .observe_pool_manager_error("committee_membership_lookup_failed");
                 }),
             Replication::NonReplicated(delegated_node_id) => Ok(node_id == delegated_node_id),
             Replication::Flexible { committee, .. } => Ok(committee.contains(node_id)),
@@ -321,9 +332,16 @@ impl CanisterHttpPoolManagerImpl {
                     warn!(
                         self.log,
                         "Failed to add canister http request to queue {:?}", err
-                    )
+                    );
+                    // The id is not cached, so the request is retried next round.
+                    self.metrics.observe_pool_manager_error(match err {
+                        SendError::Full(_) => "adapter_queue_full",
+                        SendError::BrokenConnection => "adapter_connection_broken",
+                    });
                 } else {
                     self.requested_id_cache.borrow_mut().insert(*id);
+                    self.metrics
+                        .observe_pool_manager_event("request_sent_to_adapter");
                 }
             }
         }
@@ -348,21 +366,35 @@ impl CanisterHttpPoolManagerImpl {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
                 Ok((response, payment_receipt)) => {
+                    self.metrics
+                        .observe_pool_manager_event("adapter_response_received");
                     // Drop the response if its context is no longer present in the replicated state.
                     // We continue gossiping a share even if a response to the context has already
                     // been delivered, in order to report the amount of cycles spent.
-                    let Some(context) = active_contexts
-                        .get(&response.id)
-                        .or_else(|| delivered_contexts.get(&response.id))
-                    else {
-                        warn!(
-                            self.log,
-                            "Dropping http response for request ID {}: \
-                             corresponding context is no longer in the replicated state.",
-                            response.id,
-                        );
-                        self.requested_id_cache.borrow_mut().remove(&response.id);
-                        continue;
+                    let context = match active_contexts.get(&response.id) {
+                        Some(context) => context,
+                        None => match delivered_contexts.get(&response.id) {
+                            Some(context) => {
+                                // Consensus already answered this request; we only sign a
+                                // share to report the cycles we spent on it.
+                                self.metrics
+                                    .observe_pool_manager_event("response_for_delivered_context");
+                                context
+                            }
+                            None => {
+                                warn!(
+                                    self.log,
+                                    "Dropping http response for request ID {}: \
+                                     corresponding context is no longer in the replicated state.",
+                                    response.id,
+                                );
+                                self.metrics.observe_pool_manager_event(
+                                    "response_dropped_context_timed_out",
+                                );
+                                self.requested_id_cache.borrow_mut().remove(&response.id);
+                                continue;
+                            }
+                        },
                     };
 
                     let receipt_share = CanisterHttpResponseReceipt {
@@ -371,7 +403,7 @@ impl CanisterHttpPoolManagerImpl {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: response.content.is_reject(),
-                            replica_version: ReplicaVersion::default(),
+                            replica_version: self.replica_config.replica_version.clone(),
                         },
                         payment_receipt,
                     };
@@ -381,6 +413,10 @@ impl CanisterHttpPoolManagerImpl {
                             self.log,
                             "Http Response for request ID {} is too large: {}", response.id, err
                         );
+                        // Our own adapter produced a response no honest replica could
+                        // have produced, so no peer would accept a share for it.
+                        self.metrics
+                            .observe_pool_manager_error("own_response_too_large");
                         continue;
                     }
 
@@ -391,8 +427,10 @@ impl CanisterHttpPoolManagerImpl {
                             self.replica_config.node_id,
                             context.registry_version,
                         )
-                        .map_err(|err| error!(self.log, "Failed to sign http response {}", err))
-                    {
+                        .map_err(|err| {
+                            error!(self.log, "Failed to sign http response {}", err);
+                            self.metrics.observe_pool_manager_error("sign_share_failed");
+                        }) {
                         signature
                     } else {
                         continue;
@@ -453,7 +491,9 @@ impl CanisterHttpPoolManagerImpl {
                 let share = &artifact.share;
 
                 // Reject shares from different replica versions
-                if !is_current_protocol_version(share.content.replica_version()) {
+                if share.content.replica_version() != &self.replica_config.replica_version {
+                    self.metrics
+                        .observe_pool_manager_event("share_dropped_unknown_version");
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 }
 
@@ -468,6 +508,8 @@ impl CanisterHttpPoolManagerImpl {
                     .get(&share.content.id())
                     .or_else(|| delivered_contexts.get(&share.content.id()))
                 else {
+                    self.metrics
+                        .observe_pool_manager_event("share_dropped_unknown_context");
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 };
 
@@ -517,6 +559,17 @@ impl CanisterHttpPoolManagerImpl {
                                 "Artifact should contain response".to_string(),
                             ));
                         };
+
+                        if response.id != share.content.id() {
+                            return Some(CanisterHttpChangeAction::HandleInvalid(
+                                share.clone(),
+                                format!(
+                                    "Response is for request ID {} rather than the share's {}",
+                                    response.id,
+                                    share.content.id(),
+                                ),
+                            ));
+                        }
 
                         if share.content.content_hash() != &ic_types::crypto::crypto_hash(response)
                         {
@@ -657,8 +710,10 @@ pub mod test {
     use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::CountBytes;
+    use ic_types::ReplicaVersion;
     use ic_types::crypto::crypto_hash;
     use ic_types::{
         Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
@@ -726,10 +781,14 @@ pub mod test {
         replicated_state
     }
 
+    /// The canister that makes the outcalls in these tests.
+    fn requester() -> ic_types::CanisterId {
+        ic_types::CanisterId::from(0)
+    }
+
     fn empty_canister_http_response(id: u64) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(id),
-            canister_id: ic_types::CanisterId::from(0),
             content: CanisterHttpResponseContent::Success(Vec::new()),
         }
     }
@@ -740,7 +799,9 @@ pub mod test {
         max_response_bytes: Option<NumBytes>,
     ) -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+            request: ic_test_utilities_types::messages::RequestBuilder::new()
+                .sender(requester())
+                .build(),
             url: "".to_string(),
             max_response_bytes,
             headers: vec![],
@@ -803,7 +864,7 @@ pub mod test {
                             content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                             content_size: 0,
                             is_reject: false,
-                            replica_version: ReplicaVersion::default(),
+                            replica_version: replica_config.replica_version.clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -899,7 +960,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1047,6 +1108,7 @@ pub mod test {
                 let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
                     Arc::new(Mutex::new(Box::new(shim_mock)));
 
+                let metrics_registry = MetricsRegistry::new();
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
                     state_manager as Arc<_>,
                     shim,
@@ -1055,7 +1117,7 @@ pub mod test {
                     replica_config,
                     SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
+                    metrics_registry.clone(),
                     log,
                 );
 
@@ -1065,6 +1127,15 @@ pub mod test {
                 // The share is dropped silently (removed, not marked invalid).
                 assert_eq!(changes.len(), 1);
                 assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
+                // Dropping it is expected during an upgrade, so it is not an error.
+                assert_eq!(
+                    metric_vec(&[(&[("type", "share_dropped_unknown_version")], 1)]),
+                    fetch_int_counter_vec(&metrics_registry, "canister_http_pool_manager_events")
+                );
+                assert!(
+                    fetch_int_counter_vec(&metrics_registry, "canister_http_pool_manager_errors")
+                        .is_empty()
+                );
             })
         });
     }
@@ -1109,7 +1180,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1168,6 +1239,7 @@ pub mod test {
                 let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
                     Arc::new(Mutex::new(Box::new(shim_mock)));
 
+                let metrics_registry = MetricsRegistry::new();
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
                     state_manager as Arc<_>,
                     shim,
@@ -1176,7 +1248,7 @@ pub mod test {
                     replica_config,
                     SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
+                    metrics_registry.clone(),
                     log,
                 );
 
@@ -1236,7 +1308,7 @@ pub mod test {
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1425,7 +1497,7 @@ pub mod test {
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1522,7 +1594,7 @@ pub mod test {
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1649,7 +1721,6 @@ pub mod test {
                     let response_body_too_large = vec![0; oversized_len];
                     let response = CanisterHttpResponse {
                         id: CallbackId::from(0),
-                        canister_id: ic_types::CanisterId::from(0),
                         content: CanisterHttpResponseContent::Success(response_body_too_large),
                     };
 
@@ -1659,7 +1730,7 @@ pub mod test {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: ReplicaVersion::default(),
+                            replica_version: replica_config.replica_version.clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -1714,7 +1785,6 @@ pub mod test {
                     let response_body_ok = vec![0; max_response_bytes.get() as usize];
                     let response = CanisterHttpResponse {
                         id: CallbackId::from(0),
-                        canister_id: ic_types::CanisterId::from(0),
                         content: CanisterHttpResponseContent::Success(response_body_ok),
                     };
 
@@ -1724,7 +1794,7 @@ pub mod test {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: ReplicaVersion::default(),
+                            replica_version: replica_config.replica_version.clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -1818,7 +1888,6 @@ pub mod test {
                         reject_code: RejectCode::SysTransient,
                         message: "A transient error occurred.".to_string(),
                     }),
-                    ..empty_canister_http_response(0)
                 };
 
                 let response_metadata = CanisterHttpResponseReceipt {
@@ -1827,7 +1896,7 @@ pub mod test {
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: true,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1906,7 +1975,6 @@ pub mod test {
                         reject_code: RejectCode::SysFatal,
                         message: "b".repeat(oversized_len),
                     }),
-                    ..empty_canister_http_response(callback_id.get())
                 };
 
                 let dishonest_hash = ic_types::crypto::crypto_hash(&dishonest_response);
@@ -1916,7 +1984,7 @@ pub mod test {
                         content_hash: dishonest_hash,
                         content_size: dishonest_response.content.count_bytes() as u32,
                         is_reject: true,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2020,7 +2088,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
                         content_size: limit as u32 + 1,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2236,7 +2304,6 @@ pub mod test {
                 let response = CanisterHttpResponse {
                     id: CallbackId::from(0),
                     content: CanisterHttpResponseContent::Reject(reject_content),
-                    ..empty_canister_http_response(0)
                 };
 
                 let response_metadata = CanisterHttpResponseReceipt {
@@ -2245,7 +2312,7 @@ pub mod test {
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: true,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2322,7 +2389,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2729,7 +2796,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2895,7 +2962,7 @@ pub mod test {
                         content_hash: crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2993,7 +3060,7 @@ pub mod test {
                         content_hash: crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -3137,6 +3204,44 @@ pub mod test {
                         if reason == "is_reject does not match the response content"
                     );
                 }
+
+                // TEST 5: the attached response answers a *different* callback than the
+                // share it travels with -- should be invalid.
+                {
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                    let mut foreign_response = empty_canister_http_response(callback_id.get());
+                    foreign_response.id = CallbackId::from(callback_id.get() + 1);
+
+                    let mut bad_share = share.clone();
+                    bad_share.content.metadata.content_hash = crypto_hash(&foreign_response);
+                    bad_share.signature = crypto
+                        .sign(
+                            &bad_share.content,
+                            committee_member,
+                            RegistryVersion::from(1),
+                        )
+                        .unwrap();
+
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: CanisterHttpResponseArtifact {
+                            share: bad_share,
+                            response: Some(foreign_response),
+                        },
+                        peer_id: committee_member,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
+
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::HandleInvalid(_, reason)
+                        if reason.starts_with("Response is for request ID")
+                    );
+                }
             })
         });
     }
@@ -3208,7 +3313,6 @@ pub mod test {
                         + 1) as usize;
                     let response = CanisterHttpResponse {
                         id: callback_id,
-                        canister_id: ic_types::CanisterId::from(0),
                         content: CanisterHttpResponseContent::Success(vec![0; oversized_len]),
                     };
 
@@ -3218,7 +3322,7 @@ pub mod test {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: ReplicaVersion::default(),
+                            replica_version: replica_config.replica_version.clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -3267,7 +3371,6 @@ pub mod test {
 
                     let response = CanisterHttpResponse {
                         id: callback_id,
-                        canister_id: ic_types::CanisterId::from(0),
                         content: CanisterHttpResponseContent::Success(vec![
                             0;
                             MAX_CANISTER_HTTP_RESPONSE_BYTES
@@ -3281,7 +3384,7 @@ pub mod test {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: ReplicaVersion::default(),
+                            replica_version: replica_config.replica_version.clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -3456,7 +3559,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt {
                         spent: Cycles::new(200),
@@ -3563,7 +3666,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: replica_config.replica_version.clone(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt {
                         spent: Cycles::new(200),
@@ -3785,7 +3888,7 @@ pub mod test {
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                        replica_version: test_replica_version(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -3885,7 +3988,7 @@ pub mod test {
                             content_hash: crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: ReplicaVersion::default(),
+                            replica_version: test_replica_version(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };

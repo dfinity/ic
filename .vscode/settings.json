@@ -10,8 +10,28 @@
     },
     "bazel.buildifierExecutable": "@buildifier",
     "cSpell.words": [
+        "blockmaker",
+        "blockmakers",
+        "btreemap",
+        "cbor",
+        "checkpointing",
+        "condvar",
+        "demux",
+        "Deque",
+        "errmsg",
         "followee",
-        "followees"
+        "followees",
+        "idkg",
+        "monomorphization",
+        "newtype",
+        "outcall",
+        "outcalls",
+        "reshare",
+        "sandboxing",
+        "Schnorr",
+        "unflushed",
+        "walltime",
+        "wasms"
     ],
     "files.associations": {
         "PULL_REQUEST_BAZEL_TARGETS": "ignore"

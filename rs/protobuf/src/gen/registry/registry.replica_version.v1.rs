@@ -78,13 +78,3 @@ pub struct GuestLaunchMeasurementMetadata {
     #[prost(string, optional, tag = "2")]
     pub vcpu_type: ::core::option::Option<::prost::alloc::string::String>,
 }
-/// A list of blessed versions of the IC Replica
-///
-/// New versions are added here after a vote has been accepted by token
-/// holders. Subnetworks can then be upgraded to any of those version.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct BlessedReplicaVersions {
-    /// A list of version information ids.
-    #[prost(string, repeated, tag = "1")]
-    pub blessed_version_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-}

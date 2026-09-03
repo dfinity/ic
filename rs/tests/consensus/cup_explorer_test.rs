@@ -121,6 +121,7 @@ fn test(env: TestEnv) {
     let halt_at_cup_height_payload = UpdateSubnetPayload {
         subnet_id: app_subnet.subnet_id,
         halt_at_cup_height: Some(true),
+        cooling_down: None,
         subnet_admins: None,
         ..empty_subnet_update()
     };

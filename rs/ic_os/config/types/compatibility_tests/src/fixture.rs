@@ -66,8 +66,14 @@ fn generate_hostos_config() -> HostOSConfig {
         mgmt_mac: "00:00:00:00:00:01".parse().unwrap(),
         deployment_environment: DeploymentEnvironment::Mainnet,
         enable_trusted_execution_environment: false,
+        // One `Url` per entry. Passing the whole comma-separated list to
+        // `Url::parse` yields a single `Url` whose host is `icp-api.io,https`
+        // and whose path is the rest, which re-serialises to the malformed
+        // `https://icp-api.io,https//icp0.io,https://ic0.app`.
         nns_urls: vec![
-            url::Url::parse("https://icp-api.io,https://icp0.io,https://ic0.app").unwrap(),
+            url::Url::parse("https://icp-api.io").unwrap(),
+            url::Url::parse("https://icp0.io").unwrap(),
+            url::Url::parse("https://ic0.app").unwrap(),
         ],
         node_operator_private_key: None,
         use_ssh_authorized_keys: false,

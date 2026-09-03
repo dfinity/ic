@@ -21,6 +21,10 @@ pub struct RegistryCanisterInitPayload {
     pub is_swapping_feature_enabled: Option<bool>,
     pub swapping_whitelisted_callers: Option<Vec<PrincipalId>>,
     pub swapping_enabled_subnets: Option<Vec<SubnetId>>,
+
+    // Same deal as the swapping flags above, but for the blank
+    // replica_version_id (for Cloud Engines) feature.
+    pub is_blank_replica_version_id_for_cloud_engines_enabled: Option<bool>,
 }
 
 impl fmt::Display for RegistryCanisterInitPayload {
@@ -45,6 +49,7 @@ pub struct RegistryCanisterInitPayloadBuilder {
     is_swapping_feature_enabled: bool,
     swapping_whitelisted_callers: BTreeSet<PrincipalId>,
     swapping_enabled_subnets: BTreeSet<SubnetId>,
+    is_blank_replica_version_id_for_cloud_engines_enabled: bool,
 }
 
 #[allow(clippy::new_without_default)]
@@ -55,6 +60,7 @@ impl RegistryCanisterInitPayloadBuilder {
             is_swapping_feature_enabled: false,
             swapping_whitelisted_callers: BTreeSet::new(),
             swapping_enabled_subnets: BTreeSet::new(),
+            is_blank_replica_version_id_for_cloud_engines_enabled: false,
         }
     }
 
@@ -79,6 +85,9 @@ impl RegistryCanisterInitPayloadBuilder {
             swapping_enabled_subnets: Some(
                 self.swapping_enabled_subnets.clone().into_iter().collect(),
             ),
+            is_blank_replica_version_id_for_cloud_engines_enabled: Some(
+                self.is_blank_replica_version_id_for_cloud_engines_enabled,
+            ),
         }
     }
 
@@ -94,6 +103,11 @@ impl RegistryCanisterInitPayloadBuilder {
 
     pub fn whitelist_swapping_feature_caller(&mut self, caller: PrincipalId) -> &mut Self {
         self.swapping_whitelisted_callers.insert(caller);
+        self
+    }
+
+    pub fn enable_blank_replica_version_id_for_cloud_engines(&mut self) -> &mut Self {
+        self.is_blank_replica_version_id_for_cloud_engines_enabled = true;
         self
     }
 }

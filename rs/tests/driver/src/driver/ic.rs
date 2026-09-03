@@ -3,6 +3,7 @@ use crate::driver::{
     bootstrap::{init_ic, setup_and_start_vms},
     farm::{DnsRecord, DnsRecordType, Farm, HostFeature},
     ic_gateway_vm::Playnet,
+    local_backend::{IN_GROUP_DOMAIN_SUFFIX, LocalBackend},
     nested::UnassignedRecordConfig,
     node_software_version::NodeSoftwareVersion,
     resource::{AllocatedVm, ResourceGroup, allocate_resources, get_resource_request},
@@ -13,7 +14,7 @@ use crate::driver::{
     },
     test_setup::{GroupSetup, SystemTestBackend},
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
 use ic_protobuf::registry::{dc::v1::DataCenterRecord, node::v1::NodeRewardType};
@@ -26,14 +27,51 @@ use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::{Height, NodeId, PrincipalId};
 use ic_types_cycles::CanisterCyclesCostSchedule;
 use phantom_newtype::AmountOf;
+use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, KeyPair, KeyUsagePurpose};
 use serde::{Deserialize, Serialize};
 use slog::info;
 use std::collections::BTreeMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::net::{Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 use std::time::Duration;
+
+/// The domain of the `idx`-th API boundary node outside a Farm playnet.
+///
+/// Only ever resolved from inside a test group: on the local backend by the
+/// group's own `dnsmasq` (see
+/// [`InternetComputer::setup_api_bn_local_playnet`]), and on Farm not at all —
+/// [`InternetComputer::with_api_boundary_nodes`] hands out these names without
+/// creating DNS records for them.
+fn api_boundary_node_domain(idx: usize) -> String {
+    format!("apibn-{idx}.{IN_GROUP_DOMAIN_SUFFIX}")
+}
+
+/// The TLS material behind the local backend's replacement for a Farm playnet,
+/// written by [`InternetComputer::setup_api_bn_local_playnet`] and read by
+/// `bootstrap` when it builds each API boundary node's config image.
+///
+/// Deliberately a separate attribute from [`Playnet`], which the IC gateway VM
+/// also reads and writes — sharing it would let whichever ran last silently
+/// replace the other's certificate.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LocalApiBoundaryNodesPlaynet {
+    /// PEM-encoded certificate covering every API boundary node's domain, served
+    /// by their `ic-boundary`.
+    pub cert_pem: String,
+    /// PEM-encoded private key belonging to `cert_pem`.
+    pub key_pem: String,
+    /// PEM-encoded certificate of the ephemeral CA that issued `cert_pem`. The
+    /// nodes are given this as an extra trust anchor.
+    pub ca_pem: String,
+}
+
+impl TestEnvAttribute for LocalApiBoundaryNodesPlaynet {
+    fn attribute_name() -> String {
+        "local_api_boundary_nodes_playnet".to_string()
+    }
+}
 
 /// Builder object to declare a topology of an InternetComputer.
 /// Used as input to the IC Manager.
@@ -58,6 +96,8 @@ pub struct InternetComputer {
     pub api_bn_use_playnet: bool,
     pub data_centers: Vec<DataCenterRecord>,
     pub node_operators: Vec<NodeOperatorConfig>,
+    pub extra_firewall_whitelist_prefixes: Vec<String>,
+    pub extra_firewall_whitelist_ports: Vec<u32>,
 }
 
 /// Configuration for a node operator to be added to the initial registry.
@@ -168,16 +208,26 @@ impl InternetComputer {
                 Node::new()
                     .with_boot_image(BootImage::GroupDefault)
                     .with_required_host_features(self.required_host_features.clone())
-                    .with_domain(format!("apibn-{idx}.ic.net")),
+                    .with_domain(api_boundary_node_domain(idx)),
             );
         }
         self
     }
 
-    /// Add the given number of API boundary nodes with playnet support.
+    /// Add the given number of API boundary nodes with playnet support, i.e.
+    /// with a domain name *and* a certificate for it that the nodes trust.
+    ///
     /// Unlike `with_api_boundary_nodes`, nodes are created without domains here —
-    /// real domains (e.g. `apibn-0.ic50.farm.dfinity.systems`) are assigned during
-    /// `setup_and_start` after a playnet certificate is acquired from Farm.
+    /// they are assigned during `setup_and_start`, together with a matching
+    /// certificate: on the Farm backend a real domain
+    /// (e.g. `apibn-0.ic50.farm.dfinity.systems`) with a Farm-issued publicly
+    /// trusted certificate, and on the local backend `apibn-0.ic.net` with a
+    /// certificate from an ephemeral per-group CA. See
+    /// [`setup_api_bn_playnet`](Self::setup_api_bn_playnet) and
+    /// [`setup_api_bn_local_playnet`](Self::setup_api_bn_local_playnet).
+    ///
+    /// This is required for cloud engine subnets, whose replicas reach an API
+    /// boundary node by domain name over TLS to fetch their NNS delegation.
     pub fn with_api_boundary_nodes_playnet(mut self, no_of_nodes: usize) -> Self {
         self.api_bn_use_playnet = true;
         for _ in 0..no_of_nodes {
@@ -194,6 +244,39 @@ impl InternetComputer {
     pub fn with_api_boundary_node(mut self, node: Node) -> Self {
         self.api_boundary_nodes.push(node);
         self
+    }
+
+    /// Whitelist additional sources on the nodes' firewall, *on top of* the test
+    /// driver's own addresses, which the local backend always whitelists (see
+    /// `init_ic` in `rs/tests/driver/src/driver/bootstrap.rs`).
+    ///
+    /// Needed by tests that have a VM other than the driver talk to a node. Such
+    /// a VM shares the nodes' `/64`, which the GuestOS firewall already accepts
+    /// on 7070, 9090, 9091, 9100, 19100, 19522 and 19531 (plus 9314 on cloud
+    /// engines and 9324 on API boundary nodes) — so this is only required to
+    /// reach a node on one of the *other* whitelisted ports: 22, 2497, 4100,
+    /// 8080 and 19523.
+    ///
+    /// The prefixes and ports are added to the driver's, never replace them, so
+    /// a caller cannot lock the driver out. Ignored on the Farm backend, whose
+    /// management prefixes the firewall template's `default_rules` already
+    /// cover.
+    pub fn with_extra_firewall_whitelist(mut self, prefixes: Vec<String>, ports: Vec<u32>) -> Self {
+        self.extra_firewall_whitelist_prefixes.extend(prefixes);
+        self.extra_firewall_whitelist_ports.extend(ports);
+        self
+    }
+
+    /// Whitelist every VM in the test group on the nodes' firewall, by adding
+    /// the local backend's whole range ([`LocalBackend::GROUP_PREFIX`]) to the
+    /// whitelist.
+    ///
+    /// A shorthand for the common case of
+    /// [`with_extra_firewall_whitelist`](Self::with_extra_firewall_whitelist),
+    /// and what the local backend did unconditionally before the whitelist was
+    /// narrowed to the driver's own addresses.
+    pub fn with_group_wide_firewall_whitelist(self) -> Self {
+        self.with_extra_firewall_whitelist(vec![LocalBackend::GROUP_PREFIX.to_string()], vec![])
     }
 
     /// Add a single unassigned node with the given IPv4 configuration
@@ -309,12 +392,7 @@ impl InternetComputer {
         if self.api_bn_use_playnet {
             match SystemTestBackend::read_attribute(env) {
                 SystemTestBackend::Farm => self.setup_api_bn_playnet(env),
-                SystemTestBackend::Local => {
-                    slog::warn!(
-                        env.logger(),
-                        "LocalBackend: skipping API BN playnet setup (no playnet DNS/TLS)"
-                    );
-                }
+                SystemTestBackend::Local => self.setup_api_bn_local_playnet(env, &group_name)?,
             }
         }
 
@@ -418,6 +496,87 @@ impl InternetComputer {
             a_records: vec![],
         };
         playnet.write_attribute(env);
+    }
+
+    /// The local backend's replacement for
+    /// [`setup_api_bn_playnet`](Self::setup_api_bn_playnet).
+    ///
+    /// A Farm playnet gives the API boundary nodes a publicly resolvable domain
+    /// and a publicly trusted certificate for it. Neither service exists locally,
+    /// so both halves are produced here instead:
+    ///
+    /// * an ephemeral CA plus one leaf certificate covering every API boundary
+    ///   node's domain, stored in the [`LocalApiBoundaryNodesPlaynet`] attribute.
+    ///   `bootstrap` serves the leaf from `ic-boundary` through the existing
+    ///   `ic_boundary_tls_cert` mechanism and hands the CA to the nodes as an
+    ///   extra trust anchor;
+    /// * a DNS record per node in the group's `dnsmasq`, which is the resolver
+    ///   every VM in the group queries (see [`LocalBackend::add_dns_record`]).
+    ///
+    /// Both halves are needed by cloud engine subnets, whose
+    /// `nns_delegation_manager` resolves an API boundary node's domain and then
+    /// validates its certificate.
+    fn setup_api_bn_local_playnet(&mut self, env: &TestEnv, group_name: &str) -> Result<()> {
+        let logger = env.logger();
+
+        for (idx, node) in self.api_boundary_nodes.iter_mut().enumerate() {
+            node.domain = Some(api_boundary_node_domain(idx));
+        }
+        let domains: Vec<String> = self
+            .api_boundary_nodes
+            .iter()
+            .map(|node| {
+                node.domain
+                    .clone()
+                    .expect("API BN domain was just assigned above")
+            })
+            .collect();
+
+        let ca_key = KeyPair::generate().context("generating the API BN CA key")?;
+        let mut ca_params = CertificateParams::new(Vec::new())
+            .context("building the API BN CA certificate parameters")?;
+        ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        ca_params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+        ca_params
+            .distinguished_name
+            .push(DnType::CommonName, "IC system-test local API BN CA");
+        let ca_cert = ca_params
+            .self_signed(&ca_key)
+            .context("self-signing the API BN CA certificate")?;
+
+        let leaf_key = KeyPair::generate().context("generating the API BN certificate key")?;
+        let mut leaf_params = CertificateParams::new(domains.clone())
+            .context("building the API BN certificate parameters")?;
+        leaf_params
+            .distinguished_name
+            .push(DnType::CommonName, domains[0].clone());
+        let leaf_cert = leaf_params
+            .signed_by(&leaf_key, &ca_cert, &ca_key)
+            .context("signing the API BN certificate")?;
+
+        LocalApiBoundaryNodesPlaynet {
+            cert_pem: leaf_cert.pem(),
+            key_pem: leaf_key.serialize_pem(),
+            ca_pem: ca_cert.pem(),
+        }
+        .write_attribute(env);
+
+        info!(
+            logger,
+            "Issued a local API BN certificate for {domains:?} from an ephemeral CA"
+        );
+
+        let local_backend = LocalBackend::from_test_env(env)?;
+        for node in self.api_boundary_nodes.iter() {
+            let domain = node
+                .domain
+                .as_ref()
+                .expect("API BN domain was just assigned above");
+            let ipv6 = node.ipv6.expect("API BN missing IPv6");
+            local_backend.add_dns_record(group_name, domain, IpAddr::V6(ipv6))?;
+        }
+
+        Ok(())
     }
 
     pub fn has_malicious_behaviors(&self) -> bool {

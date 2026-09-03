@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
-use ic_types::{CanisterId, PrincipalId, SubnetId};
+use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
 use icp_ledger::AccountIdentifier;
 use std::path::PathBuf;
 
@@ -45,6 +45,12 @@ pub struct ReplayToolArgs {
     #[clap(long)]
     /// Whether or not to skip prompts for user input.
     pub skip_prompts: bool,
+
+    /// The replica version under which the extra messages of the subcommand are
+    /// executed. Only needed if no consensus pool is available, otherwise the version is taken from
+    /// its finalized tip.
+    #[clap(long)]
+    pub replica_version: Option<ReplicaVersion>,
 }
 
 #[derive(Clone, Subcommand)]
@@ -115,18 +121,6 @@ pub struct UpgradeSubnetToReplicaVersionCmd {
 
 #[derive(Clone, Parser)]
 pub struct RestoreFromBackupCmd {
-    /// Registry local store path
-    pub registry_local_store_path: PathBuf,
-    /// Backup spool path
-    pub backup_spool_path: PathBuf,
-    /// The replica version to be restored
-    pub replica_version: String,
-    /// Height from which the restoration should happen
-    pub start_height: u64,
-}
-
-#[derive(Clone, Parser)]
-pub struct RestoreFromBackup2Cmd {
     /// Registry local store path
     pub registry_local_store_path: PathBuf,
     /// Backup spool path

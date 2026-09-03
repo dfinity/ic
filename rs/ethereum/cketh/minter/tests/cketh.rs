@@ -31,7 +31,7 @@ use ic_cketh_test_utils::{
     DEFAULT_USER_SUBACCOUNT, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
     DEFAULT_WITHDRAWAL_TRANSACTION, DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE,
     ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, GAS_USED, JsonRpcProvider,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, SWEEPER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use ic_management_canister_types::CanisterStatusType;
@@ -1200,9 +1200,10 @@ fn should_retrieve_minter_info() {
     assert_eq!(
         info_at_start,
         MinterInfo {
-            // The minter derives its address from a timer scheduled at install, so a
-            // fixture that has executed no round has not derived it yet.
+            // The minter derives its addresses from a timer scheduled at install, so a
+            // fixture that has executed no round has not derived them yet.
             minter_address: None,
+            sweeper_address: None,
             smart_contract_address: Some(format_ethereum_address_to_eip_55(
                 ETH_HELPER_CONTRACT_ADDRESS
             )),
@@ -1219,6 +1220,7 @@ fn should_retrieve_minter_info() {
             eth_balance: Some(Nat::from(0_u8)),
             last_gas_fee_estimate: None,
             erc20_balances: None,
+            minimum_deposit_amounts: None,
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_deposit_with_subaccount_scraped_block_number: Some(
@@ -1237,6 +1239,7 @@ fn should_retrieve_minter_info() {
         info_after_deposit,
         MinterInfo {
             minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            sweeper_address: Some(format_ethereum_address_to_eip_55(SWEEPER_ADDRESS)),
             last_observed_block_number: Some(Nat::from(new_eth_scraped_block_number)),
             eth_balance: Some(Nat::from(EXPECTED_BALANCE)),
             last_eth_scraped_block_number: Some(new_eth_scraped_block_number.into()),
@@ -1335,6 +1338,35 @@ fn decode_ledger_memo_smoke() {
         Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
         if msg.contains("Error decoding MintMemo")
     );
+}
+
+#[test]
+fn should_export_the_sweeper_funding_metrics() {
+    CkEthSetup::default()
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_cketh_burned_total 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_eth_spent_total 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeper_funding_finalized_total\{status="success"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeper_funding_finalized_total\{status="failure"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_burned_not_yet_spent 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_gas_balance 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_low_water_mark \d+ \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_target \d+ \d+")
+        .assert_contains_metric_matching(
+            r"cketh_minter_sweeper_funding_in_flight_age_seconds 0 \d+",
+        );
+}
+
+#[test]
+fn should_export_the_stored_attestation_and_authorization_metrics() {
+    CkEthSetup::default()
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_stored_attestations 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_stored_authorizations 0 \d+");
 }
 
 /// Tests with the EVM RPC canister

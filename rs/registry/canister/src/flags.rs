@@ -9,6 +9,11 @@ thread_local! {
     static IS_SUBNET_SPLITTING_ENABLED: Cell<bool> = const { Cell::new(false) };
     static IS_CHUNKIFYING_LARGE_VALUES_ENABLED: Cell<bool> = const { Cell::new(true) };
     static IS_NODE_SWAPPING_ENABLED: Cell<bool> = const { Cell::new(true) };
+
+    // TODO: When we delete this, also change integration and/or system tests
+    // that exercise this feature so that they use the release build of
+    // registry-canister, not registry-canister-test (grep for
+    // is_blank_replica_version_id_for_cloud_engines_enabled in rs/tests/).
     static IS_BLANK_REPLICA_VERSION_ID_FOR_CLOUD_ENGINES_ENABLED: Cell<bool> = const { Cell::new(true) };
 
     // Temporary flags related to the node swapping feature.
@@ -96,6 +101,10 @@ pub mod temporary_overrides {
     pub fn test_set_swapping_enabled_subnets(override_subnets: Vec<SubnetId>) {
         let policy = AccessList::allow(override_subnets);
         NODE_SWAPPING_SUBNETS_POLICY.replace(policy);
+    }
+
+    pub fn test_set_blank_replica_version_id_for_cloud_engines_enabled(override_value: bool) {
+        IS_BLANK_REPLICA_VERSION_ID_FOR_CLOUD_ENGINES_ENABLED.replace(override_value);
     }
 }
 

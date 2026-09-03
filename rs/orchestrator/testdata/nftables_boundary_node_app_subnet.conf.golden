@@ -86,7 +86,7 @@ table ip6 filter {
     #   - The rule allows a maximum of 400 persistent connections to any ip6 address.
     #   - The rule drops all new connections that goes over the configured limit.
     ct state new add @connection_limit { ip6 saddr ct count over 400 } counter name connection_limit_v6_counter drop
-    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert, mld-listener-query } accept
     ct state { invalid } drop
     ct state { established, related } accept
     ip6 saddr { ::/64 } ct state { new } tcp dport { 7070, 9091, 9100, 9324, 19531, 19100, 19522 } accept

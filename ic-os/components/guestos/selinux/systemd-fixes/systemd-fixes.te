@@ -87,6 +87,14 @@ require_read_proc_sys_kernel(systemd_detect_virt_t)
 require_read_efivarfs_files(systemd_resolved_t)
 # it wants to read certificates
 miscfiles_read_generic_certs(systemd_resolved_t)
+# systemd-resolved connects to systemd-networkd's varlink "resolve hook"
+# socket (/run/systemd/resolve.hook/io.systemd.Network) to obtain per-link DNS
+# configuration. When this is denied, resolved logs "Failed to connect to
+# resolve.hook: Permission denied" and can end up without any DNS servers for
+# the lifetime of the boot ("Failed to start query: Permission denied" for
+# every lookup), which for example makes the orchestrator unable to download
+# GuestOS upgrade images.
+allow systemd_resolved_t systemd_networkd_t : unix_stream_socket { connectto };
 
 ###############################################################################
 # systemd-cryptsetup

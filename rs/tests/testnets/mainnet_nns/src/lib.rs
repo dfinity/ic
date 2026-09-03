@@ -279,6 +279,7 @@ async fn setup_recovered_nns(
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
+            cooling_down: None,
             features: None,
             resource_limits: None,
             chain_key_config: None,
@@ -654,7 +655,7 @@ async fn test_recovered_nns(env: &TestEnv, nns_node: &IcNodeSnapshot) {
     ProposalWithMainnetState::elect_replica_version(
         nns_node,
         &env.topology_snapshot(),
-        &ReplicaVersion::try_from("1111111111111111111111111111111111111111").unwrap(),
+        &ReplicaVersion::from_str("1111111111111111111111111111111111111111").unwrap(),
         &logger,
         "2222222222222222222222222222222222222222222222222222222222222222".to_string(),
         None,

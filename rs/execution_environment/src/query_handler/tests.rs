@@ -4,10 +4,10 @@ use ic_base_types::{CanisterId, NumSeconds, PrincipalId};
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    CanisterIdRange, CanisterIdRecord, CanisterMetricsArgs, CanisterMetricsResult,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, ListCanistersResponse, LogVisibilityV2,
-    Payload,
+    CanisterIdRange, CanisterIdRecord, CanisterInfoRequest, CanisterInfoResponse,
+    CanisterMetricsArgs, CanisterMetricsResult, CanisterSettingsArgsBuilder,
+    CanisterStatusResultV2, CanisterStatusType, FetchCanisterLogsRequest,
+    FetchCanisterLogsResponse, ListCanistersResponse, LogVisibilityV2, Payload,
 };
 use ic_registry_resource_limits::ResourceLimits;
 use ic_test_utilities::universal_canister::{call_args, wasm};
@@ -1559,6 +1559,42 @@ fn composite_query_call_to_management_canister_canister_status() {
             .balance()
             .get()
     );
+}
+
+#[test]
+fn composite_query_call_to_management_canister_canister_info() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    // Canister B is controlled by the test user, not by canister A.
+    let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let payload = CanisterInfoRequest::new(canister_b, Some(10)).encode();
+    let reply = test
+        .non_replicated_query(
+            canister_a,
+            "composite_query",
+            ic00_composite_query("canister_info", payload.clone()),
+        )
+        .unwrap();
+
+    // `canister_info` is not subject to any access control, so canister A can
+    // retrieve the info of canister B and gets the same response as a query
+    // sent by the user directly to the management canister.
+    let expected = test
+        .non_replicated_query(CanisterId::ic_00(), "canister_info", payload)
+        .unwrap();
+    let info = Decode!(&reply.bytes(), CanisterInfoResponse).unwrap();
+    assert_eq!(
+        info,
+        Decode!(&expected.bytes(), CanisterInfoResponse).unwrap()
+    );
+    assert_eq!(info.controllers(), vec![test.user_id().get()]);
+    assert_eq!(
+        info.changes().len() as u64,
+        info.total_num_changes(),
+        "the whole canister history is expected to fit into the response"
+    );
+    assert_gt!(info.total_num_changes(), 0);
 }
 
 #[test]

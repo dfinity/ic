@@ -13,7 +13,7 @@ use crate::{
     DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, ERC20_HELPER_CONTRACT_ADDRESS,
     ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, LedgerBalance, MAX_TICKS,
     RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC, assert_reply,
-    format_ethereum_address_to_eip_55, new_pocket_ic,
+    format_ethereum_address_to_eip_55,
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
@@ -33,6 +33,7 @@ use ic_cketh_minter::{
 use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
+pub use ic_ledger_suite_orchestrator::candid::{Erc20Contract, LedgerInitArg};
 use ic_ledger_suite_orchestrator_test_utils::pocket_ic::LedgerSuiteOrchestrator;
 use ic_ledger_suite_orchestrator_test_utils::supported_erc20_tokens;
 use icrc_ledger_types::icrc1::account::Account;
@@ -62,7 +63,7 @@ pub struct CkErc20Setup {
 
 impl Default for CkErc20Setup {
     fn default() -> Self {
-        Self::new(Arc::new(new_pocket_ic()))
+        Self::new()
     }
 }
 
@@ -72,9 +73,36 @@ impl AsRef<CkEthSetup> for CkErc20Setup {
     }
 }
 
+/// Mainnet ckWBTC. Its `MIN_DEPOSITS` entry (0.00015 WBTC) differs from the stablecoins', so
+/// registering it gives a test a supported token whose minimum deposit amount is distinguishable
+/// from ckUSDC's and ckUSDT's.
+pub const CKWBTC_CONTRACT_ADDRESS: &str = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599";
+
+pub fn ckwbtc() -> Erc20Token {
+    Erc20Token {
+        contract: Erc20Contract {
+            chain_id: Nat::from(1_u8),
+            address: CKWBTC_CONTRACT_ADDRESS.to_string(),
+        },
+        ledger_init_arg: LedgerInitArg {
+            transfer_fee: 2_000_000_u32.into(),
+            decimals: 8,
+            token_name: "Chain-Key Wrapped Bitcoin".to_string(),
+            token_symbol: "ckWBTC".to_string(),
+            token_logo: "".to_string(),
+        },
+    }
+}
+
 impl CkErc20Setup {
-    pub fn new(env: Arc<PocketIc>) -> Self {
-        let mut ckerc20 = Self::new_without_ckerc20_active(env);
+    pub fn new() -> Self {
+        Self::with_cketh(CkEthSetup::default())
+    }
+
+    /// Activates the ckERC20 feature on an existing ckETH fixture: the balance-scan harness in
+    /// [`crate::live`] supplies one backed by a live anvil node rather than the mocked default.
+    pub(crate) fn with_cketh(cketh: CkEthSetup) -> Self {
+        let mut ckerc20 = Self::without_ckerc20_active(cketh);
         ckerc20.cketh = ckerc20
             .cketh
             .upgrade_minter_to_add_orchestrator_id(
@@ -84,8 +112,14 @@ impl CkErc20Setup {
         ckerc20
     }
 
-    pub fn new_without_ckerc20_active(env: Arc<PocketIc>) -> Self {
-        let cketh = CkEthSetup::new(env.clone());
+    pub fn new_without_ckerc20_active() -> Self {
+        Self::without_ckerc20_active(CkEthSetup::default())
+    }
+
+    /// The ckETH fixture builds the PocketIC instance; the orchestrator is then created on that
+    /// same instance so both share one replica.
+    fn without_ckerc20_active(cketh: CkEthSetup) -> Self {
+        let env = cketh.env.clone();
         let orchestrator = LedgerSuiteOrchestrator::new(
             env.clone(),
             LedgerSuiteOrchestratorInitArg {
@@ -104,34 +138,46 @@ impl CkErc20Setup {
     }
 
     pub fn add_supported_erc20_tokens(mut self) -> Self {
-        self.supported_erc20_tokens = supported_erc20_tokens();
-        for token in self.supported_erc20_tokens.iter() {
-            self.orchestrator = self
-                .orchestrator
-                .add_erc20_token(token.clone())
-                .expect_new_ledger_and_index_canisters()
-                .setup;
-            let new_ledger_id = self
-                .orchestrator
-                .call_orchestrator_canister_ids(&token.contract)
-                .unwrap()
-                .ledger
-                .unwrap();
-
-            self.cketh =
-                self.cketh
-                    .assert_has_unique_events_in_order(&[EventPayload::AddedCkErc20Token {
-                        chain_id: token.contract.chain_id.clone(),
-                        address: format_ethereum_address_to_eip_55(&token.contract.address),
-                        ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
-                        ckerc20_ledger_id: new_ledger_id,
-                    }]);
+        for token in supported_erc20_tokens() {
+            self = self.add_supported_erc20_token(token);
         }
+        self
+    }
+
+    /// Registers one more ckERC20 token with the orchestrator and the minter, on top of whatever
+    /// [`Self::add_supported_erc20_tokens`] already added.
+    pub fn add_supported_erc20_token(mut self, token: Erc20Token) -> Self {
+        self.orchestrator = self
+            .orchestrator
+            .add_erc20_token(token.clone())
+            .expect_new_ledger_and_index_canisters()
+            .setup;
+        let new_ledger_id = self
+            .orchestrator
+            .call_orchestrator_canister_ids(&token.contract)
+            .unwrap()
+            .ledger
+            .unwrap();
+
+        self.cketh =
+            self.cketh
+                .assert_has_unique_events_in_order(&[EventPayload::AddedCkErc20Token {
+                    chain_id: token.contract.chain_id.clone(),
+                    address: format_ethereum_address_to_eip_55(&token.contract.address),
+                    ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
+                    ckerc20_ledger_id: new_ledger_id,
+                }]);
+        self.supported_erc20_tokens.push(token);
         self
     }
 
     pub fn add_support_for_subaccount(mut self) -> Self {
         self.cketh = self.cketh.add_support_for_subaccount();
+        self
+    }
+
+    pub fn add_support_for_subaccount_helper(mut self, helper: Address) -> Self {
+        self.cketh = self.cketh.add_support_for_subaccount_helper(helper);
         self
     }
 

@@ -1,7 +1,6 @@
 use candid::{CandidType, Decode, Encode, Principal, Reserved};
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_management_canister_types::{CanisterLogRecord, CanisterSettings};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, Payload as _,
@@ -199,11 +198,7 @@ async fn setup(
         let cycles = if enough_cycles {
             None
         } else {
-            Some(if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                40_000_000_000
-            } else {
-                30_000_000_000
-            })
+            Some(40_000_000_000)
         };
         let migrated_canister = pic
             .create_canister_with_params(
@@ -821,22 +816,15 @@ async fn metrics() {
         0.0
     );
 
-    assert_eq!(oldest_request_age(&metrics), None);
+    assert_eq!(oldest_request_age(&metrics), 0.0);
 }
 
 const OLDEST_REQUEST_AGE_METRIC: &str = "migration_canister_oldest_request_in_flight_age_seconds";
 
 /// Reads the age (in seconds) of the oldest request in flight.
-/// Returns `None` if the metric is not set, i.e., if no request is in flight.
-fn oldest_request_age(metrics: &Scrape) -> Option<f64> {
-    let is_metric_set = metrics
-        .samples
-        .iter()
-        .any(|sample| sample.metric == OLDEST_REQUEST_AGE_METRIC);
-    if !is_metric_set {
-        return None;
-    }
-    Some(get_gauge(metrics, OLDEST_REQUEST_AGE_METRIC))
+/// The metric is always set and equal to 0 if no request is in flight.
+fn oldest_request_age(metrics: &Scrape) -> f64 {
+    get_gauge(metrics, OLDEST_REQUEST_AGE_METRIC)
 }
 
 #[tokio::test]
@@ -870,8 +858,8 @@ async fn oldest_request_in_flight_metric() {
     ))
     .await;
 
-    // Without any request in flight, the metric is not set.
-    assert_eq!(oldest_request_age(&fetch_metrics(&pic).await), None);
+    // Without any request in flight, the metric is 0.
+    assert_eq!(oldest_request_age(&fetch_metrics(&pic).await), 0.0);
 
     migrate_canister(&pic, sender, &first).await.unwrap();
     pic.advance_time(Duration::from_secs(10)).await;
@@ -883,7 +871,7 @@ async fn oldest_request_in_flight_metric() {
         get_gauge(&metrics, "migration_canister_requests_in_flight"),
         1.0
     );
-    let age = oldest_request_age(&metrics).unwrap();
+    let age = oldest_request_age(&metrics);
     assert!((10.0..100.0).contains(&age), "unexpected age {age}");
 
     // A second, younger request does not affect the metric:
@@ -894,7 +882,7 @@ async fn oldest_request_in_flight_metric() {
         get_gauge(&metrics, "migration_canister_requests_in_flight"),
         2.0
     );
-    let age = oldest_request_age(&metrics).unwrap();
+    let age = oldest_request_age(&metrics);
     assert!((10.0..100.0).contains(&age), "unexpected age {age}");
 
     // Drive both migrations to completion. We advance time by a lot so that
@@ -916,7 +904,7 @@ async fn oldest_request_in_flight_metric() {
         get_gauge(&metrics, "migration_canister_requests_in_flight"),
         0.0
     );
-    assert_eq!(oldest_request_age(&metrics), None);
+    assert_eq!(oldest_request_age(&metrics), 0.0);
 }
 
 #[tokio::test]
@@ -936,6 +924,8 @@ async fn oldest_request_in_flight_metric_reset_on_failure() {
     };
 
     migrate_canister(&pic, sender, &args).await.unwrap();
+    pic.advance_time(Duration::from_secs(10)).await;
+    pic.tick().await;
 
     // The request has been accepted and thus its age is reported by the metric.
     let metrics = fetch_metrics(&pic).await;
@@ -943,7 +933,8 @@ async fn oldest_request_in_flight_metric_reset_on_failure() {
         get_gauge(&metrics, "migration_canister_requests_in_flight"),
         1.0
     );
-    assert!(oldest_request_age(&metrics).is_some());
+    let age = oldest_request_age(&metrics);
+    assert!(age >= 10.0, "unexpected age {age}");
 
     // Validation succeeded. Now we break migration by interfering.
     pic.start_canister(migrated_canister, Some(sender))
@@ -962,7 +953,7 @@ async fn oldest_request_in_flight_metric_reset_on_failure() {
         get_gauge(&metrics, "migration_canister_requests_in_flight"),
         0.0
     );
-    assert_eq!(oldest_request_age(&metrics), None);
+    assert_eq!(oldest_request_age(&metrics), 0.0);
 }
 
 async fn concurrent_migration(

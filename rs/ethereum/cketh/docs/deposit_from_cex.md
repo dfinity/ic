@@ -129,10 +129,11 @@ _Requirements are grouped by phase, not numbered sequentially: `R11` and `R12` a
   a sweep transaction, the minter burns from its fee account on the ckETH ledger at
   least the maximum fee of that transaction; at all times, cumulative ckETH burned
   for sweeping ≥ cumulative ETH spent on sweeping. Burned-but-unspent amounts are
-  tracked and offset against subsequent burns; they are never re-minted. If the fee
-  account cannot cover a sweep, no sweep is submitted. (The burn happens ahead of
-  time: funding the sweeper address is an ordinary ckETH withdrawal from the fee
-  account, covering many sweeps — see step 0.)
+  never re-minted, and are not credited against subsequent burns either: like the
+  unspent gas of a user withdrawal, the surplus simply stays with the minter as
+  additional backing. If the fee account cannot cover a sweep, no sweep is
+  submitted. (The burn happens ahead of time: funding the sweeper address is an
+  ordinary ckETH withdrawal from the fee account, covering many sweeps — see step 0.)
 * `R15`: A single user-visible step suffices: after one `deposit_erc20`
   call, a deposit of that token arriving at the address within the pair's *scanning
   window* is credited with no further canister call by the user or frontend.
@@ -335,9 +336,10 @@ with an `icrc1_balance_of` of `1_762_128_000_000_000_000` wei ≈ 1.76 ckETH as 
    the optional fee arguments (step 1) transfers the caller-specified ckETH amount
    into the fee account (`icrc2_transfer_from`, see the variants below) — plus
    treasury top-ups and converted `deposit_fee` revenue (see Non-goals).
-1. **Daily funding task**: read the fee account's balance on the ckETH ledger and
-   the sweeper address' ETH balance (`eth_getBalance`); if the sweeper balance is
-   below its low-water mark, **withdraw ckETH from the fee account to the sweeper
+1. **Daily funding task**: compare the sweeper address' prepaid gas against its
+   low-water mark. The minter needs no chain read for this: it tracks a *lower
+   bound* on that balance from its own recorded events, and if the bound is below
+   the low-water mark it **withdraws ckETH from the fee account to the sweeper
    address** — an ordinary ckETH withdrawal through the existing pipeline (burn
    from the fee account, then send the ETH on the main address' nonce sequence).
    `R14` holds by construction, with no new burn path to audit; this pipeline is
@@ -347,10 +349,28 @@ with an `icrc1_balance_of` of `1_762_128_000_000_000_000` wei ≈ 1.76 ckETH as 
    funding is infrequent (batched to cover many sweeps) and uses the same
    resubmission machinery as withdrawals.
 
-* The sweeper address' balance *is* the `prepaid_sweep_gas` counter, reconcilable
-  on-chain with one `eth_getBalance`. Sweep gas draws it down; burned ckETH is
+* The sweeper address' balance is the `prepaid_sweep_gas` counter, and the minter
+  tracks a lower bound on it from its own events — what finalized fundings
+  delivered, less what accepted sweeps have provisioned, plus what finalized
+  sweeps handed back — and may reconcile that bound against the chain whenever it
+  chooses. A sweep provisions the most it can cost the moment it is accepted — its
+  fee ceiling, which caps every resubmission, an ERC-20 sweep moving no ETH value of
+  its own — and gets back what it did not need when it finalizes, so a sweep whose
+  finalization is never observed leaves the bound too *low* rather than too high.
+  ETH anyone else sends to the address only pushes the true balance further above
+  it. The bound therefore errs low in the safe direction for both readers: a funding
+  may be triggered earlier than strictly needed, never skipped; a sweep may be held
+  back, never authorised against gas that is not there.
+  Sweep gas draws it down; burned ckETH is
   **never re-minted**, so "cumulative burned ≥ cumulative spent" holds at every
-  instant.
+  instant. Each funding round burns for its own transfer alone: the fee a previous
+  funding provisioned but did not spend is left as backing rather than discounted
+  from the next burn, which keeps funding accounted for exactly like a user
+  withdrawal. In the same spirit, a funding whose transaction fails is not
+  reimbursed: no ETH reaches the sweeper, the failed transaction still pays for its
+  gas, and the burn minus that gas stays as backing. That is a plain-transfer send to
+  an address derived from the minter's own key, so there is no code there to revert
+  in; accepting the loss buys an accounting with no reimbursement path to audit.
 * Fundings and per-sweep effective fees are audit events; the sweeper balance and
   the fee/cost ratio are exposed on the dashboard (`R8`, `R9`) to recalibrate
   `deposit_fee` via proposal.
@@ -1063,7 +1083,7 @@ Unit tests (in `tests.rs` files per module, helpers in `test_fixtures.rs`):
 * Balance-delta crediting monotonicity across sweep interleavings (`R11`).
 * `R14` funding accounting: the burn at sweeper funding covers the transferred
   amount plus the funding fee, the sweeper balance reconciles on-chain, and the
-  surplus is never re-minted.
+  surplus is neither re-minted nor offset against the next funding's burn.
 * Event replay: state reconstructed from audit events equals live state (`R8`).
 
 Integration tests (state-machine tests in `rs/ethereum/cketh/minter/tests` with the

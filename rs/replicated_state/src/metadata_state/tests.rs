@@ -470,14 +470,7 @@ fn network_topology_roundtrip_encoding() {
         ..Default::default()
     };
 
-    let filtered_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            range(10, 19) => app_subnet_id,
-        })
-        .unwrap(),
-    );
-
-    let full_routing_table = Arc::new(
+    let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             range(10, 19) => app_subnet_id,
             range(20, 29) => engine_subnet_id,
@@ -503,16 +496,17 @@ fn network_topology_roundtrip_encoding() {
     let bitcoin_testnet_canister_id = Some(canister_test_id(100));
     let bitcoin_mainnet_canister_id = Some(canister_test_id(101));
 
-    // NetworkTopology without full_topology (non-NNS subnet).
     let network_topology = NetworkTopology::new(
-        btreemap! { app_subnet_id => app_subnet_topo.clone() },
-        filtered_routing_table.clone(),
-        canister_migrations.clone(),
+        btreemap! {
+            app_subnet_id => app_subnet_topo,
+            engine_subnet_id => engine_subnet_topo,
+        },
+        routing_table,
+        canister_migrations,
         nns_subnet_id,
-        chain_key_enabled_subnets.clone(),
+        chain_key_enabled_subnets,
         bitcoin_testnet_canister_id,
         bitcoin_mainnet_canister_id,
-        None,
         Some(app_subnet_id),
         Default::default(),
     );
@@ -520,30 +514,6 @@ fn network_topology_roundtrip_encoding() {
     let proto = pb::NetworkTopology::from(&network_topology);
     let round_trip = NetworkTopology::try_from(proto).unwrap();
     assert_eq!(network_topology, round_trip);
-
-    // NetworkTopology with full_topology (NNS subnet).
-    let network_topology_with_full = NetworkTopology::new(
-        btreemap! { app_subnet_id => app_subnet_topo.clone() },
-        filtered_routing_table,
-        canister_migrations,
-        nns_subnet_id,
-        chain_key_enabled_subnets,
-        bitcoin_testnet_canister_id,
-        bitcoin_mainnet_canister_id,
-        Some(FullTopology {
-            subnets: btreemap! {
-                app_subnet_id => app_subnet_topo,
-                engine_subnet_id => engine_subnet_topo,
-            },
-            routing_table: full_routing_table,
-        }),
-        Some(app_subnet_id),
-        Default::default(),
-    );
-
-    let proto = pb::NetworkTopology::from(&network_topology_with_full);
-    let round_trip = NetworkTopology::try_from(proto).unwrap();
-    assert_eq!(network_topology_with_full, round_trip);
 }
 
 #[test]
@@ -1012,7 +982,7 @@ fn subnet_call_contexts_metric() {
             state
                 .metadata
                 .subnet_call_context_manager
-                .retrieve_context(callback_id, &no_op_logger())
+                .retrieve_context(callback_id, UNIX_EPOCH, &no_op_logger())
                 .is_some()
         );
         assert_eq!(
@@ -1304,19 +1274,24 @@ fn canister_http_request_context(
 }
 
 /// Retrieving the response for a pay-as-you-go priced HTTP outcall retains the
-/// context for refund accounting; a legacy priced one is not retained.
+/// context for refund accounting; a legacy priced one is not retained. The
+/// retained copy is stamped with the delivery time, while the returned context
+/// keeps the time the request was made.
 #[test]
 fn retrieve_canister_http_context_retains_pay_as_you_go_contexts() {
+    const REQUEST_TIME: Time = UNIX_EPOCH;
+    let delivery_time = REQUEST_TIME + Duration::from_secs(7);
+
     for (pricing_version, retained) in [
         (PricingVersion::PayAsYouGo, true),
         (PricingVersion::Legacy, false),
     ] {
         let mut manager = SubnetCallContextManager::default();
-        let context = canister_http_request_context(pricing_version, UNIX_EPOCH);
+        let context = canister_http_request_context(pricing_version, REQUEST_TIME);
         let callback_id =
             manager.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
 
-        match manager.retrieve_context(callback_id, &no_op_logger()) {
+        match manager.retrieve_context(callback_id, delivery_time, &no_op_logger()) {
             Some(SubnetCallContext::CanisterHttpRequest(retrieved)) => {
                 assert_eq!(context, retrieved)
             }
@@ -1327,7 +1302,13 @@ fn retrieve_canister_http_context_retains_pay_as_you_go_contexts() {
 
         let delivered = manager.delivered_canister_http_request_contexts;
         if retained {
-            assert_eq!(btreemap! { callback_id => context }, delivered);
+            // Identical to the original context, except for the `time`, which is
+            // restamped with the delivery time.
+            let expected = CanisterHttpRequestContext {
+                time: delivery_time,
+                ..context
+            };
+            assert_eq!(btreemap! { callback_id => expected }, delivered);
         } else {
             assert!(delivered.is_empty());
         }
@@ -1335,23 +1316,29 @@ fn retrieve_canister_http_context_retains_pay_as_you_go_contexts() {
 }
 
 /// Delivered contexts are timed out (and returned along with their callback IDs)
-/// once `DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT` has elapsed since the
-/// request was made, and retained until then.
+/// once `DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT` has elapsed since their
+/// response was delivered, and retained until then.
 #[test]
 fn time_out_delivered_canister_http_request_contexts() {
     let mut manager = SubnetCallContextManager::default();
-    // Two contexts, made 1 second apart.
+    // Two contexts, both made at `UNIX_EPOCH` but delivered 1 second apart. The
+    // retention timeout runs from the delivery time, so the delivered contexts
+    // carry that time rather than the request time.
     let contexts: Vec<_> = [0, 1]
         .iter()
         .map(|i| {
-            let context = canister_http_request_context(
-                PricingVersion::PayAsYouGo,
-                UNIX_EPOCH + Duration::from_secs(*i),
-            );
+            let delivery_time = UNIX_EPOCH + Duration::from_secs(*i);
+            let context = canister_http_request_context(PricingVersion::PayAsYouGo, UNIX_EPOCH);
             let callback_id =
                 manager.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
-            manager.retrieve_context(callback_id, &no_op_logger());
-            (callback_id, context)
+            manager.retrieve_context(callback_id, delivery_time, &no_op_logger());
+            (
+                callback_id,
+                CanisterHttpRequestContext {
+                    time: delivery_time,
+                    ..context
+                },
+            )
         })
         .collect();
     assert_eq!(2, manager.delivered_canister_http_request_contexts.len());
@@ -1619,11 +1606,11 @@ fn network_topology_ecdsa_subnets() {
 }
 
 #[test]
-fn network_topology_route_uses_filtered_topology() {
+fn network_topology_routing() {
     let subnet_a = subnet_test_id(1);
     let subnet_b = subnet_test_id(2);
 
-    // The filtered routing table only contains subnet_a's range.
+    // The routing table only contains subnet_a's range.
     let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
@@ -1631,8 +1618,7 @@ fn network_topology_route_uses_filtered_topology() {
         .unwrap(),
     );
 
-    // The filtered subnets map only contains subnet_a.
-    // subnet_b exists in the network but is not visible to this subnet.
+    // The subnets map only contains subnet_a.
     let network_topology = NetworkTopology {
         subnets: btreemap! {
             subnet_a => SubnetTopology::default(),
@@ -1645,101 +1631,20 @@ fn network_topology_route_uses_filtered_topology() {
 
     // --- Canister ID routing ---
 
-    // Canister on subnet_a: resolvable via the filtered routing table.
+    // Canister on subnet_a: resolvable via the routing table.
     assert_eq!(
         network_topology.route(canister_test_id(50).get()),
         Some(subnet_a),
     );
-    // Canister 150 is not in the filtered routing table at all.
+    // Canister 150 is not in the routing table at all.
     assert_eq!(network_topology.route(canister_test_id(150).get()), None);
 
     // --- Subnet ID routing ---
 
-    // subnet_a is in the filtered subnets map.
+    // subnet_a is in the subnets map.
     assert_eq!(network_topology.route(subnet_a.get()), Some(subnet_a));
-    // subnet_b is NOT in the filtered subnets map.
+    // subnet_b is NOT in the subnets map.
     assert_eq!(network_topology.route(subnet_b.get()), None);
-}
-
-#[test]
-fn subnets_for_certification_falls_back_to_filtered() {
-    let subnet_a = subnet_test_id(1);
-
-    let routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-        })
-        .unwrap(),
-    );
-
-    let network_topology = NetworkTopology {
-        subnets: btreemap! {
-            subnet_a => SubnetTopology::default(),
-        },
-        routing_table: routing_table.clone(),
-        ..Default::default()
-    };
-
-    // Without full_topology, subnets_for_certification returns the filtered map.
-    assert_eq!(
-        network_topology.subnets_for_certification(),
-        network_topology.subnets()
-    );
-    assert_eq!(network_topology.routing_table(), &routing_table);
-    assert_eq!(
-        network_topology.routing_table_for_certification(),
-        network_topology.routing_table()
-    );
-}
-
-#[test]
-fn subnets_for_certification_returns_full_topology_when_set() {
-    use crate::metadata_state::testing::NetworkTopologyTesting;
-
-    let subnet_a = subnet_test_id(1);
-    let subnet_b = subnet_test_id(2); // e.g., a cloud engine
-
-    let full_subnets = btreemap! {
-        subnet_a => SubnetTopology::default(),
-        subnet_b => SubnetTopology::default(),
-    };
-    let full_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-            CanisterIdRange { start: CanisterId::from(100_u64), end: CanisterId::from(199_u64) } => subnet_b,
-        })
-        .unwrap(),
-    );
-
-    let filtered_subnets = btreemap! {
-        subnet_a => SubnetTopology::default(),
-    };
-    let filtered_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-        })
-        .unwrap(),
-    );
-
-    let mut network_topology = NetworkTopology {
-        subnets: filtered_subnets.clone(),
-        routing_table: filtered_routing_table.clone(),
-        ..Default::default()
-    };
-    network_topology.set_full_topology(Some(FullTopology {
-        subnets: full_subnets.clone(),
-        routing_table: full_routing_table.clone(),
-    }));
-
-    // subnets() and routing_table() return the filtered view.
-    assert_eq!(network_topology.subnets(), &filtered_subnets);
-    assert_eq!(network_topology.routing_table(), &filtered_routing_table);
-    // subnets_for_certification() and routing_table_for_certification() return the full view.
-    assert_eq!(network_topology.subnets_for_certification(), &full_subnets);
-    assert_eq!(
-        network_topology.routing_table_for_certification(),
-        &full_routing_table
-    );
 }
 
 /// Test fixture that will produce an ingress status of type completed or failed,
@@ -1932,7 +1837,7 @@ fn ingress_history_respects_limits() {
     let run_test = |num_statuses, max_num_terminal| {
         let mut ingress_history = IngressHistoryState::default();
 
-        assert_eq!(ingress_history.memory_usage, 0);
+        assert_eq!(ingress_history.stats.memory_usage, 0);
 
         let terminal_size =
             NumBytes::from(max_num_terminal * test_status_terminal(0).payload_bytes() as u64);
@@ -2879,13 +2784,14 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     );
 }
 
-/// The `replicated_state_consumed_cycles_since_replica_started` gauge is
-/// computed in `ReplicatedStateMetrics::observe` by summing the per-canister
-/// totals with the subnet-level use cases. This test exercises every
-/// subnet-level use case that contributes to the total, so that omitting any of
-/// them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use cases once were)
-/// would change the reported value and fail the assertion. Distinct powers of
-/// two are used so that a missing use case is always detectable in the total.
+/// The `replicated_state_consumed_cycles_since_replica_started` gauge is set in
+/// `ReplicatedStateMetrics::observe` from
+/// [`SubnetMetrics::consumed_cycles_total_including_canisters`]. This test
+/// exercises every subnet-level use case that contributes to the total, so that
+/// omitting any of them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use
+/// cases once were) would change the reported value and fail the assertion, plus
+/// the canisters' part of the total. Distinct powers of two are used so that a
+/// missing contribution is always detectable in the total.
 #[test]
 fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
     // The three use cases with a dedicated scalar field are also mirrored in the
@@ -2901,7 +2807,7 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
 
     // The canister-level use cases are also present in the by-use-case map (in
     // production they end up there via deleted canisters), but the gauge derives
-    // their contribution from the per-canister totals and the
+    // their contribution from the canisters' part of the stored aggregate and the
     // `consumed_cycles_by_deleted_canisters` scalar rather than from the map.
     // Insert them with a large value to ensure they are *not* double-counted
     // into the gauge total from the map.
@@ -2918,13 +2824,14 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         consumed_cycles_by_use_case.insert(use_case, NominalCycles::new(1024));
     }
 
-    let subnet_metrics = SubnetMetrics {
+    let mut subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(1),
         consumed_cycles_ecdsa_outcalls: NominalCycles::new(2),
         consumed_cycles_http_outcalls: NominalCycles::new(4),
         consumed_cycles_by_use_case,
         ..Default::default()
     };
+    subnet_metrics.refresh_consumed_cycles(NominalCycles::new(64));
 
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
     state.metadata.subnet_metrics = subnet_metrics;
@@ -2939,19 +2846,19 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
     );
 
     // Deleted canisters (1) + ECDSA (2) + HTTP (4) + Schnorr (8) + VetKd (16)
-    // + dropped messages (32) = 63. There are no canisters, so the per-canister
-    // contribution is zero, and the canister-level use cases inserted into the
-    // map above (each worth 1024) must not appear in the total.
+    // + dropped messages (32) + the canisters' part (64) = 127. The
+    // canister-level use cases inserted into the map above (each worth 1024)
+    // must not appear in the total.
     let gauge = fetch_gauge(
         &registry,
         "replicated_state_consumed_cycles_since_replica_started",
     )
     .unwrap();
-    assert_eq!(gauge, 63.0);
+    assert_eq!(gauge, 127.0);
 }
 
 #[test]
-fn observe_use_case_migrates_outcalls_scalar_fields_into_use_cases() {
+fn migrate_outcalls_scalar_fields_into_use_cases() {
     let mut subnet_metrics = SubnetMetrics {
         // Simulate a state persisted before use-case tracking existed: the scalar
         // fields hold the full history while the use-case entries only cover a
@@ -2969,10 +2876,12 @@ fn observe_use_case_migrates_outcalls_scalar_fields_into_use_cases() {
         ..Default::default()
     };
 
-    // Observing an *unrelated* use case triggers the migration, i.e. it runs
-    // independently of whether the HTTP/ECDSA scalar fields are observed.
+    // An unrelated use case is observed, as would happen during a round.
     subnet_metrics
         .observe_consumed_cycles_with_use_case(CyclesUseCase::Instructions, NominalCycles::new(5));
+
+    // The migration runs unconditionally at the end of the round.
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
 
     let by_use_case = subnet_metrics.get_consumed_cycles_by_use_case();
 
@@ -3044,6 +2953,11 @@ fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
     subnet_metrics
         .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, NominalCycles::new(5));
 
+    // The migration runs unconditionally at the end of the round. Because both
+    // the scalar and the use-case entry grew by the same amount, reconciling
+    // after the increments yields the same result as reconciling before them.
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
+
     // The use-case entry caught up to the (superset) scalar and grew by 5, with
     // no double counting.
     assert_eq!(
@@ -3061,6 +2975,47 @@ fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
         subnet_metrics.get_consumed_cycles_by_use_case_as_counters()[&CyclesUseCase::HTTPOutcalls],
         NominalCycles::new(65)
     );
+}
+
+#[test]
+fn migrate_outcalls_scalar_fields_without_any_observation() {
+    // A subnet that consumed ECDSA outcall cycles before use-case tracking
+    // existed and has been idle (in subnet-level terms) ever since: no outcall,
+    // no canister deletion, no dropped message. Nothing observes a use case, so
+    // the counters map is empty.
+    let mut subnet_metrics = SubnetMetrics {
+        consumed_cycles_ecdsa_outcalls: NominalCycles::new(200),
+        consumed_cycles_by_use_case: BTreeMap::from([(
+            CyclesUseCase::ECDSAOutcalls,
+            NominalCycles::new(150),
+        )]),
+        ..Default::default()
+    };
+
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
+
+    // The stale entry was backfilled without any use case being observed.
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_by_use_case()[&CyclesUseCase::ECDSAOutcalls],
+        NominalCycles::new(200)
+    );
+    // A zero scalar does not insert a spurious entry.
+    assert!(
+        !subnet_metrics
+            .get_consumed_cycles_by_use_case()
+            .contains_key(&CyclesUseCase::HTTPOutcalls)
+    );
+    // The counters map is left untouched, i.e. still empty.
+    assert!(
+        subnet_metrics
+            .get_consumed_cycles_by_use_case_as_counters()
+            .is_empty()
+    );
+
+    // Idempotent: running it again changes nothing.
+    let before = subnet_metrics.get_consumed_cycles_by_use_case().clone();
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
+    assert_eq!(subnet_metrics.get_consumed_cycles_by_use_case(), &before);
 }
 
 impl From<(u64, u64)> for BlockmakerStats {
@@ -3157,7 +3112,7 @@ fn blockmaker_metrics_time_series_check_observe_works() {
             .is_none()
     );
 
-    // Check `observe()` does nothing with a batch time before the last obseration.
+    // Check `observe()` does nothing with a batch time before the last observation.
     let metrics_before = metrics.clone();
     metrics.observe(
         batch_time,

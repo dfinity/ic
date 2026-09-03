@@ -9,11 +9,10 @@ use crate::driver::farm::{Farm, VmType};
 use crate::driver::ic::VmResources;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use crate::driver::ic::{ImageSizeGiB, VmResourceOverrides};
+use crate::driver::ic_images::get_empty_disk_image;
 use crate::driver::nested::{NestedNode, NestedNodeSpec};
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::{
-    get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
-};
+use crate::driver::test_env_api::{get_guestos_img_sha256, get_guestos_img_url};
 use crate::driver::test_setup::{GroupSetup, SystemTestBackend};
 use crate::driver::universal_vm::UniversalVm;
 use anyhow;
@@ -33,7 +32,11 @@ const DEFAULT_VM_RESOURCES: VmResources = VmResources {
 };
 
 pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(8);
-pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(33554432); // 32GiB
+/// Allocates 16 GiB so the nested GuestOS retains the standard 4 GiB
+/// ([`DEFAULT_MEMORY_KIB_PER_VM`]) after the two host deductions: 8 GiB for
+/// HostOS ([`HOSTOS_MEMORY_RESERVED_GIB`]) and 4 GiB for the upgrade VM
+/// (`UPGRADE_VM_MEMORY_GIB` in `rs/ic_os/os_tools/guest_vm_runner/src/guest_vm_config.rs`).
+pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(16 * 1024 * 1024); // 16GiB
 const DEFAULT_NESTED_VM_RESOURCES: VmResources = VmResources {
     vcpus: HOSTOS_VCPUS_PER_VM,
     memory_kibibytes: HOSTOS_MEMORY_KIB_PER_VM,
@@ -235,15 +238,7 @@ pub fn get_resource_request_for_nested_nodes(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let empty_disk_img_url = get_empty_disk_img_url()?;
-    let empty_disk_img_sha256 = get_empty_disk_img_sha256()?;
-
-    // Add a VM request for each node.
-    let mut res_req = ResourceRequest::new(DiskImage::Url {
-        ic_os_image: true,
-        url: empty_disk_img_url,
-        sha256: empty_disk_img_sha256,
-    });
+    let mut res_req = ResourceRequest::new(get_empty_disk_image(test_env)?);
     let group_setup = GroupSetup::read_attribute(test_env);
     let group_resource_overrides = group_setup.vm_resource_overrides;
     res_req.group_name = group_name.to_string();

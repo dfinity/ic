@@ -11,6 +11,29 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-08-21: Proposal 143658
+
+http://dashboard.internetcomputer.org/proposal/143658
+
+## Fixed
+
+* `insert_sns_specific_upgrade_path_entry` now actually replaces an
+  SNS-specific emergency upgrade step when called again for the same SNS
+  and starting version, instead of silently keeping the old step while
+  reporting success.
+
+
+# 2026-08-14: Proposal 143578
+
+http://dashboard.internetcomputer.org/proposal/143578
+
+## Fixed
+
+* `get_available_sns_subnet` now rotates through all configured SNS subnets
+  (round-robin, based on the number of SNSs already deployed) instead of
+  always deploying new SNSes to the first subnet in `sns_subnet_ids`.
+
+
 # 2026-07-24: Proposal 143073
 
 http://dashboard.internetcomputer.org/proposal/143073
