@@ -21,6 +21,12 @@
 //! counter overflows, the value of the counter is the initial value minus the
 //! sum of cost of all executed instructions.
 //!
+//! There is a second check at each reentrant block: Whether the current message
+//! has exceeded the maximum number of accessed heap pages. It does so by checking
+//! the injected global "canister pending_trap_code", which is written to by the
+//! deterministic memory tracker if the limit is exceeded. In that case, the execution
+//! is aborted by calling "internal_trap".
+//!
 //! In more details, first, it inserts up to five System API functions:
 //!
 //! ```wasm
@@ -35,8 +41,19 @@
 //! It then inserts (and exports) a global mutable counter:
 //! ```wasm
 //! (global (;0;) (mut i64) (i64.const 0))
-//! (export "canister counter_instructions" (global 0)))
+//! (export "canister counter_instructions" (global 0))
+//! (export "canister counter_dirty_pages" (global 1))
+//! (export "canister counter_accessed_pages" (global 2))
+//! (export "canister pending_trap_code" (global 3))
 //! ```
+//!
+//! The first counts instructions; the next two count dirty and accessed pages
+//! in the stable memory. The last holds an `InternalErrorCode` to be raised at
+//! the next reentrant basic block, or zero if no trap is pending. Unlike the
+//! counters it is an i32, so that its value can be passed straight to
+//! `internal_trap`, and it is excluded from the globals persisted in the
+//! execution state (see `get_exported_globals`), so it starts at zero on every
+//! instance.
 //!
 //! An additional function is also inserted to handle updates to the instruction
 //! counter for bulk memory instructions whose cost can only be determined at
@@ -73,21 +90,29 @@
 //! global.set 0
 //! ```
 //!
-//! and a decrementation with a counter overflow check at the beginning of every
-//! reentrant block (a function or a loop body):
+//! and a decrementation followed by a pending trap check and a counter overflow
+//! check at the beginning of every reentrant block (a function or a loop body):
 //!
 //! ```wasm
 //! global.get 0
 //! i64.const 8
 //! i64.sub
 //! global.set 0
+//! global.get 3
+//! if  ;; label = @1
+//!   global.get 3
+//!   call 3           # the `internal_trap` function
+//! end
 //! global.get 0
 //! i64.const 0
 //! i64.lt_s
 //! if  ;; label = @1
-//!   (call x)
+//!   call 0           # the `out_of_instructions` function
 //! end
 //! ```
+//!
+//! The pending trap code is checked before the instruction counter so
+//! that a memory limit violation traps before an out of instructions trap.
 //!
 //! Before every bulk memory operation, a call is made to the function which
 //! will decrement the instruction counter by the "size" argument of the bulk
