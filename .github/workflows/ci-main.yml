@@ -872,111 +872,20 @@ jobs:
     with:
       commit-sha: ${{ github.sha }}
 
-  test-container-run:
-    name: Test Container Run ${{ matrix.name }}
+  test-container-run-preflight:
+    # Decides once whether the test-container-run matrix below runs at all, so
+    # its legs only allocate runners when the container tooling changed (or on
+    # master and the release branches), and the pin and TAG checks run once
+    # instead of once per leg.
+    name: Test Container Run preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Happy paths: the pinned image is pulled by digest, verified and run.
-          - name: ic-dev default
-            setup: ""
-            command: ""
-            expect: success
-            runtime: podman
-          - name: ic-build
-            setup: ""
-            command: "--image ic-build bash"
-            expect: success
-            runtime: podman
-          # A local image squatting on the tag must be ignored: the pinned digest
-          # is pulled and run instead, and the tag is re-pointed to it (checked by
-          # the "Verify the poisoned tag ..." step below). The squatter is an
-          # empty image that cannot run anything, so a successful `true` already
-          # proves the pinned image ran.
-          - name: poisoned local tag
-            setup: |
-              tar -cf empty.tar -T /dev/null
-              repo=ghcr.io/dfinity
-              sudo podman import empty.tar "$repo/ic-dev:$(< ci/container/TAG)"
-            command: "true"
-            expect: success
-            runtime: podman
-          # A tampered pin must be refused before anything is pulled or built.
-          - name: malformed pin refused
-            setup: echo not-a-digest > ci/container/ic-dev.digest
-            command: "true"
-            expect: "refusing to pull an unpinned image"
-            runtime: podman
-          # A well-formed pin the registry does not serve: the pull fails and, by
-          # default, neither a local build nor a cached image is used.
-          - name: unknown digest refused
-            setup: printf 'sha256:%064d\n' 0 > ci/container/ic-dev.digest
-            command: "true"
-            expect: "refusing to build an unpinned image locally"
-            runtime: podman
-          # The same failed pull while a local image squats on the tag: the cached
-          # mutable-tag image must not be run either (only
-          # CONTAINER_RUN_ALLOW_UNPINNED=1 permits that), so this still refuses.
-          - name: unknown digest with poisoned local tag refused
-            setup: |
-              tar -cf empty.tar -T /dev/null
-              repo=ghcr.io/dfinity
-              sudo podman import empty.tar "$repo/ic-dev:$(< ci/container/TAG)"
-              printf 'sha256:%064d\n' 0 > ci/container/ic-dev.digest
-            command: "true"
-            expect: "refusing to build an unpinned image locally"
-            runtime: podman
-          # Edited container inputs (ci/container/{Dockerfile,init.sh,files/*}): no
-          # reviewed digest exists for the computed tag, so by default the script
-          # refuses without pulling or building anything. The setup step edits the
-          # input after the TAG-sync gate below has passed on the pristine checkout.
-          - name: edited inputs refused
-            setup: echo '# edited after the sync check' >> ci/container/Dockerfile
-            command: "true"
-            expect: "refusing to run an unpinned image"
-            runtime: podman
-          # With the explicit opt-out, an image cached under the computed tag is
-          # reused instead of being rebuilt, and the script must say that it is
-          # unverified. The cache is seeded by re-tagging the pinned image.
-          - name: edited inputs with opt-out reuses local image
-            setup: |
-              echo '# edited after the sync check' >> ci/container/Dockerfile
-              repo=ghcr.io/dfinity
-              pinned="$repo/ic-dev@$(< ci/container/ic-dev.digest)"
-              sudo podman pull "$pinned"
-              sudo podman tag "$pinned" "$repo/ic-dev:$(ci/container/get-image-tag.sh)"
-            command: "true"
-            allow_unpinned: "1"
-            expect: success
-            expect_warning: "NOT verified against a reviewed digest pin"
-            runtime: podman
-          - name: docker runtime
-            setup: ""
-            command: "true"
-            expect: success
-            runtime: docker
+    timeout-minutes: 10
+    outputs:
+      # 'true' only when the container tests are due and ci/container/TAG is in
+      # sync with the container inputs; 'false' or empty otherwise.
+      run: ${{ steps.sync.outputs.in_sync }}
     steps:
       - *checkout
-      - name: Workaround for actions/runner-images#14473 (crun pinning)
-        if: matrix.runtime == 'podman'
-        run: |
-          # Workaround for actions/runner-images#14473:
-          # Podman 5.x on ubuntu-24.04/22.04 picks /usr/bin/crun (1.14.1) over
-          # /usr/local/bin/crun (1.28). Pin it explicitly.
-          #
-          # container-run.sh always invokes podman as `sudo podman`, which
-          # resets $HOME, so a per-user containers.conf drop-in under $HOME
-          # would never be seen by (rootful) podman. Instead, use
-          # container-run.sh's own ~/.container-run.conf hook: it is sourced
-          # in the invoking (non-root) shell *before* `sudo podman run` is
-          # exec'd, and PODMAN_RUN_USR_ARGS is appended as CLI args to that
-          # `podman run` call -- which, unlike $HOME, survive sudo.
-          if command -v podman &>/dev/null && [ -x /usr/local/bin/crun ]; then
-            echo 'PODMAN_RUN_USR_ARGS=(--runtime /usr/local/bin/crun)' >>~/.container-run.conf
-          fi
       - name: Filter Relevant Files
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
@@ -1045,11 +954,12 @@ jobs:
         run: |
           # When TAG is out of sync there is no reviewed digest for the working
           # tree and container-run.sh refuses to run (it only builds locally with
-          # CONTAINER_RUN_ALLOW_UNPINNED=1), so every leg below would fail. On a
-          # pull request that state is transient: the container-autobuild.yml bot
-          # commit brings TAG and *.digest in sync and re-triggers CI. (PRs from
-          # forks cannot change the container inputs: touching ci/* closes them
-          # automatically, see .github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST.)
+          # CONTAINER_RUN_ALLOW_UNPINNED=1), so every test-container-run leg
+          # would fail. On a pull request that state is transient: the
+          # container-autobuild.yml bot commit brings TAG and *.digest in sync and
+          # re-triggers CI. (PRs from forks cannot change the container inputs:
+          # touching ci/* closes them automatically, see
+          # .github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST.)
           # Anywhere else (push to master, the merge queue, release-testing on
           # rc--/hotfix-, a manual dispatch) it means that commit never landed,
           # so fail.
@@ -1065,11 +975,118 @@ jobs:
             echo "::error file=ci/container/TAG::ci/container/TAG ($pinned) does not match the container inputs (computed $computed): the container-autobuild.yml commit did not land on $BRANCH_NAME ($CI_EVENT_NAME)"
             exit 1
           fi
+  test-container-run:
+    name: Test Container Run ${{ matrix.name }}
+    needs: test-container-run-preflight
+    if: needs.test-container-run-preflight.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Happy paths: the pinned image is pulled by digest, verified and run.
+          - name: ic-dev default
+            setup: ""
+            command: ""
+            expect: success
+            runtime: podman
+          - name: ic-build
+            setup: ""
+            command: "--image ic-build bash"
+            expect: success
+            runtime: podman
+          # A local image squatting on the tag must be ignored: the pinned digest
+          # is pulled and run instead, and the tag is re-pointed to it (checked by
+          # the "Verify the poisoned tag ..." step below). The squatter is an
+          # empty image that cannot run anything, so a successful `true` already
+          # proves the pinned image ran.
+          - name: poisoned local tag
+            setup: |
+              tar -cf empty.tar -T /dev/null
+              repo=ghcr.io/dfinity
+              sudo podman import empty.tar "$repo/ic-dev:$(< ci/container/TAG)"
+            command: "true"
+            expect: success
+            runtime: podman
+          # A tampered pin must be refused before anything is pulled or built.
+          - name: malformed pin refused
+            setup: echo not-a-digest > ci/container/ic-dev.digest
+            command: "true"
+            expect: "refusing to pull an unpinned image"
+            runtime: podman
+          # A well-formed pin the registry does not serve: the pull fails and, by
+          # default, neither a local build nor a cached image is used.
+          - name: unknown digest refused
+            setup: printf 'sha256:%064d\n' 0 > ci/container/ic-dev.digest
+            command: "true"
+            expect: "refusing to build an unpinned image locally"
+            runtime: podman
+          # The same failed pull while a local image squats on the tag: the cached
+          # mutable-tag image must not be run either (only
+          # CONTAINER_RUN_ALLOW_UNPINNED=1 permits that), so this still refuses.
+          - name: unknown digest with poisoned local tag refused
+            setup: |
+              tar -cf empty.tar -T /dev/null
+              repo=ghcr.io/dfinity
+              sudo podman import empty.tar "$repo/ic-dev:$(< ci/container/TAG)"
+              printf 'sha256:%064d\n' 0 > ci/container/ic-dev.digest
+            command: "true"
+            expect: "refusing to build an unpinned image locally"
+            runtime: podman
+          # Edited container inputs (ci/container/{Dockerfile,init.sh,files/*}): no
+          # reviewed digest exists for the computed tag, so by default the script
+          # refuses without pulling or building anything. The setup step edits the
+          # input after the preflight job's TAG-sync gate has passed on the pristine
+          # checkout.
+          - name: edited inputs refused
+            setup: echo '# edited after the sync check' >> ci/container/Dockerfile
+            command: "true"
+            expect: "refusing to run an unpinned image"
+            runtime: podman
+          # With the explicit opt-out, an image cached under the computed tag is
+          # reused instead of being rebuilt, and the script must say that it is
+          # unverified. The cache is seeded by re-tagging the pinned image.
+          - name: edited inputs with opt-out reuses local image
+            setup: |
+              echo '# edited after the sync check' >> ci/container/Dockerfile
+              repo=ghcr.io/dfinity
+              pinned="$repo/ic-dev@$(< ci/container/ic-dev.digest)"
+              sudo podman pull "$pinned"
+              sudo podman tag "$pinned" "$repo/ic-dev:$(ci/container/get-image-tag.sh)"
+            command: "true"
+            allow_unpinned: "1"
+            expect: success
+            expect_warning: "NOT verified against a reviewed digest pin"
+            runtime: podman
+          - name: docker runtime
+            setup: ""
+            command: "true"
+            expect: success
+            runtime: docker
+    steps:
+      - *checkout
+      - name: Workaround for actions/runner-images#14473 (crun pinning)
+        if: matrix.runtime == 'podman'
+        run: |
+          # Workaround for actions/runner-images#14473:
+          # Podman 5.x on ubuntu-24.04/22.04 picks /usr/bin/crun (1.14.1) over
+          # /usr/local/bin/crun (1.28). Pin it explicitly.
+          #
+          # container-run.sh always invokes podman as `sudo podman`, which
+          # resets $HOME, so a per-user containers.conf drop-in under $HOME
+          # would never be seen by (rootful) podman. Instead, use
+          # container-run.sh's own ~/.container-run.conf hook: it is sourced
+          # in the invoking (non-root) shell *before* `sudo podman run` is
+          # exec'd, and PODMAN_RUN_USR_ARGS is appended as CLI args to that
+          # `podman run` call -- which, unlike $HOME, survive sudo.
+          if command -v podman &>/dev/null && [ -x /usr/local/bin/crun ]; then
+            echo 'PODMAN_RUN_USR_ARGS=(--runtime /usr/local/bin/crun)' >>~/.container-run.conf
+          fi
       - name: Set up "${{ matrix.name }}"
-        if: steps.sync.outputs.in_sync == 'true' && matrix.setup != ''
+        if: matrix.setup != ''
         run: ${{ matrix.setup }}
       - name: Test Container Run
-        if: steps.sync.outputs.in_sync == 'true'
         env:
           CONTAINER_RUNTIME: ${{ matrix.runtime }}
           # Empty for every leg that does not set allow_unpinned, which the script
@@ -1122,7 +1139,7 @@ jobs:
             exit 1
           fi
       - name: Verify the poisoned tag was re-pointed to the verified image
-        if: steps.sync.outputs.in_sync == 'true' && matrix.name == 'poisoned local tag'
+        if: matrix.name == 'poisoned local tag'
         run: |
           set -euo pipefail
           repo=ghcr.io/dfinity
