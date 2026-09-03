@@ -24,7 +24,7 @@ use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, Syste
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
 use ic_test_utilities_metrics::{
-    HistogramStats, MetricVec, fetch_counter, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
+    HistogramStats, MetricVec, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
     fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec,
     metric_vec, nonzero_values,
 };
@@ -1569,11 +1569,11 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
     }
 }
 
-/// The exported total counter is the subnet-level aggregate (already monotonic)
-/// plus the canisters' `consumed_cycles_as_counter`; i.e. the gauge it mirrors, net
-/// of the outstanding prepayments.
+/// The exported total is the subnet-level aggregate (already monotonic) plus the
+/// canisters' `consumed_cycles_as_counter`; i.e. the certified
+/// `consumed_cycles_total_including_canisters`, net of the outstanding prepayments.
 #[test]
-fn consumed_cycles_total_as_counter_is_exported() {
+fn consumed_cycles_total_is_exported_net_of_outstanding_prepayments() {
     let mut test = SchedulerTestBuilder::new().build();
     let canister = test.create_canister();
 
@@ -1583,17 +1583,17 @@ fn consumed_cycles_total_as_counter_is_exported() {
 
     observe_state_metrics(&mut test, 0);
 
-    let gauge = fetch_gauge(
+    let certified_total = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_total_including_canisters();
+    let exported = fetch_gauge(
         test.metrics_registry(),
         "replicated_state_consumed_cycles_since_replica_started",
     )
     .unwrap();
-    let counter = fetch_counter(
-        test.metrics_registry(),
-        "replicated_state_consumed_cycles_since_replica_started_as_counter",
-    )
-    .unwrap();
-    assert_eq!(gauge - outstanding.get() as f64, counter);
+    assert_eq!((certified_total - outstanding).get() as f64, exported);
 }
 
 #[test]

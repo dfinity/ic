@@ -1669,24 +1669,11 @@ impl SystemState {
     /// executing on one subnet, but for which a response may only be produced by
     /// another subnet.
     pub fn drop_in_progress_management_calls_after_split(&mut self) {
-        // Remove aborted install code task.
+        // Remove aborted install code task and fully refund the prepaid execution
+        // cycles.
         //
         // Note that this cannot be a paused install code task, because we abort all
         // paused tasks before triggering the split.
-        //
-        // Refund the execution cycles prepaid for the dropped `install_code` in full.
-        // The canister has nothing to show for them: an aborted execution discards the
-        // slices it had already run and starts over when retried, and this one is
-        // never retried -- subnet A' rejects the corresponding call, unwinding the
-        // operation there as well.
-        //
-        // This also keeps the consumed cycles metrics consistent. Dropping the task
-        // without refunding would leave the prepayment in the gauges with nothing left
-        // in the state to account for it, breaking the invariant on
-        // `Self::outstanding_prepayments`; and the monotonic counters, which only
-        // account for a prepayment once its refund is known, would never see it at
-        // all. A full refund lowers the gauges by the prepayment and adds nothing to
-        // the counters, which is exactly right: nothing was consumed.
         if let Some(prepaid_execution_cycles) = self.task_queue.remove_aborted_install_code_task() {
             self.refund_cycles(prepaid_execution_cycles, prepaid_execution_cycles);
         }
@@ -2381,9 +2368,9 @@ impl SystemState {
         Some(outstanding)
     }
 
-    /// The value that [`CanisterMetrics::consumed_cycles_as_counter`] must have,
-    /// derived from the [`CanisterMetrics::consumed_cycles`] gauge, which predates
-    /// it and thus holds the full history.
+    /// Backfills [`CanisterMetrics::consumed_cycles_as_counter`] from the
+    /// [`CanisterMetrics::consumed_cycles`] gauge, which predates it and thus holds
+    /// the full history.
     ///
     /// This derivation is exact, thanks to the invariant documented on
     /// [`Self::outstanding_prepayments`]: the gauge differs from the counter by
@@ -2393,31 +2380,21 @@ impl SystemState {
     /// counter this way is idempotent, so it is safe to redo it in every round and
     /// after a downgrade has dropped the counter.
     ///
-    /// Returns `None` if the canister has a paused execution whose prepayment is not
-    /// part of the replicated state (see [`Self::outstanding_prepayments`]).
-    pub fn migrated_consumed_cycles_as_counter(&self) -> Option<NominalCycles> {
-        let outstanding = self.outstanding_prepayments()?;
+    /// Returns `false` (leaving the counter untouched) if the canister has a paused
+    /// execution whose prepayment is not part of the replicated state (see
+    /// [`Self::outstanding_prepayments`]); the caller is expected to retry once
+    /// paused executions have been aborted.
+    pub fn migrate_consumed_cycles_to_counter(&mut self) -> bool {
+        let Some(outstanding) = self.outstanding_prepayments() else {
+            return false;
+        };
         // `max` rather than a plain assignment: the counter must never go down, not
         // even if a saturating subtraction somewhere made the gauge lag behind it.
-        Some(
-            self.canister_metrics
-                .consumed_cycles_as_counter
-                .max(self.canister_metrics.consumed_cycles - outstanding),
-        )
-    }
-
-    /// Backfills [`CanisterMetrics::consumed_cycles_as_counter`] with
-    /// [`Self::migrated_consumed_cycles_as_counter`]. Returns `false` (leaving the
-    /// counter untouched) if the latter cannot be derived; the caller is expected to
-    /// retry once paused executions have been aborted.
-    pub fn migrate_consumed_cycles_to_counter(&mut self) -> bool {
-        match self.migrated_consumed_cycles_as_counter() {
-            Some(counter) => {
-                self.canister_metrics.consumed_cycles_as_counter = counter;
-                true
-            }
-            None => false,
-        }
+        self.canister_metrics.consumed_cycles_as_counter = self
+            .canister_metrics
+            .consumed_cycles_as_counter
+            .max(self.canister_metrics.consumed_cycles - outstanding);
+        true
     }
 
     /// Clears all canister changes and their memory usage,
