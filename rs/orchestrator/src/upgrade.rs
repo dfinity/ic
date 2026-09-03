@@ -1089,6 +1089,7 @@ fn report_master_public_key_changed_metric(
 }
 
 #[cfg(test)]
+#[allow(clippy::too_many_arguments)]
 mod tests {
     use crate::catch_up_package_provider::LocalCUPReader;
     use crate::catch_up_package_provider::tests::mock_tls_config;
