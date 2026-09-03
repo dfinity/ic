@@ -51,7 +51,7 @@ impl G2PublicKeyCache {
     /// Check the cache for an already checked G2 public key
     pub(crate) fn get(&self, bytes: &[u8; G2Affine::BYTES]) -> Option<G2Affine> {
         let mut cache = self.cache.lock();
-        cache.get(bytes)
+        cache.get_cloned(bytes)
     }
 
     /// Insert a new G2 public key into the cache
@@ -120,7 +120,7 @@ impl G2PreparedCache {
     /// Check the cache for an already prepared G2 element
     pub(crate) fn get(&self, bytes: &[u8; G2Affine::BYTES]) -> Option<G2Prepared> {
         let mut cache = self.cache.lock();
-        cache.get(bytes)
+        cache.get_cloned(bytes)
     }
 
     /// Insert a new G2Prepared into the cache
