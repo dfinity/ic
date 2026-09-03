@@ -157,6 +157,11 @@ impl AutomaticDeposits {
         self.sweeper_transactions.record_request(request)
     }
 
+    /// The request of a sweep the pipeline has taken up, still available once the sweep finalizes.
+    pub fn processed_sweep_request(&self, id: &SweepId) -> Option<&SweepRequest> {
+        self.sweeper_transactions.get_processed_request(id)
+    }
+
     pub fn reschedule_sweep_request(&mut self, id: SweepId) {
         self.sweeper_transactions.reschedule_request(id)
     }

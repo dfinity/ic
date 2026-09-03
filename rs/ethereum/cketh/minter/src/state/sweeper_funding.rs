@@ -14,9 +14,24 @@ mod tests;
 
 use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::numeric::Wei;
+use crate::tx::{Finalized, FinalizedEip1559Transaction, SweepTransaction};
 
-/// How much ckETH has been burned for sweeping and how much of it has actually been spent: the two
-/// sides of the invariant above.
+/// How much ckETH has been burned for sweeping and how much of it has actually been spent — the two
+/// sides of the invariant above — along with the sweeper address' own ETH balance, which the
+/// spending side maintains.
+///
+/// The sweeper's balance is kept like [`EthBalance`] keeps the main address' but differs in *when*
+/// it debits: the main address debits what a transaction actually cost once it finalizes, while
+/// the sweeper debits an accepted sweep's whole possible cost — its fee ceiling, a sweep sending
+/// no ETH — up front, and is credited back at finalization whatever the sweep turned out not to
+/// spend. Holding the whole cost early is what keeps the balance a lower bound while sweeps are in
+/// flight, and the sweep pipeline only accepts a sweep the balance covers, so an uncovered debit
+/// is a bug, exactly as on the main address. There is no unspent-fee counter either: an unspent
+/// fee returns into the balance and is spent by a later sweep, unlike on the main address where it
+/// accrues as surplus. ETH anyone else sends to the sweeper is not tracked and only pushes its
+/// true balance above this record.
+///
+/// [`EthBalance`]: crate::state::EthBalance
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SweeperFundingAccounting {
     /// Grows when a funding is accepted, by the whole amount that funding may spend.
@@ -31,6 +46,7 @@ pub struct SweeperFundingAccounting {
     /// a bare transfer to an address derived from the minter's own key has no code to revert in.
     successful_fundings: u64,
     failed_fundings: u64,
+    sweeper_balance: SweeperBalance,
 }
 
 impl Default for SweeperFundingAccounting {
@@ -41,7 +57,48 @@ impl Default for SweeperFundingAccounting {
             cumulative_transaction_fees: Wei::ZERO,
             successful_fundings: 0,
             failed_fundings: 0,
+            sweeper_balance: SweeperBalance::default(),
         }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+struct SweeperBalance {
+    eth_balance: Wei,
+    total_effective_tx_fees: Wei,
+}
+
+impl Default for SweeperBalance {
+    fn default() -> Self {
+        Self {
+            eth_balance: Wei::ZERO,
+            total_effective_tx_fees: Wei::ZERO,
+        }
+    }
+}
+
+impl SweeperBalance {
+    fn credit(&mut self, amount: Wei) {
+        self.eth_balance = self
+            .eth_balance
+            .checked_add(amount)
+            .expect("BUG: overflow in the sweeper balance");
+    }
+
+    fn debit(&mut self, amount: Wei) {
+        self.eth_balance = self.eth_balance.checked_sub(amount).unwrap_or_else(|| {
+            panic!(
+                "BUG: the sweeper balance {} cannot cover a debit of {amount}",
+                self.eth_balance
+            )
+        });
+    }
+
+    fn add_effective_tx_fee(&mut self, fee: Wei) {
+        self.total_effective_tx_fees = self
+            .total_effective_tx_fees
+            .checked_add(fee)
+            .expect("BUG: overflow in the sweeper's effective transaction fees");
     }
 }
 
@@ -54,22 +111,16 @@ impl SweeperFundingAccounting {
             .expect("BUG: overflow in cumulative burned for sweeping");
     }
 
-    /// Records a finalized funding transaction: `amount` is what its transfer carried and
-    /// `transaction_fee` what it paid for gas, which it did either way.
+    /// Records a finalized funding transaction: what its transfer carried, and the gas it paid for
+    /// either way, both read off the transaction.
     ///
-    /// The outcome decides both the count and whether the transfer landed, so it is one call.
     /// A failure is counted rather than trapped: the burn simply goes unspent, and the count is the
     /// only signal that something believed impossible has happened.
-    pub fn record_finalized_funding(
-        &mut self,
-        status: &TransactionStatus,
-        amount: Wei,
-        transaction_fee: Wei,
-    ) {
-        let transferred = match status {
+    pub fn record_finalized_funding(&mut self, funding: &FinalizedEip1559Transaction) {
+        let transferred = match funding.transaction_status() {
             TransactionStatus::Success => {
                 self.successful_fundings = self.successful_fundings.saturating_add(1);
-                amount
+                *funding.transaction_amount()
             }
             TransactionStatus::Failure => {
                 self.failed_fundings = self.failed_fundings.saturating_add(1);
@@ -82,14 +133,17 @@ impl SweeperFundingAccounting {
             .expect("BUG: overflow in cumulative transferred to the sweeper");
         self.cumulative_transaction_fees = self
             .cumulative_transaction_fees
-            .checked_add(transaction_fee)
+            .checked_add(funding.effective_transaction_fee())
             .expect("BUG: overflow in cumulative sweeper funding fees");
-        // The checked helper, not the saturating getter: a violation traps at the transition that
-        // caused it rather than being smoothed over on the next scrape.
-        self.checked_burned_not_yet_spent().expect(
-            "BUG: more ETH spent on sweeping than ckETH burned for it, \
-             meaning ckETH is under-backed",
-        );
+        self.sweeper_balance.credit(transferred);
+        // Traps here, at the transition that caused it, rather than being smoothed over by the
+        // saturating getter on the next scrape.
+        self.cumulative_burned
+            .checked_sub(self.cumulative_spent())
+            .expect(
+                "BUG: more ETH spent on sweeping than ckETH burned for it, \
+                 meaning ckETH is under-backed",
+            );
     }
 
     pub fn successful_fundings(&self) -> u64 {
@@ -98,6 +152,45 @@ impl SweeperFundingAccounting {
 
     pub fn failed_fundings(&self) -> u64 {
         self.failed_fundings
+    }
+
+    /// Debits the whole cost an accepted sweep can put on the sweeper address: the ceiling on its
+    /// transaction fee, which caps every resubmission too — so a sweep is debited once however
+    /// many times the pipeline resubmits it.
+    ///
+    /// Deliberately not added to [`Self::cumulative_spent`]: that counter is the minter's own ETH,
+    /// and this ETH was counted there once already, when the funding that delivered it to the
+    /// sweeper finalized. Counting it twice would make spend overtake burn and trip the invariant.
+    pub fn record_accepted_sweep(&mut self, max_transaction_fee: Wei) {
+        self.sweeper_balance.debit(max_transaction_fee);
+    }
+
+    /// Settles a finalized sweep against the hold its acceptance took, reading what actually
+    /// happened off the transaction and its receipt: the part of `max_transaction_fee` the sweep
+    /// did not pay comes back into the balance, and the fee it paid is recorded. The fee is a
+    /// sweep's whole cost whether it succeeded or reverted — its acceptance held nothing else, so
+    /// a sweep that sent ETH is a bug.
+    pub fn record_finalized_sweep(
+        &mut self,
+        max_transaction_fee: Wei,
+        sweep: &Finalized<SweepTransaction>,
+    ) {
+        assert_eq!(
+            *sweep.transaction_amount(),
+            Wei::ZERO,
+            "BUG: a sweep must not send ETH, its acceptance held only the transaction fee"
+        );
+        let effective_fee = sweep.effective_transaction_fee();
+        let unspent_fee = max_transaction_fee
+            .checked_sub(effective_fee)
+            .expect("BUG: a sweep may not pay more than its fee ceiling");
+        self.sweeper_balance.credit(unspent_fee);
+        self.sweeper_balance.add_effective_tx_fee(effective_fee);
+    }
+
+    /// Total transaction fees finalized sweeps actually paid out of the sweeper address.
+    pub fn total_effective_sweep_fees(&self) -> Wei {
+        self.sweeper_balance.total_effective_tx_fees
     }
 
     /// Total ETH debited from the main address on account of sweeping.
@@ -111,12 +204,17 @@ impl SweeperFundingAccounting {
         self.cumulative_burned
     }
 
-    /// A lower bound on the sweeper address' ETH balance: what finalized fundings delivered. Nothing
-    /// debits it yet; when sweeping lands it will subtract the gas submitted sweeps provisioned, so
-    /// the bound stays conservative. ETH sent to the address by anyone else only pushes the true
-    /// balance above it.
+    /// A lower bound on the sweeper address' ETH balance: what finalized fundings delivered, less
+    /// the gas held for every sweep in flight and the fees finalized sweeps actually paid.
+    ///
+    /// Holding at acceptance rather than at spend is what keeps this a bound while sweeps are in
+    /// flight: gas a committed sweep will pay stops counting as available immediately, and a sweep
+    /// whose finalization is never observed leaves the bound too *low* — which brings a funding
+    /// forward and makes it larger, since [`SweeperFundingConfig::amount_due`] tops up to the target
+    /// from wherever the bound sits — rather than too high, which would let the minter believe in
+    /// gas that is gone.
     pub fn sweeper_balance_lower_bound(&self) -> Wei {
-        self.cumulative_transferred
+        self.sweeper_balance.eth_balance
     }
 
     /// ckETH burned for sweeping that has not been spent yet: the burn of a funding in flight, plus
@@ -126,13 +224,9 @@ impl SweeperFundingAccounting {
     /// Saturates: the metrics and the dashboard read it from a query, and an under-backed minter is
     /// exactly when those surfaces must stay up. The state transition traps instead.
     pub fn burned_not_yet_spent(&self) -> Wei {
-        self.checked_burned_not_yet_spent().unwrap_or(Wei::ZERO)
-    }
-
-    /// `None` if more ETH has been spent on sweeping than ckETH was burned for it, which would mean
-    /// ckETH is under-backed.
-    fn checked_burned_not_yet_spent(&self) -> Option<Wei> {
-        self.cumulative_burned.checked_sub(self.cumulative_spent())
+        self.cumulative_burned
+            .checked_sub(self.cumulative_spent())
+            .unwrap_or(Wei::ZERO)
     }
 }
 

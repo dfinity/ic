@@ -159,6 +159,15 @@ fn enqueue_sweep<R: CanisterRuntime>(
             .clone()
             .to_price(sweep_gas_limit(&items))
             .max_transaction_fee();
+        let sweeper_gas = s.sweeper_funding.sweeper_balance_lower_bound();
+        if max_transaction_fee > sweeper_gas {
+            log!(
+                INFO,
+                "[create_pending_sweeper_requests]: SKIPPING {token}: the sweep needs \
+                 {max_transaction_fee} of gas but the sweeper holds at least {sweeper_gas}"
+            );
+            return;
+        }
         let request = SweepRequest {
             id: s.next_sweep_id,
             destination,

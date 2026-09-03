@@ -31,6 +31,7 @@ ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-humanize = { path = "../../nervous_system/humanize" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
+ic-protobuf = { path = "../../protobuf" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }

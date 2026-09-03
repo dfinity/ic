@@ -1792,6 +1792,9 @@ struct ProposeToUpdateCanisterSettingsCmd {
     #[clap(long)]
     /// If set, it will update the canister's snapshot visibility to this value.
     snapshot_visibility: Option<SnapshotVisibility>,
+    #[clap(long)]
+    /// If set, it will update the canister's reserved cycles limit to this value.
+    reserved_cycles_limit: Option<u64>,
 }
 
 impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
@@ -1822,6 +1825,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
         let freezing_threshold = self.freezing_threshold;
         let wasm_memory_limit = self.wasm_memory_limit;
         let wasm_memory_threshold = self.wasm_memory_threshold;
+        let reserved_cycles_limit = self.reserved_cycles_limit;
         let log_visibility = match self.log_visibility {
             Some(LogVisibility::Controllers) => Some(GovernanceLogVisibility::Controllers as i32),
             Some(LogVisibility::Public) => Some(GovernanceLogVisibility::Public as i32),
@@ -1846,6 +1850,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
                 log_visibility,
                 wasm_memory_threshold,
                 snapshot_visibility,
+                reserved_cycles_limit,
             }),
         };
 

@@ -671,8 +671,8 @@ mod tests {
         let metrics_registry = MetricsRegistry::new();
 
         let consensus_impl = ConsensusImpl::new(
-            replica_config,
-            registry,
+            replica_config.clone(),
+            registry.clone(),
             pool.get_cache(),
             crypto.clone(),
             Arc::new(FakeIngressSelector::new()),
@@ -688,6 +688,8 @@ mod tests {
                 crypto,
                 no_op_logger(),
                 &PoolReader::new(&pool),
+                registry,
+                replica_config,
             ))),
             Arc::new(FakeMessageRouting::new()),
             state_manager,

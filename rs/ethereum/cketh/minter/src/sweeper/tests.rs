@@ -256,9 +256,6 @@ mod concurrent_fundings {
         );
     }
 
-    /// The failure branch of finalization, which the accounting test cannot reach on its own: the
-    /// counter, the undelivered transfer and the gas a failed transaction still pays are all wired
-    /// up here, in the state transition.
     #[test]
     fn should_record_a_funding_whose_transaction_failed_on_chain() {
         let mut state = state();

@@ -792,6 +792,25 @@ impl PocketIngressPool {
             },
         );
     }
+
+    /// Removes the ingress messages that were just included in a block, along
+    /// with any messages whose ingress expiry has passed (those can never be
+    /// included in a block anymore).
+    ///
+    /// Without this the pool is never pruned and retains every ingress message
+    /// ever submitted -- including its payload -- for the lifetime of the
+    /// instance.
+    fn remove_inducted_and_expired(&mut self, inducted: &[SignedIngress], now: Time) {
+        for m in inducted {
+            self.validated
+                .remove(&IngressMessageId::new(m.expiry_time(), m.id()));
+        }
+        // Keys are ordered by `(expiry_time, message_id)`, so everything strictly
+        // below this bound has already expired.
+        let expiry_bound =
+            IngressMessageId::new(now, MessageId::from([0; EXPECTED_MESSAGE_ID_LENGTH]));
+        self.validated = self.validated.split_off(&expiry_bound);
+    }
 }
 
 pub trait Subnets: Send + Sync {
@@ -1932,7 +1951,13 @@ impl StateMachine {
         // used by the function `Self::execute_payload` of the `StateMachine`.
         let xnet_payload = batch_payload.xnet.clone();
         let ingress = &batch_payload.ingress;
-        let ingress_messages = ingress.clone().try_into().unwrap();
+        let ingress_messages: Vec<SignedIngress> = ingress.clone().try_into().unwrap();
+        // Prune the ingress pool, mirroring what is done for the canister HTTP
+        // pool (`RemoveValidated`) and the query stats builder (`purge`) below.
+        self.ingress_pool
+            .write()
+            .unwrap()
+            .remove_inducted_and_expired(&ingress_messages, validation_context.time);
         let (http_responses, http_spent, _) =
             CanisterHttpPayloadBuilderImpl::into_messages(&batch_payload.canister_http);
         let inducted: Vec<_> = http_responses
@@ -2765,13 +2790,25 @@ impl StateMachine {
             .push(msg, self.get_time(), self.nodes[0].node_id);
     }
 
-    pub fn mock_canister_http_response(
+    /// Injects one response share per entry of `responses`, signed by the node it
+    /// is keyed by and carrying that node's payment receipt.
+    ///
+    /// This does not require one response per subnet node, which is what
+    /// non-fully-replicated outcalls need: only the nodes of the outcall's committee
+    /// produce a response, their responses may differ, and some of them may not
+    /// respond at all.
+    pub fn mock_canister_http_response_for_nodes(
         &self,
         request_id: u64,
-        contents: Vec<CanisterHttpResponseContent>,
+        responses: BTreeMap<NodeId, (CanisterHttpResponseContent, CanisterHttpPaymentReceipt)>,
     ) {
-        assert_eq!(contents.len(), self.nodes.len());
-        for (node, content) in std::iter::zip(self.nodes.iter(), contents) {
+        for node_id in responses.keys() {
+            assert!(
+                self.nodes.iter().any(|node| node.node_id == *node_id),
+                "cannot respond as {node_id}, which is not a node of this subnet"
+            );
+        }
+        for (node_id, (content, payment_receipt)) in responses {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
@@ -2785,10 +2822,10 @@ impl StateMachine {
                     is_reject: content.is_reject(),
                     replica_version: test_replica_version(),
                 },
-                payment_receipt: CanisterHttpPaymentReceipt::default(),
+                payment_receipt,
             };
             let signature = CryptoReturningOk::default()
-                .sign(&receipt_share, node.node_id, registry_version)
+                .sign(&receipt_share, node_id, registry_version)
                 .unwrap();
             let share = Signed {
                 content: receipt_share,

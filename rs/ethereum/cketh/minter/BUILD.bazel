@@ -292,17 +292,18 @@ rust_test(
 
 rust_test(
     name = "deposit_from_cex",
-    # Four live tests — the balance scan and the three funding scenarios — run one at a time here,
-    # each on its own PocketIC instance and anvil node, which together take around four minutes.
-    # `large` rather than `medium`: at 300 seconds the whole target would sit inside a third of its
-    # budget of headroom on a loaded machine.
+    # The end-to-end tests each run a live PocketIC and wait (wall-clock) for the minter's periodic
+    # tasks — and the sweep test drives twenty deposits through two sweeps — so the target needs a
+    # far larger timeout than the pure-anvil tests.
     size = "large",
     srcs = ["tests/deposit_from_cex.rs"],
     data = [
         "//:anvil",
         "//:solc",
-        # Reuses the mock ERC-20 source compiled at test time by the vendored solc.
+        # Contract sources compiled at test time by the vendored solc: the mock ERC-20, the real
+        # deposit helper the sweep transfers through, and the delegate it sweeps with.
         "DepositHelperWithSubaccount.sol",
+        "CkSweeperAttested.sol",
         "tests/deposit_from_cex_demo/MockUSDT.sol",
         # End-to-end balance scan and sweeper funding on a live PocketIC + local anvil node.
         ":cketh_minter_debug.wasm.gz",
@@ -320,6 +321,7 @@ rust_test(
         # concurrently starve each other of CPU, and an ingress message that loses that race is
         # stamped with an expiry the auto-progressing clock then moves past, never to be answered.
         "RUST_TEST_THREADS": "1",
+        "CKSWEEPER_ATTESTED_SOL": "$(rootpath CkSweeperAttested.sol)",
         "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
         "SOLC_BIN": "$(rootpath //:solc)",
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
@@ -331,12 +333,15 @@ rust_test(
         "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
+    tags = ["long_test"],
     deps = [
         # Keep sorted.
         ":minter",
         "//packages/ic-ethereum-types",
+        "//packages/icrc-ledger-types",
         "//rs/ethereum/cketh/test_utils",
         "@crate_index//:assert_matches",
+        "@crate_index//:candid",
     ],
 )
 

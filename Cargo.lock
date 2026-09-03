@@ -3534,7 +3534,7 @@ checksum = "bba95f299f6b9cd47f68a847eca2ae9060a2713af532dc35c342065544845407"
 dependencies = [
  "proc-macro2",
  "quote",
- "structmeta 0.3.0",
+ "structmeta",
  "syn 2.0.117",
 ]
 
@@ -5128,15 +5128,12 @@ dependencies = [
  "anyhow",
  "attestation",
  "clap",
- "config_tool",
- "config_types",
  "hex",
  "ic-sys",
  "ic_device",
  "ic_os_logging",
  "itertools 0.12.1",
  "libcryptsetup-rs",
- "mockall",
  "nix 0.31.3",
  "parking_lot",
  "prometheus",
@@ -5169,10 +5166,12 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-nns-data-provider-wrappers",
+ "mockall",
  "rcgen 0.13.2",
  "rustls 0.23.37",
  "sev",
  "sev_guest",
+ "tempfile",
  "tokio",
  "tonic",
  "tower",
@@ -5230,6 +5229,7 @@ dependencies = [
  "anyhow",
  "attestation",
  "config_types",
+ "der",
  "futures",
  "guest_disk",
  "guest_upgrade_client",
@@ -7008,7 +7008,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
- "test-strategy 0.4.5",
+ "test-strategy",
 ]
 
 [[package]]
@@ -7027,7 +7027,7 @@ dependencies = [
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "scoped_threadpool",
- "test-strategy 0.4.5",
+ "test-strategy",
  "thiserror 2.0.18",
 ]
 
@@ -7341,7 +7341,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "test-strategy 0.4.5",
+ "test-strategy",
  "tokio",
 ]
 
@@ -8877,7 +8877,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "test-strategy 0.4.5",
+ "test-strategy",
  "thiserror 2.0.18",
 ]
 
@@ -8890,7 +8890,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "proptest",
  "rand 0.8.6",
- "test-strategy 0.4.5",
+ "test-strategy",
  "thiserror 2.0.18",
 ]
 
@@ -9339,7 +9339,7 @@ dependencies = [
  "slog",
  "strum 0.26.3",
  "tempfile",
- "test-strategy 0.3.1",
+ "test-strategy",
  "tokio",
  "tower",
  "tracing",
@@ -10096,7 +10096,7 @@ dependencies = [
  "rand 0.8.6",
  "serde",
  "serde_bytes",
- "test-strategy 0.4.5",
+ "test-strategy",
  "thiserror 2.0.18",
 ]
 
@@ -10206,7 +10206,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_bytes",
- "test-strategy 0.4.5",
+ "test-strategy",
 ]
 
 [[package]]
@@ -10249,7 +10249,7 @@ dependencies = [
  "num-traits",
  "proptest",
  "serde",
- "test-strategy 0.4.5",
+ "test-strategy",
 ]
 
 [[package]]
@@ -10264,7 +10264,7 @@ dependencies = [
  "num-traits",
  "proptest",
  "serde",
- "test-strategy 0.4.5",
+ "test-strategy",
 ]
 
 [[package]]
@@ -10909,7 +10909,7 @@ dependencies = [
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "slog",
- "test-strategy 0.3.1",
+ "test-strategy",
  "tracing",
 ]
 
@@ -11337,6 +11337,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "wat",
  "xrc-mock",
 ]
 
@@ -13328,7 +13329,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
- "test-strategy 0.4.5",
+ "test-strategy",
 ]
 
 [[package]]
@@ -13429,7 +13430,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
- "test-strategy 0.4.5",
+ "test-strategy",
  "tokio",
  "tracing",
  "tracing-appender",
@@ -13610,6 +13611,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-protobuf",
  "ic-sns-governance",
  "ic-sns-governance-api",
  "ic-sns-init",
@@ -14233,7 +14235,7 @@ dependencies = [
  "prost",
  "scoped_threadpool",
  "slog",
- "test-strategy 0.4.5",
+ "test-strategy",
 ]
 
 [[package]]
@@ -14310,7 +14312,7 @@ dependencies = [
  "slog",
  "slog-term",
  "tempfile",
- "test-strategy 0.4.5",
+ "test-strategy",
  "tokio",
  "tokio-util",
  "tower",
@@ -14377,7 +14379,7 @@ dependencies = [
  "slog",
  "strum 0.26.3",
  "tempfile",
- "test-strategy 0.4.5",
+ "test-strategy",
  "tokio",
  "tree-deserializer",
  "uuid",
@@ -15555,7 +15557,7 @@ dependencies = [
  "reqwest",
  "slog",
  "tempfile",
- "test-strategy 0.4.5",
+ "test-strategy",
  "thiserror 2.0.18",
  "tokio",
  "url",
@@ -17738,7 +17740,7 @@ dependencies = [
  "messaging-test-utils",
  "proptest",
  "serde",
- "test-strategy 0.4.5",
+ "test-strategy",
 ]
 
 [[package]]
@@ -19532,7 +19534,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "15.0.0"
+version = "16.0.0"
 dependencies = [
  "backon",
  "base64 0.13.1",
@@ -19577,6 +19579,7 @@ dependencies = [
  "schemars 0.8.22",
  "semver",
  "serde",
+ "serde_bytes",
  "serde_cbor",
  "serde_json",
  "sha2 0.10.9",
@@ -19595,7 +19598,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "15.0.0"
+version = "16.0.0"
 dependencies = [
  "aide",
  "askama",
@@ -19639,6 +19642,7 @@ dependencies = [
  "ic-http-endpoints-public",
  "ic-https-outcalls-adapter",
  "ic-https-outcalls-adapter-client",
+ "ic-https-outcalls-pricing",
  "ic-https-outcalls-service",
  "ic-icp-index",
  "ic-icrc1-index-ng",
@@ -23014,36 +23018,13 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "structmeta"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78ad9e09554f0456d67a69c1584c9798ba733a5b50349a6c0d0948710523922d"
-dependencies = [
- "proc-macro2",
- "quote",
- "structmeta-derive 0.2.0",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "structmeta"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e1575d8d40908d70f6fd05537266b90ae71b15dbbe7a8b7dffa2b759306d329"
 dependencies = [
  "proc-macro2",
  "quote",
- "structmeta-derive 0.3.0",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "structmeta-derive"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a60bcaff7397072dca0017d1db428e30d5002e00b6847703e2e42005c95fbe00"
-dependencies = [
- "proc-macro2",
- "quote",
+ "structmeta-derive",
  "syn 2.0.117",
 ]
 
@@ -23437,18 +23418,6 @@ dependencies = [
 
 [[package]]
 name = "test-strategy"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8361c808554228ad09bfed70f5c823caf8a3450b6881cc3a38eb57e8c08c1d9"
-dependencies = [
- "proc-macro2",
- "quote",
- "structmeta 0.2.0",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "test-strategy"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f7fd1eb9efb36942b85a290c4201d317980fe09bc88d34dd48aaaae03075c6a"
@@ -23456,7 +23425,7 @@ dependencies = [
  "derive-ex",
  "proc-macro2",
  "quote",
- "structmeta 0.3.0",
+ "structmeta",
  "syn 2.0.117",
 ]
 
@@ -24255,7 +24224,7 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "serde",
- "test-strategy 0.4.5",
+ "test-strategy",
 ]
 
 [[package]]

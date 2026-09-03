@@ -3,6 +3,15 @@
 version = 4
 
 [[package]]
+name = "acl-sys"
+version = "1.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbc079f9bdd3124fd18df23c67f7e0f79d24751ae151dcffd095fcade07a3eb2"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "actix-codec"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3074,6 +3083,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive-ex"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bba95f299f6b9cd47f68a847eca2ae9060a2713af532dc35c342065544845407"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "structmeta",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "derive-new"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3468,6 +3489,7 @@ dependencies = [
  "ping",
  "pkcs8",
  "pkg-config",
+ "posix-acl",
  "pprof",
  "predicates",
  "pretty_assertions",
@@ -8734,7 +8756,7 @@ dependencies = [
  "quote",
  "regex",
  "regex-syntax 0.8.11",
- "structmeta 0.3.0",
+ "structmeta",
  "syn 2.0.119",
 ]
 
@@ -9139,6 +9161,16 @@ name = "portable-atomic"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "350e9b48cbc6b0e028b0473b114454c6316e57336ee184ceab6e53f72c178b3e"
+
+[[package]]
+name = "posix-acl"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9928b761309e4a4ca4f2d90eb03029142e3f7164107e18db4d46516515b87441"
+dependencies = [
+ "acl-sys",
+ "libc",
+]
 
 [[package]]
 name = "postcard"
@@ -11789,36 +11821,13 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "structmeta"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78ad9e09554f0456d67a69c1584c9798ba733a5b50349a6c0d0948710523922d"
-dependencies = [
- "proc-macro2",
- "quote",
- "structmeta-derive 0.2.0",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "structmeta"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e1575d8d40908d70f6fd05537266b90ae71b15dbbe7a8b7dffa2b759306d329"
 dependencies = [
  "proc-macro2",
  "quote",
- "structmeta-derive 0.3.0",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "structmeta-derive"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a60bcaff7397072dca0017d1db428e30d5002e00b6847703e2e42005c95fbe00"
-dependencies = [
- "proc-macro2",
- "quote",
+ "structmeta-derive",
  "syn 2.0.119",
 ]
 
@@ -12252,13 +12261,14 @@ checksum = "3369f5ac52d5eb6ab48c6b4ffdc8efbcad6b89c765749064ba298f2c68a16a76"
 
 [[package]]
 name = "test-strategy"
-version = "0.3.1"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8361c808554228ad09bfed70f5c823caf8a3450b6881cc3a38eb57e8c08c1d9"
+checksum = "8f7fd1eb9efb36942b85a290c4201d317980fe09bc88d34dd48aaaae03075c6a"
 dependencies = [
+ "derive-ex",
  "proc-macro2",
  "quote",
- "structmeta 0.2.0",
+ "structmeta",
  "syn 2.0.119",
 ]
 

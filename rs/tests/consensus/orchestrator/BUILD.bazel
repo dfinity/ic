@@ -147,30 +147,6 @@ system_test_nns(
     name = "standard_engine_replica_version_test",
     # 1 API BN + 1 System + 2 * 4 Cloud Engine = 10 IC Node VMs * 6 vCPUs.
     cpus = MIN_LOCAL_CPUS + 10 * DEFAULT_VCPUS_PER_VM,
-    # TODO: Re-enable this once BOTH of these pins in
-    # mainnet-canister-revisions.json have caught up:
-    #
-    #   1. `governance` needs to include PR 10939, which relaxed the
-    #      `UpdateStandardEngineReplicaVersion` validation. The currently pinned
-    #      governance (8aa4680e37) still requires replica version IDs to be
-    #      40-character hexadecimal strings, so it rejects the proposal this test
-    #      submits: this test elects a second GuestOS/Replica version, and those
-    #      are named `<commit>-test` (see `guestos_update` below).
-    #
-    #   2. `engine-controller` needs `create_engine` to return the new subnet ID.
-    #      The currently pinned engine-controller (c8649149f7) returns
-    #      `Result<(), String>`, which this test cannot decode since it expects
-    #      `Result<NewSubnet, String>`.
-    #
-    # Note that `engine-controller` is NOT bumped by the mainnet-revisions bot
-    # (it is absent from NNS_CANISTER_NAME_TO_ID in
-    # rs/nervous_system/tools/sync-with-released-nervous-system-wasms), so a
-    # governance-only bump will not be enough to unblock this test.
-    #
-    # The `_head_nns` variant, which runs against the NNS canisters built from
-    # this branch, keeps its `long_test` tag and so keeps running on every push
-    # to master. The test therefore remains covered.
-    enable_mainnet_nns_variant = False,
     # This is needed so that the test can elect a second Guestos/Replica version.
     guestos_update = "test",
     tags = [

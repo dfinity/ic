@@ -1322,6 +1322,18 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
+                w.encode_gauge(
+                    "cketh_minter_stored_attestations",
+                    s.automatic_deposits.attestations_len() as f64,
+                    "Number of deposit address attestations the minter has signed and stored.",
+                )?;
+
+                w.encode_gauge(
+                    "cketh_minter_stored_authorizations",
+                    s.automatic_deposits.authorizations_len() as f64,
+                    "Number of delegation authorizations the minter has signed and stored.",
+                )?;
+
                 w.encode_counter(
                     "cketh_minter_sweeper_funding_cketh_burned_total",
                     s.sweeper_funding.cumulative_burned().as_f64(),
@@ -1378,12 +1390,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                         })
                         .unwrap_or(0.0),
                     "Age of the sweeper funding awaiting finalization; 0 if none is outstanding.",
-                )?;
-
-                w.encode_gauge(
-                    "cketh_minter_stored_authorizations",
-                    s.automatic_deposits.authorizations_len() as f64,
-                    "Number of delegation authorizations the minter has signed and stored.",
                 )?;
 
                 w.encode_gauge(

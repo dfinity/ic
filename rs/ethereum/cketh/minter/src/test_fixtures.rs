@@ -2,8 +2,12 @@ use crate::EVM_RPC_ID_STAGING;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::eth_logs::LedgerSubaccount;
+use crate::eth_rpc::Hash;
+use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
-use crate::numeric::{BlockNumber, Erc20Value, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas};
+use crate::numeric::{
+    BlockNumber, Erc20Value, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
+};
 use crate::state::audit::{EventType, apply_state_transition};
 use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::LogScrapingId;
@@ -11,7 +15,10 @@ use crate::state::event::AutomaticDeposit;
 use crate::state::transactions::{EthWithdrawalRequest, SweepRequest};
 use crate::state::{State, read_state};
 use crate::sweep::create_pending_sweeper_requests;
-use crate::tx::{AuthorizationRequest, GasFeeEstimate, TransactionSignature};
+use crate::tx::{
+    AccessList, AuthorizationRequest, Eip1559TransactionRequest, FinalizedEip1559Transaction,
+    GasFeeEstimate, Signed, TransactionSignature,
+};
 use candid::{Nat, Principal};
 use ethnum::u256;
 use ic_ethereum_types::Address;
@@ -138,15 +145,71 @@ pub fn automatic_deposit() -> AutomaticDeposit {
 
 /// An [`AutomaticDeposits`] whose sweep queue holds exactly these funded pairs, all taken by the
 /// one sweep [`create_pending_sweeper_requests`] enqueued for them, returned along with that
-/// request. The deposits, attestations and authorizations the enqueue pairs up arrive through the
-/// event log, so the sweep is assembled by the production path without the runtime signing
-/// anything.
+/// request.
 pub async fn deposits_with_enqueued_sweep(
     pairs: &[(Account, Address)],
 ) -> (AutomaticDeposits, SweepRequest) {
+    let (state, request) = state_with_enqueued_sweep(pairs).await;
+    (state.automatic_deposits, request)
+}
+
+pub const PREPAID_SWEEP_GAS: Wei = Wei::new(1_000_000_000_000_000_000);
+
+/// A finalized funding transaction that carried `amount` and paid `transaction_fee` for gas: one
+/// unit of gas priced at the whole fee, so the receipt reports exactly that fee.
+pub fn finalized_funding(
+    amount: Wei,
+    transaction_fee: Wei,
+    status: TransactionStatus,
+) -> FinalizedEip1559Transaction {
+    let effective_gas_price: WeiPerGas = transaction_fee.change_units();
+    let signed = Signed::from((
+        Eip1559TransactionRequest {
+            chain_id: 1,
+            nonce: TransactionNonce::ZERO,
+            max_priority_fee_per_gas: WeiPerGas::ZERO,
+            max_fee_per_gas: effective_gas_price,
+            gas_limit: GasAmount::ONE,
+            destination: Address::new([0x5e; 20]),
+            amount,
+            data: Vec::new(),
+            access_list: AccessList::new(),
+        },
+        transaction_signature(),
+    ));
+    let receipt = TransactionReceipt {
+        block_hash: Hash([0x11; 32]),
+        block_number: BlockNumber::new(4_190_269),
+        effective_gas_price,
+        gas_used: GasAmount::ONE,
+        status,
+        transaction_hash: signed.hash(),
+    };
+    signed
+        .try_finalize(receipt)
+        .expect("test setup: the receipt matches the signed transaction")
+}
+
+pub fn prepay_sweep_gas(state: &mut State) {
+    state.sweeper_funding.record_burn(PREPAID_SWEEP_GAS);
+    state
+        .sweeper_funding
+        .record_finalized_funding(&finalized_funding(
+            PREPAID_SWEEP_GAS,
+            Wei::ZERO,
+            TransactionStatus::Success,
+        ));
+}
+
+/// A [`State`] whose sweep queue holds exactly these funded pairs, all taken by the one sweep
+/// [`create_pending_sweeper_requests`] enqueued for them, returned along with that request. The
+/// deposits, attestations and authorizations the enqueue pairs up arrive through the event log, so
+/// the sweep is assembled by the production path without the runtime signing anything.
+pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, SweepRequest) {
     const SWEEP_DECIDED_AT: u64 = 1_620_328_630_000_000_000;
 
     let mut state = state_with_deposit_helper(deposit_helper());
+    prepay_sweep_gas(&mut state);
     state.sweeper_contract_address = Some(sweeper_contract());
     state.last_transaction_price_estimate = Some((SWEEP_DECIDED_AT, gas_fee_estimate()));
     let chain_id = state.ethereum_network.chain_id();
@@ -197,7 +260,7 @@ pub async fn deposits_with_enqueued_sweep(
         let [request] =
             <[SweepRequest; 1]>::try_from(s.automatic_deposits.sweep_requests_batch(usize::MAX))
                 .expect("BUG: expected the pairs to become exactly one sweep");
-        (s.automatic_deposits.clone(), request)
+        (s.clone(), request)
     })
 }
 

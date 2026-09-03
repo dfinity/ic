@@ -19,8 +19,8 @@ use ic_cketh_minter::state::transactions::{
 };
 use ic_cketh_minter::state::{MintedEvent, State};
 use ic_cketh_minter::tx::{
-    Eip1559TransactionRequest, GasFeeEstimate, SignedEip1559TransactionRequest, TransactionPrice,
-    TransactionSignature,
+    Eip1559TransactionRequest, FinalizedEip1559Transaction, GasFeeEstimate,
+    SignedEip1559TransactionRequest, TransactionPrice, TransactionSignature,
 };
 use ic_ethereum_types::Address;
 use maplit::{btreemap, btreeset};
@@ -98,11 +98,13 @@ fn should_display_block_sync() {
 fn should_display_sweeper_funding() {
     let mut state = initial_state();
     state.sweeper_funding.record_burn(Wei::from(1_000_000_u64));
-    state.sweeper_funding.record_finalized_funding(
-        &TransactionStatus::Success,
-        Wei::from(900_000_u64),
-        Wei::from(50_000_u64),
-    );
+    state
+        .sweeper_funding
+        .record_finalized_funding(&finalized_funding(
+            Wei::from(900_000_u64),
+            Wei::from(50_000_u64),
+            TransactionStatus::Success,
+        ));
 
     let dashboard = DashboardTemplate::from_state(&state, DashboardPaginationParameters::default());
 
@@ -1522,6 +1524,43 @@ fn cketh_withdrawal_flow(
         signed_tx,
         tx_receipt,
     )
+}
+
+fn finalized_funding(
+    amount: Wei,
+    transaction_fee: Wei,
+    status: TransactionStatus,
+) -> FinalizedEip1559Transaction {
+    let effective_gas_price: WeiPerGas = transaction_fee.change_units();
+    let signed = SignedEip1559TransactionRequest::from((
+        Eip1559TransactionRequest {
+            chain_id: EthereumNetwork::Sepolia.chain_id(),
+            nonce: TransactionNonce::ZERO,
+            max_priority_fee_per_gas: WeiPerGas::ZERO,
+            max_fee_per_gas: effective_gas_price,
+            gas_limit: GasAmount::ONE,
+            destination: Address::from_str("0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0").unwrap(),
+            amount,
+            data: vec![],
+            access_list: Default::default(),
+        },
+        TransactionSignature {
+            signature_y_parity: false,
+            r: Default::default(),
+            s: Default::default(),
+        },
+    ));
+    let receipt = TransactionReceipt {
+        block_hash: "0xce67a85c9fb8bc50213815c32814c159fd75160acf7cb8631e8e7b7cf7f1d472"
+            .parse()
+            .unwrap(),
+        block_number: BlockNumber::new(4190269),
+        effective_gas_price,
+        gas_used: GasAmount::ONE,
+        status,
+        transaction_hash: signed.hash(),
+    };
+    signed.try_finalize(receipt).unwrap()
 }
 
 fn ckerc20_withdrawal_flow(

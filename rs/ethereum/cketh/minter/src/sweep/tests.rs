@@ -12,7 +12,7 @@ use crate::sweep::create_pending_sweeper_requests;
 use crate::test_fixtures::mock::MockCanisterRuntime;
 use crate::test_fixtures::{
     account, another_account, automatic_deposit, deposit_address, init_state, initial_state,
-    state_with_deposit_helper, usdc, usdt,
+    prepay_sweep_gas, state_with_deposit_helper, usdc, usdt,
 };
 use crate::tx::{Authorization, AuthorizationRequest, GasFeeEstimate, TransactionSignature};
 use ethnum::u256;
@@ -233,6 +233,30 @@ async fn should_carry_the_signed_attestation_and_authorization_of_every_swept_ac
 }
 
 #[tokio::test]
+async fn should_not_accept_a_sweep_the_sweeper_gas_cannot_pay_for() {
+    init_state(state_ready_to_sign_with_unfunded_sweeper(&[(
+        account(),
+        usdc(),
+    )]));
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    expect_signing(&mut runtime);
+
+    create_pending_sweeper_requests(&runtime).await;
+
+    assert_eq!(
+        pending_sweeps(),
+        vec![],
+        "a sweep whose fee the sweeper's gas cannot cover must not be accepted"
+    );
+    assert_eq!(
+        read_state(|s| s.automatic_deposits.sweep_len()),
+        1,
+        "the deposit stays queued until a funding delivers the gas"
+    );
+}
+
+#[tokio::test]
 async fn should_not_offer_an_enqueued_deposit_to_a_second_sweep() {
     init_state(state_ready_to_sign(&[(account(), usdc())]));
     let mut runtime = mock();
@@ -365,6 +389,12 @@ fn derivation_path_bytes() -> Vec<Vec<u8>> {
 }
 
 fn state_ready_to_sign(deposits: &[(Account, Address)]) -> State {
+    let mut state = state_ready_to_sign_with_unfunded_sweeper(deposits);
+    prepay_sweep_gas(&mut state);
+    state
+}
+
+fn state_ready_to_sign_with_unfunded_sweeper(deposits: &[(Account, Address)]) -> State {
     let mut state = state_with_deposit_helper(DEPOSIT_HELPER);
     state.sweeper_contract_address = Some(SWEEPER_CONTRACT);
     state.last_transaction_price_estimate = Some((
