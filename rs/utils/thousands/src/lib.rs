@@ -66,6 +66,6 @@ mod tests {
     fn leaves_sign_prefix_and_fraction_untouched() {
         // Only the first run of digits is grouped, matching `thousands`.
         assert_eq!(separate_with_underscores(-1234567_i64), "-1_234_567");
-        assert_eq!(separate_with_underscores(1234.5_f64), "1_234.5");
+        assert_eq!(separate_with_underscores(1234.5678_f64), "1_234.5678");
     }
 }
