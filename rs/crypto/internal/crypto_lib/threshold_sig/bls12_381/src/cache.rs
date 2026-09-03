@@ -1,6 +1,6 @@
 //! Cache for BLS signatures
 
-use cached::{Cached, SizedCache};
+use ic_utils_mem_lru::LruCacheWithStats;
 use std::sync::LazyLock;
 
 #[cfg(test)]
@@ -40,7 +40,7 @@ impl SignatureCacheEntry {
 
 /// A cache for BLS signature verification
 pub(crate) struct SignatureCache {
-    cache: parking_lot::Mutex<SizedCache<SignatureCacheEntry, ()>>,
+    cache: parking_lot::Mutex<LruCacheWithStats<SignatureCacheEntry, ()>>,
 }
 
 static GLOBAL_SIGNATURE_CACHE: LazyLock<SignatureCache> =
@@ -49,28 +49,17 @@ static GLOBAL_SIGNATURE_CACHE: LazyLock<SignatureCache> =
 impl SignatureCache {
     /// Specify the size of the global signature cache
     ///
-    /// cached::SizedCache uses approximately 65 bytes of memory
-    /// per entry, so with the currently specified size the cache
-    /// consumes ~ 6.5 MB of RAM.
-    ///
-    /// The derivation for 65 bytes is as follows:
-    /// - [u8; 32] is 32 bytes
-    /// - Option<[u8; 32]> is 33 bytes
-    /// - Option<([u8; 32], ())> is also 33 bytes
-    /// - cached's `ListEntry<T>` contains a T plus two usize elements
-    /// - Due to structure padding `ListEntry<Option<([u8; 32], ())>>` is
-    ///   56 bytes rather than 33+2*8=49 bytes. (By using a 31 byte hash
-    ///   we could save some substantial amount of cache memory.)
-    /// - The other overhead of `SizedCache` is a `hashbrown::RawTable<usize>`,
-    ///   which is estimated to consume 9 bytes per element.
-    /// - This leads to an estimate of 65 bytes per element, plus some
-    ///   fixed overhead.
+    /// Each entry stores a 32-byte hash (see [`SignatureCacheEntry`]) plus the
+    /// per-entry bookkeeping of the underlying LRU cache (a hash-map slot and
+    /// the intrusive linked-list node), on the order of a hundred bytes per
+    /// entry. With the currently specified size the cache consumes a few MB of
+    /// RAM.
     pub const SIZE_OF_GLOBAL_CACHE: usize = 100000;
 
     /// Create a new signature cache with the specified maximum size
     fn new(max_size: usize) -> Self {
-        let cache = parking_lot::Mutex::<SizedCache<SignatureCacheEntry, ()>>::new(
-            SizedCache::with_size(max_size),
+        let cache = parking_lot::Mutex::<LruCacheWithStats<SignatureCacheEntry, ()>>::new(
+            LruCacheWithStats::with_size(max_size),
         );
         Self { cache }
     }
@@ -85,7 +74,7 @@ impl SignatureCache {
     /// Returns true if found, false otherwise
     pub(crate) fn contains(&self, entry: &SignatureCacheEntry) -> bool {
         let mut cache = self.cache.lock();
-        cache.cache_get(entry).is_some()
+        cache.get(entry).is_some()
     }
 
     /// Insert a entry into the signature cache
@@ -95,7 +84,7 @@ impl SignatureCache {
     /// been verified to be valid.
     pub(crate) fn insert(&self, entry: &SignatureCacheEntry) {
         let mut cache = self.cache.lock();
-        cache.cache_set(*entry, ());
+        cache.insert(*entry, ());
     }
 
     /// Return statistics about the cache
@@ -105,9 +94,9 @@ impl SignatureCache {
     pub(crate) fn cache_statistics(&self) -> SignatureCacheStatistics {
         let cache = self.cache.lock();
 
-        let cache_size = cache.cache_size();
-        let hits = cache.cache_hits().unwrap_or(0);
-        let misses = cache.cache_misses().unwrap_or(0);
+        let cache_size = cache.len();
+        let hits = cache.hits();
+        let misses = cache.misses();
 
         SignatureCacheStatistics::new(cache_size, hits, misses)
     }

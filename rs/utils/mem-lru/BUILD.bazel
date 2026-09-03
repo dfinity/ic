@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "mem-lru",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_utils_mem_lru",
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:lru",
+    ],
+)
+
+rust_test(
+    name = "mem-lru_test",
+    crate = ":mem-lru",
+)
+
+rust_doc_test(
+    name = "mem-lru_doc_test",
+    crate = ":mem-lru",
+)
