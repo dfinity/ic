@@ -3,15 +3,6 @@
 version = 4
 
 [[package]]
-name = "acl-sys"
-version = "1.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbc079f9bdd3124fd18df23c67f7e0f79d24751ae151dcffd095fcade07a3eb2"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "actix-codec"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4144,7 +4135,6 @@ dependencies = [
  "ping",
  "pkcs8",
  "pkg-config",
- "posix-acl",
  "pprof",
  "predicates",
  "pretty_assertions",
@@ -9910,16 +9900,6 @@ name = "portable-atomic"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "350e9b48cbc6b0e028b0473b114454c6316e57336ee184ceab6e53f72c178b3e"
-
-[[package]]
-name = "posix-acl"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9928b761309e4a4ca4f2d90eb03029142e3f7164107e18db4d46516515b87441"
-dependencies = [
- "acl-sys",
- "libc",
-]
 
 [[package]]
 name = "postcard"
