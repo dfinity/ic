@@ -2384,18 +2384,6 @@ dependencies = [
 
 [[package]]
 name = "cached"
-version = "0.49.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e8e463fceca5674287f32d252fb1d94083758b8709c160efae66d263e5f4eba"
-dependencies = [
- "hashbrown 0.14.5",
- "instant",
- "once_cell",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "cached"
 version = "0.54.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9718806c4a2fe9e8a56fd736f97b340dd10ed1be8ed733ed50449f351dc33cae"
@@ -8787,10 +8775,10 @@ dependencies = [
 name = "ic-crypto-internal-bls12-381-type"
 version = "0.9.0"
 dependencies = [
- "cached 0.49.3",
  "criterion",
  "hex",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-utils-mem-lru",
  "ic_bls12_381",
  "itertools 0.12.1",
  "pairing",
@@ -9017,7 +9005,6 @@ name = "ic-crypto-internal-threshold-sig-bls12381"
 version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
- "cached 0.49.3",
  "criterion",
  "hex",
  "ic-crypto-internal-bls12-381-type",
@@ -9027,6 +9014,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
+ "ic-utils-mem-lru",
  "parking_lot",
  "proptest",
  "proptest-derive",
@@ -15976,6 +15964,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-utils-mem-lru"
+version = "0.9.0"
+dependencies = [
+ "lru 0.7.8",
+]
+
+[[package]]
 name = "ic-utils-rustfmt"
 version = "0.9.0"
 
@@ -17149,15 +17144,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "instant"
-version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0242819d153cba4b4b05a5a8f2a7e9bbf97b6055b2a002b395c96b5ff3c0222"
-dependencies = [
- "cfg-if",
 ]
 
 [[package]]
