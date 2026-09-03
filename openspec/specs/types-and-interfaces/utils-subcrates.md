@@ -140,6 +140,23 @@ Formats Rust source files at the given path:
 
 ---
 
+## Crate: `ic-utils-thousands`
+
+**Path:** `rs/utils/thousands`
+
+### Purpose
+
+A tiny, dependency-free replacement for the external [`thousands`](https://crates.io/crates/thousands) crate's `Separable::separate_with_underscores`, formatting integers with an underscore between every group of three digits (e.g. `1234567` becomes `1_234_567`).
+
+### Public Functions
+
+#### `separate_with_underscores<T: Display>(value: T) -> String`
+
+- Groups digits in threes counting from the right.
+- Only the first run of ASCII decimal digits in the value's `Display` representation is grouped, so a leading sign or a trailing fraction is left untouched (e.g. `-12345.6` becomes `-12_345.6`).
+
+---
+
 ## Crate: `ic-utils-thread`
 
 **Path:** `rs/utils/thread`
