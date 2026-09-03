@@ -155,10 +155,7 @@ impl AppSubnet {
     /// The application subnet running on `schedule`.
     fn on(env: &TestEnv, schedule: CanisterCyclesCostSchedule) -> Self {
         let nodes: Vec<_> = get_app_subnet_node_snapshots_with_schedule(env, schedule).collect();
-        assert_eq!(
-            nodes.len(),
-            SUBNET_NODES as usize
-        );
+        assert_eq!(nodes.len(), SUBNET_NODES as usize);
         let node = nodes
             .into_iter()
             .next()
@@ -1749,9 +1746,7 @@ fn test_charged_and_refunded(env: TestEnv) {
     let withheld_capped =
         flexible_fees(&url, Some(SMALL_MAX_RESPONSE_BYTES)).withheld(u128::from(CYCLES));
     let withheld_uncapped = flexible_fees(&url, None).withheld(u128::from(CYCLES));
-    assert!(
-        withheld_capped < withheld_uncapped
-    );
+    assert!(withheld_capped < withheld_uncapped);
 
     block_on(async {
         ic_system_test_driver::retry_with_msg_async!(

@@ -3040,7 +3040,7 @@ fn test_pay_as_you_go_funded_by_the_quote(env: TestEnv) {
         let elapsed = started.elapsed();
         assert_matches!(
             &response,
-            Ok(ok) if ok.status == 200 && ok.body == "quoted",
+            Ok(ok) if ok.status == 200 && ok.body == "quoted"
         );
         let charge = settled_charge(&handlers, &baseline).await;
         let RefundedCycles::Cycles(refunded) = refunded_cycles else {
@@ -3140,9 +3140,7 @@ fn test_pay_as_you_go_base_fee_threshold(env: TestEnv) {
             "a request that was never admitted should have its whole payment returned"
         );
         let refused = settled_charge(&handlers, &refused_baseline).await;
-        assert_eq!(
-            refused.consumed.http_outcalls, 0
-        );
+        assert_eq!(refused.consumed.http_outcalls, 0);
 
         // Exactly the base fee: admitted, and the base fee is kept.
         let baseline = settled_baseline(&handlers).await;
@@ -3173,10 +3171,7 @@ fn test_pay_as_you_go_base_fee_threshold(env: TestEnv) {
             "a payment of exactly the base fee leaves nothing to refund"
         );
         let charge = settled_charge(&handlers, &baseline).await;
-        assert_eq!(
-            charge.consumed.http_outcalls,
-            u128::from(base_fee)
-        );
+        assert_eq!(charge.consumed.http_outcalls, u128::from(base_fee));
     });
 }
 
@@ -3292,9 +3287,7 @@ fn test_legacy_charges_the_estimate_and_nothing_else(env: TestEnv) {
         let charge = settled_charge(&handlers, &baseline).await;
         // Legacy is charged up front exactly as quoted, and nothing about the
         // outcall's actual resource usage moves it afterwards.
-        assert_eq!(
-            charge.consumed.http_outcalls, estimate
-        );
+        assert_eq!(charge.consumed.http_outcalls, estimate);
     });
 }
 
@@ -3355,9 +3348,7 @@ fn test_pay_as_you_go_out_of_cycles(env: TestEnv) {
         // deliver, and the rest is credited back.
         let charge = settled_charge(&handlers, &baseline).await;
         let expected = fees.base_fee + spent;
-        assert_eq!(
-            charge.consumed.http_outcalls, expected
-        );
+        assert_eq!(charge.consumed.http_outcalls, expected);
     });
 }
 

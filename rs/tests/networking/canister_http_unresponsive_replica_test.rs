@@ -113,9 +113,7 @@ fn test_unresponsive_replica_is_refunded_on_timeout(env: TestEnv) {
         subnet_size,
     );
     let payment = u128::from(PAYMENT);
-    assert!(
-        fees.payment_is_ample(payment)
-    );
+    assert!(fees.payment_is_ample(payment));
     let allowance = fees.allowance(payment);
 
     info!(logger, "Killing one application node.");
