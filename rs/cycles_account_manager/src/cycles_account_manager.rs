@@ -897,10 +897,12 @@ impl CyclesAccountManager {
     /// the requirement compare, and settling the prepayment would need to account for
     /// both parts separately. In particular, a canister whose subnet switched from the
     /// normal to the free cost schedule across a call would hit the branch below that
-    /// returns the prepayment unchanged, and `refund_unused_execution_cycles` would
-    /// then clamp the refund to the free-schedule amount of zero real cycles, so the
-    /// canister would forfeit the whole real prepayment it made under the normal cost
-    /// schedule instead of getting it back.
+    /// returns the prepayment unchanged, i.e. keep the prepayment it made under the
+    /// normal cost schedule, real part and all. `refund_unused_execution_cycles` would
+    /// then derive the refund under the free cost schedule, where the real part of an
+    /// `Instructions` amount is zero, so it would return nothing at all to the balance
+    /// and the canister would forfeit that whole real prepayment instead of getting it
+    /// back.
     ///
     /// Returns the prepayment matching the cycles required for executing the response
     /// in the given Wasm execution mode, or a `CanisterOutOfCyclesError` if the
