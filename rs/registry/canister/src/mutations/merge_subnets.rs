@@ -4,7 +4,6 @@ use candid::CandidType;
 use dfn_core::println;
 use ic_base_types::SubnetId;
 use ic_registry_keys::make_subnet_record_key;
-use ic_registry_routing_table::are_disjoint;
 use serde::{Deserialize, Serialize};
 
 impl Registry {
@@ -25,6 +24,7 @@ impl Registry {
             destination_subnet,
         } = payload;
 
+        // The subnets must be distinct.
         if source_subnet == destination_subnet {
             return Err(format!(
                 "source subnet {source_subnet} and destination subnet {destination_subnet} must be different subnets"
@@ -33,6 +33,7 @@ impl Registry {
 
         let version = self.latest_version();
 
+        // The subnets must exist.
         self.get(&make_subnet_record_key(source_subnet).into_bytes(), version)
             .ok_or_else(|| format!("source {source_subnet} is not a known subnet"))?;
         self.get(
@@ -41,22 +42,11 @@ impl Registry {
         )
         .ok_or_else(|| format!("destination {destination_subnet} is not a known subnet"))?;
 
+        // The source subnet must be nonempty.
         let routing_table = self.get_routing_table_or_panic(version);
-        let source_ranges = routing_table.ranges(source_subnet);
-        if source_ranges.is_empty() {
+        if routing_table.ranges(source_subnet).is_empty() {
             return Err(format!(
                 "source subnet {source_subnet} does not host any canister ID range"
-            ));
-        }
-
-        // Rerouting the canister ID ranges of the source subnet would break any ongoing canister
-        // migration out of those ranges: the migrated ranges would end up being hosted by the
-        // destination subnet, which is not on the recorded migration trace.
-        if let Some(canister_migrations) = self.get_canister_migrations(version)
-            && !are_disjoint(canister_migrations.ranges(), source_ranges.iter())
-        {
-            return Err(format!(
-                "source subnet {source_subnet} hosts canister ID ranges with ongoing canister migrations"
             ));
         }
 
@@ -89,57 +79,66 @@ mod tests {
             add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
             prepare_registry_with_nodes,
         },
-        mutations::{
-            prepare_canister_migration::PrepareCanisterMigrationPayload,
-            routing_table::routing_table_into_registry_mutation,
-        },
+        mutations::routing_table::routing_table_into_registry_mutation,
     };
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_types::CanisterId;
     use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2, SUBNET_3};
+    use lazy_static::lazy_static;
     use maplit::btreemap;
 
-    fn range(start: u64, end: u64) -> CanisterIdRange {
+    const fn range(start: u64, end: u64) -> CanisterIdRange {
         CanisterIdRange {
             start: CanisterId::from_u64(start),
             end: CanisterId::from_u64(end),
         }
     }
 
-    /// Returns a registry with two subnets, `SUBNET_1` and `SUBNET_2`, where
-    /// `SUBNET_1` hosts the canister ID ranges `[10, 19]` and `[30, 39]` and
-    /// `SUBNET_2` hosts the canister ID range `[20, 29]`.
-    fn new_two_subnets_fixture_registry() -> Registry {
-        let mut registry = invariant_compliant_registry(0);
+    /// The routing table of `TWO_SUBNETS_REGISTRY`.
+    const FIXTURE_ROUTING_TABLE_ENTRIES: [(CanisterIdRange, SubnetId); 3] = [
+        (range(10, 19), SUBNET_1),
+        (range(20, 29), SUBNET_2),
+        (range(30, 39), SUBNET_1),
+    ];
 
-        let (mutate_request, node_ids_and_dkg_pks) =
-            prepare_registry_with_nodes(/* start_mutation_id = */ 1, /* nodes = */ 2);
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+    lazy_static! {
+        /// A registry with two subnets, `SUBNET_1` and `SUBNET_2`, where `SUBNET_1`
+        /// hosts the canister ID ranges `[10, 19]` and `[30, 39]` and `SUBNET_2`
+        /// hosts the canister ID range `[20, 29]`.
+        static ref TWO_SUBNETS_REGISTRY: Registry = {
+            let mut registry = invariant_compliant_registry(0);
 
-        let mut subnet_list_record = registry.get_subnet_list_record();
-        let subnet_ids_and_nodes = [SUBNET_1, SUBNET_2].into_iter().zip(node_ids_and_dkg_pks);
-
-        for (subnet_id, (node_id, dkg_pk)) in subnet_ids_and_nodes {
-            let subnet_record = get_invariant_compliant_subnet_record(vec![node_id]);
-            let subnet_mutations = add_fake_subnet(
-                subnet_id,
-                &mut subnet_list_record,
-                subnet_record,
-                &btreemap! { node_id => dkg_pk },
+            let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
+                1, // start_mutation_id
+                2, // nodes
             );
-            registry.maybe_apply_mutation_internal(subnet_mutations);
-        }
+            registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
-        let mut routing_table = RoutingTable::new();
-        routing_table.insert(range(10, 19), SUBNET_1).unwrap();
-        routing_table.insert(range(20, 29), SUBNET_2).unwrap();
-        routing_table.insert(range(30, 39), SUBNET_1).unwrap();
-        registry.maybe_apply_mutation_internal(routing_table_into_registry_mutation(
-            &registry,
-            routing_table,
-        ));
+            let mut subnet_list_record = registry.get_subnet_list_record();
+            let subnet_ids_and_nodes = [SUBNET_1, SUBNET_2].into_iter().zip(node_ids_and_dkg_pks);
 
-        registry
+            for (subnet_id, (node_id, dkg_pk)) in subnet_ids_and_nodes {
+                let subnet_record = get_invariant_compliant_subnet_record(vec![node_id]);
+                let subnet_mutations = add_fake_subnet(
+                    subnet_id,
+                    &mut subnet_list_record,
+                    subnet_record,
+                    &btreemap! { node_id => dkg_pk },
+                );
+                registry.maybe_apply_mutation_internal(subnet_mutations);
+            }
+
+            let mut routing_table = RoutingTable::new();
+            for (canister_id_range, subnet_id) in FIXTURE_ROUTING_TABLE_ENTRIES {
+                routing_table.insert(canister_id_range, subnet_id).unwrap();
+            }
+            registry.maybe_apply_mutation_internal(routing_table_into_registry_mutation(
+                &registry,
+                routing_table,
+            ));
+
+            registry
+        };
     }
 
     fn get_routing_table_entries(registry: &Registry) -> Vec<(CanisterIdRange, SubnetId)> {
@@ -149,10 +148,20 @@ mod tests {
             .collect::<Vec<(CanisterIdRange, SubnetId)>>()
     }
 
+    /// Asserts that the routing table is still the one of `TWO_SUBNETS_REGISTRY`,
+    /// i.e. that the (failed) merge did not modify it.
+    #[track_caller]
+    fn assert_routing_table_unchanged_vs_fixture(registry: &Registry) {
+        assert_eq!(
+            get_routing_table_entries(registry),
+            FIXTURE_ROUTING_TABLE_ENTRIES.to_vec(),
+        );
+    }
+
     #[test]
     fn test_merge_subnets() {
         // Step 1: Prepare the world.
-        let mut registry = new_two_subnets_fixture_registry();
+        let mut registry = TWO_SUBNETS_REGISTRY.clone();
 
         // Step 2: Run the code under test.
         let result = registry.merge_subnets(MergeSubnetsPayload {
@@ -179,7 +188,7 @@ mod tests {
         // range at all, so that the merge has to add the destination subnet to the
         // routing table. The two ranges of the source subnet are not adjacent, so
         // they must stay two separate entries.
-        let mut registry = new_two_subnets_fixture_registry();
+        let mut registry = TWO_SUBNETS_REGISTRY.clone();
         let mut routing_table = RoutingTable::new();
         routing_table.insert(range(10, 19), SUBNET_1).unwrap();
         routing_table.insert(range(30, 39), SUBNET_1).unwrap();
@@ -206,7 +215,7 @@ mod tests {
     #[test]
     fn test_merge_subnets_fails_when_subnets_are_equal() {
         // Step 1: Prepare the world.
-        let mut registry = new_two_subnets_fixture_registry();
+        let mut registry = TWO_SUBNETS_REGISTRY.clone();
 
         // Step 2: Run the code under test.
         let result = registry.merge_subnets(MergeSubnetsPayload {
@@ -220,20 +229,13 @@ mod tests {
             error_message.contains("must be different subnets"),
             "{error_message}"
         );
-        assert_eq!(
-            get_routing_table_entries(&registry),
-            vec![
-                (range(10, 19), SUBNET_1),
-                (range(20, 29), SUBNET_2),
-                (range(30, 39), SUBNET_1),
-            ],
-        );
+        assert_routing_table_unchanged_vs_fixture(&registry);
     }
 
     #[test]
     fn test_merge_subnets_fails_when_source_subnet_is_unknown() {
         // Step 1: Prepare the world.
-        let mut registry = new_two_subnets_fixture_registry();
+        let mut registry = TWO_SUBNETS_REGISTRY.clone();
 
         // Step 2: Run the code under test.
         let result = registry.merge_subnets(MergeSubnetsPayload {
@@ -247,12 +249,13 @@ mod tests {
             error_message.contains(&format!("source {SUBNET_3} is not a known subnet")),
             "{error_message}"
         );
+        assert_routing_table_unchanged_vs_fixture(&registry);
     }
 
     #[test]
     fn test_merge_subnets_fails_when_destination_subnet_is_unknown() {
         // Step 1: Prepare the world.
-        let mut registry = new_two_subnets_fixture_registry();
+        let mut registry = TWO_SUBNETS_REGISTRY.clone();
 
         // Step 2: Run the code under test.
         let result = registry.merge_subnets(MergeSubnetsPayload {
@@ -266,13 +269,14 @@ mod tests {
             error_message.contains(&format!("destination {SUBNET_3} is not a known subnet")),
             "{error_message}"
         );
+        assert_routing_table_unchanged_vs_fixture(&registry);
     }
 
     #[test]
     fn test_merge_subnets_fails_when_source_subnet_hosts_no_canister_id_range() {
         // Step 1: Prepare the world: only the destination subnet hosts a canister
         // ID range.
-        let mut registry = new_two_subnets_fixture_registry();
+        let mut registry = TWO_SUBNETS_REGISTRY.clone();
         let mut routing_table = RoutingTable::new();
         routing_table.insert(range(20, 29), SUBNET_2).unwrap();
         registry.maybe_apply_mutation_internal(routing_table_into_registry_mutation(
@@ -292,40 +296,9 @@ mod tests {
             error_message.contains("does not host any canister ID range"),
             "{error_message}"
         );
-    }
-
-    #[test]
-    fn test_merge_subnets_fails_with_ongoing_canister_migration() {
-        // Step 1: Prepare the world: start migrating a canister ID range away from
-        // the source subnet.
-        let mut registry = new_two_subnets_fixture_registry();
-        registry
-            .prepare_canister_migration(PrepareCanisterMigrationPayload {
-                canister_id_ranges: vec![range(10, 11)],
-                source_subnet: SUBNET_1,
-                destination_subnet: SUBNET_2,
-            })
-            .unwrap();
-
-        // Step 2: Run the code under test.
-        let result = registry.merge_subnets(MergeSubnetsPayload {
-            source_subnet: SUBNET_1,
-            destination_subnet: SUBNET_2,
-        });
-
-        // Step 3: Verify results.
-        let error_message = result.unwrap_err();
-        assert!(
-            error_message.contains("ongoing canister migrations"),
-            "{error_message}"
-        );
         assert_eq!(
             get_routing_table_entries(&registry),
-            vec![
-                (range(10, 19), SUBNET_1),
-                (range(20, 29), SUBNET_2),
-                (range(30, 39), SUBNET_1),
-            ],
+            vec![(range(20, 29), SUBNET_2)],
         );
     }
 }

@@ -8,7 +8,7 @@ use ic_nns_test_utils::{
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_types::CanisterId;
+use ic_types::{CanisterId, SubnetId};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::merge_subnets::MergeSubnetsPayload,
 };
@@ -29,10 +29,12 @@ fn test_merge_subnets() {
             // ID range [0, 255] and subnet 1 hosts [256, 511].
             let (subnet_1_mutation, subnet_id_1, subnet_id_2_option, _, _) =
                 prepare_registry_with_two_node_sets(
-                    /* num_nodes_in_subnet = */ 4, /* num_unassigned_nodes = */ 4, true,
+                    4,    // num_nodes_in_subnet1
+                    4,    // num_nodes_in_subnet2
+                    true, // assign_nodes_to_subnet2
                 );
             let subnet_id_2 = subnet_id_2_option.unwrap();
-            let rt_mutation = {
+            let routing_table_mutation = {
                 fn range(start: u64, end: u64) -> CanisterIdRange {
                     CanisterIdRange {
                         start: CanisterId::from(start),
@@ -40,14 +42,16 @@ fn test_merge_subnets() {
                     }
                 }
 
-                let mut rt = RoutingTable::new();
-                rt.insert(range(0, 255), subnet_id_2)
+                let mut routing_table = RoutingTable::new();
+                routing_table
+                    .insert(range(0, 255), subnet_id_2)
                     .expect("failed to update the routing table");
-                rt.insert(range(256, 511), subnet_id_1)
+                routing_table
+                    .insert(range(256, 511), subnet_id_1)
                     .expect("failed to update the routing table");
 
                 RegistryAtomicMutateRequest {
-                    mutations: initial_routing_table_mutations(&rt),
+                    mutations: initial_routing_table_mutations(&routing_table),
                     preconditions: vec![],
                 }
             };
@@ -56,7 +60,7 @@ fn test_merge_subnets() {
                 &runtime,
                 RegistryCanisterInitPayloadBuilder::new()
                     .push_init_mutate_request(subnet_1_mutation)
-                    .push_init_mutate_request(rt_mutation)
+                    .push_init_mutate_request(routing_table_mutation)
                     .build(),
             )
             .await;
@@ -67,7 +71,9 @@ fn test_merge_subnets() {
                 ic_nns_constants::GOVERNANCE_CANISTER_ID
             );
 
-            // Step 2: A caller other than governance may not merge subnets.
+            // Step 2: Run the code under test.
+
+            // Step 2.1: The sad case: caller is not the Governance canister.
             check_error_message(
                 registry
                     .update_(
@@ -82,7 +88,8 @@ fn test_merge_subnets() {
                 "not authorized",
             );
 
-            // Step 3: Run the code under test: merge subnet 1 into subnet 2.
+            // Step 2.2: The happy case: merging subnet 1 into subnet 2 succeeds,
+            // because Governance is the caller.
             try_call_via_universal_canister(
                 &governance_fake,
                 &registry,
@@ -96,16 +103,13 @@ fn test_merge_subnets() {
             .await
             .unwrap();
 
-            // Step 4: Verify results: the canisters formerly hosted by subnet 1 are now
+            // Step 3: Verify results: the canisters formerly hosted by subnet 1 are now
             // hosted by subnet 2, and the canisters of subnet 2 stay put.
             check_subnet_for_canisters(
                 &registry,
-                vec![
-                    (CanisterId::from(0), subnet_id_2),
-                    (CanisterId::from(255), subnet_id_2),
-                    (CanisterId::from(256), subnet_id_2),
-                    (CanisterId::from(511), subnet_id_2),
-                ],
+                (0..=511_u64)
+                    .map(|canister_id| (CanisterId::from(canister_id), subnet_id_2))
+                    .collect::<Vec<(CanisterId, SubnetId)>>(),
             )
             .await;
 
