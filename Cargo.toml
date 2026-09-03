@@ -600,6 +600,11 @@ actix-rt = "2.10.0"
 actix-web = "4.9.0"
 actix-web-prom = "0.10.0"
 aide = { version = "^0.14.2", features = ["axum", "axum-json"] }
+alloy-consensus = { version = "1.8.3", features = ["k256", "serde"] }
+alloy-eips = { version = "1.8.3", features = ["k256", "serde"] }
+alloy-primitives = { version = "1.6.0", features = ["k256", "serde"] }
+alloy-rpc-types-eth = "1.8.3"
+alloy-sol-types = "1.6.0"
 anyhow = "1.0.93"
 arbitrary = { version = "1.3.2", features = ["derive"] }
 arc-swap = "^1.7.1"
