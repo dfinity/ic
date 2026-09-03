@@ -1,5 +1,5 @@
 {
-  "checksum": "1919d1279617bf694a811661c4b2a5d4f0eb18a59dfd2424fa3c887daf6f7718",
+  "checksum": "5d175093a4c3bec343f27967cf71d11fb63502018384a14f35b20061c8588fe8",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -12613,12 +12613,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "std"
-          ],
-          "selects": {}
-        },
         "edition": "2018",
         "version": "1.2.2"
       },
@@ -19583,9 +19577,7 @@
         "crate_features": {
           "common": [
             "default",
-            "limit_128",
-            "limit_256",
-            "std"
+            "limit_128"
           ],
           "selects": {}
         },
@@ -23264,10 +23256,6 @@
             {
               "id": "escargot 0.5.7",
               "target": "escargot"
-            },
-            {
-              "id": "ethers-core 2.0.8",
-              "target": "ethers_core"
             },
             {
               "id": "ethnum 1.5.3",
@@ -27172,399 +27160,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "ethabi 18.0.0": {
-      "name": "ethabi",
-      "version": "18.0.0",
-      "package_url": "https://github.com/rust-ethereum/ethabi",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ethabi/18.0.0/download",
-          "sha256": "7413c5f74cc903ea37386a8965a936cbeb334bd270862fdece542c1b2dcbc898"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ethabi",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ethabi",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "full-serde",
-            "once_cell",
-            "regex",
-            "rlp",
-            "serde",
-            "serde_json",
-            "std",
-            "thiserror",
-            "uint"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "ethereum-types 0.14.1",
-              "target": "ethereum_types"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "regex 1.13.1",
-              "target": "regex"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.145",
-              "target": "serde_json"
-            },
-            {
-              "id": "sha3 0.10.8",
-              "target": "sha3"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            },
-            {
-              "id": "uint 0.9.5",
-              "target": "uint"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "18.0.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "ethbloom 0.13.0": {
-      "name": "ethbloom",
-      "version": "0.13.0",
-      "package_url": "https://github.com/paritytech/parity-common",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ethbloom/0.13.0/download",
-          "sha256": "c22d4b5885b6aa2fe5e8b9329fb8d232bf739e434e6b87347c63bdd00c120f60"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ethbloom",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ethbloom",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "codec",
-            "impl-codec",
-            "impl-rlp",
-            "impl-serde",
-            "rlp",
-            "scale-info",
-            "serialize",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "crunchy 0.2.2",
-              "target": "crunchy"
-            },
-            {
-              "id": "fixed-hash 0.8.0",
-              "target": "fixed_hash"
-            },
-            {
-              "id": "impl-codec 0.6.0",
-              "target": "impl_codec"
-            },
-            {
-              "id": "impl-rlp 0.3.0",
-              "target": "impl_rlp"
-            },
-            {
-              "id": "impl-serde 0.4.0",
-              "target": "impl_serde"
-            },
-            {
-              "id": "scale-info 2.9.0",
-              "target": "scale_info"
-            },
-            {
-              "id": "tiny-keccak 2.0.2",
-              "target": "tiny_keccak"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.13.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
-    "ethereum-types 0.14.1": {
-      "name": "ethereum-types",
-      "version": "0.14.1",
-      "package_url": "https://github.com/paritytech/parity-common",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ethereum-types/0.14.1/download",
-          "sha256": "02d215cbf040552efcbe99a38372fe80ab9d00268e20012b79fcd0f073edd8ee"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ethereum_types",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ethereum_types",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "codec",
-            "default",
-            "ethbloom",
-            "impl-codec",
-            "impl-rlp",
-            "impl-serde",
-            "rlp",
-            "scale-info",
-            "serialize",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "ethbloom 0.13.0",
-              "target": "ethbloom"
-            },
-            {
-              "id": "fixed-hash 0.8.0",
-              "target": "fixed_hash"
-            },
-            {
-              "id": "impl-codec 0.6.0",
-              "target": "impl_codec"
-            },
-            {
-              "id": "impl-rlp 0.3.0",
-              "target": "impl_rlp"
-            },
-            {
-              "id": "impl-serde 0.4.0",
-              "target": "impl_serde"
-            },
-            {
-              "id": "primitive-types 0.12.1",
-              "target": "primitive_types"
-            },
-            {
-              "id": "scale-info 2.9.0",
-              "target": "scale_info"
-            },
-            {
-              "id": "uint 0.9.5",
-              "target": "uint",
-              "alias": "uint_crate"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.14.1"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
-    "ethers-core 2.0.8": {
-      "name": "ethers-core",
-      "version": "2.0.8",
-      "package_url": "https://github.com/gakonst/ethers-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ethers-core/2.0.8/download",
-          "sha256": "60ca2514feb98918a0a31de7e1983c29f2267ebf61b2dc5d4294f91e5b866623"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ethers_core",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ethers_core",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "arrayvec 0.7.4",
-              "target": "arrayvec"
-            },
-            {
-              "id": "bytes 1.11.1",
-              "target": "bytes"
-            },
-            {
-              "id": "chrono 0.4.42",
-              "target": "chrono"
-            },
-            {
-              "id": "elliptic-curve 0.13.8",
-              "target": "elliptic_curve"
-            },
-            {
-              "id": "ethabi 18.0.0",
-              "target": "ethabi"
-            },
-            {
-              "id": "generic-array 0.14.7",
-              "target": "generic_array"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "k256 0.13.4",
-              "target": "k256"
-            },
-            {
-              "id": "num_enum 0.6.1",
-              "target": "num_enum"
-            },
-            {
-              "id": "open-fastrlp 0.1.4",
-              "target": "open_fastrlp"
-            },
-            {
-              "id": "rand 0.8.6",
-              "target": "rand"
-            },
-            {
-              "id": "rlp 0.5.2",
-              "target": "rlp"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.145",
-              "target": "serde_json"
-            },
-            {
-              "id": "strum 0.25.0",
-              "target": "strum"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            },
-            {
-              "id": "tiny-keccak 2.0.2",
-              "target": "tiny_keccak"
-            },
-            {
-              "id": "unicode-xid 0.2.4",
-              "target": "unicode_xid"
-            }
-          ],
-          "selects": {
-            "cfg(not(target_arch = \"wasm32\"))": [
-              {
-                "id": "tempfile 3.23.0",
-                "target": "tempfile"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "2.0.8"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
     "ethnum 1.5.3": {
       "name": "ethnum",
       "version": "1.5.3",
@@ -28892,29 +28487,8 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "byteorder",
-            "rand",
-            "rustc-hex",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
-            {
-              "id": "byteorder 1.5.0",
-              "target": "byteorder"
-            },
-            {
-              "id": "rand 0.8.6",
-              "target": "rand"
-            },
-            {
-              "id": "rustc-hex 2.1.0",
-              "target": "rustc_hex"
-            },
             {
               "id": "static_assertions 1.1.0",
               "target": "static_assertions"
@@ -40746,12 +40320,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -40809,102 +40377,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "impl-rlp 0.3.0": {
-      "name": "impl-rlp",
-      "version": "0.3.0",
-      "package_url": "https://github.com/paritytech/parity-common",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/impl-rlp/0.3.0/download",
-          "sha256": "f28220f89297a075ddc7245cd538076ee98b01f2a9c23a53a4f1105d5a322808"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "impl_rlp",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "impl_rlp",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rlp 0.5.2",
-              "target": "rlp"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.3.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
-    "impl-serde 0.4.0": {
-      "name": "impl-serde",
-      "version": "0.4.0",
-      "package_url": "https://github.com/paritytech/parity-common",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/impl-serde/0.4.0/download",
-          "sha256": "ebc88fc67028ae3db0c853baa36269d398d5f45b6982f95549ff5def78c935cd"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "impl_serde",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "impl_serde",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.4.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
     },
     "impl-trait-for-tuples 0.2.2": {
       "name": "impl-trait-for-tuples",
@@ -52549,130 +52021,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "num_enum 0.6.1": {
-      "name": "num_enum",
-      "version": "0.6.1",
-      "package_url": "https://github.com/illicitonion/num_enum",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/num_enum/0.6.1/download",
-          "sha256": "7a015b430d3c108a207fd776d2e2196aaf8b1cf8cf93253e3a097ff3085076a1"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "num_enum",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "num_enum",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "num_enum_derive 0.6.1",
-              "target": "num_enum_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.6.1"
-      },
-      "license": "BSD-3-Clause OR MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "BSD-3-Clause",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "num_enum_derive 0.6.1": {
-      "name": "num_enum_derive",
-      "version": "0.6.1",
-      "package_url": "https://github.com/illicitonion/num_enum",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/num_enum_derive/0.6.1/download",
-          "sha256": "96667db765a921f7b295ffee8b60472b686a51d4f21c2ee4ffdb94c7013b65a6"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "num_enum_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "num_enum_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "proc-macro-crate",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro-crate 1.3.1",
-              "target": "proc_macro_crate"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.119",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.6.1"
-      },
-      "license": "BSD-3-Clause OR MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "BSD-3-Clause",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "num_threads 0.1.6": {
       "name": "num_threads",
       "version": "0.1.6",
@@ -53549,144 +52897,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "open-fastrlp 0.1.4": {
-      "name": "open-fastrlp",
-      "version": "0.1.4",
-      "package_url": "https://github.com/gakonst/open-fastrlp",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/open-fastrlp/0.1.4/download",
-          "sha256": "786393f80485445794f6043fd3138854dd109cc6c4bd1a6383db304c9ce9b9ce"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "open_fastrlp",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "open_fastrlp",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "derive",
-            "ethereum-types",
-            "rlp-derive",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "arrayvec 0.7.4",
-              "target": "arrayvec"
-            },
-            {
-              "id": "bytes 1.11.1",
-              "target": "bytes"
-            },
-            {
-              "id": "ethereum-types 0.14.1",
-              "target": "ethereum_types"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "auto_impl 1.3.0",
-              "target": "auto_impl"
-            },
-            {
-              "id": "open-fastrlp-derive 0.1.1",
-              "target": "open_fastrlp_derive",
-              "alias": "rlp_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.1.4"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "open-fastrlp-derive 0.1.1": {
-      "name": "open-fastrlp-derive",
-      "version": "0.1.1",
-      "package_url": "https://github.com/gakonst/open-fastrlp",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/open-fastrlp-derive/0.1.1/download",
-          "sha256": "003b2be5c6c53c1cfeb0a238b8a1c3915cd410feb684457a36c10038f764bb1c"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "open_fastrlp_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "open_fastrlp_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bytes 1.11.1",
-              "target": "bytes"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.1.1"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
     },
     "openssh-keys 0.5.0": {
       "name": "openssh-keys",
@@ -55052,17 +54262,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "chain-error",
-            "derive",
-            "max-encoded-len",
-            "parity-scale-codec-derive",
-            "serde",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -55072,10 +54271,6 @@
             {
               "id": "byte-slice-cast 1.2.2",
               "target": "byte_slice_cast"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
             }
           ],
           "selects": {}
@@ -55086,10 +54281,6 @@
             {
               "id": "impl-trait-for-tuples 0.2.2",
               "target": "impl_trait_for_tuples"
-            },
-            {
-              "id": "parity-scale-codec-derive 3.6.3",
-              "target": "parity_scale_codec_derive"
             }
           ],
           "selects": {}
@@ -55131,12 +54322,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "max-encoded-len"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -58992,44 +58177,11 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "byteorder",
-            "codec",
-            "impl-codec",
-            "impl-rlp",
-            "impl-serde",
-            "rlp",
-            "rustc-hex",
-            "scale-info",
-            "scale-info-crate",
-            "serde_no_std",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
               "id": "fixed-hash 0.8.0",
               "target": "fixed_hash"
-            },
-            {
-              "id": "impl-codec 0.6.0",
-              "target": "impl_codec"
-            },
-            {
-              "id": "impl-rlp 0.3.0",
-              "target": "impl_rlp"
-            },
-            {
-              "id": "impl-serde 0.4.0",
-              "target": "impl_serde"
-            },
-            {
-              "id": "scale-info 2.9.0",
-              "target": "scale_info",
-              "alias": "scale_info_crate"
             },
             {
               "id": "uint 0.9.5",
@@ -65356,8 +64508,6 @@
         "crate_features": {
           "common": [
             "default",
-            "derive",
-            "rlp-derive",
             "std"
           ],
           "selects": {}
@@ -65376,74 +64526,9 @@
           "selects": {}
         },
         "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "rlp-derive 0.1.0",
-              "target": "rlp_derive"
-            }
-          ],
-          "selects": {}
-        },
         "version": "0.5.2"
       },
       "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
-    "rlp-derive 0.1.0": {
-      "name": "rlp-derive",
-      "version": "0.1.0",
-      "package_url": "http://parity.io",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rlp-derive/0.1.0/download",
-          "sha256": "e33d7b2abe0c340d8797fe2907d3f20d3b5ea5908683618bfe80df7f621f672a"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "rlp_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rlp_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.1.0"
-      },
-      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -68307,137 +67392,6 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "scale-info 2.9.0": {
-      "name": "scale-info",
-      "version": "2.9.0",
-      "package_url": "https://github.com/paritytech/scale-info",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/scale-info/2.9.0/download",
-          "sha256": "35c0a159d0c45c12b20c5a844feb1fe4bea86e28f17b92a5f0c42193634d3782"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "scale_info",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "scale_info",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "derive",
-            "scale-info-derive"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "parity-scale-codec 3.6.3",
-              "target": "parity_scale_codec",
-              "alias": "scale"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "derive_more 0.99.17",
-              "target": "derive_more"
-            },
-            {
-              "id": "scale-info-derive 2.9.0",
-              "target": "scale_info_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "2.9.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "scale-info-derive 2.9.0": {
-      "name": "scale-info-derive",
-      "version": "2.9.0",
-      "package_url": "https://github.com/paritytech/scale-info",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/scale-info-derive/2.9.0/download",
-          "sha256": "912e55f6d20e0e80d63733872b40e1227c0bce1e1ab81ba67d696339bfd7fd29"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "scale_info_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "scale_info_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro-crate 1.3.1",
-              "target": "proc_macro_crate"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "2.9.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
     "schannel 0.1.22": {
       "name": "schannel",
       "version": "0.1.22",
@@ -70660,7 +69614,6 @@
         "crate_features": {
           "common": [
             "alloc",
-            "arbitrary_precision",
             "default",
             "raw_value",
             "std",
@@ -75275,62 +74228,6 @@
       ],
       "license_file": null
     },
-    "strum 0.25.0": {
-      "name": "strum",
-      "version": "0.25.0",
-      "package_url": "https://github.com/Peternator7/strum",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/strum/0.25.0/download",
-          "sha256": "290d54ea6f91c969195bdbcd7442c8c2a2ba87da8bf60a7ee86a235d4bc1e125"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "strum",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "strum",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "derive",
-            "std",
-            "strum_macros"
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "strum_macros 0.25.3",
-              "target": "strum_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.25.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "strum 0.26.3": {
       "name": "strum",
       "version": "0.26.3",
@@ -75492,74 +74389,6 @@
           "selects": {}
         },
         "version": "0.28.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "strum_macros 0.25.3": {
-      "name": "strum_macros",
-      "version": "0.25.3",
-      "package_url": "https://github.com/Peternator7/strum",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/strum_macros/0.25.3/download",
-          "sha256": "23dc1fa9ac9c169a78ba62f0b841814b7abae11bdd047b9c58f893439e309ea0"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "strum_macros",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "strum_macros",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "heck 0.4.1",
-              "target": "heck"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.119",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "rustversion 1.0.14",
-              "target": "rustversion"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.25.3"
       },
       "license": "MIT",
       "license_ids": [
@@ -76098,8 +74927,7 @@
             "printing",
             "proc-macro",
             "quote",
-            "visit",
-            "visit-mut"
+            "visit"
           ],
           "selects": {}
         },
@@ -79031,26 +77859,10 @@
         "crate_features": {
           "common": [
             "default",
-            "keccak"
+            "sha3",
+            "shake"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "sha3",
-              "shake"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "sha3",
-              "shake"
-            ],
-            "x86_64-apple-darwin": [
-              "sha3",
-              "shake"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "sha3",
-              "shake"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -83881,12 +82693,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -96608,7 +95414,6 @@
     "enum-ordinalize-derive 4.4.1",
     "erased-serde 0.3.28",
     "escargot 0.5.7",
-    "ethers-core 2.0.8",
     "ethnum 1.5.3",
     "evm_rpc_client 0.4.0",
     "evm_rpc_types 3.1.1",

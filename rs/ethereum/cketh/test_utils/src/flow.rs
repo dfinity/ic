@@ -15,7 +15,6 @@ use crate::{
     format_ethereum_address_to_eip_55,
 };
 use candid::{Decode, Encode, Nat, Principal};
-use ethers_core::utils::hex;
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::ckerc20::RetrieveErc20Request;
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, EventSource};
