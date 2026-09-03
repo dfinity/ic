@@ -1,5 +1,5 @@
 {
-  "checksum": "98278ea443cfe6515f1fa375b646fca2545068032d765eca6a881c43d551a253",
+  "checksum": "7ea35fe5a597aec3a6da4d82c410bc3b2159c97d1fb3bbd1e4eee7a0bdc690dc",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -24486,10 +24486,6 @@
             {
               "id": "wirm 4.0.4",
               "target": "wirm"
-            },
-            {
-              "id": "wsl 0.1.0",
-              "target": "wsl"
             },
             {
               "id": "wycheproof 0.6.0",
@@ -94490,44 +94486,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "wsl 0.1.0": {
-      "name": "wsl",
-      "version": "0.1.0",
-      "package_url": "https://github.com/Dentosal/wsl-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wsl/0.1.0/download",
-          "sha256": "f8dab7ac864710bdea6594becbea5b5050333cf34fefb0dc319567eb347950d4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wsl",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wsl",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.1.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "wycheproof 0.6.0": {
       "name": "wycheproof",
       "version": "0.6.0",
@@ -97054,7 +97012,6 @@
     "webpki-roots 1.0.6",
     "which 4.4.0",
     "wirm 4.0.4",
-    "wsl 0.1.0",
     "wycheproof 0.6.0",
     "x509-cert 0.2.5",
     "x509-parser 0.18.1",
