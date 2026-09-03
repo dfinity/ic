@@ -578,16 +578,36 @@ type UnsignedTransaction = record {
     access_list : vec record { address : text; storage_keys : vec blob };
 };
 
+// A secp256k1 signature: the two 32-byte components and the parity recovering
+// the signing key from them.
+type TransactionSignature = record {
+    y_parity : bool;
+    // 32-byte signature components.
+    r : blob;
+    s : blob;
+};
+
 // An EIP-7702 authorization tuple: a deposit address' signed consent to delegate
 // its code to `delegate`, signed by the address itself.
 type SignedAuthorization = record {
     chain_id : nat;
     delegate : text;
     nonce : nat;
-    y_parity : bool;
-    // 32-byte signature components.
-    r : blob;
-    s : blob;
+    signature : TransactionSignature;
+};
+
+// One deposit a sweep moves: the address the funds sit at, the account they are
+// credited to, the attestation binding the two, and the delegation letting the
+// sweeper's code run there.
+type AuthorizedSweepItem = record {
+    deposit : text;
+    owner : principal;
+    subaccount : opt blob;
+    // The attestation signed by the deposit address itself.
+    attestation : TransactionSignature;
+    // The delegation installed on the way, absent if the address is already
+    // delegated.
+    authorization : opt SignedAuthorization;
 };
 
 // A sweep transaction the minter has created but not yet signed: a transaction,
@@ -664,14 +684,12 @@ type Event = record {
         AcceptedSweepRequest : record {
             sweep_id : nat;
             destination : text;
-            amount : nat;
-            // Transaction call data (the delegate sweep call).
-            data : blob;
+            // The single ERC-20 contract this sweep moves.
+            token : text;
+            // The deposits the sweep moves, one per account.
+            items : vec AuthorizedSweepItem;
             max_transaction_fee : nat;
             created_at : nat64;
-            // Delegations the sweep installs on the way, empty if every address
-            // it touches is already delegated.
-            authorizations : vec SignedAuthorization;
         };
         CreatedSweeperTransaction : record {
             sweep_id : nat;
@@ -786,10 +804,16 @@ type Event = record {
             deposit_helper : text;
             owner : principal;
             subaccount : opt blob;
-            y_parity : bool;
-            // 32-byte signature components.
-            r : blob;
-            s : blob;
+            // The attestation signed by the deposit address itself.
+            attestation : TransactionSignature;
+        };
+        AuthorizedDepositAddress : record {
+            owner : principal;
+            subaccount : opt blob;
+            // The tuple the deposit address signed, delegating its code to the
+            // sweeper contract. Its nonce is always zero: the delegation is
+            // installed the first time the tuple is applied.
+            authorization : SignedAuthorization;
         };
     };
 };

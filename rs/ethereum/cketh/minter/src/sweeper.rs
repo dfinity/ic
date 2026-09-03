@@ -17,13 +17,14 @@ use crate::numeric::{LedgerBurnIndex, Wei};
 use crate::state::audit::{EventType, process_event};
 use crate::state::transactions::EthWithdrawalRequest;
 use crate::state::{State, TaskType, mutate_state, read_state};
+use crate::time::TimeProvider;
 use ic_canister_log::log;
-use ic_cdk::api::{canister_self, time};
+use ic_cdk::api::canister_self;
 
 /// Tops the sweeper address up when the balance the minter can vouch for has fallen below the
 /// configured low-water mark. Reads state, decides, burns, records — no chain read, because the
 /// minter already knows a lower bound on that balance from its own events.
-pub async fn fund_sweeper_address() {
+pub async fn fund_sweeper_address<T: TimeProvider>(time_provider: &T) {
     let _guard = match TimerGuard::new(TaskType::SweeperFunding) {
         Ok(guard) => guard,
         Err(_) => return,
@@ -114,10 +115,14 @@ pub async fn fund_sweeper_address() {
         ledger_burn_index,
         from: canister_self(),
         from_subaccount: LedgerSubaccount::from_bytes(CKETH_FEE_SUBACCOUNT),
-        created_at: Some(time()),
+        created_at: Some(time_provider.time()),
     };
     mutate_state(|s| {
-        process_event(s, EventType::AcceptedSweeperFundingRequest(request));
+        process_event(
+            s,
+            EventType::AcceptedSweeperFundingRequest(request),
+            time_provider,
+        );
     });
 }
 

@@ -1,39 +1,31 @@
-//! Semantic verification of the deployless balance batcher (`BATCHER_INITCODE`)
-//! against a real EVM: a local anvil node runs the exact bytecode the minter
-//! ships, so this complements the byte-level assembler golden
-//! (`balance_scan::batcher::tests::initcode_matches_readable_assembly`) by
-//! proving the program actually *does* the right thing end to end.
-//!
-//! It deploys `MockUSDT` (a standard ERC-20 with `balanceOf(address)`), funds a
-//! set of holders, and issues the batcher exactly as the minter does — a
-//! create-style `eth_call` (`to` omitted) whose calldata is
-//! `encode_balance_batch(..)`. The returned blob is decoded with
-//! `decode_balance_batch` and checked against the balances anvil reports
-//! directly. A separate test pins the fail-loud contract: a batch touching a
-//! non-contract "token" reverts the whole call rather than reporting a zero
-//! balance.
-//!
-//! Two further tests drive whole features end to end through a live PocketIC
-//! and the real EVM RPC canister: the balance scan (see
-//! [`ic_cketh_test_utils::live`]) and sweeper fee funding, which deposits
-//! through the production helper contract and then watches the minter burn
-//! ckETH from its fee subaccount to pay for sweep gas (see
-//! [`ic_cketh_test_utils::live`]).
-//!
-//! The anvil node client and its ABI/solc helpers live in
-//! [`ic_cketh_test_utils::anvil`]; `anvil` and `solc` are vendored via Bazel
-//! (`ANVIL_BIN`, `SOLC_BIN`); see BUILD.bazel.
+//! Integration tests showcasing the support of deposits from central exchanges:
+//! 1) the user notifies the minter of an upcoming deposit of a given token.
+//! 2) the minter watches the balance of that address for roughly 24H
+//! 3) if the address' balance is sufficient (roughly at least $10 equivalent), the minter proceeds with consolidating the funds.
+//! 4) the deposit address delegates to a sweeper contract,
+//!    whose purpose is to move the ERC-20 from the deposit address by calling the helper smart contract (DepositHelperWithSubaccount.sol),
+//!    to trigger the original deposit flow. This requires in particular the minter attesting that the given deposit address is for a given
+//!    principal and subaccount.
 
 use assert_matches::assert_matches;
+use candid::Principal;
 use ic_cketh_minter::balance_scan::batcher::{
     BalanceOfCall, decode_balance_batch, encode_balance_batch,
 };
 use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
+use ic_cketh_minter::endpoints::events::EventPayload;
 use ic_cketh_minter::numeric::Erc20Value;
-use ic_cketh_test_utils::anvil::{Anvil, DEV_ACCOUNT, address_from_hex, deploy_mock_erc20};
-use ic_cketh_test_utils::live::{Holding, LiveSetup};
+use ic_cketh_test_utils::anvil::{
+    Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
+};
+use ic_cketh_test_utils::ckerc20::Erc20Token;
+use ic_cketh_test_utils::live::{Holding, LiveSetup, contract_address};
+use ic_cketh_test_utils::{MINTER_ADDRESS, SWEEPER_ADDRESS};
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
+use std::collections::BTreeSet;
+use std::str::FromStr;
 
 #[test]
 fn should_read_erc20_balances_across_tokens_and_holders() {
@@ -288,6 +280,216 @@ fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
         "the ETH debited from the main address ({spent}) must never exceed the ckETH \
          burned for it ({burned})"
     );
+}
+
+#[test]
+fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
+    /// Ten depositors per token, so each sweep is a ten-deposit single-token batch — directly
+    /// comparable with `deposit_from_cex_demo`'s measured scenarios.
+    const DEPOSITORS_PER_TOKEN: u64 = 10;
+    // 6-decimal amounts, both far above the ~$10 per-token candidate minimum.
+    const USDC_DEPOSIT: u128 = 100_000_000;
+    const USDT_DEPOSIT: u128 = 150_000_000;
+
+    let sweeper = address_from_hex(SWEEPER_ADDRESS);
+    let setup = LiveSetup::new_sweep();
+    let funded_gas = setup.anvil_eth_balance(&sweeper);
+    let contracts = setup.sweep_contracts();
+    let [usdc, usdt] = setup.supported_erc20_tokens() else {
+        panic!("expected exactly 2 supported tokens")
+    };
+
+    // Every depositor gets a distinct principal and a distinct subaccount, so no two share a
+    // deposit address and each attestation binds a different account.
+    let deposits: Vec<Deposit> = (0..2 * DEPOSITORS_PER_TOKEN)
+        .map(|index| {
+            let (token, amount) = if index < DEPOSITORS_PER_TOKEN {
+                (usdc, USDC_DEPOSIT)
+            } else {
+                (usdt, USDT_DEPOSIT)
+            };
+            let owner = setup.depositor(index);
+            let subaccount = [u8::try_from(index).unwrap(); 32];
+            Deposit {
+                owner,
+                subaccount,
+                token,
+                amount,
+                address: setup.register_deposit_address(owner, subaccount, token),
+            }
+        })
+        .collect();
+
+    let distinct: BTreeSet<_> = deposits.iter().map(|deposit| deposit.address).collect();
+    assert_eq!(
+        distinct.len(),
+        deposits.len(),
+        "every account must get its own deposit address"
+    );
+    for deposit in &deposits {
+        assert!(
+            setup.anvil().code(&deposit.address).is_empty(),
+            "a deposit address starts with no code"
+        );
+        assert_eq!(
+            setup.anvil().balance(&deposit.address),
+            0,
+            "a deposit address never needs ETH of its own"
+        );
+    }
+
+    // The CEX withdrawals: a plain ERC-20 transfer to each address, carrying no principal.
+    let holdings: Vec<Holding<'_>> = deposits.iter().map(Deposit::holding).collect();
+    setup.credit_deposits(&holdings);
+
+    for deposit in &deposits {
+        assert_matches!(
+            setup.await_scan(deposit.owner, deposit.subaccount, deposit.token).status,
+            DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == deposit.amount
+        );
+    }
+
+    // One sweep per token, and nothing more.
+    let sweeps = setup.await_sweeps(&sweeper, 2);
+    for sweep in &sweeps {
+        assert_eq!(
+            sweep.transaction_type, 4,
+            "a first sweep installs delegations, so it must be an EIP-7702 transaction: {sweep:?}"
+        );
+        assert!(sweep.succeeded, "the sweep reverted: {sweep:?}");
+    }
+    assert_sweep_gas_near_demo(&sweeps, DEPOSITORS_PER_TOKEN);
+
+    // What each sweep actually batched, so that two transactions cannot pass as one per token.
+    let mut batched: Vec<(Address, usize)> = setup
+        .minter_events()
+        .into_iter()
+        .filter_map(|event| match event.payload {
+            EventPayload::AcceptedSweepRequest { token, items, .. } => Some((
+                Address::from_str(&token).expect("BUG: the sweep names an invalid token"),
+                items.len(),
+            )),
+            _ => None,
+        })
+        .collect();
+    batched.sort();
+    let per_token = usize::try_from(DEPOSITORS_PER_TOKEN).unwrap();
+    let mut expected = vec![
+        (contract_address(usdc), per_token),
+        (contract_address(usdt), per_token),
+    ];
+    expected.sort();
+    assert_eq!(
+        batched, expected,
+        "each sweep must batch one token's ten deposits, not a mixed batch and a redundant one"
+    );
+
+    // The funds left every deposit address and landed at the minter's main address.
+    let minter = address_from_hex(MINTER_ADDRESS);
+    for deposit in &deposits {
+        assert_eq!(
+            setup
+                .anvil()
+                .erc20_balance(&contract_address(deposit.token), &deposit.address),
+            Erc20Value::from(0_u8),
+            "the deposit address should have been swept empty"
+        );
+    }
+    for (token, amount) in [
+        (usdc, USDC_DEPOSIT * u128::from(DEPOSITORS_PER_TOKEN)),
+        (usdt, USDT_DEPOSIT * u128::from(DEPOSITORS_PER_TOKEN)),
+    ] {
+        assert_eq!(
+            setup
+                .anvil()
+                .erc20_balance(&contract_address(token), &minter),
+            Erc20Value::from(amount),
+            "the minter's main address should hold everything swept of {}",
+            token.contract.address
+        );
+    }
+
+    // Every address is now delegated, by the 23-byte EIP-7702 designator `0xef0100 || delegate`.
+    let mut designator = vec![0xef, 0x01, 0x00];
+    designator.extend_from_slice(contracts.delegate.as_ref());
+    for deposit in &deposits {
+        assert_eq!(
+            setup.anvil().code(&deposit.address),
+            designator,
+            "the sweep should have installed the delegation"
+        );
+    }
+    assert!(
+        setup.anvil().balance(&sweeper) < funded_gas,
+        "the sweeper address pays for the sweeps out of its own prepaid gas"
+    );
+
+    // Only now the mint, which the unchanged deposit pipeline drives off each sweep's own helper
+    // event — downstream of every effect asserted above.
+    let ledgers = [
+        (usdc, setup.ckerc20_token("ckUSDC").ledger_canister_id),
+        (usdt, setup.ckerc20_token("ckUSDT").ledger_canister_id),
+    ];
+    for deposit in &deposits {
+        let (_, ledger_id) = ledgers
+            .iter()
+            .find(|(token, _)| token.contract.address == deposit.token.contract.address)
+            .expect("every deposited token has a ledger");
+        let account = Account {
+            owner: deposit.owner,
+            subaccount: Some(deposit.subaccount),
+        };
+        setup.await_credited(*ledger_id, account, deposit.amount);
+    }
+}
+
+/// One user's deposit: who it credits, which token, and the address the CEX sends to.
+struct Deposit<'a> {
+    owner: Principal,
+    subaccount: [u8; 32],
+    token: &'a Erc20Token,
+    amount: u128,
+    address: Address,
+}
+
+impl<'a> Deposit<'a> {
+    fn holding(&self) -> Holding<'a> {
+        Holding {
+            deposit: self.address,
+            token: self.token,
+            amount: self.amount,
+        }
+    }
+}
+
+fn assert_sweep_gas_near_demo(sweeps: &[SentTransaction], deposits_per_sweep: u64) {
+    // `ATTESTED_SCENARIOS` in deposit_from_cex_demo.rs, EIP-7702 (first sweep) column.
+    const DEMO_ONE_DEPOSIT: u64 = 98_000;
+    const DEMO_TEN_DEPOSITS: u64 = 609_431;
+    const GAS_BAND_PERCENT: u64 = 10;
+
+    assert_eq!(
+        deposits_per_sweep, 10,
+        "the demo baseline is measured for ten-deposit sweeps"
+    );
+    for sweep in sweeps {
+        let per_deposit = sweep.gas_used / deposits_per_sweep;
+        println!(
+            "[gas] {} deposits: {} total, {} per deposit \
+             (demo: {DEMO_TEN_DEPOSITS} total, {} per deposit for ten; {DEMO_ONE_DEPOSIT} for one)",
+            deposits_per_sweep,
+            sweep.gas_used,
+            per_deposit,
+            DEMO_TEN_DEPOSITS / 10,
+        );
+        assert!(
+            sweep.gas_used.abs_diff(DEMO_TEN_DEPOSITS) * 100
+                <= DEMO_TEN_DEPOSITS * GAS_BAND_PERCENT,
+            "a ten-deposit sweep used {} gas, more than {GAS_BAND_PERCENT}% away from the \
+             demo-measured {DEMO_TEN_DEPOSITS}: {sweep:?}",
+            sweep.gas_used,
+        );
+    }
 }
 
 fn holder_at(index: u64) -> Address {

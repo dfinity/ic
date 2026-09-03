@@ -12,11 +12,15 @@ use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
+use crate::runtime::CanisterRuntime;
 use crate::state::automatic_deposits::{AutomaticDeposits, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
-use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
+use crate::state::transactions::{
+    Erc20WithdrawalRequest, SweepRequest, TransactionCallData, WithdrawalRequest,
+};
 use crate::timed_sized_map::{Entry, Timestamp};
+use crate::tx::AuthorizationRequest;
 use crate::tx::GasFeeEstimate;
 use crate::tx::TransactionSignature;
 use candid::Principal;
@@ -29,7 +33,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet, btree_map};
 use std::fmt::{Display, Formatter};
 use strum_macros::EnumIter;
-use transactions::{SweepId, SweeperTransactionPipeline, WithdrawalTransactions};
+use transactions::{SweepId, WithdrawalTransactions};
 
 pub mod audit;
 pub mod automatic_deposits;
@@ -78,9 +82,6 @@ pub struct State {
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
     pub withdrawal_transactions: WithdrawalTransactions,
-    /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
-    /// its own nonce sequence, independent of the main-address withdrawal pipeline.
-    pub sweeper_transactions: SweeperTransactionPipeline,
     /// Monotonic counter minting the next [`SweepId`] for the sweeper pipeline.
     pub next_sweep_id: SweepId,
     pub skipped_blocks: BTreeMap<Address, BTreeSet<BlockNumber>>,
@@ -278,6 +279,57 @@ impl State {
         ))
     }
 
+    pub fn attestation_requests<T: AsRef<Account>>(
+        &self,
+        accounts: &[T],
+    ) -> Option<Vec<AttestationRequest>> {
+        let deposit_helper = *self
+            .log_scrapings
+            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)?;
+        Some(
+            accounts
+                .iter()
+                .map(|account| {
+                    AttestationRequest::new(
+                        self.ethereum_network.chain_id(),
+                        deposit_helper,
+                        *account.as_ref(),
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    /// What every deposit address in `accounts` authorizes to let the configured sweeper contract
+    /// sweep it: the tuple naming this minter's chain, that contract, and nonce zero. `None` while
+    /// no sweeper contract is configured.
+    ///
+    /// The nonce is always zero, whatever the address actually holds. A deposit address is at
+    /// nonce zero exactly while it has never been delegated — applying an authorization spends it
+    /// — so the tuple either installs the delegation or is skipped, and both are correct in any
+    /// order the sweeps carrying them land. That is what lets a sweep authorize every address it
+    /// touches without tracking which ones are already delegated, at the price of the intrinsic
+    /// gas a skipped tuple still costs.
+    pub fn authorization_requests<T: AsRef<Account>>(
+        &self,
+        accounts: &[T],
+    ) -> Option<Vec<AuthorizationRequest>> {
+        let delegate = self.sweeper_contract_address?;
+        Some(
+            accounts
+                .iter()
+                .map(|account| {
+                    AuthorizationRequest::new(
+                        *account.as_ref(),
+                        self.ethereum_network.chain_id(),
+                        delegate,
+                        TransactionNonce::ZERO,
+                    )
+                })
+                .collect(),
+        )
+    }
+
     /// The attestation `account`'s ckERC20 deposit address has already signed for the configuration
     /// this minter runs against, if any: signing another would cost a threshold-ECDSA signature for
     /// the same digest.
@@ -437,6 +489,26 @@ impl State {
         self.update_balance_upon_withdrawal(withdrawal_id, receipt);
     }
 
+    /// Finalizes a sweep: releases the deposits it held and settles what it actually cost the
+    /// sweeper address. The sweeper pipeline is never reimbursed and holds no ckETH balance, so
+    /// unlike the main pipeline there is no reimbursement tail and no ckETH accounting here.
+    pub fn record_finalized_sweeper_transaction(
+        &mut self,
+        sweep_id: &SweepId,
+        receipt: &TransactionReceipt,
+    ) {
+        let max_transaction_fee = self
+            .automatic_deposits
+            .processed_sweep_request(sweep_id)
+            .expect("BUG: missing sweep request")
+            .max_transaction_fee;
+        let finalized = self
+            .automatic_deposits
+            .record_finalized_sweep_transaction(*sweep_id, receipt);
+        self.sweeper_funding
+            .record_finalized_sweep(max_transaction_fee, &finalized);
+    }
+
     pub fn next_request_id(&mut self) -> u64 {
         let current_request_id = self.http_request_counter;
         // overflow is not an issue here because we only use `next_request_id` to correlate
@@ -452,6 +524,15 @@ impl State {
                 .erc20_balances
                 .erc20_add(event.erc20_contract_address, event.value),
         };
+    }
+
+    /// Takes the whole cost an accepted sweep can put on the sweeper address out of the balance
+    /// bound: its fee ceiling, which caps every resubmission the pipeline makes for it. An ERC-20
+    /// sweep moves its tokens through call data and carries no ETH value, so the fee is all it
+    /// can cost.
+    pub fn update_sweeper_balance_upon_accepted_sweep(&mut self, request: &SweepRequest) {
+        self.sweeper_funding
+            .record_accepted_sweep(request.max_transaction_fee);
     }
 
     fn update_balance_upon_withdrawal(
@@ -490,13 +571,11 @@ impl State {
         self.eth_balance.total_effective_tx_fees_add(tx_fee);
         self.eth_balance.total_unspent_tx_fees_add(unspent_tx_fee);
 
-        if matches!(withdrawal_request, WithdrawalRequest::SweeperFunding(_)) {
-            let transferred = match receipt.status {
-                TransactionStatus::Success => tx.transaction().amount,
-                TransactionStatus::Failure => Wei::ZERO,
-            };
-            self.sweeper_funding
-                .record_finalized_funding(transferred, tx_fee);
+        match withdrawal_request {
+            WithdrawalRequest::SweeperFunding(_) => {
+                self.sweeper_funding.record_finalized_funding(tx)
+            }
+            WithdrawalRequest::CkEth(_) | WithdrawalRequest::CkErc20(_) => {}
         }
 
         if receipt.status == TransactionStatus::Success && !tx.transaction_data().is_empty() {
@@ -598,8 +677,8 @@ impl State {
         if let Some(nonce) = next_sweeper_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
                 .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {e}")))?;
-            self.sweeper_transactions
-                .update_next_transaction_nonce(nonce);
+            self.automatic_deposits
+                .update_next_sweeper_transaction_nonce(nonce);
         }
         if let Some(amount) = minimum_withdrawal_amount {
             let minimum_withdrawal_amount = Wei::try_from(amount).map_err(|e| {
@@ -711,7 +790,8 @@ impl State {
             other.ledger_suite_orchestrator_id
         );
         ensure_eq!(self.ckerc20_tokens, other.ckerc20_tokens);
-        ensure_eq!(self.automatic_deposits, other.automatic_deposits);
+        self.automatic_deposits
+            .is_equivalent_to(&other.automatic_deposits)?;
         ensure_eq!(
             self.sweeper_contract_address,
             other.sweeper_contract_address
@@ -719,8 +799,6 @@ impl State {
         ensure_eq!(self.sweeper_funding, other.sweeper_funding);
         ensure_eq!(self.next_sweep_id, other.next_sweep_id);
 
-        self.sweeper_transactions
-            .is_equivalent_to(&other.sweeper_transactions)?;
         self.withdrawal_transactions
             .is_equivalent_to(&other.withdrawal_transactions)
     }
@@ -803,11 +881,9 @@ where
     })
 }
 
-pub async fn lazy_call_ecdsa_public_key_with_chain_code() -> (PublicKey, [u8; 32]) {
-    use ic_cdk_management_canister::{
-        EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, ecdsa_public_key,
-    };
-
+pub async fn lazy_call_ecdsa_public_key_with_chain_code<R: CanisterRuntime>(
+    runtime: &R,
+) -> (PublicKey, [u8; 32]) {
     fn to_public_key_and_chain_code(response: &EcdsaPublicKeyResult) -> (PublicKey, [u8; 32]) {
         let public_key = PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
             ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
@@ -827,29 +903,26 @@ pub async fn lazy_call_ecdsa_public_key_with_chain_code() -> (PublicKey, [u8; 32
     }
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
     log!(DEBUG, "Fetching the ECDSA public key {key_name}");
-    let response = ecdsa_public_key(&EcdsaPublicKeyArgs {
-        canister_id: None,
-        derivation_path: crate::MAIN_DERIVATION_PATH
-            .into_iter()
-            .map(|x| x.to_vec())
-            .collect(),
-        key_id: EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: key_name,
-        },
-    })
-    .await
-    .unwrap_or_else(|err| ic_cdk::trap(format!("failed to get minter's public key: {err}")));
+    let response = runtime
+        .ecdsa_public_key(
+            key_name,
+            crate::MAIN_DERIVATION_PATH
+                .into_iter()
+                .map(|x| x.to_vec())
+                .collect(),
+        )
+        .await
+        .unwrap_or_else(|err| ic_cdk::trap(format!("failed to get minter's public key: {err}")));
     mutate_state(|s| s.ecdsa_public_key = Some(response.clone()));
     to_public_key_and_chain_code(&response)
 }
 
-pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
-    lazy_call_ecdsa_public_key_with_chain_code().await.0
+pub async fn lazy_call_ecdsa_public_key<R: CanisterRuntime>(runtime: &R) -> PublicKey {
+    lazy_call_ecdsa_public_key_with_chain_code(runtime).await.0
 }
 
-pub async fn minter_address() -> Address {
-    ecdsa_public_key_to_address(&lazy_call_ecdsa_public_key().await)
+pub async fn minter_address<R: CanisterRuntime>(runtime: &R) -> Address {
+    ecdsa_public_key_to_address(&lazy_call_ecdsa_public_key(runtime).await)
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -990,4 +1063,5 @@ pub enum TaskType {
     BalanceScan,
     SweeperFunding,
     SweeperSend,
+    SweeperEnqueue,
 }

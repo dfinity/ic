@@ -2,6 +2,7 @@ use super::{AccessList, TransactionPrice, encode_u256};
 use crate::{
     eth_rpc::Hash,
     numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas},
+    runtime::CanisterRuntime,
 };
 use ethnum::u256;
 use ic_ethereum_types::Address;
@@ -210,11 +211,12 @@ impl<T: SignableTransaction> Signed<T> {
 
 /// Sign `transaction` with the minter's ECDSA key at `derivation_path` and wrap it into a
 /// [`Signed`] transaction.
-pub async fn sign<T: SignableTransaction>(
+pub async fn sign<T: SignableTransaction, R: CanisterRuntime>(
     transaction: T,
     derivation_path: Vec<ByteBuf>,
+    runtime: &R,
 ) -> Result<Signed<T>, String> {
     let hash = transaction.hash();
-    let signature = super::sign_digest(&hash, &derivation_path).await?;
+    let signature = super::sign_digest(&hash, &derivation_path, runtime).await?;
     Ok(Signed::new(transaction, signature))
 }

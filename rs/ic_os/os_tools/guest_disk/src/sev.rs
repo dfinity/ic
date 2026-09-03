@@ -32,14 +32,14 @@
 //! - Re-keying replaces the keyslot's passphrase in place and rewrites its token.
 
 use crate::crypt::{
-    LuksHeaderLocation, SevMetadata, destroy_keyslots_except_first, export_luks_metrics,
-    format_crypt_device, open_luks2_device, read_keyslot_token, write_keyslot_token,
+    LuksHeaderLocation, SINGLE_KEYSLOT_INDEX, SevMetadata, destroy_keyslots_except_first,
+    export_luks_metrics, format_crypt_device, open_luks2_device, read_single_keyslot_token,
+    write_keyslot_token,
 };
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result, bail};
 use attestation::attestation_report::{AttestationReportExt, tcb_version_from_u64};
 use config_types::GuestVMType;
-use libcryptsetup_rs::CryptDevice;
 use libcryptsetup_rs::consts::flags::CryptActivate;
 use prometheus::Registry;
 use sev::firmware::guest::AttestationReport;
@@ -49,6 +49,9 @@ use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
+/// Disk encryption for SEV guests: the key is derived from the SEV firmware, bound to
+/// the GuestOS's launch measurement. The Var partition uses an attached LUKS header; the
+/// Store partition uses a detached header stored on the Var partition.
 pub struct SevDiskEncryption {
     pub sev_firmware: Box<dyn SevGuestFirmware>,
     pub store_luks_header_path: PathBuf,
@@ -56,14 +59,19 @@ pub struct SevDiskEncryption {
     pub metrics_registry: Registry,
 }
 
+impl SevDiskEncryption {
+    fn header_location(&self, partition: Partition) -> LuksHeaderLocation<'_> {
+        match partition {
+            Partition::Store => LuksHeaderLocation::Detached(&self.store_luks_header_path),
+            Partition::Var => LuksHeaderLocation::Attached,
+        }
+    }
+}
+
 impl DiskEncryption for SevDiskEncryption {
     fn open(&mut self, device_path: &Path, partition: Partition, crypt_name: &str) -> Result<()> {
         let report = get_attestation_report(self.sev_firmware.as_mut())?;
-
-        let header_location = match partition {
-            Partition::Var => LuksHeaderLocation::Attached,
-            Partition::Store => LuksHeaderLocation::Detached(&self.store_luks_header_path),
-        };
+        let header_location = self.header_location(partition);
 
         let mut crypt_device = open_luks2_device(device_path, header_location, true)
             .context("Failed to open device")?;
@@ -71,7 +79,7 @@ impl DiskEncryption for SevDiskEncryption {
         // The single keyslot (the first one) has a token recording the TCB version its
         // key was derived at; the passphrase must be derived at exactly that TCB (which
         // may be older than the current firmware's after a firmware upgrade).
-        let token = read_keyslot_token(&mut crypt_device)?;
+        let token = read_single_keyslot_token(&mut crypt_device)?;
         let key = derive_key_from_sev_measurement(
             self.sev_firmware.as_mut(),
             Key::DiskEncryptionKey { device_path },
@@ -83,7 +91,7 @@ impl DiskEncryption for SevDiskEncryption {
             .activate_handle()
             .activate_by_passphrase(
                 Some(crypt_name),
-                Some(token.keyslot()?),
+                Some(SINGLE_KEYSLOT_INDEX),
                 key.as_bytes(),
                 activate_flags(partition),
             )
@@ -126,22 +134,17 @@ impl DiskEncryption for SevDiskEncryption {
         )
         .context("Failed to derive SEV key for disk encryption")?;
 
-        let header_location = match partition {
-            Partition::Store => {
-                if self.store_luks_header_path.exists() {
-                    bail!(
-                        "Refusing to format Store because detached LUKS header {} already exists. \
-                        Remove the stale header first if you really want to reformat the device.",
-                        self.store_luks_header_path.display()
-                    );
-                }
-                LuksHeaderLocation::Detached(&self.store_luks_header_path)
-            }
-            Partition::Var => LuksHeaderLocation::Attached,
-        };
+        if partition == Partition::Store && self.store_luks_header_path.exists() {
+            bail!(
+                "Refusing to format Store because detached LUKS header {} already exists. \
+                Remove the stale header first if you really want to reformat the device.",
+                self.store_luks_header_path.display()
+            );
+        }
 
-        let mut crypt_device = format_crypt_device(device_path, header_location, key.as_bytes())
-            .context("Failed to format partition")?;
+        let mut crypt_device =
+            format_crypt_device(device_path, self.header_location(partition), key.as_bytes())
+                .context("Failed to format partition")?;
         write_keyslot_token(&mut crypt_device, sev_metadata)
             .context("Failed to write SEV keyslot metadata")?;
 
@@ -185,7 +188,7 @@ pub fn can_open(
     // Like open(): derive the passphrase at the TCB version recorded in the keyslot's
     // token and check that it unlocks the device.
     let key = (|| {
-        let token = read_keyslot_token(&mut crypt_device)?;
+        let token = read_single_keyslot_token(&mut crypt_device)?;
         derive_key_from_sev_measurement(
             sev_firmware,
             Key::DiskEncryptionKey { device_path },
@@ -198,7 +201,12 @@ pub fn can_open(
 
     let unlocks = crypt_device
         .activate_handle()
-        .activate_by_passphrase(Some(0), Some(0), key.as_bytes(), CryptActivate::empty())
+        .activate_by_passphrase(
+            None,
+            Some(SINGLE_KEYSLOT_INDEX),
+            key.as_bytes(),
+            CryptActivate::empty(),
+        )
         .is_ok();
 
     Ok(unlocks)
@@ -229,7 +237,14 @@ pub fn rekey(
     // new key. Fails if the old key does not unlock any keyslot.
     crypt_device
         .keyslot_handle()
-        .change_by_passphrase(Some(0), Some(0), old_key, new_key.as_bytes())
+        .change_by_passphrase(
+            // TODO: after all nodes have a single keyslot at SINGLE_KEYSLOT_INDEX, change this to
+            //  Some(SINGLE_KEYSLOT_INDEX)
+            None,
+            Some(SINGLE_KEYSLOT_INDEX),
+            old_key,
+            new_key.as_bytes(),
+        )
         .context("Failed to replace the old key with the new SEV-derived key")?;
     // Removes the keyslots that legacy headers may still carry.
     destroy_keyslots_except_first(&mut crypt_device)?;

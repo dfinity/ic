@@ -25,7 +25,8 @@ The key exchange involves two GuestOS VMs running simultaneously on the same phy
 │  │    │ from SEV        │   │  re-keys it to own      │  │
 │  │    │ measurement     │   │  SEV-derived key        │  │
 │  │    ▼                 │   │                        │  │
-│  │  sends key ─────────►│───┼──► receives key         │  │
+│  │  sends key + ───────►│───┼──► receives key +      │  │
+│  │  header              │   │    header              │  │
 │  └──────────────────────┘   └────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```

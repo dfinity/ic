@@ -12,6 +12,13 @@ on:
         required: false
         default: ''
         type: string
+    outputs:
+      release-build:
+        description: Whether this run was a release build, i.e. uploaded artifacts to the CDN.
+        value: ${{ jobs.config.outputs.release-build }}
+      manifest-sha256:
+        description: sha256 of the upload-manifest.
+        value: ${{ jobs.upload-manifests.outputs.manifest-sha256 }}
 
 permissions:
   actions: write # needed for uploading artifacts to github
@@ -211,6 +218,8 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     needs: [config, infer-bazel-targets]
+    outputs:
+      manifest-sha256: ${{ steps.upload-artifacts.outputs.manifest-sha256 }}
     environment:
       # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
       # It also requires the AWS and CF secrets which are only available in the `upload-artifacts` environment.
@@ -278,6 +287,7 @@ jobs:
           aws-region: eu-central-1
 
       - name: Upload artifacts
+        id: upload-artifacts
         uses: ./.github/actions/upload-artifacts
         if: needs.config.outputs.release-build == 'true'
         env:
@@ -285,6 +295,7 @@ jobs:
           CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
           name: Bazel Test All
+          manifest-name: upload-manifest-main
           # with --check_up_to_date Bazel will error out if the artifacts
           # to be uploaded were not built in the build step above
           # (this ensures that the exact artifacts built above are uploaded)
@@ -325,6 +336,10 @@ jobs:
     timeout-minutes: 120
     needs: [config]
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
+    outputs:
+      arm64-linux-sums: ${{ steps.sums.outputs.arm64-linux-sums }}
+      arm64-darwin-sums: ${{ steps.sums.outputs.arm64-darwin-sums }}
+      x86_64-darwin-sums: ${{ steps.sums.outputs.x86_64-darwin-sums }}
     steps:
       - name: Set up Bazel cache
         run: |
@@ -366,6 +381,46 @@ jobs:
           cp \
             ./bazel-bin/publish/binaries/pocket-ic.gz \
             ./build/pocket-ic-server-x86_64-darwin.gz
+
+      - name: Record artifact checksums
+        id: sums
+        if: ${{ needs.config.outputs.release-build == 'true' }}
+        shell: bash
+        env:
+          OS: ${{ matrix.os }}
+        run: |
+          set -euo pipefail
+          cd build
+
+          # Record the sha256sum lines of every file uploaded as an Actions
+          # artifact below in this job's outputs. The
+          # upload-external-artifacts job re-checks the downloaded artifacts
+          # against them before re-uploading anything to the CDN: an Actions
+          # artifact can be replaced mid-run by anything holding an
+          # `actions: write` token, but job outputs cannot be tampered with
+          # by other jobs. Recording happens right after the builds so the
+          # whole-codebase build and test steps below stay outside this
+          # trust chain: should any of them overwrite these files, the
+          # uploaded artifact no longer matches its recorded sums and
+          # verification fails loudly.
+          shasum -a 256 \
+            "pocket-ic-server-arm64-$OS.gz" \
+            "ic-admin-arm64-$OS.gz" \
+            "sns-arm64-$OS.gz" \
+            | LC_ALL=C sort -k2 >"$RUNNER_TEMP/arm64-sums"
+          {
+            echo "arm64-$OS-sums<<SUMS"
+            cat "$RUNNER_TEMP/arm64-sums"
+            echo "SUMS"
+          } >>"$GITHUB_OUTPUT"
+
+          if [[ "$OS" == darwin ]]; then
+            {
+              echo "x86_64-darwin-sums<<SUMS"
+              shasum -a 256 pocket-ic-server-x86_64-darwin.gz
+              echo "SUMS"
+            } >>"$GITHUB_OUTPUT"
+          fi
 
       # Ensures that local development works on arm64-darwin.
       - name: Build the entire codebase on darwin
@@ -422,6 +477,8 @@ jobs:
     name: Upload external artifacts
     needs: [bazel-test-arm64, config]
     if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
+    outputs:
+      manifest-sha256: ${{ steps.upload-artifacts.outputs.manifest-sha256 }}
     # The `Upload artifacts` step below requires the AWS & CF secrets
     # which are only available in the `upload-artifacts` environment.
     environment: upload-artifacts
@@ -451,6 +508,32 @@ jobs:
           # avoid downloading to workspace to avoid version being marked as dirty
           path: ~/.cache/pocket-ic-server-x86_64-darwin
 
+      - name: Verify downloaded artifacts
+        shell: bash
+        env:
+          ARM64_LINUX_SUMS: ${{ needs.bazel-test-arm64.outputs.arm64-linux-sums }}
+          ARM64_DARWIN_SUMS: ${{ needs.bazel-test-arm64.outputs.arm64-darwin-sums }}
+          X86_64_DARWIN_SUMS: ${{ needs.bazel-test-arm64.outputs.x86_64-darwin-sums }}
+        run: |
+          set -euo pipefail
+
+          # Re-check every file downloaded above against the sha256sum lines
+          # the producing bazel-test-arm64 legs recorded in their job
+          # outputs, before anything is bundled and re-uploaded to the CDN:
+          # an Actions artifact can be replaced mid-run by anything holding
+          # an `actions: write` token, but job outputs cannot be tampered
+          # with by other jobs. A missing or empty output also fails here:
+          # sha256sum rejects input without valid checksum lines.
+          check() { # <download-dir> <recorded sha256sum lines>
+            echo "$2" | (cd "$1" && sha256sum --check --strict)
+            # Also reject artifacts carrying anything beyond the recorded files
+            diff <(echo "$2" | awk '{print $2}' | LC_ALL=C sort) \
+              <(cd "$1" && find . -mindepth 1 | sed 's|^\./||' | LC_ALL=C sort)
+          }
+          check ~/.cache/arm64-binaries-linux "$ARM64_LINUX_SUMS"
+          check ~/.cache/arm64-binaries-darwin "$ARM64_DARWIN_SUMS"
+          check ~/.cache/pocket-ic-server-x86_64-darwin "$X86_64_DARWIN_SUMS"
+
       - name: Prepare bundle
         id: prepare-bundle
         run: |
@@ -470,6 +553,13 @@ jobs:
           mkdir -p "$bundledir/binaries/x86_64-darwin/"
           cp ~/.cache/pocket-ic-server-x86_64-darwin/pocket-ic-server-x86_64-darwin.gz "$bundledir/binaries/x86_64-darwin/pocket-ic.gz"
 
+          # Give these hand-assembled directories the same SHA256SUMS file that the bazel-built bundles get
+          # from the artifact_bundle rule so every binaries/<platform>/ directory on the CDN carries a
+          # checksum manifest that release workflows can verify against its attestation.
+          (cd "$bundledir/binaries/arm64-linux" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
+          (cd "$bundledir/binaries/arm64-darwin" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
+          (cd "$bundledir/binaries/x86_64-darwin" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
+
           echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
@@ -480,13 +570,72 @@ jobs:
           aws-region: eu-central-1
 
       - name: Upload artifacts
+        id: upload-artifacts
         uses: ./.github/actions/upload-artifacts
         env:
           CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
           CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
           name: arm64 artifacts
+          manifest-name: upload-manifest-external
           upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
+
+  # Merge the per-job upload manifests into the single upload-manifest
+  # artifact exposed through this workflow's `manifest-sha256` output.
+  upload-manifests:
+    name: Merge upload manifests
+    needs: [config, bazel-test-all, upload-external-artifacts]
+    if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      manifest-sha256: ${{ steps.merge.outputs.sha256 }}
+    steps:
+      - name: Download main upload manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: upload-manifest-main
+          path: ${{ runner.temp }}/upload-manifests/main
+
+      - name: Download external upload manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: upload-manifest-external
+          path: ${{ runner.temp }}/upload-manifests/external
+
+      - name: Verify and merge manifests
+        id: merge
+        shell: bash
+        env:
+          MANIFEST_SHA256_MAIN: ${{ needs.bazel-test-all.outputs.manifest-sha256 }}
+          MANIFEST_SHA256_EXTERNAL: ${{ needs.upload-external-artifacts.outputs.manifest-sha256 }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/upload-manifests"
+
+          # Verify the downloaded artifacts against the hashes recorded in
+          # the producing jobs' outputs before merging anything: an Actions
+          # artifact can be replaced mid-run by anything holding an
+          # `actions: write` token, but job outputs cannot be tampered with
+          # by other jobs. A missing or empty output also fails here:
+          # sha256sum rejects the malformed line.
+          echo "$MANIFEST_SHA256_MAIN  main/upload-manifest.sha256sums" | sha256sum --check
+          echo "$MANIFEST_SHA256_EXTERNAL  external/upload-manifest.sha256sums" | sha256sum --check
+
+          LC_ALL=C sort -k2 \
+            main/upload-manifest.sha256sums \
+            external/upload-manifest.sha256sums \
+            >upload-manifest.sha256sums
+
+          echo "sha256=$(sha256sum upload-manifest.sha256sums | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
+
+      - name: Upload merged manifest
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: upload-manifest
+          path: ${{ runner.temp }}/upload-manifests/upload-manifest.sha256sums
+          if-no-files-found: error
 
   python-ci-tests:
     name: Python CI Tests

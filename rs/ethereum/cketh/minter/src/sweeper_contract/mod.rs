@@ -12,6 +12,7 @@ use crate::eth_logs::encode_principal;
 use crate::tx::TransactionSignature;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
+use minicbor::{Decode, Encode};
 
 /// First 4 bytes of
 /// keccak256("sweepErc20Batch((address,bytes32,bytes32,bytes32,bytes32,uint8)[],address[])").
@@ -25,10 +26,13 @@ const WORD: usize = 32;
 
 /// One deposit address in a batch sweep: the address, the IC account its balance is credited to,
 /// and that account's attestation, signed by the address' own key.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct SweepItem {
+    #[n(0)]
     pub deposit: DepositAddress,
+    #[n(1)]
     pub account: Account,
+    #[n(2)]
     pub attestation: TransactionSignature,
 }
 

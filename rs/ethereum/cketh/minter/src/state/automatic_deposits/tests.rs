@@ -1,16 +1,24 @@
 use super::{
     AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, MAX_ACTIVE_DEPOSITS,
-    MAX_TOKENS_PER_ACCOUNT, SCAN_GAP_SECS, SECS_PER_BLOCK, ScanProgress, SweepEntry,
+    MAX_TOKENS_PER_ACCOUNT, SCAN_GAP_SECS, SECS_PER_BLOCK, ScanProgress, SweepEntry, SweepTarget,
 };
 use crate::deposit_address::DepositAddress;
 use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
+use crate::eth_rpc::Hash;
+use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, Erc20Value};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
+use crate::state::transactions::{PipelineRequest, SweepId, SweepRequest};
+use crate::test_fixtures::{
+    deposit_address, deposits_with_enqueued_sweep, gas_fee_estimate, usdc, usdt,
+};
 use crate::timed_sized_map::{Entry, Timestamp};
+use crate::tx::{SignableTransaction, Signed, TransactionSignature};
 use candid::{Nat, Principal};
 use ic_ethereum_types::Address;
-use ic_sha3::Keccak256;
 use icrc_ledger_types::icrc1::account::Account;
+use std::collections::BTreeMap;
 
 #[test]
 fn should_watch_a_pair_for_the_scan_window() {
@@ -679,14 +687,6 @@ fn token(byte: u8) -> Address {
     Address::new([byte; 20])
 }
 
-fn usdc() -> Address {
-    token(0xaa)
-}
-
-fn usdt() -> Address {
-    token(0xbb)
-}
-
 fn request(account: Account, token: Address) -> DepositRequest {
     DepositRequest::new(account, token)
 }
@@ -709,6 +709,189 @@ fn automatic_deposit(
     }
 }
 
+#[test]
+fn should_batch_queued_deposits_by_token() {
+    let deposits = queued(&[
+        (account(0), usdc()),
+        (account(1), usdc()),
+        (account(2), usdt()),
+    ]);
+
+    let batches = deposits.requests_batch(10);
+
+    assert_eq!(
+        batches.keys().copied().collect::<Vec<_>>(),
+        vec![usdc(), usdt()]
+    );
+    assert_eq!(accounts_in(&batches, usdc()), vec![account(0), account(1)]);
+    assert_eq!(accounts_in(&batches, usdt()), vec![account(2)]);
+
+    // Nothing has taken them, so batching again offers the same deposits.
+    let again = deposits.requests_batch(10);
+    assert_eq!(accounts_in(&again, usdc()), vec![account(0), account(1)]);
+    assert_eq!(accounts_in(&again, usdt()), vec![account(2)]);
+}
+
+#[test]
+fn should_stop_offering_a_deposit_a_sweep_has_taken() {
+    let mut deposits = queued(&[(account(0), usdc()), (account(1), usdc())]);
+
+    deposits.record_sweep_scheduled(SweepId(7), usdc(), [account(0)]);
+
+    let batches = deposits.requests_batch(10);
+    assert_eq!(accounts_in(&batches, usdc()), vec![account(1)]);
+
+    // The taken deposit is still queued: only a settled sweep removes it.
+    assert_eq!(deposits.sweep_len(), 2);
+}
+
+#[test]
+fn should_offer_nothing_once_every_deposit_is_taken() {
+    let mut deposits = queued(&[(account(0), usdc()), (account(1), usdt())]);
+
+    deposits.record_sweep_scheduled(SweepId(1), usdc(), [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(2), usdt(), [account(1)]);
+
+    assert!(deposits.requests_batch(10).is_empty());
+    assert_eq!(deposits.sweep_len(), 2);
+}
+
+#[test]
+#[should_panic(expected = "was already taken by another sweep")]
+fn should_refuse_to_hand_the_same_deposit_to_two_sweeps() {
+    let mut deposits = queued(&[(account(0), usdc())]);
+
+    deposits.record_sweep_scheduled(SweepId(1), usdc(), [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(2), usdc(), [account(0)]);
+}
+
+#[test]
+#[should_panic(expected = "is not queued for sweeping")]
+fn should_refuse_to_schedule_a_deposit_that_is_not_queued() {
+    let mut deposits = queued(&[(account(0), usdc())]);
+
+    deposits.record_sweep_scheduled(SweepId(1), usdt(), [account(0)]);
+}
+
+#[tokio::test]
+async fn should_release_a_deposit_once_its_sweep_succeeds() {
+    let (mut deposits, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+    queue(&mut deposits, &[(account(1), usdc())]);
+
+    finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+
+    // The swept pair is gone from the queue; the pair queued after the sweep was decided is still
+    // offered.
+    assert_eq!(deposits.sweep_len(), 1);
+    assert_eq!(
+        accounts_in(&deposits.requests_batch(10), usdc()),
+        vec![account(1)]
+    );
+}
+
+#[tokio::test]
+async fn should_drop_a_deposit_once_its_sweep_fails() {
+    let (mut deposits, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+
+    finalize_sweep(&mut deposits, request, TransactionStatus::Failure);
+
+    // A reverted sweep moved nothing, but the minter does not retry: the pair leaves the queue and
+    // has to be armed afresh.
+    assert_eq!(deposits.sweep_len(), 0);
+    assert!(deposits.requests_batch(10).is_empty());
+}
+
+#[tokio::test]
+async fn should_release_every_account_a_sweep_held() {
+    let (mut deposits, request) =
+        deposits_with_enqueued_sweep(&[(account(0), usdc()), (account(1), usdc())]).await;
+
+    finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+
+    assert_eq!(deposits.sweep_len(), 0);
+}
+
+/// The mismatch this test finalizes cannot come out of `create_pending_sweeper_requests`, which
+/// schedules exactly the deposits its request names. Hence the request the production code built
+/// for both accounts is replayed against a queue that never held the second one.
+#[tokio::test]
+#[should_panic(expected = "is not queued for sweeping")]
+async fn should_refuse_to_finalize_a_sweep_whose_deposit_left_the_queue() {
+    let (_, request) =
+        deposits_with_enqueued_sweep(&[(account(0), usdc()), (account(1), usdc())]).await;
+    let mut deposits = queued(&[(account(0), usdc())]);
+    deposits.record_sweep_scheduled(SweepId(0), usdc(), [account(0)]);
+    deposits.record_sweep_request(request.clone());
+
+    finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+}
+
+/// Drives the already-recorded `request` through the sweeper pipeline to a receipt of `status`.
+fn finalize_sweep(
+    deposits: &mut AutomaticDeposits,
+    request: SweepRequest,
+    status: TransactionStatus,
+) {
+    let id = request.id;
+    let transaction = request
+        .create_transaction(
+            deposits.next_sweeper_transaction_nonce(),
+            gas_fee_estimate(),
+            request.gas_limit(),
+            EthereumNetwork::Sepolia,
+        )
+        .expect("BUG: the fixture prices the request with the estimate it creates with");
+    deposits.record_created_sweep_transaction(id, transaction.clone());
+    let signed = Signed::from((
+        transaction,
+        TransactionSignature {
+            signature_y_parity: false,
+            r: Default::default(),
+            s: Default::default(),
+        },
+    ));
+    let receipt = TransactionReceipt {
+        block_hash: Hash([0x11; 32]),
+        block_number: BlockNumber::new(4_190_269),
+        effective_gas_price: signed.transaction().max_fee_per_gas(),
+        gas_used: signed.transaction().gas_limit(),
+        status,
+        transaction_hash: signed.hash(),
+    };
+    deposits.record_signed_sweep_transaction(signed);
+    deposits.record_finalized_sweep_transaction(id, &receipt);
+}
+
+/// An [`AutomaticDeposits`] whose sweep queue holds exactly these funded pairs.
+fn queued(pairs: &[(Account, Address)]) -> AutomaticDeposits {
+    let mut deposits = AutomaticDeposits::default();
+    queue(&mut deposits, pairs);
+    assert_eq!(deposits.sweep_len(), pairs.len());
+    deposits
+}
+
+fn queue(deposits: &mut AutomaticDeposits, pairs: &[(Account, Address)]) {
+    for (account, token) in pairs {
+        deposits
+            .watch_deposit(ts(0), *account, *token, deposit_address(account))
+            .unwrap();
+        deposits.record_automatic_deposit_received(&automatic_deposit(
+            *account,
+            *token,
+            10,
+            BlockNumber::new(900),
+            3,
+        ));
+    }
+}
+
+fn accounts_in(batches: &BTreeMap<Address, Vec<SweepTarget>>, token: Address) -> Vec<Account> {
+    batches
+        .get(&token)
+        .map(|targets| targets.iter().map(|target| target.account()).collect())
+        .unwrap_or_default()
+}
+
 fn sweep_entry(
     address: DepositAddress,
     last_scanned_block: BlockNumber,
@@ -720,6 +903,7 @@ fn sweep_entry(
         last_scanned_block,
         scan_count,
         scanned_balance: Erc20Value::new(scanned_balance),
+        swept_by: None,
     }
 }
 
@@ -754,15 +938,6 @@ fn entry(account: &Account, expires_at: Timestamp) -> Entry<ScanProgress> {
 /// The deposit address is a deterministic function of the account, so a given
 /// account always maps to the same address (mirroring the production key
 /// derivation).
-fn deposit_address(account: &Account) -> DepositAddress {
-    let mut preimage = account.owner.as_slice().to_vec();
-    preimage.extend_from_slice(account.effective_subaccount());
-    let hash = Keccak256::hash(&preimage);
-    let mut bytes = [0_u8; 20];
-    bytes.copy_from_slice(&hash[12..32]);
-    DepositAddress::new(Address::new(bytes))
-}
-
 fn registration(
     account: Account,
     token: Address,

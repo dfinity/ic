@@ -321,6 +321,59 @@ fn a_non_minter_cannot_sweep_a_deposit() {
     assert_eq!(events[0].principal, encode_principal(&principal));
 }
 
+#[test]
+fn a_zero_nonce_authorization_cannot_redelegate() {
+    let anvil = Anvil::start();
+    let chain_id = anvil.chain_id();
+
+    let minter_key = key_from_hex(MINTER_PRIVATE_KEY);
+    let minter = eth_address(&minter_key.public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+
+    let Contracts {
+        usdt,
+        via_helper,
+        attested,
+        ..
+    } = deploy_contracts(&anvil, &minter, &cex);
+
+    let key = derive_deposit_key(&Principal::self_authenticating([43_u8]));
+    let deposit = eth_address(&key.public_key());
+    let delegate_only = call(
+        "sweepErc20Batch(address[],bytes32[],bytes32[],address[])",
+        &[
+            Token::Array(vec![]),
+            Token::Array(vec![]),
+            Token::Array(vec![]),
+            Token::Array(vec![address_token(&usdt)]),
+        ],
+    );
+    let delegation_designator =
+        |delegate: &Address| [&[0xef_u8, 0x01, 0x00][..], delegate.as_ref()].concat();
+    let delegate_with_a_zero_nonce_tuple = |delegate: &Address| {
+        let receipt = anvil.send_eip7702(
+            &minter_key,
+            chain_id,
+            &via_helper,
+            delegate_only.clone(),
+            vec![sign_authorization(&key, chain_id, delegate, 0)],
+        );
+        assert!(status_ok(&receipt), "delegation attempt reverted");
+        anvil.code(&deposit)
+    };
+
+    assert_eq!(
+        delegate_with_a_zero_nonce_tuple(&via_helper),
+        delegation_designator(&via_helper),
+        "deposit should be delegated to the first sweeper"
+    );
+    assert_eq!(
+        delegate_with_a_zero_nonce_tuple(&attested),
+        delegation_designator(&via_helper),
+        "a zero-nonce tuple must not re-delegate an already delegated address"
+    );
+}
+
 /// The proposed permissionless variant: the same batch sweeps, but through the
 /// attested sweeper and submitted by a relayer that is NOT the minter.
 #[test]

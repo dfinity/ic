@@ -26,6 +26,7 @@ pub fn derive_key_from_sev_measurement(
     let mut field_select = GuestFieldSelect::default();
     field_select.set_measurement(true);
     field_select.set_tcb_version(true);
+    field_select.set_guest_policy(true);
 
     let derived_key = sev_firmware
         .get_derived_key(
@@ -88,6 +89,7 @@ mod tests {
                 assert_eq!(derived_key.tcb_version, 123456);
                 assert!(derived_key.guest_field_select.get_measurement());
                 assert!(derived_key.guest_field_select.get_tcb_version());
+                assert!(derived_key.guest_field_select.get_guest_policy());
                 Ok([42; 32])
             });
 

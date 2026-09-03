@@ -14,7 +14,7 @@ const GENERATED_KEY_SIZE_BYTES: usize = 16;
 
 pub struct GeneratedKeyDiskEncryption<'a> {
     pub key_path: &'a Path,
-    pub metrics_registry: &'a Registry,
+    pub metrics_registry: Registry,
 }
 
 impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
@@ -32,7 +32,7 @@ impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
             // execution environment)
             /*verify_luks_params=*/
             false,
-            self.metrics_registry,
+            &self.metrics_registry,
         )
         .context("Failed to activate crypt device")?;
 

@@ -148,8 +148,6 @@ struct SandboxedExecutionMetrics {
     accessed_wasm_pages: HistogramVec,
     dirty_pages: HistogramVec,
     dirty_wasm_pages: HistogramVec,
-    read_before_write_count: HistogramVec,
-    direct_write_count: HistogramVec,
     allocated_pages: IntGauge,
     sigsegv_count: HistogramVec,
     mmap_count: HistogramVec,
@@ -357,20 +355,6 @@ impl SandboxedExecutionMetrics {
                 exponential_buckets(1.0, 2.0, 22),
                 &["api_type", "memory_type"],
             ),
-            read_before_write_count: metrics_registry.histogram_vec(
-                "sandboxed_execution_read_before_write_count",
-                "Number of write accesses handled where the page had already been read \
-                    by type of memory (wasm, stable) and api type.",
-                exponential_buckets(1.0, 2.0, 22),
-                &["api_type", "memory_type"],
-            ),
-            direct_write_count: metrics_registry.histogram_vec(
-                "sandboxed_execution_direct_write_count",
-                "Number of write accesses handled where the page had not yet been read \
-                    by type of memory (wasm, stable) and api type.",
-                exponential_buckets(1.0, 2.0, 22),
-                &["api_type", "memory_type"],
-            ),
             allocated_pages: metrics_registry.int_gauge(
                 "sandboxed_execution_allocated_pages",
                 "Total number of currently allocated pages.",
@@ -443,12 +427,6 @@ impl SandboxedExecutionMetrics {
         self.dirty_wasm_pages
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_dirty_wasm_pages_count as f64);
-        self.read_before_write_count
-            .with_label_values(&[api_type_label, "wasm"])
-            .observe(instance_stats.wasm_read_before_write_count as f64);
-        self.direct_write_count
-            .with_label_values(&[api_type_label, "wasm"])
-            .observe(instance_stats.wasm_direct_write_count as f64);
         self.sigsegv_count
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_sigsegv_count as f64);
@@ -472,12 +450,6 @@ impl SandboxedExecutionMetrics {
         self.dirty_pages
             .with_label_values(&[api_type_label, "stable"])
             .observe(instance_stats.stable_dirty_pages as f64);
-        self.read_before_write_count
-            .with_label_values(&[api_type_label, "stable"])
-            .observe(instance_stats.stable_read_before_write_count as f64);
-        self.direct_write_count
-            .with_label_values(&[api_type_label, "stable"])
-            .observe(instance_stats.stable_direct_write_count as f64);
         self.sigsegv_count
             .with_label_values(&[api_type_label, "stable"])
             .observe(instance_stats.stable_sigsegv_count as f64);

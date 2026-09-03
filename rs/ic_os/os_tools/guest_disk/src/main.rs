@@ -53,9 +53,6 @@ fn main() -> Result<()> {
         bail!("This program requires root privileges.");
     }
 
-    let guestos_config: GuestOSConfig = deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
-        .context("Failed to read GuestOS config")?;
-
     run(
         args,
         guestos_config.guest_vm_type,
@@ -96,7 +93,7 @@ fn run(
     } else {
         Box::new(GeneratedKeyDiskEncryption {
             key_path: generated_key_path,
-            metrics_registry: &metrics_registry,
+            metrics_registry: metrics_registry.clone(),
         })
     };
     let partition = args.partition();
