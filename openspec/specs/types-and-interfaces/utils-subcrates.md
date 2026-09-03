@@ -115,6 +115,26 @@ In debug builds (for caches with < 1,000 entries), the cache verifies that track
 
 ---
 
+## Crate: `ic-utils-mem-lru`
+
+**Path:** `rs/utils/mem-lru`
+
+### Purpose
+
+A minimal, fixed-capacity, in-memory LRU cache (`LruCacheWithStats`) that wraps the external [`lru`](https://crates.io/crates/lru) crate and additionally tracks hit and miss counts.
+
+### Public Types
+
+#### `LruCacheWithStats<K, V>`
+
+- `with_size(max_size: usize) -> Self` -- creates a cache holding at most `max_size` entries.
+- `get(&mut self, key: &K) -> Option<&V>` -- returns the cached value, marking it most-recently-used and recording a hit or a miss.
+- `get_cloned(&mut self, key: &K) -> Option<V>` -- like `get`, but returns an owned clone (`V: Clone`) so the caller can retain the value beyond the cache's borrow, e.g. after releasing a lock guard.
+- `insert(&mut self, key: K, value: V)` -- inserts a value, evicting the least-recently-used entry once the cache is at capacity.
+- `len()`, `is_empty()`, `hits()`, `misses()` -- introspection.
+
+---
+
 ## Crate: `ic-utils-rustfmt`
 
 **Path:** `rs/utils/rustfmt`
