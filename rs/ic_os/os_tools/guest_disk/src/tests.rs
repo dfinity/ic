@@ -18,8 +18,8 @@ use anyhow::{Result, anyhow};
 use guest_disk::DiskEncryption;
 use guest_disk::crypt::{
     IC_KEY_TOKEN_TYPE, KeyslotToken, LUKS2_N_KEYSLOTS, LUKS2_N_TOKENS, LuksHeaderLocation,
-    SINGLE_KEYSLOT_INDEX, SINGLE_TOKEN_INDEX, deactivate_crypt_device, format_crypt_device,
-    open_luks2_device, read_single_keyslot_token,
+    SINGLE_KEYSLOT_INDEX, SINGLE_TOKEN_INDEX, SevMetadata, deactivate_crypt_device,
+    format_crypt_device, open_luks2_device, read_single_keyslot_token,
 };
 use guest_disk::sev::{SevDiskEncryption, can_open, rekey};
 use ic_device::device_mapping::{Bytes, TempDevice};
@@ -28,7 +28,7 @@ use itertools::Either::Right;
 use libcryptsetup_rs::consts::flags::CryptVolumeKey;
 use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{
-    CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo,
+    CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo, TokenInput,
 };
 use prometheus::Registry;
 use sev::Generation;
@@ -946,6 +946,87 @@ fn test_upgrade_removes_stale_keyslots() {
     // The re-key converges the legacy header back to the single token in the first
     // position, assigned to the single keyslot.
     fixture.store_partition().read_keyslot_token();
+}
+
+/// A legacy header carrying its keyslot at a non-zero index and its IC key metadata
+/// token at a non-zero index migrates on the next upgrade: the re-key succeeds and
+/// converges to the canonical layout with a single keyslot at index 0 and a single
+/// token at index 0.
+// TODO: remove this test once all nodes only use a single key slot + token per device
+#[test]
+fn test_rekey_migrates_legacy_keyslot_and_token_positions() {
+    const LEGACY_KEYSLOT_INDEX: u32 = 2;
+    const LEGACY_TOKEN_INDEX: u32 = 3;
+    const STALE_KEY: &[u8] = b"stale previous key";
+
+    let mut fixture = TestFixture::new_sev();
+
+    // Build the legacy layout: the current GuestOS's (served) key in keyslot 2, keyslot
+    // 0 unused, and the IC key metadata token in token position 3.
+    let served_key = fixture.derive_sev_key(Partition::Store);
+    let mut crypt_device = format_crypt_device(
+        fixture.store_device_path(),
+        LuksHeaderLocation::Detached(&fixture.store_header_path()),
+        STALE_KEY,
+    )
+    .unwrap();
+    crypt_device
+        .keyslot_handle()
+        .add_by_passphrase(Some(LEGACY_KEYSLOT_INDEX), STALE_KEY, &served_key)
+        .expect("Failed to add the served key's keyslot at the legacy position");
+    crypt_device
+        .keyslot_handle()
+        .destroy(SINGLE_KEYSLOT_INDEX)
+        .expect("Failed to remove the format key's keyslot");
+    let mut legacy_token = KeyslotToken::new_sev(SevMetadata {
+        launch_measurement_hex: default_launch_measurement_as_hex(),
+        tcb_version: default_launch_tcb_as_u64(),
+    });
+    legacy_token.keyslots = vec![LEGACY_KEYSLOT_INDEX.to_string()];
+    crypt_device
+        .token_handle()
+        .json_set(TokenInput::ReplaceToken(
+            LEGACY_TOKEN_INDEX,
+            &serde_json::to_value(legacy_token).unwrap(),
+        ))
+        .expect("Failed to write the legacy IC key metadata token at position 3");
+    drop(crypt_device);
+
+    // Sanity-check the legacy layout before the migration: exactly one active keyslot
+    // (in position 2) and the IC key token in position 3.
+    assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
+    assert!(matches!(
+        fixture
+            .store_partition()
+            .open_crypt_device()
+            .token_handle()
+            .status(LEGACY_TOKEN_INDEX)
+            .unwrap(),
+        CryptTokenInfo::ExternalUnknown(ref token_type) if token_type == IC_KEY_TOKEN_TYPE
+    ));
+
+    fixture
+        .upgrade_sev_guestos_to([0x33; 48])
+        .expect("re-keying a legacy header with non-zero keyslot/token positions should succeed");
+
+    // The migrated header carries exactly one active keyslot, and it is at index 0.
+    assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
+    assert!(matches!(
+        fixture
+            .store_partition()
+            .open_crypt_device()
+            .keyslot_handle()
+            .status(SINGLE_KEYSLOT_INDEX)
+            .unwrap(),
+        KeyslotInfo::Active | KeyslotInfo::ActiveLast
+    ));
+    // The single token moved to position 0 referencing keyslot 0 (asserted by
+    // read_keyslot_token) and carries the new GuestOS's launch measurement.
+    let token = fixture.store_partition().read_keyslot_token();
+    assert_eq!(
+        token.sev_metadata.launch_measurement_hex,
+        hex::encode([0x33_u8; 48])
+    );
 }
 
 #[test]

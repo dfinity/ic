@@ -202,7 +202,7 @@ fn apply_default_settings(crypt_device: &mut CryptDevice) -> Result<()> {
 pub fn format_crypt_device(
     device_path: &Path,
     header_location: LuksHeaderLocation,
-    encryption_key: &[u8],
+    passphrase: &[u8],
 ) -> Result<CryptDevice> {
     if let LuksHeaderLocation::Detached(header_path) = header_location {
         File::create(header_path)
@@ -236,7 +236,7 @@ pub fn format_crypt_device(
         .add_by_key(
             Some(SINGLE_KEYSLOT_INDEX),
             None,
-            encryption_key,
+            passphrase,
             CryptVolumeKey::empty(),
         )
         .context("Could not add key to cryptographic device")?;
