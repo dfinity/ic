@@ -647,10 +647,12 @@ impl SubnetMetrics {
     /// `CanisterMetrics::consumed_cycles()` over the canisters that currently
     /// exist, as of the end of the last committed round.
     ///
-    /// Every consumer of the full total reads it here -- the certified state tree at
-    /// `/subnet/<subnet_id>/metrics` (from certification version `V29`) and the
-    /// `replicated_state_consumed_cycles_since_replica_started` gauge -- so they
-    /// cannot drift apart.
+    /// This is the certified total: the state tree at `/subnet/<subnet_id>/metrics`
+    /// (from certification version `V29`) reads it here. The
+    /// `replicated_state_consumed_cycles_since_replica_started` gauge deliberately
+    /// exports the monotonic counterpart instead -- this same total, net of the
+    /// prepayments whose refund is not known yet -- see
+    /// `ReplicatedStateMetrics::observe`.
     pub fn consumed_cycles_total_including_canisters(&self) -> NominalCycles {
         self.consumed_cycles_total_including_canisters
     }

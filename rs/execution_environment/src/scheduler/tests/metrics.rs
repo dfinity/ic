@@ -45,10 +45,11 @@ use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id
 use more_asserts::assert_ge;
 use std::time::Duration;
 
-/// Observes the state metrics at `height`, having first refreshed the derived
-/// consumed-cycles total that the `replicated_state_consumed_cycles_since_replica_started`
-/// gauge reads. Production refreshes it on every `commit_and_certify`, which this
-/// harness never does.
+/// Observes the state metrics at `height`, having first refreshed
+/// `SubnetMetrics::consumed_cycles_total_including_canisters`, the derived
+/// certified total that the assertions below compare the exported gauge against.
+/// Production refreshes it on every `commit_and_certify`, which this harness never
+/// does.
 fn observe_state_metrics(test: &mut SchedulerTest, height: u64) {
     test.state_mut().refresh_consumed_cycles();
     test.state_metrics().observe(
