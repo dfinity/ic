@@ -45,6 +45,7 @@ fn setup(
 
 /// Like `setup`, but with an explicit per-message access limit. Also returns the
 /// list of abort reasons the tracker reported, in order.
+#[allow(clippy::type_complexity)]
 fn setup_with_access_limit(
     checkpoint_pages: usize,
     memory_pages: usize,
