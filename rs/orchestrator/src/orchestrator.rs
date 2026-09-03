@@ -239,7 +239,7 @@ impl Orchestrator {
 
         metrics
             .orchestrator_info
-            .with_label_values(&[replica_version.as_ref()])
+            .with_label_values(&[replica_version.as_ref(), guestos_version.as_ref()])
             .set(1);
 
         let mut registration = NodeRegistration::new(

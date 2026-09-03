@@ -68,7 +68,7 @@ impl OrchestratorMetrics {
             orchestrator_info: metrics_registry.int_gauge_vec(
                 "ic_orchestrator_info",
                 "version info for the internet computer orchestrator running.",
-                &["ic_active_version"],
+                &["ic_active_version", "ic_guestos_version"],
             ),
             key_rotation_status: metrics_registry.int_gauge_vec(
                 "orchestrator_key_rotation_status",
