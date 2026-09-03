@@ -13,14 +13,14 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterStatus,
     metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
-    testing::SystemStateTesting,
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
 };
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_metrics::{fetch_counter, fetch_histogram_vec_buckets};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::messages::{
-    CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
+    CallbackId, Payload, RejectContext, RequestOrResponse, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::time::{UNIX_EPOCH, expiry_time_from_now};
 use ic_types_cycles::Cycles;
@@ -451,7 +451,8 @@ fn can_timeout_stop_canister_requests() {
 
 /// Stop contexts without a call id (i.e. from before call ids were introduced)
 /// have no recorded time to expire against, so they are timed out immediately,
-/// without waiting for `STOP_CANISTER_TIMEOUT_DURATION`.
+/// without waiting for `STOP_CANISTER_TIMEOUT_DURATION`; and both the ingress
+/// and the canister originated ones are responded to.
 #[test]
 fn can_timeout_stop_canister_requests_without_call_id() {
     let batch_time = Time::from_nanos_since_unix_epoch(u64::MAX / 2);
@@ -460,40 +461,82 @@ fn can_timeout_stop_canister_requests_without_call_id() {
         .build();
 
     let canister = test.create_canister();
+    let xnet_canister = test.xnet_canister_id();
 
     // Open a call context by calling a cross-net canister, so that the canister
     // is not ready to stop.
     test.send_ingress(
         canister,
-        ingress(1).call(other_side(test.xnet_canister_id(), 1), on_response(1)),
+        ingress(1).call(other_side(xnet_canister, 1), on_response(1)),
     );
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // A stop request with a call id, which is subject to the regular timeout.
+    // Two stop requests from a canister. One of them is rewritten below to look
+    // like a request from before call ids were introduced; the other one is
+    // subject to the regular timeout.
     let arg = Encode!(&CanisterIdRecord::from(canister)).unwrap();
-    test.inject_call_to_ic00(
-        Method::StopCanister,
-        arg,
-        Cycles::zero(),
-        test.xnet_canister_id(),
-        InputQueueType::RemoteSubnet,
-    );
+    for _ in 0..2 {
+        test.inject_call_to_ic00(
+            Method::StopCanister,
+            arg.clone(),
+            Cycles::zero(),
+            xnet_canister,
+            InputQueueType::RemoteSubnet,
+        );
+    }
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // Plus an old stop request, from before call ids were introduced.
+    // Drop the call id of the second stop context, remembering what it must be
+    // responded to with. Rewriting an actual stop context (as opposed to adding
+    // a synthetic one) preserves the response slot reserved for it when the stop
+    // request was inducted.
+    let mut status = test
+        .canister_state(canister)
+        .system_state
+        .get_status()
+        .clone();
+    let (reply_callback, refund, deadline) = match &mut status {
+        CanisterStatus::Stopping { stop_contexts, .. } => {
+            assert_eq!(stop_contexts.len(), 2);
+            match &mut stop_contexts[1] {
+                StopCanisterContext::Canister {
+                    reply_callback,
+                    call_id,
+                    cycles,
+                    deadline,
+                    ..
+                } => {
+                    *call_id = None;
+                    (*reply_callback, *cycles, *deadline)
+                }
+                StopCanisterContext::Ingress { .. } => {
+                    unreachable!("Expected a stop context from a canister");
+                }
+            }
+        }
+        CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
+            unreachable!("Expected the canister to be in stopping mode");
+        }
+    };
+    test.canister_state_mut(canister)
+        .system_state
+        .set_status(status);
+
+    // Plus an old stop request from a user.
+    let message_id = message_test_id(1);
     test.canister_state_mut(canister)
         .system_state
         .add_stop_context(StopCanisterContext::Ingress {
             sender: user_test_id(1),
-            message_id: message_test_id(1),
+            message_id: message_id.clone(),
             call_id: None,
         });
 
     match test.canister_state(canister).system_state.get_status() {
         CanisterStatus::Stopping { stop_contexts, .. } => {
-            assert_eq!(stop_contexts.len(), 2);
+            assert_eq!(stop_contexts.len(), 3);
         }
         CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
             unreachable!("Expected the canister to be in stopping mode");
@@ -511,7 +554,8 @@ fn can_timeout_stop_canister_requests_without_call_id() {
 
     match system_state.get_status() {
         CanisterStatus::Stopping { stop_contexts, .. } => {
-            // The stop context without a call id has expired, the other one has not.
+            // Both stop contexts without a call id have expired, the one with a
+            // call id has not.
             assert_eq!(stop_contexts.len(), 1);
             assert_eq!(
                 stop_contexts[0].call_id(),
@@ -521,6 +565,36 @@ fn can_timeout_stop_canister_requests_without_call_id() {
         CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
             unreachable!("Expected the canister to be in stopping mode");
         }
+    }
+
+    // The user is told that their stop request timed out.
+    assert_eq!(
+        test.ingress_error(&message_id).code(),
+        ErrorCode::StopCanisterRequestTimeout
+    );
+
+    // And the canister gets a `SysTransient` reject on the callback of its
+    // original stop request, with its cycles refunded.
+    let response = test
+        .state_mut()
+        .subnet_queues_mut()
+        .pop_canister_output(&xnet_canister)
+        .expect("Expected a response to the stop request from the canister");
+    match response {
+        RequestOrResponse::Response(response) => {
+            assert_eq!(response.originator, xnet_canister);
+            assert_eq!(response.originator_reply_callback, reply_callback);
+            assert_eq!(response.refund, refund);
+            assert_eq!(response.deadline, deadline);
+            assert_eq!(
+                response.response_payload,
+                Payload::Reject(RejectContext::new(
+                    RejectCode::SysTransient,
+                    "Stop canister request timed out"
+                ))
+            );
+        }
+        RequestOrResponse::Request(_) => unreachable!("Expected a response"),
     }
 }
 
