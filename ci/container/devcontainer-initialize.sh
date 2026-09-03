@@ -25,7 +25,7 @@ touch ~/.zsh_history ~/.bash_history
 # container-run.sh container of the same checkout never share an output base:
 # they run in separate PID namespaces, so bazel invocations from one (e.g. the
 # Bazel extension's background queries) would kill the server of the other.
-KEY="devcontainer-$("$WORKSPACE"/ci/container/bazel-output-base-key.sh "$WORKSPACE")"
-RC_FILE="$HOME/.cache/container-run/devcontainer-$DEVCONTAINER_ID.bazelrc"
-mkdir -p "$(dirname "$RC_FILE")"
-echo "startup --output_base=/home/ubuntu/.cache/bazel/_bazel_ubuntu/$KEY" >"$RC_FILE"
+OUTPUT_BASE_KEY="devcontainer-$("$WORKSPACE"/ci/container/bazel-output-base-key.sh "$WORKSPACE")"
+BAZELRC_FILE="$HOME/.cache/container-run/devcontainer-$DEVCONTAINER_ID.bazelrc"
+mkdir -p "$(dirname "$BAZELRC_FILE")"
+echo "startup --output_base=/home/ubuntu/.cache/bazel/_bazel_ubuntu/$OUTPUT_BASE_KEY" >"$BAZELRC_FILE"
