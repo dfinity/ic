@@ -399,8 +399,7 @@ mod eip7702 {
 
     /// Cross-checks the minter's hand-rolled EIP-7702 encoding against `alloy`, which encodes the
     /// same transaction independently: the payload to sign, the broadcast payload of the signed
-    /// transaction, and the hash the transaction is referenced by. The deprecated `ethers-rs`
-    /// this replaced was archived before EIP-7702 and could not check any of this.
+    /// transaction, and the hash the transaction is referenced by.
     #[test]
     fn should_encode_the_same_transaction_as_alloy() {
         use alloy_consensus::SignableTransaction;
