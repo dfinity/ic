@@ -2,77 +2,53 @@
 
 Repository: `https://github.com/dfinity/ic.git`
 
-Git hash: `cf41372e3d4dc1accfe2c09a7969f8bddc729dc1`
+Git hash: `7360f8f35bda2e4754bb7f2258d6852feec268e8`
 
-New compressed Wasm hash: `b7294354c6ad8d0466894204471155d47e80af468fbca4759baa64c7c77ca65a`
+New compressed Wasm hash: `b8bb51fe0fd93bcb262a2e61e13a3c1625496e7e8cc55c0c635e8536a4096680`
 
-Upgrade args hash: `2c0a6655a48e343f2514e9f3bd379a3e62dee2d966a6f19699c06a83242cd76f`
+Upgrade args hash: `0987f8cdde68719fa7de404958ef92341515d317f7b643492d6b2bff4ce36285`
 
 Target canister: `vxkom-oyaaa-aaaar-qafda-cai`
 
-Previous ledger suite orchestrator proposal: https://dashboard.internetcomputer.org/proposal/140272
+Previous ledger suite orchestrator proposal: https://dashboard.internetcomputer.org/proposal/143606
 
 ---
 
 ## Motivation
-Upgrade all ledger suites managed by the orchestrator to the latest version ([ledger-suite-icrc-2026-03-09](https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2026-03-09)).
 
+Effectively disable block archiving on all ledgers managed by the orchestrator, by raising the archiving trigger threshold to `4_200_000_000` blocks. The Wasm module of each ledger is not changed and remains at the currently deployed version from proposal [140856](https://dashboard.internetcomputer.org/proposal/140856).
 
 ## Release Notes
 
-### Orchestrator
-
 ```
-git log --format='%C(auto) %h %s' 653c927f2c732398bfd6e6b9dbfaf983cfb9b911..cf41372e3d4dc1accfe2c09a7969f8bddc729dc1 -- rs/ethereum/ledger-suite-orchestrator
-c199eff5ab feat(ICRC_Index): DEFI-2684: Variable build_index wait time (#9060)
+git log --format='%C(auto) %h %s' cf41372e3d4dc1accfe2c09a7969f8bddc729dc1..7360f8f35bda2e4754bb7f2258d6852feec268e8 -- rs/ethereum/ledger-suite-orchestrator
+957dcaf50b feat(ledger-suite-orchestrator): forward ledger upgrade argument to managed ledgers (#11407)
+6ca30003de feat: migrate to ic-cdk 0.20 (#11069)
+53efbe5878 test(cketh): migrate integration tests to PocketIC (#10955)
+04a1d9ebcc test(ledger-suite-orchestrator): migrate integration tests to PocketIC (#10949)
+6ed0116324 chore: move all crate definitions into workspace (#10812)
+f245d740fb chore: use workspace crates everywhere (#10809)
+5297f59ed2 chore: prepare for rustc version bump to v1.95.0 (#10637)
+b44af81463 chore(defi): remove deprecated ic-cdk imports in ic-ledger-suite-orchestrator (#10291)
+63b841f4fa chore: remove unused DeFi rust dependencies (#10281)
+7fb12c2e43 ci(defi): check endpoints exported in a canister's WASM against its Candid specification (#10147)
+88a0df635a chore(icrc-ledger-types): DEFI-1894: Switch icrc-ledger-types bazel variants (#9900)
+d3b3351fa3 feat(icrc1): implement ICRC-122/152 with ledger endpoints, index-ng, and Rosetta support (#9586)
+b608c374f2 chore: 42u64 -> 42_u64 (#9523)
+a08eb494fe chore(de-fi): Add separator before type suffix in integer literals. (#9433)
+cca3eb1c44 refactor: Group cycles related types in new ic-types-cycles crate (#9341)
  ```
-
-### Ledger Suite
-
-The commit used
-`cf41372e3d4dc1accfe2c09a7969f8bddc729dc1` corresponds to the [ICRC Ledger Suite release 2026-03-09](https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc
--2026-03-09).
-
-#### Ledger
-
-```
-git log --format="%C(auto) %h %s" ledger-suite-icrc-2026-02-02..ledger-suite-icrc-2026-03-09 -- rs/ledger_suite/common rs/ledger_suite/icrc1/ledger
-rs/ledger_suite/icrc1/src rs/ledger_suite/icrc1/tokens_u256 packages/icrc-ledger-types
- b34d5ed28c chore: Upgrade rustc to 1.93.1  (#9113)
- 11306dd454 chore: always add canbench test (#9151)
- 8910873dcc chore: bump candid to v0.10.22 (#8780)
-```
-
-#### Index
-
-```
-git log --format="%C(auto) %h %s" ledger-suite-icrc-2026-02-02..ledger-suite-icrc-2026-03-09 -- rs/ledger_suite/icrc1/index-ng
- c199eff5abb feat(ICRC_Index): DEFI-2684: Variable build_index wait time (#9060)
-```
-
-#### Archive
-
-```
-git log --format="%C(auto) %h %s" ledger-suite-icrc-2026-02-02..ledger-suite-icrc-2026-03-09 -- rs/ledger_suite/icrc1/archive/
-
-```
 
 ## Upgrade args
 
 ```
 git fetch
-git checkout cf41372e3d4dc1accfe2c09a7969f8bddc729dc1
-didc encode -d rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator.did -t '(OrchestratorArg)' '(
-  variant {
-    UpgradeArg = record {
-      git_commit_hash = opt "cf41372e3d4dc1accfe2c09a7969f8bddc729dc1";
-      ledger_compressed_wasm_hash = opt "390e22377640748f5a63fc35d50680d27a05d3e9a05c1c25c4061cacebda4c56";
-      index_compressed_wasm_hash = opt "b9f248fed399250f17bd3c00386c251bdff5479001bedde341aeccc632a74253";
-      archive_compressed_wasm_hash = opt "47c385eda3cfa2816e9da29b570ce69beda49770916a7745c7a3cfda0ccdc2f3";
-    }
-  },
-)' | xxd -r -p | sha256sum
+git checkout 7360f8f35bda2e4754bb7f2258d6852feec268e8
+didc encode -d rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator.did -t '(OrchestratorArg)' '(variant { UpgradeArg = record { ledger_compressed_wasm_hash = opt "390e22377640748f5a63fc35d50680d27a05d3e9a05c1c25c4061cacebda4c56"; ledger_upgrade_arg = opt record { change_archive_options = opt record { trigger_threshold = opt 4_200_000_000 : opt nat64 } } } })' | xxd -r -p | sha256sum
 ```
+
+* The ledger compressed wasm hash `390e22377640748f5a63fc35d50680d27a05d3e9a05c1c25c4061cacebda4c56` is the same as the currently deployed version from proposal [140856](https://dashboard.internetcomputer.org/proposal/140856).
+* Raising the archiving trigger threshold to `4_200_000_000` blocks effectively disables block archiving on all ledgers managed by the orchestrator.
 
 ## Wasm Verification
 
@@ -80,17 +56,7 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 
 ```
 git fetch
-git checkout cf41372e3d4dc1accfe2c09a7969f8bddc729dc1
+git checkout 7360f8f35bda2e4754bb7f2258d6852feec268e8
 "./ci/container/build-ic.sh" "--canisters"
 sha256sum ./artifacts/canisters/ic-ledger-suite-orchestrator-canister.wasm.gz
 ```
-
-Verify that the hashes of the gzipped WASMs for the ledger, index and archive match the proposed hashes in the upgrade arguments.
-
-```
-git fetch
-git checkout cf41372e3d4dc1accfe2c09a7969f8bddc729dc1
-"./ci/container/build-ic.sh" "--canisters"
-sha256sum ./artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz
-sha256sum ./artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz
-sha256sum ./artifacts/canisters/ic-icrc1-archive-u256.wasm.gz
