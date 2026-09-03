@@ -870,6 +870,38 @@ impl CyclesAccountManager {
     /// the instructions it executed, at the instruction costs of the Wasm execution
     /// mode it executed them in.
     ///
+    /// The prepayment is compared to the requirement on its nominal part rather than
+    /// on its real part, so that the adjustment applies under the free cost schedule
+    /// too: the real part of an `Instructions` amount is zero under that schedule, so
+    /// a comparison of real parts would see no difference between the Wasm execution
+    /// modes and leave the nominal part unadjusted, misreporting the consumed cycles
+    /// metrics. Under the free cost schedule nothing is withdrawn from or refunded to
+    /// the balance, hence only those metrics are adjusted; under the normal cost
+    /// schedule the real and the nominal parts coincide, so this comparison is
+    /// equivalent to comparing the real parts.
+    ///
+    /// # Assumption: the cost schedule of a subnet never changes
+    ///
+    /// Comparing a single part, be it the real or the nominal one, is only sound
+    /// because the prepayment and the requirement are stamped with the same cost
+    /// schedule: the prepayment recorded in the callback carries the cost schedule in
+    /// effect when the call was performed, whereas the requirement is derived from the
+    /// cost schedule in effect when the response is executed. A subnet is assigned its
+    /// cost schedule when it is created (`do_create_subnet`) and keeps it (a subnet
+    /// split inherits it and splitting a rental subnet is rejected outright), and
+    /// `UpdateSubnetPayload` exposes no field to change it, so the two schedules always
+    /// coincide today.
+    ///
+    /// Were the cost schedule of a live subnet allowed to change, this would break:
+    /// the real and the nominal parts would no longer agree on how the prepayment and
+    /// the requirement compare, and settling the prepayment would need to account for
+    /// both parts separately. In particular, a canister whose subnet switched from the
+    /// normal to the free cost schedule across a call would hit the branch below that
+    /// returns the prepayment unchanged, and `refund_unused_execution_cycles` would
+    /// then clamp the refund to the free-schedule amount of zero real cycles, so the
+    /// canister would forfeit the whole real prepayment it made under the normal cost
+    /// schedule instead of getting it back.
+    ///
     /// Returns the prepayment matching the cycles required for executing the response
     /// in the given Wasm execution mode, or a `CanisterOutOfCyclesError` if the
     /// canister's balance does not cover the additional prepayment.
@@ -883,7 +915,7 @@ impl CyclesAccountManager {
     ) -> Result<CompoundCycles<Instructions>, CanisterOutOfCyclesError> {
         let required = self.prepayment_for_response_execution(subnet_cycles_config, execution_mode);
         let prepaid = prepayment_for_response_execution;
-        if prepaid.real() < required.real() {
+        if prepaid.nominal() < required.nominal() {
             // No freezing threshold is applied, i.e., the threshold is zero.
             self.consume_with_threshold_impl(
                 system_state,
@@ -908,6 +940,9 @@ impl CyclesAccountManager {
     /// Unlike `adjust_prepayment_for_response_execution`, which uses this function to
     /// handle an excessive prepayment, this never withdraws cycles from the canister's
     /// balance and hence it cannot fail.
+    ///
+    /// The prepayment is compared to the requirement on its nominal part for the same
+    /// reason as in `adjust_prepayment_for_response_execution`.
     fn refund_excess_prepayment_for_response_execution(
         &self,
         system_state: &mut SystemState,
@@ -916,7 +951,7 @@ impl CyclesAccountManager {
         execution_mode: WasmExecutionMode,
     ) -> CompoundCycles<Instructions> {
         let required = self.prepayment_for_response_execution(subnet_cycles_config, execution_mode);
-        if prepayment_for_response_execution.real() <= required.real() {
+        if prepayment_for_response_execution.nominal() <= required.nominal() {
             return prepayment_for_response_execution;
         }
         // The excess part of the prepayment is refunded in full and hence it does not
