@@ -656,11 +656,16 @@ impl WasmtimeEmbedder {
 
         // Create a closure that aborts the execution by recording a pending
         // trap code, which the instrumented Wasm raises at the next reentrant
-        // block start. Writing an integer keeps the signal handler free of
-        // allocation; the error message is built by `internal_trap`.
+        // block start. The error message is built by `internal_trap`.
         //
-        // SAFETY: as for `subtract_instruction_counter` above.
+        // SAFETY: We store a raw pointer to the Store and a copy of the Global.
+        // These remain valid for the lifetime of the WasmtimeInstance because:
+        // 1. The Store is pinned (heap-allocated) and owned by WasmtimeInstance
+        // 2. The Global is a lightweight handle that references data in the Store
+        // 3. The memory tracker (which holds this closure) is also owned by WasmtimeInstance
+        // 4. All are dropped together when WasmtimeInstance is dropped
         let abort_execution: Arc<SignalMutex<dyn FnMut(AbortReason) + Send>> = {
+            // StorePtr::new requires a Pin, enforcing that the store is pinned.
             let mut store_ptr = StorePtr::new(store.as_mut());
             let global_copy = pending_trap_code_global;
 
@@ -671,10 +676,9 @@ impl WasmtimeEmbedder {
                     }
                 };
                 // SAFETY: Accessing the Store and Global from the signal handler.
+                // Both pointers are guaranteed valid by the lifetime relationship described above.
                 unsafe {
                     let store_ref = store_ptr.get();
-                    // The first violation wins, so that the reported error
-                    // does not depend on how many faults follow it.
                     if let Val::I32(0) = global_copy.get(&mut *store_ref) {
                         let _ = global_copy.set(store_ref, Val::I32(code as i32));
                     }
