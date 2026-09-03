@@ -1002,13 +1002,13 @@ jobs:
           # digest is rejected too, not only a mismatching well-formed one. At
           # least one reference per image must exist (it does today), which also
           # guards against the grep pattern going stale.
-          check_refs() { # $1 = image, $2 = pinned digest
-            local refs
+          check_refs() {
+            local image=$1 digest=$2 refs
             # grep exits 1 when nothing matches; treat that as an empty set so the
             # comparison below reports it instead of pipefail aborting the step.
-            refs="$({ grep -rhoE "${prefix}$1[:@][^\"'[:space:]]+" .devcontainer .github/workflows || true; } | sort -u)"
-            if [ "$refs" != "${prefix}$1@$2" ]; then
-              echo "::error file=ci/container/$1.digest::every $1 reference in .devcontainer/ and .github/workflows/ must be ${prefix}$1@$2 (ci/container/$1.digest; all are written by container-autobuild.yml), found:"
+            refs="$({ grep -rhoE "${prefix}${image}[:@][^\"'[:space:]]+" .devcontainer .github/workflows || true; } | sort -u)"
+            if [ "$refs" != "${prefix}${image}@${digest}" ]; then
+              echo "::error file=ci/container/${image}.digest::every ${image} reference in .devcontainer/ and .github/workflows/ must be ${prefix}${image}@${digest} (ci/container/${image}.digest; all are written by container-autobuild.yml), found:"
               echo "${refs:-<none>}"
               exit 1
             fi
