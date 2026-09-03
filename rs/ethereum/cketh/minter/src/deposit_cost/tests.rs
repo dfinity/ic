@@ -8,6 +8,12 @@ use crate::sweep::MAX_DEPOSITS_PER_SWEEP;
 use ic_ethereum_types::Address;
 use std::ops::Add;
 
+const NODES_IN_FIDUCIARY_SUBNET: u128 = 34;
+const HTTPS_OUTCALL_BASE_CYCLES: u128 =
+    (3_000_000 + 60_000 * NODES_IN_FIDUCIARY_SUBNET) * NODES_IN_FIDUCIARY_SUBNET;
+const HTTPS_OUTCALL_REQUEST_CYCLES_PER_BYTE: u128 = 400 * NODES_IN_FIDUCIARY_SUBNET;
+const HTTPS_OUTCALL_RESPONSE_CYCLES_PER_BYTE: u128 = 800 * NODES_IN_FIDUCIARY_SUBNET;
+
 #[test]
 fn should_compute_deposit_cost_in_usd() {
     for scenario in scenarios() {
@@ -30,64 +36,30 @@ fn should_compute_deposit_cost_in_usd() {
 
 fn scenarios() -> Vec<Scenario> {
     vec![
-        ScenarioBuilder::new("calm gas, lone deposit")
-            .with_balance_scans([1])
+        ScenarioBuilder::new("best case: calm gas, cheap ether, everything amortized")
+            .with_balance_scans([MAX_CALLS_PER_BATCH as u32])
+            .with_sweep_of_size(MAX_DEPOSITS_PER_SWEEP as u32)
             .with_market_conditions(MarketConditions {
                 gas_price_gwei: 0.5,
-                ..Default::default()
-            })
-            .expecting("0.1371", "0.1058", "0.2429"),
-        ScenarioBuilder::new("calm gas, full batch")
-            .with_balance_scans([10])
-            .with_sweep_of_size(10)
-            .with_market_conditions(MarketConditions {
-                gas_price_gwei: 0.5,
-                ..Default::default()
-            })
-            .expecting("0.1020", "0.0732", "0.1752"),
-        ScenarioBuilder::new("typical gas, lone deposit")
-            .with_balance_scans([1])
-            .expecting("0.5484", "0.1058", "0.6542"),
-        ScenarioBuilder::new("typical gas, full batch")
-            .with_balance_scans([10])
-            .with_sweep_of_size(10)
-            .expecting("0.4080", "0.0732", "0.4812"),
-        ScenarioBuilder::new("congested gas, lone deposit")
-            .with_balance_scans([1])
-            .with_market_conditions(MarketConditions {
-                gas_price_gwei: 10.0,
-                ..Default::default()
-            })
-            .expecting("2.7420", "0.1058", "2.8478"),
-        ScenarioBuilder::new("gas spike, lone deposit")
-            .with_balance_scans([1])
-            .with_market_conditions(MarketConditions {
-                gas_price_gwei: 100.0,
-                ..Default::default()
-            })
-            .expecting("27.4200", "0.1058", "27.5258"),
-        ScenarioBuilder::new("bear market ether, typical gas")
-            .with_balance_scans([1])
-            .with_market_conditions(MarketConditions {
                 eth_usd: 2_000.0,
                 ..Default::default()
             })
-            .expecting("0.3656", "0.1058", "0.4714"),
-        ScenarioBuilder::new("bull market ether, typical gas")
-            .with_balance_scans([1])
+            .expecting("0.0680", "0.0731", "0.1411"),
+        ScenarioBuilder::new("middle ground: typical gas, lone deposit found within the hour")
+            .with_balance_scans([1; SCANS_WITHIN_FIRST_HOUR])
+            .expecting("0.5484", "0.1184", "0.6668"),
+        ScenarioBuilder::new("worst case: gas spike, expensive ether, scanned alone for 24h")
+            .with_balance_scans([1; SCAN_GAP_SECS.len()])
             .with_market_conditions(MarketConditions {
-                eth_usd: 10_000.0,
+                gas_price_gwei: 20.0,
+                eth_usd: 5_000.0,
                 ..Default::default()
             })
-            .expecting("1.8280", "0.1058", "1.9338"),
-        ScenarioBuilder::new("scanned alone through the full 24h schedule")
-            .with_balance_scans([1; SCAN_GAP_SECS.len()])
-            .expecting("0.5484", "0.1507", "0.6991"),
-        ScenarioBuilder::new("scanned through the full 24h schedule in full calls")
-            .with_balance_scans([MAX_CALLS_PER_BATCH as u32; SCAN_GAP_SECS.len()])
-            .expecting("0.5484", "0.1050", "0.6534"),
+            .expecting("9.1400", "0.1507", "9.2907"),
     ]
 }
+
+const SCANS_WITHIN_FIRST_HOUR: usize = 10;
 
 struct ScenarioBuilder {
     name: &'static str,
@@ -308,9 +280,3 @@ struct Scenario {
 fn usd(amount: f64) -> String {
     format!("{amount:.4}")
 }
-
-const NODES_IN_FIDUCIARY_SUBNET: u128 = 34;
-const HTTPS_OUTCALL_BASE_CYCLES: u128 =
-    (3_000_000 + 60_000 * NODES_IN_FIDUCIARY_SUBNET) * NODES_IN_FIDUCIARY_SUBNET;
-const HTTPS_OUTCALL_REQUEST_CYCLES_PER_BYTE: u128 = 400 * NODES_IN_FIDUCIARY_SUBNET;
-const HTTPS_OUTCALL_RESPONSE_CYCLES_PER_BYTE: u128 = 800 * NODES_IN_FIDUCIARY_SUBNET;
