@@ -2027,10 +2027,6 @@ crate.spec(
     version = "4.0.4",
 )
 crate.spec(
-    package = "wsl",
-    version = "^0.1.0",
-)
-crate.spec(
     default_features = False,
     features = [
         "ecdsa",

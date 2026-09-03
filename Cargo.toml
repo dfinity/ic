@@ -1020,7 +1020,6 @@ wat = "~1.252.0"
 webpki-roots = "1.0.6"
 which = "6.0.3"
 wirm = { version = "4.0.4", features = ["parallel"] }
-wsl = "0.1.0"
 wycheproof = { version = "0.6", default-features = false }
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.18.1" }

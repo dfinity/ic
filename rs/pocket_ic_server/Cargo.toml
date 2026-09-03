@@ -75,6 +75,7 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-sns-wasm = { path = "../nns/sns-wasm" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-state-manager = { path = "../state_manager" }
+ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-types-cycles = { path = "../types/cycles" }
 ic-utils = { workspace = true }
@@ -104,7 +105,6 @@ tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
 wat = { workspace = true }
-wsl = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
