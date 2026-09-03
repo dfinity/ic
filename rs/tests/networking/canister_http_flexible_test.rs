@@ -1865,7 +1865,7 @@ fn test_out_of_cycles(env: TestEnv) {
                 let (result, refunded_cycles) =
                     send_flexible_reporting_refund(&proxy, args, PAYMENT).await?;
 
-                let spent = match result {
+                let report = match result {
                     Ok(FlexibleHttpRequestResult::Err(FlexibleHttpRequestErr {
                         global_error: Some(FlexibleHttpGlobalError::OutOfCycles(_)),
                         message,
@@ -1876,7 +1876,7 @@ fn test_out_of_cycles(env: TestEnv) {
                         if !message.contains("Out of cycles") {
                             bail!("unexpected out-of-cycles message: '{message}'");
                         }
-                        reported_spend(&message).map_err(anyhow::Error::msg)?
+                        reported_out_of_cycles(&message).map_err(anyhow::Error::msg)?
                     }
                     other => bail!("expected an OutOfCycles error, got: {other:?}"),
                 };
@@ -1886,18 +1886,10 @@ fn test_out_of_cycles(env: TestEnv) {
                     .map_err(|wrong| anyhow::anyhow!("a failed outcall {wrong}"))?;
 
                 // Failing does not forfeit the allowances: each replica is charged
-                // what it reported spending, the rest is credited back, and the base
-                // fee stays.
+                // what it spent, the rest is credited back, and the base fee stays.
                 let charge = settled_charge(&subnet.node, subnet.proxy_id, &baseline).await?;
-                let expected = fees.base_fee + spent;
-                if charge.consumed.http_outcalls != expected {
-                    bail!(
-                        "a failed outcall consumed {} cycles, not the {expected} its {} base \
-                         fee and the {spent} reported spent come to",
-                        charge.consumed.http_outcalls,
-                        fees.base_fee
-                    );
-                }
+                fees.check_failed_consumption(&charge.consumed, &report, payment)
+                    .map_err(|wrong| anyhow::anyhow!("a failed outcall {wrong}"))?;
                 Ok(())
             }
         )

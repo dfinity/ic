@@ -199,13 +199,37 @@ fn load_metrics_e2e_test() {
         // Accept up to 10% error. The precise values are not important here and they're very sensitive
         // to the changes to the replicated state / execution. It's mostly a sanity check that the
         // returned values are not too ridiculous and they might have to be updated once in a while.
-        // These metrics are near-symmetric, so they do not pin down the orientation; the
+        //These metrics are near-symmetric, so they do not pin down the orientation; the
         // orientation is determined and checked for consistency by the exact `assert_eq_oriented`
         // checks below, and these `assert_near` checks pass in either orientation.
-        assert_near!(states_sizes_bytes.source, 4232865, 0.1);
-        assert_near!(states_sizes_bytes.destination, 5006039, 0.1);
-        assert_near!(instructions_executed.source, 144345636, 0.1);
-        assert_near!(instructions_executed.destination, 145689636, 0.1);
+        assert_near!(
+            states_sizes_bytes
+                .source
+                .min(states_sizes_bytes.destination),
+            4232865,
+            0.1
+        );
+        assert_near!(
+            states_sizes_bytes
+                .source
+                .max(states_sizes_bytes.destination),
+            5006039,
+            0.1
+        );
+        assert_near!(
+            instructions_executed
+                .source
+                .min(instructions_executed.destination),
+            144345636,
+            0.1
+        );
+        assert_near!(
+            instructions_executed
+                .source
+                .max(instructions_executed.destination),
+            145689636,
+            0.1
+        );
         assert_eq_oriented!(canisters_installed, 11, 9);
         assert_eq_oriented!(ingress_messages_executed, 21, 18);
         assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 5, 5);

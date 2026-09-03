@@ -2814,7 +2814,7 @@ async fn proxy_cycle_balance(handlers: &Handlers<'_>) -> u128 {
 /// fee and the per-replica allowances comes back on the reply, and the unspent part
 /// of the allowances is credited to the balance once the response is delivered. So
 /// what stays charged is the base fee plus what the outcall really spent — more
-/// than a lower bound dervied from the delivered response, and no more than
+/// than a lower bound derived from the delivered response, and no more than
 /// `ic0.cost_http_request_v2` quotes for the resources it consumed.
 ///
 /// Returns the fees and what the outcall actually cost, for whatever the caller
@@ -2853,7 +2853,7 @@ async fn assert_charged_as_quoted(
     if let Err(wrong) = fees.check_consumption(&charge.consumed, &delivered, elapsed) {
         panic!("{description} {wrong}");
     }
-    // Everything that wasn't withheld should heve been refunded with the response.
+    // Everything that wasn't withheld should have been refunded with the response.
     let RefundedCycles::Cycles(refunded) = refunded_cycles else {
         panic!("{description} reported no refund on its reply at all");
     };
@@ -3316,7 +3316,7 @@ fn test_pay_as_you_go_out_of_cycles(env: TestEnv) {
         )
         .await;
 
-        let spent = match &response {
+        let report = match &response {
             Err(RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message,
@@ -3326,7 +3326,7 @@ fn test_pay_as_you_go_out_of_cycles(env: TestEnv) {
                     reject_message.contains("Out of cycles"),
                     "unexpected rejection message: '{reject_message}'"
                 );
-                fatal(reported_spend(reject_message).map_err(anyhow::Error::msg))
+                fatal(reported_out_of_cycles(reject_message).map_err(anyhow::Error::msg))
             }
             other => panic!("expected an out-of-cycles rejection, got: {other:?}"),
         };
@@ -3345,8 +3345,9 @@ fn test_pay_as_you_go_out_of_cycles(env: TestEnv) {
         // charged what it reported spending on the response it could not afford to
         // deliver, and the rest is credited back.
         let charge = settled_charge(&handlers, &baseline).await;
-        let expected = fees.base_fee + spent;
-        assert_eq!(charge.consumed.http_outcalls, expected);
+        if let Err(wrong) = fees.check_failed_consumption(&charge.consumed, &report, payment) {
+            panic!("an out-of-cycles outcall {wrong}");
+        }
     });
 }
 

@@ -739,17 +739,17 @@ const SETTLE_QUIET: Duration = Duration::from_secs(15);
 /// Waits for `canister`'s cycle balance to stop increasing, then returns it.
 pub async fn settled_balance(node: &IcNodeSnapshot, canister: PrincipalId) -> Result<u128> {
     let deadline = Instant::now() + SETTLE_BUDGET;
-    let mut high_water = cycle_balance(node, canister).await?;
+    let mut previous = cycle_balance(node, canister).await?;
     let mut last_rise = Instant::now();
     loop {
         tokio::time::sleep(SETTLE_INTERVAL).await;
         let current = cycle_balance(node, canister).await?;
-        if current > high_water {
-            high_water = current;
+        if current > previous {
             last_rise = Instant::now();
         } else if last_rise.elapsed() >= SETTLE_QUIET {
             return Ok(current);
         }
+        previous = current;
         if Instant::now() >= deadline {
             bail!("{canister} was still being credited after {SETTLE_BUDGET:?}");
         }
@@ -813,19 +813,40 @@ pub async fn settled_charge(
     }
 }
 
-/// What an out-of-cycles rejection reports the replicas collectively spent.
-/// Determined by parsing the reject message.
+/// What an out-of-cycles rejection reports: how many replicas had reported their
+/// spend by the time the outcall was given up on, and what they had spent between
+/// them. Determined by parsing the reject message.
+pub struct OutOfCyclesReport {
+    /// How many replicas had reported when the outcall was given up on.
+    pub replicas: usize,
+    /// What those replicas had spent between them.
+    pub spent: u128,
+}
+
 pub fn reported_spend(reject_message: &str) -> Result<u128, String> {
-    const PREFIX: &str = "collective spend of ";
-    reject_message
-        .split_once(PREFIX)
+    reported_out_of_cycles(reject_message).map(|report| report.spent)
+}
+
+pub fn reported_out_of_cycles(reject_message: &str) -> Result<OutOfCyclesReport, String> {
+    let malformed =
+        || format!("expected a rejection naming what was spent, got: '{reject_message}'");
+    // `Cycles` renders with underscore separators.
+    let number = |token: &str| token.replace('_', "").parse().ok();
+
+    let replicas = reject_message
+        .split_once("Out of cycles: ")
         .and_then(|(_, rest)| rest.split_whitespace().next())
-        // `Cycles` renders with underscore separators.
-        .map(|cycles| cycles.replace('_', ""))
-        .and_then(|cycles| cycles.parse().ok())
-        .ok_or_else(|| {
-            format!("expected a rejection naming what was spent, got: '{reject_message}'")
-        })
+        .and_then(number)
+        .ok_or_else(malformed)?;
+    let spent = reject_message
+        .split_once("collective spend of ")
+        .and_then(|(_, rest)| rest.split_whitespace().next())
+        .and_then(number)
+        .ok_or_else(malformed)?;
+    Ok(OutOfCyclesReport {
+        replicas: replicas as usize,
+        spent,
+    })
 }
 
 /// Base arguments for a `GET` outcall to `url` that opts into pay-as-you-go
@@ -1011,7 +1032,7 @@ fn transform_instructions_at_most(body: NumBytes) -> u64 {
     ENTRY.saturating_add(PER_BYTE.saturating_mul(body.get()))
 }
 
-/// A cycles account manager for a charging subnet..
+/// A cycles account manager for a charging subnet.
 fn paying_cycles_account_manager() -> CyclesAccountManager {
     CyclesAccountManager::new(
         NumInstructions::from(0),
@@ -1128,6 +1149,38 @@ impl PaygFees {
     fn byte_fee(&self, bytes: u64) -> u128 {
         (self.priced_at(Duration::ZERO, bytes, 0, 0) - self.priced_at(Duration::ZERO, 0, 0, 0))
             / self.node_count as u128
+    }
+
+    /// Checks what an outcall that failed with "out-of-cycles" was charged: its base fee,
+    /// plus what every replica that attempted it spent.
+    pub fn check_failed_consumption(
+        &self,
+        consumed_diff: &ConsumedCycles,
+        report: &OutOfCyclesReport,
+        payment: u128,
+    ) -> Result<(), String> {
+        let outcall = consumed_diff.http_outcalls;
+        let floor = self.base_fee + report.spent;
+        if outcall < floor {
+            return Err(format!(
+                "consumed {outcall} cycles, less than the {floor} its {} base fee and the \
+                 {} the {} replicas that had reported spent between them come to",
+                self.base_fee, report.spent, report.replicas
+            ));
+        }
+        let unheard = self.node_count.saturating_sub(report.replicas) as u128;
+        let ceiling = floor + unheard * self.allowance(payment);
+        if outcall > ceiling {
+            return Err(format!(
+                "consumed {outcall} cycles, more than the {ceiling} the {} reported spent \
+                 comes to once the {unheard} replicas that had yet to report are each \
+                 allowed their whole {} allowance — so more was charged than the allowances \
+                 could cover",
+                report.spent,
+                self.allowance(payment)
+            ));
+        }
+        Ok(())
     }
 
     /// Whether the `payment` is ample enough that the worst-case usage fee, rather
