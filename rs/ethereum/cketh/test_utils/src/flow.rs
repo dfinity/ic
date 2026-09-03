@@ -1109,7 +1109,11 @@ fn set_transaction_status(receipt: &mut alloy_rpc_types_eth::TransactionReceipt,
 }
 
 pub fn increment_max_priority_fee_per_gas(fee_history: &mut alloy_rpc_types_eth::FeeHistory) {
-    for rewards in fee_history.reward.iter_mut().flatten() {
+    let rewards_per_block = fee_history
+        .reward
+        .as_mut()
+        .expect("BUG: fee history without rewards");
+    for rewards in rewards_per_block.iter_mut() {
         for reward in rewards.iter_mut() {
             *reward = reward
                 .checked_add(1)
