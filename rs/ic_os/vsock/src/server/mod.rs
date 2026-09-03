@@ -111,6 +111,7 @@ impl VsockServer {
             });
         }
 
+        // Drop the socket early so that no more clients connect while we drain the tracker.
         drop(self.listener);
         tracker.close();
 
@@ -179,8 +180,11 @@ async fn process_connection(
         Command::StartUpgradeGuestVM => start_upgrade_guest_vm(),
     }
     .map_err(|e| {
+        // We don't return any errors from command execution up the stack. Log
+        // the error on the server, and write the `Response` to the client, and
+        // continue.
         let error = e.to_string();
-        println!("{error}");
+        println!("{error:#}");
 
         error
     });

@@ -39,21 +39,19 @@ pub(crate) async fn notify(
     }
 
     let message_output_count = std::cmp::min(notify_data.count, 10);
-    let message = notify_data.message.clone();
+    let message_clone = notify_data.message.clone();
 
-    for device_path in &["/dev/tty1", "/dev/ttyS0"] {
-        let mut terminal_device_file = OpenOptions::new().write(true).open(device_path)?;
-
-        let message_clone = message.clone();
-        tracker.spawn(async move {
-            for _ in 0..message_output_count {
+    tracker.spawn(async move {
+        for _ in 0..message_output_count {
+            for device_path in &["/dev/tty1", "/dev/ttyS0"] {
+                let mut terminal_device_file = OpenOptions::new().write(true).open(device_path)?;
                 terminal_device_file.write_all(format!("\n{message_clone}\n").as_bytes())?;
-                sleep(std::time::Duration::from_secs(2)).await;
             }
+            sleep(std::time::Duration::from_secs(2)).await;
+        }
 
-            Ok::<(), VsockServerError>(())
-        });
-    }
+        Ok::<(), VsockServerError>(())
+    });
 
     Ok(Payload::NoPayload)
 }

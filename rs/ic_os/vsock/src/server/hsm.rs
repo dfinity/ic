@@ -65,7 +65,7 @@ fn create_hsm_xml_file() -> Result<NamedTempFile, VsockServerError> {
 
     let xml: String = get_hsm_xml_string(&hsm_info);
 
-    let mut file: NamedTempFile = NamedTempFile::with_prefix("hsm")?;
+    let mut file = NamedTempFile::with_prefix("hsm")?;
     file.write_all(xml.as_bytes())?;
 
     Ok(file)

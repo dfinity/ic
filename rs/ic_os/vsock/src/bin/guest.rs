@@ -7,9 +7,9 @@ use vsock_lib::protocol::{Command as ProtocolCommand, NotifyData, Payload, Upgra
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 
+/// A CLI for sending vsock commands
 #[derive(Debug, Parser)]
 #[command(version = "1.0.0")]
-/// A CLI for sending vsock commands
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -67,13 +67,13 @@ fn main() -> Result<()> {
 
     let response = LinuxVsockClient::with_port(cli.port)
         .send_command(command)
-        .context("sending command")?;
+        .context("sending command '{command}'")?;
 
     // Output the values directly
     match response {
         Ok(Payload::HostOSVsockVersion(version)) => println!("{version}"),
         Ok(Payload::HostOSVersion(version)) => println!("{version}"),
-        Err(error) => bail!("Server responded with error: '{error}'"),
+        Err(error) => bail!("Server responded with error: '{error:#}'"),
         _ => (),
     }
 
