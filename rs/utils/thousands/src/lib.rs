@@ -28,7 +28,7 @@ pub fn separate_with_underscores<T: Display>(value: T) -> String {
         .map_or(s.len(), |i| start + i);
     let digit_count = end - start;
 
-    let mut result = String::with_capacity(s.len() + digit_count / 3);
+    let mut result = String::new();
     result.push_str(&s[..start]);
     for (i, ch) in s[start..end].chars().enumerate() {
         result.push(ch);
@@ -64,7 +64,7 @@ mod tests {
 
     #[test]
     fn leaves_sign_prefix_and_fraction_untouched() {
-        // Only the first run of digits is grouped, matching `thousands`.
+        // Only the first run of digits is grouped.
         assert_eq!(separate_with_underscores(-1234567_i64), "-1_234_567");
         assert_eq!(separate_with_underscores(1234.5678_f64), "1_234.5678");
     }
