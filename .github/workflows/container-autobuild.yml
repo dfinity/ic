@@ -45,9 +45,7 @@ jobs:
           if grep $image_tag ci/container/TAG; then
             echo "build_image=false" >> "$GITHUB_OUTPUT"
             echo "Update with this image already in this PR!"
-            echo "Modify ci/container/TAG with a random string to trigger a new build. Until this"
-            echo "workflow's commit lands, container-run.sh on that commit refuses to run because no"
-            echo "reviewed digest exists for it; set CONTAINER_RUN_ALLOW_UNPINNED=1 to build the image locally instead."
+            echo "Modify ci/container/TAG with a random string to trigger a new build."
           else
             echo "build_image=true" >> "$GITHUB_OUTPUT"
             echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
@@ -164,8 +162,6 @@ jobs:
           IMAGE_PREFIX="ghcr.io/dfinity/"
           IC_BUILD_DIGEST='${{ needs.ic-build-image.outputs.ic-build-imagedigest }}'
           IC_DEV_DIGEST='${{ needs.ic-build-image.outputs.ic-dev-imagedigest }}'
-          # container-run.sh pulls by these digests and refuses a malformed one, so
-          # fail here rather than committing a pin that breaks every container run.
           for digest in "$IC_BUILD_DIGEST" "$IC_DEV_DIGEST"; do
             if ! [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then
               echo "::error::malformed image digest '$digest'"
@@ -175,9 +171,6 @@ jobs:
           IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build@${IC_BUILD_DIGEST}"
           IMG_NAME_IC_DEV="${IMAGE_PREFIX}ic-dev@${IC_DEV_DIGEST}"
 
-          # TAG and the *.digest files are read by ci/container/container-run.sh,
-          # which pulls the images by digest; they live directly under
-          # ci/container/ (never in ci/container/files/, an input of get-image-tag.sh).
           echo '${{ needs.build-image-prep.outputs.image_tag }}' > ci/container/TAG
           echo "$IC_BUILD_DIGEST" > ci/container/ic-build.digest
           echo "$IC_DEV_DIGEST" > ci/container/ic-dev.digest

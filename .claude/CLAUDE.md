@@ -2,20 +2,15 @@
 
 All commands should be run from the repository root (`/ic`).
 
+
 Never manually edit `ci/container/TAG`, `ci/container/ic-dev.digest` or
 `ci/container/ic-build.digest`. They are written only by the
 `container-autobuild.yml` GitHub Actions workflow, which builds the new
-dev-container images and pushes them to the registry *before* committing the
-new tag and digests. `ci/container/container-run.sh` pulls the image by the
-committed digest: a malformed pin is refused outright, and a digest the
-registry does not serve cannot be pulled, so a hand-edited pin breaks the dev
-container for everyone. If the dev container image genuinely
+dev-container image and pushes it to the registry *before* the tag and digest changes
+takes effect. Hand-editing it points the tag at an image that was never built
+or published, breaking CI for everyone. If the dev container image genuinely
 needs to change (e.g. `ci/container/Dockerfile` was edited), let that workflow
-bump them — don't do it in your commit. Until its bot commit lands (this
-includes the sanctioned trick of putting a random string in `TAG` to force a
-rebuild), `TAG` does not match the working tree and `container-run.sh` refuses
-to run; `CONTAINER_RUN_ALLOW_UNPINNED=1` makes it build the image locally from
-the checkout instead.
+bump `TAG` — don't do it in your commit.
 
 # Rust
 

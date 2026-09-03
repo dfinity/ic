@@ -48,8 +48,7 @@ runtime's daemon isn't reachable it prints which command it tried.
   repo-local scripts with a relative path, e.g.
   `CONTAINER_RUNTIME=docker ./ci/container/container-run.sh ./path/to/script.sh`.
 - The image is pulled from `ghcr.io` on first use (large, one-time) by the
-  digest committed in `ci/container/ic-dev.digest` and verified against it
-  before it runs; registry tags are never pulled. If `ci/container/Dockerfile`,
+  digest committed in `ci/container/ic-dev.digest`; If `ci/container/Dockerfile`,
   `init.sh` or `files/*` differ from what `ci/container/TAG` was built from
   (you edited them, or the autobuild's commit hasn't landed on your branch yet)
   the script refuses to run; `CONTAINER_RUN_ALLOW_UNPINNED=1` makes it build the
