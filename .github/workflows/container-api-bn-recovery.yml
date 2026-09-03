@@ -25,6 +25,11 @@ defaults:
 jobs:
   build-and-push:
     name: Build and Push API BN Recovery Image
+    # for dfinity/ic: run on all events except on PRs from forks
+    # for dfinity/ic-private: only run on PRs
+    if: |
+      (github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) ||
+      (github.repository == 'dfinity/ic-private' && github.event_name == 'pull_request')
     runs-on:
       labels: dind-large
     container:

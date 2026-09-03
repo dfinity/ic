@@ -1,8 +1,9 @@
 use crate::events::MinterEventAssert;
 use crate::mock::{JsonRpcMethod, MockJsonRpcProviders, MockJsonRpcProvidersBuilder};
 use crate::response::{
-    block_response, empty_logs, encode_transaction, fee_history, send_raw_transaction_response,
-    transaction_count_response, transaction_receipt,
+    block_response, decode_transaction, empty_logs, encode_transaction, fee_history,
+    hash_transaction, minter_address, send_raw_transaction_response, transaction_count_response,
+    transaction_receipt,
 };
 use crate::{
     CkEthSetup, DEFAULT_DEPOSIT_BLOCK_HASH, DEFAULT_DEPOSIT_BLOCK_NUMBER,
@@ -14,7 +15,7 @@ use crate::{
     format_ethereum_address_to_eip_55,
 };
 use candid::{Decode, Encode, Nat, Principal};
-use ethers_core::utils::{hex, rlp};
+use ethers_core::utils::hex;
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::ckerc20::RetrieveErc20Request;
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, EventSource};
@@ -35,7 +36,6 @@ use pocket_ic::PocketIc;
 use pocket_ic::common::rest::RawMessageId;
 use serde_json::json;
 use std::convert::identity;
-use std::str::FromStr;
 use std::time::Duration;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -85,7 +85,7 @@ impl DepositParams {
         }
     }
 
-    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+    pub fn to_log_entry(&self) -> alloy_rpc_types_eth::Log {
         match self {
             Self::CkEth(params) => params.to_log_entry(),
             Self::CkEthWithSubaccount(params) => params.to_log_entry(),
@@ -113,7 +113,7 @@ impl Default for DepositCkEthParams {
 }
 
 impl DepositCkEthParams {
-    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+    pub fn to_log_entry(&self) -> alloy_rpc_types_eth::Log {
         let amount_hex = format!("0x{:0>64x}", self.amount);
         let topics = vec![
             RECEIVED_ETH_EVENT_TOPIC.to_string(),
@@ -189,7 +189,7 @@ impl Default for DepositCkEthWithSubaccountParams {
 }
 
 impl DepositCkEthWithSubaccountParams {
-    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+    pub fn to_log_entry(&self) -> alloy_rpc_types_eth::Log {
         let data = {
             let amount_hex = format!("{:0>64x}", self.amount);
             assert_eq!(amount_hex.len(), 64);
@@ -549,8 +549,8 @@ impl ProcessWithdrawalParams {
     pub fn with_failed_transaction_receipt(self) -> Self {
         self.with_mock_eth_get_transaction_receipt(move |mock| {
             mock.modify_response_for_all(
-                &mut |receipt: &mut ethers_core::types::TransactionReceipt| {
-                    receipt.status = Some(0_u64.into())
+                &mut |receipt: &mut alloy_rpc_types_eth::TransactionReceipt| {
+                    set_transaction_failed(receipt)
                 },
             )
         })
@@ -560,20 +560,20 @@ impl ProcessWithdrawalParams {
         self.with_mock_eth_get_transaction_receipt(move |mock| {
             mock.modify_response(
                 JsonRpcProvider::Provider1,
-                &mut |response: &mut ethers_core::types::TransactionReceipt| {
-                    response.status = Some(0.into())
+                &mut |response: &mut alloy_rpc_types_eth::TransactionReceipt| {
+                    set_transaction_failed(response)
                 },
             )
             .modify_response(
                 JsonRpcProvider::Provider4,
-                &mut |response: &mut ethers_core::types::TransactionReceipt| {
-                    response.status = Some(0.into())
+                &mut |response: &mut alloy_rpc_types_eth::TransactionReceipt| {
+                    set_transaction_failed(response)
                 },
             )
             .modify_response(
                 JsonRpcProvider::Provider2,
-                &mut |response: &mut ethers_core::types::TransactionReceipt| {
-                    response.status = Some(1.into())
+                &mut |response: &mut alloy_rpc_types_eth::TransactionReceipt| {
+                    set_transaction_succeeded(response)
                 },
             )
         })
@@ -664,12 +664,12 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
 
     pub fn process_withdrawal_with_resubmission_and_same_price(
         self,
-        tx: ethers_core::types::Eip1559TransactionRequest,
-        tx_sig: ethers_core::types::Signature,
+        tx: alloy_consensus::TxEip1559,
+        tx_sig: alloy_primitives::Signature,
     ) -> T {
         let sent_tx = encode_transaction(tx.clone(), tx_sig);
         let transaction = EthTransaction {
-            transaction_hash: format!("{:?}", crate::response::hash_transaction(tx, tx_sig)),
+            transaction_hash: format!("{:?}", hash_transaction(tx, tx_sig)),
         };
         self.start_processing_withdrawals()
             .retrieve_fee_history(identity)
@@ -712,14 +712,14 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
     }
 
     pub fn process_withdrawal_with_resubmission_and_increased_price<
-        F: FnMut(&mut ethers_core::types::FeeHistory),
+        F: FnMut(&mut alloy_rpc_types_eth::FeeHistory),
     >(
         self,
-        first_tx: ethers_core::types::Eip1559TransactionRequest,
-        first_tx_sig: ethers_core::types::Signature,
+        first_tx: alloy_consensus::TxEip1559,
+        first_tx_sig: alloy_primitives::Signature,
         change_fee_history: &mut F,
-        resubmitted_tx: ethers_core::types::Eip1559TransactionRequest,
-        resubmitted_tx_sig: ethers_core::types::Signature,
+        resubmitted_tx: alloy_consensus::TxEip1559,
+        resubmitted_tx_sig: alloy_primitives::Signature,
     ) -> T {
         let first_sent_tx = encode_transaction(first_tx.clone(), first_tx_sig);
         let first_tx_hash = hash_transaction(first_tx.clone(), first_tx_sig);
@@ -892,16 +892,17 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> SendRawTransactionProcessWithdr
     }
 
     pub fn send_raw_transaction_expecting(self, expected_sent_tx: &str) -> Self {
-        use ethers_core::types::transaction::eip2718::TypedTransaction;
+        let signed = decode_transaction(expected_sent_tx);
+        let signer = signed
+            .recover_signer()
+            .expect("BUG: cannot recover the signer of minter's ETH transaction");
+        assert_eq!(
+            signer,
+            minter_address(),
+            "BUG: minter's ETH transaction was not signed by the minter"
+        );
 
-        let (tx, sig) = decode_transaction(expected_sent_tx);
-        sig.verify(
-            TypedTransaction::Eip1559(tx.clone()).sighash(),
-            tx.from.unwrap(),
-        )
-        .expect("BUG: cannot verify signature of minter's ETH transaction");
-
-        let tx_hash = hash_transaction(tx, sig);
+        let tx_hash = *signed.hash();
         self.send_raw_transaction(|mock| {
             mock.with_request_params(json!([expected_sent_tx]))
                 .respond_with(JsonRpcProvider::Provider1, tx_hash)
@@ -1049,31 +1050,6 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> TransactionReceiptProcessWithdr
     }
 }
 
-fn decode_transaction(
-    tx: &str,
-) -> (
-    ethers_core::types::Eip1559TransactionRequest,
-    ethers_core::types::Signature,
-) {
-    use ethers_core::types::transaction::eip2718::TypedTransaction;
-
-    TypedTransaction::decode_signed(&rlp::Rlp::new(
-        &ethers_core::types::Bytes::from_str(tx).unwrap(),
-    ))
-    .map(|(tx, sig)| match tx {
-        TypedTransaction::Eip1559(eip1559_tx) => (eip1559_tx, sig),
-        _ => panic!("BUG: unexpected sent ETH transaction type {tx:?}"),
-    })
-    .expect("BUG: failed to deserialize sent ETH transaction")
-}
-
-fn hash_transaction(
-    tx: ethers_core::types::Eip1559TransactionRequest,
-    sig: ethers_core::types::Signature,
-) -> ethers_core::types::TxHash {
-    ethers_core::types::transaction::eip2718::TypedTransaction::Eip1559(tx).hash(&sig)
-}
-
 fn assert_contains_unique_event(events: &[Event], payload: EventPayload) {
     match events.iter().filter(|e| e.payload == payload).count() {
         0 => panic!("missing the event payload {payload:#?} in audit log {events:#?}"),
@@ -1091,28 +1067,49 @@ pub fn encode_principal(principal: Principal) -> String {
     format!("0x{}", hex::encode(fixed_bytes))
 }
 
-pub fn increment_max_priority_fee_per_gas(fee_history: &mut ethers_core::types::FeeHistory) {
-    for rewards in fee_history.reward.iter_mut() {
+fn set_transaction_failed(receipt: &mut alloy_rpc_types_eth::TransactionReceipt) {
+    set_transaction_status(receipt, false)
+}
+
+fn set_transaction_succeeded(receipt: &mut alloy_rpc_types_eth::TransactionReceipt) {
+    set_transaction_status(receipt, true)
+}
+
+fn set_transaction_status(receipt: &mut alloy_rpc_types_eth::TransactionReceipt, succeeded: bool) {
+    receipt
+        .inner
+        .as_receipt_with_bloom_mut()
+        .expect("BUG: transaction receipt without an EIP-658 status")
+        .receipt
+        .status = succeeded.into();
+}
+
+pub fn increment_max_priority_fee_per_gas(fee_history: &mut alloy_rpc_types_eth::FeeHistory) {
+    let rewards_per_block = fee_history
+        .reward
+        .as_mut()
+        .expect("BUG: fee history without rewards");
+    for rewards in rewards_per_block.iter_mut() {
         for reward in rewards.iter_mut() {
             *reward = reward
-                .checked_add(1_u64.into())
+                .checked_add(1)
                 .unwrap()
-                .max((1_500_000_000_u64 + 1_u64).into());
+                .max(1_500_000_000_u128 + 1_u128);
         }
     }
 }
 
-pub fn increment_base_fee_per_gas(fee_history: &mut ethers_core::types::FeeHistory) {
+pub fn increment_base_fee_per_gas(fee_history: &mut alloy_rpc_types_eth::FeeHistory) {
     for base_fee_per_gas in fee_history.base_fee_per_gas.iter_mut() {
-        *base_fee_per_gas = base_fee_per_gas.checked_add(1_u64.into()).unwrap();
+        *base_fee_per_gas = base_fee_per_gas.checked_add(1).unwrap();
     }
 }
 
-pub fn double_and_increment_base_fee_per_gas(fee_history: &mut ethers_core::types::FeeHistory) {
+pub fn double_and_increment_base_fee_per_gas(fee_history: &mut alloy_rpc_types_eth::FeeHistory) {
     for base_fee_per_gas in fee_history.base_fee_per_gas.iter_mut() {
         *base_fee_per_gas = base_fee_per_gas
-            .checked_mul(2_u64.into())
-            .and_then(|f| f.checked_add(1_u64.into()))
+            .checked_mul(2)
+            .and_then(|f| f.checked_add(1))
             .unwrap();
     }
 }

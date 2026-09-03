@@ -733,7 +733,7 @@ mod upgrade_ledger_suite {
     };
     use crate::scheduler::{
         Task, TaskError, UpgradeLedgerSuite, UpgradeLedgerSuiteError, UpgradeLedgerSuiteSubtask,
-        pop_if_ready,
+        encode_empty_arg, pop_if_ready,
     };
     use crate::state::{
         ARCHIVE_NODE_BYTECODE, CanisterUpgrade, INDEX_BYTECODE, Index, LEDGER_BYTECODE, Ledger,
@@ -765,7 +765,8 @@ mod upgrade_ledger_suite {
             subtasks,
             vec![UpgradeLedger {
                 token_id: usdc_token_id(),
-                compressed_wasm_hash: ledger_wasm_hash.clone()
+                compressed_wasm_hash: ledger_wasm_hash.clone(),
+                ledger_upgrade_arg: None,
             },]
         );
 
@@ -795,7 +796,8 @@ mod upgrade_ledger_suite {
                 },
                 UpgradeLedger {
                     token_id: usdc_token_id(),
-                    compressed_wasm_hash: ledger_wasm_hash.clone()
+                    compressed_wasm_hash: ledger_wasm_hash.clone(),
+                    ledger_upgrade_arg: None,
                 },
             ]
         );
@@ -827,7 +829,8 @@ mod upgrade_ledger_suite {
             vec![
                 UpgradeLedger {
                     token_id: usdc_token_id(),
-                    compressed_wasm_hash: ledger_wasm_hash.clone()
+                    compressed_wasm_hash: ledger_wasm_hash.clone(),
+                    ledger_upgrade_arg: None,
                 },
                 DiscoverArchives {
                     token_id: usdc_token_id()
@@ -876,7 +879,8 @@ mod upgrade_ledger_suite {
                 },
                 UpgradeLedger {
                     token_id: usdc_token_id(),
-                    compressed_wasm_hash: ledger_wasm_hash.clone()
+                    compressed_wasm_hash: ledger_wasm_hash.clone(),
+                    ledger_upgrade_arg: None,
                 },
                 DiscoverArchives {
                     token_id: usdc_token_id()
@@ -887,6 +891,80 @@ mod upgrade_ledger_suite {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn should_attach_ledger_upgrade_arg_to_ledger_subtask_only() {
+        let ledger_wasm_hash = WasmHash::from([1_u8; 32]);
+        let index_wasm_hash = WasmHash::from([2_u8; 32]);
+        let archive_wasm_hash = WasmHash::from([3_u8; 32]);
+        let ledger_upgrade_arg = vec![4_u8, 5, 6];
+
+        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc_token_id())
+            .ledger_wasm_hash(ledger_wasm_hash.clone())
+            .ledger_upgrade_arg(ledger_upgrade_arg.clone())
+            .index_wasm_hash(index_wasm_hash.clone())
+            .archive_wasm_hash(archive_wasm_hash.clone())
+            .build()
+            .collect();
+
+        assert_eq!(
+            subtasks,
+            vec![
+                UpgradeIndex {
+                    token_id: usdc_token_id(),
+                    compressed_wasm_hash: index_wasm_hash
+                },
+                UpgradeLedger {
+                    token_id: usdc_token_id(),
+                    compressed_wasm_hash: ledger_wasm_hash,
+                    ledger_upgrade_arg: Some(ledger_upgrade_arg),
+                },
+                DiscoverArchives {
+                    token_id: usdc_token_id()
+                },
+                UpgradeArchives {
+                    token_id: usdc_token_id(),
+                    compressed_wasm_hash: archive_wasm_hash
+                }
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn should_upgrade_ledger_with_ledger_upgrade_arg() {
+        init_state();
+        let usdc = usdc();
+        let usdc_token_id = TokenId::from(usdc.clone());
+        mutate_state(|s| {
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata());
+            s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
+            s.record_installed_canister::<Ledger>(&usdc, WasmHash::default());
+        });
+        let mut runtime = MockCanisterRuntime::new();
+        let ledger_upgrade_arg = vec![4_u8, 5, 6];
+        let task = Task::UpgradeLedgerSuite(
+            UpgradeLedgerSuite::builder(usdc_token_id)
+                .ledger_wasm_hash(read_ledger_wasm_hash())
+                .ledger_upgrade_arg(ledger_upgrade_arg.clone())
+                .build(),
+        );
+
+        expect_stop_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
+        expect_upgrade_canister(
+            &mut runtime,
+            LEDGER_PRINCIPAL,
+            LEDGER_BYTECODE.to_vec(),
+            ledger_upgrade_arg,
+            Ok(()),
+        );
+        expect_start_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
+        runtime.expect_time().return_const(0_u64);
+
+        let result = execute_now(task.clone(), &runtime).await;
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_queue_from_state(), vec![]);
     }
 
     #[test]
@@ -1068,6 +1146,7 @@ mod upgrade_ledger_suite {
             &mut runtime,
             INDEX_PRINCIPAL,
             INDEX_BYTECODE.to_vec(),
+            encode_empty_arg(),
             Ok(()),
         );
         expect_start_canister(&mut runtime, INDEX_PRINCIPAL, Ok(()));
@@ -1087,6 +1166,7 @@ mod upgrade_ledger_suite {
             &mut runtime,
             LEDGER_PRINCIPAL,
             LEDGER_BYTECODE.to_vec(),
+            encode_empty_arg(),
             Ok(()),
         );
         expect_start_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
@@ -1131,6 +1211,7 @@ mod upgrade_ledger_suite {
             &mut runtime,
             INDEX_PRINCIPAL,
             INDEX_BYTECODE.to_vec(),
+            encode_empty_arg(),
             Ok(()),
         );
         expect_start_canister(&mut runtime, INDEX_PRINCIPAL, Ok(()));
@@ -1151,6 +1232,7 @@ mod upgrade_ledger_suite {
             &mut runtime,
             LEDGER_PRINCIPAL,
             LEDGER_BYTECODE.to_vec(),
+            encode_empty_arg(),
             Ok(()),
         );
         expect_start_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
@@ -1199,6 +1281,7 @@ mod upgrade_ledger_suite {
                 &mut runtime,
                 archive,
                 ARCHIVE_NODE_BYTECODE.to_vec(),
+                encode_empty_arg(),
                 Ok(()),
             );
             expect_start_canister(&mut runtime, archive, Ok(()));
@@ -1237,11 +1320,14 @@ mod upgrade_ledger_suite {
         runtime: &mut MockCanisterRuntime,
         canister_id: Principal,
         wasm_module: Vec<u8>,
+        upgrade_arg: Vec<u8>,
         mocked_result: Result<(), CallError>,
     ) {
         runtime
             .expect_upgrade_canister()
-            .withf(move |&id, module| id == canister_id && module == &wasm_module)
+            .withf(move |&id, module, arg| {
+                id == canister_id && module == &wasm_module && arg == &upgrade_arg
+            })
             .times(1)
             .return_const(mocked_result);
     }
@@ -1720,7 +1806,8 @@ mod mock {
             async fn upgrade_canister(
                 &self,
                 canister_id: Principal,
-                wasm_module:Vec<u8>,
+                wasm_module: Vec<u8>,
+                arg: Vec<u8>,
             ) -> Result<(), CallError>;
 
             async fn canister_cycles(
@@ -1752,11 +1839,10 @@ mod install_ledger_suite_args {
     use crate::scheduler::tests::{MINTER_PRINCIPAL, usdc_metadata};
     use crate::scheduler::{ChainId, Erc20Token, InstallLedgerSuiteArgs, InvalidAddErc20ArgError};
     use crate::state::test_fixtures::{expect_panic_with_message, new_state, new_state_from};
-    use crate::state::{GitCommitHash, IndexWasm, LedgerSuiteVersion, LedgerWasm, WasmHash};
+    use crate::state::{IndexWasm, LedgerSuiteVersion, LedgerWasm, WasmHash};
     use crate::storage::test_fixtures::{
-        embedded_ledger_suite_version, empty_task_queue, empty_wasm_store,
+        embedded_ledger_suite_version, empty_task_queue, wasm_store_with_icrc1_ledger_suite,
     };
-    use crate::storage::{WasmStore, record_icrc1_ledger_suite_wasms};
     use assert_matches::assert_matches;
     use candid::Nat;
     use proptest::collection::vec;
@@ -1949,17 +2035,203 @@ mod install_ledger_suite_args {
             },
         }
     }
+}
 
-    fn wasm_store_with_icrc1_ledger_suite() -> WasmStore {
-        let mut store = empty_wasm_store();
-        assert_eq!(
-            record_icrc1_ledger_suite_wasms(
-                &mut store,
-                1_620_328_630_000_000_000,
-                GitCommitHash::default(),
-            ),
-            Ok(embedded_ledger_suite_version())
+mod validate_upgrade_arg {
+    use crate::candid::{LedgerUpgradeArg, UpgradeArg};
+    use crate::scheduler::{InvalidUpgradeArgError, UpgradeOrchestratorArgs};
+    use crate::storage::test_fixtures::{
+        embedded_ledger_suite_version, wasm_store_with_icrc1_ledger_suite,
+    };
+    use assert_matches::assert_matches;
+    use candid::Decode;
+    use ic_icrc1_ledger::{ChangeArchiveOptions, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
+
+    #[test]
+    fn should_error_when_ledger_upgrade_arg_without_ledger_wasm_hash() {
+        let wasm_store = wasm_store_with_icrc1_ledger_suite();
+        let arg = UpgradeArg {
+            ledger_upgrade_arg: Some(raise_trigger_threshold()),
+            ..Default::default()
+        };
+
+        assert_matches!(
+            UpgradeOrchestratorArgs::validate_upgrade_arg(&wasm_store, arg),
+            Err(InvalidUpgradeArgError::LedgerUpgradeArgRequiresLedgerWasmHash)
         );
-        store
+    }
+
+    #[test]
+    fn should_accept_ledger_upgrade_arg_with_ledger_wasm_hash() {
+        let wasm_store = wasm_store_with_icrc1_ledger_suite();
+        let arg = UpgradeArg {
+            ledger_compressed_wasm_hash: Some(embedded_ledger_wasm_hash()),
+            ledger_upgrade_arg: Some(raise_trigger_threshold()),
+            ..Default::default()
+        };
+
+        let validated_args =
+            UpgradeOrchestratorArgs::validate_upgrade_arg(&wasm_store, arg).unwrap();
+
+        assert!(validated_args.upgrade_ledger_suite());
+    }
+
+    #[test]
+    fn should_encode_ledger_upgrade_arg_as_ledger_argument() {
+        let wasm_store = wasm_store_with_icrc1_ledger_suite();
+        let change_archive_options = ChangeArchiveOptions {
+            trigger_threshold: Some(20_000),
+            ..Default::default()
+        };
+        let arg = UpgradeArg {
+            ledger_compressed_wasm_hash: Some(embedded_ledger_wasm_hash()),
+            ledger_upgrade_arg: Some(LedgerUpgradeArg {
+                change_archive_options: Some(change_archive_options.clone()),
+            }),
+            ..Default::default()
+        };
+
+        let validated_args =
+            UpgradeOrchestratorArgs::validate_upgrade_arg(&wasm_store, arg).unwrap();
+
+        let encoded_arg = validated_args.ledger_upgrade_arg.unwrap();
+        assert_eq!(
+            Decode!(&encoded_arg, Option<LedgerArgument>).unwrap(),
+            Some(LedgerArgument::Upgrade(Some(LedgerUpgradeArgs {
+                change_archive_options: Some(change_archive_options),
+                ..Default::default()
+            })))
+        );
+    }
+
+    #[test]
+    fn should_have_no_encoded_arg_when_ledger_upgrade_arg_absent() {
+        let wasm_store = wasm_store_with_icrc1_ledger_suite();
+        let arg = UpgradeArg {
+            ledger_compressed_wasm_hash: Some(embedded_ledger_wasm_hash()),
+            ..Default::default()
+        };
+
+        let validated_args =
+            UpgradeOrchestratorArgs::validate_upgrade_arg(&wasm_store, arg).unwrap();
+
+        assert_eq!(validated_args.ledger_upgrade_arg, None);
+    }
+
+    fn raise_trigger_threshold() -> LedgerUpgradeArg {
+        LedgerUpgradeArg {
+            change_archive_options: Some(ChangeArchiveOptions {
+                trigger_threshold: Some(20_000),
+                ..Default::default()
+            }),
+        }
+    }
+
+    fn embedded_ledger_wasm_hash() -> String {
+        embedded_ledger_suite_version()
+            .ledger_compressed_wasm_hash
+            .to_string()
+    }
+}
+
+mod schema_upgrades {
+    use crate::scheduler::test_fixtures::usdc_token_id;
+    use crate::scheduler::{UpgradeLedgerSuite, UpgradeLedgerSuiteSubtask};
+    use crate::state::{TokenId, WasmHash, decode, encode};
+    use candid::Deserialize;
+    use serde::Serialize;
+
+    #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+    pub struct UpgradeLedgerSuitePreviousVersion {
+        subtasks: Vec<UpgradeLedgerSuiteSubtaskPreviousVersion>,
+        next_subtask_index: usize,
+    }
+
+    impl From<UpgradeLedgerSuite> for UpgradeLedgerSuitePreviousVersion {
+        fn from(value: UpgradeLedgerSuite) -> Self {
+            Self {
+                subtasks: value.subtasks.into_iter().map(Into::into).collect(),
+                next_subtask_index: value.next_subtask_index,
+            }
+        }
+    }
+
+    #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+    pub enum UpgradeLedgerSuiteSubtaskPreviousVersion {
+        UpgradeIndex {
+            token_id: TokenId,
+            compressed_wasm_hash: WasmHash,
+        },
+        UpgradeLedger {
+            token_id: TokenId,
+            compressed_wasm_hash: WasmHash,
+        },
+        DiscoverArchives {
+            token_id: TokenId,
+        },
+        UpgradeArchives {
+            token_id: TokenId,
+            compressed_wasm_hash: WasmHash,
+        },
+    }
+
+    impl From<UpgradeLedgerSuiteSubtask> for UpgradeLedgerSuiteSubtaskPreviousVersion {
+        fn from(value: UpgradeLedgerSuiteSubtask) -> Self {
+            match value {
+                UpgradeLedgerSuiteSubtask::UpgradeIndex {
+                    token_id,
+                    compressed_wasm_hash,
+                } => Self::UpgradeIndex {
+                    token_id,
+                    compressed_wasm_hash,
+                },
+                UpgradeLedgerSuiteSubtask::UpgradeLedger {
+                    token_id,
+                    compressed_wasm_hash,
+                    ledger_upgrade_arg: _,
+                } => Self::UpgradeLedger {
+                    token_id,
+                    compressed_wasm_hash,
+                },
+                UpgradeLedgerSuiteSubtask::DiscoverArchives { token_id } => {
+                    Self::DiscoverArchives { token_id }
+                }
+                UpgradeLedgerSuiteSubtask::UpgradeArchives {
+                    token_id,
+                    compressed_wasm_hash,
+                } => Self::UpgradeArchives {
+                    token_id,
+                    compressed_wasm_hash,
+                },
+            }
+        }
+    }
+
+    #[test]
+    fn should_decode_upgrade_ledger_suite_task_from_previous_version() {
+        let task_before_upgrade: UpgradeLedgerSuitePreviousVersion =
+            UpgradeLedgerSuite::builder(usdc_token_id())
+                .ledger_wasm_hash(WasmHash::from([1_u8; 32]))
+                .index_wasm_hash(WasmHash::from([2_u8; 32]))
+                .archive_wasm_hash(WasmHash::from([3_u8; 32]))
+                .build()
+                .into();
+
+        let serialized_task_before_upgrade = encode(&task_before_upgrade);
+        let task_after_upgrade: UpgradeLedgerSuite =
+            decode(serialized_task_before_upgrade.as_slice());
+
+        assert_eq!(task_before_upgrade, task_after_upgrade.clone().into());
+        assert!(
+            task_after_upgrade
+                .subtasks
+                .iter()
+                .all(|subtask| match subtask {
+                    UpgradeLedgerSuiteSubtask::UpgradeLedger {
+                        ledger_upgrade_arg, ..
+                    } => ledger_upgrade_arg.is_none(),
+                    _ => true,
+                })
+        );
     }
 }

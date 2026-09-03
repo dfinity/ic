@@ -133,6 +133,11 @@ fn node_metrics_history(_: NodeMetricsHistoryArgs) -> NodeMetricsHistoryResult {
 }
 
 #[candid_method(update)]
+fn subnet_metrics(_: SubnetMetricsArgs) -> SubnetMetricsResult {
+    unimplemented!()
+}
+
+#[candid_method(update)]
 fn provisional_create_canister_with_cycles(
     _: ProvisionalCreateCanisterWithCyclesArgs,
 ) -> ProvisionalCreateCanisterWithCyclesResult {

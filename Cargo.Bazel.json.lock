@@ -1,5 +1,5 @@
 {
-  "checksum": "2f4fc1c213836fa6719143538487871b26096a3566460f381a1a3c402a3064de",
+  "checksum": "98278ea443cfe6515f1fa375b646fca2545068032d765eca6a881c43d551a253",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -1968,6 +1968,1606 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "alloy-consensus 1.8.3": {
+      "name": "alloy-consensus",
+      "version": "1.8.3",
+      "package_url": "https://github.com/alloy-rs/alloy",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-consensus/1.8.3/download",
+          "sha256": "7f16daaf7e1f95f62c6c3bf8a3fc3d78b08ae9777810c0bb5e94966c7cd57ef0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_consensus",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_consensus",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "k256",
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-eips 1.8.3",
+              "target": "alloy_eips"
+            },
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "alloy-rlp 0.3.16",
+              "target": "alloy_rlp"
+            },
+            {
+              "id": "alloy-serde 1.8.3",
+              "target": "alloy_serde"
+            },
+            {
+              "id": "alloy-trie 0.9.5",
+              "target": "alloy_trie"
+            },
+            {
+              "id": "derive_more 2.1.1",
+              "target": "derive_more"
+            },
+            {
+              "id": "either 1.18.0",
+              "target": "either"
+            },
+            {
+              "id": "k256 0.13.4",
+              "target": "k256"
+            },
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.145",
+              "target": "serde_json"
+            },
+            {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "alloy-tx-macros 1.8.3",
+              "target": "alloy_tx_macros"
+            },
+            {
+              "id": "auto_impl 1.3.0",
+              "target": "auto_impl"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "1.8.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-consensus-any 1.8.3": {
+      "name": "alloy-consensus-any",
+      "version": "1.8.3",
+      "package_url": "https://github.com/alloy-rs/alloy",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-consensus-any/1.8.3/download",
+          "sha256": "118998d9015332ab1b4720ae1f1e3009491966a0349938a1f43ff45a8a4c6299"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_consensus_any",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_consensus_any",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-consensus 1.8.3",
+              "target": "alloy_consensus"
+            },
+            {
+              "id": "alloy-eips 1.8.3",
+              "target": "alloy_eips"
+            },
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "alloy-rlp 0.3.16",
+              "target": "alloy_rlp"
+            },
+            {
+              "id": "alloy-serde 1.8.3",
+              "target": "alloy_serde"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.8.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-eip2124 0.2.0": {
+      "name": "alloy-eip2124",
+      "version": "0.2.0",
+      "package_url": "https://github.com/alloy-rs/eips",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-eip2124/0.2.0/download",
+          "sha256": "741bdd7499908b3aa0b159bba11e71c8cddd009a2c2eb7a06e825f1ec87900a5"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_eip2124",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_eip2124",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "alloy-rlp 0.3.16",
+              "target": "alloy_rlp"
+            },
+            {
+              "id": "crc 3.3.0",
+              "target": "crc"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-eip2930 0.2.4": {
+      "name": "alloy-eip2930",
+      "version": "0.2.4",
+      "package_url": "https://github.com/alloy-rs/eips",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-eip2930/0.2.4/download",
+          "sha256": "e64579d931b3f8eacc7c9ab0b220e87e9c4816e5c724ede1947b55c2f8e92ae5"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_eip2930",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_eip2930",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "alloy-rlp 0.3.16",
+              "target": "alloy_rlp"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.2.4"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-eip7702 0.6.3": {
+      "name": "alloy-eip7702",
+      "version": "0.6.3",
+      "package_url": "https://github.com/alloy-rs/eips",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-eip7702/0.6.3/download",
+          "sha256": "2919c5a56a1007492da313e7a3b6d45ef5edc5d33416fdec63c0d7a2702a0d20"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_eip7702",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_eip7702",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "k256",
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "alloy-rlp 0.3.16",
+              "target": "alloy_rlp"
+            },
+            {
+              "id": "k256 0.13.4",
+              "target": "k256"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.6.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-eip7928 0.3.7": {
+      "name": "alloy-eip7928",
+      "version": "0.3.7",
+      "package_url": "https://github.com/alloy-rs/eips",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-eip7928/0.3.7/download",
+          "sha256": "6b827a6d7784fe3eb3489d40699407a4cdcce74271421a01bdffe60cf573bb16"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_eip7928",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_eip7928",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "alloy-rlp 0.3.16",
+              "target": "alloy_rlp"
+            },
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.3.7"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-eips 1.8.3": {
+      "name": "alloy-eips",
+      "version": "1.8.3",
+      "package_url": "https://github.com/alloy-rs/alloy",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-eips/1.8.3/download",
+          "sha256": "e6ef28c9fdad22d4eec52d894f5f2673a0895f1e5ef196734568e68c0f6caca8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_eips",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_eips",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "k256",
+            "kzg-sidecar",
+            "serde",
+            "sha2",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-eip2124 0.2.0",
+              "target": "alloy_eip2124"
+            },
+            {
+              "id": "alloy-eip2930 0.2.4",
+              "target": "alloy_eip2930"
+            },
+            {
+              "id": "alloy-eip7702 0.6.3",
+              "target": "alloy_eip7702"
+            },
+            {
+              "id": "alloy-eip7928 0.3.7",
+              "target": "alloy_eip7928"
+            },
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "alloy-rlp 0.3.16",
+              "target": "alloy_rlp"
+            },
+            {
+              "id": "alloy-serde 1.8.3",
+              "target": "alloy_serde"
+            },
+            {
+              "id": "derive_more 2.1.1",
+              "target": "derive_more"
+            },
+            {
+              "id": "either 1.18.0",
+              "target": "either"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_with 3.21.0",
+              "target": "serde_with"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "auto_impl 1.3.0",
+              "target": "auto_impl"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "1.8.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-json-abi 1.7.1": {
+      "name": "alloy-json-abi",
+      "version": "1.7.1",
+      "package_url": "https://github.com/alloy-rs/core",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-json-abi/1.7.1/download",
+          "sha256": "208699c66c453fbb4c50d2e602f8ceff8a5f1fa48ac8b6ee3b6357fdc93da311"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_json_abi",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_json_abi",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "alloy-sol-type-parser 1.7.1",
+              "target": "alloy_sol_type_parser"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "1.7.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-network-primitives 1.8.3": {
+      "name": "alloy-network-primitives",
+      "version": "1.8.3",
+      "package_url": "https://github.com/alloy-rs/alloy",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-network-primitives/1.8.3/download",
+          "sha256": "eb82711d59a43fdfd79727c99f270b974c784ec4eb5728a0d0d22f26716c87ef"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_network_primitives",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_network_primitives",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-consensus 1.8.3",
+              "target": "alloy_consensus"
+            },
+            {
+              "id": "alloy-eips 1.8.3",
+              "target": "alloy_eips"
+            },
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "alloy-serde 1.8.3",
+              "target": "alloy_serde"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.8.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-primitives 1.7.1": {
+      "name": "alloy-primitives",
+      "version": "1.7.1",
+      "package_url": "https://github.com/alloy-rs/core",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-primitives/1.7.1/download",
+          "sha256": "9c902f0ca3f8353c41e3e1ec3cf26be49412525bc48ab9d3c4710d7be4f01832"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_primitives",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_primitives",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "k256",
+            "map",
+            "map-foldhash",
+            "rlp",
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-rlp 0.3.16",
+              "target": "alloy_rlp"
+            },
+            {
+              "id": "bytes 1.11.1",
+              "target": "bytes"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "const-hex 1.19.1",
+              "target": "const_hex",
+              "alias": "hex"
+            },
+            {
+              "id": "derive_more 2.1.1",
+              "target": "derive_more"
+            },
+            {
+              "id": "foldhash 0.2.0",
+              "target": "foldhash"
+            },
+            {
+              "id": "hashbrown 0.17.0",
+              "target": "hashbrown"
+            },
+            {
+              "id": "itoa 1.0.17",
+              "target": "itoa"
+            },
+            {
+              "id": "k256 0.13.4",
+              "target": "k256"
+            },
+            {
+              "id": "ruint 1.20.0",
+              "target": "ruint"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "sha3 0.11.0",
+              "target": "sha3"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "paste 1.0.15",
+              "target": "paste"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "1.7.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-rlp 0.3.16": {
+      "name": "alloy-rlp",
+      "version": "0.3.16",
+      "package_url": "https://github.com/alloy-rs/rlp",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-rlp/0.3.16/download",
+          "sha256": "24671b1f62edcf0f9b62994c7bf72cd621a04a4b99f5020ece1a647b40e2f103"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_rlp",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_rlp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "arrayvec",
+            "core-error",
+            "core-net",
+            "derive",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "arrayvec 0.7.4",
+              "target": "arrayvec"
+            },
+            {
+              "id": "bytes 1.11.1",
+              "target": "bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "alloy-rlp-derive 0.3.16",
+              "target": "alloy_rlp_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.3.16"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-rlp-derive 0.3.16": {
+      "name": "alloy-rlp-derive",
+      "version": "0.3.16",
+      "package_url": "https://github.com/alloy-rs/rlp",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-rlp-derive/0.3.16/download",
+          "sha256": "9d4311c03125e8a18296504560b9de3d75ecbd0dcda7f71e6cf2a196d57e6fba"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "alloy_rlp_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_rlp_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.16"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-rpc-types-eth 1.8.3": {
+      "name": "alloy-rpc-types-eth",
+      "version": "1.8.3",
+      "package_url": "https://github.com/alloy-rs/alloy",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-rpc-types-eth/1.8.3/download",
+          "sha256": "59c095f92c4e1ff4981d89e9aa02d5f98c762a1980ab66bec49c44be11349da2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_rpc_types_eth",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_rpc_types_eth",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-consensus 1.8.3",
+              "target": "alloy_consensus"
+            },
+            {
+              "id": "alloy-consensus-any 1.8.3",
+              "target": "alloy_consensus_any"
+            },
+            {
+              "id": "alloy-eips 1.8.3",
+              "target": "alloy_eips"
+            },
+            {
+              "id": "alloy-network-primitives 1.8.3",
+              "target": "alloy_network_primitives"
+            },
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "alloy-rlp 0.3.16",
+              "target": "alloy_rlp"
+            },
+            {
+              "id": "alloy-serde 1.8.3",
+              "target": "alloy_serde"
+            },
+            {
+              "id": "alloy-sol-types 1.7.1",
+              "target": "alloy_sol_types"
+            },
+            {
+              "id": "itertools 0.14.0",
+              "target": "itertools"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.145",
+              "target": "serde_json"
+            },
+            {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.8.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-serde 1.8.3": {
+      "name": "alloy-serde",
+      "version": "1.8.3",
+      "package_url": "https://github.com/alloy-rs/alloy",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-serde/1.8.3/download",
+          "sha256": "11ece63b89294b8614ab3f483560c08d016930f842bf36da56bf0b764a15c11e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_serde",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_serde",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.145",
+              "target": "serde_json"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.8.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-sol-macro 1.7.1": {
+      "name": "alloy-sol-macro",
+      "version": "1.7.1",
+      "package_url": "https://github.com/alloy-rs/core",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-sol-macro/1.7.1/download",
+          "sha256": "fdcbd48d60e029be4a325c3a2f1312761caea4ed249f18ba9e8ed24ca1bf01e6"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "alloy_sol_macro",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_sol_macro",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-sol-macro-expander 1.7.1",
+              "target": "alloy_sol_macro_expander"
+            },
+            {
+              "id": "alloy-sol-macro-input 1.7.1",
+              "target": "alloy_sol_macro_input"
+            },
+            {
+              "id": "proc-macro-error3 3.0.1",
+              "target": "proc_macro_error3"
+            },
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "1.7.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-sol-macro-expander 1.7.1": {
+      "name": "alloy-sol-macro-expander",
+      "version": "1.7.1",
+      "package_url": "https://github.com/alloy-rs/core",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-sol-macro-expander/1.7.1/download",
+          "sha256": "59c9f7c535f99a7e7b64cc520968b09ed14cec3715572fcc277cfbff602808cd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_sol_macro_expander",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_sol_macro_expander",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-sol-macro-input 1.7.1",
+              "target": "alloy_sol_macro_input"
+            },
+            {
+              "id": "const-hex 1.19.1",
+              "target": "const_hex",
+              "alias": "hex"
+            },
+            {
+              "id": "heck 0.5.0",
+              "target": "heck"
+            },
+            {
+              "id": "indexmap 2.14.0",
+              "target": "indexmap"
+            },
+            {
+              "id": "proc-macro-error3 3.0.1",
+              "target": "proc_macro_error3"
+            },
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "sha3 0.11.0",
+              "target": "sha3"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            },
+            {
+              "id": "syn-solidity 1.7.1",
+              "target": "syn_solidity"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "1.7.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-sol-macro-input 1.7.1": {
+      "name": "alloy-sol-macro-input",
+      "version": "1.7.1",
+      "package_url": "https://github.com/alloy-rs/core",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-sol-macro-input/1.7.1/download",
+          "sha256": "1abd404fbc12f543823005146b73fd07621bdc0baaa950d26995c543a9d73811"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_sol_macro_input",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_sol_macro_input",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "const-hex 1.19.1",
+              "target": "const_hex",
+              "alias": "hex"
+            },
+            {
+              "id": "dunce 1.0.5",
+              "target": "dunce"
+            },
+            {
+              "id": "heck 0.5.0",
+              "target": "heck"
+            },
+            {
+              "id": "macro-string 0.2.0",
+              "target": "macro_string"
+            },
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            },
+            {
+              "id": "syn-solidity 1.7.1",
+              "target": "syn_solidity"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "1.7.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-sol-type-parser 1.7.1": {
+      "name": "alloy-sol-type-parser",
+      "version": "1.7.1",
+      "package_url": "https://github.com/alloy-rs/core",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-sol-type-parser/1.7.1/download",
+          "sha256": "40a7fd71864526bfeca8903010d5bb7fd28a0a4f5cc55818304c9cad8f0d63ab"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_sol_type_parser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_sol_type_parser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "winnow 1.0.4",
+              "target": "winnow"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "1.7.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-sol-types 1.7.1": {
+      "name": "alloy-sol-types",
+      "version": "1.7.1",
+      "package_url": "https://github.com/alloy-rs/core",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-sol-types/1.7.1/download",
+          "sha256": "adfc2ba3fb0e865de4934bcad6d37fc51e9ffcd5294be1322eab38e4494e051b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_sol_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_sol_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "alloy-sol-macro 1.7.1",
+              "target": "alloy_sol_macro"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "1.7.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "alloy-trie 0.9.5": {
+      "name": "alloy-trie",
+      "version": "0.9.5",
+      "package_url": "https://github.com/alloy-rs/trie",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-trie/0.9.5/download",
+          "sha256": "3f14b5d9b2c2173980202c6ff470d96e7c5e202c65a9f67884ad565226df7fbb"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloy_trie",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_trie",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "ethereum",
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "alloy-rlp 0.3.16",
+              "target": "alloy_rlp"
+            },
+            {
+              "id": "derive_more 2.1.1",
+              "target": "derive_more"
+            },
+            {
+              "id": "nybbles 0.4.8",
+              "target": "nybbles"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "smallvec 1.15.1",
+              "target": "smallvec"
+            },
+            {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            },
+            {
+              "id": "tracing 0.1.44",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.9.5"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "alloy-tx-macros 1.8.3": {
+      "name": "alloy-tx-macros",
+      "version": "1.8.3",
+      "package_url": "https://github.com/alloy-rs/alloy",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloy-tx-macros/1.8.3/download",
+          "sha256": "d69722eddcdf1ce096c3ab66cf8116999363f734eb36fe94a148f4f71c85da84"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "alloy_tx_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloy_tx_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "serde"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "darling 0.23.0",
+              "target": "darling"
+            },
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.8.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "android_system_properties 0.1.5": {
       "name": "android_system_properties",
       "version": "0.1.5",
@@ -2575,6 +4175,1350 @@
         "version": "0.4.1"
       },
       "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-ff 0.3.0": {
+      "name": "ark-ff",
+      "version": "0.3.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-ff/0.3.0/download",
+          "sha256": "6b3235cc41ee7a12aaaf2c575a2ad7b46713a8a50bda2fc3b003a04845c05dd6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ark_ff",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_ff",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "ark-ff 0.3.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "ark-serialize 0.3.0",
+              "target": "ark_serialize"
+            },
+            {
+              "id": "ark-std 0.3.0",
+              "target": "ark_std"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "zeroize 1.8.1",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ark-ff-asm 0.3.0",
+              "target": "ark_ff_asm"
+            },
+            {
+              "id": "ark-ff-macros 0.3.0",
+              "target": "ark_ff_macros"
+            },
+            {
+              "id": "derivative 2.2.0",
+              "target": "derivative"
+            },
+            {
+              "id": "paste 1.0.15",
+              "target": "paste"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.3.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "rustc_version 0.3.3",
+              "target": "rustc_version"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-ff 0.4.2": {
+      "name": "ark-ff",
+      "version": "0.4.2",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-ff/0.4.2/download",
+          "sha256": "ec847af850f44ad29048935519032c33da8aa03340876d351dfab5660d2966ba"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ark_ff",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_ff",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "ark-serialize 0.4.2",
+              "target": "ark_serialize"
+            },
+            {
+              "id": "ark-std 0.4.0",
+              "target": "ark_std"
+            },
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "itertools 0.10.5",
+              "target": "itertools"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "zeroize 1.8.1",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ark-ff-asm 0.4.2",
+              "target": "ark_ff_asm"
+            },
+            {
+              "id": "ark-ff-macros 0.4.2",
+              "target": "ark_ff_macros"
+            },
+            {
+              "id": "derivative 2.2.0",
+              "target": "derivative"
+            },
+            {
+              "id": "paste 1.0.15",
+              "target": "paste"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.4.2"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-ff 0.5.0": {
+      "name": "ark-ff",
+      "version": "0.5.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-ff/0.5.0/download",
+          "sha256": "a177aba0ed1e0fbb62aa9f6d0502e9b46dad8c2eab04c14258a1212d2557ea70"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ark_ff",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_ff",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "ark-serialize 0.5.0",
+              "target": "ark_serialize"
+            },
+            {
+              "id": "ark-std 0.5.0",
+              "target": "ark_std"
+            },
+            {
+              "id": "arrayvec 0.7.4",
+              "target": "arrayvec"
+            },
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "itertools 0.13.0",
+              "target": "itertools"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "zeroize 1.8.1",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ark-ff-asm 0.5.0",
+              "target": "ark_ff_asm"
+            },
+            {
+              "id": "ark-ff-macros 0.5.0",
+              "target": "ark_ff_macros"
+            },
+            {
+              "id": "educe 0.6.0",
+              "target": "educe"
+            },
+            {
+              "id": "paste 1.0.15",
+              "target": "paste"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.5.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-ff 0.6.0": {
+      "name": "ark-ff",
+      "version": "0.6.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-ff/0.6.0/download",
+          "sha256": "f7a806ac6c8307b929df4645776290a50ee2aac754ad09d8bdf73391309e43af"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ark_ff",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_ff",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "ark-serialize 0.6.0",
+              "target": "ark_serialize"
+            },
+            {
+              "id": "ark-std 0.6.0",
+              "target": "ark_std"
+            },
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "zeroize 1.8.1",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ark-ff-asm 0.6.0",
+              "target": "ark_ff_asm"
+            },
+            {
+              "id": "ark-ff-macros 0.6.0",
+              "target": "ark_ff_macros"
+            },
+            {
+              "id": "educe 0.6.0",
+              "target": "educe"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.6.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-ff-asm 0.3.0": {
+      "name": "ark-ff-asm",
+      "version": "0.3.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-ff-asm/0.3.0/download",
+          "sha256": "db02d390bf6643fb404d3d22d31aee1c4bc4459600aef9113833d17e786c6e44"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ark_ff_asm",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_ff_asm",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-ff-asm 0.4.2": {
+      "name": "ark-ff-asm",
+      "version": "0.4.2",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-ff-asm/0.4.2/download",
+          "sha256": "3ed4aa4fe255d0bc6d79373f7e31d2ea147bcf486cba1be5ba7ea85abdb92348"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ark_ff_asm",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_ff_asm",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.2"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-ff-asm 0.5.0": {
+      "name": "ark-ff-asm",
+      "version": "0.5.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-ff-asm/0.5.0/download",
+          "sha256": "62945a2f7e6de02a31fe400aa489f0e0f5b2502e69f95f853adb82a96c7a6b60"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ark_ff_asm",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_ff_asm",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.5.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-ff-asm 0.6.0": {
+      "name": "ark-ff-asm",
+      "version": "0.6.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-ff-asm/0.6.0/download",
+          "sha256": "1479009684adc073dff49a1025d3a7065b317a9ead25aaaca38cdc70058ba8a2"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ark_ff_asm",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_ff_asm",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-ff-macros 0.3.0": {
+      "name": "ark-ff-macros",
+      "version": "0.3.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-ff-macros/0.3.0/download",
+          "sha256": "db2fd794a08ccb318058009eefdf15bcaaaaf6f8161eb3345f907222bac38b20"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ark_ff_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_ff_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-ff-macros 0.4.2": {
+      "name": "ark-ff-macros",
+      "version": "0.4.2",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-ff-macros/0.4.2/download",
+          "sha256": "7abe79b0e4288889c4574159ab790824d0033b9fdcb2a112a3182fac2e514565"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ark_ff_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_ff_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.2"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-ff-macros 0.5.0": {
+      "name": "ark-ff-macros",
+      "version": "0.5.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-ff-macros/0.5.0/download",
+          "sha256": "09be120733ee33f7693ceaa202ca41accd5653b779563608f1234f78ae07c4b3"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ark_ff_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_ff_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.5.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-ff-macros 0.6.0": {
+      "name": "ark-ff-macros",
+      "version": "0.6.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-ff-macros/0.6.0/download",
+          "sha256": "4a0691ed21ef00ef89c1e9bda832eba493dda3ec2f8d892fb25b705f73f06bb8"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ark_ff_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_ff_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-serialize 0.3.0": {
+      "name": "ark-serialize",
+      "version": "0.3.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-serialize/0.3.0/download",
+          "sha256": "1d6c2b318ee6e10f8c2853e73a83adc0ccb88995aa978d8a3408d492ab2ee671"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ark_serialize",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_serialize",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "ark-std 0.3.0",
+              "target": "ark_std"
+            },
+            {
+              "id": "digest 0.9.0",
+              "target": "digest"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-serialize 0.4.2": {
+      "name": "ark-serialize",
+      "version": "0.4.2",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-serialize/0.4.2/download",
+          "sha256": "adb7b85a02b83d2f22f89bd5cac66c9c89474240cb6207cb1efc16d098e822a5"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ark_serialize",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_serialize",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "ark-std 0.4.0",
+              "target": "ark_std"
+            },
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.2"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-serialize 0.5.0": {
+      "name": "ark-serialize",
+      "version": "0.5.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-serialize/0.5.0/download",
+          "sha256": "3f4d068aaf107ebcd7dfb52bc748f8030e0fc930ac8e360146ca54c1203088f7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ark_serialize",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_serialize",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "ark-std 0.5.0",
+              "target": "ark_std"
+            },
+            {
+              "id": "arrayvec 0.7.4",
+              "target": "arrayvec"
+            },
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.5.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-serialize 0.6.0": {
+      "name": "ark-serialize",
+      "version": "0.6.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-serialize/0.6.0/download",
+          "sha256": "a74dd304fd536fb95d0a328e72be759209cc496a9da094c5bc56e5fea4f9e86b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ark_serialize",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_serialize",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "ark-std 0.6.0",
+              "target": "ark_std"
+            },
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-serialize-derive 0.6.0": {
+      "name": "ark-serialize-derive",
+      "version": "0.6.0",
+      "package_url": "https://github.com/arkworks-rs/algebra",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-serialize-derive/0.6.0/download",
+          "sha256": "4f153690697a2b91e5e1251ff98411ee5371500a111a0fd317a70e588eb300f9"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ark_serialize_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_serialize_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-std 0.3.0": {
+      "name": "ark-std",
+      "version": "0.3.0",
+      "package_url": "https://github.com/arkworks-rs/utils",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-std/0.3.0/download",
+          "sha256": "1df2c09229cbc5a028b1d70e00fdb2acee28b1055dfb5ca73eea49c5a25c4e7c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ark_std",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_std",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "rand 0.8.6",
+              "target": "rand"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-std 0.4.0": {
+      "name": "ark-std",
+      "version": "0.4.0",
+      "package_url": "https://github.com/arkworks-rs/std",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-std/0.4.0/download",
+          "sha256": "94893f1e0c6eeab764ade8dc4c0db24caf4fe7cbbaafc0eba0a9030f447b5185"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ark_std",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_std",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "rand 0.8.6",
+              "target": "rand"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-std 0.5.0": {
+      "name": "ark-std",
+      "version": "0.5.0",
+      "package_url": "https://github.com/arkworks-rs/std",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-std/0.5.0/download",
+          "sha256": "246a225cc6131e9ee4f24619af0f19d67761fff15d7ccc22e42b80846e69449a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ark_std",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_std",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "rand 0.8.6",
+              "target": "rand"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.5.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ark-std 0.6.0": {
+      "name": "ark-std",
+      "version": "0.6.0",
+      "package_url": "https://github.com/arkworks-rs/std",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ark-std/0.6.0/download",
+          "sha256": "367c9c827ed431bff6868b7aa926e05b16eb46603cc8b6e768e4a5553fa1d155"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ark_std",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ark_std",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "rand 0.8.6",
+              "target": "rand"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
+      },
+      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -4721,14 +7665,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "auto_impl 1.1.0": {
+    "auto_impl 1.3.0": {
       "name": "auto_impl",
-      "version": "1.1.0",
+      "version": "1.3.0",
       "package_url": "https://github.com/auto-impl-rs/auto_impl/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/auto_impl/1.1.0/download",
-          "sha256": "fee3da8ef1276b0bee5dd1c7258010d8fffd31801447323115a25560e1327b89"
+          "url": "https://static.crates.io/crates/auto_impl/1.3.0/download",
+          "sha256": "ffdcb70bdbc4d478427380519163274ac86e52916e10f0a8889adf0f96d3fee7"
         }
       },
       "targets": [
@@ -4753,10 +7697,6 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro-error 1.0.4",
-              "target": "proc_macro_error"
-            },
-            {
               "id": "proc-macro2 1.0.106",
               "target": "proc_macro2"
             },
@@ -4765,14 +7705,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.1.0"
+        "version": "1.3.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -7165,7 +10105,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             },
             {
@@ -8522,6 +11462,104 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "blst 0.3.17": {
+      "name": "blst",
+      "version": "0.3.17",
+      "package_url": "https://github.com/supranational/blst",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/blst/0.3.17/download",
+          "sha256": "c20659f9bbee16cbbd2f7393e40ab6309f5a98f76a2eb57a995ec508b72387fe"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "blst",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "blst",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "blst 0.3.17",
+              "target": "build_script_build"
+            },
+            {
+              "id": "zeroize 1.8.1",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {
+            "cfg(not(any(target_arch = \"wasm32\", target_os = \"none\", target_os = \"unknown\", target_os = \"uefi\")))": [
+              {
+                "id": "threadpool 1.8.1",
+                "target": "threadpool"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.3.17"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.2.48",
+              "target": "cc"
+            }
+          ],
+          "selects": {
+            "cfg(target_env = \"msvc\")": [
+              {
+                "id": "glob 0.3.1",
+                "target": "glob"
+              }
+            ]
+          }
+        },
+        "links": "blst"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
     "borrow-or-share 0.2.4": {
       "name": "borrow-or-share",
       "version": "0.2.4",
@@ -8643,6 +11681,69 @@
       "license_ids": [
         "Apache-2.0",
         "MIT"
+      ],
+      "license_file": null
+    },
+    "borsh-derive 1.5.7": {
+      "name": "borsh-derive",
+      "version": "1.5.7",
+      "package_url": "https://github.com/near/borsh-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/borsh-derive/1.5.7/download",
+          "sha256": "fdd1d3c0c2f5833f22386f252fe8ed005c7f59fdcddeef025c01b4c3b9fd9ac3"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "borsh_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "borsh_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "proc-macro-crate 3.5.0",
+              "target": "proc_macro_crate"
+            },
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.5.7"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
       ],
       "license_file": null
     },
@@ -10081,6 +13182,114 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "c-kzg 2.1.8": {
+      "name": "c-kzg",
+      "version": "2.1.8",
+      "package_url": null,
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/c-kzg/2.1.8/download",
+          "sha256": "38d04308254695569fdb9bfe3bacc1c91837a670d0806605eb82d63748fbd3a6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "c_kzg",
+            "crate_root": "bindings/rust/src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "bindings/rust/build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "c_kzg",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "blst 0.3.17",
+              "target": "blst"
+            },
+            {
+              "id": "c-kzg 2.1.8",
+              "target": "build_script_build"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "libc 0.2.186",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.1.8"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.2.48",
+              "target": "cc"
+            }
+          ],
+          "selects": {
+            "cfg(target_env = \"msvc\")": [
+              {
+                "id": "glob 0.3.1",
+                "target": "glob"
+              }
+            ]
+          }
+        },
+        "link_deps": {
+          "common": [
+            {
+              "id": "blst 0.3.17",
+              "target": "blst"
+            }
+          ],
+          "selects": {}
+        },
+        "links": "ckzg"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "cached 0.49.2": {
       "name": "cached",
@@ -13664,6 +16873,74 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "const-hex 1.19.1": {
+      "name": "const-hex",
+      "version": "1.19.1",
+      "package_url": "https://github.com/danipopes/const-hex",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/const-hex/1.19.1/download",
+          "sha256": "33e2a781ebdf4467d1428dc4593067825fb646f6871475098d8577421af73558"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "const_hex",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "const_hex",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "core-error",
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "serde_core 1.0.228",
+              "target": "serde_core"
+            }
+          ],
+          "selects": {
+            "cfg(any(target_arch = \"x86\", target_arch = \"x86_64\"))": [
+              {
+                "id": "cpufeatures 0.2.9",
+                "target": "cpufeatures"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "1.19.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "const-oid 0.9.4": {
       "name": "const-oid",
@@ -17338,6 +20615,7 @@
         "crate_features": {
           "common": [
             "default",
+            "serde",
             "suggestions"
           ],
           "selects": {}
@@ -17474,6 +20752,7 @@
         ],
         "crate_features": {
           "common": [
+            "serde",
             "strsim",
             "suggestions"
           ],
@@ -17492,6 +20771,10 @@
             {
               "id": "quote 1.0.47",
               "target": "quote"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
             },
             {
               "id": "strsim 0.11.1",
@@ -18493,6 +21776,62 @@
       ],
       "license_file": "LICENSE-Apache"
     },
+    "derivative 2.2.0": {
+      "name": "derivative",
+      "version": "2.2.0",
+      "package_url": "https://github.com/mcarton/rust-derivative",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/derivative/2.2.0/download",
+          "sha256": "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "derivative",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "derivative",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "2.2.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "derive-ex 0.1.8": {
       "name": "derive-ex",
       "version": "0.1.8",
@@ -18980,6 +22319,12 @@
             "display",
             "error",
             "from",
+            "from_str",
+            "index",
+            "index_mut",
+            "into",
+            "into_iterator",
+            "not",
             "std"
           ],
           "selects": {}
@@ -19041,7 +22386,13 @@
             "deref_mut",
             "display",
             "error",
-            "from"
+            "from",
+            "from_str",
+            "index",
+            "index_mut",
+            "into",
+            "into_iterator",
+            "not"
           ],
           "selects": {}
         },
@@ -19685,6 +23036,26 @@
             {
               "id": "aide 0.14.2",
               "target": "aide"
+            },
+            {
+              "id": "alloy-consensus 1.8.3",
+              "target": "alloy_consensus"
+            },
+            {
+              "id": "alloy-eips 1.8.3",
+              "target": "alloy_eips"
+            },
+            {
+              "id": "alloy-primitives 1.7.1",
+              "target": "alloy_primitives"
+            },
+            {
+              "id": "alloy-rpc-types-eth 1.8.3",
+              "target": "alloy_rpc_types_eth"
+            },
+            {
+              "id": "alloy-sol-types 1.7.1",
+              "target": "alloy_sol_types"
             },
             {
               "id": "anyhow 1.0.104",
@@ -20901,6 +24272,10 @@
               "target": "thiserror"
             },
             {
+              "id": "thousands 0.2.0",
+              "target": "thousands"
+            },
+            {
               "id": "threadpool 1.8.1",
               "target": "threadpool"
             },
@@ -22036,6 +25411,8 @@
             "pem",
             "pkcs8",
             "rfc6979",
+            "serde",
+            "serdect",
             "signing",
             "spki",
             "std",
@@ -22060,6 +25437,10 @@
             {
               "id": "rfc6979 0.4.0",
               "target": "rfc6979"
+            },
+            {
+              "id": "serdect 0.2.0",
+              "target": "serdect"
             },
             {
               "id": "signature 2.2.0",
@@ -22395,6 +25776,65 @@
       ],
       "license_file": "LICENSE"
     },
+    "educe 0.6.0": {
+      "name": "educe",
+      "version": "0.6.0",
+      "package_url": "https://github.com/magiclen/educe",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/educe/0.6.0/download",
+          "sha256": "1d7bc049e1bd8cdeb31b68bbd586a9464ecf9f3944af3958a7a9d0f8b9799417"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "educe",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "educe",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "enum-ordinalize 4.4.2",
+              "target": "enum_ordinalize"
+            },
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "ego-tree 0.10.0": {
       "name": "ego-tree",
       "version": "0.10.0",
@@ -22433,14 +25873,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "either 1.14.0": {
+    "either 1.18.0": {
       "name": "either",
-      "version": "1.14.0",
+      "version": "1.18.0",
       "package_url": "https://github.com/rayon-rs/either",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/either/1.14.0/download",
-          "sha256": "b7914353092ddf589ad78f25c5c1c21b7f80b0ff8621e7c814c3485b5306da9d"
+          "url": "https://static.crates.io/crates/either/1.18.0/download",
+          "sha256": "252afb9ae5eaa683babdc6a068b3f5726eb19e05070c731f9b2a23a7c3e8ed34"
         }
       },
       "targets": [
@@ -22465,12 +25905,23 @@
         "crate_features": {
           "common": [
             "default",
+            "serde",
+            "std",
             "use_std"
           ],
           "selects": {}
         },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
         "edition": "2021",
-        "version": "1.14.0"
+        "version": "1.18.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -22521,6 +25972,7 @@
             "pem",
             "pkcs8",
             "sec1",
+            "serde",
             "std"
           ],
           "selects": {}
@@ -22570,6 +26022,10 @@
             {
               "id": "sec1 0.7.3",
               "target": "sec1"
+            },
+            {
+              "id": "serdect 0.2.0",
+              "target": "serdect"
             },
             {
               "id": "subtle 2.6.1",
@@ -24950,6 +28406,126 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "fastrlp 0.3.1": {
+      "name": "fastrlp",
+      "version": "0.3.1",
+      "package_url": "https://github.com/vorot93/fastrlp",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/fastrlp/0.3.1/download",
+          "sha256": "139834ddba373bbdd213dffe02c8d110508dcf1726c2be27e8d1f7d7e1856418"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "fastrlp",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "fastrlp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "arrayvec 0.7.4",
+              "target": "arrayvec"
+            },
+            {
+              "id": "bytes 1.11.1",
+              "target": "bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "auto_impl 1.3.0",
+              "target": "auto_impl"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.3.1"
+      },
+      "license": "MPL-2.0",
+      "license_ids": [
+        "MPL-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "fastrlp 0.4.0": {
+      "name": "fastrlp",
+      "version": "0.4.0",
+      "package_url": "https://github.com/vorot93/fastrlp",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/fastrlp/0.4.0/download",
+          "sha256": "ce8dba4714ef14b8274c371879b175aa55b16b30f269663f19d576f380018dc4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "fastrlp",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "fastrlp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "arrayvec 0.7.4",
+              "target": "arrayvec"
+            },
+            {
+              "id": "bytes 1.11.1",
+              "target": "bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "auto_impl 1.3.0",
+              "target": "auto_impl"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.4.0"
+      },
+      "license": "MPL-2.0",
+      "license_ids": [
+        "MPL-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ff 0.12.1": {
       "name": "ff",
       "version": "0.12.1",
@@ -25302,6 +28878,54 @@
           ],
           "selects": {}
         }
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "fixed-cache 0.1.10": {
+      "name": "fixed-cache",
+      "version": "0.1.10",
+      "package_url": "https://github.com/DaniPopes/fixed-cache",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/fixed-cache/0.1.10/download",
+          "sha256": "2fe63500644ef0269fe6b744e7e5dc5c20b5eebf3d881bc2be53f194636f6583"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "fixed_cache",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "fixed_cache",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "equivalent 1.0.1",
+              "target": "equivalent"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.1.10"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -25796,6 +29420,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {}
+        },
         "edition": "2021",
         "version": "0.2.0"
       },
@@ -27319,7 +30949,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             },
             {
@@ -29222,6 +32852,7 @@
         "crate_features": {
           "common": [
             "default-hasher",
+            "inline-more",
             "serde"
           ],
           "selects": {}
@@ -38996,7 +42627,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             }
           ],
@@ -39052,7 +42683,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             }
           ],
@@ -39108,7 +42739,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             }
           ],
@@ -39164,7 +42795,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             }
           ],
@@ -39220,7 +42851,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             }
           ],
@@ -40171,6 +43802,8 @@
             "pkcs8",
             "precomputed-tables",
             "schnorr",
+            "serde",
+            "serdect",
             "sha2",
             "sha256",
             "signature",
@@ -40196,6 +43829,10 @@
             {
               "id": "once_cell 1.21.3",
               "target": "once_cell"
+            },
+            {
+              "id": "serdect 0.2.0",
+              "target": "serdect"
             },
             {
               "id": "sha2 0.10.9",
@@ -40274,6 +43911,112 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "keccak 0.2.2": {
+      "name": "keccak",
+      "version": "0.2.2",
+      "package_url": "https://github.com/RustCrypto/sponges",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/keccak/0.2.2/download",
+          "sha256": "d8f198d1db720e4940b5a493201d199d9f24f568f8f746bd13706243a2f71598"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "keccak",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "keccak",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            }
+          ],
+          "selects": {
+            "cfg(target_arch = \"aarch64\")": [
+              {
+                "id": "cpufeatures 0.3.0",
+                "target": "cpufeatures"
+              }
+            ]
+          }
+        },
+        "edition": "2024",
+        "version": "0.2.2"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "keccak-asm 0.1.8": {
+      "name": "keccak-asm",
+      "version": "0.1.8",
+      "package_url": "https://github.com/danipopes/keccak-asm",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/keccak-asm/0.1.8/download",
+          "sha256": "dd5dc2c0d691cbf7595cde551ced329cca99c2387c2cbc97754c5d0cd045d3ee"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "keccak_asm",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "keccak_asm",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "sha3-asm 0.1.8",
+              "target": "sha3_asm"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.8"
+      },
+      "license": "BSD-3-Clause",
+      "license_ids": [
+        "BSD-3-Clause"
+      ],
+      "license_file": "LICENSE"
     },
     "keyring 3.4.0": {
       "name": "keyring",
@@ -41098,7 +44841,7 @@
               "target": "bitflags"
             },
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             },
             {
@@ -44192,6 +47935,62 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "macro-string 0.2.0": {
+      "name": "macro-string",
+      "version": "0.2.0",
+      "package_url": "https://github.com/dtolnay/macro-string",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/macro-string/0.2.0/download",
+          "sha256": "59a9dbbfc75d2688ed057456ce8a3ee3f48d12eec09229f560f3643b9f275653"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "macro_string",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "macro_string",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "manyhow 0.11.4": {
       "name": "manyhow",
       "version": "0.11.4",
@@ -46623,7 +50422,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             },
             {
@@ -49040,6 +52839,73 @@
       ],
       "license_file": null
     },
+    "nybbles 0.4.8": {
+      "name": "nybbles",
+      "version": "0.4.8",
+      "package_url": "https://github.com/alloy-rs/nybbles",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/nybbles/0.4.8/download",
+          "sha256": "0d49ff0c0d00d4a502b39df9af3a525e1efeb14b9dabb5bb83335284c1309210"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nybbles",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "nybbles",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "ruint 1.20.0",
+              "target": "ruint"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "smallvec 1.15.1",
+              "target": "smallvec"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.4.8"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "objc2-core-foundation 0.3.2": {
       "name": "objc2-core-foundation",
       "version": "0.3.2",
@@ -49815,7 +53681,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "auto_impl 1.1.0",
+              "id": "auto_impl 1.3.0",
               "target": "auto_impl"
             },
             {
@@ -54885,7 +58751,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             },
             {
@@ -55369,20 +59235,20 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "proc-macro-error 1.0.4": {
-      "name": "proc-macro-error",
-      "version": "1.0.4",
-      "package_url": "https://gitlab.com/CreepySkeleton/proc-macro-error",
+    "proc-macro-crate 3.5.0": {
+      "name": "proc-macro-crate",
+      "version": "3.5.0",
+      "package_url": "https://github.com/bkchr/proc-macro-crate",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/proc-macro-error/1.0.4/download",
-          "sha256": "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
+          "url": "https://static.crates.io/crates/proc-macro-crate/3.5.0/download",
+          "sha256": "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
         }
       },
       "targets": [
         {
           "Library": {
-            "crate_name": "proc_macro_error",
+            "crate_name": "proc_macro_crate",
             "crate_root": "src/lib.rs",
             "srcs": {
               "allow_empty": true,
@@ -55391,130 +59257,9 @@
               ]
             }
           }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
         }
       ],
-      "library_target_name": "proc_macro_error",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "syn",
-            "syn-error"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro-error 1.0.4",
-              "target": "build_script_build"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "proc-macro-error-attr 1.0.4",
-              "target": "proc_macro_error_attr"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "1.0.4"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "version_check 0.9.4",
-              "target": "version_check"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "proc-macro-error-attr 1.0.4": {
-      "name": "proc-macro-error-attr",
-      "version": "1.0.4",
-      "package_url": "https://gitlab.com/CreepySkeleton/proc-macro-error",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/proc-macro-error-attr/1.0.4/download",
-          "sha256": "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "proc_macro_error_attr",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "proc_macro_error_attr",
+      "library_target_name": "proc_macro_crate",
       "common_attrs": {
         "compile_data_glob": [
           "**"
@@ -55522,42 +59267,14 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro-error-attr 1.0.4",
-              "target": "build_script_build"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.47",
-              "target": "quote"
+              "id": "toml_edit 0.25.13+spec-1.1.0",
+              "target": "toml_edit"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "1.0.4"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "version_check 0.9.4",
-              "target": "version_check"
-            }
-          ],
-          "selects": {}
-        }
+        "edition": "2021",
+        "version": "3.5.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -55610,6 +59327,58 @@
         },
         "edition": "2021",
         "version": "2.0.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "proc-macro-error-attr3 3.0.1": {
+      "name": "proc-macro-error-attr3",
+      "version": "3.0.1",
+      "package_url": "https://github.com/gamma0987/proc-macro-error3",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/proc-macro-error-attr3/3.0.1/download",
+          "sha256": "82366fd7d8b7a440d66d13418820c69df9b3908bcb1a0476d7f5ce5d12f5a04d"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "proc_macro_error_attr3",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "proc_macro_error_attr3",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "3.0.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -55682,6 +59451,78 @@
           "selects": {}
         },
         "version": "2.0.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "proc-macro-error3 3.0.1": {
+      "name": "proc-macro-error3",
+      "version": "3.0.1",
+      "package_url": "https://github.com/gamma0987/proc-macro-error3",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/proc-macro-error3/3.0.1/download",
+          "sha256": "b511283ea8a74b4b39447b128c5d00f03a356b7424554b13e298a5550100d9ac"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "proc_macro_error3",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "proc_macro_error3",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "syn-error"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "proc-macro-error-attr3 3.0.1",
+              "target": "proc_macro_error_attr3"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "3.0.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -58905,6 +62746,54 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "rapidhash 4.5.1": {
+      "name": "rapidhash",
+      "version": "4.5.1",
+      "package_url": "https://github.com/hoxxep/rapidhash",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rapidhash/4.5.1/download",
+          "sha256": "5da7e78a036ce858e8d55b7e7dc8ba3a88b78350fd2155d3591bbd966b58589e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rapidhash",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rapidhash",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "rustversion 1.0.14",
+              "target": "rustversion"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "4.5.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "ratatui 0.29.0": {
       "name": "ratatui",
       "version": "0.29.0",
@@ -59148,7 +63037,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             },
             {
@@ -62025,6 +65914,113 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "ruint 1.20.0": {
+      "name": "ruint",
+      "version": "1.20.0",
+      "package_url": "https://github.com/alloy-rs/ruint",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ruint/1.20.0/download",
+          "sha256": "f5e99bff0393163bb25029a6af25d3d8d202ba5b5438a74d1bd8789f5c822970"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ruint",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ruint",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "alloy-rlp",
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloy-rlp 0.3.16",
+              "target": "alloy_rlp"
+            },
+            {
+              "id": "serde_core 1.0.228",
+              "target": "serde_core"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ruint-macro 1.2.1",
+              "target": "ruint_macro"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "1.20.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "ruint-macro 1.2.1": {
+      "name": "ruint-macro",
+      "version": "1.2.1",
+      "package_url": "https://github.com/recmo/uint",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ruint-macro/1.2.1/download",
+          "sha256": "48fd7bd8a6377e15ad9d42a8ec25371b94ddc67abe7c8b9127bec79bebaaae18"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ruint_macro",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ruint_macro",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "1.2.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
+    },
     "rusb 0.9.4": {
       "name": "rusb",
       "version": "0.9.4",
@@ -62563,6 +66559,54 @@
         },
         "edition": "2018",
         "version": "2.1.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "rustc_version 0.3.3": {
+      "name": "rustc_version",
+      "version": "0.3.3",
+      "package_url": "https://github.com/Kimundi/rustc-version-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rustc_version/0.3.3/download",
+          "sha256": "f0dfe2087c51c460008730de8b57e6a320782fbfb312e1f4d520e6c6fae155ee"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustc_version",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rustc_version",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "semver 0.11.0",
+              "target": "semver"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.3"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -65091,6 +69135,7 @@
             "pem",
             "pkcs8",
             "point",
+            "serde",
             "std",
             "subtle",
             "zeroize"
@@ -65114,6 +69159,10 @@
             {
               "id": "pkcs8 0.10.2",
               "target": "pkcs8"
+            },
+            {
+              "id": "serdect 0.2.0",
+              "target": "serdect"
             },
             {
               "id": "subtle 2.6.1",
@@ -65256,6 +69305,100 @@
         },
         "edition": "2021",
         "version": "0.29.0"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "secp256k1 0.30.0": {
+      "name": "secp256k1",
+      "version": "0.30.0",
+      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/secp256k1/0.30.0/download",
+          "sha256": "b50c5943d326858130af85e049f2661ba3c78b26589b8ab98e65e80ae44a1252"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "secp256k1",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "secp256k1",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "secp256k1-sys 0.10.0",
+              "target": "secp256k1_sys"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.30.0"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "secp256k1 0.31.1": {
+      "name": "secp256k1",
+      "version": "0.31.1",
+      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/secp256k1/0.31.1/download",
+          "sha256": "2c3c81b43dc2d8877c216a3fccf76677ee1ebccd429566d3e67447290d0c42b2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "secp256k1",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "secp256k1",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "secp256k1-sys 0.11.0",
+              "target": "secp256k1_sys"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.31.1"
       },
       "license": "CC0-1.0",
       "license_ids": [
@@ -65439,6 +69582,86 @@
           "selects": {}
         },
         "links": "rustsecp256k1_v0_10_0"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "secp256k1-sys 0.11.0": {
+      "name": "secp256k1-sys",
+      "version": "0.11.0",
+      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/secp256k1-sys/0.11.0/download",
+          "sha256": "dcb913707158fadaf0d8702c2db0e857de66eb003ccfdda5924b5f5ac98efb38"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "secp256k1_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "secp256k1_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "secp256k1-sys 0.11.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.11.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.2.48",
+              "target": "cc"
+            }
+          ],
+          "selects": {}
+        },
+        "links": "rustsecp256k1_v0_11"
       },
       "license": "CC0-1.0",
       "license_ids": [
@@ -65837,6 +70060,54 @@
       ],
       "license_file": null
     },
+    "semver 0.11.0": {
+      "name": "semver",
+      "version": "0.11.0",
+      "package_url": "https://github.com/steveklabnik/semver",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/semver/0.11.0/download",
+          "sha256": "f301af10236f6df4160f7c3f04eec6dbc70ace82d23326abad5edee88801c6b6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "semver",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "semver",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "semver-parser 0.10.3",
+              "target": "semver_parser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.11.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "semver 1.0.27": {
       "name": "semver",
       "version": "1.0.27",
@@ -65888,6 +70159,54 @@
         "version": "1.0.27"
       },
       "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "semver-parser 0.10.3": {
+      "name": "semver-parser",
+      "version": "0.10.3",
+      "package_url": "https://github.com/steveklabnik/semver-parser",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/semver-parser/0.10.3/download",
+          "sha256": "9900206b54a3527fdc7b8a938bffd94a568bac4f4aa8113b209df75a09c0dec2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "semver_parser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "semver_parser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "pest 2.7.1",
+              "target": "pest"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.10.3"
+      },
+      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -67056,6 +71375,64 @@
       ],
       "license_file": "LICENSE"
     },
+    "serdect 0.2.0": {
+      "name": "serdect",
+      "version": "0.2.0",
+      "package_url": "https://github.com/RustCrypto/formats/tree/master/serdect",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/serdect/0.2.0/download",
+          "sha256": "a84f14a19e9a014bb9f4512488d9829a68e04ecabffb0f9904cd1ace94598177"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "serdect",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "serdect",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "base16ct 0.2.0",
+              "target": "base16ct"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "servo_arc 0.4.3": {
       "name": "servo_arc",
       "version": "0.4.3",
@@ -67671,6 +72048,141 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "sha3 0.11.0": {
+      "name": "sha3",
+      "version": "0.11.0",
+      "package_url": "https://github.com/RustCrypto/hashes",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/sha3/0.11.0/download",
+          "sha256": "be176f1a57ce4e3d31c1a166222d9768de5954f811601fb7ca06fc8203905ce1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sha3",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "sha3",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "digest 0.11.3",
+              "target": "digest"
+            },
+            {
+              "id": "keccak 0.2.2",
+              "target": "keccak"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.11.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "sha3-asm 0.1.8": {
+      "name": "sha3-asm",
+      "version": "0.1.8",
+      "package_url": "https://github.com/danipopes/keccak-asm",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/sha3-asm/0.1.8/download",
+          "sha256": "a6287fd675f713484342a89cbf0a386abef5f15919cfad607e5e1f19e1e15331"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sha3_asm",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "sha3_asm",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "sha3-asm 0.1.8",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.8"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.2.48",
+              "target": "cc"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "BSD-3-Clause",
+      "license_ids": [
+        "BSD-3-Clause"
+      ],
+      "license_file": null
     },
     "sharded-slab 0.1.4": {
       "name": "sharded-slab",
@@ -69474,7 +73986,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             },
             {
@@ -71788,6 +76300,78 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "syn-solidity 1.7.1": {
+      "name": "syn-solidity",
+      "version": "1.7.1",
+      "package_url": "https://github.com/alloy-rs/core",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/syn-solidity/1.7.1/download",
+          "sha256": "e452eb8cb83fc8b81597eb07c8d39f770d04905af9c5bffce8bea7213df29960"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "syn_solidity",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "syn_solidity",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "visit",
+            "visit-mut"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.119",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "paste 1.0.15",
+              "target": "paste"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "1.7.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "sync_wrapper 1.0.2": {
       "name": "sync_wrapper",
       "version": "1.0.2",
@@ -73908,6 +78492,45 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "thousands 0.2.0": {
+      "name": "thousands",
+      "version": "0.2.0",
+      "package_url": "https://github.com/tov/thousands-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/thousands/0.2.0/download",
+          "sha256": "3bf63baf9f5039dadc247375c29eb13706706cfde997d0330d05aa63a77d8820"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "thousands",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "thousands",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.2.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "thread_local 1.1.7": {
       "name": "thread_local",
       "version": "1.1.7",
@@ -75540,7 +80163,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             },
             {
@@ -76101,6 +80724,53 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "toml_datetime 1.1.1+spec-1.1.0": {
+      "name": "toml_datetime",
+      "version": "1.1.1+spec-1.1.0",
+      "package_url": "https://github.com/toml-rs/toml",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/toml_datetime/1.1.1+spec-1.1.0/download",
+          "sha256": "3165f65f62e28e0115a00b2ebdd37eb6f3b641855f9d636d3cd4103767159ad7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "toml_datetime",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "toml_datetime",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "1.1.1+spec-1.1.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "toml_edit 0.19.14": {
       "name": "toml_edit",
       "version": "0.19.14",
@@ -76226,6 +80896,128 @@
         },
         "edition": "2021",
         "version": "0.22.20"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "toml_edit 0.25.13+spec-1.1.0": {
+      "name": "toml_edit",
+      "version": "0.25.13+spec-1.1.0",
+      "package_url": "https://github.com/toml-rs/toml",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/toml_edit/0.25.13+spec-1.1.0/download",
+          "sha256": "6975367e4d2ef766d86af01ffad14b622fecc8d4357a998fbc4deb6e9bacaf9b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "toml_edit",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "toml_edit",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "parse"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "indexmap 2.14.0",
+              "target": "indexmap"
+            },
+            {
+              "id": "toml_datetime 1.1.1+spec-1.1.0",
+              "target": "toml_datetime"
+            },
+            {
+              "id": "toml_parser 1.1.3+spec-1.1.0",
+              "target": "toml_parser"
+            },
+            {
+              "id": "winnow 1.0.4",
+              "target": "winnow"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.25.13+spec-1.1.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "toml_parser 1.1.3+spec-1.1.0": {
+      "name": "toml_parser",
+      "version": "1.1.3+spec-1.1.0",
+      "package_url": "https://github.com/toml-rs/toml",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/toml_parser/1.1.3+spec-1.1.0/download",
+          "sha256": "1d38ac1cf9b95face32296c0a3ede1fdc270627c9d9c02a7274dd6d960dc4d56"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "toml_parser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "toml_parser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "winnow 1.0.4",
+              "target": "winnow"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "1.1.3+spec-1.1.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -84570,7 +89362,7 @@
         "deps": {
           "common": [
             {
-              "id": "either 1.14.0",
+              "id": "either 1.18.0",
               "target": "either"
             },
             {
@@ -88746,6 +93538,55 @@
       ],
       "license_file": "LICENSE-MIT"
     },
+    "winnow 1.0.4": {
+      "name": "winnow",
+      "version": "1.0.4",
+      "package_url": "https://github.com/winnow-rs/winnow",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/winnow/1.0.4/download",
+          "sha256": "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "winnow",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "winnow",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "ascii",
+            "binary",
+            "default",
+            "parser",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.0.4"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE-MIT"
+    },
     "winreg 0.50.0": {
       "name": "winreg",
       "version": "0.50.0",
@@ -91635,6 +96476,10 @@
       "x86_64-apple-darwin",
       "x86_64-unknown-linux-gnu"
     ],
+    "cfg(any(target_arch = \"x86\", target_arch = \"x86_64\"))": [
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu"
+    ],
     "cfg(any(target_arch = \"x86_64\", target_arch = \"x86\"))": [
       "x86_64-apple-darwin",
       "x86_64-unknown-linux-gnu"
@@ -91708,6 +96553,12 @@
       "x86_64-unknown-linux-gnu"
     ],
     "cfg(not(all(target_family = \"wasm\", target_os = \"unknown\")))": [
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu"
+    ],
+    "cfg(not(any(target_arch = \"wasm32\", target_os = \"none\", target_os = \"unknown\", target_os = \"uefi\")))": [
       "aarch64-apple-darwin",
       "aarch64-unknown-linux-gnu",
       "x86_64-apple-darwin",
@@ -91829,6 +96680,11 @@
     "addr 0.15.6",
     "aes-gcm 0.10.3",
     "aide 0.14.2",
+    "alloy-consensus 1.8.3",
+    "alloy-eips 1.8.3",
+    "alloy-primitives 1.7.1",
+    "alloy-rpc-types-eth 1.8.3",
+    "alloy-sol-types 1.7.1",
     "anyhow 1.0.104",
     "arbitrary 1.4.2",
     "arc-swap 1.7.1",
@@ -92144,6 +97000,7 @@
     "test-strategy 0.4.5",
     "textplots 0.8.4",
     "thiserror 2.0.18",
+    "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.7.0",
     "tikv-jemallocator 0.7.0",

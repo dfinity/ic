@@ -57,8 +57,8 @@ To perform this exchange, the HostOS launches a temporary, low-resource "upgrade
 1. The orchestrator installs the new image to the passive partition, same as a non-SEV upgrade.
 2. The orchestrator starts a key exchange server on the active GuestOS and requests the HostOS to launch the upgrade VM.
 3. The active GuestOS and upgrade VM perform **mutual attestation**: each side generates an SEV-SNP attestation report and verifies the other's measurement against approved launch measurements from the registry, confirms matching chip IDs (same physical CPU), and validates a TLS key binding to prevent MITM.
-4. The active GuestOS sends the disk encryption key to the upgrade VM over the attested channel. The upgrade VM writes the key to disk and shuts down.
-5. The orchestrator commits the upgrade and reboots into the new version, which uses the transferred key to unlock the store partition.
+4. The active GuestOS sends the disk encryption key and the store partition's detached LUKS header to the upgrade VM over the attested channel. The upgrade VM copies the header to its own Var partition and re-keys it to its own SEV-derived key (the upgrade VM runs the new image and thus has the same launch measurement as the GuestOS the machine will boot into), then shuts down.
+5. The orchestrator commits the upgrade and reboots into the new version, which derives the same key from its own launch measurement to unlock the store partition.
 
 The mutual attestation prevents two attack scenarios:
 

@@ -2005,6 +2005,7 @@ message CanisterSettings {
   optional uint64 wasm_memory_limit = 6;
   optional uint64 wasm_memory_threshold = 7;
   optional SnapshotVisibility snapshot_visibility = 8;
+  optional uint64 reserved_cycles_limit = 9;
 }
 
 message UpdateCanisterSettings {

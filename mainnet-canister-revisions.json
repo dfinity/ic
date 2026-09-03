@@ -72,12 +72,12 @@
     "sha256": "7a628302f262b2453c11abcbb58ee7d5bcb7c424dc3f3635eef32588720a66ff"
   },
   "governance": {
-    "rev": "c748b8e76b90ceef329c055e6f7b38a00aae8745",
-    "sha256": "e4e9e99730dbee3a6fb9a95b40b10b512ad4831c9d2f6efb51d3f0a5d243b503"
+    "rev": "0c9710598f7ef85692b588a6ec518c8d8bf817ae",
+    "sha256": "74e07d7d70ac89e254cf51d4214ec71a38789f922a82305d550a7281e4b23fc1"
   },
   "governance-canister_test": {
-    "rev": "c748b8e76b90ceef329c055e6f7b38a00aae8745",
-    "sha256": "a14a930f3d4ea8988b18350e5fa24e509878e87d0278931e9e1d74a3324cf2f9"
+    "rev": "0c9710598f7ef85692b588a6ec518c8d8bf817ae",
+    "sha256": "485e17af1fb44a4b6290e903183fceb7be7ec2110a97ea87fc861492b348f72c"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
@@ -132,8 +132,8 @@
     "sha256": "f7f48f402a128cbd18dc7734c7f149f2814c8181766f39897a66d514d47ccf11"
   },
   "sns_governance": {
-    "rev": "b904c9dd1bdef8841bd12f03efbc71180a015e25",
-    "sha256": "d41e8cd08a2161e56cc6f4eb99733c9a46a38b98d3f40ce80e444dc33c5580ad"
+    "rev": "647f2c68c6090cf45e9b1de1c5ef85134a45c19e",
+    "sha256": "3bfd1b3792ae0bf16344e40376ddf05d3065f2016715f14dc00dea82c1a903ef"
   },
   "sns_index": {
     "rev": "cf41372e3d4dc1accfe2c09a7969f8bddc729dc1",

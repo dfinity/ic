@@ -2749,6 +2749,7 @@ pub struct CanisterSettings {
     pub snapshot_visibility: Option<i32>,
     pub wasm_memory_limit: Option<u64>,
     pub wasm_memory_threshold: Option<u64>,
+    pub reserved_cycles_limit: Option<u64>,
 }
 
 /// Nested message and enum types in `CanisterSettings`.
