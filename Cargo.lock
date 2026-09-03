@@ -1977,14 +1977,17 @@ dependencies = [
 name = "canister_http"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "candid",
  "canister-test",
  "ic-config",
  "ic-cycles-account-manager",
  "ic-https-outcalls-pricing",
+ "ic-management-canister-types-private",
  "ic-protobuf",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
+ "ic-replicated-state",
  "ic-system-test-driver",
  "ic-test-utilities-types",
  "ic-types",
@@ -18098,7 +18101,6 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-http-endpoints-public",
  "ic-http-endpoints-test-agent",
- "ic-https-outcalls-pricing",
  "ic-limits",
  "ic-management-canister-types-private",
  "ic-message",
