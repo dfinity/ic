@@ -394,8 +394,8 @@ fn should_not_fund_a_sweeper_above_the_low_water_mark() {
 /// so the burn minus that gas ends up as extra backing.
 ///
 /// Has to be arranged, because it is otherwise unreachable: the sweeper is a code-less EOA precisely
-/// so a bare transfer cannot fail. Placing code there leaves the 21'000 base gas with nothing to run
-/// it, so the transaction fails.
+/// so a bare transfer cannot fail. Placing code there gives the 21'000 base gas something to run and
+/// nothing to run it with, so the transaction fails.
 #[test]
 fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
     // Starts with an empty fee account for the same reason as the test above: the sweeper cannot be
@@ -406,9 +406,11 @@ fn should_not_reimburse_a_funding_transaction_that_fails_on_chain() {
     let sweeper = setup.await_sweeper_address();
     setup.await_minter_log("[fund_sweeper]: SKIPPING: failed to burn");
 
-    // Any non-empty code does it: all 21'000 gas of a bare transfer is intrinsic, so the first
-    // opcode is already out of gas. PUSH1 0, PUSH1 0, REVERT is what is placed here, so that the
-    // call would fail on its own terms too if it were ever reached with gas to spare.
+    // All 21'000 gas of a bare transfer is intrinsic, so the callee runs with none and the first
+    // opcode that costs anything halts it. That is what fails the transaction here — `PUSH1` costs
+    // 3 — and it is why the bytecode is not arbitrary: code beginning with the zero-cost `STOP`
+    // would run to completion and succeed. Spelled PUSH1 0, PUSH1 0, REVERT, so the call would also
+    // fail on its own terms if it were ever reached with gas to spare.
     setup.set_code(&sweeper, &[0x60, 0x00, 0x60, 0x00, 0xfd]);
     // Read back rather than assumed: an arrangement placed on the wrong account makes the whole
     // test vacuous, and the transfer then simply succeeds.

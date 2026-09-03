@@ -837,8 +837,10 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         }
     }
 
-    /// Places code at `address`, so a plain value transfer to it no longer succeeds: with the
-    /// 21'000 gas of a bare transfer there is nothing left to execute it.
+    /// Places `code` at `address`, so that a plain value transfer to it no longer succeeds: all
+    /// 21'000 gas of a bare transfer is intrinsic, leaving the callee none. Which makes this a
+    /// guarantee only for `code` whose first opcode costs something — code beginning with the
+    /// zero-cost `STOP` runs to completion on no gas at all and the transfer still succeeds.
     pub fn set_code(&self, address: &Address, code: &[u8]) {
         self.anvil.set_code(address, code);
     }
