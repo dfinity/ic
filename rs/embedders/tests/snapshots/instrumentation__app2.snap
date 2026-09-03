@@ -21,6 +21,7 @@ expression: out
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)
+  (global (;3;) (mut i32) i32.const 0)
   (export "compute" (func $compute))
   (export "tenfold" (func $tenfold))
   (export "inc" (func $inc))
@@ -29,12 +30,18 @@ expression: out
   (export "canister counter_instructions" (global 0))
   (export "canister counter_dirty_pages" (global 1))
   (export "canister counter_accessed_pages" (global 2))
+  (export "canister pending_trap_code" (global 3))
   (func $compute (;5;) (type 0) (param i64) (result i64)
     (local i64)
     global.get 0
     i64.const 16
     i64.sub
     global.set 0
+    global.get 3
+    if ;; label = @1
+      global.get 3
+      call 3
+    end
     global.get 0
     i64.const 0
     i64.lt_s
@@ -120,6 +127,11 @@ expression: out
     i64.const 4
     i64.sub
     global.set 0
+    global.get 3
+    if ;; label = @1
+      global.get 3
+      call 3
+    end
     global.get 0
     i64.const 0
     i64.lt_s
@@ -135,6 +147,11 @@ expression: out
     i64.const 4
     i64.sub
     global.set 0
+    global.get 3
+    if ;; label = @1
+      global.get 3
+      call 3
+    end
     global.get 0
     i64.const 0
     i64.lt_s
