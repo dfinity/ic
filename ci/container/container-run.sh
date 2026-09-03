@@ -113,7 +113,6 @@ die() {
     exit 1
 }
 
-# Allow-list --image before it is used in a file path or a registry reference.
 case "$IMAGE_NAME" in
     ic-dev | ic-build) ;;
     *) die "Unknown image '$IMAGE_NAME' (expected ic-dev or ic-build)" ;;
@@ -121,10 +120,7 @@ esac
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_REPO="ghcr.io/dfinity/$IMAGE_NAME"
-# Hash of the working tree's container inputs (ci/container/{Dockerfile,init.sh,files/*}).
 IMAGE_TAG="$("$REPO_ROOT"/ci/container/get-image-tag.sh)"
-# The tag the committed digest pins were built from. TAG and the *.digest files
-# are written only by the container-autobuild.yml workflow, never by hand.
 PINNED_TAG="$(<"$REPO_ROOT/ci/container/TAG")"
 DIGEST_FILE="$REPO_ROOT/ci/container/$IMAGE_NAME.digest"
 # By default the script refuses to run any image that is not verified against
@@ -142,8 +138,6 @@ esac
 # (built locally, or an existing local image reused because the pull failed).
 LOCAL_IMAGE=false
 
-# podman has `image exists`; docker doesn't, so use `image inspect`. Neither
-# needs the network.
 image_exists() {
     if [ "$RUNTIME" = docker ]; then
         "${CONTAINER_CMD[@]}" image inspect "$1" >/dev/null 2>&1
@@ -152,9 +146,6 @@ image_exists() {
     fi
 }
 
-# Build $IMAGE_REPO:$IMAGE_TAG from the checkout, into the store $CONTAINER_CMD
-# runs from (build-image.sh would otherwise default to plain docker).
-# $1 = reason
 build_locally() {
     if [ -z "$ALLOW_UNPINNED" ]; then
         die "$1; refusing to build an unpinned image locally (set CONTAINER_RUN_ALLOW_UNPINNED=1 to run an image that is not verified against the committed digest)"
@@ -166,9 +157,6 @@ build_locally() {
 }
 
 if [ "$IMAGE_TAG" = "$PINNED_TAG" ]; then
-    # The working tree matches what the reviewed pins were built from: run the
-    # registry image, fetched by its immutable digest only. Registry *tags* are
-    # mutable and writable without review, so they are never pulled.
     [ -f "$DIGEST_FILE" ] || die "$DIGEST_FILE is missing: refusing to pull an unpinned image"
     IMAGE_DIGEST="$(<"$DIGEST_FILE")"
     if ! [[ $IMAGE_DIGEST =~ ^sha256:[0-9a-f]{64}$ ]]; then
@@ -179,10 +167,6 @@ if [ "$IMAGE_TAG" = "$PINNED_TAG" ]; then
         eprintln "Local image $IMAGE_REPO:$IMAGE_TAG is not verified against the pin (e.g. built locally); pulling the pinned image $IMAGE instead (one-time download)."
     fi
     if image_exists "$IMAGE" || "${CONTAINER_CMD[@]}" pull "$IMAGE"; then
-        # Alias the verified image under its tag: readable `images` output, and
-        # `docker image prune` would otherwise delete an image that has no tag.
-        # This also re-points a tag that a different local image was squatting
-        # on, so a failure here is not ignored.
         "${CONTAINER_CMD[@]}" tag "$IMAGE" "$IMAGE_REPO:$IMAGE_TAG" \
             || die "Failed to tag the verified image $IMAGE as $IMAGE_REPO:$IMAGE_TAG"
     elif [ -n "$ALLOW_UNPINNED" ] && image_exists "$IMAGE_REPO:$IMAGE_TAG"; then
