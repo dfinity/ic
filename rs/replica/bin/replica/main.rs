@@ -193,7 +193,7 @@ fn main() -> io::Result<()> {
     );
     let platform_version = PlatformVersion {
         guestos_version,
-        replica_version: replica_version.clone(),
+        replica_version,
     };
     // Report replica version metric
     {
