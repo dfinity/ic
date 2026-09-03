@@ -15,9 +15,9 @@ use std::fmt::Display;
 /// ```
 /// use ic_utils_thousands::separate_with_underscores;
 ///
-/// assert_eq!(separate_with_underscores(1234567u64), "1_234_567");
-/// assert_eq!(separate_with_underscores(12345u32), "12_345");
-/// assert_eq!(separate_with_underscores(42u8), "42");
+/// assert_eq!(separate_with_underscores(1234567_u64), "1_234_567");
+/// assert_eq!(separate_with_underscores(12345_u32), "12_345");
+/// assert_eq!(separate_with_underscores(42_u8), "42");
 /// ```
 pub fn separate_with_underscores<T: Display>(value: T) -> String {
     let s = value.to_string();
@@ -47,13 +47,13 @@ mod tests {
 
     #[test]
     fn groups_digits_in_threes_from_the_right() {
-        assert_eq!(separate_with_underscores(0u64), "0");
-        assert_eq!(separate_with_underscores(12u64), "12");
-        assert_eq!(separate_with_underscores(999u64), "999");
-        assert_eq!(separate_with_underscores(1000u64), "1_000");
-        assert_eq!(separate_with_underscores(1234567u64), "1_234_567");
+        assert_eq!(separate_with_underscores(0_u64), "0");
+        assert_eq!(separate_with_underscores(12_u64), "12");
+        assert_eq!(separate_with_underscores(999_u64), "999");
+        assert_eq!(separate_with_underscores(1000_u64), "1_000");
+        assert_eq!(separate_with_underscores(1234567_u64), "1_234_567");
         assert_eq!(
-            separate_with_underscores(1_000_000_000_000u128),
+            separate_with_underscores(1_000_000_000_000_u128),
             "1_000_000_000_000"
         );
         assert_eq!(
@@ -65,7 +65,7 @@ mod tests {
     #[test]
     fn leaves_sign_prefix_and_fraction_untouched() {
         // Only the first run of digits is grouped, matching `thousands`.
-        assert_eq!(separate_with_underscores(-1234567i64), "-1_234_567");
-        assert_eq!(separate_with_underscores(1234.5f64), "1_234.5");
+        assert_eq!(separate_with_underscores(-1234567_i64), "-1_234_567");
+        assert_eq!(separate_with_underscores(1234.5_f64), "1_234.5");
     }
 }
