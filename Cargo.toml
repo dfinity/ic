@@ -533,6 +533,7 @@ members = [
     "rs/utils/ensure",
     "rs/utils/lru_cache",
     "rs/utils/rustfmt",
+    "rs/utils/thousands",
     "rs/utils/thread",
     "rs/utils/validate_eq",
     "rs/utils/validate_eq_derive",
@@ -956,7 +957,6 @@ textplots = "^0.8"
 # DO NOT upgrade to >=2.0.19 as it pulls in syn 3 whereas the rest of the
 # codebase uses syn 2.
 thiserror = "=2.0.18"
-thousands = "^0.2.0"
 threadpool = "1.8.1"
 tikv-jemalloc-ctl = { version = "0.7", features = ["stats"] }
 tikv-jemallocator = "0.7"
