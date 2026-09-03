@@ -201,10 +201,15 @@ impl GetEventsFile {
             match TxEnvelope::decode_2718(&mut raw_bytes.as_slice())
                 .expect("BUG: failed to deserialize sent ETH transaction")
             {
-                TxEnvelope::Eip1559(signed) => (
-                    map_eip_1559_transaction(signed.tx()),
-                    map_signature(signed.signature()),
-                ),
+                TxEnvelope::Eip1559(signed) => {
+                    signed
+                        .recover_signer()
+                        .expect("BUG: unrecoverable signature on sent ETH transaction");
+                    (
+                        map_eip_1559_transaction(signed.tx()),
+                        map_signature(signed.signature()),
+                    )
+                }
                 transaction => {
                     panic!("BUG: unexpected sent ETH transaction type {transaction:?}")
                 }
