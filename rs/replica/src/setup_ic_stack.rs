@@ -134,18 +134,17 @@ pub fn construct_ic_stack(
     // This is the first object that is required for the creation of the IC stack. Initializing the
     // persistent consensus pool is the only way for retrieving the height of the last CUP and/or
     // certification.
-    let replica_version = platform_version.replica_version.clone();
     let artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool.clone());
     create_consensus_pool_dir(&config);
     ensure_persistent_pool_replica_version_compatibility(
         artifact_pool_config.persistent_pool_db_path(),
-        &replica_version,
+        &platform_version.replica_version,
     );
 
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
         node_id,
         subnet_id,
-        &replica_version,
+        &platform_version.replica_version,
         // Note: it's important to pass the original proto which came from the command line (as
         // opposed to, for example, a proto which was first deserialized and then serialized
         // again). Since the proto file could have been produced and signed by nodes running a
