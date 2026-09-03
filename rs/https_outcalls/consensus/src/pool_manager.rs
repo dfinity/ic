@@ -403,11 +403,7 @@ impl CanisterHttpPoolManagerImpl {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: response.content.is_reject(),
-                            replica_version: self
-                                .replica_config
-                                .platform_version
-                                .replica_version
-                                .clone(),
+                            replica_version: self.replica_config.replica_version().clone(),
                         },
                         payment_receipt,
                     };
@@ -868,10 +864,7 @@ pub mod test {
                             content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                             content_size: 0,
                             is_reject: false,
-                            replica_version: replica_config
-                                .platform_version
-                                .replica_version
-                                .clone(),
+                            replica_version: replica_config.replica_version().clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -1737,10 +1730,7 @@ pub mod test {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: replica_config
-                                .platform_version
-                                .replica_version
-                                .clone(),
+                            replica_version: replica_config.replica_version().clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -1804,10 +1794,7 @@ pub mod test {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: replica_config
-                                .platform_version
-                                .replica_version
-                                .clone(),
+                            replica_version: replica_config.replica_version().clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -3335,10 +3322,7 @@ pub mod test {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: replica_config
-                                .platform_version
-                                .replica_version
-                                .clone(),
+                            replica_version: replica_config.replica_version().clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -3400,10 +3384,7 @@ pub mod test {
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
-                            replica_version: replica_config
-                                .platform_version
-                                .replica_version
-                                .clone(),
+                            replica_version: replica_config.replica_version().clone(),
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
