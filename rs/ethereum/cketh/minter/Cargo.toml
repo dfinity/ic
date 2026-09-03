@@ -38,6 +38,7 @@ ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 ic-sha3 = { workspace = true }
 ic-stable-structures = { workspace = true }
 ic-utils-ensure = { path = "../../../utils/ensure" }
+ic-utils-thousands = { path = "../../../utils/thousands" }
 icrc-cbor = { path = "../../../../packages/icrc-cbor", features = ["u256"] }
 icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
@@ -53,7 +54,6 @@ serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
-thousands = { workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]
@@ -61,9 +61,9 @@ alloy-consensus = { workspace = true }
 alloy-eips = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
+alloy-sol-types = { workspace = true }
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
-ethers-core = { workspace = true }
 flate2 = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }

@@ -8061,13 +8061,13 @@ dependencies = [
  "alloy-eips",
  "alloy-primitives",
  "alloy-rpc-types-eth",
+ "alloy-sol-types",
  "askama",
  "assert_matches",
  "async-trait",
  "canbench-rs",
  "candid",
  "candid_parser",
- "ethers-core",
  "ethnum",
  "evm_rpc_client",
  "evm_rpc_types",
@@ -8095,6 +8095,7 @@ dependencies = [
  "ic-sha3 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-stable-structures 0.6.9",
  "ic-utils-ensure",
+ "ic-utils-thousands",
  "icrc-cbor",
  "icrc-ledger-client-cdk",
  "icrc-ledger-types",
@@ -8118,7 +8119,6 @@ dependencies = [
  "strum_macros 0.26.4",
  "tempfile",
  "thiserror 2.0.18",
- "thousands",
  "time",
  "tokio",
 ]
@@ -8131,6 +8131,7 @@ dependencies = [
  "alloy-eips",
  "alloy-primitives",
  "alloy-rpc-types-eth",
+ "alloy-sol-types",
  "assert_matches",
  "candid",
  "ethers-core",
@@ -15866,6 +15867,7 @@ dependencies = [
  "ic-types-cycles",
  "ic-types-test-utils",
  "ic-utils 0.9.0",
+ "ic-utils-thousands",
  "ic-validate-eq",
  "ic-validate-eq-derive",
  "maplit",
@@ -15887,7 +15889,6 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "thiserror 2.0.18",
- "thousands",
 ]
 
 [[package]]
@@ -15897,11 +15898,11 @@ dependencies = [
  "candid",
  "ic-heap-bytes",
  "ic-protobuf",
+ "ic-utils-thousands",
  "serde",
  "serde_cbor",
  "strum 0.26.3",
  "strum_macros 0.26.4",
- "thousands",
 ]
 
 [[package]]
@@ -15976,6 +15977,10 @@ dependencies = [
 
 [[package]]
 name = "ic-utils-rustfmt"
+version = "0.9.0"
+
+[[package]]
+name = "ic-utils-thousands"
 version = "0.9.0"
 
 [[package]]
@@ -24418,12 +24423,6 @@ dependencies = [
  "quote",
  "syn 2.0.117",
 ]
-
-[[package]]
-name = "thousands"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bf63baf9f5039dadc247375c29eb13706706cfde997d0330d05aa63a77d8820"
 
 [[package]]
 name = "thread_local"

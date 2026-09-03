@@ -11,6 +11,7 @@ alloy-consensus = { workspace = true }
 alloy-eips = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
+alloy-sol-types = { workspace = true }
 assert_matches = { workspace = true }
 candid = { workspace = true }
 ethers-core = { workspace = true }

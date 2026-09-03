@@ -13,17 +13,15 @@ pub fn empty_logs() -> Vec<alloy_rpc_types_eth::Log> {
 /// concatenation of 32-byte words, exactly what the batcher's `RETURN` yields — one word per
 /// scanned `(address, token)` pair, in call order.
 ///
-/// Encoded as a flat list of `Uint` tokens (not `Token::Array`, which would prepend an ABI
+/// Encoded as a flat sequence of words (not as an ABI array, which would prepend an
 /// offset+length header the batcher does not emit).
 pub fn balance_scan_response(balances: &[u128]) -> String {
-    use ethers_core::abi::{Token, encode};
-    use ethers_core::types::U256;
-    let words = encode(
-        &balances
-            .iter()
-            .map(|&balance| Token::Uint(U256::from(balance)))
-            .collect::<Vec<_>>(),
-    );
+    use alloy_sol_types::SolValue;
+
+    let words: Vec<u8> = balances
+        .iter()
+        .flat_map(|&balance| alloy_primitives::U256::from(balance).abi_encode())
+        .collect();
     format!("0x{}", hex::encode(words))
 }
 

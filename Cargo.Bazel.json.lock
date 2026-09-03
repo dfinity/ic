@@ -1,5 +1,5 @@
 {
-  "checksum": "7ea35fe5a597aec3a6da4d82c410bc3b2159c97d1fb3bbd1e4eee7a0bdc690dc",
+  "checksum": "1d84ab79bc7eeb3c7709193ece8c47df3779ffed11ab433c96704c69023730a8",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -24270,10 +24270,6 @@
             {
               "id": "thiserror 2.0.18",
               "target": "thiserror"
-            },
-            {
-              "id": "thousands 0.2.0",
-              "target": "thousands"
             },
             {
               "id": "threadpool 1.8.1",
@@ -78488,45 +78484,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thousands 0.2.0": {
-      "name": "thousands",
-      "version": "0.2.0",
-      "package_url": "https://github.com/tov/thousands-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/thousands/0.2.0/download",
-          "sha256": "3bf63baf9f5039dadc247375c29eb13706706cfde997d0330d05aa63a77d8820"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "thousands",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "thousands",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.2.0"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "thread_local 1.1.7": {
       "name": "thread_local",
       "version": "1.1.7",
@@ -96958,7 +96915,6 @@
     "test-strategy 0.4.5",
     "textplots 0.8.4",
     "thiserror 2.0.18",
-    "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.7.0",
     "tikv-jemallocator 0.7.0",
