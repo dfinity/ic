@@ -155,12 +155,16 @@ pub fn node_test_id(i: u64) -> NodeId {
 }
 
 pub fn test_replica_version() -> ReplicaVersion {
-    ReplicaVersion::from_str("cafebabe0000ffff0000ffff0000ffff0000ffff").unwrap()
+    ReplicaVersion::from_str("cafebabecafebabecafebabecafebabecafebabe").unwrap()
+}
+
+pub fn test_guestos_version() -> ReplicaVersion {
+    ReplicaVersion::from_str("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef").unwrap()
 }
 
 pub fn test_platform_version() -> PlatformVersion {
     PlatformVersion {
-        guestos_version: test_replica_version(),
+        guestos_version: test_guestos_version(),
         replica_version: test_replica_version(),
     }
 }
