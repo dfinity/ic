@@ -900,7 +900,7 @@ jobs:
             setup: |
               tar -cf empty.tar -T /dev/null
               repo=ghcr.io/dfinity
-              sudo podman import empty.tar "$repo/ic-dev:$(cat ci/container/TAG)"
+              sudo podman import empty.tar "$repo/ic-dev:$(< ci/container/TAG)"
             command: "true"
             expect: success
             runtime: podman
@@ -924,7 +924,7 @@ jobs:
             setup: |
               tar -cf empty.tar -T /dev/null
               repo=ghcr.io/dfinity
-              sudo podman import empty.tar "$repo/ic-dev:$(cat ci/container/TAG)"
+              sudo podman import empty.tar "$repo/ic-dev:$(< ci/container/TAG)"
               printf 'sha256:%064d\n' 0 > ci/container/ic-dev.digest
             command: "true"
             expect: "refusing to build an unpinned image locally"
@@ -988,8 +988,8 @@ jobs:
           # in a variable to keep this script from being rewritten too.
           set -euo pipefail
           prefix="ghcr.io/dfinity/"
-          dev_digest="$(cat ci/container/ic-dev.digest)"
-          build_digest="$(cat ci/container/ic-build.digest)"
+          dev_digest="$(< ci/container/ic-dev.digest)"
+          build_digest="$(< ci/container/ic-build.digest)"
           for digest in "$dev_digest" "$build_digest"; do
             if ! [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then
               echo "::error::malformed digest '$digest' in ci/container/*.digest (they are written by container-autobuild.yml)"
@@ -1031,7 +1031,7 @@ jobs:
           # so fail.
           set -euo pipefail
           computed="$(ci/container/get-image-tag.sh)"
-          pinned="$(cat ci/container/TAG)"
+          pinned="$(< ci/container/TAG)"
           if [ "$computed" = "$pinned" ]; then
             echo "in_sync=true" >> "$GITHUB_OUTPUT"
           elif [ "$CI_EVENT_NAME" = pull_request ]; then
@@ -1087,8 +1087,8 @@ jobs:
         run: |
           set -euo pipefail
           repo=ghcr.io/dfinity
-          tag="$repo/ic-dev:$(cat ci/container/TAG)"
-          want="$repo/ic-dev@$(cat ci/container/ic-dev.digest)"
+          tag="$repo/ic-dev:$(< ci/container/TAG)"
+          want="$repo/ic-dev@$(< ci/container/ic-dev.digest)"
           digests="$(sudo podman image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$tag")"
           printf '%s\n' "$digests"
           if ! grep -qxF "$want" <<<"$digests"; then
