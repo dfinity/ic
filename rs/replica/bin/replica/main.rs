@@ -207,7 +207,7 @@ fn main() -> io::Result<()> {
             ],
         );
         g.with_label_values(&[
-            replica_version.as_ref(),
+            platform_version.replica_version.as_ref(),
             platform_version.guestos_version.as_ref(),
             &get_replica_binary_hash()
                 .map(|x| x.1)
