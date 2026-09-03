@@ -482,10 +482,6 @@ crate.spec(
     version = "^0.5.7",
 )
 crate.spec(
-    package = "ethers-core",
-    version = "^2.0.7",
-)
-crate.spec(
     features = ["serde"],
     package = "ethnum",
     version = "^1.5.3",

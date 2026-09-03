@@ -664,7 +664,7 @@ impl DepositCkErc20WithSubaccountParams {
             ),
             format!(
                 "0x000000000000000000000000{}",
-                ethers_core::utils::hex::encode(self.from_address.as_ref())
+                hex::encode(self.from_address.as_ref())
             ),
             encode_principal(self.recipient),
         ];
