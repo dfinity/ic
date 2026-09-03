@@ -929,6 +929,30 @@ jobs:
             command: "true"
             expect: "refusing to build an unpinned image locally"
             runtime: podman
+          # Edited container inputs (ci/container/{Dockerfile,init.sh,files/*}): no
+          # reviewed digest exists for the computed tag, so by default the script
+          # refuses without pulling or building anything. The setup step edits the
+          # input after the TAG-sync gate below has passed on the pristine checkout.
+          - name: edited inputs refused
+            setup: echo '# edited after the sync check' >> ci/container/Dockerfile
+            command: "true"
+            expect: "refusing to run an unpinned image"
+            runtime: podman
+          # With the explicit opt-out, an image cached under the computed tag is
+          # reused instead of being rebuilt, and the script must say that it is
+          # unverified. The cache is seeded by re-tagging the pinned image.
+          - name: edited inputs with opt-out reuses local image
+            setup: |
+              echo '# edited after the sync check' >> ci/container/Dockerfile
+              repo=ghcr.io/dfinity
+              pinned="$repo/ic-dev@$(< ci/container/ic-dev.digest)"
+              sudo podman pull "$pinned"
+              sudo podman tag "$pinned" "$repo/ic-dev:$(ci/container/get-image-tag.sh)"
+            command: "true"
+            allow_unpinned: "1"
+            expect: success
+            expect_warning: "NOT verified against a reviewed digest pin"
+            runtime: podman
           - name: docker runtime
             setup: ""
             command: "true"
@@ -1048,38 +1072,53 @@ jobs:
         if: steps.sync.outputs.in_sync == 'true'
         env:
           CONTAINER_RUNTIME: ${{ matrix.runtime }}
+          # Empty for every leg that does not set allow_unpinned, which the script
+          # treats as unset.
+          CONTAINER_RUN_ALLOW_UNPINNED: ${{ matrix.allow_unpinned }}
         run: |
           set -euo pipefail
           if [ "${{ matrix.expect }}" = success ]; then
-            ./ci/container/container-run.sh ${{ matrix.command }}
-            exit 0
+            set +e
+            out="$(./ci/container/container-run.sh ${{ matrix.command }} 2>&1)"
+            rc=$?
+            set -e
+            printf '%s\n' "$out"
+            if [ "$rc" -ne 0 ]; then
+              echo "::error::container-run.sh exited with $rc"
+              exit 1
+            fi
+          else
+            # A tampered pin or edited inputs must fail fast: not succeed, not hit
+            # the timeout, and not fall through to a local build that merely times
+            # the job out. Snapshot the store first: a refusal must leave it
+            # untouched (nothing pulled or built) and must not have run anything,
+            # in particular not an image the setup step cached under a tag.
+            images_before="$(sudo podman images --no-trunc -q | sort -u)"
+            containers_before="$(sudo podman ps -aq)"
+            set +e
+            out="$(timeout 300 ./ci/container/container-run.sh ${{ matrix.command }} 2>&1)"
+            rc=$?
+            set -e
+            printf '%s\n' "$out"
+            if [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ]; then
+              echo "::error::expected container-run.sh to refuse quickly, got exit code $rc"
+              exit 1
+            fi
+            if ! grep -qF -- "${{ matrix.expect }}" <<<"$out"; then
+              echo "::error::expected the output to contain '${{ matrix.expect }}'"
+              exit 1
+            fi
+            if [ "$(sudo podman images --no-trunc -q | sort -u)" != "$images_before" ]; then
+              echo "::error::an image was pulled or built despite the refusal"
+              exit 1
+            fi
+            if [ "$(sudo podman ps -aq)" != "$containers_before" ]; then
+              echo "::error::a container was run despite the refusal"
+              exit 1
+            fi
           fi
-          # A tampered pin must fail fast: not succeed, not hit the timeout, and
-          # not fall through to a local build that merely times the job out.
-          # Snapshot the store first: a refusal must leave it untouched (nothing
-          # pulled or built) and must not have run anything, in particular not an
-          # image the setup step cached under the mutable tag.
-          images_before="$(sudo podman images --no-trunc -q | sort -u)"
-          containers_before="$(sudo podman ps -aq)"
-          set +e
-          out="$(timeout 300 ./ci/container/container-run.sh ${{ matrix.command }} 2>&1)"
-          rc=$?
-          set -e
-          printf '%s\n' "$out"
-          if [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ]; then
-            echo "::error::expected container-run.sh to refuse quickly, got exit code $rc"
-            exit 1
-          fi
-          if ! grep -qF -- "${{ matrix.expect }}" <<<"$out"; then
-            echo "::error::expected the output to contain '${{ matrix.expect }}'"
-            exit 1
-          fi
-          if [ "$(sudo podman images --no-trunc -q | sort -u)" != "$images_before" ]; then
-            echo "::error::an image was pulled or built despite the refusal"
-            exit 1
-          fi
-          if [ "$(sudo podman ps -aq)" != "$containers_before" ]; then
-            echo "::error::a container was run despite the refusal"
+          if [ -n "${{ matrix.expect_warning }}" ] && ! grep -qF -- "${{ matrix.expect_warning }}" <<<"$out"; then
+            echo "::error::expected the output to contain '${{ matrix.expect_warning }}'"
             exit 1
           fi
       - name: Verify the poisoned tag was re-pointed to the verified image
