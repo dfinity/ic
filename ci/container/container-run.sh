@@ -369,8 +369,4 @@ if [ -f "$HOME/.container-run.conf" ]; then
 fi
 
 set -x
-# --pull=never comes after RUNTIME_RUN_ARGS (which ends with the user's
-# ~/.container-run.conf arguments) so it cannot be overridden: `run` never pulls
-# (by default it would pull a missing image by its mutable tag); every branch
-# above runs only an image that is already present locally.
 exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" --pull=never "$IMAGE" "${cmd[@]}"
