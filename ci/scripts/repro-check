@@ -181,6 +181,25 @@ def compare_hashes(local_hash_value: str, remote_hash_value: str, os_type: str) 
         )
         return True
 
+
+def parse_proposal_payload(payload: dict, proposal_id: int) -> tuple[str, str | None, dict | None, str | None]:
+    """
+    Extracts (git_hash, guest_os_hash, guest_os_measurements, host_os_hash) from an
+    election proposal payload. HostOS proposals carry no launch measurements.
+    """
+    sha256_hex = payload["release_package_sha256_hex"]
+    if payload.get("replica_version_to_elect"):
+        # NOTE: We convert the "human" hex format from the dashboard API to the
+        # byte format that is actually used in the proposal directly.
+        measurements = payload["guest_launch_measurements"]
+        for measurement in measurements["guest_launch_measurements"]:
+            measurement["measurement"] = list(bytes.fromhex(measurement["measurement"]))
+        return (payload["replica_version_to_elect"], sha256_hex, measurements, None)
+    if payload.get("hostos_version_to_elect"):
+        return (payload["hostos_version_to_elect"], None, None, sha256_hex)
+    raise VerificationError(f"Proposal #{proposal_id} is missing replica_version_to_elect or hostos_version_to_elect")
+
+
 def format_measurements(measurements: dict) -> dict:
     """Formats the 'measurement' field from a list of integers to a hex string."""
     formatted = copy.deepcopy(measurements)
@@ -586,7 +605,7 @@ class ReproducibilityVerifier:
     # --------------------------------------------------------------------------
     # Core logic restructured to start downloads early
     # --------------------------------------------------------------------------
-    def process_proposal(self) -> tuple[str | None, str | None, str | None]:
+    def process_proposal(self) -> tuple[str | None, dict | None, str | None]:
         """If a proposal ID is provided, fetch the proposal data and set internal state."""
         if not self.proposal_id:
             return (None, None, None)
@@ -602,27 +621,14 @@ class ReproducibilityVerifier:
             err = f"Could not fetch {self.proposal_id}. Error: {e}"
             raise RuntimeError(err)
 
-        proposal_data = json.loads(data)
-        self.proposal_package_urls = proposal_data["payload"]["release_package_urls"]
-        self.proposal_package_sha256_hex = proposal_data["payload"]["release_package_sha256_hex"]
+        payload = json.loads(data)["payload"]
+        self.proposal_package_urls = payload["release_package_urls"]
+        self.proposal_package_sha256_hex = payload["release_package_sha256_hex"]
 
-        # NOTE: We convert the "human" hex format from the dashboard API to the
-        # byte format that is actually used in the proposal directly.
-        proposal_launch_measurements = proposal_data["payload"]["guest_launch_measurements"]
-        for measurement in proposal_launch_measurements["guest_launch_measurements"]:
-            measurement["measurement"] = list(bytes.fromhex(measurement["measurement"]))
-        self.proposal_launch_measurements = proposal_launch_measurements
-
-        prop_str = json.dumps(proposal_data)
-        if "replica_version_to_elect" in prop_str:
-            self.git_hash = proposal_data["payload"]["replica_version_to_elect"]
-            return (self.proposal_package_sha256_hex, self.proposal_launch_measurements, None)
-        elif "hostos_version_to_elect" in prop_str:
-            self.git_hash = proposal_data["payload"]["hostos_version_to_elect"]
-            return (None, None, self.proposal_package_sha256_hex)
-        else:
-            err = f"Proposal #{self.proposal_id} is missing replica_version_to_elect or hostos_version_to_elect"
-            raise VerificationError(err)
+        self.git_hash, guest_os_hash, guest_os_measurements, host_os_hash = parse_proposal_payload(
+            payload, self.proposal_id
+        )
+        return (guest_os_hash, guest_os_measurements, host_os_hash)
 
     def decide_git_hash(self) -> None:
         """Determines which git hash to build and verify."""
