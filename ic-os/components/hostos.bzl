@@ -16,6 +16,7 @@ component_files = {
     Label("hostos/guestos/upgrade-guestos.service"): "/etc/systemd/system/upgrade-guestos.service",
     Label("hostos/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
     Label("hostos/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
+    Label("hostos/libvirt/kvm_amd.conf"): "/etc/modprobe.d/kvm_amd.conf",
     Label("hostos/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",
     Label("hostos/misc/detect-first-boot.sh"): "/opt/ic/bin/detect-first-boot.sh",
     Label("hostos/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
