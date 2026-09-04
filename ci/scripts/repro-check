@@ -191,7 +191,7 @@ def parse_proposal_payload(payload: dict, proposal_id: int) -> tuple[str, str | 
     if payload.get("replica_version_to_elect"):
         # NOTE: We convert the "human" hex format from the dashboard API to the
         # byte format that is actually used in the proposal directly.
-        measurements = payload["guest_launch_measurements"]
+        measurements = copy.deepcopy(payload["guest_launch_measurements"])
         for measurement in measurements["guest_launch_measurements"]:
             measurement["measurement"] = list(bytes.fromhex(measurement["measurement"]))
         return (payload["replica_version_to_elect"], sha256_hex, measurements, None)
@@ -812,11 +812,14 @@ class ReproducibilityVerifier:
     def compare_proposal_measurements_vs_cdn(
         self,
         storage: Dirs,
-        proposal_measurements: str | None,
+        proposal_measurements: dict | None,
         guest_os_downloads: list[Download],
     ) -> None:
         """Compares the proposal’s measurements against the CDN-stored measurements if a proposal is specified."""
         if not self.proposal_id:
+            return
+        if proposal_measurements is None:
+            logger.debug("The proposal carries no GuestOS launch measurements, skipping their comparison.")
             return
         [f.result() for f in concurrent.futures.as_completed(guest_os_downloads)]
         cdn_measurements = self.get_cdn_measurements(storage)
