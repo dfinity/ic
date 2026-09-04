@@ -105,6 +105,9 @@ git checkout faa1a8a77f71e183b37bb9f25907e90cab7516bc
 didc encode -d rs/ethereum/cketh/minter/cketh_minter.did -t '(MinterArg)' '(variant { UpgradeArg = record { ethereum_sweeper_contract_address = opt "0x939743E3d48eB541317B2c6Ad862f5283899023b"; next_sweeper_transaction_nonce = opt (0 : nat)} })' | xxd -r -p | sha256sum
 ```
 
+* [0x939743E3d48eB541317B2c6Ad862f5283899023b](https://etherscan.io/address/0x939743e3d48eb541317b2c6ad862f5283899023b) is the sweeper contract address initialized with the address of the deposit helper smart contract [0x18901044688D3756C35Ed2b36D93e6a5B8e00E68](https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68).
+* The address controlled by the minter to make sweep transactions did not create yet any transaction and so its next transaction nonce is `0`.
+
 ## Wasm Verification
 
 Verify that the hash of the gzipped WASM matches the proposed hash.
