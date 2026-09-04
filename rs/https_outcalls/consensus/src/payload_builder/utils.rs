@@ -37,9 +37,15 @@ use crate::metrics::CanisterHttpPayloadBuilderMetrics;
 pub(crate) fn check_response_consistency(
     response: &CanisterHttpResponseWithConsensus,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    let content = &response.content;
-    let metadata = &response.proof.metadata;
+    check_metadata_matches_content(&response.proof.metadata, &response.content)
+}
 
+/// Checks that the `metadata` describes `content`: same callback id,
+/// content hash, content size and `is_reject` flag.
+pub(crate) fn check_metadata_matches_content(
+    metadata: &CanisterHttpResponseMetadata,
+    content: &CanisterHttpResponse,
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
     // Check metadata field consistency
     if metadata.id != content.id {
         return Err(InvalidCanisterHttpPayloadReason::InvalidMetadata {
@@ -427,7 +433,8 @@ pub(crate) fn aggregate_shares(
 /// Validates a single [`FlexibleCanisterHttpResponseWithProof`].
 ///
 /// Checks callback-id consistency, share validity (using
-/// [`validate_response_share`]), content hash, and content size.
+/// [`validate_response_share`]), and that the signed metadata describes the
+/// response (using [`check_metadata_matches_content`]).
 ///
 /// **NOTE**: The signature on the share is not verified. Callers are expected
 /// to batch-verify the signatures of all shares in the surrounding group via
@@ -454,31 +461,10 @@ pub(crate) fn validate_flexible_response_with_proof(
         context,
     )?;
 
-    let calculated_hash = crypto_hash(&response_with_proof.response);
-    if &calculated_hash != response_with_proof.proof.content.content_hash() {
-        return Err(InvalidCanisterHttpPayloadReason::ContentHashMismatch {
-            metadata_hash: response_with_proof.proof.content.content_hash().clone(),
-            calculated_hash,
-        });
-    }
-
-    let calculated_size = response_with_proof.response.content.count_bytes() as u32;
-    if calculated_size != response_with_proof.proof.content.content_size() {
-        return Err(InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
-            metadata_size: response_with_proof.proof.content.content_size(),
-            calculated_size,
-        });
-    }
-
-    let calculated_is_reject = response_with_proof.response.content.is_reject();
-    if calculated_is_reject != response_with_proof.proof.content.is_reject() {
-        return Err(InvalidCanisterHttpPayloadReason::IsRejectMismatch {
-            metadata_is_reject: response_with_proof.proof.content.is_reject(),
-            calculated_is_reject,
-        });
-    }
-
-    Ok(())
+    check_metadata_matches_content(
+        &response_with_proof.proof.content.metadata,
+        &response_with_proof.response,
+    )
 }
 
 /// Validates a single [`CanisterHttpResponseShare`]'s metadata against the
