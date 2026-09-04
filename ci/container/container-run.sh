@@ -205,6 +205,58 @@ RUNTIME_RUN_ARGS=(
     --mount type=tmpfs,target="/tmp/containers" # expected by ic-os build
 )
 
+# Give every checkout its own bazel output base.
+#
+# Bazel derives the default output base from the md5 of the workspace path.
+# Every checkout is mounted at the same path ($WORKDIR) with the same cache
+# dir, so containers started from different checkouts (git worktrees or
+# clones) would all use one output base. Each container also has its own PID
+# namespace, so bazel's client cannot recognize the other container's server
+# (it verifies the server pid via /proc), starts a second server in the same
+# output base, and the first server then kills itself: its client fails with
+# "Server terminated abruptly (error code: 14 ...)". Keying the output base on
+# the host path of the checkout avoids this while keeping the install base,
+# the repository cache and the repo contents cache (all of which live in the
+# shared output_user_root) shared between checkouts.
+#
+# Bazel reads the rc files named in $BAZELRC in addition to the workspace
+# .bazelrc (including its user.bazelrc import) and ~/.bazelrc, so the rest of
+# the repository's bazel configuration still applies. The variable only
+# exists inside the container, so host-side bazel invocations are unaffected.
+# Keep only characters that are safe in the rc line, in $BAZELRC (comma-separated) and in
+# a filename; the path hash below keeps the key unique.
+REPO_NAME="$(printf '%s' "$(basename "$REPO_ROOT")" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_' | cut -c1-64)"
+OUTPUT_BASE_KEY="$REPO_NAME-$(printf '%s' "$REPO_ROOT" | sha256sum | cut -c1-8)"
+OUTPUT_BASE="$CTR_CACHE_DIR/bazel/_bazel_$CTR_USER/$OUTPUT_BASE_KEY"
+BAZELRC_REL="container-run/$OUTPUT_BASE_KEY.bazelrc" # relative to the cache dir
+mkdir -p "$(dirname "$CACHE_DIR/$BAZELRC_REL")"
+echo "startup --output_base=$OUTPUT_BASE" >"$CACHE_DIR/$BAZELRC_REL"
+RUNTIME_RUN_ARGS+=(-e BAZELRC="$CTR_CACHE_DIR/$BAZELRC_REL")
+eprintln "Using bazel output base '$OUTPUT_BASE'"
+
+# Support linked git worktrees (`git worktree add`).
+#
+# A linked worktree's .git is a file pointing into the main repository's .git
+# directory on the host, which is not otherwise visible in the container, so
+# git (and everything that uses it: --config=stamped, rust-lint.sh, ic-admin's
+# build script under cargo, ...) would fail with "not a git repository".
+# Bind-mount the common git dir at its host path so that the pointer resolves.
+#
+# Inside such a container `git worktree list` reports the linked worktrees as
+# "prunable" because their host checkout paths are not visible, so never run
+# `git worktree prune|repair|move|remove` in the container. For the same
+# reason gc's automatic worktree pruning is disabled via GIT_CONFIG_*.
+GIT_COMMON_DIR="$(cd "$REPO_ROOT" && realpath "$(git rev-parse --git-common-dir)")"
+if [ "$GIT_COMMON_DIR" != "$REPO_ROOT/.git" ]; then
+    eprintln "Detected linked git worktree; mounting '$GIT_COMMON_DIR'"
+    RUNTIME_RUN_ARGS+=(
+        --mount type=bind,source="$GIT_COMMON_DIR",target="$GIT_COMMON_DIR"
+        -e GIT_CONFIG_COUNT=1
+        -e GIT_CONFIG_KEY_0=gc.worktreePruneExpire
+        -e GIT_CONFIG_VALUE_0=never
+    )
+fi
+
 # Privilege/isolation flags required by the IC-OS guest build, per runtime.
 if [ "$RUNTIME" = docker ]; then
     # Under docker the IC-OS build runs (rootless) podman *inside* this
