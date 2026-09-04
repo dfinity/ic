@@ -450,6 +450,39 @@ mod tests {
         // The assertion is at the top: #[should_panic(...)].
     }
 
+    /// The counterpart of the previous test, but for the other way that the
+    /// fleet can end up on a unique replica version: rolling all the way back
+    /// instead of all the way forward.
+    #[test]
+    #[should_panic(expected = "cannot skip a version")]
+    fn should_panic_when_skipping_a_version_after_rolling_back() {
+        // Step 1: Prepare the world. Fully roll back v1 -> v2. That is, all
+        // engines end up (back) on v1, and v2 gets abandoned.
+        let mut registry = REGISTRY.clone();
+        registry.do_update_standard_engine_replica_version(
+            UpdateStandardEngineReplicaVersionPayload {
+                new_replica_version_id: "v2".into(),
+                old_replica_version_id: "v1".into(),
+                deployment_progress: 0.0,
+            },
+        );
+
+        // Step 2: Run the code under test. The new old_replica_version_id
+        // ("v2") is the version that was just rolled back away from. The
+        // version that engines are actually running is v1, so this deployment
+        // would skip over it.
+        registry.do_update_standard_engine_replica_version(
+            UpdateStandardEngineReplicaVersionPayload {
+                new_replica_version_id: "v3".into(),
+                old_replica_version_id: "v2".into(),
+                deployment_progress: 0.1,
+            },
+        );
+
+        // Step 3: Verify result(s).
+        // The assertion is at the top: #[should_panic(...)].
+    }
+
     #[test]
     #[should_panic(expected = "Using a version that isn't elected.")]
     fn should_panic_if_new_version_not_elected() {
