@@ -8,6 +8,8 @@ inputs:
     required: true
   manifest-name:
     required: true
+    description: |
+      Name of the artifact containing the manifest.
 outputs:
   manifest-sha256:
     description: sha256 of the uploaded manifest
@@ -46,7 +48,7 @@ runs:
         set -euo pipefail
         manifest="$RUNNER_TEMP/upload-manifest.sha256sums"
 
-        # Fail closed rather than attest garbage: the manifest must be
+        # Fail rather than attest garbage: the manifest must be
         # non-empty and every line must be "<64-hex>  ic/<path>".
         if ! [ -s "$manifest" ]; then
           echo "upload manifest is missing or empty: $manifest" >&2

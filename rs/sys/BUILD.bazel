@@ -17,7 +17,6 @@ rust_library(
         "@crate_index//:nix",
         "@crate_index//:prost",
         "@crate_index//:tokio",
-        "@crate_index//:wsl",
     ] + select({
         "@rules_rust//rust/platform:unix": [
             "@crate_index//:rand",

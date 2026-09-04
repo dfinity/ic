@@ -1,17 +1,21 @@
 #![cfg(test)]
 
 use anyhow::bail;
+use attestation::SevAttestationPackage;
 use attestation::attestation_package::SevRootCertificateVerification;
 use config_types::{
     GuestOSConfig, GuestOSUpgradeConfig, GuestVMType, ICOSSettings,
     TrustedExecutionEnvironmentConfig,
 };
+use der::asn1::OctetStringRef;
 use futures::future::Either;
 use futures::{FutureExt, TryFutureExt};
 use guest_upgrade_client::DiskEncryptionKeyExchangeClientAgent;
 use guest_upgrade_client::MockDiskCryptoOps;
+use guest_upgrade_client::verify_server_attestation_package;
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
 use guest_upgrade_shared::DEFAULT_SERVER_PORT;
+use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurements, ReplicaVersionRecord,
 };
@@ -20,6 +24,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::add_replica_version_record;
 use ic_types::ReplicaVersion;
 use rand::RngCore;
+use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::future::Future;
@@ -630,5 +635,60 @@ async fn test_start_upgrade_vm_command_fails() {
     assert!(
         result.to_string().contains("UpgradeVM error: boom"),
         "{result}"
+    );
+}
+
+/// Verifies that the client's own launch measurement is rejected.
+#[test]
+fn test_server_package_verification_rejects_own_launch_measurement() {
+    let signer = FakeAttestationReportSigner::default();
+    let tee_config = TrustedExecutionEnvironmentConfig {
+        sev_cert_chain_pem: signer.get_certificate_chain_pem(),
+    };
+    let custom_data = GetDiskEncryptionKeyTokenCustomData {
+        client_tls_public_key: OctetStringRef::new(b"client tls public key").unwrap(),
+        server_tls_public_key: OctetStringRef::new(b"server tls public key").unwrap(),
+    };
+    let elected_measurements = vec![
+        DEFAULT_CLIENT_MEASUREMENT.to_vec(),
+        DEFAULT_SERVER_MEASUREMENT.to_vec(),
+    ];
+
+    let mut client_firmware = MockSevGuestFirmwareBuilder::new()
+        .with_measurement(DEFAULT_CLIENT_MEASUREMENT)
+        .with_signer(Some(signer.clone()));
+    let client_package =
+        generate_attestation_package(&mut client_firmware, &tee_config, &custom_data).unwrap();
+    let my_attestation_report = *client_package.attestation_report();
+
+    // A genuine server package (a different, elected measurement) verifies.
+    let mut server_firmware = MockSevGuestFirmwareBuilder::new()
+        .with_measurement(DEFAULT_SERVER_MEASUREMENT)
+        .with_signer(Some(signer));
+    let server_package: SevAttestationPackage =
+        generate_attestation_package(&mut server_firmware, &tee_config, &custom_data)
+            .unwrap()
+            .into();
+    verify_server_attestation_package(
+        server_package,
+        &my_attestation_report,
+        &custom_data,
+        elected_measurements.clone(),
+        SevRootCertificateVerification::TestOnlySkipVerification,
+    )
+    .unwrap();
+
+    // The client's own package, reflected back by an attacker, must be rejected.
+    let error = verify_server_attestation_package(
+        client_package.into(),
+        &my_attestation_report,
+        &custom_data,
+        elected_measurements,
+        SevRootCertificateVerification::TestOnlySkipVerification,
+    )
+    .unwrap_err();
+    assert!(
+        format!("{error:?}").contains("InvalidMeasurement"),
+        "unexpected error: {error:?}"
     );
 }

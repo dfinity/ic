@@ -392,14 +392,6 @@ jobs:
           set -euo pipefail
           cd build
 
-          # macOS runners may only have perl's shasum, not GNU coreutils
-          # (same fallback as in .github/actions/bazel).
-          if command -v sha256sum >/dev/null; then
-            sha256() { sha256sum "$@"; }
-          else
-            sha256() { shasum -a 256 "$@"; }
-          fi
-
           # Record the sha256sum lines of every file uploaded as an Actions
           # artifact below in this job's outputs. The
           # upload-external-artifacts job re-checks the downloaded artifacts
@@ -411,7 +403,7 @@ jobs:
           # trust chain: should any of them overwrite these files, the
           # uploaded artifact no longer matches its recorded sums and
           # verification fails loudly.
-          sha256 \
+          shasum -a 256 \
             "pocket-ic-server-arm64-$OS.gz" \
             "ic-admin-arm64-$OS.gz" \
             "sns-arm64-$OS.gz" \
@@ -425,7 +417,7 @@ jobs:
           if [[ "$OS" == darwin ]]; then
             {
               echo "x86_64-darwin-sums<<SUMS"
-              sha256 pocket-ic-server-x86_64-darwin.gz
+              shasum -a 256 pocket-ic-server-x86_64-darwin.gz
               echo "SUMS"
             } >>"$GITHUB_OUTPUT"
           fi
@@ -561,14 +553,12 @@ jobs:
           mkdir -p "$bundledir/binaries/x86_64-darwin/"
           cp ~/.cache/pocket-ic-server-x86_64-darwin/pocket-ic-server-x86_64-darwin.gz "$bundledir/binaries/x86_64-darwin/pocket-ic.gz"
 
-          # Give these hand-assembled directories the same SHA256SUMS file
-          # that the bazel-built bundles get from the artifact_bundle rule
-          # so every binaries/<platform>/ directory on the CDN carries
-          # a checksum manifest that release workflows can verify
-          # against its attestation.
-          for d in arm64-linux arm64-darwin x86_64-darwin; do
-            (cd "$bundledir/binaries/$d" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
-          done
+          # Give these hand-assembled directories the same SHA256SUMS file that the bazel-built bundles get
+          # from the artifact_bundle rule so every binaries/<platform>/ directory on the CDN carries a
+          # checksum manifest that release workflows can verify against its attestation.
+          (cd "$bundledir/binaries/arm64-linux" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
+          (cd "$bundledir/binaries/arm64-darwin" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
+          (cd "$bundledir/binaries/x86_64-darwin" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
 
           echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
 

@@ -20,6 +20,8 @@ mod concurrent_fundings {
     /// The bounds the fixture's minimum implies, rather than a pair of its own: the target is ten
     /// times the minimum withdrawal amount, and refilling starts at half of that.
     const TARGET: u128 = 10 * MINIMUM_BURN;
+    /// What the receipt in `finalize_with` charges: 21'000 gas at one wei per gas.
+    const RECEIPT_TRANSACTION_FEE: u128 = 21_000;
     /// A funding that lands the sweeper below the low-water mark rather than at the target, so that
     /// a test can tell a lifted guard from a sweeper that simply needs nothing.
     const PARTIAL_FUNDING: u128 = TARGET / 4;
@@ -98,6 +100,15 @@ mod concurrent_fundings {
         request: &EthWithdrawalRequest,
         transaction: &SignedEip1559TransactionRequest,
     ) {
+        finalize_with(state, request, transaction, TransactionStatus::Success);
+    }
+
+    fn finalize_with(
+        state: &mut State,
+        request: &EthWithdrawalRequest,
+        transaction: &SignedEip1559TransactionRequest,
+        status: TransactionStatus,
+    ) {
         apply_state_transition(
             state,
             &EventType::FinalizedTransaction {
@@ -110,7 +121,7 @@ mod concurrent_fundings {
                     block_number: BlockNumber::new(4190269),
                     effective_gas_price: WeiPerGas::ONE,
                     gas_used: GasAmount::from(21_000_u32),
-                    status: TransactionStatus::Success,
+                    status,
                     transaction_hash: transaction.hash(),
                 },
             },
@@ -238,6 +249,41 @@ mod concurrent_fundings {
                     >= state.sweeper_funding.cumulative_spent()
             );
         }
+        assert_eq!(
+            state.sweeper_funding.failed_fundings(),
+            0,
+            "fundings that delivered must not count as failures"
+        );
+    }
+
+    #[test]
+    fn should_record_a_funding_whose_transaction_failed_on_chain() {
+        let mut state = state();
+        let request = funding_request(1, Wei::new(TARGET));
+
+        accept(&mut state, &request);
+        let transaction = create(&mut state, &request);
+        let signed = sign(&mut state, &request, transaction);
+        assert_eq!(state.sweeper_funding.failed_fundings(), 0);
+
+        finalize_with(&mut state, &request, &signed, TransactionStatus::Failure);
+
+        assert_eq!(state.sweeper_funding.failed_fundings(), 1);
+        assert_eq!(
+            state.sweeper_funding.sweeper_balance_lower_bound(),
+            Wei::ZERO,
+            "a failed transfer delivered nothing, so it bounds nothing"
+        );
+        assert_eq!(
+            state.sweeper_funding.cumulative_spent(),
+            Wei::new(RECEIPT_TRANSACTION_FEE),
+            "the failed transaction still paid its gas"
+        );
+        assert_eq!(
+            state.sweeper_funding.cumulative_burned(),
+            Wei::new(TARGET),
+            "and the burn stays put, which is what leaves it as backing"
+        );
     }
 
     /// Bypassing the guard is a prudence violation, not a solvency one: each funding burns for its
