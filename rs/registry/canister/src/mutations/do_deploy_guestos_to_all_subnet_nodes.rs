@@ -107,10 +107,6 @@ mod tests {
         get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_cloud_engine_subnet, prepare_registry_with_nodes,
     };
-    use crate::flags::{
-        temporarily_disable_blank_replica_version_id_for_cloud_engines,
-        temporarily_enable_blank_replica_version_id_for_cloud_engines,
-    };
     use ic_nns_constants::{ENGINE_CONTROLLER_CANISTER_ID, GOVERNANCE_CANISTER_ID};
     use ic_protobuf::registry::{
         replica_version::v1::ReplicaVersionRecord,
@@ -268,7 +264,6 @@ mod tests {
 
     #[test]
     fn engine_controller_can_blank_cloud_engine_replica_version() {
-        let _restore_on_drop = temporarily_enable_blank_replica_version_id_for_cloud_engines();
         let (mut registry, subnet_id) = make_registry_with_blankable_cloud_engine_subnet();
 
         registry.do_deploy_guestos_to_all_subnet_nodes(
@@ -282,7 +277,6 @@ mod tests {
 
     #[test]
     fn governance_can_blank_cloud_engine_replica_version() {
-        let _restore_on_drop = temporarily_enable_blank_replica_version_id_for_cloud_engines();
         let (mut registry, subnet_id) = make_registry_with_blankable_cloud_engine_subnet();
 
         registry.do_deploy_guestos_to_all_subnet_nodes(
@@ -294,24 +288,11 @@ mod tests {
         assert_eq!(subnet_record.replica_version_id, "");
     }
 
-    #[test]
-    #[should_panic(expected = "a blank replica_version_id is not enabled yet")]
-    fn cannot_blank_replica_version_when_feature_is_disabled() {
-        let _restore_on_drop = temporarily_disable_blank_replica_version_id_for_cloud_engines();
-        let (mut registry, subnet_id) = make_registry_with_blankable_cloud_engine_subnet();
-
-        registry.do_deploy_guestos_to_all_subnet_nodes(
-            ENGINE_CONTROLLER_CANISTER_ID.get(),
-            new_blank_replica_version_id_payload(subnet_id),
-        );
-    }
-
     /// Without the standard engine record, a blank id would leave the subnet
     /// with no replica version at all.
     #[test]
     #[should_panic(expected = "Registry has no StandardEngineReplicaVersionRecord")]
     fn cannot_blank_replica_version_without_standard_engine_record() {
-        let _restore_on_drop = temporarily_enable_blank_replica_version_id_for_cloud_engines();
         let mut registry = invariant_compliant_registry(0);
         let (mutate_request, subnet_id) = prepare_registry_with_cloud_engine_subnet(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
@@ -328,7 +309,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "only CloudEngine subnets may have a blank replica_version_id")]
     fn cannot_blank_replica_version_of_non_cloud_engine_subnet() {
-        let _restore_on_drop = temporarily_enable_blank_replica_version_id_for_cloud_engines();
         let (mut registry, subnet_id) =
             make_registry_with_non_cloud_engine_subnet(SubnetType::Application);
         add_standard_engine_replica_version_record(&mut registry);
