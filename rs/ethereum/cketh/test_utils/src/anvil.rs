@@ -263,6 +263,30 @@ impl Anvil {
             .to_string()
     }
 
+    /// Sends `wei` from `from` (an unlocked dev account) to `to` with an explicit gas limit,
+    /// skipping gas estimation so a reverting transfer is mined instead of rejected upfront.
+    /// Returns whether the transaction succeeded.
+    pub fn plain_transfer_succeeds(
+        &self,
+        from: &Address,
+        to: &Address,
+        wei: u128,
+        gas: u64,
+    ) -> bool {
+        let tx = serde_json::json!({
+            "from": to_hex(from.as_ref()),
+            "to": to_hex(to.as_ref()),
+            "value": format!("0x{wei:x}"),
+            "gas": format!("0x{gas:x}"),
+        });
+        let hash = self
+            .rpc("eth_sendTransaction", serde_json::json!([tx]))
+            .as_str()
+            .unwrap()
+            .to_string();
+        status_ok(&self.await_receipt(&hash))
+    }
+
     pub(crate) fn deploy(&self, from: &Address, code: &[u8]) -> Address {
         let hash = self.send_transaction(from, None, code);
         let receipt = self.await_receipt(&hash);
