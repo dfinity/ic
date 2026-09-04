@@ -252,10 +252,10 @@ impl InternetComputer {
     ///
     /// Needed by tests that have a VM other than the driver talk to a node. Such
     /// a VM shares the nodes' `/64`, which the GuestOS firewall already accepts
-    /// on 7070, 9090, 9091, 9100, 19100, 19522 and 19531 (plus 9314 on cloud
-    /// engines and 9324 on API boundary nodes) — so this is only required to
-    /// reach a node on one of the *other* whitelisted ports: 22, 2497, 4100,
-    /// 8080 and 19523.
+    /// on 7070, 9090, 9091, 9100, 19100 and 19531 (plus 9314 on cloud
+    /// engines and 9324 on API boundary nodes; 19522 is restricted to the peer
+    /// Guest VM) — so this is only required to reach a node on one of the
+    /// *other* whitelisted ports: 22, 2497, 4100, 8080 and 19523.
     ///
     /// The prefixes and ports are added to the driver's, never replace them, so
     /// a caller cannot lock the driver out. Ignored on the Farm backend, whose

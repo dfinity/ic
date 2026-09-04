@@ -1482,13 +1482,13 @@ motoko.toolchain(version = "1.11.0")  # NOTE: keep version in line with Dockerfi
 http_file(
     name = "farm_universal_vm_img",
     downloaded_file_path = "universal-vm.img.zst",
-    sha256 = "ae94e672589c8cb47231976f8d0a4abaac4b8fde9ded1a664de6d7c32f0eac25",
-    url = "https://download.dfinity.systems/farm/universal-vm/ae94e672589c8cb47231976f8d0a4abaac4b8fde9ded1a664de6d7c32f0eac25/x86_64-linux/universal-vm.img.zst",
+    sha256 = "ba8b49004163fa15f13c8ebac1e7cb99499043cda9f0a5dee00eca1b95187aee",
+    url = "https://download.dfinity.systems/farm/universal-vm/ba8b49004163fa15f13c8ebac1e7cb99499043cda9f0a5dee00eca1b95187aee/x86_64-linux/universal-vm.img.zst",
 )
 
 http_file(
     name = "farm_prometheus_vm_img",
     downloaded_file_path = "prometheus-vm.img.zst",
-    sha256 = "3568d6e7e8176636bcbd29f5469dec6b036345e61d2b57c276a0941df0b31c4a",
-    url = "https://download.dfinity.systems/farm/prometheus-vm/3568d6e7e8176636bcbd29f5469dec6b036345e61d2b57c276a0941df0b31c4a/x86_64-linux/prometheus-vm.img.zst",
+    sha256 = "6dc09a214f1975ce55a42a560b67b44ac58a61b52e3c3e9cf03dc2d7fbdd5f02",
+    url = "https://download.dfinity.systems/farm/prometheus-vm/6dc09a214f1975ce55a42a560b67b44ac58a61b52e3c3e9cf03dc2d7fbdd5f02/x86_64-linux/prometheus-vm.img.zst",
 )
