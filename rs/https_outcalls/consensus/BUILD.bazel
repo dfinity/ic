@@ -91,7 +91,6 @@ rust_test(
         "@crate_index//:proptest",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
-        "@crate_index//:rayon",
         "@crate_index//:slog",
         "@crate_index//:strum",
     ],
