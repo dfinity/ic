@@ -23,6 +23,10 @@ on the process that this file is part of, see
 
 ## Changed
 
+* `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
+  fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward
+  (`deployment_progress == 1.0`).
+
 ## Deprecated
 
 ## Removed
