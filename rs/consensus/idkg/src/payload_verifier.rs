@@ -548,9 +548,9 @@ mod test {
             resharing::{initiate_reshare_requests, update_completed_reshare_requests},
         },
         test_utils::*,
-        utils::build_thread_pool,
     };
     use assert_matches::assert_matches;
+    use ic_consensus_utils::build_thread_pool;
     use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, dummy_values::dummy_dealings,

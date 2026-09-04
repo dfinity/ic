@@ -10,8 +10,8 @@ use ic_consensus::consensus::validator::Validator;
 use ic_consensus_certification::CertificationCrypto;
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, crypto::ConsensusCrypto, membership::Membership,
-    pool_reader::PoolReader, registry_version_at_height,
+    active_high_threshold_nidkg_id, build_thread_pool, crypto::ConsensusCrypto,
+    membership::Membership, pool_reader::PoolReader, registry_version_at_height,
 };
 use ic_interfaces::{
     certification::Verifier,
@@ -37,7 +37,6 @@ use ic_types::{
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
 };
-use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
 
 use crate::{mocks::MockPayloadBuilder, player::ReplayError};
@@ -131,10 +130,7 @@ impl ReplayValidator {
             subnet_id,
             replica_version,
         };
-        let thread_pool = ThreadPoolBuilder::new()
-            .num_threads(MAX_VALIDATION_THREADS)
-            .build()
-            .expect("Failed to create thread pool");
+        let thread_pool = build_thread_pool(MAX_VALIDATION_THREADS);
 
         let validator = Validator::new(
             replica_cfg.clone(),
@@ -145,7 +141,7 @@ impl ReplayValidator {
             state_manager,
             message_routing,
             Arc::new(dkg_pool) as Arc<_>,
-            Arc::new(thread_pool),
+            thread_pool,
             log.clone(),
             &metrics_registry,
             time_source.clone(),

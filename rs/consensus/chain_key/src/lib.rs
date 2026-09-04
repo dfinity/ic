@@ -658,6 +658,7 @@ mod tests {
     use assert_matches::assert_matches;
     use core::{convert::From, iter::Iterator, time::Duration};
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+    use ic_consensus_utils::build_thread_pool;
     use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationFailure};
     use ic_interfaces::idkg::IDkgChangeAction;
@@ -676,7 +677,6 @@ mod tests {
     use ic_types::time::UNIX_EPOCH;
     use ic_types::time::current_time;
     use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
-    use rayon::ThreadPoolBuilder;
     use std::str::FromStr;
 
     use super::*;
@@ -873,12 +873,7 @@ mod tests {
                 pool.get_cache(),
                 crypto,
                 state_manager,
-                Arc::new(
-                    ThreadPoolBuilder::new()
-                        .num_threads(num_threads)
-                        .build()
-                        .unwrap(),
-                ),
+                build_thread_pool(num_threads),
                 subnet_id,
                 registry,
                 &MetricsRegistry::new(),
