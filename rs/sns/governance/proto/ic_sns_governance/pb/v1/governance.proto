@@ -182,6 +182,18 @@ message Neuron {
     map<int32, FolloweesForTopic> topic_id_to_followees = 1;
   }
 
+  message RewardEventParticipation {
+    // The end timestamp of the reward event that calculated these shares.
+    uint64 reward_event_end_timestamp_seconds = 1;
+
+    // The sum of the neuron's canonical ballot voting power over all
+    // reward-eligible Yes and No ballots in proposals settled by this event.
+    //
+    // Encoded as the canonical big-endian unsigned integer magnitude produced
+    // by BigUint::to_bytes_be().
+    bytes reward_shares = 2;
+  }
+
   // The neuron's legacy followees (per proposal type), specified as a map of proposal functions IDs
   // to followees neuron IDs. The map's keys are represented by integers as Protobuf does not
   // support enum keys in maps.
@@ -189,6 +201,13 @@ message Neuron {
 
   // The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
   optional TopicFollowees topic_followees = 19;
+
+  // The neuron's positive reward shares from its most recent participating reward event,
+  // tagged with that event's end timestamp. Consumers must compare this timestamp with
+  // `latest_reward_event.end_timestamp_seconds`. An absent value or a different timestamp means
+  // that the neuron had zero shares in the target event. A neuron that did not participate in a
+  // newer event may retain its older tagged value.
+  optional RewardEventParticipation latest_reward_event_participation = 20;
 
   // The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
   // 10e-8 of a governance token.

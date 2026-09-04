@@ -144,6 +144,13 @@ pub struct Neuron {
     /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
     #[prost(message, optional, tag = "19")]
     pub topic_followees: ::core::option::Option<neuron::TopicFollowees>,
+    /// The neuron's positive reward shares from its most recent participating reward event,
+    /// tagged with that event's end timestamp. Consumers must compare this timestamp with
+    /// `latest_reward_event.end_timestamp_seconds`. An absent value or a different timestamp means
+    /// that the neuron had zero shares in the target event. A neuron that did not participate in a
+    /// newer event may retain its older tagged value.
+    #[prost(message, optional, tag = "20")]
+    pub latest_reward_event_participation: ::core::option::Option<neuron::RewardEventParticipation>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10e-8 of a governance token.
     ///
@@ -253,6 +260,28 @@ pub mod neuron {
     pub struct TopicFollowees {
         #[prost(btree_map = "int32, message", tag = "1")]
         pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<i32, FolloweesForTopic>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Message,
+    )]
+    pub struct RewardEventParticipation {
+        /// The end timestamp of the reward event that calculated these shares.
+        #[prost(uint64, tag = "1")]
+        pub reward_event_end_timestamp_seconds: u64,
+        /// The sum of the neuron's canonical ballot voting power over all
+        /// reward-eligible Yes and No ballots in proposals settled by this event.
+        ///
+        /// Encoded as the canonical big-endian unsigned integer magnitude produced
+        /// by BigUint::to_bytes_be().
+        #[prost(bytes = "vec", tag = "2")]
+        pub reward_shares: ::prost::alloc::vec::Vec<u8>,
     }
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.

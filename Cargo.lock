@@ -14288,6 +14288,7 @@ dependencies = [
  "itertools 0.12.1",
  "lazy_static",
  "maplit",
+ "num-bigint 0.4.6",
  "num-traits",
  "pretty_assertions",
  "proptest",

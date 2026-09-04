@@ -138,6 +138,11 @@ pub struct Neuron {
     pub followees: BTreeMap<u64, neuron::Followees>,
     /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
     pub topic_followees: Option<neuron::TopicFollowees>,
+    /// The neuron's positive reward shares from its most recent participating reward event,
+    /// tagged with that event's end timestamp. An absent participation or a timestamp that differs
+    /// from `latest_reward_event.end_timestamp_seconds` means zero shares for that event. A neuron
+    /// may retain participation from an older event.
+    pub latest_reward_event_participation: Option<neuron::RewardEventParticipation>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///
@@ -227,6 +232,18 @@ pub mod neuron {
     )]
     pub struct TopicFollowees {
         pub topic_id_to_followees: BTreeMap<i32, FolloweesForTopic>,
+    }
+
+    /// Participation in a reward event. Governance currently populates both optional fields.
+    /// Consumers should use the shares only when both fields are present and the timestamp matches
+    /// `latest_reward_event.end_timestamp_seconds`.
+    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    pub struct RewardEventParticipation {
+        /// The end timestamp of the reward event that calculated these shares.
+        pub reward_event_end_timestamp_seconds: Option<u64>,
+        /// The non-negative sum of the neuron's canonical ballot voting power over all
+        /// reward-eligible Yes and No ballots in proposals settled by this event.
+        pub reward_shares: Option<candid::Nat>,
     }
 
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,

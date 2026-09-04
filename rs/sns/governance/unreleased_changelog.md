@@ -9,6 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
+- Expose each neuron's exact voting reward shares for its latest participating reward event through
+  `get_neuron` and `list_neurons`.
+
 ## Changed
 
 ## Deprecated
