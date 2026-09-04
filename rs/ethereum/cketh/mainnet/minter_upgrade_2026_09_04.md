@@ -17,20 +17,20 @@ Previous ckETH minter proposal: https://dashboard.internetcomputer.org/proposal/
 ## Motivation
 
 Upgrade the ckETH/ckERC20 minter to support deposits of ERC-20 tokens from central exchanges.
-Currently, depositing an ERC-20 tokens requires calling a smart contract ([0x18901044688D3756C35Ed2b36D93e6a5B8e00E68](https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68)) with parameters specifying the intended owner on the Internet Computer (principal and subaccount), which is typically not supported from central exchanges.
+Currently, depositing an ERC-20 token requires calling a smart contract ([0x18901044688D3756C35Ed2b36D93e6a5B8e00E68](https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68)) with parameters specifying the intended owner on the Internet Computer (principal and subaccount), which is typically not supported by central exchanges.
 
 At a high level, the new deposit flow for Alice would look like this:
-1. She notifies the minter of her intention of depositing USDT by calling the new endpoint `deposit_erc20`, which returns Alice's dedicated deposit address on Ethereum.
-2. Alice has roughly 24H to do a transfer of USDT from her account on her favorite central exchange to the deposit address.
-3. The minter scans the registered deposit addresses and if an address as enough tokens (roughly $10) it will be swept, which consists of the following steps:
-    1. The minter signs an attestation, binding the deposit address to a (principal, subaccount) on the Internet Computer
-    2. The minter signs an [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) authorization to delegate the deposit address to the sweeper contract `0xREPLACE_ME`.
-    3. Finally, the minter makes an [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) transaction to the sweeper contract at `0xREPLACE_ME`. The sweeper contract verifies the attestation and calls the existing deposit helper smart contract with the given principal and subaccount, so that the exact same deposit flow occurs as if the user had called the deposit helper smart contract directly. This has the benefits that the same events `ReceivedEthOrErc20` are emitted and the minter's main address ([0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80](https://etherscan.io/address/0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80)) holds the funds.
+1. She notifies the minter of her intention of depositing USDT by calling the new endpoint `deposit_erc20`, which returns Alice's dedicated deposit address on Ethereum. The address is derived from the minter's threshold-ECDSA key, so funds sent there are under the minter's control from the moment they arrive.
+2. Alice has 24 hours to transfer USDT from her account on her favorite central exchange to the deposit address. The window can be re-armed by calling `deposit_erc20` again, and funds arriving after it closed are not lost: scanning simply resumes with the next registration.
+3. The minter scans the registered deposit addresses and if an address has enough tokens (roughly $10) it will be swept, which consists of the following steps:
+    1. The minter signs an attestation with the deposit address' own threshold-ECDSA key, binding the deposit address to a (principal, subaccount) on the Internet Computer.
+    2. The minter signs an [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) authorization to delegate the deposit address to the sweeper contract `0xREPLACE_ME`. This happens once per deposit address: the delegation persists, so later sweeps of the same address need no new authorization.
+    3. Finally, the minter sends the sweep transaction to the sweeper contract at `0xREPLACE_ME`. Running as the deposit address' delegate, the sweeper contract verifies that the attestation recovers to the deposit address itself and calls the existing deposit helper smart contract with the attested principal and subaccount, so that the exact same deposit flow occurs as if the user had called the deposit helper smart contract directly. This has the benefit that the same `ReceivedEthOrErc20` events are emitted and the minter's main address ([0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80](https://etherscan.io/address/0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80)) holds the funds.
 
 Key design decisions:
-1. Backing of ckETH is not affected: cost of sweeping transactions is taken from the minter's fee subaccount on the ledger.
-2. Sweeping transactions use a different address than the minter's main address ([0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80](https://etherscan.io/address/0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80)) holding the funds so that a blocking sweeping transaction does not block the main transaction pipeline (due to Ethereum sequential nonces).
-3. Sweeping is permissionless: once a deposit address is delegated, anyone can call the sweep methods to forwards the tokens, provided the input attestation is correct.
+1. The 1:1 backing of ckETH is not affected: the gas for sweep transactions is paid by burning ckETH from the minter's fee subaccount on the ckETH ledger, so the cumulative amount burned always covers the cumulative ETH spent on sweeps.
+2. Sweep transactions are sent from a dedicated sweeper address, distinct from the minter's main address ([0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80](https://etherscan.io/address/0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80)) holding the funds, so that a stuck sweep transaction does not block the withdrawal pipeline (Ethereum nonces are sequential per address).
+3. Sweeping is permissionless: once a deposit address is delegated, anyone can call the sweep methods to forward the tokens, provided the input attestation is correct — an attestation only ever credits the account it was created for.
 
 More details and diagrams can be found in the [design document](https://github.com/dfinity/ic/blob/master/rs/ethereum/cketh/docs/deposit_from_cex.md).
 
