@@ -22,11 +22,11 @@ Success::
 
 end::catalog[] */
 
-use std::time::Duration;
-
 use anyhow::Result;
 use anyhow::bail;
-use ic_consensus_system_test_upgrade_common::elect_target_version;
+use ic_consensus_system_test_upgrade_common::{
+    UP_DOWNGRADE_OVERALL_TIMEOUT, UP_DOWNGRADE_PER_TEST_TIMEOUT, elect_target_version,
+};
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     upgrade::{deploy_guestos_to_all_unassigned_nodes, fetch_unassigned_node_version},
@@ -41,15 +41,6 @@ use ic_system_test_driver::{
 use ic_types::ReplicaVersion;
 use slog::Logger;
 use slog::info;
-
-// The test performs two sequential GuestOS upgrades of the unassigned node,
-// each of which is polled with a 600s retry budget (see
-// `upgrade_unassigned_nodes` below). The driver's default per-test timeout of
-// 10 minutes cannot even cover a single exhausted poll, so give the test an
-// explicit budget that covers its own worst case (2 x 600s polling + proposal
-// handling + slack), like its siblings in this package do.
-const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(30 * 60);
-const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
