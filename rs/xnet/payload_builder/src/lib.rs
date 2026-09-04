@@ -1775,8 +1775,8 @@ impl XNetClientImpl {
         let response_body_size = metrics_registry.histogram_vec(
             METRIC_RESPONSE_BODY_SIZE,
             "Response body (encoded slice) size in bytes, by decode status.",
-            // 10 B - 5 MB
-            decimal_buckets(1, 6),
+            // 10 B - 50 MB
+            decimal_buckets(1, 7),
             &[LABEL_STATUS],
         );
         response_body_size.with_label_values(&[STATUS_SUCCESS]);
