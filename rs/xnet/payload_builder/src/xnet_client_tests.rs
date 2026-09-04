@@ -74,7 +74,7 @@ async fn query_success() {
         get(move || proto_axum_response::<_, pb::CertifiedStreamSlice>(slice.clone()));
 
     let result = with_test_replica_logger(|log| async {
-        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_slice).await
+        do_xnet_client_query(&make_xnet_client(&metrics, log), respond_with_slice).await
     })
     .await;
 
@@ -89,6 +89,35 @@ async fn query_success() {
     assert_eq!(Some(0), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
 }
 
+/// Tests that a successful query makes a previously unhealthy node healthy
+/// again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn query_success_resets_unhealthy_node() {
+    let metrics = MetricsRegistry::new();
+
+    let respond_with_server_error =
+        get(|| async { (StatusCode::SERVICE_UNAVAILABLE, b"Oops".to_vec()) });
+    let slice = get_stream_slice_for_testing();
+    let respond_with_slice =
+        get(move || proto_axum_response::<_, pb::CertifiedStreamSlice>(slice.clone()));
+
+    with_test_replica_logger(|log| async {
+        // Both queries go to `LOCAL_NODE`, regardless of the server they hit.
+        let xnet_client = make_xnet_client(&metrics, log);
+
+        do_xnet_client_query(&xnet_client, respond_with_server_error)
+            .await
+            .unwrap_err();
+        assert_eq!(Some(1), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
+
+        do_xnet_client_query(&xnet_client, respond_with_slice)
+            .await
+            .unwrap();
+        assert_eq!(Some(0), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
+    })
+    .await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn query_garbage_response() {
     let metrics = MetricsRegistry::new();
@@ -96,7 +125,7 @@ async fn query_garbage_response() {
     let respond_with_garbage = get(|| async { b"garbage".to_vec() });
 
     let result = with_test_replica_logger(|log| async {
-        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_garbage).await
+        do_xnet_client_query(&make_xnet_client(&metrics, log), respond_with_garbage).await
     })
     .await;
 
@@ -124,7 +153,7 @@ async fn query_invalid_proto() {
         get(move || proto_axum_response::<_, pb::CertifiedStreamSlice>(slice.clone()));
 
     let result = with_test_replica_logger(|log| async {
-        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_invalid_proto).await
+        do_xnet_client_query(&make_xnet_client(&metrics, log), respond_with_invalid_proto).await
     })
     .await;
 
@@ -146,10 +175,10 @@ async fn query_invalid_proto() {
 async fn query_no_content() {
     let metrics = MetricsRegistry::new();
 
-    let respond_with_garbage = get(|| async { StatusCode::NO_CONTENT });
+    let respond_with_no_content = get(|| async { StatusCode::NO_CONTENT });
 
     let result = with_test_replica_logger(|log| async {
-        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_garbage).await
+        do_xnet_client_query(&make_xnet_client(&metrics, log), respond_with_no_content).await
     })
     .await;
 
@@ -168,19 +197,19 @@ async fn query_no_content() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn query_error_response() {
+async fn query_server_error() {
     let metrics = MetricsRegistry::new();
 
-    let respond_with_error =
-        get(|| async { (StatusCode::INTERNAL_SERVER_ERROR, b"Oops".to_vec()) });
+    let respond_with_server_error =
+        get(|| async { (StatusCode::SERVICE_UNAVAILABLE, b"Oops".to_vec()) });
 
     let result = with_test_replica_logger(|log| async {
-        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_error).await
+        do_xnet_client_query(&make_xnet_client(&metrics, log), respond_with_server_error).await
     })
     .await;
 
     match result {
-        Err(XNetClientError::ErrorResponse(hyper::StatusCode::INTERNAL_SERVER_ERROR, _)) => (),
+        Err(XNetClientError::ErrorResponse(hyper::StatusCode::SERVICE_UNAVAILABLE, _)) => (),
         _ => panic!("Expecting Err(ErrorResponse(_)), got {result:?}"),
     }
     assert_eq!(
@@ -193,6 +222,38 @@ async fn query_error_response() {
     assert_eq!(Some(1), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
 }
 
+/// A 416 response means that the node does not have the messages we asked for
+/// (e.g. because it is lagging behind), not that it is unhealthy.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn query_range_not_satisfiable() {
+    let metrics = MetricsRegistry::new();
+
+    let respond_with_range_not_satisfiable =
+        get(|| async { (StatusCode::RANGE_NOT_SATISFIABLE, b"Oops".to_vec()) });
+
+    let result = with_test_replica_logger(|log| async {
+        do_xnet_client_query(
+            &make_xnet_client(&metrics, log),
+            respond_with_range_not_satisfiable,
+        )
+        .await
+    })
+    .await;
+
+    match result {
+        Err(XNetClientError::ErrorResponse(hyper::StatusCode::RANGE_NOT_SATISFIABLE, _)) => (),
+        _ => panic!("Expecting Err(ErrorResponse(_)), got {result:?}"),
+    }
+    assert_eq!(
+        metric_vec(&[
+            (&[("status", "success")], 0),
+            (&[("status", "ProxyDecodeError")], 0)
+        ]),
+        response_counts(&metrics)
+    );
+    assert_eq!(Some(0), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn query_request_timeout() {
     let metrics = &MetricsRegistry::new();
@@ -202,7 +263,7 @@ async fn query_request_timeout() {
     });
 
     let result = with_test_replica_logger(|log| async {
-        do_xnet_client_query(make_xnet_client(metrics, log), sleep_when_responding).await
+        do_xnet_client_query(&make_xnet_client(metrics, log), sleep_when_responding).await
     })
     .await;
 
@@ -250,7 +311,7 @@ async fn query_request_failed() {
     let url = format!("http://{sa}").parse::<Uri>().unwrap();
 
     let result = with_test_replica_logger(|log| async {
-        do_async_query(make_xnet_client(metrics, log), url).await
+        do_async_query(&make_xnet_client(metrics, log), url).await
     })
     .await;
 
@@ -271,7 +332,7 @@ async fn query_request_failed() {
 /// Returns the result of invoking `xnet_client.query()` against an HTTP server
 /// in a spawned thread that processes a single request using `handle_request`.
 async fn do_xnet_client_query(
-    xnet_client: XNetClientImpl,
+    xnet_client: &XNetClientImpl,
     method_router: MethodRouter,
 ) -> Result<CertifiedStreamSlice, XNetClientError> {
     let router = Router::new().route("/", method_router);
@@ -286,7 +347,7 @@ async fn do_xnet_client_query(
 /// Helper for synchronously calling `query()` on the given `XNetClientImpl`,
 /// with the given URL.
 async fn do_async_query(
-    xnet_client: XNetClientImpl,
+    xnet_client: &XNetClientImpl,
     url: Uri,
 ) -> Result<CertifiedStreamSlice, XNetClientError> {
     let endpoint = EndpointLocator {

@@ -40,14 +40,17 @@ const LABEL_TO: &str = "to";
 
 const OPERATOR_UNKNOWN: &str = "unknown";
 
-/// Helper for probabilistically selecting a node on a given subnet, weighted by
-/// proximity.
+/// Helper for probabilistically selecting a healthy node on a given subnet,
+/// weighted by proximity.
 ///
 /// Proximity is modeled as the exponential moving average (EMA) of roundtrip
 /// time (RTT) per datacenter operator (under the assumption that all nodes
 /// belonging to a datacenter operator are colocated). The probability of a
 /// specific node on a given subnet being selected is inversely proportional to
 /// the RTT EMA of its operator.
+///
+/// Node health is sourced from a shared `UnhealthyNodes` instance, and is based
+/// on recent XNet query outcomes.
 pub struct ProximityMap {
     /// Exponential moving averages (EMA) of roundtrip times by datacenter
     /// operator.
@@ -56,7 +59,7 @@ pub struct ProximityMap {
     /// Used for retrieving subnet node lists and node transport info.
     registry: Arc<dyn RegistryClient>,
 
-    /// The nodes to not pick, because they are unhealthy.
+    /// Tracks recently unhealthy nodes, based on recent XNet query outcomes.
     unhealthy_nodes: Arc<UnhealthyNodes>,
 
     /// Generates a random value in the range [`low`, `high`), i.e. inclusive of
@@ -276,7 +279,7 @@ impl UnhealthyNodes {
             ttl,
             metric_unhealthy_nodes: metrics_registry.int_gauge(
                 METRIC_UNHEALTHY_NODES,
-                "Number of unhealthy nodes, i.e. whose last XNet request failed.",
+                "Number of unhealthy XNet nodes, i.e. nodes whose last XNet request failed within the unhealthy node TTL.",
             ),
         }
     }
