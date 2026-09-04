@@ -9,10 +9,10 @@ mod test {
         response::Response,
         routing::{delete, get, head, patch, post, put},
     };
+    use axum_server::tls_rustls::RustlsConfig;
     use bytes::Bytes;
     use http_body_util::Full;
     use hyper::Request;
-    use hyper::body::Incoming;
     use hyper_util::rt::{TokioExecutor, TokioIo};
     use ic_https_outcalls_adapter::{Config, IncomingSource};
     use ic_https_outcalls_service::{
@@ -30,7 +30,6 @@ mod test {
     use tokio::net::{TcpSocket, UnixStream};
     use tokio_rustls::TlsAcceptor;
     use tonic::transport::{Channel, Endpoint, Uri};
-    use tower::Service;
     use tower::service_fn;
     use uuid::Uuid;
 
@@ -138,9 +137,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         dir
     }
 
-    async fn handle_post(body: Bytes) -> String {
-        let req: u64 = serde_json::from_slice(&body).unwrap();
-        req.to_string()
+    async fn handle_post(body: Bytes) -> Bytes {
+        body
     }
 
     async fn handle_get() -> axum::Json<&'static str> {
@@ -161,14 +159,14 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             .unwrap()
     }
 
-    async fn handle_size(body: Bytes) -> Vec<u8> {
-        let req: usize = serde_json::from_slice(&body).unwrap();
-        vec![0_u8; req]
+    async fn handle_size(body: String) -> Vec<u8> {
+        let size = body.parse::<usize>().unwrap();
+        vec![0_u8; size]
     }
 
-    async fn handle_delay(body: Bytes) -> StatusCode {
-        let req: u64 = serde_json::from_slice(&body).unwrap();
-        tokio::time::sleep(std::time::Duration::from_secs(req)).await;
+    async fn handle_delay(body: String) -> StatusCode {
+        let delay = body.parse::<u64>().unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
         StatusCode::OK
     }
 
@@ -314,46 +312,21 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     }
 
     fn start_server(cert_dir: &TempDir) -> String {
-        let cert_file = std::fs::read(cert_path(cert_dir)).unwrap();
-        let certs = rustls_pemfile::certs(&mut cert_file.as_ref())
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        let key_file = std::fs::read(key_path(cert_dir)).unwrap();
-        let key = rustls_pemfile::private_key(&mut key_file.as_ref())
-            .unwrap()
-            .unwrap();
-        let mut tls_config = ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(certs, key)
-            .unwrap();
-        tls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-        let acceptor = TlsAcceptor::from(Arc::new(tls_config));
-
         // Bind synchronously so the ephemeral port is known before returning.
         let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        listener.set_nonblocking(true).unwrap();
         let port = listener.local_addr().unwrap().port();
 
+        let cert_path = cert_path(cert_dir);
+        let key_path = key_path(cert_dir);
         tokio::spawn(async move {
-            let listener = tokio::net::TcpListener::from_std(listener).unwrap();
-            loop {
-                let Ok((tcp_stream, _)) = listener.accept().await else {
-                    continue;
-                };
-                let acceptor = acceptor.clone();
-                let router = router();
-                tokio::spawn(async move {
-                    let Ok(tls_stream) = acceptor.accept(tcp_stream).await else {
-                        return;
-                    };
-                    let service = hyper::service::service_fn(move |request: Request<Incoming>| {
-                        router.clone().call(request)
-                    });
-                    let _ = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
-                        .serve_connection_with_upgrades(TokioIo::new(tls_stream), service)
-                        .await;
-                });
-            }
+            // `from_pem_file` advertises h2 and http/1.1 via ALPN.
+            let tls_config = RustlsConfig::from_pem_file(cert_path, key_path)
+                .await
+                .unwrap();
+            axum_server::from_tcp_rustls(listener, tls_config)
+                .serve(router().into_make_service())
+                .await
+                .unwrap();
         });
 
         format!("localhost:{}", port)
