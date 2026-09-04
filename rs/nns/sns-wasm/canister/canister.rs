@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_cdk::call::{Call, Error as IcCdkCallError, RejectCode};
+use ic_cdk::call::{Call, Error as IcCdkCallError};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_management_canister_types_private::{
     CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
@@ -10,7 +10,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResultV2, CanisterStatusType, canister_status},
 };
-use ic_nervous_system_runtime::CdkRuntime;
+use ic_nervous_system_runtime::{CdkRuntime, into_reject_code_and_message};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root_interface::client::NnsRootCanisterClientImpl;
 use ic_sns_wasm::{
@@ -204,33 +204,6 @@ impl CanisterApi for CanisterApiImpl {
             .map_err(handle_call_error(format!(
                 "Failed to send cycles to canister {target}"
             )))
-    }
-}
-
-/// Translates a failed call into the `(reject code, message)` pair that the error messages
-/// below report.
-///
-/// The match is deliberately exhaustive (rather than using a catch-all arm) so
-/// that a new [`IcCdkCallError`] variant forces us to revisit this mapping
-/// instead of silently classifying it as [`RejectCode::SysTransient`].
-fn into_reject_code_and_message(err: IcCdkCallError) -> (i32, String) {
-    match err {
-        IcCdkCallError::CallRejected(rejected) => (
-            rejected.raw_reject_code() as i32,
-            rejected.reject_message().to_string(),
-        ),
-        // A response that cannot be decoded means the callee misbehaved.
-        IcCdkCallError::CandidDecodeFailed(err) => {
-            (RejectCode::CanisterError as i32, err.to_string())
-        }
-        // Neither of these ever left this canister, so the call may well succeed
-        // if retried.
-        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
-        IcCdkCallError::CallPerformFailed(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
     }
 }
 
