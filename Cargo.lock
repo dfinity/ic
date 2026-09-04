@@ -8406,6 +8406,7 @@ dependencies = [
  "ic-types-cycles",
  "prometheus",
  "rand 0.8.6",
+ "rayon",
  "rstest",
  "slog",
  "thiserror 2.0.18",
