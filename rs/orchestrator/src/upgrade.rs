@@ -803,10 +803,11 @@ fn get_subnet_id(registry: &RegistryHelper, cup: &CatchUpPackage) -> Result<Subn
     // the subnet id from the registry.
     match dkg_id.target_subnet {
         NiDkgTargetSubnet::Local => Ok(dkg_id.dealer_subnet),
-        // If we hit this case, then the local CUP is a genesis or recovery CUP of an application
-        // subnet or of the NNS subnet recovered on failover nodes. We cannot derive the subnet id
-        // from it, so we use the registry version of that CUP and the node id of one of the
-        // high-threshold committee members, to find out to which subnet this node belongs to.
+        // If we hit this case, then the local CUP is a genesis, recovery or post-split CUP of an
+        // application subnet or of the NNS subnet recovered on failover nodes. We cannot derive
+        // the subnet id from it, so we use the registry version of that CUP and the node id of one
+        // of the high-threshold committee members, to find out to which subnet this node belongs
+        // to.
         NiDkgTargetSubnet::Remote(_) => {
             let node_id = dkg_summary
                 .current_transcripts()
