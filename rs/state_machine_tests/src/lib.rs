@@ -824,6 +824,8 @@ struct PocketXNetImpl {
     subnets: Arc<dyn Subnets>,
     /// The certified slice pool of the `StateMachine` for which the XNet layer is mocked.
     pool: Arc<Mutex<CertifiedSlicePool>>,
+    /// Used for validating the slices before pooling them.
+    certified_stream_store: Arc<dyn CertifiedStreamStore>,
     /// The subnet ID of the `StateMachine` for which the XNet layer is mocked.
     own_subnet_id: SubnetId,
 }
@@ -832,11 +834,13 @@ impl PocketXNetImpl {
     fn new(
         subnets: Arc<dyn Subnets>,
         pool: Arc<Mutex<CertifiedSlicePool>>,
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
         own_subnet_id: SubnetId,
     ) -> Self {
         Self {
             subnets,
             pool,
+            certified_stream_store,
             own_subnet_id,
         }
     }
@@ -860,18 +864,26 @@ impl PocketXNetImpl {
                     Ok(slice) => {
                         if indices.witness_begin != indices.msg_begin {
                             // Pulled a stream suffix, append to pooled slice.
-                            self.pool
-                                .lock()
-                                .unwrap()
-                                .append(subnet_id, slice, registry_version, log.clone())
-                                .unwrap();
+                            CertifiedSlicePool::append(
+                                &self.pool,
+                                subnet_id,
+                                slice,
+                                self.certified_stream_store.as_ref(),
+                                registry_version,
+                                log.clone(),
+                            )
+                            .unwrap();
                         } else {
                             // Pulled a complete stream, replace pooled slice (if any).
-                            self.pool
-                                .lock()
-                                .unwrap()
-                                .put(subnet_id, slice, registry_version, log.clone())
-                                .unwrap();
+                            CertifiedSlicePool::put(
+                                &self.pool,
+                                subnet_id,
+                                slice,
+                                self.certified_stream_store.as_ref(),
+                                registry_version,
+                                log.clone(),
+                            )
+                            .unwrap();
                         }
                     }
                     Err(EncodeStreamError::NoStreamForSubnet(_)) => (),
@@ -1786,10 +1798,8 @@ impl StateMachineBuilder {
         // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
         let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
-        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            certified_stream_store,
-            &sm.metrics_registry,
-        )));
+        let certified_slice_pool =
+            Arc::new(Mutex::new(CertifiedSlicePool::new(&sm.metrics_registry)));
         let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
         let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new_from_components(
@@ -1837,7 +1847,12 @@ impl StateMachineBuilder {
 
         // Put `PocketXNetImpl` into `StateMachine`
         // which contains no `PocketXNetImpl` after creation.
-        let pocket_xnet_impl = PocketXNetImpl::new(subnets, certified_slice_pool, subnet_id);
+        let pocket_xnet_impl = PocketXNetImpl::new(
+            subnets,
+            certified_slice_pool,
+            certified_stream_store,
+            subnet_id,
+        );
         *sm.pocket_xnet.write().unwrap() = Some(pocket_xnet_impl);
         // Instantiate a `PayloadBuilderImpl` and put it into `StateMachine`
         // which contains no `PayloadBuilderImpl` after creation.
