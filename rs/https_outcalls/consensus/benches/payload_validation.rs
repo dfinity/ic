@@ -7,6 +7,7 @@ use std::sync::Arc;
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
 use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_https_outcalls_consensus::payload_builder::{CanisterHttpPayloadBuilderImpl, PastPayloads};
 use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
@@ -232,6 +233,7 @@ fn build_target(
         deps.pool.get_cache(),
         crypto,
         state_manager,
+        build_thread_pool(MAX_CONSENSUS_THREADS),
         subnet_id,
         registry_client.clone(),
         &MetricsRegistry::new(),
