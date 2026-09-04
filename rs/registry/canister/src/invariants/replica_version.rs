@@ -291,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn panic_when_using_unelected_version() {
         let registry = invariant_compliant_registry(0);
 
@@ -308,7 +308,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn panic_when_using_unelected_unassigned_version() {
         let registry = invariant_compliant_registry(0);
 
@@ -352,7 +352,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn panic_when_new_replica_version_is_not_elected_in_standard_engine_replica_version_record() {
         // Step 1: Prepare the world. Elect old, but not new.
         let mut registry = invariant_compliant_registry(0);
@@ -380,7 +380,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn panic_when_old_replica_version_is_not_elected_in_standard_engine_replica_version_record() {
         // Step 1: Prepare the world. Elect new, but not old.
         // (Same initial state as previous test.)
@@ -473,7 +473,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn panic_when_blank_replica_version_id_is_not_enabled_yet() {
         // Step 1: Prepare the world. The only difference compared to the
         // previous test is that here, the feature is DISABLED.
@@ -507,7 +507,7 @@ mod tests {
     /// are no CloudEngines, but in general, there would be, so the name of this
     /// test does not mention this "and the sun must exist" condition.
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn panic_when_there_is_no_standard_replica_version() {
         // Step 1: Prepare the world.
         let _restore_on_drop = temporarily_enable_blank_replica_version_id_for_cloud_engines();
@@ -523,7 +523,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn panic_when_non_cloud_engine_subnet_has_blank_replica_version_id() {
         // Step 1: Prepare the world.
 
@@ -568,7 +568,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn panic_when_retiring_a_version_in_use() {
         let registry = invariant_compliant_registry(0);
 
@@ -579,7 +579,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn panic_when_retiring_unassigned_nodes_version() {
         let mut registry = invariant_compliant_registry(0);
 
@@ -614,7 +614,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn panic_when_retiring_a_version_referenced_by_standard_engine_record() {
         // Step 1: Prepare the world.
 
