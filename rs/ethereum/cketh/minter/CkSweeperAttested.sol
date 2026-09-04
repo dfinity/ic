@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 interface ICkDeposit {
     function depositErc20(address erc20Address, uint256 amount, bytes32 principal, bytes32 subaccount) external;
+    function depositEth(bytes32 principal, bytes32 subaccount) external payable;
 }
 
 interface IErc20Balance {
@@ -37,6 +38,12 @@ contract CkSweeperAttested {
         HELPER = helper;
     }
 
+    /// Accepts plain ETH sends to a delegated deposit address. Deliberately
+    /// empty: batched CEX withdrawals may forward value with only the 2'300-gas
+    /// `transfer`/`send` stipend, which any extra logic would exceed, and
+    /// detection is balance-based so no event is needed.
+    receive() external payable {}
+
     /// The attestation digest: keccak256 over a fixed-length, domain-separated
     /// preimage. The ASCII prefix (first byte 0x63) cannot collide with typed
     /// transactions (0x00-0x04), EIP-7702 authorizations (0x05), EIP-191/712
@@ -66,13 +73,36 @@ contract CkSweeperAttested {
         }
     }
 
+    /// Sweeps the deposit address' entire ETH balance to the minter through the
+    /// helper's `depositEth`, under the same attestation check as `sweepErc20`.
+    function sweepEth(bytes32 principal, bytes32 subaccount, bytes32 r, bytes32 s, uint8 v) external {
+        require(
+            ecrecover(_attestationDigest(principal, subaccount), v, r, s) == address(this),
+            "invalid attestation"
+        );
+        uint256 balance = address(this).balance;
+        if (balance > 0) {
+            ICkDeposit(HELPER).depositEth{value: balance}(principal, subaccount);
+        }
+    }
+
     /// Permissionless batch entry point: sweeps many delegated deposit EOAs in a
     /// single transaction, each with its own attestation.
     function sweepErc20Batch(SweepItem[] calldata items, address[] calldata tokens) external {
         for (uint256 i = 0; i < items.length; ++i) {
             SweepItem calldata item = items[i];
-            CkSweeperAttested(item.deposit).sweepErc20(
+            CkSweeperAttested(payable(item.deposit)).sweepErc20(
                 tokens, item.principal, item.subaccount, item.r, item.s, item.v
+            );
+        }
+    }
+
+    /// The ETH counterpart of `sweepErc20Batch`.
+    function sweepEthBatch(SweepItem[] calldata items) external {
+        for (uint256 i = 0; i < items.length; ++i) {
+            SweepItem calldata item = items[i];
+            CkSweeperAttested(payable(item.deposit)).sweepEth(
+                item.principal, item.subaccount, item.r, item.s, item.v
             );
         }
     }

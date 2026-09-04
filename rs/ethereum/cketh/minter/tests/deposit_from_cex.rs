@@ -464,8 +464,8 @@ impl<'a> Deposit<'a> {
 
 fn assert_sweep_gas_near_demo(sweeps: &[SentTransaction], deposits_per_sweep: u64) {
     // `ATTESTED_SCENARIOS` in deposit_from_cex_demo.rs, EIP-7702 (first sweep) column.
-    const DEMO_ONE_DEPOSIT: u64 = 98_000;
-    const DEMO_TEN_DEPOSITS: u64 = 609_431;
+    const DEMO_ONE_DEPOSIT: u64 = 98_075;
+    const DEMO_TEN_DEPOSITS: u64 = 609_750;
     const GAS_BAND_PERCENT: u64 = 10;
 
     assert_eq!(
