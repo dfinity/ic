@@ -260,7 +260,6 @@ system_test_nns(
 
 system_test_nns(
     name = "subnet_splitting_v2_test",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 11 * DEFAULT_VCPUS_PER_VM,  # 11 IC Node VMs (1+1 System + 8 Application + 1 VerifiedApplication) * 6 vCPUs.
     enable_metrics = True,
     tags = [

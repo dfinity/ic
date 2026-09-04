@@ -413,7 +413,6 @@ system_test_nns(
 
 system_test_nns(
     name = "state_sync_performance",
-    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_required_host_features = ["performance"],
     cpus = MIN_LOCAL_CPUS + (1 + 12) * DEFAULT_VCPUS_PER_VM,  # 13 IC Node VMs (1 system node + 12 unassigned), 6 vCPUs each.
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.

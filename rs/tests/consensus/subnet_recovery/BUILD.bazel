@@ -40,7 +40,6 @@ rust_library(
 
 system_test_nns(
     name = "sr_app_same_nodes_test",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [
@@ -59,7 +58,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_provision_write_access_test",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [
@@ -78,7 +76,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_same_nodes_enable_chain_keys_test",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [
@@ -97,7 +94,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_same_nodes_with_chain_keys_test",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 unassigned) * 6 vCPUs.
     guestos_update = "test",
     tags = [
@@ -173,7 +169,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_test",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [
@@ -192,7 +187,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_local_test",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [
@@ -211,7 +205,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_enable_chain_keys_test",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [
@@ -230,7 +223,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_with_chain_keys_test",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 unassigned) * 6 vCPUs.
     guestos_update = "test",
     tags = [
