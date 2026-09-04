@@ -12,7 +12,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
-use ic_consensus_cup_utils::make_registry_cup_from_cup_contents;
+use ic_consensus_cup_utils::make_registry_cup;
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
@@ -654,21 +654,14 @@ fn make_fresh_registry_cup(
     subnet_id: SubnetId,
     replica_logger: &ReplicaLogger,
 ) -> pb::CatchUpPackage {
-    let registry_version = registry_client.get_latest_version();
-    let cup_contents = registry_client
-        .get_cup_contents(subnet_id, registry_version)
-        .unwrap()
-        .value
-        .unwrap();
-    let cup = make_registry_cup_from_cup_contents(
+    make_registry_cup(
         registry_client.as_ref(),
         subnet_id,
-        cup_contents,
-        registry_version,
+        registry_client.get_latest_version(),
         replica_logger,
     )
-    .unwrap();
-    cup.into()
+    .unwrap()
+    .into()
 }
 
 /// Convert an object into CBOR binary.
@@ -2790,13 +2783,25 @@ impl StateMachine {
             .push(msg, self.get_time(), self.nodes[0].node_id);
     }
 
-    pub fn mock_canister_http_response(
+    /// Injects one response share per entry of `responses`, signed by the node it
+    /// is keyed by and carrying that node's payment receipt.
+    ///
+    /// This does not require one response per subnet node, which is what
+    /// non-fully-replicated outcalls need: only the nodes of the outcall's committee
+    /// produce a response, their responses may differ, and some of them may not
+    /// respond at all.
+    pub fn mock_canister_http_response_for_nodes(
         &self,
         request_id: u64,
-        contents: Vec<CanisterHttpResponseContent>,
+        responses: BTreeMap<NodeId, (CanisterHttpResponseContent, CanisterHttpPaymentReceipt)>,
     ) {
-        assert_eq!(contents.len(), self.nodes.len());
-        for (node, content) in std::iter::zip(self.nodes.iter(), contents) {
+        for node_id in responses.keys() {
+            assert!(
+                self.nodes.iter().any(|node| node.node_id == *node_id),
+                "cannot respond as {node_id}, which is not a node of this subnet"
+            );
+        }
+        for (node_id, (content, payment_receipt)) in responses {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
@@ -2810,10 +2815,10 @@ impl StateMachine {
                     is_reject: content.is_reject(),
                     replica_version: test_replica_version(),
                 },
-                payment_receipt: CanisterHttpPaymentReceipt::default(),
+                payment_receipt,
             };
             let signature = CryptoReturningOk::default()
-                .sign(&receipt_share, node.node_id, registry_version)
+                .sign(&receipt_share, node_id, registry_version)
                 .unwrap();
             let share = Signed {
                 content: receipt_share,

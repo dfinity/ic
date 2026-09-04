@@ -99,9 +99,22 @@ PODMAN_RUN_USR_ARGS=(
 )
 ```
 
-### How to run parallel bazel tests
+### Running containers from several checkouts (git worktrees, clones) at once
 
-By default `container-run.sh` bind-mounts `~/.cache` which is used for (output_base)[https://bazel.build/docs/user-manual#output-base]. If you need to run 2nd build/test in parallel but not interfere with the 1st one, follow the steps below.
+Bazel derives its default output base from the workspace path, and every checkout is mounted at `/ic` with the same `~/.cache`, so containers started from different checkouts would share one output base. Bazel cannot recognize a server that runs in another container (each container has its own PID namespace), so the second container would start another server in the same output base and the first one would die with `Server terminated abruptly (error code: 14, ...)`.
+
+`container-run.sh` therefore gives every checkout its own output base, `~/.cache/bazel/_bazel_ubuntu/<basename>-<hash of the host path>`, by pointing `BAZELRC` at a generated rc file under `~/.cache/container-run/`. The install base, the repository cache and the repo contents cache stay shared, and the rest of the repository's bazel configuration (`.bazelrc`, `user.bazelrc`) still applies. Containers started from different checkouts can run bazel concurrently.
+
+Notes:
+
+- The first run from a checkout builds from scratch (the remote cache helps). The previously shared output base `~/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0` can be deleted to reclaim disk space once no container uses it anymore.
+- Two containers started from the *same* checkout still share an output base and must not run bazel at the same time. For a second shell in a running container use `sudo podman exec -it <container> bash` (on a devenv: `sudo podman --root /hoststorage/podman-root exec -it <container> bash`).
+- The injected rc file is read after the workspace `.bazelrc` and `user.bazelrc`, so a `startup --output_base` in `user.bazelrc` is overridden inside the container.
+- `~/.cache/cargo` (`CARGO_TARGET_DIR`) is still shared between all checkouts; concurrent cargo builds serialize on its lock and invalidate each other's artifacts.
+
+Linked git worktrees (`git worktree add`) are supported: the main repository's `.git` directory is bind-mounted at its host path so that git works inside the container. There `git worktree list` shows the linked worktrees as `prunable` because their checkouts are not visible in the container, so never run `git worktree prune`, `repair`, `move` or `remove` inside a container (gc's automatic worktree pruning is disabled via `gc.worktreePruneExpire=never`).
+
+To isolate everything, including the install base, repository cache and cargo target dir, use a separate cache directory instead:
 
 ```bash
 mkdir ~/.cache2

@@ -3,15 +3,10 @@ mod tests;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
-use config_types::GuestOSConfig;
 use guest_disk::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
 use guest_disk::metrics::write_metrics;
 use guest_disk::sev::SevDiskEncryption;
-use guest_disk::{
-    DEFAULT_PREVIOUS_SEV_KEY_PATH, DEFAULT_STORE_LUKS_HEADER_PATH, DiskEncryption, Partition,
-    crypt_name,
-};
+use guest_disk::{DEFAULT_STORE_LUKS_HEADER_PATH, DiskEncryption, Partition, crypt_name};
 use nix::unistd::getuid;
 use prometheus::Registry;
 use sev_guest::firmware::SevGuestFirmware;
@@ -56,19 +51,14 @@ fn main() -> Result<()> {
         bail!("This program requires root privileges.");
     }
 
-    let guestos_config: GuestOSConfig = deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
-        .context("Failed to read GuestOS config")?;
-
     run(
         args,
-        &guestos_config,
         sev_guest::is_tee_enabled().context("Failed to check if SEV is active")?,
         || {
             ::sev::firmware::guest::Firmware::open()
                 .context("Failed to open /dev/sev-guest")
                 .map(|x| Box::new(x) as _)
         },
-        Path::new(DEFAULT_PREVIOUS_SEV_KEY_PATH),
         Path::new(DEFAULT_STORE_LUKS_HEADER_PATH),
         Path::new(DEFAULT_GENERATED_KEY_PATH),
         Path::new(METRICS_DIR),
@@ -76,13 +66,11 @@ fn main() -> Result<()> {
 }
 
 /// Sets up disk encryption for the specified partition.
-/// `sev_key_deriver` must be provided if the GuestOS is configured to use TEE in `guestos_config`.
+/// `sev_firmware_factory` must be provided if SEV is active.
 fn run(
     args: Args,
-    guestos_config: &GuestOSConfig,
     is_tee_enabled: bool,
     sev_firmware_factory: impl Fn() -> Result<Box<dyn SevGuestFirmware>>,
-    previous_key_path: &Path,
     store_luks_header_path: &Path,
     generated_key_path: &Path,
     metrics_dir: &Path,
@@ -94,15 +82,13 @@ fn run(
     let mut encryption: Box<dyn DiskEncryption> = if is_tee_enabled {
         Box::new(SevDiskEncryption {
             sev_firmware: sev_firmware_factory().context("Failed to open SEV firmware")?,
-            guest_vm_type: guestos_config.guest_vm_type,
-            previous_key_path: previous_key_path.to_path_buf(),
             store_luks_header_path: store_luks_header_path.to_path_buf(),
             metrics_registry: metrics_registry.clone(),
         })
     } else {
         Box::new(GeneratedKeyDiskEncryption {
             key_path: generated_key_path,
-            metrics_registry: &metrics_registry,
+            metrics_registry: metrics_registry.clone(),
         })
     };
     let partition = args.partition();

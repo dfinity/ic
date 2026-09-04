@@ -1439,7 +1439,7 @@ impl
             consensus_responses.push(ConsensusResponse::new(
                 error.callback_id,
                 Payload::Reject(RejectContext::new(
-                    RejectCode::SysTransient,
+                    RejectCode::CanisterReject,
                     out_of_cycles_reject_message(
                         &error.shares,
                         error.unspent_allowance,

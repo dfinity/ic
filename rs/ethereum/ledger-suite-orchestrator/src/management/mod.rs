@@ -1,6 +1,6 @@
 use crate::logs::DEBUG;
 use async_trait::async_trait;
-use candid::{CandidType, Encode, Principal};
+use candid::{CandidType, Principal};
 use ic_canister_log::log;
 use ic_cdk::call::{Call, CallFailed, OnewayError, RejectCode};
 use ic_cdk_management_canister::{
@@ -170,11 +170,12 @@ pub trait CanisterRuntime {
         arg: Vec<u8>,
     ) -> Result<(), CallError>;
 
-    /// Upgrade the given canister without any upgrade arguments.
+    /// Upgrade the given canister with the given upgrade arguments.
     async fn upgrade_canister(
         &self,
         canister_id: Principal,
         wasm_module: Vec<u8>,
+        arg: Vec<u8>,
     ) -> Result<(), CallError>;
 
     async fn canister_cycles(&self, canister_id: Principal) -> Result<u128, CallError>;
@@ -297,12 +298,13 @@ impl CanisterRuntime for IcCanisterRuntime {
         &self,
         canister_id: Principal,
         wasm_module: Vec<u8>,
+        arg: Vec<u8>,
     ) -> Result<(), CallError> {
         install_code(&InstallCodeArgs {
             mode: CanisterInstallMode::Upgrade(None),
             canister_id,
             wasm_module,
-            arg: Encode!(&()).unwrap(),
+            arg,
         })
         .await
         .map_err(|err| CallError {

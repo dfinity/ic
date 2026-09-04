@@ -21,10 +21,12 @@ ic-registry-client = { path = "../../../registry/client" }
 ic-registry-client-helpers = { path = "../../../registry/helpers" }
 ic-registry-nns-data-provider-wrappers = { path = "../../../registry/nns_data_provider_wrappers" }
 ic-crypto-utils-threshold-sig-der = { path = "../../../crypto/utils/threshold_sig_der" }
+mockall = { workspace = true }
 sev_guest = { path = "../../sev/guest" }
 rcgen = { workspace = true }
 rustls = { workspace = true }
 sev = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 x509-parser = { workspace = true }

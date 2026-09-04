@@ -280,6 +280,20 @@ To deterministically test canister HTTP outcalls, you can use a pair of function
 - a function `PocketIc::get_canister_http` to retrieve all pending canister HTTP outcalls;
 - and a function `PocketIc::mock_canister_http_response` to mock a response for a pending canister HTTP outcall.
 
+`PocketIc::mock_canister_http_response` answers for every node of the subnet, which is what an outcall made
+through the `http_request` management canister endpoint needs — whichever way it is replicated (see
+`CanisterHttpRequest::replication`):
+- a *fully replicated* outcall delivers the response its nodes agree on; a single `response` makes them all
+  agree, and differing `additional_responses` are how a test makes them disagree (see the "no consensus" sketch
+  below);
+- a *non-replicated* outcall (`is_replicated = false`) delivers the response of the one node it was delegated
+  to. PocketIC does not report which node that was, so mock the same `response` for all of them; differing
+  `additional_responses` would make the delivered response unpredictable.
+
+A *flexible* outcall is answered with `PocketIc::mock_flexible_canister_http_response` instead, which is what
+answers a committee node by node — and can leave some of them silent. It only accepts a flexible outcall and
+fails on any other one. See the section below.
+
 Here is a sketch of a test for a canister making canister HTTP outcalls:
 
 ```rust
@@ -322,7 +336,8 @@ fn test_canister_http() {
             status: 200,
             headers: vec![],
             body: body.clone(),
-        }),
+        })
+        .into(),
         additional_responses: vec![],
     };
     pic.mock_canister_http_response(mock_canister_http_response);
@@ -377,6 +392,109 @@ e.g., 13 for a regular application subnet.
     let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, timeout: 1620328930000000005, hashes: [98387cc077af9cff2ef439132854e91cb074035bb76e2afb266960d8e3beaf11: 2], [6a2fa8e54fb4bbe62cde29f7531223d9fcf52c21c03500c1060a5f893ed32d2e: 2], [3e9ec98abf56ef680bebb14309858ede38f6fde771cd4c04cda8f066dc2810db: 2], [2c14e77f18cd990676ae6ce0d7eb89c0af9e1a66e17294b5f0efa68422bba4cb: 2], [2843e4133f673571ff919808d3ca542cc54aaf288c702944e291f0e4fafffc69: 2], [1c4ad84926c36f1fbc634a0dc0535709706f7c48f0c6ebd814fe514022b90671: 2], [7bf80e2f02011ab0a7836b526546e75203b94e856d767c9df4cb0c19baf34059: 1]";
     assert_eq!(err, expected);
 ```
+
+### Flexible canister HTTP outcalls
+
+A canister can also make a *flexible* HTTP outcall through the `flexible_http_request` management canister
+endpoint. Such an outcall is performed by a committee of `total_requests` nodes of the subnet, whose responses
+need not agree, and the calling canister is handed between `min_responses` and `max_responses` of them.
+
+Flexible outcalls are priced with the pay-as-you-go pricing model, which is still gated. So is the
+`pricing_version` field of a regular `http_request`, through which a fully replicated or non-replicated outcall
+can select that same pricing model. To use either on a regular application subnet, enable beta features on the
+instance:
+
+```rust
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_icp_config(IcpConfig {
+            beta_features: Some(IcpConfigFlag::Enabled),
+            ..Default::default()
+        })
+        .build();
+```
+
+Without beta features, flexible outcalls are only available on subnets where HTTP outcalls are free (system
+subnets and subnets created with a free cycles cost schedule), where they fall back to the legacy pricing model,
+and an `http_request` asking for pay-as-you-go pricing silently falls back to the legacy pricing model as well.
+`CanisterHttpRequest::pricing_version` reports which pricing model a pending outcall actually ended up with.
+
+Under the pay-as-you-go pricing model, a base fee is charged up front, a per-replica cycles allowance is
+withheld from the payment, and whatever the responding nodes do not spend is refunded. If the attached cycles
+do not cover the cost of delivering a response, the outcall fails with an out-of-cycles error: a `flexible_http_request`
+returns the `out_of_cycles` error described below, while an `http_request` is rejected with `SysTransient` and
+a message starting with `Out of cycles:`. This applies to calls made under pay-as-you-go pricing.
+
+A pending flexible outcall reports its replication in `CanisterHttpRequest::replication`, from which the size
+of its committee can be read, and its responses are mocked with `PocketIc::mock_flexible_canister_http_response`:
+
+```rust
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 1);
+    let canister_http_request = &canister_http_requests[0];
+
+    let CanisterHttpReplication::Flexible { total_requests, .. } =
+        canister_http_request.replication
+    else {
+        panic!("expected a flexible canister http outcall");
+    };
+
+    let http_reply = |body: &[u8]| {
+        CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: body.to_vec(),
+        })
+    };
+    pic.mock_flexible_canister_http_response(MockFlexibleCanisterHttpResponse {
+        subnet_id: canister_http_request.subnet_id,
+        request_id: canister_http_request.request_id,
+        // One response per committee node. The responses may differ.
+        responses: vec![http_reply(b"hello"); total_requests as usize],
+    });
+
+    // The calling canister receives at least `min_responses` (and at most
+    // `max_responses`) of the mocked responses, smallest first.
+    let reply = pic.await_call(call_id).unwrap();
+```
+
+Unlike `PocketIc::mock_canister_http_response`, which delivers one response per node of the subnet,
+this takes *at most* `total_requests` responses. Providing fewer models the remaining committee nodes never
+responding. What the outcall reports is then decided in this order:
+- once the outcall is older than its 60 second timeout it reports a `timeout`;
+- with at least `min_responses` successful responses, the outcall succeeds — unless the responses cannot be
+  delivered, in which case one of the outcomes below applies instead;
+- with more rejects than the slack between `total_requests` and `min_responses` allows, i.e. with
+  more than `total_requests - min_responses` of them, the outcall fails with a `too_many_rejects` error
+  reporting the rejecting nodes;
+- if the smallest successful responses that would have to be delivered do not fit into the 2 MiB a block has
+  for HTTP outcall responses, the outcall fails with a `responses_too_large` error — note that each individual
+  response may still be within the 2 MB cap that applies to a single response;
+- if what the nodes left unspent of their per-replica cycles allowances no longer covers putting a response
+  into a block, it fails with an `out_of_cycles` error;
+- with too few responses to decide any of the above, the outcall stays pending, so that advancing the time past
+  its timeout makes it fail with a `timeout` error.
+
+*Warning.* All responses to an outcall must be provided in a single call: once any response to it has been
+mocked, the outcall no longer shows up in `PocketIc::get_canister_http` and further responses to it cannot
+be mocked.
+
+*Note.* A mocked reject message must fit into the 1 KiB a node truncates its reject messages to; mocking a
+longer one fails, since no node could have reported it. This applies to both `PocketIc::mock_canister_http_response`
+and `PocketIc::mock_flexible_canister_http_response`.
+
+Note that a flexible outcall never rejects the calling canister's call: every outcome above, including the
+errors, is delivered as a `flexible_http_request_result` reply. Only a synchronous failure (invalid arguments,
+insufficient cycles attached, or the endpoint not being enabled on the subnet) rejects the call.
+
+*Note.* PocketIC derives what each node reports having spent on a mocked outcall with the same pricing machinery
+a real node uses, except that it charges no response time: what a real node is charged for the time an outcall
+took is wall-clock time, which would make the cost of a mocked outcall depend on how fast and how loaded the
+machine running the test is. What a mocked outcall costs therefore follows from the size of the mocked response,
+and is reproducible. Only the pay-as-you-go pricing model charges for what the nodes spent at all; the legacy
+pricing model charges its whole fee up front instead.
+
+### Live mode
 
 In the live mode (see the section "Live Mode" for more details), the canister HTTP outcalls are processed
 by actually making an HTTP request to the URL specified in the canister HTTP outcall.
@@ -807,7 +925,7 @@ use `PocketIcBuilder::with_icp_config` when creating a new PocketIC instance.
 To use a new management canister endpoint that is not yet supported by a dedicated (Rust) PocketIC library function,
 the generic PocketIC library API, e.g., `PocketIc::update_call_with_effective_principal` should be used:
 - the `canister_id` argument should be the management canister principal (`aaaaa-aa`),
-- the `effective_principal` argument should be the actual canister or subnet to which the call is targetted
+- the `effective_principal` argument should be the actual canister or subnet to which the call is targeted
   (e.g., `RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec())` for a `canister_id` of type `Principal`;
   in particular, `RawEffectivePrincipal::None` must not be used),
 - and the `payload` argument should be the Candid-encoded binary input to the new management canister endpoint

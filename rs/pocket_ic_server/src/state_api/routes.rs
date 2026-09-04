@@ -12,8 +12,8 @@ use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
     CanisterSnapshotDownload, CanisterSnapshotUpload, DashboardRequest, DeleteSubnet,
     GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime,
-    GetTopology, IngressMessageStatus, MockCanisterHttp, PubKey, Query, QueryRequest,
-    SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    GetTopology, IngressMessageStatus, MockCanisterHttp, MockFlexibleCanisterHttp, PubKey, Query,
+    QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
     SubnetReadStateRequest, Tick,
 };
 use crate::{
@@ -45,11 +45,11 @@ use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, IcpConfig, IcpFeatures, InitialTime, InstanceConfig,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCanisterSnapshotDownload, RawCanisterSnapshotId,
-    RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs, RawMessageId,
-    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTickConfigs, RawTime, Topology,
+    MockCanisterHttpResponse, MockFlexibleCanisterHttpResponse, RawAddCycles, RawCanisterCall,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCanisterSnapshotDownload,
+    RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs,
+    RawMessageId, RawMockCanisterHttpResponse, RawMockFlexibleCanisterHttpResponse, RawPrincipalId,
+    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTickConfigs, RawTime, Topology,
 };
 use serde::Serialize;
 use slog::Level;
@@ -138,6 +138,10 @@ where
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
         .directory_route("/tick", post(handler_tick))
         .directory_route("/mock_canister_http", post(handler_mock_canister_http))
+        .directory_route(
+            "/mock_flexible_canister_http",
+            post(handler_mock_flexible_canister_http),
+        )
         .directory_route(
             "/canister_snapshot_download",
             post(handler_canister_snapshot_download),
@@ -707,6 +711,24 @@ pub async fn handler_mock_canister_http(
         raw_mock_canister_http_response.into();
     let op = MockCanisterHttp {
         mock_canister_http_response,
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
+}
+
+pub async fn handler_mock_flexible_canister_http(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(raw_mock_flexible_canister_http_response): axum::extract::Json<
+        RawMockFlexibleCanisterHttpResponse,
+    >,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let mock_flexible_canister_http_response: MockFlexibleCanisterHttpResponse =
+        raw_mock_flexible_canister_http_response.into();
+    let op = MockFlexibleCanisterHttp {
+        mock_flexible_canister_http_response,
     };
     let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(response))

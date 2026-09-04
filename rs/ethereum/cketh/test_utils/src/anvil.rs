@@ -4,10 +4,9 @@
 //!
 //! Runs the `anvil` and `solc` binaries vendored via Bazel (`ANVIL_BIN`, `SOLC_BIN`).
 
+use alloy_primitives::{B256, U256, keccak256};
+use alloy_sol_types::SolValue;
 use candid::Principal;
-use ethers_core::abi::{ParamType, Token};
-use ethers_core::types::{Address as EthAddress, U256};
-use ethers_core::utils::keccak256;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -187,7 +186,7 @@ impl Anvil {
                 "eth_call",
                 serde_json::json!([
                     {"to": to_hex(token.as_ref()),
-                     "input": to_hex(&call("balanceOf(address)", &[address_token(holder)]))},
+                     "input": to_hex(&call("balanceOf(address)", &alloy_address(holder).abi_encode()))},
                     "latest"
                 ]),
             )
@@ -207,7 +206,7 @@ impl Anvil {
                     Some(token),
                     &call(
                         "transfer(address,uint256)",
-                        &[address_token(to), uint_token(*amount)],
+                        &(alloy_address(to), U256::from(*amount)).abi_encode_params(),
                     ),
                 )
             })
@@ -231,7 +230,7 @@ impl Anvil {
             Some(token),
             &call(
                 "transfer(address,uint256)",
-                &[address_token(to), uint_token(amount)],
+                &(alloy_address(to), U256::from(amount)).abi_encode_params(),
             ),
         );
         assert!(
@@ -454,7 +453,7 @@ fn wait_until_ready(child: &mut Child, bin: &str, url: &str, client: &reqwest::b
 pub fn deploy_mock_erc20(anvil: &Anvil, holder: &Address) -> Address {
     let code = deploy_code(
         &compile("MOCKUSDT_SOL", "MockUSDT"),
-        &[address_token(holder), uint_token(TOKEN_SUPPLY)],
+        &(alloy_address(holder), U256::from(TOKEN_SUPPLY)).abi_encode_params(),
     );
     anvil.deploy(holder, &code)
 }
@@ -468,7 +467,7 @@ pub(crate) fn deploy_deposit_helper(
 ) -> Address {
     let code = deploy_code(
         &compile("CKDEPOSIT_SOL", "CkDeposit"),
-        &[address_token(minter)],
+        &alloy_address(minter).abi_encode(),
     );
     anvil.deploy(deployer, &code)
 }
@@ -482,14 +481,14 @@ pub(crate) fn deposit_eth(
     beneficiary: Account,
     value: u128,
 ) {
-    let data = [
-        &keccak256(b"depositEth(bytes32,bytes32)")[..4],
-        &ethers_core::abi::encode(&[
-            bytes32_token(principal_to_bytes32(&beneficiary.owner)),
-            bytes32_token(beneficiary.subaccount.unwrap_or([0; 32])),
-        ]),
-    ]
-    .concat();
+    let data = call(
+        "depositEth(bytes32,bytes32)",
+        &(
+            B256::from(principal_to_bytes32(&beneficiary.owner)),
+            B256::from(beneficiary.subaccount.unwrap_or([0; 32])),
+        )
+            .abi_encode_params(),
+    );
     let hash = anvil.send_transaction_with_value(depositor, Some(helper), &data, value);
     assert!(
         status_ok(&anvil.await_receipt(&hash)),
@@ -510,16 +509,12 @@ fn principal_to_bytes32(principal: &Principal) -> [u8; 32] {
     word
 }
 
-fn bytes32_token(value: [u8; 32]) -> Token {
-    Token::FixedBytes(value.to_vec())
-}
-
 /// The storage slot of `balanceOf[holder]` for a Solidity `mapping(address => uint256)` declared at
 /// slot 0 (as in `MockUSDT`): `keccak256(pad32(holder) ‖ pad32(0))`.
 pub(crate) fn erc20_balance_slot(holder: &Address) -> [u8; 32] {
     let mut key = [0_u8; 64];
     key[12..32].copy_from_slice(holder.as_ref());
-    keccak256(key)
+    keccak256(key).0
 }
 
 /// A `u128` as a big-endian 32-byte EVM word.
@@ -530,35 +525,27 @@ pub(crate) fn u256_be(value: u128) -> [u8; 32] {
 }
 
 // ---------------------------------------------------------------------------
-// ABI encoding / decoding via ethers-core (ethabi).
+// ABI encoding / decoding via alloy.
 // ---------------------------------------------------------------------------
 
 /// A function call: the 4-byte selector followed by the ABI-encoded arguments.
-fn call(signature: &str, tokens: &[Token]) -> Vec<u8> {
+fn call(signature: &str, encoded_args: &[u8]) -> Vec<u8> {
     let selector = &keccak256(signature.as_bytes())[..4];
-    [selector, &ethers_core::abi::encode(tokens)].concat()
+    [selector, encoded_args].concat()
 }
 
-fn address_token(address: &Address) -> Token {
-    Token::Address(EthAddress::from_slice(address.as_ref()))
-}
-
-fn uint_token(value: u128) -> Token {
-    Token::Uint(U256::from(value))
+fn alloy_address(address: &Address) -> alloy_primitives::Address {
+    alloy_primitives::Address::from(address.into_bytes())
 }
 
 fn decode_uint(data: &[u8]) -> u128 {
-    ethers_core::abi::decode(&[ParamType::Uint(256)], data)
+    U256::abi_decode(data)
         .expect("ABI decode failed")
-        .pop()
-        .unwrap()
-        .into_uint()
-        .unwrap()
-        .as_u128()
+        .to::<u128>()
 }
 
-fn deploy_code(bytecode: &[u8], constructor_args: &[Token]) -> Vec<u8> {
-    [bytecode, &ethers_core::abi::encode(constructor_args)].concat()
+fn deploy_code(bytecode: &[u8], encoded_constructor_args: &[u8]) -> Vec<u8> {
+    [bytecode, encoded_constructor_args].concat()
 }
 
 /// Compiles `contract` from the Solidity source at env var `source_var` using the vendored `solc`,
@@ -631,7 +618,7 @@ pub fn deploy_sweep_contracts(anvil: &Anvil, minter: &Address) -> SweepContracts
         &deployer,
         &deploy_code(
             &compile("CKDEPOSIT_SOL", "CkDeposit"),
-            &[address_token(minter)],
+            &alloy_address(minter).abi_encode(),
         ),
     );
     assert_eq!(
@@ -643,7 +630,7 @@ pub fn deploy_sweep_contracts(anvil: &Anvil, minter: &Address) -> SweepContracts
         &deployer,
         &deploy_code(
             &compile("CKSWEEPER_ATTESTED_SOL", "CkSweeperAttested"),
-            &[address_token(&helper)],
+            &alloy_address(&helper).abi_encode(),
         ),
     );
     SweepContracts { helper, delegate }
