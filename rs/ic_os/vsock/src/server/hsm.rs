@@ -46,7 +46,10 @@ fn hsm_helper(command: &str) -> Result<Payload, VsockServerError> {
         .arg(DOMAIN_NAME)
         .arg("--file")
         .arg(hsm_xml_file.path())
-        .output()?;
+        .output()
+        .map_err(VsockServerError::io(format!(
+            "running command 'virsh {command}'"
+        )))?;
 
     if command_output.status.success() {
         Ok(Payload::NoPayload)
@@ -65,8 +68,13 @@ fn create_hsm_xml_file() -> Result<NamedTempFile, VsockServerError> {
 
     let xml: String = get_hsm_xml_string(&hsm_info);
 
-    let mut file = NamedTempFile::with_prefix("hsm")?;
-    file.write_all(xml.as_bytes())?;
+    let mut file = NamedTempFile::with_prefix("hsm").map_err(VsockServerError::io(
+        "opening temp hsm xml file".to_string(),
+    ))?;
+    file.write_all(xml.as_bytes())
+        .map_err(VsockServerError::io(
+            "writing temp hsm xml file".to_string(),
+        ))?;
 
     Ok(file)
 }

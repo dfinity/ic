@@ -1,5 +1,5 @@
+use std::io;
 use std::time::Duration;
-use std::{io, string};
 
 mod hsm;
 mod misc;
@@ -61,17 +61,23 @@ pub enum VsockServerError {
     #[error("no HSM device found")]
     HsmNotFound,
     #[error(transparent)]
-    InvalidUtf8(#[from] string::FromUtf8Error),
-    #[error(transparent)]
     FileDownload(#[from] FileDownloadError),
-    #[error(transparent)]
+    #[error("with usb device")]
     Usb(#[from] rusb::Error),
-    #[error(transparent)]
-    Timeout(#[from] Elapsed),
-    #[error(transparent)]
-    Join(#[from] tokio::task::JoinError),
-    #[error(transparent)]
-    Io(#[from] io::Error),
+    #[error("timeout: {context}")]
+    Timeout { context: String, source: Elapsed },
+    #[error("io failure: {context}")]
+    Io { context: String, source: io::Error },
+}
+
+impl VsockServerError {
+    pub fn io(context: String) -> impl FnOnce(io::Error) -> Self {
+        move |source| Self::Io { context, source }
+    }
+
+    pub fn timeout(context: String) -> impl FnOnce(Elapsed) -> Self {
+        move |source| Self::Timeout { context, source }
+    }
 }
 
 impl VsockServer {
@@ -79,7 +85,9 @@ impl VsockServer {
 
     pub fn with_port(port: u32) -> Result<Self, VsockServerError> {
         let addr = VsockAddr::new(VMADDR_CID_ANY, port);
-        let listener = VsockListener::bind(addr)?;
+        let listener = VsockListener::bind(addr).map_err(VsockServerError::io(format!(
+            "binding to VSOCK addr '{addr}'"
+        )))?;
 
         Ok(Self { listener })
     }
@@ -137,7 +145,11 @@ async fn process_connection(
             .take(MAX_MESSAGE_SIZE)
             .read_to_end(&mut buffer),
     )
-    .await??;
+    .await
+    .map_err(VsockServerError::timeout(
+        "waiting to read from client".to_string(),
+    ))?
+    .map_err(VsockServerError::io("reading from client".to_string()))?;
     let request = match serde_json::from_slice::<Request>(&buffer) {
         Ok(request) => request,
         Err(source) => {
@@ -196,7 +208,7 @@ async fn write_response(
     stream: &mut VsockStream,
     response: Response,
 ) -> Result<(), VsockServerError> {
-    Ok(timeout(
+    timeout(
         CONNECTION_TIMEOUT,
         stream.write_all(
             // Make sure we put the right type on the wire
@@ -204,13 +216,22 @@ async fn write_response(
                 .map_err(|source| VsockServerError::InvalidResponse { response, source })?,
         ),
     )
-    .await??)
+    .await
+    .map_err(VsockServerError::timeout(
+        "waiting to write to client".to_string(),
+    ))?
+    .map_err(VsockServerError::io("writing to client".to_string()))
 }
 
 // As a sanity check, we request that the sender adds its own CID to the message, and that CID must match the CID in the stream peer address.
 // NOTE: The kernel vhost driver also enforces this. Any packet with a forged source is dropped.
 fn verify_sender_cid(stream: &mut VsockStream, guest_cid: u32) -> Result<(), VsockServerError> {
-    if stream.peer_addr()?.cid() != guest_cid {
+    if stream
+        .peer_addr()
+        .map_err(VsockServerError::io("checking VSOCK peer addr".to_string()))?
+        .cid()
+        != guest_cid
+    {
         Err(VsockServerError::InvalidCid)
     } else {
         Ok(())

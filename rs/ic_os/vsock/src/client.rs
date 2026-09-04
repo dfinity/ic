@@ -12,8 +12,8 @@ pub trait VsockClient {
 
 #[derive(Error, Debug)]
 pub enum VsockClientError {
-    #[error(transparent)]
-    Io(#[from] io::Error),
+    #[error("io failure: {context}")]
+    Io { context: String, source: io::Error },
     #[error("unable to serialize request: {request:#?}")]
     InvalidRequest {
         request: Request,
@@ -24,6 +24,12 @@ pub enum VsockClientError {
         response: String,
         source: serde_json::Error,
     },
+}
+
+impl VsockClientError {
+    pub fn io(context: String) -> impl FnOnce(io::Error) -> Self {
+        move |source| Self::Io { context, source }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -57,22 +63,41 @@ mod linux {
 
     impl VsockClient for LinuxVsockClient {
         fn send_command(&self, command: Command) -> Result<Response, VsockClientError> {
-            let guest_cid = vsock::get_local_cid()?;
+            let guest_cid = vsock::get_local_cid()
+                .map_err(VsockClientError::io("getting local cid".to_string()))?;
             let request = Request { guest_cid, command };
 
-            let mut stream = VsockStream::connect_with_cid_port(VMADDR_CID_HOST, self.port)?;
-            stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
+            let mut stream = VsockStream::connect_with_cid_port(VMADDR_CID_HOST, self.port)
+                .map_err(VsockClientError::io(
+                    "unable to connect to VSOCK".to_string(),
+                ))?;
+            stream
+                .set_write_timeout(Some(std::time::Duration::from_secs(5)))
+                .map_err(VsockClientError::io(
+                    "unable to set write timeout".to_string(),
+                ))?;
             // Set a long timeout, so HostOS has enough time to upgrade.
-            stream.set_read_timeout(Some(std::time::Duration::from_secs(60 * 5)))?;
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(60 * 5)))
+                .map_err(VsockClientError::io(
+                    "unable to set read timeout".to_string(),
+                ))?;
 
-            stream.write_all(
-                &serde_json::to_vec(&request)
-                    .map_err(|source| VsockClientError::InvalidRequest { request, source })?,
-            )?;
-            stream.shutdown(std::net::Shutdown::Write)?;
+            stream
+                .write_all(
+                    &serde_json::to_vec(&request)
+                        .map_err(|source| VsockClientError::InvalidRequest { request, source })?,
+                )
+                .map_err(VsockClientError::io("writing to server".to_string()))?;
+            stream
+                .shutdown(std::net::Shutdown::Write)
+                .map_err(VsockClientError::io("closing VSOCK".to_string()))?;
 
             let mut buffer = Vec::new();
-            stream.take(MAX_MESSAGE_SIZE).read_to_end(&mut buffer)?;
+            stream
+                .take(MAX_MESSAGE_SIZE)
+                .read_to_end(&mut buffer)
+                .map_err(VsockClientError::io("reading from server".to_string()))?;
 
             serde_json::from_slice::<Response>(&buffer).map_err(|source| {
                 VsockClientError::InvalidResponse {

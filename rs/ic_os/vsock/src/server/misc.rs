@@ -10,7 +10,10 @@ use tokio_util::task::TaskTracker;
 const HOSTOS_VERSION_FILE_PATH: &str = "/opt/ic/share/version.txt";
 
 pub(crate) fn get_hostos_version() -> Result<Payload, VsockServerError> {
-    let version = std::fs::read_to_string(HOSTOS_VERSION_FILE_PATH)?
+    let version = std::fs::read_to_string(HOSTOS_VERSION_FILE_PATH)
+        .map_err(VsockServerError::io(format!(
+            "reading {HOSTOS_VERSION_FILE_PATH}"
+        )))?
         .trim()
         .to_string();
 
@@ -53,8 +56,17 @@ pub(crate) async fn notify(
 async fn notify_task(message: String, message_output_count: u32) -> Result<(), VsockServerError> {
     for _ in 0..message_output_count {
         for device_path in &["/dev/tty1", "/dev/ttyS0"] {
-            let mut terminal_device_file = OpenOptions::new().write(true).open(device_path)?;
-            terminal_device_file.write_all(format!("\n{message}\n").as_bytes())?;
+            let mut terminal_device_file = OpenOptions::new()
+                .write(true)
+                .open(device_path)
+                .map_err(VsockServerError::io(format!(
+                    "opening terminal device {device_path}"
+                )))?;
+            terminal_device_file
+                .write_all(format!("\n{message}\n").as_bytes())
+                .map_err(VsockServerError::io(format!(
+                    "writing terminal device {device_path}"
+                )))?;
         }
         sleep(std::time::Duration::from_secs(2)).await;
     }

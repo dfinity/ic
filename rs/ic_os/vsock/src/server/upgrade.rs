@@ -26,7 +26,10 @@ pub(crate) async fn upgrade_hostos(
     println!("Download completed, starting upgrade installation...");
     let command_output = std::process::Command::new(INSTALL_UPGRADE_FILE_PATH)
         .arg(UPGRADE_FILE_PATH)
-        .output()?;
+        .output()
+        .map_err(VsockServerError::io(format!(
+            "running command '{INSTALL_UPGRADE_FILE_PATH}'"
+        )))?;
 
     if !command_output.status.success() {
         return Err(VsockServerError::CommandFailed {
@@ -38,7 +41,10 @@ pub(crate) async fn upgrade_hostos(
     // Schedule a reboot for +1 minute
     let command_output = std::process::Command::new("shutdown")
         .arg("--reboot")
-        .output()?;
+        .output()
+        .map_err(VsockServerError::io(
+            "running command 'shutdown'".to_string(),
+        ))?;
 
     if !command_output.status.success() {
         return Err(VsockServerError::CommandFailed {
@@ -56,7 +62,10 @@ pub(crate) fn start_upgrade_guest_vm() -> Result<Payload, VsockServerError> {
     let output = std::process::Command::new("systemctl")
         .arg("restart")
         .arg(GUESTOS_UPGRADER_SERVICE)
-        .output()?;
+        .output()
+        .map_err(VsockServerError::io(
+            "running command 'systemctl restart'".to_string(),
+        ))?;
 
     if output.status.success() {
         return Ok(Payload::NoPayload);
