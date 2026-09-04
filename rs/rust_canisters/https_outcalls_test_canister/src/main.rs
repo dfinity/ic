@@ -556,18 +556,36 @@ enum CostHttpRequestOutcallType {
     Flexible(Option<ReplicationCounts>),
 }
 
-/// `ic0.cost_http_request_v2` is not in the `ic0` crate yet, so declare it here.
+/// Neither of these is in the `ic0` crate yet, so declare them here.
 mod ic0 {
     #[cfg(target_family = "wasm")]
     #[link(wasm_import_module = "ic0")]
     unsafe extern "C" {
         pub fn cost_http_request_v2(params_src: usize, params_size: usize, dst: usize);
+        pub fn subnet_self_node_count() -> u32;
     }
 
     #[cfg(not(target_family = "wasm"))]
     pub unsafe fn cost_http_request_v2(_params_src: usize, _params_size: usize, _dst: usize) {
         panic!("cost_http_request_v2 should only be called inside canisters.");
     }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub unsafe fn subnet_self_node_count() -> u32 {
+        panic!("subnet_self_node_count should only be called inside canisters.");
+    }
+}
+
+// ================================ Subnet size ================================
+
+/// How many nodes this subnet has, via `ic0.subnet_self_node_count`.
+///
+/// Every outcall fee scales with this, so it is what the cost functions above are
+/// implicitly quoting against.
+#[query]
+fn subnet_node_count() -> u32 {
+    // SAFETY: takes no arguments and returns a plain scalar.
+    unsafe { ic0::subnet_self_node_count() }
 }
 
 // ================================== Balance ==================================

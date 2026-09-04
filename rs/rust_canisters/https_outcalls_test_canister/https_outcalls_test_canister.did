@@ -212,6 +212,7 @@ service : {
   // This canister's cycle balance — where pay-as-you-go refunds land, shortly
   // after the response is delivered rather than on the reply itself.
   cycle_balance : () -> (nat) query;
+  subnet_node_count : () -> (nat32) query;
 
   // The transform queries the outcalls above reference by name; see `transform`.
   identity : (transform_args) -> (http_response) query;
