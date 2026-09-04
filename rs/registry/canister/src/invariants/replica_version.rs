@@ -185,10 +185,6 @@ mod tests {
             GUEST_LAUNCH_MEASUREMENTS, invariant_compliant_registry,
             prepare_registry_with_cloud_engine_subnet,
         },
-        flags::{
-            temporarily_disable_blank_replica_version_id_for_cloud_engines,
-            temporarily_enable_blank_replica_version_id_for_cloud_engines,
-        },
         registry::Registry,
     };
 
@@ -415,13 +411,11 @@ mod tests {
     }
 
     /// One thing not mentioned in the name is that
-    /// StandardEngineReplicaVersionRecord must exist (and this feature must be
-    /// enabled via flag).
+    /// StandardEngineReplicaVersionRecord must exist.
     #[test]
     fn test_blank_replica_version_id_is_allowed() {
         // Step 1: Prepare the world.
 
-        let _restore_on_drop = temporarily_enable_blank_replica_version_id_for_cloud_engines();
         let mut registry = invariant_compliant_registry(0);
 
         // Elect replica versions 1 and 2.
@@ -452,37 +446,6 @@ mod tests {
         // The implicit assertion is that the previous line did not panic.
     }
 
-    #[test]
-    #[should_panic(expected = "Using a version that isn't elected.")]
-    fn panic_when_blank_replica_version_id_is_not_enabled_yet() {
-        // Step 1: Prepare the world. The only difference compared to the
-        // previous test is that here, the feature is DISABLED.
-        let _restore_on_drop = temporarily_disable_blank_replica_version_id_for_cloud_engines();
-        let mut registry = invariant_compliant_registry(0);
-        registry.maybe_apply_mutation_internal(elect_version_mutations(vec![
-            REPLICA_VERSION_ID_1.to_string(),
-            REPLICA_VERSION_ID_2.to_string(),
-        ]));
-        registry.maybe_apply_mutation_internal(vec![insert(
-            make_standard_engine_replica_version_record_key().as_bytes(),
-            StandardEngineReplicaVersionRecord {
-                new_replica_version_id: REPLICA_VERSION_ID_2.to_string(),
-                old_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
-                deployment_progress: 0.1,
-            }
-            .encode_to_vec(),
-        )]);
-        let subnet_id = add_cloud_engine_subnet(&mut registry);
-
-        // Step 2: Run the code under test. Same as the previous test.
-        let mutation = blank_replica_version_id_mutation(&registry, subnet_id);
-        registry.check_global_state_invariants(&mutation);
-
-        // Step 3: Verify result(s).
-        // The assertion is at the top: #[should_panic(...)].
-        // Unlike the previous test where the nominal behavior is NO panic.
-    }
-
     /// It is fine for there to be no standard engine replica version if there
     /// are no CloudEngines, but in general, there would be, so the name of this
     /// test does not mention this "and the sun must exist" condition.
@@ -490,7 +453,6 @@ mod tests {
     #[should_panic(expected = "Using a version that isn't elected.")]
     fn panic_when_there_is_no_standard_replica_version() {
         // Step 1: Prepare the world.
-        let _restore_on_drop = temporarily_enable_blank_replica_version_id_for_cloud_engines();
         let mut registry = invariant_compliant_registry(0);
         let subnet_id = add_cloud_engine_subnet(&mut registry);
 
@@ -507,7 +469,6 @@ mod tests {
     fn panic_when_non_cloud_engine_subnet_has_blank_replica_version_id() {
         // Step 1: Prepare the world.
 
-        let _restore_on_drop = temporarily_enable_blank_replica_version_id_for_cloud_engines();
         let mut registry = invariant_compliant_registry(0);
 
         // Like in previous tests, elect a couple of replica versions, and

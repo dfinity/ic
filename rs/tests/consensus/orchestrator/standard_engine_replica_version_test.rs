@@ -35,10 +35,7 @@ Runbook::
 0. Set up an IC with an NNS subnet, plus a pool of unassigned nodes to
    form 2 Cloud Engines.
 
-1. Install NNS. Blank replica_version_id is enabled in Registry.
-   This requires using registry-canister-test, not the regular/release
-   build, registry-canister. Once this feature has survived its
-   probation period, this test can switch to registry-canister.
+1. Install NNS.
 
 2. Elect a second GuestOS/replica version.
 
@@ -124,7 +121,6 @@ use ic_system_test_driver::{
     util::{block_on, runtime_from_url},
 };
 use ic_types::ReplicaVersion;
-use registry_canister::init::RegistryCanisterInitPayload;
 use slog::{Logger, info};
 use std::time::Duration;
 
@@ -193,13 +189,7 @@ fn setup(env: TestEnv) {
     info!(logger, "[Step 1] Install NNS.");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCustomizations {
-            registry_canister_init_payload: RegistryCanisterInitPayload {
-                is_blank_replica_version_id_for_cloud_engines_enabled: Some(true),
-                ..Default::default()
-            },
-            ..Default::default()
-        },
+        NnsCustomizations::default(),
     );
 }
 
