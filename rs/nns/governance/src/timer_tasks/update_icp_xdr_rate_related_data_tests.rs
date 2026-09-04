@@ -594,8 +594,8 @@ async fn test_execute_stores_rate_and_computes_modulation() {
         assert_eq!(
             gov.heap_data.maturity_modulation,
             Some(MaturityModulation {
-                current_value_permyriad: Some(0),
-                updated_at_days_since_epoch: None,
+                current_value_permyriad: 0,
+                updated_at_days_since_epoch: 0,
             })
         );
     });
@@ -622,8 +622,8 @@ async fn test_execute_xrc_failure_leaves_state_unchanged() {
             }],
         });
         gov.heap_data.maturity_modulation = Some(MaturityModulation {
-            current_value_permyriad: Some(42),
-            updated_at_days_since_epoch: Some(current_day - 1),
+            current_value_permyriad: 42,
+            updated_at_days_since_epoch: current_day - 1,
         });
     });
 
@@ -654,8 +654,8 @@ async fn test_execute_xrc_failure_leaves_state_unchanged() {
         assert_eq!(
             *gov.heap_data.maturity_modulation.as_ref().unwrap(),
             MaturityModulation {
-                current_value_permyriad: Some(42),
-                updated_at_days_since_epoch: Some(current_day - 1),
+                current_value_permyriad: 42,
+                updated_at_days_since_epoch: current_day - 1,
             }
         );
     });
@@ -680,8 +680,8 @@ async fn test_execute_zero_rate_is_ignored() {
             }],
         });
         gov.heap_data.maturity_modulation = Some(MaturityModulation {
-            current_value_permyriad: Some(42),
-            updated_at_days_since_epoch: Some(current_day - 1),
+            current_value_permyriad: 42,
+            updated_at_days_since_epoch: current_day - 1,
         });
     });
 
@@ -707,8 +707,8 @@ async fn test_execute_zero_rate_is_ignored() {
         assert_eq!(
             *gov.heap_data.maturity_modulation.as_ref().unwrap(),
             MaturityModulation {
-                current_value_permyriad: Some(42),
-                updated_at_days_since_epoch: Some(current_day - 1),
+                current_value_permyriad: 42,
+                updated_at_days_since_epoch: current_day - 1,
             }
         );
     });
@@ -736,8 +736,8 @@ async fn test_execute_skips_when_already_updated_today() {
             }],
         });
         gov.heap_data.maturity_modulation = Some(MaturityModulation {
-            current_value_permyriad: Some(42),
-            updated_at_days_since_epoch: Some(current_day),
+            current_value_permyriad: 42,
+            updated_at_days_since_epoch: current_day,
         });
     });
 
@@ -752,8 +752,8 @@ async fn test_execute_skips_when_already_updated_today() {
         assert_eq!(
             *gov.heap_data.maturity_modulation.as_ref().unwrap(),
             MaturityModulation {
-                current_value_permyriad: Some(42),
-                updated_at_days_since_epoch: Some(current_day),
+                current_value_permyriad: 42,
+                updated_at_days_since_epoch: current_day,
             }
         );
     });
@@ -787,8 +787,8 @@ async fn test_execute_backfill_then_daily() {
             icp_xdr_rates: rates,
         });
         gov.heap_data.maturity_modulation = Some(MaturityModulation {
-            current_value_permyriad: Some(100),
-            updated_at_days_since_epoch: Some(current_day - 2),
+            current_value_permyriad: 100,
+            updated_at_days_since_epoch: current_day - 2,
         });
     });
 
@@ -829,8 +829,10 @@ async fn test_execute_backfill_then_daily() {
 
     GOV.with_borrow(|gov| {
         let mm = gov.heap_data.maturity_modulation.as_ref().unwrap();
-        assert!(mm.current_value_permyriad.is_some());
-        assert_eq!(mm.updated_at_days_since_epoch, Some(current_day));
+        assert_eq!(mm.updated_at_days_since_epoch, current_day);
+        // The recent-window (last 7 days) prices were 55_000 vs the reference-window's 50_000
+        // long-term average, so modulation should be strictly positive.
+        assert!(mm.current_value_permyriad > 0);
     });
 }
 
@@ -860,8 +862,8 @@ async fn test_execute_advances_cursor_on_failure_and_succeeds_on_next_day() {
             icp_xdr_rates: rates,
         });
         gov.heap_data.maturity_modulation = Some(MaturityModulation {
-            current_value_permyriad: Some(0),
-            updated_at_days_since_epoch: Some(current_day - 2),
+            current_value_permyriad: 0,
+            updated_at_days_since_epoch: current_day - 2,
         });
     });
 
@@ -925,8 +927,7 @@ async fn test_execute_advances_cursor_on_failure_and_succeeds_on_next_day() {
     assert_eq!(delay_3, duration_until_next_midnight_utc(now));
     GOV.with_borrow(|gov| {
         let mm = gov.heap_data.maturity_modulation.as_ref().unwrap();
-        assert_eq!(mm.updated_at_days_since_epoch, Some(current_day));
-        assert!(mm.current_value_permyriad.is_some());
+        assert_eq!(mm.updated_at_days_since_epoch, current_day);
     });
 }
 
@@ -1024,8 +1025,8 @@ async fn test_execute_repeated_calls_accumulate_rates() {
         assert_eq!(
             gov.heap_data.maturity_modulation,
             Some(MaturityModulation {
-                current_value_permyriad: Some(0),
-                updated_at_days_since_epoch: None,
+                current_value_permyriad: 0,
+                updated_at_days_since_epoch: 0,
             })
         );
     });
