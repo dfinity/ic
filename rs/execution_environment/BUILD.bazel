@@ -115,13 +115,14 @@ rust_ic_test_suite(
     srcs = glob(
         ["tests/*.rs"],
         exclude = [
-            # Exclude the dts, memory_matrix, and storage_reservation tests,
-            # which have separate targets below
-            # because they suffer from long running times on CI
-            # so we want to experiment with different configuration options.
+            # Exclude the dts, memory_matrix, storage_reservation, and
+            # large_heaps tests, which have separate targets below because
+            # they suffer from long running times on CI so we want to
+            # experiment with different configuration options.
             "tests/dts.rs",
             "tests/memory_matrix.rs",
             "tests/storage_reservation.rs",
+            "tests/large_heaps.rs",
         ],
     ),
     compile_data = glob(["tests/test-data/**"]),
@@ -198,6 +199,30 @@ rust_ic_test_suite(
         "@crate_index//:wasmparser",
         "@crate_index//:wat",
         "@crate_index//:wirm",
+    ],
+)
+
+rust_ic_test(
+    name = "large_heaps_test",
+    size = "large",
+    srcs = ["tests/large_heaps.rs"],
+    env = {
+        "RUST_TEST_THREADS": "1",
+    },
+    tags = [
+        "test_all_platforms_slow",
+    ],
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//rs/config",
+        "//rs/replicated_state",
+        "//rs/sys",
+        "//rs/test_utilities/execution_environment",
+        "//rs/types/cycles",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:wat",
     ],
 )
 
