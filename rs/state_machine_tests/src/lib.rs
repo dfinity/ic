@@ -12,7 +12,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
-use ic_consensus_cup_utils::make_registry_cup_from_cup_contents;
+use ic_consensus_cup_utils::make_registry_cup;
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
@@ -654,21 +654,14 @@ fn make_fresh_registry_cup(
     subnet_id: SubnetId,
     replica_logger: &ReplicaLogger,
 ) -> pb::CatchUpPackage {
-    let registry_version = registry_client.get_latest_version();
-    let cup_contents = registry_client
-        .get_cup_contents(subnet_id, registry_version)
-        .unwrap()
-        .value
-        .unwrap();
-    let cup = make_registry_cup_from_cup_contents(
+    make_registry_cup(
         registry_client.as_ref(),
         subnet_id,
-        cup_contents,
-        registry_version,
+        registry_client.get_latest_version(),
         replica_logger,
     )
-    .unwrap();
-    cup.into()
+    .unwrap()
+    .into()
 }
 
 /// Convert an object into CBOR binary.
