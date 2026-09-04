@@ -1,12 +1,9 @@
 use std::collections::BTreeSet;
 
-use crate::{
-    flags::is_blank_replica_version_id_for_cloud_engines_enabled,
-    invariants::common::{
-        InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
-        get_all_replica_version_records, get_api_boundary_node_records_from_snapshot,
-        get_subnet_ids_from_snapshot, get_value_from_snapshot,
-    },
+use crate::invariants::common::{
+    InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
+    get_all_replica_version_records, get_api_boundary_node_records_from_snapshot,
+    get_subnet_ids_from_snapshot, get_value_from_snapshot,
 };
 
 use ic_base_types::SubnetId;
@@ -111,11 +108,9 @@ fn get_subnet_record(snapshot: &RegistrySnapshot, subnet_id: SubnetId) -> Subnet
 /// Returns the list of replica versions where each version is referred to
 /// by at least one subnet.
 fn get_all_replica_versions_of_subnets(snapshot: &RegistrySnapshot) -> BTreeSet<String> {
-    let cloud_engines_are_allowed_to_have_blank_replica_version_id =
-        is_blank_replica_version_id_for_cloud_engines_enabled()
-            && snapshot
-                .get(make_standard_engine_replica_version_record_key().as_bytes())
-                .is_some();
+    let cloud_engines_are_allowed_to_have_blank_replica_version_id = snapshot
+        .get(make_standard_engine_replica_version_record_key().as_bytes())
+        .is_some();
 
     get_subnet_ids_from_snapshot(snapshot)
         .iter()

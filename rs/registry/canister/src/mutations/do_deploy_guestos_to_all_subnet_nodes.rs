@@ -1,6 +1,5 @@
 use crate::{
-    common::LOG_PREFIX, flags::is_blank_replica_version_id_for_cloud_engines_enabled,
-    mutations::common::check_replica_version_is_elected, registry::Registry,
+    common::LOG_PREFIX, mutations::common::check_replica_version_is_elected, registry::Registry,
 };
 
 use candid::{CandidType, Deserialize};
@@ -77,17 +76,11 @@ impl Registry {
     }
 
     /// Panics unless `subnet_id` is allowed to have a blank
-    /// `replica_version_id` — i.e. it is a Cloud Engine, the feature is
-    /// enabled, and there is a StandardEngineReplicaVersionRecord to resolve
-    /// the blank against. Without the last one, blanking would leave the subnet
-    /// with no replica version at all (and trip the SubnetRecord invariant).
+    /// `replica_version_id` — i.e. it is a Cloud Engine, and there is a
+    /// StandardEngineReplicaVersionRecord to resolve the blank against.
+    /// Without the latter, blanking would leave the subnet with no replica
+    /// version at all (and trip the SubnetRecord invariant).
     fn check_engine_can_have_blank_replica_version_id(&self, subnet_id: SubnetId) {
-        assert!(
-            is_blank_replica_version_id_for_cloud_engines_enabled(),
-            "{LOG_PREFIX}do_deploy_guestos_to_all_subnet_nodes: a blank replica_version_id is \
-             not enabled yet.",
-        );
-
         let subnet_record = self.get_subnet_or_panic(subnet_id);
         assert_eq!(
             subnet_record.subnet_type,
