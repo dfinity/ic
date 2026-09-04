@@ -4,6 +4,7 @@ use crate::state::STATE;
 use crate::state::audit::{EventType, process_event, replay_events};
 use crate::state::mutate_state;
 use crate::storage::total_event_count;
+use crate::time::TimeProvider;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_canister_log::log;
 use minicbor::{Decode, Encode};
@@ -38,14 +39,14 @@ pub struct UpgradeArg {
     pub next_sweeper_transaction_nonce: Option<Nat>,
 }
 
-pub fn post_upgrade(upgrade_args: Option<UpgradeArg>) {
+pub fn post_upgrade<T: TimeProvider>(upgrade_args: Option<UpgradeArg>, time_provider: &T) {
     let start = ic_cdk::api::instruction_counter();
 
     STATE.with(|cell| {
         *cell.borrow_mut() = Some(replay_events());
     });
     if let Some(args) = upgrade_args {
-        mutate_state(|s| process_event(s, EventType::Upgrade(args)))
+        mutate_state(|s| process_event(s, EventType::Upgrade(args), time_provider))
     }
 
     let end = ic_cdk::api::instruction_counter();

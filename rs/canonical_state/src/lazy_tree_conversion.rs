@@ -35,7 +35,6 @@ use ic_types::{
     messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId, Refund, Request, Response, StreamMessage},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
 };
-use ic_types_cycles::NominalCycles;
 use std::convert::{AsRef, TryFrom, TryInto};
 use std::iter::once;
 use std::sync::Arc;
@@ -481,7 +480,6 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                     &state.metadata.own_subnet_info.node_public_keys,
                     inverted_routing_table.clone(),
                     &state.metadata.subnet_metrics,
-                    state.canister_states(),
                     certification_version,
                 )
             })
@@ -1120,7 +1118,6 @@ fn subnets_as_tree<'a>(
     own_subnet_node_public_keys: &'a BTreeMap<NodeId, Vec<u8>>,
     inverted_routing_table: Arc<BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>>>,
     metrics: &'a SubnetMetrics,
-    canisters: &'a CanisterStates,
     certification_version: CertificationVersion,
 ) -> LazyTree<'a> {
     fork(MapTransformFork {
@@ -1146,24 +1143,9 @@ fn subnets_as_tree<'a>(
                     .with_tree_if(
                         subnet_id == &own_subnet_id,
                         "metrics",
-                        blob(move || {
-                            // Starting with `V29`, the reported total also
-                            // includes the cycles consumed by all non-deleted
-                            // canisters. `total_consumed_cycles` is
-                            // `O(|hot canisters|)` thanks to the precomputed
-                            // cold-pool aggregate; only compute it when needed.
-                            let consumed_cycles_by_canisters =
-                                if certification_version >= CertificationVersion::V29 {
-                                    canisters.total_consumed_cycles()
-                                } else {
-                                    NominalCycles::zero()
-                                };
-                            encode_subnet_metrics(
-                                metrics,
-                                consumed_cycles_by_canisters,
-                                certification_version,
-                            )
-                        }),
+                        // Starting with `V29`, the reported total also includes
+                        // the cycles consumed by all non-deleted canisters.
+                        blob(move || encode_subnet_metrics(metrics, certification_version)),
                     )
                     .with_tree_if(
                         certification_version >= CertificationVersion::V25,

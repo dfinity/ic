@@ -183,19 +183,6 @@ alias(
     }),
 )
 
-### dfx
-
-alias(
-    name = "dfx",
-    actual = select({
-        "@bazel_tools//src/conditions:darwin_x86_64": "@dfx-x86_64-darwin//:dfx",
-        "@bazel_tools//src/conditions:darwin_arm64": "@dfx-aarch64-darwin//:dfx",
-        "@bazel_tools//src/conditions:linux_x86_64": "@dfx-x86_64-linux//:dfx",
-        "@bazel_tools//src/conditions:linux_aarch64": "@dfx-aarch64-linux//:dfx",
-        "//conditions:default": "@platforms//:incompatible",
-    }),
-)
-
 ### pebble & pebble DNS, used in Boundary Nodes ACME testing
 
 alias(
@@ -251,8 +238,16 @@ alias(
     }),
 )
 
-### e2fsdroid, used to populate ext4 filesystem images (fs_config + SELinux contexts)
+### debugfs, used to inspect ext filesystems (e.g. extract files from ext4 images)
+alias(
+    name = "debugfs",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@e2fsprogs//:debugfs",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
 
+### e2fsdroid, used to populate ext4 filesystem images (fs_config + SELinux contexts)
 alias(
     name = "e2fsdroid",
     actual = select({

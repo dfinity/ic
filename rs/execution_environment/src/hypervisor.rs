@@ -361,13 +361,13 @@ impl Hypervisor {
         own_subnet_id: SubnetId,
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        dirty_page_overhead: NumInstructions,
+        page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
-        embedder_config.dirty_page_overhead = dirty_page_overhead;
+        embedder_config.page_overhead = page_overhead;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => {

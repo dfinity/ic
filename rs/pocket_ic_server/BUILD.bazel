@@ -21,6 +21,7 @@ LIB_DEPENDENCIES = [
     "//rs/http_endpoints/public",
     "//rs/https_outcalls/adapter:adapter_with_http",
     "//rs/https_outcalls/client",
+    "//rs/https_outcalls/pricing",
     "//rs/https_outcalls/service",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
@@ -274,7 +275,7 @@ MAINNET_NNS_CANISTER_ENV = {
             "@crate_index//:async-trait",
         ],
         rustc_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
-        version = "15.0.0",
+        version = "16.0.0",
         deps = LIB_DEPENDENCIES + [":build_script"],
     )
     for (name_suffix, nns_canister_data, nns_canister_env) in [

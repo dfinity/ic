@@ -40,11 +40,11 @@ use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
-    ids::{node_id_to_u64, node_test_id, subnet_test_id},
+    ids::{node_id_to_u64, node_test_id, subnet_test_id, test_replica_version},
     messages::RequestBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
     batch::{
         CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
@@ -1775,7 +1775,7 @@ fn test_response_and_metadata_with_content(
         content_hash: crypto_hash(&response),
         content_size: response.content.count_bytes() as u32,
         is_reject: response.content.is_reject(),
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     };
     (response, metadata)
 }
@@ -5668,6 +5668,123 @@ fn out_of_cycles_is_delivered_as_a_reject_with_the_spend_reported() {
     );
 }
 
+/// The out-of-cycles error that a fully-replicated and a non-replicated outcall
+/// produce is delivered as a reject spelling out the figures it is proved by, with
+/// the spend its shares report recorded rather than refunded.
+#[test]
+fn into_messages_delivers_out_of_cycles_as_rejects() {
+    // A fully-replicated outcall, three of whose assigned replicas have signed a
+    // receipt, between them accounting for 300 + 500 + 700 = 1_500 cycles of spend.
+    let replicated_callback = CallbackId::from(42);
+    let (_, replicated_metadata) = test_response_and_metadata(replicated_callback.get());
+    let replicated = CanisterHttpOutOfCycles {
+        callback_id: replicated_callback,
+        shares: vec![
+            metadata_to_share_with_spent(0, &replicated_metadata, Cycles::new(300)),
+            metadata_to_share_with_spent(1, &replicated_metadata, Cycles::new(500)),
+            metadata_to_share_with_spent(2, &replicated_metadata, Cycles::new(700)),
+        ],
+        min_cost: Cycles::new(9_000),
+        unspent_allowance: Cycles::new(1_100),
+    };
+
+    // A non-replicated outcall, where only the designated replica ever answers, so its
+    // single share is all the evidence there is and no allowance is left unspent.
+    let non_replicated_callback = CallbackId::from(43);
+    let (_, non_replicated_metadata) = test_response_and_metadata(non_replicated_callback.get());
+    let designated = 3;
+    let non_replicated = CanisterHttpOutOfCycles {
+        callback_id: non_replicated_callback,
+        shares: vec![metadata_to_share_with_spent(
+            designated,
+            &non_replicated_metadata,
+            Cycles::new(2_500),
+        )],
+        min_cost: Cycles::new(4_000),
+        unspent_allowance: Cycles::zero(),
+    };
+
+    let payload = CanisterHttpPayload {
+        out_of_cycles: vec![replicated, non_replicated],
+        ..Default::default()
+    };
+
+    let (responses, spent, stats) =
+        CanisterHttpPayloadBuilderImpl::into_messages(&payload_to_bytes_max_4mb(payload));
+
+    assert_eq!(stats.out_of_cycles, 2);
+    assert_eq!(responses.len(), 2);
+    assert_eq!(spent.initial.len(), 2);
+    assert!(spent.asynchronous.is_empty());
+
+    let reject_message = |callback: CallbackId| {
+        let response = responses
+            .iter()
+            .find(|response| response.callback == callback)
+            .unwrap_or_else(|| panic!("response for {callback} missing"));
+        let Payload::Reject(ref reject) = response.payload else {
+            panic!("Expected Payload::Reject, got {:?}", response.payload);
+        };
+        assert_eq!(reject.code(), RejectCode::CanisterReject);
+        reject.message().clone()
+    };
+    let report = |callback: CallbackId| {
+        spent
+            .initial
+            .iter()
+            .find(|report| report.callback == callback)
+            .unwrap_or_else(|| panic!("report for {callback} missing"))
+    };
+    // Each figure is checked in its own slot of the message, so that reporting the
+    // allowance where the cost belongs (or vice versa) does not pass.
+    let assert_figures = |message: &str, fragments: [String; 4]| {
+        for fragment in fragments {
+            assert!(
+                message.contains(&fragment),
+                "{fragment:?} missing from {message}"
+            );
+        }
+    };
+
+    // The caller is told how many replicas answered, what they spent between them,
+    // what is left of the collective allowance, and what a response would have cost
+    // at least, so that it can tell how much more it would have had to attach.
+    assert_figures(
+        &reject_message(replicated_callback),
+        [
+            "3 of the assigned replicas".to_string(),
+            format!("collective spend of {} cycles", Cycles::new(1_500)),
+            format!("leaving {} cycles", Cycles::new(1_100)),
+            format!("cost at least {} cycles", Cycles::new(9_000)),
+        ],
+    );
+    assert_figures(
+        &reject_message(non_replicated_callback),
+        [
+            "1 of the assigned replicas".to_string(),
+            format!("collective spend of {} cycles", Cycles::new(2_500)),
+            format!("leaving {} cycles", Cycles::zero()),
+            format!("cost at least {} cycles", Cycles::new(4_000)),
+        ],
+    );
+
+    // Neither error delivers a body, so each reports just what its own shares spent,
+    // charged to exactly the replicas that signed them.
+    let replicated_report = report(replicated_callback);
+    assert_eq!(replicated_report.amount, Cycles::new(1_500));
+    assert_eq!(
+        replicated_report.nodes,
+        (0..3).map(node_test_id).collect::<BTreeSet<_>>()
+    );
+
+    let non_replicated_report = report(non_replicated_callback);
+    assert_eq!(non_replicated_report.amount, Cycles::new(2_500));
+    assert_eq!(
+        non_replicated_report.nodes,
+        BTreeSet::from([node_test_id(designated)])
+    );
+}
+
 /// A fully-replicated outcall keeps waiting while replicas that have not answered yet
 /// could still contribute an allowance, and is only reported once enough of them have
 /// answered that the response is pinned and unaffordable.
@@ -7904,7 +8021,7 @@ fn metadata_share_with_content_size(
         content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
         content_size,
         is_reject: false,
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     };
     metadata_to_share(signer_node, &metadata)
 }
@@ -7915,7 +8032,7 @@ fn reject_metadata_share(callback_id: u64, signer_node: u64) -> CanisterHttpResp
         content_hash: CryptoHashOf::new(CryptoHash(vec![0xCD; 32])),
         content_size: 50,
         is_reject: true,
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     };
     metadata_to_share(signer_node, &metadata)
 }

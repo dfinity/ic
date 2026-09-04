@@ -1,12 +1,10 @@
-use std::collections::BTreeMap;
-
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     validation::ValidationResult,
 };
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
 use ic_types::{
     CryptoHashOfPartialState, Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     batch::{BatchPayload, ValidationContext},
@@ -28,6 +26,7 @@ use ic_types::{
     },
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 pub trait Fake {
     fn fake() -> Self;
@@ -231,7 +230,11 @@ impl<T: CryptoHashable, S: Signable> FakeContentSigner<T>
 impl FakeContentSigner<&Block> for NotarizationShare {
     fn fake(block: &Block, signer: NodeId) -> NotarizationShare {
         Signed {
-            content: NotarizationContent::new(block.height, ic_types::crypto::crypto_hash(block)),
+            content: NotarizationContent::new(
+                block.height,
+                ic_types::crypto::crypto_hash(block),
+                block.version.clone(),
+            ),
             signature: MultiSignatureShare::fake(signer),
         }
     }
@@ -240,9 +243,12 @@ impl FakeContentSigner<&Block> for NotarizationShare {
 impl FakeContentSigner<&Block> for FinalizationShare {
     fn fake(block: &Block, signer: NodeId) -> FinalizationShare {
         let height = block.height;
-        let block = ic_types::crypto::crypto_hash(block);
         Signed {
-            content: FinalizationContent::new(height, block),
+            content: FinalizationContent::new(
+                height,
+                ic_types::crypto::crypto_hash(block),
+                block.version.clone(),
+            ),
             signature: MultiSignatureShare::fake(signer),
         }
     }
@@ -255,7 +261,11 @@ impl FakeContentSigner<&RandomBeacon> for RandomBeaconShare {
             signer,
         };
         let height = parent.content.height.increment();
-        let beacon = RandomBeaconContent::new(height, ic_types::crypto::crypto_hash(parent));
+        let beacon = RandomBeaconContent::new(
+            height,
+            ic_types::crypto::crypto_hash(parent),
+            parent.content.version.clone(),
+        );
         Signed {
             content: beacon,
             signature,
@@ -270,7 +280,7 @@ impl FakeContentSigner<Height> for RandomTapeShare {
             signer,
         };
         Signed {
-            content: RandomTapeContent::new(height),
+            content: RandomTapeContent::new(height, test_replica_version()),
             signature,
         }
     }
@@ -296,6 +306,7 @@ impl FromParent for Block {
             parent.height.increment(),
             Rank(0),
             parent.context.clone(),
+            parent.version.clone(),
         )
     }
 }
@@ -305,6 +316,7 @@ impl FromParent for RandomBeacon {
         Self::fake(RandomBeaconContent::new(
             parent.content.height.increment(),
             ic_types::crypto::crypto_hash(parent),
+            parent.content.version.clone(),
         ))
     }
 }
@@ -355,6 +367,7 @@ impl Verifier for FakeVerifier {
 
 #[cfg(test)]
 mod tests {
+    use ic_test_utilities_types::ids::test_replica_version;
     use ic_types::consensus::HasVersion;
 
     use super::*;
@@ -378,6 +391,7 @@ mod tests {
                 certified_height: Height::from(42),
                 time: ic_types::time::UNIX_EPOCH,
             },
+            test_replica_version(),
         );
         let bytes1 = bincode::serialize(&block).unwrap();
         let fake_block = bincode::deserialize::<FakeBlock>(&bytes1).unwrap();
@@ -405,6 +419,7 @@ mod tests {
                 certified_height: Height::from(42),
                 time: ic_types::time::UNIX_EPOCH,
             },
+            test_replica_version(),
         );
 
         // fake block is binary compatible

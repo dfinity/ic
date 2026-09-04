@@ -16,6 +16,7 @@ path = "bin/principal_to_hex.rs"
 
 [dependencies]
 askama = { workspace = true }
+async-trait = { workspace = true }
 canbench-rs = { workspace = true, optional = true }
 candid = { workspace = true }
 ethnum = { workspace = true }
@@ -69,6 +70,7 @@ ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/rep
 ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
 ic-management-canister-types = { workspace = true }
 maplit = { workspace = true }
+mockall = { workspace = true }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }
 rand = { workspace = true }

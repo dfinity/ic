@@ -128,8 +128,8 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
-    pub fn with_dirty_page_overhead(mut self, dirty_page_overhead: NumInstructions) -> Self {
-        self.config.dirty_page_overhead = dirty_page_overhead;
+    pub fn with_page_overhead(mut self, page_overhead: NumInstructions) -> Self {
+        self.config.page_overhead = page_overhead;
         self
     }
 

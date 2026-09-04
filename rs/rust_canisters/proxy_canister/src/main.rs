@@ -18,8 +18,9 @@ use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
 use proxy_canister::{
-    FlexibleRemoteHttpRequest, RejectionCode, RemoteHttpRequest, RemoteHttpResponse,
-    RemoteHttpStressRequest, RemoteHttpStressResponse, ResponseWithRefundedCycles,
+    FlexibleRemoteHttpRequest, FlexibleResponseWithRefundedCycles, RejectionCode,
+    RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest, RemoteHttpStressResponse,
+    ResponseWithRefundedCycles,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -48,15 +49,21 @@ fn map_call_error(err: CallFailed) -> (RejectionCode, String) {
 #[update]
 async fn send_flexible_request(
     request: FlexibleRemoteHttpRequest,
-) -> Result<Vec<u8>, (RejectionCode, String)> {
+) -> FlexibleResponseWithRefundedCycles {
     let FlexibleRemoteHttpRequest { request, cycles } = request;
 
-    Call::unbounded_wait(Principal::management_canister(), "flexible_http_request")
+    let result = Call::unbounded_wait(Principal::management_canister(), "flexible_http_request")
         .with_raw_args(&request.encode())
         .with_cycles(u128::from(cycles))
         .await
         .map(|response| response.into_bytes())
-        .map_err(map_call_error)
+        .map_err(map_call_error);
+    // As in `send_request_with_refund_callback`: readable here because the call
+    // came back through a reply or reject callback.
+    FlexibleResponseWithRefundedCycles {
+        result,
+        refunded_cycles: msg_cycles_refunded() as u64,
+    }
 }
 
 #[update]
@@ -219,11 +226,6 @@ async fn check_response(
 }
 
 /// This canister's own cycle balance.
-///
-/// Under pay-as-you-go pricing an HTTP outcall's payment is taken up front and
-/// the unspent part is credited back to the balance afterwards, rather than
-/// returned as `msg_cycles_refunded` on the reply. Tests therefore observe what
-/// an outcall actually cost by watching this.
 #[query]
 fn cycle_balance() -> u128 {
     ic_cdk::api::canister_cycle_balance()

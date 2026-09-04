@@ -2,156 +2,6 @@
   "guestos": {
     "subnets": {
       "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe": {
-        "version": "59c42492cd6ee3ef5e60cd35d7b766e7bfd085da",
-        "update_img_hash": "5e67e60caf8b71d79f6f2300ceb2461086d9d763cabc5656175307c13a4410e2",
-        "update_img_hash_dev": "3924d5e9c86822b367cbfdbaab48c667f2a32bee3ab65e5772d54c32e6a829ed",
-        "setupos_disk_img_hash": "5c488a88730dd52c2cf3186d10517b8e86cfbc445f47e850a07479632d466390",
-        "setupos_disk_img_hash_dev": "18330bb4c6fcf94977fb7e8576e0d781864777406a8b33b47153f15fbef4e454",
-        "binaries": {
-          "canister_sandbox": "2a2e8891dc8837b02b1bf00972b71e5e8393fc5334ac611638071bc151b37cfc",
-          "compiler_sandbox": "050bdee43705e3d66fc64fa95918d122625cb3a8539c4a00e30461788fe97afb",
-          "ic-replay": "6fc9e9b24e74690964357ac1681d4dcfac1c7907af6fbdd4d24a45e986d56ee5",
-          "replicated-state-test": "106b3fc2af013b33e251ead603152c22cef7ac12584c207bc223bcd4e0c081fc",
-          "sandbox_launcher": "e888b39bb3917002bd9843252469af5d3094aa4409d5b0c758ecf8d2b7a72c5e",
-          "state-layout-test": "f7603af64891a3f9d72efa8b12de51f9bf121e0bda974b45ffcbcf793bfa39ea",
-          "types-test": "c30d337312392ea63ac0be5403547ebe884b24aab716343891e6ed2442b83973"
-        },
-        "launch_measurements": {
-          "guest_launch_measurements": [
-            {
-              "measurement": [ 105, 16, 7, 203, 4, 81, 21, 181, 132, 82, 9, 30, 179, 74, 170, 71, 190, 232, 8, 168, 68, 16, 144, 177, 108, 49, 32, 122, 45, 230, 12, 73, 247, 152, 201, 160, 163, 154, 204, 19, 147, 176, 152, 9, 168, 189, 16, 148 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=94bda435662aeeb114c014a6b611ffe3764522716ad87811de0b43b60f90261f",
-                "vcpu_type": "EPYC-v4"
-              }
-            },
-            {
-              "measurement": [ 230, 121, 145, 157, 44, 83, 89, 194, 30, 70, 237, 194, 31, 1, 207, 90, 150, 29, 156, 41, 11, 70, 247, 245, 89, 117, 79, 243, 138, 116, 231, 154, 254, 150, 167, 213, 123, 54, 242, 25, 122, 71, 116, 71, 249, 31, 212, 111 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=94bda435662aeeb114c014a6b611ffe3764522716ad87811de0b43b60f90261f",
-                "vcpu_type": "EPYC-v4"
-              }
-            },
-            {
-              "measurement": [ 82, 255, 64, 197, 187, 195, 17, 181, 206, 119, 155, 218, 244, 148, 35, 239, 142, 168, 197, 251, 164, 113, 224, 94, 179, 58, 214, 205, 104, 75, 58, 26, 210, 26, 205, 109, 85, 231, 125, 55, 200, 96, 210, 175, 130, 84, 150, 179 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=94bda435662aeeb114c014a6b611ffe3764522716ad87811de0b43b60f90261f",
-                "vcpu_type": "EPYC-Genoa"
-              }
-            },
-            {
-              "measurement": [ 31, 72, 138, 251, 4, 111, 33, 134, 29, 207, 231, 24, 176, 0, 190, 224, 37, 221, 114, 32, 162, 115, 53, 177, 50, 97, 222, 164, 140, 125, 148, 166, 21, 120, 162, 139, 109, 53, 241, 106, 184, 78, 153, 236, 243, 220, 45, 151 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=94bda435662aeeb114c014a6b611ffe3764522716ad87811de0b43b60f90261f",
-                "vcpu_type": "EPYC-Genoa"
-              }
-            },
-            {
-              "measurement": [ 224, 86, 85, 125, 165, 241, 83, 41, 160, 49, 160, 147, 238, 179, 219, 113, 202, 22, 239, 236, 65, 73, 188, 75, 91, 100, 255, 1, 108, 234, 31, 15, 202, 1, 252, 27, 49, 79, 43, 221, 73, 183, 81, 84, 229, 171, 232, 157 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=94bda435662aeeb114c014a6b611ffe3764522716ad87811de0b43b60f90261f",
-                "vcpu_type": "EPYC-Turin"
-              }
-            },
-            {
-              "measurement": [ 250, 34, 22, 132, 210, 209, 58, 149, 113, 121, 168, 207, 50, 98, 200, 123, 9, 12, 252, 233, 147, 47, 248, 32, 93, 62, 123, 132, 249, 248, 139, 149, 41, 203, 188, 21, 98, 193, 225, 41, 92, 210, 56, 61, 9, 12, 158, 198 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=94bda435662aeeb114c014a6b611ffe3764522716ad87811de0b43b60f90261f",
-                "vcpu_type": "EPYC-Turin"
-              }
-            }
-          ]
-        },
-        "launch_measurements_dev": {
-          "guest_launch_measurements": [
-            {
-              "measurement": [ 191, 7, 246, 147, 76, 70, 60, 246, 57, 3, 174, 250, 77, 0, 81, 91, 70, 18, 14, 217, 54, 102, 227, 63, 130, 229, 42, 90, 242, 185, 14, 123, 202, 127, 240, 50, 53, 25, 131, 235, 223, 227, 129, 216, 202, 196, 180, 48 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=a8428dcf3afc89035626e29489dd1d38a6dfbfc85943a1bcfa4a57217f921ed9",
-                "vcpu_type": "EPYC-v4"
-              }
-            },
-            {
-              "measurement": [ 235, 231, 221, 133, 21, 162, 79, 186, 11, 90, 18, 8, 144, 51, 107, 159, 188, 8, 205, 137, 33, 145, 99, 242, 150, 75, 227, 250, 155, 174, 75, 118, 48, 165, 222, 104, 38, 74, 254, 102, 88, 23, 216, 45, 69, 224, 241, 167 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=a8428dcf3afc89035626e29489dd1d38a6dfbfc85943a1bcfa4a57217f921ed9",
-                "vcpu_type": "EPYC-v4"
-              }
-            },
-            {
-              "measurement": [ 113, 111, 78, 138, 62, 115, 146, 130, 53, 250, 28, 173, 1, 185, 178, 15, 184, 190, 21, 185, 196, 167, 104, 56, 105, 192, 42, 46, 212, 82, 96, 117, 199, 231, 109, 182, 50, 26, 187, 212, 108, 178, 231, 122, 237, 103, 129, 143 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=a8428dcf3afc89035626e29489dd1d38a6dfbfc85943a1bcfa4a57217f921ed9",
-                "vcpu_type": "EPYC-v4"
-              }
-            },
-            {
-              "measurement": [ 173, 113, 253, 164, 81, 211, 88, 21, 247, 85, 111, 86, 58, 60, 175, 133, 117, 123, 213, 47, 245, 174, 57, 61, 76, 126, 95, 32, 26, 134, 93, 162, 39, 5, 157, 1, 28, 24, 47, 74, 235, 193, 232, 6, 130, 23, 79, 135 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=a8428dcf3afc89035626e29489dd1d38a6dfbfc85943a1bcfa4a57217f921ed9",
-                "vcpu_type": "EPYC-v4"
-              }
-            },
-            {
-              "measurement": [ 146, 153, 135, 235, 89, 89, 197, 118, 48, 106, 82, 57, 190, 146, 154, 70, 170, 110, 43, 54, 160, 186, 19, 16, 131, 131, 192, 106, 165, 74, 220, 13, 6, 194, 236, 87, 53, 233, 87, 176, 204, 91, 198, 188, 229, 116, 26, 109 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=a8428dcf3afc89035626e29489dd1d38a6dfbfc85943a1bcfa4a57217f921ed9",
-                "vcpu_type": "EPYC-Genoa"
-              }
-            },
-            {
-              "measurement": [ 84, 4, 77, 150, 245, 145, 130, 106, 63, 95, 67, 219, 137, 40, 205, 191, 12, 160, 24, 80, 118, 212, 11, 14, 162, 35, 83, 29, 66, 56, 27, 72, 11, 169, 3, 12, 80, 71, 153, 165, 191, 122, 55, 67, 11, 74, 238, 218 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=a8428dcf3afc89035626e29489dd1d38a6dfbfc85943a1bcfa4a57217f921ed9",
-                "vcpu_type": "EPYC-Genoa"
-              }
-            },
-            {
-              "measurement": [ 71, 159, 89, 83, 109, 150, 179, 79, 208, 78, 250, 146, 26, 39, 13, 255, 208, 49, 191, 209, 251, 58, 144, 131, 233, 62, 122, 37, 248, 74, 128, 188, 152, 68, 224, 140, 156, 57, 222, 220, 252, 140, 5, 251, 92, 164, 255, 11 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=a8428dcf3afc89035626e29489dd1d38a6dfbfc85943a1bcfa4a57217f921ed9",
-                "vcpu_type": "EPYC-Genoa"
-              }
-            },
-            {
-              "measurement": [ 2, 49, 178, 63, 225, 118, 204, 220, 80, 243, 84, 212, 30, 42, 81, 121, 13, 208, 44, 222, 138, 143, 153, 185, 133, 88, 58, 35, 57, 245, 120, 168, 127, 118, 209, 241, 162, 63, 35, 243, 177, 89, 241, 185, 77, 230, 129, 204 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=a8428dcf3afc89035626e29489dd1d38a6dfbfc85943a1bcfa4a57217f921ed9",
-                "vcpu_type": "EPYC-Genoa"
-              }
-            },
-            {
-              "measurement": [ 40, 254, 178, 170, 188, 41, 116, 128, 117, 82, 108, 214, 245, 138, 128, 32, 107, 251, 249, 54, 0, 19, 162, 171, 192, 160, 191, 203, 210, 179, 244, 102, 129, 51, 25, 204, 191, 146, 8, 101, 85, 124, 170, 251, 234, 252, 176, 0 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=a8428dcf3afc89035626e29489dd1d38a6dfbfc85943a1bcfa4a57217f921ed9",
-                "vcpu_type": "EPYC-Turin"
-              }
-            },
-            {
-              "measurement": [ 3, 142, 228, 101, 204, 159, 105, 2, 140, 176, 253, 123, 125, 140, 218, 163, 128, 201, 244, 50, 229, 109, 86, 114, 60, 5, 163, 62, 143, 218, 41, 172, 173, 206, 61, 62, 98, 3, 19, 96, 184, 89, 15, 85, 114, 37, 241, 81 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=a8428dcf3afc89035626e29489dd1d38a6dfbfc85943a1bcfa4a57217f921ed9",
-                "vcpu_type": "EPYC-Turin"
-              }
-            },
-            {
-              "measurement": [ 54, 27, 137, 80, 94, 244, 155, 186, 209, 227, 158, 174, 239, 111, 191, 68, 143, 88, 237, 123, 109, 92, 103, 248, 199, 43, 27, 214, 33, 55, 254, 213, 39, 168, 192, 134, 11, 21, 84, 95, 158, 89, 143, 145, 68, 76, 64, 5 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=a8428dcf3afc89035626e29489dd1d38a6dfbfc85943a1bcfa4a57217f921ed9",
-                "vcpu_type": "EPYC-Turin"
-              }
-            },
-            {
-              "measurement": [ 178, 20, 193, 232, 48, 187, 73, 10, 252, 3, 192, 121, 35, 99, 231, 3, 42, 172, 152, 241, 47, 249, 69, 87, 28, 22, 181, 182, 67, 6, 109, 49, 8, 37, 129, 119, 72, 63, 251, 241, 202, 116, 151, 86, 127, 32, 52, 247 ],
-              "metadata": {
-                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=a8428dcf3afc89035626e29489dd1d38a6dfbfc85943a1bcfa4a57217f921ed9",
-                "vcpu_type": "EPYC-Turin"
-              }
-            }
-          ]
-        }
-      },
-      "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe": {
         "version": "79c01052b5f7f49d3cf53d04d696cb2893294cd3",
         "update_img_hash": "b30cbd5189c051a2aaebbafe98e63c192cae9c63f3b61ca048eecd0828a09b2f",
         "update_img_hash_dev": "7bd2b03abab3428da35b0f9aec9972a48466efdc9c9d8b75a0463ab66aa1731a",
@@ -300,64 +150,214 @@
             }
           ]
         }
+      },
+      "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe": {
+        "version": "e9fd136f3fed6cb44625379e056ad63789d52d2c",
+        "update_img_hash": "eb8051fb07e820df921aebb3bf5f90075838f05e92bf5e246aa02f837f1473b7",
+        "update_img_hash_dev": "9eb0151ec43287f4f49c38b8707d922a22348a655dad85d72b8f40c567070940",
+        "setupos_disk_img_hash": "3d616a29c3fc07ea70b8fb32a65de686f5b2a11831f9fb3f38e3bfa8d07455ed",
+        "setupos_disk_img_hash_dev": "be3545863cc8653a65bec1016463d360d8d931ebd619618959a3105f0ede593d",
+        "binaries": {
+          "canister_sandbox": "47893eeb9c12e5e78fd8bbaada7c8016199c75edc3f147865fd07b473946e520",
+          "compiler_sandbox": "eb46ed49e02d3a4657925cdac6c6936bd87db3fdc2f5b64cfbb8587ec0154765",
+          "ic-replay": "946e51d238fac36bc67a2bfcab473f5d203a65982941e2996fb0161f05fdd23c",
+          "replicated-state-test": "8c6110936a031118334aa9868cd0b425dc60fc83f2e55e253bae085f31f63361",
+          "sandbox_launcher": "345a7ca9b4a7a30b1e1253a4df1d1a7f68ba96741072dd24bc5c6b179fa4cc4b",
+          "state-layout-test": "816bf829976f6cdb28339fb69b511913482765ce916c87b5a43a1af7cae4339b",
+          "types-test": "78ce8413a400bf21cf1b56a30a6a7123e2d77dd24007be28cb0a3b73edb1ba27"
+        },
+        "launch_measurements": {
+          "guest_launch_measurements": [
+            {
+              "measurement": [ 253, 218, 55, 120, 123, 161, 33, 226, 57, 196, 117, 1, 239, 217, 128, 135, 2, 17, 123, 72, 98, 233, 199, 47, 57, 28, 110, 81, 140, 64, 127, 242, 25, 255, 43, 146, 93, 177, 53, 141, 86, 245, 1, 217, 205, 16, 115, 16 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
+                "vcpu_type": "EPYC-v4"
+              }
+            },
+            {
+              "measurement": [ 24, 101, 192, 136, 179, 108, 41, 150, 58, 9, 132, 254, 156, 18, 94, 124, 128, 110, 157, 155, 203, 2, 217, 244, 173, 103, 248, 87, 9, 43, 77, 185, 231, 22, 65, 168, 65, 138, 172, 95, 184, 198, 180, 49, 55, 222, 72, 124 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
+                "vcpu_type": "EPYC-v4"
+              }
+            },
+            {
+              "measurement": [ 31, 105, 208, 20, 208, 180, 26, 165, 70, 230, 230, 195, 211, 154, 177, 236, 207, 50, 214, 213, 27, 104, 135, 151, 221, 153, 147, 25, 143, 10, 61, 78, 26, 24, 80, 13, 51, 224, 26, 115, 100, 19, 89, 56, 148, 68, 139, 86 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
+                "vcpu_type": "EPYC-Genoa"
+              }
+            },
+            {
+              "measurement": [ 155, 59, 38, 196, 220, 178, 41, 89, 210, 173, 90, 14, 229, 17, 100, 91, 52, 79, 176, 132, 20, 209, 227, 6, 222, 216, 144, 164, 250, 138, 104, 34, 86, 41, 237, 177, 25, 70, 23, 1, 13, 73, 56, 153, 244, 29, 128, 229 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
+                "vcpu_type": "EPYC-Genoa"
+              }
+            },
+            {
+              "measurement": [ 13, 25, 223, 92, 32, 200, 132, 118, 112, 108, 132, 242, 39, 188, 7, 51, 60, 11, 140, 9, 55, 62, 175, 209, 77, 246, 194, 30, 162, 239, 197, 34, 59, 74, 254, 148, 133, 211, 117, 28, 204, 23, 251, 58, 234, 171, 166, 66 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
+                "vcpu_type": "EPYC-Turin"
+              }
+            },
+            {
+              "measurement": [ 71, 208, 102, 253, 4, 208, 30, 75, 200, 126, 202, 44, 49, 254, 17, 215, 56, 68, 124, 134, 245, 48, 29, 11, 103, 176, 76, 76, 42, 15, 77, 188, 6, 100, 144, 115, 215, 225, 127, 84, 3, 199, 45, 185, 170, 152, 236, 203 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
+                "vcpu_type": "EPYC-Turin"
+              }
+            }
+          ]
+        },
+        "launch_measurements_dev": {
+          "guest_launch_measurements": [
+            {
+              "measurement": [ 171, 50, 232, 7, 177, 49, 103, 245, 120, 161, 7, 171, 169, 182, 143, 198, 140, 6, 217, 159, 252, 90, 222, 11, 167, 252, 236, 101, 186, 223, 248, 117, 83, 87, 150, 191, 13, 19, 11, 178, 186, 228, 37, 158, 70, 227, 66, 31 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
+                "vcpu_type": "EPYC-v4"
+              }
+            },
+            {
+              "measurement": [ 90, 225, 7, 189, 1, 64, 17, 147, 170, 74, 228, 32, 57, 165, 159, 45, 95, 82, 121, 30, 105, 60, 56, 108, 183, 118, 220, 147, 190, 176, 169, 52, 195, 91, 26, 18, 74, 32, 197, 210, 99, 119, 227, 7, 145, 165, 144, 219 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
+                "vcpu_type": "EPYC-v4"
+              }
+            },
+            {
+              "measurement": [ 233, 155, 70, 103, 64, 244, 12, 180, 79, 39, 114, 40, 226, 107, 124, 93, 41, 82, 223, 133, 216, 178, 240, 125, 56, 82, 127, 231, 114, 207, 220, 73, 209, 173, 209, 1, 209, 177, 105, 42, 61, 110, 201, 132, 113, 78, 223, 18 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
+                "vcpu_type": "EPYC-v4"
+              }
+            },
+            {
+              "measurement": [ 28, 49, 243, 135, 31, 144, 163, 161, 125, 36, 233, 118, 57, 201, 168, 189, 85, 141, 42, 11, 191, 145, 153, 78, 213, 172, 208, 90, 41, 159, 27, 57, 97, 60, 141, 103, 139, 238, 68, 220, 188, 66, 75, 41, 151, 193, 158, 41 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
+                "vcpu_type": "EPYC-v4"
+              }
+            },
+            {
+              "measurement": [ 185, 22, 231, 181, 88, 223, 48, 7, 13, 105, 151, 242, 124, 69, 229, 229, 135, 84, 175, 179, 142, 219, 91, 138, 113, 111, 231, 83, 160, 121, 54, 250, 12, 168, 216, 209, 66, 199, 14, 26, 251, 212, 78, 136, 1, 216, 134, 198 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
+                "vcpu_type": "EPYC-Genoa"
+              }
+            },
+            {
+              "measurement": [ 83, 55, 182, 105, 148, 211, 122, 12, 115, 193, 203, 128, 188, 234, 62, 245, 99, 9, 10, 204, 114, 84, 65, 160, 9, 232, 201, 129, 164, 159, 80, 56, 7, 100, 21, 252, 61, 116, 181, 197, 98, 252, 26, 243, 5, 121, 45, 182 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
+                "vcpu_type": "EPYC-Genoa"
+              }
+            },
+            {
+              "measurement": [ 219, 20, 107, 239, 52, 225, 137, 103, 177, 219, 204, 26, 129, 124, 196, 115, 139, 79, 180, 216, 80, 97, 182, 89, 86, 222, 146, 54, 233, 221, 145, 234, 239, 30, 196, 149, 214, 17, 229, 31, 55, 14, 163, 10, 105, 66, 69, 237 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
+                "vcpu_type": "EPYC-Genoa"
+              }
+            },
+            {
+              "measurement": [ 245, 21, 81, 171, 206, 34, 102, 27, 208, 92, 77, 138, 37, 105, 64, 226, 39, 222, 71, 116, 41, 88, 246, 1, 242, 16, 251, 77, 166, 13, 223, 179, 185, 43, 212, 25, 123, 211, 129, 232, 248, 111, 118, 108, 88, 60, 10, 98 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
+                "vcpu_type": "EPYC-Genoa"
+              }
+            },
+            {
+              "measurement": [ 122, 51, 100, 199, 221, 224, 78, 147, 49, 10, 5, 57, 137, 156, 135, 39, 157, 2, 123, 27, 106, 166, 213, 156, 75, 108, 86, 107, 147, 180, 72, 37, 1, 226, 212, 226, 74, 17, 185, 120, 178, 203, 12, 30, 225, 177, 74, 53 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
+                "vcpu_type": "EPYC-Turin"
+              }
+            },
+            {
+              "measurement": [ 214, 18, 159, 176, 242, 242, 47, 43, 120, 179, 126, 47, 174, 167, 60, 88, 191, 198, 85, 58, 216, 188, 90, 168, 82, 209, 57, 114, 224, 35, 16, 42, 91, 135, 95, 10, 195, 30, 91, 217, 171, 126, 189, 126, 232, 56, 92, 126 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
+                "vcpu_type": "EPYC-Turin"
+              }
+            },
+            {
+              "measurement": [ 31, 95, 116, 205, 73, 151, 60, 184, 240, 8, 208, 114, 128, 185, 182, 57, 66, 105, 132, 41, 106, 32, 130, 228, 106, 179, 64, 39, 226, 9, 174, 123, 135, 18, 225, 180, 18, 99, 74, 31, 127, 236, 62, 183, 212, 249, 245, 116 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
+                "vcpu_type": "EPYC-Turin"
+              }
+            },
+            {
+              "measurement": [ 110, 39, 51, 232, 188, 192, 150, 96, 181, 21, 67, 184, 50, 141, 162, 136, 87, 175, 184, 245, 89, 26, 229, 7, 197, 10, 82, 15, 41, 31, 108, 76, 101, 200, 115, 41, 195, 122, 23, 165, 86, 11, 90, 98, 116, 173, 167, 49 ],
+              "metadata": {
+                "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
+                "vcpu_type": "EPYC-Turin"
+              }
+            }
+          ]
+        }
       }
     },
     "latest_release": {
-      "version": "79c01052b5f7f49d3cf53d04d696cb2893294cd3",
-      "update_img_hash": "b30cbd5189c051a2aaebbafe98e63c192cae9c63f3b61ca048eecd0828a09b2f",
-      "update_img_hash_dev": "7bd2b03abab3428da35b0f9aec9972a48466efdc9c9d8b75a0463ab66aa1731a",
-      "setupos_disk_img_hash": "cd607d415b08f2516c08100181598ecc13330f65521be1e75ec3f8beedbcca6f",
-      "setupos_disk_img_hash_dev": "1548651b7144feea24ff8dffc5f445b85126ed90e40092486430dfdbfdb090d6",
+      "version": "e9fd136f3fed6cb44625379e056ad63789d52d2c",
+      "update_img_hash": "eb8051fb07e820df921aebb3bf5f90075838f05e92bf5e246aa02f837f1473b7",
+      "update_img_hash_dev": "9eb0151ec43287f4f49c38b8707d922a22348a655dad85d72b8f40c567070940",
+      "setupos_disk_img_hash": "3d616a29c3fc07ea70b8fb32a65de686f5b2a11831f9fb3f38e3bfa8d07455ed",
+      "setupos_disk_img_hash_dev": "be3545863cc8653a65bec1016463d360d8d931ebd619618959a3105f0ede593d",
       "binaries": {
-        "canister_sandbox": "0a4a155bd2fd3571cce16cd304fba498d8e54e6e53b2f1e2d1dfd04b764c422e",
-        "compiler_sandbox": "fd5ba2539d6708c306d1f750c2f38df673c616a32741e68ba242d5e3dbbe6e82",
-        "ic-replay": "b56a690a26780435e7865f32351ece26e17e9d3f28ec333f9e3cd13ba7cabfe0",
-        "replicated-state-test": "3eeaf26deecdedd849f2842a443f278448beda98dec944f8d1deb9c99ee88a12",
-        "sandbox_launcher": "1a9db8ccaa3a5fe626d2c44e0eac4d322c7d645aa348931365181247cebea4b6",
-        "state-layout-test": "d48e2a9ea40aed2b5ce168e3c199cbd1b2ece11f84fbbff79273e2c0efef61bc",
-        "types-test": "f15cbecbdb9b3fa3f952c519a9bff22db0222eca5430115e952373eb196cfda0"
+        "canister_sandbox": "47893eeb9c12e5e78fd8bbaada7c8016199c75edc3f147865fd07b473946e520",
+        "compiler_sandbox": "eb46ed49e02d3a4657925cdac6c6936bd87db3fdc2f5b64cfbb8587ec0154765",
+        "ic-replay": "946e51d238fac36bc67a2bfcab473f5d203a65982941e2996fb0161f05fdd23c",
+        "replicated-state-test": "8c6110936a031118334aa9868cd0b425dc60fc83f2e55e253bae085f31f63361",
+        "sandbox_launcher": "345a7ca9b4a7a30b1e1253a4df1d1a7f68ba96741072dd24bc5c6b179fa4cc4b",
+        "state-layout-test": "816bf829976f6cdb28339fb69b511913482765ce916c87b5a43a1af7cae4339b",
+        "types-test": "78ce8413a400bf21cf1b56a30a6a7123e2d77dd24007be28cb0a3b73edb1ba27"
       },
       "launch_measurements": {
         "guest_launch_measurements": [
           {
-            "measurement": [ 122, 116, 234, 204, 36, 67, 24, 221, 147, 26, 165, 200, 80, 74, 39, 224, 116, 208, 192, 234, 103, 227, 10, 225, 165, 82, 48, 7, 101, 172, 193, 120, 117, 105, 232, 82, 122, 78, 53, 108, 127, 170, 91, 62, 43, 43, 16, 117 ],
+            "measurement": [ 253, 218, 55, 120, 123, 161, 33, 226, 57, 196, 117, 1, 239, 217, 128, 135, 2, 17, 123, 72, 98, 233, 199, 47, 57, 28, 110, 81, 140, 64, 127, 242, 25, 255, 43, 146, 93, 177, 53, 141, 86, 245, 1, 217, 205, 16, 115, 16 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=4afdfe767bdaade0459fadc7dedba5d6bb4148bd1caa6d1da23acf34e498cf1a",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
               "vcpu_type": "EPYC-v4"
             }
           },
           {
-            "measurement": [ 110, 22, 25, 190, 72, 208, 67, 248, 123, 141, 21, 122, 115, 63, 3, 191, 47, 124, 76, 26, 148, 174, 8, 88, 109, 119, 60, 150, 123, 83, 89, 108, 114, 103, 135, 231, 163, 232, 10, 81, 84, 240, 68, 219, 232, 223, 226, 155 ],
+            "measurement": [ 24, 101, 192, 136, 179, 108, 41, 150, 58, 9, 132, 254, 156, 18, 94, 124, 128, 110, 157, 155, 203, 2, 217, 244, 173, 103, 248, 87, 9, 43, 77, 185, 231, 22, 65, 168, 65, 138, 172, 95, 184, 198, 180, 49, 55, 222, 72, 124 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=4afdfe767bdaade0459fadc7dedba5d6bb4148bd1caa6d1da23acf34e498cf1a",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
               "vcpu_type": "EPYC-v4"
             }
           },
           {
-            "measurement": [ 132, 68, 39, 247, 230, 214, 121, 65, 63, 170, 187, 232, 204, 235, 51, 57, 2, 248, 18, 61, 49, 18, 207, 174, 92, 22, 81, 36, 115, 133, 239, 251, 154, 169, 61, 104, 55, 56, 14, 14, 77, 106, 68, 243, 141, 29, 174, 254 ],
+            "measurement": [ 31, 105, 208, 20, 208, 180, 26, 165, 70, 230, 230, 195, 211, 154, 177, 236, 207, 50, 214, 213, 27, 104, 135, 151, 221, 153, 147, 25, 143, 10, 61, 78, 26, 24, 80, 13, 51, 224, 26, 115, 100, 19, 89, 56, 148, 68, 139, 86 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=4afdfe767bdaade0459fadc7dedba5d6bb4148bd1caa6d1da23acf34e498cf1a",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
               "vcpu_type": "EPYC-Genoa"
             }
           },
           {
-            "measurement": [ 103, 180, 123, 137, 49, 226, 208, 212, 228, 18, 255, 224, 143, 110, 114, 129, 179, 147, 134, 77, 112, 239, 234, 186, 237, 228, 193, 144, 141, 72, 208, 107, 205, 105, 100, 241, 147, 203, 60, 203, 73, 195, 117, 134, 95, 142, 40, 96 ],
+            "measurement": [ 155, 59, 38, 196, 220, 178, 41, 89, 210, 173, 90, 14, 229, 17, 100, 91, 52, 79, 176, 132, 20, 209, 227, 6, 222, 216, 144, 164, 250, 138, 104, 34, 86, 41, 237, 177, 25, 70, 23, 1, 13, 73, 56, 153, 244, 29, 128, 229 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=4afdfe767bdaade0459fadc7dedba5d6bb4148bd1caa6d1da23acf34e498cf1a",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
               "vcpu_type": "EPYC-Genoa"
             }
           },
           {
-            "measurement": [ 91, 66, 132, 193, 110, 51, 229, 253, 69, 162, 251, 191, 173, 117, 109, 230, 191, 152, 218, 178, 123, 182, 131, 186, 165, 87, 59, 57, 221, 182, 44, 109, 128, 158, 148, 102, 0, 157, 240, 75, 215, 246, 243, 95, 242, 118, 248, 192 ],
+            "measurement": [ 13, 25, 223, 92, 32, 200, 132, 118, 112, 108, 132, 242, 39, 188, 7, 51, 60, 11, 140, 9, 55, 62, 175, 209, 77, 246, 194, 30, 162, 239, 197, 34, 59, 74, 254, 148, 133, 211, 117, 28, 204, 23, 251, 58, 234, 171, 166, 66 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=4afdfe767bdaade0459fadc7dedba5d6bb4148bd1caa6d1da23acf34e498cf1a",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
               "vcpu_type": "EPYC-Turin"
             }
           },
           {
-            "measurement": [ 64, 105, 74, 176, 134, 39, 233, 223, 228, 121, 214, 219, 44, 215, 178, 78, 101, 226, 42, 251, 92, 157, 45, 172, 87, 190, 149, 49, 251, 183, 69, 98, 227, 181, 216, 104, 156, 163, 205, 160, 100, 249, 90, 166, 2, 136, 192, 64 ],
+            "measurement": [ 71, 208, 102, 253, 4, 208, 30, 75, 200, 126, 202, 44, 49, 254, 17, 215, 56, 68, 124, 134, 245, 48, 29, 11, 103, 176, 76, 76, 42, 15, 77, 188, 6, 100, 144, 115, 215, 225, 127, 84, 3, 199, 45, 185, 170, 152, 236, 203 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=4afdfe767bdaade0459fadc7dedba5d6bb4148bd1caa6d1da23acf34e498cf1a",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
               "vcpu_type": "EPYC-Turin"
             }
           }
@@ -366,86 +366,86 @@
       "launch_measurements_dev": {
         "guest_launch_measurements": [
           {
-            "measurement": [ 51, 19, 101, 195, 176, 21, 202, 79, 71, 101, 115, 38, 14, 194, 77, 18, 140, 85, 87, 90, 150, 17, 129, 138, 64, 196, 70, 220, 12, 45, 184, 41, 193, 199, 70, 135, 190, 87, 163, 146, 201, 59, 99, 92, 233, 146, 104, 33 ],
+            "measurement": [ 171, 50, 232, 7, 177, 49, 103, 245, 120, 161, 7, 171, 169, 182, 143, 198, 140, 6, 217, 159, 252, 90, 222, 11, 167, 252, 236, 101, 186, 223, 248, 117, 83, 87, 150, 191, 13, 19, 11, 178, 186, 228, 37, 158, 70, 227, 66, 31 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-v4"
             }
           },
           {
-            "measurement": [ 203, 137, 23, 177, 85, 242, 56, 244, 92, 62, 166, 49, 246, 23, 7, 12, 197, 63, 52, 171, 14, 136, 241, 248, 199, 228, 67, 32, 232, 117, 191, 79, 171, 114, 236, 86, 197, 244, 102, 211, 213, 243, 67, 173, 154, 223, 129, 74 ],
+            "measurement": [ 90, 225, 7, 189, 1, 64, 17, 147, 170, 74, 228, 32, 57, 165, 159, 45, 95, 82, 121, 30, 105, 60, 56, 108, 183, 118, 220, 147, 190, 176, 169, 52, 195, 91, 26, 18, 74, 32, 197, 210, 99, 119, 227, 7, 145, 165, 144, 219 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-v4"
             }
           },
           {
-            "measurement": [ 18, 102, 98, 129, 132, 126, 73, 31, 213, 146, 102, 195, 99, 73, 186, 198, 223, 72, 173, 170, 207, 73, 122, 52, 25, 31, 181, 115, 103, 40, 243, 222, 124, 101, 42, 72, 139, 210, 24, 127, 137, 10, 212, 5, 74, 182, 49, 55 ],
+            "measurement": [ 233, 155, 70, 103, 64, 244, 12, 180, 79, 39, 114, 40, 226, 107, 124, 93, 41, 82, 223, 133, 216, 178, 240, 125, 56, 82, 127, 231, 114, 207, 220, 73, 209, 173, 209, 1, 209, 177, 105, 42, 61, 110, 201, 132, 113, 78, 223, 18 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-v4"
             }
           },
           {
-            "measurement": [ 130, 81, 160, 226, 43, 179, 83, 71, 108, 211, 193, 105, 194, 108, 194, 150, 250, 214, 208, 123, 57, 40, 54, 239, 52, 251, 31, 33, 132, 164, 162, 51, 218, 190, 69, 51, 97, 226, 120, 220, 157, 108, 213, 154, 199, 229, 23, 90 ],
+            "measurement": [ 28, 49, 243, 135, 31, 144, 163, 161, 125, 36, 233, 118, 57, 201, 168, 189, 85, 141, 42, 11, 191, 145, 153, 78, 213, 172, 208, 90, 41, 159, 27, 57, 97, 60, 141, 103, 139, 238, 68, 220, 188, 66, 75, 41, 151, 193, 158, 41 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-v4"
             }
           },
           {
-            "measurement": [ 74, 108, 186, 103, 144, 44, 153, 152, 133, 141, 41, 131, 229, 38, 138, 149, 143, 149, 181, 95, 51, 190, 112, 93, 72, 31, 221, 27, 109, 147, 140, 50, 216, 170, 35, 52, 116, 172, 46, 57, 40, 68, 171, 98, 23, 76, 70, 32 ],
+            "measurement": [ 185, 22, 231, 181, 88, 223, 48, 7, 13, 105, 151, 242, 124, 69, 229, 229, 135, 84, 175, 179, 142, 219, 91, 138, 113, 111, 231, 83, 160, 121, 54, 250, 12, 168, 216, 209, 66, 199, 14, 26, 251, 212, 78, 136, 1, 216, 134, 198 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Genoa"
             }
           },
           {
-            "measurement": [ 16, 136, 179, 96, 127, 30, 58, 62, 70, 94, 206, 84, 22, 162, 99, 44, 144, 245, 213, 209, 11, 110, 93, 236, 120, 149, 19, 62, 16, 124, 86, 158, 164, 60, 202, 86, 167, 101, 175, 25, 29, 242, 114, 101, 128, 135, 91, 91 ],
+            "measurement": [ 83, 55, 182, 105, 148, 211, 122, 12, 115, 193, 203, 128, 188, 234, 62, 245, 99, 9, 10, 204, 114, 84, 65, 160, 9, 232, 201, 129, 164, 159, 80, 56, 7, 100, 21, 252, 61, 116, 181, 197, 98, 252, 26, 243, 5, 121, 45, 182 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Genoa"
             }
           },
           {
-            "measurement": [ 131, 168, 3, 38, 197, 121, 131, 84, 141, 131, 8, 199, 181, 239, 127, 149, 13, 56, 234, 119, 123, 75, 106, 161, 83, 132, 182, 225, 57, 3, 61, 8, 133, 82, 29, 229, 52, 7, 59, 52, 87, 129, 3, 168, 173, 106, 55, 51 ],
+            "measurement": [ 219, 20, 107, 239, 52, 225, 137, 103, 177, 219, 204, 26, 129, 124, 196, 115, 139, 79, 180, 216, 80, 97, 182, 89, 86, 222, 146, 54, 233, 221, 145, 234, 239, 30, 196, 149, 214, 17, 229, 31, 55, 14, 163, 10, 105, 66, 69, 237 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Genoa"
             }
           },
           {
-            "measurement": [ 39, 18, 68, 38, 229, 14, 241, 150, 191, 206, 160, 6, 137, 196, 234, 30, 52, 44, 243, 189, 97, 56, 120, 74, 158, 8, 201, 100, 245, 128, 173, 128, 206, 3, 89, 38, 210, 124, 210, 142, 154, 242, 250, 17, 229, 137, 115, 214 ],
+            "measurement": [ 245, 21, 81, 171, 206, 34, 102, 27, 208, 92, 77, 138, 37, 105, 64, 226, 39, 222, 71, 116, 41, 88, 246, 1, 242, 16, 251, 77, 166, 13, 223, 179, 185, 43, 212, 25, 123, 211, 129, 232, 248, 111, 118, 108, 88, 60, 10, 98 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Genoa"
             }
           },
           {
-            "measurement": [ 163, 13, 81, 178, 94, 164, 119, 100, 219, 215, 237, 6, 152, 129, 97, 155, 237, 198, 159, 196, 217, 245, 21, 132, 174, 88, 148, 100, 6, 156, 24, 168, 149, 119, 167, 222, 191, 92, 113, 165, 224, 111, 208, 174, 9, 201, 14, 170 ],
+            "measurement": [ 122, 51, 100, 199, 221, 224, 78, 147, 49, 10, 5, 57, 137, 156, 135, 39, 157, 2, 123, 27, 106, 166, 213, 156, 75, 108, 86, 107, 147, 180, 72, 37, 1, 226, 212, 226, 74, 17, 185, 120, 178, 203, 12, 30, 225, 177, 74, 53 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Turin"
             }
           },
           {
-            "measurement": [ 225, 13, 92, 49, 93, 159, 34, 53, 17, 169, 235, 249, 53, 197, 82, 171, 32, 191, 174, 94, 148, 39, 32, 5, 27, 152, 167, 132, 15, 111, 202, 207, 224, 218, 74, 196, 3, 98, 126, 54, 218, 145, 101, 8, 130, 93, 127, 49 ],
+            "measurement": [ 214, 18, 159, 176, 242, 242, 47, 43, 120, 179, 126, 47, 174, 167, 60, 88, 191, 198, 85, 58, 216, 188, 90, 168, 82, 209, 57, 114, 224, 35, 16, 42, 91, 135, 95, 10, 195, 30, 91, 217, 171, 126, 189, 126, 232, 56, 92, 126 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Turin"
             }
           },
           {
-            "measurement": [ 11, 112, 224, 199, 185, 74, 89, 125, 165, 200, 255, 134, 93, 188, 157, 84, 170, 110, 195, 75, 167, 50, 19, 43, 91, 49, 108, 232, 247, 124, 113, 130, 105, 190, 108, 128, 6, 197, 138, 10, 152, 198, 122, 28, 6, 224, 175, 157 ],
+            "measurement": [ 31, 95, 116, 205, 73, 151, 60, 184, 240, 8, 208, 114, 128, 185, 182, 57, 66, 105, 132, 41, 106, 32, 130, 228, 106, 179, 64, 39, 226, 9, 174, 123, 135, 18, 225, 180, 18, 99, 74, 31, 127, 236, 62, 183, 212, 249, 245, 116 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Turin"
             }
           },
           {
-            "measurement": [ 61, 99, 184, 219, 133, 70, 145, 130, 204, 141, 230, 57, 228, 242, 143, 115, 38, 174, 84, 226, 24, 85, 128, 181, 72, 44, 140, 183, 138, 33, 193, 241, 199, 77, 132, 41, 251, 80, 123, 198, 42, 166, 22, 148, 111, 77, 220, 29 ],
+            "measurement": [ 110, 39, 51, 232, 188, 192, 150, 96, 181, 21, 67, 184, 50, 141, 162, 136, 87, 175, 184, 245, 89, 26, 229, 7, 197, 10, 82, 15, 41, 31, 108, 76, 101, 200, 115, 41, 195, 122, 23, 165, 86, 11, 90, 98, 116, 173, 167, 49 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Turin"
             }
           }
@@ -455,61 +455,61 @@
   },
   "hostos": {
     "latest_release": {
-      "version": "79c01052b5f7f49d3cf53d04d696cb2893294cd3",
-      "update_img_hash": "10dc9bdfae3618d8233205fcf98e842dd88f4711ee15b04f1524025a02cab450",
-      "update_img_hash_dev": "3c96e65fe297085242d2a631aa2aeddc1c3c0396ba8d7c2fdcca3b9d62cd7d37",
-      "setupos_disk_img_hash": "cd607d415b08f2516c08100181598ecc13330f65521be1e75ec3f8beedbcca6f",
-      "setupos_disk_img_hash_dev": "1548651b7144feea24ff8dffc5f445b85126ed90e40092486430dfdbfdb090d6",
+      "version": "e9fd136f3fed6cb44625379e056ad63789d52d2c",
+      "update_img_hash": "0d4d6de1f62f9812b07cdd8d72007b3fd0f139b35d50ad337a43ad89728cc978",
+      "update_img_hash_dev": "6ad6bf5b6c0a57319b4d3d7a9f8e72eae0da5544dbd36631a17837d67a6ddab1",
+      "setupos_disk_img_hash": "3d616a29c3fc07ea70b8fb32a65de686f5b2a11831f9fb3f38e3bfa8d07455ed",
+      "setupos_disk_img_hash_dev": "be3545863cc8653a65bec1016463d360d8d931ebd619618959a3105f0ede593d",
       "binaries": {
-        "canister_sandbox": "0a4a155bd2fd3571cce16cd304fba498d8e54e6e53b2f1e2d1dfd04b764c422e",
-        "compiler_sandbox": "fd5ba2539d6708c306d1f750c2f38df673c616a32741e68ba242d5e3dbbe6e82",
-        "ic-replay": "b56a690a26780435e7865f32351ece26e17e9d3f28ec333f9e3cd13ba7cabfe0",
-        "replicated-state-test": "3eeaf26deecdedd849f2842a443f278448beda98dec944f8d1deb9c99ee88a12",
-        "sandbox_launcher": "1a9db8ccaa3a5fe626d2c44e0eac4d322c7d645aa348931365181247cebea4b6",
-        "state-layout-test": "d48e2a9ea40aed2b5ce168e3c199cbd1b2ece11f84fbbff79273e2c0efef61bc",
-        "types-test": "f15cbecbdb9b3fa3f952c519a9bff22db0222eca5430115e952373eb196cfda0"
+        "canister_sandbox": "47893eeb9c12e5e78fd8bbaada7c8016199c75edc3f147865fd07b473946e520",
+        "compiler_sandbox": "eb46ed49e02d3a4657925cdac6c6936bd87db3fdc2f5b64cfbb8587ec0154765",
+        "ic-replay": "946e51d238fac36bc67a2bfcab473f5d203a65982941e2996fb0161f05fdd23c",
+        "replicated-state-test": "8c6110936a031118334aa9868cd0b425dc60fc83f2e55e253bae085f31f63361",
+        "sandbox_launcher": "345a7ca9b4a7a30b1e1253a4df1d1a7f68ba96741072dd24bc5c6b179fa4cc4b",
+        "state-layout-test": "816bf829976f6cdb28339fb69b511913482765ce916c87b5a43a1af7cae4339b",
+        "types-test": "78ce8413a400bf21cf1b56a30a6a7123e2d77dd24007be28cb0a3b73edb1ba27"
       },
       "launch_measurements": {
         "guest_launch_measurements": [
           {
-            "measurement": [ 122, 116, 234, 204, 36, 67, 24, 221, 147, 26, 165, 200, 80, 74, 39, 224, 116, 208, 192, 234, 103, 227, 10, 225, 165, 82, 48, 7, 101, 172, 193, 120, 117, 105, 232, 82, 122, 78, 53, 108, 127, 170, 91, 62, 43, 43, 16, 117 ],
+            "measurement": [ 253, 218, 55, 120, 123, 161, 33, 226, 57, 196, 117, 1, 239, 217, 128, 135, 2, 17, 123, 72, 98, 233, 199, 47, 57, 28, 110, 81, 140, 64, 127, 242, 25, 255, 43, 146, 93, 177, 53, 141, 86, 245, 1, 217, 205, 16, 115, 16 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=4afdfe767bdaade0459fadc7dedba5d6bb4148bd1caa6d1da23acf34e498cf1a",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
               "vcpu_type": "EPYC-v4"
             }
           },
           {
-            "measurement": [ 110, 22, 25, 190, 72, 208, 67, 248, 123, 141, 21, 122, 115, 63, 3, 191, 47, 124, 76, 26, 148, 174, 8, 88, 109, 119, 60, 150, 123, 83, 89, 108, 114, 103, 135, 231, 163, 232, 10, 81, 84, 240, 68, 219, 232, 223, 226, 155 ],
+            "measurement": [ 24, 101, 192, 136, 179, 108, 41, 150, 58, 9, 132, 254, 156, 18, 94, 124, 128, 110, 157, 155, 203, 2, 217, 244, 173, 103, 248, 87, 9, 43, 77, 185, 231, 22, 65, 168, 65, 138, 172, 95, 184, 198, 180, 49, 55, 222, 72, 124 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=4afdfe767bdaade0459fadc7dedba5d6bb4148bd1caa6d1da23acf34e498cf1a",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
               "vcpu_type": "EPYC-v4"
             }
           },
           {
-            "measurement": [ 132, 68, 39, 247, 230, 214, 121, 65, 63, 170, 187, 232, 204, 235, 51, 57, 2, 248, 18, 61, 49, 18, 207, 174, 92, 22, 81, 36, 115, 133, 239, 251, 154, 169, 61, 104, 55, 56, 14, 14, 77, 106, 68, 243, 141, 29, 174, 254 ],
+            "measurement": [ 31, 105, 208, 20, 208, 180, 26, 165, 70, 230, 230, 195, 211, 154, 177, 236, 207, 50, 214, 213, 27, 104, 135, 151, 221, 153, 147, 25, 143, 10, 61, 78, 26, 24, 80, 13, 51, 224, 26, 115, 100, 19, 89, 56, 148, 68, 139, 86 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=4afdfe767bdaade0459fadc7dedba5d6bb4148bd1caa6d1da23acf34e498cf1a",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
               "vcpu_type": "EPYC-Genoa"
             }
           },
           {
-            "measurement": [ 103, 180, 123, 137, 49, 226, 208, 212, 228, 18, 255, 224, 143, 110, 114, 129, 179, 147, 134, 77, 112, 239, 234, 186, 237, 228, 193, 144, 141, 72, 208, 107, 205, 105, 100, 241, 147, 203, 60, 203, 73, 195, 117, 134, 95, 142, 40, 96 ],
+            "measurement": [ 155, 59, 38, 196, 220, 178, 41, 89, 210, 173, 90, 14, 229, 17, 100, 91, 52, 79, 176, 132, 20, 209, 227, 6, 222, 216, 144, 164, 250, 138, 104, 34, 86, 41, 237, 177, 25, 70, 23, 1, 13, 73, 56, 153, 244, 29, 128, 229 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=4afdfe767bdaade0459fadc7dedba5d6bb4148bd1caa6d1da23acf34e498cf1a",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
               "vcpu_type": "EPYC-Genoa"
             }
           },
           {
-            "measurement": [ 91, 66, 132, 193, 110, 51, 229, 253, 69, 162, 251, 191, 173, 117, 109, 230, 191, 152, 218, 178, 123, 182, 131, 186, 165, 87, 59, 57, 221, 182, 44, 109, 128, 158, 148, 102, 0, 157, 240, 75, 215, 246, 243, 95, 242, 118, 248, 192 ],
+            "measurement": [ 13, 25, 223, 92, 32, 200, 132, 118, 112, 108, 132, 242, 39, 188, 7, 51, 60, 11, 140, 9, 55, 62, 175, 209, 77, 246, 194, 30, 162, 239, 197, 34, 59, 74, 254, 148, 133, 211, 117, 28, 204, 23, 251, 58, 234, 171, 166, 66 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=4afdfe767bdaade0459fadc7dedba5d6bb4148bd1caa6d1da23acf34e498cf1a",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
               "vcpu_type": "EPYC-Turin"
             }
           },
           {
-            "measurement": [ 64, 105, 74, 176, 134, 39, 233, 223, 228, 121, 214, 219, 44, 215, 178, 78, 101, 226, 42, 251, 92, 157, 45, 172, 87, 190, 149, 49, 251, 183, 69, 98, 227, 181, 216, 104, 156, 163, 205, 160, 100, 249, 90, 166, 2, 136, 192, 64 ],
+            "measurement": [ 71, 208, 102, 253, 4, 208, 30, 75, 200, 126, 202, 44, 49, 254, 17, 215, 56, 68, 124, 134, 245, 48, 29, 11, 103, 176, 76, 76, 42, 15, 77, 188, 6, 100, 144, 115, 215, 225, 127, 84, 3, 199, 45, 185, 170, 152, 236, 203 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=4afdfe767bdaade0459fadc7dedba5d6bb4148bd1caa6d1da23acf34e498cf1a",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=685fedc18ad6763c4182d7e0d09569ae501383330e9e06d06f51b094ffabdcd6",
               "vcpu_type": "EPYC-Turin"
             }
           }
@@ -518,86 +518,86 @@
       "launch_measurements_dev": {
         "guest_launch_measurements": [
           {
-            "measurement": [ 51, 19, 101, 195, 176, 21, 202, 79, 71, 101, 115, 38, 14, 194, 77, 18, 140, 85, 87, 90, 150, 17, 129, 138, 64, 196, 70, 220, 12, 45, 184, 41, 193, 199, 70, 135, 190, 87, 163, 146, 201, 59, 99, 92, 233, 146, 104, 33 ],
+            "measurement": [ 171, 50, 232, 7, 177, 49, 103, 245, 120, 161, 7, 171, 169, 182, 143, 198, 140, 6, 217, 159, 252, 90, 222, 11, 167, 252, 236, 101, 186, 223, 248, 117, 83, 87, 150, 191, 13, 19, 11, 178, 186, 228, 37, 158, 70, 227, 66, 31 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-v4"
             }
           },
           {
-            "measurement": [ 203, 137, 23, 177, 85, 242, 56, 244, 92, 62, 166, 49, 246, 23, 7, 12, 197, 63, 52, 171, 14, 136, 241, 248, 199, 228, 67, 32, 232, 117, 191, 79, 171, 114, 236, 86, 197, 244, 102, 211, 213, 243, 67, 173, 154, 223, 129, 74 ],
+            "measurement": [ 90, 225, 7, 189, 1, 64, 17, 147, 170, 74, 228, 32, 57, 165, 159, 45, 95, 82, 121, 30, 105, 60, 56, 108, 183, 118, 220, 147, 190, 176, 169, 52, 195, 91, 26, 18, 74, 32, 197, 210, 99, 119, 227, 7, 145, 165, 144, 219 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-v4"
             }
           },
           {
-            "measurement": [ 18, 102, 98, 129, 132, 126, 73, 31, 213, 146, 102, 195, 99, 73, 186, 198, 223, 72, 173, 170, 207, 73, 122, 52, 25, 31, 181, 115, 103, 40, 243, 222, 124, 101, 42, 72, 139, 210, 24, 127, 137, 10, 212, 5, 74, 182, 49, 55 ],
+            "measurement": [ 233, 155, 70, 103, 64, 244, 12, 180, 79, 39, 114, 40, 226, 107, 124, 93, 41, 82, 223, 133, 216, 178, 240, 125, 56, 82, 127, 231, 114, 207, 220, 73, 209, 173, 209, 1, 209, 177, 105, 42, 61, 110, 201, 132, 113, 78, 223, 18 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-v4"
             }
           },
           {
-            "measurement": [ 130, 81, 160, 226, 43, 179, 83, 71, 108, 211, 193, 105, 194, 108, 194, 150, 250, 214, 208, 123, 57, 40, 54, 239, 52, 251, 31, 33, 132, 164, 162, 51, 218, 190, 69, 51, 97, 226, 120, 220, 157, 108, 213, 154, 199, 229, 23, 90 ],
+            "measurement": [ 28, 49, 243, 135, 31, 144, 163, 161, 125, 36, 233, 118, 57, 201, 168, 189, 85, 141, 42, 11, 191, 145, 153, 78, 213, 172, 208, 90, 41, 159, 27, 57, 97, 60, 141, 103, 139, 238, 68, 220, 188, 66, 75, 41, 151, 193, 158, 41 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-v4"
             }
           },
           {
-            "measurement": [ 74, 108, 186, 103, 144, 44, 153, 152, 133, 141, 41, 131, 229, 38, 138, 149, 143, 149, 181, 95, 51, 190, 112, 93, 72, 31, 221, 27, 109, 147, 140, 50, 216, 170, 35, 52, 116, 172, 46, 57, 40, 68, 171, 98, 23, 76, 70, 32 ],
+            "measurement": [ 185, 22, 231, 181, 88, 223, 48, 7, 13, 105, 151, 242, 124, 69, 229, 229, 135, 84, 175, 179, 142, 219, 91, 138, 113, 111, 231, 83, 160, 121, 54, 250, 12, 168, 216, 209, 66, 199, 14, 26, 251, 212, 78, 136, 1, 216, 134, 198 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Genoa"
             }
           },
           {
-            "measurement": [ 16, 136, 179, 96, 127, 30, 58, 62, 70, 94, 206, 84, 22, 162, 99, 44, 144, 245, 213, 209, 11, 110, 93, 236, 120, 149, 19, 62, 16, 124, 86, 158, 164, 60, 202, 86, 167, 101, 175, 25, 29, 242, 114, 101, 128, 135, 91, 91 ],
+            "measurement": [ 83, 55, 182, 105, 148, 211, 122, 12, 115, 193, 203, 128, 188, 234, 62, 245, 99, 9, 10, 204, 114, 84, 65, 160, 9, 232, 201, 129, 164, 159, 80, 56, 7, 100, 21, 252, 61, 116, 181, 197, 98, 252, 26, 243, 5, 121, 45, 182 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Genoa"
             }
           },
           {
-            "measurement": [ 131, 168, 3, 38, 197, 121, 131, 84, 141, 131, 8, 199, 181, 239, 127, 149, 13, 56, 234, 119, 123, 75, 106, 161, 83, 132, 182, 225, 57, 3, 61, 8, 133, 82, 29, 229, 52, 7, 59, 52, 87, 129, 3, 168, 173, 106, 55, 51 ],
+            "measurement": [ 219, 20, 107, 239, 52, 225, 137, 103, 177, 219, 204, 26, 129, 124, 196, 115, 139, 79, 180, 216, 80, 97, 182, 89, 86, 222, 146, 54, 233, 221, 145, 234, 239, 30, 196, 149, 214, 17, 229, 31, 55, 14, 163, 10, 105, 66, 69, 237 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Genoa"
             }
           },
           {
-            "measurement": [ 39, 18, 68, 38, 229, 14, 241, 150, 191, 206, 160, 6, 137, 196, 234, 30, 52, 44, 243, 189, 97, 56, 120, 74, 158, 8, 201, 100, 245, 128, 173, 128, 206, 3, 89, 38, 210, 124, 210, 142, 154, 242, 250, 17, 229, 137, 115, 214 ],
+            "measurement": [ 245, 21, 81, 171, 206, 34, 102, 27, 208, 92, 77, 138, 37, 105, 64, 226, 39, 222, 71, 116, 41, 88, 246, 1, 242, 16, 251, 77, 166, 13, 223, 179, 185, 43, 212, 25, 123, 211, 129, 232, 248, 111, 118, 108, 88, 60, 10, 98 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Genoa"
             }
           },
           {
-            "measurement": [ 163, 13, 81, 178, 94, 164, 119, 100, 219, 215, 237, 6, 152, 129, 97, 155, 237, 198, 159, 196, 217, 245, 21, 132, 174, 88, 148, 100, 6, 156, 24, 168, 149, 119, 167, 222, 191, 92, 113, 165, 224, 111, 208, 174, 9, 201, 14, 170 ],
+            "measurement": [ 122, 51, 100, 199, 221, 224, 78, 147, 49, 10, 5, 57, 137, 156, 135, 39, 157, 2, 123, 27, 106, 166, 213, 156, 75, 108, 86, 107, 147, 180, 72, 37, 1, 226, 212, 226, 74, 17, 185, 120, 178, 203, 12, 30, 225, 177, 74, 53 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Turin"
             }
           },
           {
-            "measurement": [ 225, 13, 92, 49, 93, 159, 34, 53, 17, 169, 235, 249, 53, 197, 82, 171, 32, 191, 174, 94, 148, 39, 32, 5, 27, 152, 167, 132, 15, 111, 202, 207, 224, 218, 74, 196, 3, 98, 126, 54, 218, 145, 101, 8, 130, 93, 127, 49 ],
+            "measurement": [ 214, 18, 159, 176, 242, 242, 47, 43, 120, 179, 126, 47, 174, 167, 60, 88, 191, 198, 85, 58, 216, 188, 90, 168, 82, 209, 57, 114, 224, 35, 16, 42, 91, 135, 95, 10, 195, 30, 91, 217, 171, 126, 189, 126, 232, 56, 92, 126 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Turin"
             }
           },
           {
-            "measurement": [ 11, 112, 224, 199, 185, 74, 89, 125, 165, 200, 255, 134, 93, 188, 157, 84, 170, 110, 195, 75, 167, 50, 19, 43, 91, 49, 108, 232, 247, 124, 113, 130, 105, 190, 108, 128, 6, 197, 138, 10, 152, 198, 122, 28, 6, 224, 175, 157 ],
+            "measurement": [ 31, 95, 116, 205, 73, 151, 60, 184, 240, 8, 208, 114, 128, 185, 182, 57, 66, 105, 132, 41, 106, 32, 130, 228, 106, 179, 64, 39, 226, 9, 174, 123, 135, 18, 225, 180, 18, 99, 74, 31, 127, 236, 62, 183, 212, 249, 245, 116 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Turin"
             }
           },
           {
-            "measurement": [ 61, 99, 184, 219, 133, 70, 145, 130, 204, 141, 230, 57, 228, 242, 143, 115, 38, 174, 84, 226, 24, 85, 128, 181, 72, 44, 140, 183, 138, 33, 193, 241, 199, 77, 132, 41, 251, 80, 123, 198, 42, 166, 22, 148, 111, 77, 220, 29 ],
+            "measurement": [ 110, 39, 51, 232, 188, 192, 150, 96, 181, 21, 67, 184, 50, 141, 162, 136, 87, 175, 184, 245, 89, 26, 229, 7, 197, 10, 82, 15, 41, 31, 108, 76, 101, 200, 115, 41, 195, 122, 23, 165, 86, 11, 90, 98, 116, 173, 167, 49 ],
             "metadata": {
-              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=c92ff53b7647372ea2ebcc558ff9f9377218f1d7619b30b1b7de36f8f8ea8cd7",
+              "kernel_cmdline": "root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=3689f07a00c8bac15ecb67aa757cce9414643761a2001829fd61ecb7664e0267",
               "vcpu_type": "EPYC-Turin"
             }
           }

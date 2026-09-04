@@ -504,13 +504,13 @@ impl Storable for ConfigState {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-fn encode<S: ?Sized + serde::Serialize>(state: &S) -> Vec<u8> {
+pub(crate) fn encode<S: ?Sized + serde::Serialize>(state: &S) -> Vec<u8> {
     let mut buf = vec![];
     ciborium::ser::into_writer(state, &mut buf).expect("failed to encode state");
     buf
 }
 
-fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
+pub(crate) fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
     ciborium::de::from_reader(bytes)
         .unwrap_or_else(|e| panic!("failed to decode state bytes {}: {e}", hex::encode(bytes)))
 }

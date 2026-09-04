@@ -5,11 +5,12 @@ use ic_types::crypto::{
 };
 use ic_types::signature::ThresholdSignature;
 use ic_types::{
-    Height,
+    Height, ReplicaVersion,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
 };
 use ic_types_test_utils::ids::subnet_test_id;
 use std::collections::BTreeSet;
+use std::str::FromStr;
 use strum::{EnumCount, IntoEnumIterator};
 
 #[test]
@@ -103,6 +104,9 @@ fn fake_random_beacon(height: u64) -> RandomBeacon {
         content: RandomBeaconContent::new(
             Height::from(height),
             CryptoHashOf::new(CryptoHash(vec![])),
+            // The random beacon is used as a randomness source, so changing the replica version
+            // can affect the output.
+            ReplicaVersion::from_str("0.9.0").unwrap(),
         ),
         signature: ThresholdSignature {
             signer: fake_dkg_id(0),

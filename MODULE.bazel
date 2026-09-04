@@ -422,15 +422,6 @@ http_file(
     url = "https://raw.githubusercontent.com/dfinity/ic-http-gateway-protocol/07bc0f3e6e95a8011de9d1712211cbafdf2e5bfe/examples/http-gateway/canister/http_gateway_canister_custom_assets.wasm.gz",
 )
 
-# Old version of wallet canister
-
-http_file(
-    name = "wallet_canister_0.7.2",
-    downloaded_file_path = "wallet.wasm",
-    sha256 = "1404b28b1c66491689b59e184a9de3c2be0dbdd75d952f29113b516742b7f898",
-    url = "https://github.com/dfinity/sdk/raw/0.7.2/src/distributed/wallet.wasm",
-)
-
 # Bitcoin canister
 
 http_file(
@@ -896,8 +887,11 @@ http_archive(
     sha256 = "10cd1111da87bf2400a380c1639a6cba8bfb937a24f9c51f5f88d393ae5f6f76",
     strip_prefix = "mtools-4.0.49",
     urls = [
-        "https://ftp.gnu.org/gnu/mtools/mtools-4.0.49.tar.gz",
+        # mirrors.kernel.org first: ftp.gnu.org and ftpmirror.gnu.org have a
+        # history of outages that broke CI (e.g. 2026-08-28).
+        "https://mirrors.kernel.org/gnu/mtools/mtools-4.0.49.tar.gz",
         "https://ftpmirror.gnu.org/mtools/mtools-4.0.49.tar.gz",
+        "https://ftp.gnu.org/gnu/mtools/mtools-4.0.49.tar.gz",
     ],
 )
 
@@ -1030,34 +1024,6 @@ http_archive(
     build_file = "@//third_party:BUILD.trivy.bazel",
     sha256 = "41f6eac3ebe3a00448a16f08038b55ce769fe2d5128cb0d64bdf282cdad4831a",
     url = "https://github.com/aquasecurity/trivy/releases/download/v0.69.2/trivy_0.69.2_macOS-64bit.tar.gz",
-)
-
-http_archive(
-    name = "dfx-x86_64-darwin",
-    build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "be1079c5f48e4bb88c2421f65b501040250a13a4ea57c6ccc1d3edf17812f674",
-    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-x86_64-darwin.tar.gz",
-)
-
-http_archive(
-    name = "dfx-x86_64-linux",
-    build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "d1473ae15ece44e782f0f2f8ac586ead349fe434189df8b587eb738becce0138",
-    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-x86_64-linux.tar.gz",
-)
-
-http_archive(
-    name = "dfx-aarch64-darwin",
-    build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "c97b3975f3c72c20f016f7ef4d394fea5bb7e7d849dd77f6ab0ea0361ad6276c",
-    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-darwin.tar.gz",
-)
-
-http_archive(
-    name = "dfx-aarch64-linux",
-    build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "9da909e8a3cbcb938cfe8502afab87ec61e75c5744025cd0a18b621695c38a5e",
-    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-linux.tar.gz",
 )
 
 # We pull in the binary artifact to break a circular dependency

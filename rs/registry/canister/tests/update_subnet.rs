@@ -24,7 +24,7 @@ use ic_registry_subnet_features::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
-use ic_types::ReplicaVersion;
+use ic_test_utilities_types::ids::test_replica_version;
 use prost::Message;
 use registry_canister::mutations::do_update_subnet::{ChainKeyConfig, KeyConfig};
 use registry_canister::{
@@ -145,7 +145,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns: false,
@@ -277,7 +277,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             max_block_payload_size: 4 * 1024 * 1024,
                             unit_delay_millis: 500,
                             initial_notary_delay_millis: 1500,
-                            replica_version_id: ReplicaVersion::default().into(),
+                            replica_version_id: test_replica_version().to_string(),
                             dkg_interval_length: 0,
                             dkg_dealings_per_block: 1,
                             start_as_nns: false,
@@ -378,7 +378,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 max_ingress_messages_per_block: 1000,
                 unit_delay_millis: 100,
                 initial_notary_delay_millis: 1500,
-                replica_version_id: ReplicaVersion::default().into(),
+                replica_version_id: test_replica_version().to_string(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
                 start_as_nns: false,
@@ -466,7 +466,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns: false,

@@ -42,10 +42,10 @@ use ic_management_canister_types_private::{
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
-    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
-    VetKdPublicKeyResult,
+    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, SubnetMetricsArgs, SubnetMetricsResponse,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -714,10 +714,12 @@ impl ExecutionEnvironment {
 
         let mut msg = match msg {
             SubnetMessage::Response(response) => {
-                let context = state
-                    .metadata
-                    .subnet_call_context_manager
-                    .retrieve_context(response.originator_reply_callback, &self.log);
+                let time = state.time();
+                let context = state.metadata.subnet_call_context_manager.retrieve_context(
+                    response.originator_reply_callback,
+                    time,
+                    &self.log,
+                );
                 return match context {
                     None => (state, ExecuteSubnetMessageResultType::Finished),
                     Some(context) => {
@@ -1269,12 +1271,25 @@ impl ExecutionEnvironment {
                 // paying subnets flexible outcalls remain unavailable until the
                 // flag is enabled, since legacy pricing would overcharge them
                 // (it charges the maximum response size up front).
-                let http_outcalls_are_free =
-                    self.http_outcalls_are_free(state.get_own_cost_schedule());
-                let pricing_version = match self.config.flexible_http_requests {
-                    FlagStatus::Enabled => Some(PricingVersion::PayAsYouGo),
-                    FlagStatus::Disabled if http_outcalls_are_free => Some(PricingVersion::Legacy),
-                    FlagStatus::Disabled => None,
+                let cost_schedule = match self.own_subnet_type {
+                    SubnetType::System => CanisterCyclesCostSchedule::Free,
+                    SubnetType::Application
+                    | SubnetType::VerifiedApplication
+                    | SubnetType::CloudEngine => state.get_own_cost_schedule(),
+                };
+                // And, just like non-flexible outcalls, flexible outcalls are
+                // only offered on subnets where the `http_requests` subnet
+                // feature is enabled.
+                let pricing_version = if state.subnet_features().http_requests {
+                    match (self.config.flexible_http_requests, cost_schedule) {
+                        (FlagStatus::Enabled, _) => Some(PricingVersion::PayAsYouGo),
+                        (FlagStatus::Disabled, CanisterCyclesCostSchedule::Free) => {
+                            Some(PricingVersion::Legacy)
+                        }
+                        (FlagStatus::Disabled, CanisterCyclesCostSchedule::Normal) => None,
+                    }
+                } else {
+                    None
                 };
                 match pricing_version {
                     None => ExecuteSubnetMessageResult::Finished {
@@ -1292,12 +1307,6 @@ impl ExecutionEnvironment {
                                     refund: msg.take_cycles(),
                                 },
                                 Ok(args) => {
-                                    let cost_schedule = match self.own_subnet_type {
-                                        SubnetType::System => CanisterCyclesCostSchedule::Free,
-                                        SubnetType::Application
-                                        | SubnetType::VerifiedApplication
-                                        | SubnetType::CloudEngine => state.get_own_cost_schedule(),
-                                    };
                                     match CanisterHttpRequestContext::generate_from_flexible_args(
                                         state.time(),
                                         request.as_ref(),
@@ -1351,6 +1360,10 @@ impl ExecutionEnvironment {
                                     | SubnetType::VerifiedApplication
                                     | SubnetType::CloudEngine => state.get_own_cost_schedule(),
                                 };
+                                // The pay-as-you-go pricing model is gated behind the same
+                                // feature flag as flexible outcalls
+                                let pay_as_you_go_enabled =
+                                    self.config.flexible_http_requests == FlagStatus::Enabled;
                                 match CanisterHttpRequestContext::generate_from_args(
                                     state.time(),
                                     request.as_ref(),
@@ -1359,6 +1372,7 @@ impl ExecutionEnvironment {
                                     registry_settings.registry_version,
                                     cost_schedule,
                                     rng,
+                                    pay_as_you_go_enabled,
                                 ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
                                         response: Err(err.into()),
@@ -1877,6 +1891,20 @@ impl ExecutionEnvironment {
                 }
             },
 
+            Ok(Ic00Method::SubnetMetrics) => match &msg {
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::SubnetMetrics)
+                }
+                CanisterCall::Request(_) => {
+                    let res = SubnetMetricsArgs::decode(payload)
+                        .and_then(|args| self.subnet_metrics(&state, current_round, args));
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res.map(|res| (res, None)),
+                        refund: msg.take_cycles(),
+                    }
+                }
+            },
+
             Ok(Ic00Method::SubnetInfo) => match &msg {
                 CanisterCall::Ingress(_) => self.reject_unexpected_ingress(Ic00Method::SubnetInfo),
                 CanisterCall::Request(_) => {
@@ -2190,14 +2218,6 @@ impl ExecutionEnvironment {
         }
     }
 
-    /// Returns whether HTTP outcalls are free on this subnet, i.e. the subnet
-    /// charges nothing for them. This is true on a free cost schedule, and on
-    /// system subnets.
-    fn http_outcalls_are_free(&self, cost_schedule: CanisterCyclesCostSchedule) -> bool {
-        cost_schedule == CanisterCyclesCostSchedule::Free
-            || self.own_subnet_type == SubnetType::System
-    }
-
     fn try_add_http_context_to_replicated_state(
         &self,
         mut canister_http_request_context: CanisterHttpRequestContext,
@@ -2206,8 +2226,11 @@ impl ExecutionEnvironment {
         since: Instant,
     ) -> Result<(), UserError> {
         let variable_parts_size = canister_http_request_context.variable_parts_size();
-        let cycles_config = state.get_own_subnet_cycles_config();
-        let cost_schedule = cycles_config.cost_schedule;
+        // HTTP outcalls are also free on system subnets, despite their normal cost schedule.
+        let cost_schedule = canister_http_request_context.cost_schedule;
+        let mut cycles_config = state.get_own_subnet_cycles_config();
+        cycles_config.cost_schedule = cost_schedule;
+
         let legacy_fee = self.cycles_account_manager.http_request_fee(
             variable_parts_size,
             canister_http_request_context.max_response_bytes,
@@ -2267,7 +2290,7 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let http_outcalls_are_free = self.http_outcalls_are_free(cost_schedule);
+        let http_outcalls_are_free = cost_schedule == CanisterCyclesCostSchedule::Free;
 
         // The refundable payment is everything the payment covers beyond the
         // base fee; when the outcall is free nothing is charged, so nothing is
@@ -3378,6 +3401,60 @@ impl ExecutionEnvironment {
         let res = SubnetInfoResponse {
             replica_version: replica_version.to_string(),
             registry_version: registry_version.get(),
+        };
+        Ok(Encode!(&res).unwrap())
+    }
+
+    /// Computes the response to the `subnet_metrics` management canister method.
+    ///
+    /// Charges no round instructions: every field comes from adding up a fixed
+    /// number of already-aggregated `SubnetMetrics` fields, so there is no work
+    /// here to price. See the `counts_toward_round_limit: false` grouping in
+    /// `ic00_permissions.rs`.
+    fn subnet_metrics(
+        &self,
+        state: &ReplicatedState,
+        current_round: ExecutionRound,
+        args: SubnetMetricsArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        if args.subnet_id != self.own_subnet_id.get() {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Provided target subnet ID {} does not match current subnet ID {}.",
+                    args.subnet_id, self.own_subnet_id
+                ),
+            ));
+        }
+        let metrics = &state.metadata.subnet_metrics;
+        // The same stored aggregate the certified state tree at
+        // `/subnet/<subnet_id>/metrics` reads from certification version `V29` on, so
+        // the two cannot drift. It is refreshed on every `commit_and_certify`
+        // (`rs/state_manager/src/lib.rs`), so a call executing in round N reads the
+        // end-of-round-(N-1) value -- the same one-round lag as `num_canisters`
+        // below. Reading it rather than recomputing the total is also what keeps a
+        // canister deleted earlier in this same round from being counted twice.
+        let consumed_cycles_total = metrics.consumed_cycles_total_including_canisters();
+        let res = SubnetMetricsResponse {
+            // The height of the block in whose execution this call is processed.
+            // `ExecutionRound` is numerically the finalized consensus block
+            // height; see `rs/messaging/src/state_machine.rs`.
+            block_height: candid::Nat::from(current_round.get()),
+            // `num_canisters` and `update_transactions_total` are written at the
+            // *end* of a round (`message_routing.rs`, `scheduler.rs`), so a call
+            // executing in round N reports the end-of-round-(N-1) values. That
+            // one-round lag is what `read_state` reports for height N-1 too, so the
+            // two agree; it is nonetheless not literally "current".
+            num_canisters: candid::Nat::from(metrics.num_canisters),
+            // Read from the stored `SubnetMetrics` field rather than recomputed
+            // live, so that the value agrees with the certified state tree. Note
+            // that message routing only refreshes the stored field every 10
+            // rounds by design (`rs/messaging/src/message_routing.rs`), so
+            // recomputing it here would make `subnet_metrics` disagree with
+            // `read_state` on 9 rounds out of 10.
+            canister_state_bytes: candid::Nat::from(metrics.canister_state_bytes.get()),
+            consumed_cycles_total: candid::Nat::from(consumed_cycles_total.get()),
+            update_transactions_total: candid::Nat::from(metrics.update_transactions_total),
         };
         Ok(Encode!(&res).unwrap())
     }

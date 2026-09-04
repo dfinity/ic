@@ -1,10 +1,22 @@
 use crate::EVM_RPC_ID_STAGING;
+use crate::attestation::AttestationRequest;
+use crate::deposit_address::DepositAddress;
 use crate::eth_logs::LedgerSubaccount;
 use crate::lifecycle::init::InitArg;
-use crate::numeric::{LedgerBurnIndex, Wei};
-use crate::state::State;
-use crate::state::transactions::EthWithdrawalRequest;
+use crate::numeric::{BlockNumber, Erc20Value, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas};
+use crate::state::audit::{EventType, apply_state_transition};
+use crate::state::automatic_deposits::AutomaticDeposits;
+use crate::state::eth_logs_scraping::LogScrapingId;
+use crate::state::event::AutomaticDeposit;
+use crate::state::transactions::{EthWithdrawalRequest, SweepRequest};
+use crate::state::{State, read_state};
+use crate::sweep::create_pending_sweeper_requests;
+use crate::tx::{AuthorizationRequest, GasFeeEstimate, TransactionSignature};
 use candid::{Nat, Principal};
+use ethnum::u256;
+use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
+use std::collections::BTreeSet;
 
 pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
     f: F,
@@ -33,6 +45,51 @@ pub fn initial_state() -> State {
     State::try_from(valid_init_arg()).expect("BUG: invalid init arg")
 }
 
+/// [`initial_state`] with `deposit_helper` configured as the deposit helper whose events name the
+/// account an address credits, which is the one the deposit and sweep paths read.
+pub fn state_with_deposit_helper(deposit_helper: Address) -> State {
+    let mut state = initial_state();
+    state.log_scrapings.set_contract_address(
+        LogScrapingId::EthOrErc20DepositWithSubaccount,
+        deposit_helper,
+    );
+    state
+}
+
+/// An account a deposit address is derived for. Its subaccount is explicit, so a test that clears
+/// it changes the value instead of falling back to the default subaccount.
+pub fn account() -> Account {
+    Account {
+        owner: Principal::from_slice(&[1, 2, 3, 4]),
+        subaccount: Some([42_u8; 32]),
+    }
+}
+
+/// A second account, for tests that need two deposit addresses in one sweep.
+pub fn another_account() -> Account {
+    Account {
+        owner: Principal::from_slice(&[5, 6, 7, 8]),
+        subaccount: Some([43_u8; 32]),
+    }
+}
+
+/// The deposit helper whose events name the account an address credits.
+pub fn deposit_helper() -> Address {
+    "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38"
+        .parse()
+        .expect("BUG: invalid address")
+}
+
+/// A well-formed signature that stands for no particular one, for tests that only check it is
+/// carried around unchanged.
+pub fn transaction_signature() -> TransactionSignature {
+    TransactionSignature {
+        signature_y_parity: true,
+        r: u256::from_be_bytes([0xaa; 32]),
+        s: u256::from_be_bytes([0xbb; 32]),
+    }
+}
+
 /// A sweeper funding request of `withdrawal_amount`, as the funding task builds one: burned from the
 /// minter's own fee subaccount, sent to its sweeper address.
 pub fn sweeper_funding_request(withdrawal_amount: Wei) -> EthWithdrawalRequest {
@@ -47,6 +104,130 @@ pub fn sweeper_funding_request(withdrawal_amount: Wei) -> EthWithdrawalRequest {
             .unwrap(),
         from_subaccount: LedgerSubaccount::from_bytes(crate::CKETH_FEE_SUBACCOUNT),
         created_at: Some(1699527697000000000),
+    }
+}
+
+pub fn deposit_address(account: &Account) -> DepositAddress {
+    let mut preimage = account.owner.as_slice().to_vec();
+    preimage.extend_from_slice(account.effective_subaccount());
+    let hash = ic_sha3::Keccak256::hash(&preimage);
+    let mut bytes = [0_u8; 20];
+    bytes.copy_from_slice(&hash[12..32]);
+    DepositAddress::new(Address::new(bytes))
+}
+
+pub fn usdc() -> Address {
+    Address::new([0xaa; 20])
+}
+
+pub fn usdt() -> Address {
+    Address::new([0xbb; 20])
+}
+
+pub fn automatic_deposit() -> AutomaticDeposit {
+    AutomaticDeposit {
+        owner: account().owner,
+        subaccount: account().subaccount,
+        address: DepositAddress::new(Address::new([0xa1; 20])),
+        erc20_contract_address: Address::new([0x22; 20]),
+        last_scanned_block: BlockNumber::new(1_000),
+        scan_count: 1,
+        scanned_balance: Erc20Value::from(1_000_000_u64),
+    }
+}
+
+/// An [`AutomaticDeposits`] whose sweep queue holds exactly these funded pairs, all taken by the
+/// one sweep [`create_pending_sweeper_requests`] enqueued for them, returned along with that
+/// request.
+pub async fn deposits_with_enqueued_sweep(
+    pairs: &[(Account, Address)],
+) -> (AutomaticDeposits, SweepRequest) {
+    let (state, request) = state_with_enqueued_sweep(pairs).await;
+    (state.automatic_deposits, request)
+}
+
+pub const PREPAID_SWEEP_GAS: Wei = Wei::new(1_000_000_000_000_000_000);
+
+pub fn prepay_sweep_gas(state: &mut State) {
+    state.sweeper_funding.record_burn(PREPAID_SWEEP_GAS);
+    state
+        .sweeper_funding
+        .record_finalized_funding(PREPAID_SWEEP_GAS, Wei::ZERO);
+}
+
+/// A [`State`] whose sweep queue holds exactly these funded pairs, all taken by the one sweep
+/// [`create_pending_sweeper_requests`] enqueued for them, returned along with that request. The
+/// deposits, attestations and authorizations the enqueue pairs up arrive through the event log, so
+/// the sweep is assembled by the production path without the runtime signing anything.
+pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, SweepRequest) {
+    const SWEEP_DECIDED_AT: u64 = 1_620_328_630_000_000_000;
+
+    let mut state = state_with_deposit_helper(deposit_helper());
+    prepay_sweep_gas(&mut state);
+    state.sweeper_contract_address = Some(sweeper_contract());
+    state.last_transaction_price_estimate = Some((SWEEP_DECIDED_AT, gas_fee_estimate()));
+    let chain_id = state.ethereum_network.chain_id();
+    for (account, token) in pairs {
+        apply_state_transition(
+            &mut state,
+            &EventType::AutomaticDepositReceived(AutomaticDeposit {
+                owner: account.owner,
+                subaccount: account.subaccount,
+                address: deposit_address(account),
+                erc20_contract_address: *token,
+                ..automatic_deposit()
+            }),
+        );
+    }
+    for account in pairs
+        .iter()
+        .map(|(account, _token)| *account)
+        .collect::<BTreeSet<_>>()
+    {
+        apply_state_transition(
+            &mut state,
+            &EventType::AttestedDepositAddress {
+                request: AttestationRequest::new(chain_id, deposit_helper(), account),
+                signature: transaction_signature(),
+            },
+        );
+        apply_state_transition(
+            &mut state,
+            &EventType::AuthorizedDepositAddress {
+                request: AuthorizationRequest::new(
+                    account,
+                    chain_id,
+                    sweeper_contract(),
+                    TransactionNonce::ZERO,
+                ),
+                signature: transaction_signature(),
+            },
+        );
+    }
+    init_state(state);
+    let mut runtime = mock::MockCanisterRuntime::new();
+    runtime.expect_time().return_const(SWEEP_DECIDED_AT);
+
+    create_pending_sweeper_requests(&runtime).await;
+
+    read_state(|s| {
+        let [request] =
+            <[SweepRequest; 1]>::try_from(s.automatic_deposits.sweep_requests_batch(usize::MAX))
+                .expect("BUG: expected the pairs to become exactly one sweep");
+        (s.clone(), request)
+    })
+}
+
+pub fn sweeper_contract() -> Address {
+    Address::new([0x5e; 20])
+}
+
+/// The estimate every sweep fixture prices and creates with, so a fixture sweep's transaction fee
+/// always fits the cap its request was priced against.
+pub fn gas_fee_estimate() -> GasFeeEstimate {
+    GasFeeEstimate {
+        base_fee_per_gas: WeiPerGas::new(10),
+        max_priority_fee_per_gas: WeiPerGas::new(1),
     }
 }
 
@@ -70,6 +251,57 @@ pub fn valid_init_arg() -> InitArg {
         evm_rpc_id: Some(EVM_RPC_ID_STAGING),
         ethereum_sweeper_contract_address: None,
         next_sweeper_transaction_nonce: None,
+    }
+}
+
+pub mod mock {
+    use crate::management::CallError;
+    use crate::runtime::CanisterRuntime;
+    use crate::time::TimeProvider;
+    use async_trait::async_trait;
+    use ic_cdk_management_canister::EcdsaPublicKeyResult;
+    use mockall::mock;
+
+    mock! {
+        #[derive(Debug)]
+        pub TimeProvider {}
+
+        impl TimeProvider for TimeProvider {
+            fn time(&self) -> u64;
+        }
+
+        impl Clone for TimeProvider {
+            fn clone(&self) -> Self;
+        }
+    }
+
+    mock! {
+        #[derive(Debug)]
+        pub CanisterRuntime {}
+
+        impl TimeProvider for CanisterRuntime {
+            fn time(&self) -> u64;
+        }
+
+        #[async_trait]
+        impl CanisterRuntime for CanisterRuntime {
+            async fn sign_with_ecdsa(
+                &self,
+                key_name: String,
+                derivation_path: Vec<Vec<u8>>,
+                message_hash: [u8; 32],
+            ) -> Result<[u8; 64], CallError>;
+
+            async fn ecdsa_public_key(
+                &self,
+                key_name: String,
+                derivation_path: Vec<Vec<u8>>,
+            ) -> Result<EcdsaPublicKeyResult, CallError>;
+        }
+
+        impl Clone for CanisterRuntime {
+            fn clone(&self) -> Self;
+        }
     }
 }
 

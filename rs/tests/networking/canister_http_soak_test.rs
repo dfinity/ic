@@ -42,6 +42,8 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(stress_setup)
         .add_test(systest!(test))
+        // Floods the adapter on purpose, so a full adapter queue is expected here.
+        .remove_metrics_to_check("canister_http_pool_manager_errors")
         .execute_from_args()?;
 
     Ok(())

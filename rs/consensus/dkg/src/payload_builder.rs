@@ -1030,13 +1030,14 @@ mod tests {
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
+    use ic_test_utilities_types::ids::test_replica_version;
     use ic_test_utilities_types::{
         ids::{node_test_id, subnet_test_id},
         messages::RequestBuilder,
     };
     use ic_types::consensus::dkg::RemoteDkgAttempts;
     use ic_types::{
-        RegistryVersion, ReplicaVersion,
+        RegistryVersion,
         consensus::{BlockPayload, Payload, Rank, SummaryPayload, dkg::SplittingArgs},
         crypto::{
             CryptoHash, CryptoHashOf,
@@ -1052,7 +1053,7 @@ mod tests {
     /// `registry_version`.
     fn make_summary_block(dkg_summary: DkgSummary, registry_version: RegistryVersion) -> Block {
         Block {
-            version: ReplicaVersion::default(),
+            version: test_replica_version(),
             parent: CryptoHashOf::from(CryptoHash(vec![])),
             payload: Payload::new(
                 ic_types::crypto::crypto_hash,

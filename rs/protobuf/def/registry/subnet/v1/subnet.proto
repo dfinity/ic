@@ -431,8 +431,8 @@ message ResourceLimits {
   // call graph.
   // The protocol uses a default value if the limit of `0` is specified.
   optional uint64 maximum_query_instructions = 3;
-  // The maximum wall-clock time, in seconds, that a query (including a composite query call
-  // graph) is allowed to run.
+  // The maximum wall-clock time, in seconds, that a composite query call graph is allowed to
+  // run.
   // The protocol uses a default value if the limit of `0` is specified.
   optional uint64 maximum_query_walltime_seconds = 4;
 }

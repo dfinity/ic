@@ -791,3 +791,50 @@ fn arb_gas_fee_estimate() -> impl Strategy<Value = GasFeeEstimate> {
         }
     })
 }
+
+mod sign_digest {
+    use crate::eth_rpc::Hash;
+    use crate::test_fixtures::mock::MockCanisterRuntime;
+    use crate::test_fixtures::{init_state, initial_state};
+    use crate::tx::{TransactionSignature, sign_digest, split_in_two};
+    use ethnum::u256;
+    use ic_cdk_management_canister::EcdsaPublicKeyResult;
+    use ic_secp256k1::PrivateKey;
+
+    #[tokio::test]
+    async fn should_sign_digest_through_the_runtime() {
+        let private_key = PrivateKey::deserialize_sec1(&[0x46_u8; 32]).unwrap();
+        let digest = Hash([0x11_u8; 32]);
+        let signature = private_key.sign_digest_with_ecdsa(&digest.0);
+        let public_key = EcdsaPublicKeyResult {
+            public_key: private_key.public_key().serialize_sec1(true),
+            chain_code: vec![0_u8; 32],
+        };
+        init_state(initial_state());
+        let mut runtime = MockCanisterRuntime::new();
+        runtime
+            .expect_ecdsa_public_key()
+            .times(1)
+            .return_once(move |_, _| Ok(public_key));
+        runtime
+            .expect_sign_with_ecdsa()
+            .times(1)
+            .return_once(move |_, _, _| Ok(signature));
+
+        let signed = sign_digest(&digest, &[], &runtime).await.unwrap();
+
+        let (r_bytes, s_bytes) = split_in_two(signature);
+        let recovery_id = private_key
+            .public_key()
+            .try_recovery_from_digest(&digest.0, &signature)
+            .unwrap();
+        assert_eq!(
+            signed,
+            TransactionSignature {
+                signature_y_parity: recovery_id.is_y_odd(),
+                r: u256::from_be_bytes(r_bytes),
+                s: u256::from_be_bytes(s_bytes),
+            }
+        );
+    }
+}

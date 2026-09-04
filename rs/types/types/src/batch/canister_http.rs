@@ -866,7 +866,7 @@ mod tests {
                     ])),
                     content_size: 42,
                     is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: ReplicaVersion::try_from("test_replica_version").unwrap(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt {
                     spent: Cycles::new(42),

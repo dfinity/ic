@@ -88,9 +88,9 @@ pub struct DealingContent {
 
 impl DealingContent {
     /// Create a new DealingContent
-    pub fn new(dealing: NiDkgDealing, dkg_id: NiDkgId) -> Self {
+    pub fn new(dealing: NiDkgDealing, dkg_id: NiDkgId, version: ReplicaVersion) -> Self {
         DealingContent {
-            version: ReplicaVersion::default(),
+            version,
             dealing,
             dkg_id,
         }

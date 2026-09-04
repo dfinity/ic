@@ -1,3 +1,4 @@
+use crate::consensus::idkg::common::RequestId;
 use crate::crypto::CryptoError;
 use crate::crypto::HexEncoding;
 use crate::crypto::SignedBytesWithoutDomainSeparator;
@@ -14,6 +15,7 @@ mod test;
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct VetKdArgs<'a> {
     pub ni_dkg_id: &'a NiDkgId,
+    pub request_id: RequestId,
     pub input: &'a Vec<u8>,
     pub context: VetKdDerivationContextRef<'a>,
     pub transport_public_key: &'a Vec<u8>,
@@ -23,6 +25,7 @@ impl fmt::Debug for VetKdArgs<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("VetKdArgs")
             .field("ni_dkg_id", self.ni_dkg_id)
+            .field("request_id", &self.request_id)
             .field("input", &HexEncoding::from(self.input))
             .field("context", &self.context)
             .field(
@@ -49,6 +52,31 @@ impl_display_using_debug!(VetKdEncryptedKeyShareContent);
 impl SignedBytesWithoutDomainSeparator for VetKdEncryptedKeyShareContent {
     fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&self.0);
+    }
+}
+
+/// The content that a node signs when it creates a vetKD encrypted key share.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct VetKdEncryptedKeyShareSigningContent<'a> {
+    request_id: RequestId,
+    encrypted_key_share: &'a VetKdEncryptedKeyShareContent,
+}
+
+impl<'a> VetKdEncryptedKeyShareSigningContent<'a> {
+    pub fn new(args: &VetKdArgs, encrypted_key_share: &'a VetKdEncryptedKeyShareContent) -> Self {
+        Self {
+            request_id: args.request_id,
+            encrypted_key_share,
+        }
+    }
+}
+
+impl SignedBytesWithoutDomainSeparator for VetKdEncryptedKeyShareSigningContent<'_> {
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.request_id.callback_id.get().to_be_bytes());
+        bytes.extend_from_slice(&self.request_id.height.get().to_be_bytes());
+        self.encrypted_key_share
+            .write_signed_bytes_without_domain_separator(bytes);
     }
 }
 
@@ -142,7 +170,6 @@ pub enum VetKdKeyShareCombinationError {
     ThresholdSigDataNotFound(ThresholdSigDataNotFoundError),
     InvalidArgumentMasterPublicKey,
     InvalidArgumentEncryptionPublicKey,
-    InvalidArgumentEncryptedKeyShare,
     IndividualPublicKeyComputationError(CryptoError),
     CombinationError(String),
     InternalError(String),

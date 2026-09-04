@@ -674,6 +674,8 @@ fn default_replica_metrics() -> BTreeMap<&'static str, u64> {
         ("idkg_invalidated_artifacts", 0),
         ("certification_invalidated_artifacts", 0),
         ("canister_http_invalidated_artifacts", 0),
+        ("mr_canister_http_accounting_errors_total", 0),
+        ("canister_http_pool_manager_errors", 0),
     ])
 }
 

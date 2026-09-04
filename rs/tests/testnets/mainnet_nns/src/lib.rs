@@ -655,7 +655,7 @@ async fn test_recovered_nns(env: &TestEnv, nns_node: &IcNodeSnapshot) {
     ProposalWithMainnetState::elect_replica_version(
         nns_node,
         &env.topology_snapshot(),
-        &ReplicaVersion::try_from("1111111111111111111111111111111111111111").unwrap(),
+        &ReplicaVersion::from_str("1111111111111111111111111111111111111111").unwrap(),
         &logger,
         "2222222222222222222222222222222222222222222222222222222222222222".to_string(),
         None,

@@ -37,7 +37,7 @@ use ic_types::{
     time::CoarseTime,
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, CyclesAccountManagerSubnetConfig,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesAccountManagerSubnetConfig,
     CyclesUseCaseKind, DroppedMessages,
 };
 use ic_validate_eq::ValidateEq;
@@ -49,7 +49,7 @@ use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
 #[cfg(debug_assertions)]
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CyclesUseCase, NominalCycles};
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
@@ -481,13 +481,23 @@ impl ReplicatedState {
     /// Creates a replicated state from a checkpoint.
     pub fn new_from_checkpoint(
         canister_states: BTreeMap<CanisterId, Arc<CanisterState>>,
-        metadata: SystemMetadata,
+        mut metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
         refunds: RefundPool,
         epoch_query_stats: RawQueryStats,
     ) -> Self {
+        let canister_states = CanisterStates::new(canister_states);
+
+        // The consumed-cycles total is transient, so derive it from the canisters
+        // just loaded. A running replica gets the same value from
+        // `Self::refresh_consumed_cycles`, so the canonical state tree at
+        // `/subnet/<subnet_id>/metrics` hashes identically across a restart.
+        metadata
+            .subnet_metrics
+            .refresh_consumed_cycles(canister_states.total_consumed_cycles());
+
         Self {
-            canister_states: CanisterStates::new(canister_states),
+            canister_states,
             metadata,
             subnet_queues,
             refunds,
@@ -681,6 +691,19 @@ impl ReplicatedState {
         F: FnMut(&CanisterId, &mut Arc<CanisterState>) -> Result<(), E>,
     {
         self.canister_states.try_for_each_mut(f)
+    }
+
+    /// Refreshes
+    /// [`crate::metadata_state::SubnetMetrics::consumed_cycles_total_including_canisters`]
+    /// from the current canister states. The total is derived, not persisted;
+    /// [`Self::new_from_checkpoint`] derives it the same way.
+    ///
+    /// `O(|hot canisters|)`.
+    pub fn refresh_consumed_cycles(&mut self) {
+        let consumed_by_canisters = self.canister_states.total_consumed_cycles();
+        self.metadata
+            .subnet_metrics
+            .refresh_consumed_cycles(consumed_by_canisters);
     }
 
     /// Re-establishes strict hot / cold partitioning of canister states (see
@@ -1112,6 +1135,15 @@ impl ReplicatedState {
             }
         }
         Ok(())
+    }
+
+    /// Pools `amount` cycles to be refunded to `receiver`, wherever it is hosted.
+    ///
+    /// Message Routing routes the pooled refunds (via the loopback stream, if the
+    /// recipient is local) and credits them on induction, accounting for them as
+    /// lost if the recipient no longer exists.
+    pub fn add_refund(&mut self, receiver: CanisterId, amount: Cycles) {
+        self.refunds.add(receiver, amount);
     }
 
     /// Credits the cycles in `refund` to the recipient canister's balance.
@@ -1852,7 +1884,6 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
 
 pub mod testing {
     use super::*;
-    use ic_types_cycles::Cycles;
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
@@ -1876,9 +1907,6 @@ pub mod testing {
         /// Testing only: Returns the number of messages across all canister and
         /// subnet output queues.
         fn output_message_count(&self) -> usize;
-
-        /// Testing only: Adds the given refund to the subnet-wide refund pool.
-        fn add_refund(&mut self, receiver: CanisterId, amount: Cycles);
     }
 
     impl ReplicatedStateTesting for ReplicatedState {
@@ -1910,10 +1938,6 @@ pub mod testing {
                 .map(|canister| canister.system_state.queues().output_queues_message_count())
                 .sum::<usize>()
                 + self.subnet_queues.output_queues_message_count()
-        }
-
-        fn add_refund(&mut self, receiver: CanisterId, amount: Cycles) {
-            self.refunds.add(receiver, amount);
         }
     }
 

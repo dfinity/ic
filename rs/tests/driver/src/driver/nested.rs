@@ -31,7 +31,7 @@ use url::Url;
 
 pub const NESTED_VMS_DIR: &str = "nested_vms";
 pub const NESTED_VM_PATH: &str = "vm.json";
-pub const NESTED_CONFIG_IMAGE_PATH: &str = "config.img.zst";
+pub const NESTED_CONFIG_IMAGE_PATH: &str = "config.img";
 pub const NESTED_NETWORK_PATH: &str = "ips.json";
 pub const NESTED_VM_CONFIG: &str = "nested_vm_config.json";
 

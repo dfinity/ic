@@ -293,7 +293,7 @@ impl CatchUpPackageProvider {
                 &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
                 &CatchUpContentProtobufBytes::from(&protobuf),
                 subnet_id,
-                cup.content.block.get_value().context.registry_version,
+                cup.content.registry_version(),
             )
             .map_err(|e| format!("Failed to verify CUP signature at: {uri:?} with: {e:?}"))?;
 
@@ -536,11 +536,22 @@ pub(crate) mod tests {
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
     use ic_logger::no_op_logger;
+    use ic_protobuf::registry::node::v1::ConnectionEndpoint;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_node_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_test_utilities_consensus::fake::{Fake, FakeContent};
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_single_subnet_record};
     use ic_test_utilities_types::ids::{SUBNET_0, node_test_id};
+    use ic_types::{
+        ReplicaVersion,
+        batch::ValidationContext,
+        consensus::{
+            Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
+            RandomBeacon, RandomBeaconContent, Rank, SummaryPayload, dkg::DkgSummary,
+        },
+        time::UNIX_EPOCH,
+    };
     use rcgen::{CertificateParams, KeyPair};
     use rustls::{
         ClientConfig, DigitallySignedStruct, ServerConfig, SignatureScheme,
@@ -566,6 +577,8 @@ pub(crate) mod tests {
         NoContent,
         /// Service that responds with an error
         BadRequest,
+        /// Service that serves the given serialized CUP
+        SendCup(Arc<Vec<u8>>),
     }
 
     async fn test_service(
@@ -576,7 +589,17 @@ pub(crate) mod tests {
             TestService::Unresponsive => unresponsive_service().await,
             TestService::NoContent => no_content_service().await,
             TestService::BadRequest => error_service().await,
+            TestService::SendCup(cup) => cup_service(cup).await,
         }
+    }
+
+    async fn cup_service(
+        cup: Arc<Vec<u8>>,
+    ) -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
+        Ok(Response::builder()
+            .status(StatusCode::OK)
+            .body(Full::new(Bytes::from(cup.to_vec())).boxed())
+            .unwrap())
     }
 
     async fn slow_body_service(
@@ -616,6 +639,117 @@ pub(crate) mod tests {
             .status(StatusCode::BAD_REQUEST)
             .body(Full::new(Bytes::from("error message")).boxed())
             .unwrap())
+    }
+
+    /// A [`ThresholdSigVerifierByPublicKey`] that accepts every signature and records the registry
+    /// version it was asked to verify at.
+    #[derive(Default)]
+    struct RegistryVersionRecordingCrypto {
+        verified_at: Mutex<Option<RegistryVersion>>,
+    }
+
+    impl ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
+        for RegistryVersionRecordingCrypto
+    {
+        fn verify_combined_threshold_sig_by_public_key(
+            &self,
+            _signature: &CombinedThresholdSigOf<CatchUpContentProtobufBytes>,
+            _message: &CatchUpContentProtobufBytes,
+            _subnet_id: SubnetId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()> {
+            *self.verified_at.lock().unwrap() = Some(registry_version);
+            Ok(())
+        }
+    }
+
+    /// Builds a CUP whose DKG summary registry version differs from the registry version of its
+    /// block's validation context.
+    fn cup_with_distinct_registry_versions(
+        summary_registry_version: RegistryVersion,
+        context_registry_version: RegistryVersion,
+    ) -> pb::CatchUpPackage {
+        let height = Height::from(10);
+        let replica_version = ReplicaVersion::try_from("test").unwrap();
+
+        let mut dkg = DkgSummary::fake();
+        dkg.registry_version = summary_registry_version;
+
+        let block = Block::new(
+            CryptoHashOf::from(CryptoHash(vec![])),
+            Payload::new(
+                crypto_hash,
+                BlockPayload::Summary(SummaryPayload { dkg, idkg: None }),
+            ),
+            height,
+            Rank(0),
+            ValidationContext {
+                certified_height: height,
+                registry_version: context_registry_version,
+                time: UNIX_EPOCH,
+            },
+            replica_version.clone(),
+        );
+
+        let random_beacon = RandomBeacon::fake(RandomBeaconContent {
+            version: replica_version,
+            height,
+            parent: CryptoHashOf::from(CryptoHash(vec![])),
+        });
+
+        let cup = CatchUpPackage::fake(CatchUpContent::new(
+            HashedBlock::new(crypto_hash, block),
+            HashedRandomBeacon::new(crypto_hash, random_beacon),
+            CryptoHashOf::from(CryptoHash(vec![])),
+            /*oldest_registry_version_in_use_by_replicated_state=*/ None,
+        ));
+
+        pb::CatchUpPackage::from(cup)
+    }
+
+    /// The registry version at which a peer CUP's signature is verified must be the same one that
+    /// [`CatchUpPackageParam`] orders by, i.e. the DKG summary's registry version.
+    #[tokio::test]
+    async fn test_peer_cup_is_verified_at_the_dkg_summary_registry_version() {
+        let summary_registry_version = RegistryVersion::from(3);
+        let context_registry_version = RegistryVersion::from(7);
+        let cup_proto =
+            cup_with_distinct_registry_versions(summary_registry_version, context_registry_version);
+
+        let server_addr =
+            start_server(TestService::SendCup(Arc::new(cup_proto.encode_to_vec()))).await;
+        let node_id = node_test_id(1);
+        let node_record = NodeRecord {
+            http: Some(ConnectionEndpoint {
+                ip_addr: server_addr.ip().to_string(),
+                port: server_addr.port() as u32,
+            }),
+            ..Default::default()
+        };
+
+        let crypto = Arc::new(RegistryVersionRecordingCrypto::default());
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let mut cup_provider = make_cup_provider_with_crypto(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            setup_registry(),
+            crypto.clone(),
+        );
+
+        let (_, cup) = cup_provider
+            .fetch_and_verify_catch_up_package(&node_id, &node_record, None, SUBNET_0)
+            .await
+            .expect("failed to fetch and verify the CUP")
+            .expect("expected a CUP to be served");
+
+        let verified_at = *crypto.verified_at.lock().unwrap();
+        assert_eq!(verified_at, Some(summary_registry_version));
+        assert_ne!(verified_at, Some(context_registry_version));
+        assert_eq!(
+            CatchUpPackageParam::from(&cup),
+            CatchUpPackageParam::from(&CatchUpPackage::try_from(&cup_proto).unwrap()),
+        );
     }
 
     fn fake_cup() -> pb::CatchUpPackage {
@@ -786,10 +920,26 @@ pub(crate) mod tests {
         backoff: Duration,
         registry: Arc<RegistryHelper>,
     ) -> CatchUpPackageProvider {
+        make_cup_provider_with_crypto(
+            cup_dir,
+            node_id,
+            backoff,
+            registry,
+            Arc::new(CryptoReturningOk::default()),
+        )
+    }
+
+    fn make_cup_provider_with_crypto(
+        cup_dir: PathBuf,
+        node_id: NodeId,
+        backoff: Duration,
+        registry: Arc<RegistryHelper>,
+        crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
+    ) -> CatchUpPackageProvider {
         CatchUpPackageProvider::new_with_initial_backoff(
             registry,
             LocalCUPReader::new(cup_dir, no_op_logger()),
-            Arc::new(CryptoReturningOk::default()),
+            crypto,
             Arc::new(mock_tls_config()),
             no_op_logger(),
             node_id,

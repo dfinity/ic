@@ -52,7 +52,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     methods::WasmMethod,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -4812,7 +4812,7 @@ fn install_code_calls_canister_init_and_start() {
     // Linux, 4 on 16 KiB hosts such as arm64-darwin).
     let os_pages_per_wasm_page = WASM_PAGE_SIZE_IN_BYTES as u64 / PAGE_SIZE as u64;
     let dirty_heap_cost =
-        NumInstructions::from(2 * os_pages_per_wasm_page * 2 * test.dirty_heap_page_overhead());
+        NumInstructions::from(2 * os_pages_per_wasm_page * 2 * test.heap_page_overhead());
     assert_eq!(
         // Function is 1 instruction.
         DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
@@ -5248,7 +5248,7 @@ fn ic0_trap_preserves_some_cycles() {
             + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 }, WasmMemoryType::Wasm32)
             + bytes_and_logging_cost(12) as u64 /* trap data */
             + 1 // Function is 1 instruction.
-            + os_pages_per_wasm_page * test.dirty_heap_page_overhead(),
+            + os_pages_per_wasm_page * test.heap_page_overhead(),
     );
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
     assert_eq!(
@@ -7924,7 +7924,7 @@ fn charge_for_dirty_pages() {
     test.ingress(canister_id, "test2", vec![]).unwrap();
     let i2 = test.canister_executed_instructions(canister_id);
 
-    let cdi = ic_config::subnet_config::SchedulerConfig::application_subnet().dirty_page_overhead;
+    let cdi = ic_config::subnet_config::SchedulerConfig::application_subnet().page_overhead;
     // test2 writes to the next Wasm page, i.e. (1 read + 1 write)x16=32 OS pages.
     assert_eq!((i2 - i1) - (i1 - i0), cdi * 32);
 }
@@ -9564,6 +9564,45 @@ fn invoke_cost_http_request_v2_flexible_without_counts_uses_the_defaults() {
         Some(CostHttpRequestOutcallType::Flexible(None)),
         ReplicationKind::default_flexible(NumberOfNodes::from(subnet_size as u32)),
     );
+}
+
+#[test]
+fn cost_http_request_v2_is_free_on_system_subnet() {
+    cost_http_request_v2_is_free_on(
+        ExecutionTestBuilder::new()
+            .with_subnet_type(SubnetType::System)
+            .build(),
+    );
+}
+
+#[test]
+fn cost_http_request_v2_is_free_on_free_cost_schedule() {
+    cost_http_request_v2_is_free_on(
+        ExecutionTestBuilder::new()
+            .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+            .build(),
+    );
+}
+
+fn cost_http_request_v2_is_free_on(mut test: ExecutionTest) {
+    let canister_id = test.universal_canister().unwrap();
+    let params_blob = Encode!(&CostHttpRequestV2Params {
+        request_bytes: 1000,
+        http_roundtrip_time_ms: 2_000,
+        raw_response_bytes: 500_000,
+        transformed_response_bytes: 1_000,
+        transform_instructions: 1_000_000,
+        outcall_type: None,
+    })
+    .unwrap();
+
+    let payload = wasm()
+        .cost_http_request_v2(&params_blob)
+        .reply_data_append()
+        .reply()
+        .build();
+    let bytes = get_reply(test.ingress(canister_id, "update", payload));
+    assert_eq!(Cycles::try_from(&bytes).unwrap(), Cycles::zero());
 }
 
 #[test]

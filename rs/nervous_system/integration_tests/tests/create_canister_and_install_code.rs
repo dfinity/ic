@@ -1,12 +1,12 @@
-use candid::Principal;
+use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_utils::wasm_helpers::SMALLEST_VALID_WASM_BYTES;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{NnsInstaller, nns};
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_governance_api::{
-    CreateCanisterAndInstallCodeRequest, MakeProposalRequest, ProposalActionRequest,
-    SuccessfulProposalExecutionValue, WasmModule,
+    CanisterSettings, CreateCanisterAndInstallCodeRequest, MakeProposalRequest,
+    ProposalActionRequest, SuccessfulProposalExecutionValue, WasmModule,
 };
 use pocket_ic::PocketIcBuilder;
 
@@ -50,6 +50,7 @@ async fn test_create_canister_and_install_code() {
     let expected_module_hash = Sha256::hash(wasm_module_bytes).to_vec();
 
     // Step 2.3: Execute proposal.
+    let reserved_cycles_limit = 1_u64 << 35;
     let proposal_info = nns::governance::propose_and_wait(
         &pocket_ic,
         MakeProposalRequest {
@@ -59,7 +60,10 @@ async fn test_create_canister_and_install_code() {
             action: Some(ProposalActionRequest::CreateCanisterAndInstallCode(
                 CreateCanisterAndInstallCodeRequest {
                     host_subnet_id: Some(host_subnet_id),
-                    canister_settings: None,
+                    canister_settings: Some(CanisterSettings {
+                        reserved_cycles_limit: Some(reserved_cycles_limit),
+                        ..Default::default()
+                    }),
                     wasm_module: Some(WasmModule::Inlined(wasm_module_bytes.to_vec())),
                     install_arg: None,
                 },
@@ -122,5 +126,12 @@ async fn test_create_canister_and_install_code() {
         status.settings.controllers.contains(&root_principal),
         "Root should be a controller. Controllers: {:?}",
         status.settings.controllers,
+    );
+
+    // Step 3.6: Verify that the canister settings from the proposal reached the
+    // new canister.
+    assert_eq!(
+        status.settings.reserved_cycles_limit,
+        Nat::from(reserved_cycles_limit)
     );
 }

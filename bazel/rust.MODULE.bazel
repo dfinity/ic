@@ -1044,7 +1044,7 @@ crate.spec(
 )
 crate.spec(
     package = "mockall",
-    version = "^0.13.1",
+    version = "^0.15.0",
 )
 crate.spec(
     package = "mockito",
@@ -1354,6 +1354,7 @@ crate.spec(
 )
 crate.spec(
     features = [
+        "x509-parser",
         "zeroize",
     ],
     package = "rcgen",
@@ -1735,7 +1736,7 @@ crate.spec(
 )
 crate.spec(
     package = "test-strategy",
-    version = "^0.3.1",
+    version = "^0.4.0",
 )
 crate.spec(
     package = "textplots",

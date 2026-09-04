@@ -165,6 +165,8 @@ members = [
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/build_tools/partition_tools",
+    "rs/ic_os/build_tools/alternative_guestos",
+    "rs/ic_os/alternative_guestos",
     "rs/ic_os/command_runner",
     "rs/ic_os/config/tool",
     "rs/ic_os/config/types",
@@ -509,7 +511,6 @@ members = [
     "rs/tests/nns/sns/lib",
     "rs/tests/node",
     "rs/tests/query_stats/lib",
-    "rs/tests/sdk",
     "rs/tests/test_canisters/http_counter",
     "rs/tests/test_canisters/kv_store",
     "rs/tests/test_canisters/message",
@@ -791,7 +792,7 @@ memchr = "2.7"
 memmap2 = "0.9.5"
 minicbor = { version = "0.22.0", features = ["alloc", "derive"] }
 minicbor-derive = "0.14.0"
-mockall = "0.13.0"
+mockall = "0.15.0"
 mockito = "1.6.1"
 more-asserts = "0.3.1"
 nftables = "0.4"
@@ -867,7 +868,7 @@ rand_distr = "^0.4"
 rand_pcg = "^0.3.1"
 ratatui = "0.29"
 rayon = "1.10.0"
-rcgen = { version = "0.13.1", features = ["zeroize"] }
+rcgen = { version = "0.13.1", features = ["x509-parser", "zeroize"] }
 regex = "1.11.0"
 regex-lite = "0.1.8"
 rexpect = "0.6"
@@ -946,6 +947,7 @@ sys-mount = "3.0"
 sysinfo = "0.37"
 tar = "0.4.39"
 tempfile = "3.20"
+test-strategy = "0.4.0"
 textplots = "^0.8"
 # DO NOT upgrade to >=2.0.19 as it pulls in syn 3 whereas the rest of the
 # codebase uses syn 2.

@@ -76,6 +76,7 @@ system_test_nns(
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/rust_canisters/canister_test",
         "//rs/types/cycles",
+        "//rs/types/types",
     ],
 )
 
@@ -206,12 +207,7 @@ system_test_nns(
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
-    deps = CANISTER_HTTP_BASE_DEPS + [
-        "//rs/https_outcalls/pricing",
-        "//rs/rust_canisters/canister_test",
-        "//rs/types/types",
-        "@crate_index//:tokio",
-    ],
+    deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
 )
 
 system_test_nns(

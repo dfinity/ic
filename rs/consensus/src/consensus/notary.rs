@@ -40,7 +40,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::NotarizationDelaySettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height,
+    Height, ReplicaVersion,
     consensus::{
         BlockProposal, HasBlockHash, HasHeight, HasRank, HashedBlock, NotarizationContent,
         NotarizationShare, RandomBeacon, Rank,
@@ -133,6 +133,7 @@ impl Notary {
             &self.log,
             height,
             rank,
+            &self.replica_config.replica_version,
         )?;
 
         let now_relative = self.time_source.get_relative_time();
@@ -184,7 +185,11 @@ impl Notary {
         block: &HashedBlock,
     ) -> Option<NotarizationShare> {
         let registry_version = pool.registry_version(block.height())?;
-        let content = NotarizationContent::new(block.height(), block.get_hash().clone());
+        let content = NotarizationContent::new(
+            block.height(),
+            block.get_hash().clone(),
+            self.replica_config.replica_version.clone(),
+        );
         match self
             .crypto
             .sign(&content, self.replica_config.node_id, registry_version)
@@ -244,6 +249,7 @@ fn get_adjusted_notary_delay(
     log: &ReplicaLogger,
     height: Height,
     rank: Rank,
+    replica_version: &ReplicaVersion,
 ) -> Option<Duration> {
     match get_adjusted_notary_delay_from_settings(
         get_notarization_delay_settings(
@@ -256,6 +262,7 @@ fn get_adjusted_notary_delay(
         state_reader,
         membership,
         rank,
+        replica_version,
         log,
     ) {
         NotaryDelay::CanNotarizeAfter(duration) => Some(duration),
@@ -298,6 +305,7 @@ fn get_adjusted_notary_delay_from_settings(
     state_reader: &dyn StateReader<State = ReplicatedState>,
     membership: &Membership,
     rank: Rank,
+    replica_version: &ReplicaVersion,
     logger: &ReplicaLogger,
 ) -> NotaryDelay {
     let NotarizationDelaySettings {
@@ -353,6 +361,7 @@ fn get_adjusted_notary_delay_from_settings(
             membership.registry_client.as_ref(),
             membership.subnet_id,
             pool,
+            replica_version,
             logger,
         ) == Some(true)
     };
@@ -412,6 +421,7 @@ mod tests {
             } = DependenciesBuilder::new(pool_config, 1)
                 .with_dkg_interval_length(dkg_interval_length)
                 .build();
+            let replica_version = replica_config.replica_version.clone();
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -455,6 +465,7 @@ mod tests {
                             &no_op_logger(),
                             Height::from(1),
                             Rank(0),
+                            &replica_version,
                         )
                         .unwrap(),
                 )
@@ -504,6 +515,7 @@ mod tests {
                             &no_op_logger(),
                             Height::from(1),
                             Rank(9),
+                            &replica_version,
                         )
                         .unwrap(),
                 )
@@ -521,6 +533,7 @@ mod tests {
                             &no_op_logger(),
                             Height::from(1),
                             twenty_block.rank(),
+                            &replica_version,
                         )
                         .unwrap(),
                 )
@@ -605,6 +618,7 @@ mod tests {
             } = DependenciesBuilder::new(pool_config, 1)
                 .with_dkg_interval_length(dkg_interval_length)
                 .build();
+            let replica_version = replica_config.replica_version.clone();
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -646,6 +660,7 @@ mod tests {
                     &no_op_logger(),
                     Height::from(5),
                     Rank(0),
+                    &replica_version,
                 )
                 .unwrap(),
             );
@@ -665,6 +680,7 @@ mod tests {
                 mut pool,
                 state_manager,
                 membership,
+                replica_config,
                 ..
             } = DependenciesBuilder::new(pool_config, 3)
                 /* use large enough DKG interval to trigger notarization/CUP gap limit */
@@ -713,6 +729,7 @@ mod tests {
                     state_manager.as_ref(),
                     membership.as_ref(),
                     Rank(0),
+                    &replica_config.replica_version,
                     &logger,
                 ),
                 NotaryDelay::ReachedMaxNotarizationCertificationGap { .. }
@@ -738,6 +755,7 @@ mod tests {
                     state_manager.as_ref(),
                     membership.as_ref(),
                     Rank(0),
+                    &replica_config.replica_version,
                     &logger,
                 ),
                 NotaryDelay::CanNotarizeAfter(Duration::from_secs(0))
@@ -765,6 +783,7 @@ mod tests {
                     state_manager.as_ref(),
                     membership.as_ref(),
                     Rank(0),
+                    &replica_config.replica_version,
                     &logger,
                 ),
                 NotaryDelay::ReachedMaxNotarizationCUPGap { .. }
@@ -787,6 +806,7 @@ mod tests {
                 mut pool,
                 state_manager,
                 membership,
+                replica_config,
                 ..
             } = DependenciesBuilder::new(pool_config, 3)
                 .with_dkg_interval_length(dkg_interval)
@@ -805,6 +825,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
+                &replica_config.replica_version,
                 &logger,
             );
             assert_eq!(
@@ -820,6 +841,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
+                &replica_config.replica_version,
                 &logger,
             );
             assert_eq!(
@@ -835,6 +857,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
+                &replica_config.replica_version,
                 &logger,
             );
             assert_eq!(
@@ -851,6 +874,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
+                &replica_config.replica_version,
                 &logger,
             );
             assert_eq!(
@@ -869,6 +893,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
+                &replica_config.replica_version,
                 &logger,
             );
             assert_eq!(
@@ -894,6 +919,7 @@ mod tests {
                 mut pool,
                 state_manager,
                 membership,
+                replica_config,
                 ..
             } = DependenciesBuilder::single_subnet(
                 pool_config,
@@ -937,6 +963,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
+                &replica_config.replica_version,
                 &logger,
             );
             assert_eq!(
@@ -958,6 +985,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
+                &replica_config.replica_version,
                 &logger,
             );
             assert_eq!(
