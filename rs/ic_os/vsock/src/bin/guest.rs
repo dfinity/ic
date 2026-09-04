@@ -67,7 +67,7 @@ fn main() -> Result<()> {
 
     let response = LinuxVsockClient::with_port(cli.port)
         .send_command(command)
-        .context("sending command '{command}'")?;
+        .context("sending command")?;
 
     // Output the values directly
     match response {

@@ -33,10 +33,8 @@ pub use linux::*;
 mod linux {
     use super::*;
 
-    use std::io::{Read, Write};
-
     use crate::protocol::{Request, Response};
-
+    use std::io::{Read, Write};
     use vsock::{VMADDR_CID_HOST, VsockStream};
 
     pub struct LinuxVsockClient {
