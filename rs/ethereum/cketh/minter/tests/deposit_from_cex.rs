@@ -357,7 +357,9 @@ fn should_sweep_a_second_deposit_despite_resending_a_stale_authorization() {
     let (setup, _first_sweeps) = setup
         .await_sweeps(&sweeper, 1)
         .expect_all_delegating_sweeps();
-    let setup = setup.expect_mints(&first_deposits);
+    let setup = setup
+        .expect_sweeps_finalized(1)
+        .expect_mints(&first_deposits);
     let address = first_deposits[0].address;
     assert_eq!(
         setup.anvil().transaction_count(&address),

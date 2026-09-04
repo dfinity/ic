@@ -575,6 +575,40 @@ impl LiveSetup<CkErc20Setup> {
         self
     }
 
+    /// Waits until the minter has finalized `expected` sweeps successfully. A swept pair only leaves
+    /// the sweep queue on finalization, which runs one timer apart from the log scrape that mints,
+    /// so a test re-registering the pair waits for this rather than for its credit: registering
+    /// a pair still queued reports its stale detection instead of arming it afresh.
+    pub fn expect_sweeps_finalized(self, expected: usize) -> Self {
+        self.drive_until(
+            SWEEP_TICKS,
+            |setup| {
+                format!(
+                    "the minter finalized {} of {expected} sweeps successfully (stages: {})",
+                    setup.finalized_sweeps(),
+                    setup.sweep_stages(),
+                )
+            },
+            |setup| setup.finalized_sweeps() == expected,
+        );
+        self
+    }
+
+    fn finalized_sweeps(&self) -> usize {
+        self.minter_events()
+            .iter()
+            .filter(|event| {
+                matches!(
+                    &event.payload,
+                    EventPayload::FinalizedSweeperTransaction {
+                        transaction_receipt,
+                        ..
+                    } if transaction_receipt.status == TransactionStatus::Success
+                )
+            })
+            .count()
+    }
+
     /// How far the sweep pipeline has got, counted off the minter's audit events. Unlike its
     /// canister log, which is a rolling buffer the EVM RPC canister's tracing evicts within
     /// minutes, the event log is durable — so this says which stage stalled even late in a run.
