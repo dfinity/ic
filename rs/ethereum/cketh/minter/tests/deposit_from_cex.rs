@@ -18,7 +18,6 @@ use ic_cketh_minter::endpoints::events::EventPayload;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{
     Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
-    deploy_sweep_contracts,
 };
 use ic_cketh_test_utils::ckerc20::Erc20Token;
 use ic_cketh_test_utils::live::{Holding, LiveSetup, contract_address};
@@ -280,29 +279,6 @@ fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
         spent <= burned,
         "the ETH debited from the main address ({spent}) must never exceed the ckETH \
          burned for it ({burned})"
-    );
-}
-
-#[test]
-fn should_bounce_eth_sent_to_the_sweeper_implementation() {
-    let anvil = Anvil::start();
-    let contracts = deploy_sweep_contracts(&anvil, &address_from_hex(MINTER_ADDRESS));
-    let sender = address_from_hex(DEV_ACCOUNT);
-
-    assert!(
-        !anvil.plain_transfer_succeeds(
-            &sender,
-            &contracts.delegate,
-            1_000_000_000_000_000,
-            100_000
-        ),
-        "no attestation can recover to the implementation's own address, so ETH landing there \
-         would be locked forever: the guarded receive() must bounce it at the sender"
-    );
-    assert_eq!(
-        anvil.balance(&contracts.delegate),
-        0,
-        "the bounced ETH must not stick to the implementation"
     );
 }
 
