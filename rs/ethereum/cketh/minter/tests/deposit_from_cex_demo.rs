@@ -25,7 +25,10 @@
 //! matching the proposed design where sweeping is *permissionless* but each sweep
 //! carries a minter attestation (a deposit-key signature binding the address to
 //! its IC account). Those sweeps are submitted by a non-minter relayer, and a
-//! separate test shows a forged attestation is rejected.
+//! separate test shows a forged attestation is rejected. A further test funds a
+//! *delegated* deposit address with plain ETH — accepted by the delegate's
+//! `receive()`, while a fixed 21'000-gas send fails at the sender — and moves it
+//! to the minter through the attested `sweepEth`/`sweepEthBatch` entry points.
 //!
 //! Runs the `anvil` binary vendored via `@foundry_bin_*` (see BUILD.bazel);
 //! `ANVIL_BIN` points at it. Requires EIP-7702 support (foundry >= v1.0).
@@ -63,6 +66,8 @@ const RELAYER_PRIVATE_KEY: &str =
 
 const USDT_SUPPLY: u128 = 1_000_000_000_000; // 1M USDT (6 decimals)
 const DEPOSIT_AMOUNT: u128 = 10_000_000; // 10 USDT per deposit
+const ETH_DEPOSIT_AMOUNT: u128 = 1_000_000_000_000_000_000; // 1 ETH
+const PLAIN_TRANSFER_GAS: u64 = 21_000;
 
 // Generous, deterministic fees and a gas limit large enough for a batch of 20;
 // the minter dev account is funded with 10000 ETH. Gas *used* (asserted below)
@@ -120,24 +125,24 @@ const SCENARIOS: [BatchScenario; 3] = [
 const ATTESTED_SCENARIOS: [BatchScenario; 3] = [
     BatchScenario {
         deposits: 1,
-        eip7702_total_gas_used: 98_000,
-        eip7702_average_gas_used: 98_000,
-        eip1559_total_gas_used: 66_320,
-        eip1559_average_gas_used: 66_320,
+        eip7702_total_gas_used: 98_075,
+        eip7702_average_gas_used: 98_075,
+        eip1559_total_gas_used: 66_395,
+        eip1559_average_gas_used: 66_395,
     },
     BatchScenario {
         deposits: 10,
-        eip7702_total_gas_used: 609_431,
-        eip7702_average_gas_used: 60_943,
-        eip1559_total_gas_used: 429_431,
-        eip1559_average_gas_used: 42_943,
+        eip7702_total_gas_used: 609_750,
+        eip7702_average_gas_used: 60_975,
+        eip1559_total_gas_used: 429_750,
+        eip1559_average_gas_used: 42_975,
     },
     BatchScenario {
         deposits: 20,
-        eip7702_total_gas_used: 1_192_900,
-        eip7702_average_gas_used: 59_645,
-        eip1559_total_gas_used: 832_900,
-        eip1559_average_gas_used: 41_645,
+        eip7702_total_gas_used: 1_193_491,
+        eip7702_average_gas_used: 59_674,
+        eip1559_total_gas_used: 833_491,
+        eip1559_average_gas_used: 41_674,
     },
 ];
 
@@ -534,6 +539,242 @@ fn attested_sweep_rejects_a_forged_attestation() {
     let events = received_events(&receipt, &helper);
     assert_eq!(events.len(), 1, "expected one ReceivedEthOrErc20 event");
     assert_eq!(events[0].principal, encode_principal(&principal));
+}
+
+#[test]
+fn attested_sweep_moves_plain_eth_to_the_minter() {
+    let anvil = Anvil::start();
+    let chain_id = anvil.chain_id();
+
+    let minter = eth_address(&key_from_hex(MINTER_PRIVATE_KEY).public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+    let relayer_key = key_from_hex(RELAYER_PRIVATE_KEY);
+
+    let Contracts {
+        helper, attested, ..
+    } = deploy_contracts(&anvil, &minter, &cex);
+
+    let principal = Principal::self_authenticating([0xE7]);
+    let key = derive_deposit_key(&principal);
+    let deposit = eth_address(&key.public_key());
+
+    let receipt = anvil.send_eth(&cex, &deposit, ETH_DEPOSIT_AMOUNT, Some(PLAIN_TRANSFER_GAS));
+    assert!(
+        status_ok(&receipt),
+        "a fixed 21'000-gas send to a code-less deposit address must succeed"
+    );
+    assert_eq!(anvil.balance(&deposit), ETH_DEPOSIT_AMOUNT);
+
+    let attestation = attest(&key, chain_id, &helper, &principal, &[0_u8; 32]);
+    let batch_sweep = ICkSweeperAttested::sweepEthBatchCall {
+        items: vec![SweepItem {
+            deposit: alloy_address(&deposit),
+            principal: B256::from(encode_principal(&principal)),
+            subaccount: B256::ZERO,
+            r: B256::from(attestation.r),
+            s: B256::from(attestation.s),
+            v: attestation.v,
+        }],
+    }
+    .abi_encode();
+    let minter_before = anvil.balance(&minter);
+    let receipt = anvil.send_eip7702(
+        &relayer_key,
+        chain_id,
+        &attested,
+        batch_sweep,
+        vec![sign_authorization(&key, chain_id, &attested, 0)],
+    );
+    assert!(status_ok(&receipt), "the batch ETH sweep reverted");
+    assert_eq!(anvil.balance(&deposit), 0, "deposit not swept");
+    assert_eq!(
+        anvil.balance(&minter),
+        minter_before + ETH_DEPOSIT_AMOUNT,
+        "the minter must receive the swept ETH"
+    );
+    let events = received_events(&receipt, &helper);
+    assert_eq!(events.len(), 1, "expected one ReceivedEthOrErc20 event");
+    assert_eq!(events[0].owner, deposit);
+    assert_eq!(events[0].principal, encode_principal(&principal));
+    assert_eq!(events[0].amount, ETH_DEPOSIT_AMOUNT);
+
+    let underfunded = anvil.send_eth(&cex, &deposit, ETH_DEPOSIT_AMOUNT, Some(PLAIN_TRANSFER_GAS));
+    assert!(
+        !status_ok(&underfunded),
+        "a fixed 21'000-gas send to a delegated address must fail on the sender side"
+    );
+    assert_eq!(
+        anvil.balance(&deposit),
+        0,
+        "the failed send must not leave ETH at the deposit address"
+    );
+
+    let receipt = anvil.send_eth(&cex, &deposit, ETH_DEPOSIT_AMOUNT, None);
+    assert!(
+        status_ok(&receipt),
+        "the delegate's receive() must accept a plain send given enough gas"
+    );
+    println!(
+        "plain ETH send into the delegated receive(): {} gas",
+        gas_used(&receipt)
+    );
+    assert!(
+        gas_used(&receipt) > PLAIN_TRANSFER_GAS,
+        "receiving through the delegate must cost more than a plain send"
+    );
+    assert_eq!(anvil.balance(&deposit), ETH_DEPOSIT_AMOUNT);
+
+    let sweep = ICkSweeperAttested::sweepEthCall {
+        principal: B256::from(encode_principal(&principal)),
+        subaccount: B256::ZERO,
+        r: B256::from(attestation.r),
+        s: B256::from(attestation.s),
+        v: attestation.v,
+    }
+    .abi_encode();
+    let minter_before = anvil.balance(&minter);
+    let receipt = anvil.send_eip1559(&relayer_key, chain_id, &deposit, sweep);
+    assert!(status_ok(&receipt), "the attested ETH sweep reverted");
+    assert_eq!(anvil.balance(&deposit), 0, "deposit not swept");
+    assert_eq!(
+        anvil.balance(&minter),
+        minter_before + ETH_DEPOSIT_AMOUNT,
+        "the minter must receive the swept ETH"
+    );
+    let events = received_events(&receipt, &helper);
+    assert_eq!(events.len(), 1, "expected one ReceivedEthOrErc20 event");
+    assert_eq!(events[0].amount, ETH_DEPOSIT_AMOUNT);
+}
+
+#[test]
+fn attested_eth_sweep_rejects_a_forged_attestation() {
+    let anvil = Anvil::start();
+    let chain_id = anvil.chain_id();
+
+    let minter = eth_address(&key_from_hex(MINTER_PRIVATE_KEY).public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+    let attacker_key = key_from_hex(ATTACKER_PRIVATE_KEY);
+    let attacker = eth_address(&attacker_key.public_key());
+
+    let Contracts {
+        helper, attested, ..
+    } = deploy_contracts(&anvil, &minter, &cex);
+
+    let principal = Principal::self_authenticating([0xE9]);
+    let key = derive_deposit_key(&principal);
+    let deposit = eth_address(&key.public_key());
+
+    let delegate_only = ICkSweeperAttested::sweepEthBatchCall { items: vec![] }.abi_encode();
+    assert!(
+        status_ok(&anvil.send_eip7702(
+            &attacker_key,
+            chain_id,
+            &attested,
+            delegate_only,
+            vec![sign_authorization(&key, chain_id, &attested, 0)]
+        )),
+        "delegation setup reverted"
+    );
+    let receipt = anvil.send_eth(&cex, &deposit, ETH_DEPOSIT_AMOUNT, None);
+    assert!(
+        status_ok(&receipt),
+        "funding the delegated deposit reverted"
+    );
+
+    let attacker_principal = Principal::self_authenticating([0xEA]);
+    let forged = attest(
+        &attacker_key,
+        chain_id,
+        &helper,
+        &attacker_principal,
+        &[0_u8; 32],
+    );
+    let attack = anvil.send_transaction(
+        &attacker,
+        Some(&deposit),
+        &ICkSweeperAttested::sweepEthCall {
+            principal: B256::from(encode_principal(&attacker_principal)),
+            subaccount: B256::ZERO,
+            r: B256::from(forged.r),
+            s: B256::from(forged.s),
+            v: forged.v,
+        }
+        .abi_encode(),
+        Some(300_000),
+    );
+    assert!(
+        !status_ok(&anvil.await_receipt(&attack)),
+        "a forged attestation must not move native ETH"
+    );
+    assert_eq!(
+        anvil.balance(&deposit),
+        ETH_DEPOSIT_AMOUNT,
+        "the ETH must stay at the deposit address"
+    );
+}
+
+#[test]
+fn a_stipend_transfer_from_a_contract_reaches_a_delegated_deposit_address() {
+    let anvil = Anvil::start();
+    let chain_id = anvil.chain_id();
+
+    let minter_key = key_from_hex(MINTER_PRIVATE_KEY);
+    let minter = eth_address(&minter_key.public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+
+    let Contracts { attested, .. } = deploy_contracts(&anvil, &minter, &cex);
+    let forwarder = anvil.deploy(
+        &cex,
+        &deploy_code(&compile("STIPEND_FORWARDER_SOL", "StipendForwarder"), &[]),
+    );
+
+    let key = derive_deposit_key(&Principal::self_authenticating([0xE8]));
+    let deposit = eth_address(&key.public_key());
+    let delegate_only = ICkSweeperAttested::sweepEthBatchCall { items: vec![] }.abi_encode();
+    assert!(
+        status_ok(&anvil.send_eip7702(
+            &minter_key,
+            chain_id,
+            &attested,
+            delegate_only,
+            vec![sign_authorization(&key, chain_id, &attested, 0)]
+        )),
+        "delegation setup reverted"
+    );
+    assert!(!anvil.code(&deposit).is_empty(), "deposit not delegated");
+
+    let tx = anvil.send_transaction_with_value(
+        &cex,
+        Some(&forwarder),
+        &IStipendForwarder::forwardCall {
+            to: alloy_address(&deposit),
+        }
+        .abi_encode(),
+        None,
+        Some(ETH_DEPOSIT_AMOUNT),
+    );
+    assert!(
+        status_ok(&anvil.await_receipt(&tx)),
+        "a 2'300-gas-stipend transfer into the delegated receive() must succeed"
+    );
+    assert_eq!(anvil.balance(&deposit), ETH_DEPOSIT_AMOUNT);
+}
+
+#[test]
+fn the_sweeper_implementation_rejects_plain_eth() {
+    let anvil = Anvil::start();
+
+    let minter = eth_address(&key_from_hex(MINTER_PRIVATE_KEY).public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+
+    let Contracts { attested, .. } = deploy_contracts(&anvil, &minter, &cex);
+
+    let receipt = anvil.send_eth(&cex, &attested, ETH_DEPOSIT_AMOUNT, Some(50_000));
+    assert!(
+        !status_ok(&receipt),
+        "ETH sent to the implementation contract would be locked forever, so it must bounce"
+    );
+    assert_eq!(anvil.balance(&attested), 0);
 }
 
 struct Contracts {
@@ -991,6 +1232,12 @@ sol! {
         uint8 v;
     }
 
+    /// `StipendForwarder.sol`: forwards ETH with `transfer`'s 2'300-gas stipend,
+    /// the worst-case sender profile of a contract-batched CEX withdrawal.
+    interface IStipendForwarder {
+        function forward(address to) external payable;
+    }
+
     interface ICkSweeperAttested {
         function sweepErc20(
             address[] tokens,
@@ -1001,6 +1248,8 @@ sol! {
             uint8 v
         ) external;
         function sweepErc20Batch(SweepItem[] items, address[] tokens) external;
+        function sweepEth(bytes32 principal, bytes32 subaccount, bytes32 r, bytes32 s, uint8 v) external;
+        function sweepEthBatch(SweepItem[] items) external;
     }
 }
 
@@ -1218,6 +1467,17 @@ impl Anvil {
         data: &[u8],
         gas: Option<u64>,
     ) -> String {
+        self.send_transaction_with_value(from, to, data, gas, None)
+    }
+
+    fn send_transaction_with_value(
+        &self,
+        from: &Address,
+        to: Option<&Address>,
+        data: &[u8],
+        gas: Option<u64>,
+        value: Option<u128>,
+    ) -> String {
         let mut tx = serde_json::json!({"from": to_hex(from.as_ref()), "input": to_hex(data)});
         if let Some(to) = to {
             tx["to"] = serde_json::json!(to_hex(to.as_ref()));
@@ -1225,10 +1485,30 @@ impl Anvil {
         if let Some(gas) = gas {
             tx["gas"] = serde_json::json!(format!("0x{gas:x}"));
         }
+        if let Some(value) = value {
+            tx["value"] = serde_json::json!(format!("0x{value:x}"));
+        }
         self.rpc("eth_sendTransaction", serde_json::json!([tx]))
             .as_str()
             .unwrap()
             .to_string()
+    }
+
+    fn send_eth(&self, from: &Address, to: &Address, value: u128, gas: Option<u64>) -> Value {
+        let mut tx = serde_json::json!({
+            "from": to_hex(from.as_ref()),
+            "to": to_hex(to.as_ref()),
+            "value": format!("0x{value:x}"),
+        });
+        if let Some(gas) = gas {
+            tx["gas"] = serde_json::json!(format!("0x{gas:x}"));
+        }
+        let hash = self
+            .rpc("eth_sendTransaction", serde_json::json!([tx]))
+            .as_str()
+            .unwrap()
+            .to_string();
+        self.await_receipt(&hash)
     }
 
     fn send_raw(&self, raw: &[u8]) -> String {
