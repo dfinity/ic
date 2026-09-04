@@ -16,14 +16,23 @@ Previous ckETH minter proposal: https://dashboard.internetcomputer.org/proposal/
 
 ## Motivation
 
-Update the ckETH minter canister to include the latest code changes:
+Upgrade the ckETH/ckERC20 minter to support deposits of ERC-20 tokens from central exchanges.
+Currently, depositing an ERC-20 tokens requires calling a smart contract ([0x18901044688D3756C35Ed2b36D93e6a5B8e00E68](https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68)) with parameters specifying the intended owner on the Internet Computer (principal and subaccount), which is typically not supported from central exchanges.
 
-* Reduce the minimum ETH withdrawal amount by a factor of 6, from 0.03 ETH (`30_000_000_000_000_000` wei) to 0.005 ETH (`5_000_000_000_000_000` wei) — approximately $10 at current prices. The reasoning is as follows:
-    * The current minimum dates back to December 2023, when the ckETH minter was installed (see proposal [126171](https://dashboard.internetcomputer.org/proposal/126171)). At that time ETH traded in a similar USD range (around $2000), but Ethereum mainnet transaction fees were averaging $5–$10 per transaction ([source](https://bitinfocharts.com/comparison/ethereum-transactionfees.html#3y)).
-    * Today, Ethereum mainnet fees are in the order of cents and rarely exceed $1.
-    * As explained [here](https://github.com/dfinity/ic/blob/14382b5abb14b8e7de2bd4a3fb402ba069b82861/rs/ethereum/cketh/docs/cketh.adoc?plain=1#L208), an order-of-magnitude safety margin is preserved so the minter can always submit the transaction even when the Ethereum network is congested and one or more resubmissions are needed (each resubmission requires at least a 10% fee bump). With current Ethereum fees of ~$0.10–$1, a $10 minimum still preserves the ~10× safety margin even after several fee bumps.
-* Update the OFAC checklist.
+At a high level, the new deposit flow for Alice would look like this:
+1. She notifies the minter of her intention of depositing USDT by calling the new endpoint `deposit_erc20`, which returns Alice's dedicated deposit address on Ethereum.
+2. Alice has roughly 24H to do a transfer of USDT from her account on her favorite central exchange to the deposit address.
+3. The minter scans the registered deposit addresses and if an address as enough tokens (roughly $10) it will be swept, which consists of the following steps:
+    1. The minter signs an attestation, binding the deposit address to a (principal, subaccount) on the Internet Computer
+    2. The minter signs an [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) authorization to delegate the deposit address to the sweeper contract `0xREPLACE_ME`.
+    3. Finally, the minter makes an [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) transaction to the sweeper contract at `0xREPLACE_ME`. The sweeper contract verifies the attestation and calls the existing deposit helper smart contract with the given principal and subaccount, so that the exact same deposit flow occurs as if the user had called the deposit helper smart contract directly. This has the benefits that the same events `ReceivedEthOrErc20` are emitted and the minter's main address ([0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80](https://etherscan.io/address/0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80)) holds the funds.
 
+Key design decisions:
+1. Backing of ckETH is not affected: cost of sweeping transactions is taken from the minter's fee subaccount on the ledger.
+2. Sweeping transactions use a different address than the minter's main address ([0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80](https://etherscan.io/address/0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80)) holding the funds so that a blocking sweeping transaction does not block the main transaction pipeline (due to Ethereum sequential nonces).
+3. Sweeping is permissionless: once a deposit address is delegated, anyone can call the sweep methods to forwards the tokens, provided the input attestation is correct.
+
+More details and diagrams can be found in the [design document](https://github.com/dfinity/ic/blob/master/rs/ethereum/cketh/docs/deposit_from_cex.md).
 
 ## Release Notes
 
