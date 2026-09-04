@@ -1,8 +1,11 @@
 use assert_matches::assert_matches;
 use ic_canonical_state::{CURRENT_CERTIFICATION_VERSION, LabelLike};
 use ic_crypto_tree_hash::{Label, LabeledTree, flat_map::FlatMap};
-use ic_interfaces_certified_stream_store::DecodeStreamError;
+use ic_interfaces_certified_stream_store::{
+    CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
+};
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
+use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{messaging::xnet::v1, proxy::ProtoProxy};
 use ic_replicated_state::Stream;
@@ -11,17 +14,20 @@ use ic_test_utilities_metrics::{HistogramStats, metric_vec};
 use ic_test_utilities_state::arb_stream_slice;
 use ic_test_utilities_types::xnet::StreamSliceBuilder;
 use ic_types::messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT;
-use ic_types::xnet::{CertifiedStreamSlice, StreamIndex};
+use ic_types::xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice};
 use ic_types::{CountBytes, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{
-    CertifiedSliceError, CertifiedSlicePool, InvalidAppend, InvalidSlice, LABEL_STATUS,
-    STATUS_NONE, STATUS_SUCCESS, UnpackedStreamSlice, certified_slice_count_bytes, testing,
+    CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, InvalidAppend, InvalidSlice,
+    LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS, UnpackedStreamSlice, certified_slice_count_bytes,
+    testing,
 };
 use ic_xnet_payload_builder::{ExpectedIndices, MAX_SIGNALS, max_message_index};
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;
-use std::{convert::TryFrom, sync::Arc};
+use std::collections::BTreeMap;
+use std::convert::TryFrom;
+use std::sync::{Arc, Mutex};
 
 mod common;
 use common::*;
@@ -523,6 +529,77 @@ fn matching_count_bytes(
     });
 }
 
+/// Takes a pooled slice from the given subnet. Panics if no such slice exists.
+fn take_slice(
+    pool: &Mutex<CertifiedSlicePool>,
+    subnet_id: SubnetId,
+    begin: Option<&ExpectedIndices>,
+    msg_limit: Option<usize>,
+    byte_limit: Option<usize>,
+) -> Option<CertifiedStreamSlice> {
+    pool.lock()
+        .unwrap()
+        .take_slice(subnet_id, begin, msg_limit, byte_limit)
+        .unwrap()
+        .map(|(slice, _)| slice)
+}
+
+fn put(
+    pool: &Mutex<CertifiedSlicePool>,
+    subnet_id: SubnetId,
+    slice: CertifiedStreamSlice,
+    certified_stream_store: &dyn CertifiedStreamStore,
+    log: &ReplicaLogger,
+) -> CertifiedSliceResult<()> {
+    CertifiedSlicePool::put(
+        pool,
+        subnet_id,
+        slice,
+        certified_stream_store,
+        REGISTRY_VERSION,
+        log.clone(),
+    )
+}
+
+fn append(
+    pool: &Mutex<CertifiedSlicePool>,
+    subnet_id: SubnetId,
+    partial: CertifiedStreamSlice,
+    certified_stream_store: &dyn CertifiedStreamStore,
+    log: &ReplicaLogger,
+) -> CertifiedSliceResult<()> {
+    CertifiedSlicePool::append(
+        pool,
+        subnet_id,
+        partial,
+        certified_stream_store,
+        REGISTRY_VERSION,
+        log.clone(),
+    )
+}
+
+fn slice_stats(
+    pool: &Mutex<CertifiedSlicePool>,
+    subnet_id: SubnetId,
+) -> (Option<ExpectedIndices>, Option<StreamIndex>, usize, usize) {
+    pool.lock().unwrap().slice_stats(subnet_id)
+}
+
+fn peers(pool: &Mutex<CertifiedSlicePool>) -> Vec<SubnetId> {
+    pool.lock().unwrap().peers().cloned().collect()
+}
+
+fn garbage_collect(
+    pool: &Mutex<CertifiedSlicePool>,
+    new_stream_positions: BTreeMap<SubnetId, ExpectedIndices>,
+) {
+    pool.lock().unwrap().garbage_collect(new_stream_positions)
+}
+
+fn observe_pool_size_bytes(pool: &Mutex<CertifiedSlicePool>) {
+    pool.lock().unwrap().observe_pool_size_bytes()
+}
+
 #[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn pool(
     #[strategy(arb_stream_slice(
@@ -537,31 +614,22 @@ fn pool(
     let (mut stream, from, msg_count) = test_slice;
 
     /// Asserts that the pool has a cached stream position for the given subnet.
-    fn has_stream_position(subnet_id: SubnetId, pool: &CertifiedSlicePool) -> bool {
-        !matches!(pool.slice_stats(subnet_id), (None, _, _, _))
+    fn has_stream_position(subnet_id: SubnetId, pool: &Mutex<CertifiedSlicePool>) -> bool {
+        !matches!(slice_stats(pool, subnet_id), (None, _, _, _))
     }
     /// Asserts that the pool contains a slice from the given subnet.
-    fn has_slice(subnet_id: SubnetId, pool: &CertifiedSlicePool) -> bool {
-        !matches!(pool.slice_stats(subnet_id), (_, None, 0, 0))
-    }
-    /// Takes the full pooled slice from the given subnet. Panics if no such slice exists.
-    fn take_slice(
-        subnet_id: SubnetId,
-        pool: &mut CertifiedSlicePool,
-    ) -> Option<CertifiedStreamSlice> {
-        pool.take_slice(subnet_id, None, None, None)
-            .unwrap()
-            .map(|(slice, _)| slice)
+    fn has_slice(subnet_id: SubnetId, pool: &Mutex<CertifiedSlicePool>) -> bool {
+        !matches!(slice_stats(pool, subnet_id), (_, None, 0, 0))
     }
     /// Asserts that the pool contains a slice with the expected stats and non-zero byte size.
     fn assert_has_slice(
         subnet_id: SubnetId,
-        pool: &mut CertifiedSlicePool,
+        pool: &Mutex<CertifiedSlicePool>,
         expected_stream_position: Option<ExpectedIndices>,
         expected_slice_begin: Option<StreamIndex>,
         expected_msg_count: usize,
     ) {
-        let (stream_position, slice_begin, msg_count, byte_size) = pool.slice_stats(subnet_id);
+        let (stream_position, slice_begin, msg_count, byte_size) = slice_stats(pool, subnet_id);
         assert_eq!(expected_stream_position, stream_position);
         assert_eq!(expected_slice_begin, slice_begin);
         assert_eq!(expected_msg_count, msg_count);
@@ -588,66 +656,60 @@ fn pool(
         certified_stream_store
             .expect_decode_certified_stream_slice()
             .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
-        let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-        let mut pool =
-            CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &MetricsRegistry::new());
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Mutex::new(CertifiedSlicePool::new(&MetricsRegistry::new()));
 
         // Empty pool is empty.
-        assert!(pool.peers().next().is_none());
+        assert!(peers(&pool).is_empty());
         assert!(!has_stream_position(SRC_SUBNET, &pool));
         assert!(!has_slice(SRC_SUBNET, &pool));
-        assert!(take_slice(SRC_SUBNET, &mut pool).is_none());
+        assert!(take_slice(&pool, SRC_SUBNET, None, None, None).is_none());
 
         // Populate the pool.
-        pool.put(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log.clone())
-            .unwrap();
+        put(&pool, SRC_SUBNET, slice.clone(), &*store, &log).unwrap();
 
         // Peers and stream positions still not set.
-        assert!(pool.peers().next().is_none());
+        assert!(peers(&pool).is_empty());
         assert!(!has_stream_position(SRC_SUBNET, &pool));
 
         // But we can take the slice out of the pool...
         assert!(has_slice(SRC_SUBNET, &pool));
-        assert_eq!(slice, take_slice(SRC_SUBNET, &mut pool).unwrap());
+        assert_eq!(
+            slice,
+            take_slice(&pool, SRC_SUBNET, None, None, None).unwrap()
+        );
         // ...once.
         assert!(!has_slice(SRC_SUBNET, &pool));
-        assert!(take_slice(SRC_SUBNET, &mut pool).is_none());
+        assert!(take_slice(&pool, SRC_SUBNET, None, None, None).is_none());
 
         // Create a fresh, populated pool.
-        let mut pool =
-            CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
-        pool.garbage_collect(btreemap! {SRC_SUBNET => ExpectedIndices::default()});
-        pool.put(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log.clone())
-            .unwrap();
+        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
+        garbage_collect(&pool, btreemap! {SRC_SUBNET => ExpectedIndices::default()});
+        put(&pool, SRC_SUBNET, slice.clone(), &*store, &log).unwrap();
 
         // Sanity check that the slice is in the pool.
-        {
-            let mut peers = pool.peers();
-            assert_eq!(Some(&SRC_SUBNET), peers.next());
-            assert!(peers.next().is_none());
-
-            pool.observe_pool_size_bytes();
-            assert_eq!(
-                UnpackedStreamSlice::try_from(slice.clone())
-                    .unwrap()
-                    .count_bytes(),
-                fixture.fetch_pool_size_bytes()
-            );
-        }
+        assert_eq!(vec![SRC_SUBNET], peers(&pool));
+        observe_pool_size_bytes(&pool);
+        assert_eq!(
+            UnpackedStreamSlice::try_from(slice.clone())
+                .unwrap()
+                .count_bytes(),
+            fixture.fetch_pool_size_bytes()
+        );
         assert_has_slice(
             SRC_SUBNET,
-            &mut pool,
+            &pool,
             Some(zero_indices),
             messages_begin,
             msg_count,
         );
 
         // Garbage collecting no messages and no signals should be a no-op.
-        pool.garbage_collect(btreemap! {SRC_SUBNET => indices_before.clone()});
+        garbage_collect(&pool, btreemap! {SRC_SUBNET => indices_before.clone()});
         // But stream position should be updated.
         assert_has_slice(
             SRC_SUBNET,
-            &mut pool,
+            &pool,
             Some(indices_before.clone()),
             messages_begin,
             msg_count,
@@ -656,12 +718,11 @@ fn pool(
         // Taking a slice with too low a byte limit should also be a no-op.
         assert_eq!(
             None,
-            pool.take_slice(SRC_SUBNET, Some(&indices_before), None, Some(1))
-                .unwrap(),
+            take_slice(&pool, SRC_SUBNET, Some(&indices_before), None, Some(1)),
         );
         assert_has_slice(
             SRC_SUBNET,
-            &mut pool,
+            &pool,
             Some(indices_before.clone()),
             messages_begin,
             msg_count,
@@ -670,9 +731,7 @@ fn pool(
         // Taking a slice with message limit zero should return the header only...
         assert_opt_slices_eq(
             Some(fixture.get_slice(DST_SUBNET, from, 0)),
-            pool.take_slice(SRC_SUBNET, Some(&indices_before), Some(0), None)
-                .unwrap()
-                .map(|(slice, _)| slice),
+            take_slice(&pool, SRC_SUBNET, Some(&indices_before), Some(0), None),
         );
         // ...but advance `signals_end`.
         let mut stream_position = ExpectedIndices {
@@ -683,7 +742,7 @@ fn pool(
             // Slice had length zero, it should have been consumed.
             assert_eq!(
                 (Some(stream_position), None, 0, 0),
-                pool.slice_stats(SRC_SUBNET)
+                slice_stats(&pool, SRC_SUBNET)
             );
             // Terminate early.
             return;
@@ -692,7 +751,7 @@ fn pool(
         // Slice was non-empty, messages should still be there.
         assert_has_slice(
             SRC_SUBNET,
-            &mut pool,
+            &pool,
             Some(stream_position.clone()),
             Some(from),
             msg_count,
@@ -700,16 +759,14 @@ fn pool(
 
         // Pretend message 0 was already included into a block and take the next 1 message.
         stream_position.message_index.inc_assign();
-        let prefix = pool
-            .take_slice(SRC_SUBNET, Some(&stream_position), Some(1), None)
-            .unwrap();
+        let prefix = take_slice(&pool, SRC_SUBNET, Some(&stream_position), Some(1), None);
         if msg_count == 1 {
             // Attempting to take a second message should have returned nothing...
             assert_eq!(None, prefix);
             // ...and GC-ed everything.
             assert_eq!(
                 (Some(stream_position), None, 0, 0),
-                pool.slice_stats(SRC_SUBNET)
+                slice_stats(&pool, SRC_SUBNET)
             );
             // Terminate early.
             return;
@@ -718,7 +775,7 @@ fn pool(
         // A slice containing the second message should have been returned.
         assert_opt_slices_eq(
             Some(fixture.get_slice(DST_SUBNET, from.increment(), 1)),
-            prefix.map(|(slice, _)| slice),
+            prefix,
         );
 
         stream_position.message_index.inc_assign();
@@ -726,7 +783,7 @@ fn pool(
             // Slice should have been consumed.
             assert_eq!(
                 (Some(stream_position), None, 0, 0),
-                pool.slice_stats(SRC_SUBNET)
+                slice_stats(&pool, SRC_SUBNET)
             );
             // Terminate early.
             return;
@@ -735,7 +792,7 @@ fn pool(
         // Rest of slice should be in the pool.
         assert_has_slice(
             SRC_SUBNET,
-            &mut pool,
+            &pool,
             Some(stream_position.clone()),
             Some(stream_position.message_index),
             msg_count - 2,
@@ -747,20 +804,20 @@ fn pool(
             message_index: earlier_message_index,
             signal_index: stream_position.signal_index,
         };
-        pool.garbage_collect(btreemap! {SRC_SUBNET => earlier_indices.clone()});
+        garbage_collect(&pool, btreemap! {SRC_SUBNET => earlier_indices.clone()});
         assert_has_slice(
             SRC_SUBNET,
-            &mut pool,
+            &pool,
             Some(earlier_indices.clone()),
             Some(stream_position.message_index),
             msg_count - 2,
         );
 
         // ...but putting back the original slice now should replace it (from the earlier index).
-        pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log).unwrap();
+        put(&pool, SRC_SUBNET, slice, &*store, &log).unwrap();
         assert_has_slice(
             SRC_SUBNET,
-            &mut pool,
+            &pool,
             Some(earlier_indices),
             Some(earlier_message_index),
             msg_count - 1,
@@ -826,31 +883,26 @@ fn pool_append_same_slice(
         certified_stream_store
             .expect_decode_certified_stream_slice()
             .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
-        let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-        let mut pool =
-            CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
 
         // `append()` with no slice present is equivalent to `put()`.
-        pool.append(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log.clone())
-            .unwrap();
+        append(&pool, SRC_SUBNET, slice.clone(), &*store, &log).unwrap();
         // Note: this takes the slice and updates the cached stream position to its end indices.
         assert_opt_slices_eq(
             Some(slice.clone()),
-            pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None)
-                .unwrap()
-                .map(|(slice, _)| slice),
+            take_slice(&pool, SRC_SUBNET, Some(&stream_position), None, None),
         );
 
         // Appending the same slice after taking it should be a no-op.
-        pool.append(SRC_SUBNET, slice, REGISTRY_VERSION, log.clone())
-            .unwrap();
+        append(&pool, SRC_SUBNET, slice, &*store, &log).unwrap();
         let mut stream_position = ExpectedIndices {
             message_index: to,
             signal_index: stream.signals_end(),
         };
         assert_eq!(
             (Some(stream_position.clone()), None, 0, 0),
-            pool.slice_stats(SRC_SUBNET)
+            slice_stats(&pool, SRC_SUBNET)
         );
 
         // But appending the same slice with a higher `signals_end` should result in an empty
@@ -860,8 +912,7 @@ fn pool_append_same_slice(
             StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
         let new_slice = new_fixture.get_slice(DST_SUBNET, from, msg_count);
 
-        pool.append(SRC_SUBNET, new_slice, REGISTRY_VERSION, log)
-            .unwrap();
+        append(&pool, SRC_SUBNET, new_slice, &*store, &log).unwrap();
 
         let empty_slice = new_fixture.get_slice(DST_SUBNET, to, 0);
         let empty_slice_bytes = UnpackedStreamSlice::try_from(empty_slice.clone())
@@ -869,17 +920,15 @@ fn pool_append_same_slice(
             .count_bytes();
         assert_opt_slices_eq(
             Some(empty_slice),
-            pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None)
-                .unwrap()
-                .map(|(slice, _)| slice),
+            take_slice(&pool, SRC_SUBNET, Some(&stream_position), None, None),
         );
         stream_position.signal_index = stream.signals_end();
         assert_eq!(
             (Some(stream_position), None, 0, 0),
-            pool.slice_stats(SRC_SUBNET)
+            slice_stats(&pool, SRC_SUBNET)
         );
 
-        pool.observe_pool_size_bytes();
+        observe_pool_size_bytes(&pool);
         assert_eq!(0, fixture.fetch_pool_size_bytes());
         assert_eq!(
             metric_vec(&[(&[(LABEL_STATUS, STATUS_SUCCESS)], 2),]),
@@ -940,29 +989,21 @@ fn pool_append_non_empty_to_empty(
         certified_stream_store
             .expect_decode_certified_stream_slice()
             .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
-        let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-        let mut pool =
-            CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
 
         // Append an empty slice.
         let empty_prefix_slice = fixture.get_slice(DST_SUBNET, from, 0);
-        pool.append(
-            SRC_SUBNET,
-            empty_prefix_slice,
-            REGISTRY_VERSION,
-            log.clone(),
-        )
-        .unwrap();
+        append(&pool, SRC_SUBNET, empty_prefix_slice, &*store, &log).unwrap();
         assert_matches!(
-            pool.slice_stats(SRC_SUBNET),
+            slice_stats(&pool, SRC_SUBNET),
             (None, None, 0, byte_size) if byte_size > 0
         );
 
         // Appending the full slice should pool the full slice.
-        pool.append(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log)
-            .unwrap();
+        append(&pool, SRC_SUBNET, slice.clone(), &*store, &log).unwrap();
         assert_matches!(
-            pool.slice_stats(SRC_SUBNET),
+            slice_stats(&pool, SRC_SUBNET),
             (None, Some(messages_begin), count, byte_size)
                 if messages_begin == from
                     && count == msg_count
@@ -970,9 +1011,7 @@ fn pool_append_non_empty_to_empty(
         );
         assert_opt_slices_eq(
             Some(slice),
-            pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None)
-                .unwrap()
-                .map(|(slice, _)| slice),
+            take_slice(&pool, SRC_SUBNET, Some(&stream_position), None, None),
         );
     });
 }
@@ -1009,9 +1048,8 @@ fn pool_append_non_empty_to_non_empty(
         certified_stream_store
             .expect_decode_certified_stream_slice()
             .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
-        let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-        let mut pool =
-            CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
 
         // Slice midpoint.
         let prefix_len = msg_count / 2;
@@ -1020,10 +1058,9 @@ fn pool_append_non_empty_to_non_empty(
 
         // Pool first half of slice.
         let prefix_slice = fixture.get_slice(DST_SUBNET, from, prefix_len);
-        pool.put(SRC_SUBNET, prefix_slice, REGISTRY_VERSION, log.clone())
-            .unwrap();
+        put(&pool, SRC_SUBNET, prefix_slice, &*store, &log).unwrap();
         assert_matches!(
-            pool.slice_stats(SRC_SUBNET),
+            slice_stats(&pool, SRC_SUBNET),
             (None, Some(messages_begin), count, byte_size)
                 if messages_begin == from
                     && count == prefix_len
@@ -1034,19 +1071,14 @@ fn pool_append_non_empty_to_non_empty(
         let overlapping_suffix_slice =
             fixture.get_partial_slice(DST_SUBNET, from, mid.decrement(), suffix_len + 1);
         assert_matches!(
-            pool.append(
-                SRC_SUBNET,
-                overlapping_suffix_slice,
-                REGISTRY_VERSION,
-                log.clone()
-            ),
+            append(&pool, SRC_SUBNET, overlapping_suffix_slice, &*store, &log),
             Err(CertifiedSliceError::InvalidAppend(
                 InvalidAppend::IndexMismatch
             ))
         );
         // Pooled slice stays unchanged.
         assert_matches!(
-            pool.slice_stats(SRC_SUBNET),
+            slice_stats(&pool, SRC_SUBNET),
             (None, Some(messages_begin), count, byte_size)
                 if messages_begin == from
                     && count == prefix_len
@@ -1058,19 +1090,14 @@ fn pool_append_non_empty_to_non_empty(
             let gapped_suffix_slice =
                 fixture.get_partial_slice(DST_SUBNET, from, mid.increment(), suffix_len - 1);
             assert_matches!(
-                pool.append(
-                    SRC_SUBNET,
-                    gapped_suffix_slice,
-                    REGISTRY_VERSION,
-                    log.clone()
-                ),
+                append(&pool, SRC_SUBNET, gapped_suffix_slice, &*store, &log),
                 Err(CertifiedSliceError::InvalidAppend(
                     InvalidAppend::IndexMismatch
                 ))
             );
             // Pooled slice stays unchanged.
             assert_matches!(
-                pool.slice_stats(SRC_SUBNET),
+                slice_stats(&pool, SRC_SUBNET),
                 (None, Some(messages_begin), count, byte_size)
                     if messages_begin == from
                         && count == prefix_len
@@ -1080,11 +1107,10 @@ fn pool_append_non_empty_to_non_empty(
 
         // Appending the matching second half should succeed.
         let suffix_slice = fixture.get_partial_slice(DST_SUBNET, from, mid, suffix_len);
-        pool.append(SRC_SUBNET, suffix_slice, REGISTRY_VERSION, log)
-            .unwrap();
+        append(&pool, SRC_SUBNET, suffix_slice, &*store, &log).unwrap();
         // And result in the full slice being pooled.
         assert_matches!(
-            pool.slice_stats(SRC_SUBNET),
+            slice_stats(&pool, SRC_SUBNET),
             (None, Some(messages_begin), count, byte_size)
                 if messages_begin == from
                     && count == msg_count
@@ -1092,9 +1118,7 @@ fn pool_append_non_empty_to_non_empty(
         );
         assert_opt_slices_eq(
             Some(slice),
-            pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None)
-                .unwrap()
-                .map(|(slice, _)| slice),
+            take_slice(&pool, SRC_SUBNET, Some(&stream_position), None, None),
         );
     });
 }
@@ -1130,27 +1154,24 @@ fn pool_put_invalid_slice(
         certified_stream_store
             .expect_decode_certified_stream_slice()
             .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
-        let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-        let mut pool =
-            CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
 
         // `put()` should fail.
         assert_matches!(
-            pool.put(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log.clone()),
+            put(&pool, SRC_SUBNET, slice.clone(), &*store, &log),
             Err(CertifiedSliceError::DecodeStreamError(
                 DecodeStreamError::InvalidSignature(_)
             ))
         );
 
         // Pool should be untouched.
-        assert_eq!((None, None, 0, 0), pool.slice_stats(SRC_SUBNET));
+        assert_eq!((None, None, 0, 0), slice_stats(&pool, SRC_SUBNET));
         assert_opt_slices_eq(
             None,
-            pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None)
-                .unwrap()
-                .map(|(slice, _)| slice),
+            take_slice(&pool, SRC_SUBNET, Some(&stream_position), None, None),
         );
-        pool.observe_pool_size_bytes();
+        observe_pool_size_bytes(&pool);
         assert_eq!(0, fixture.fetch_pool_size_bytes());
     });
 }
@@ -1197,15 +1218,13 @@ fn pool_append_invalid_slice(
         certified_stream_store
             .expect_decode_certified_stream_slice()
             .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
-        let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-        let mut pool =
-            CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
 
         // Populate the pool with the prefix.
-        pool.put(SRC_SUBNET, prefix.clone(), REGISTRY_VERSION, log.clone())
-            .unwrap();
+        put(&pool, SRC_SUBNET, prefix.clone(), &*store, &log).unwrap();
         assert_matches!(
-            pool.slice_stats(SRC_SUBNET),
+            slice_stats(&pool, SRC_SUBNET),
             (None, Some(messages_begin), count, byte_size)
                 if messages_begin == stream_begin
                     && count == prefix_msg_count
@@ -1214,7 +1233,7 @@ fn pool_append_invalid_slice(
 
         // `append()` should fail.
         assert_matches!(
-            pool.append(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log.clone()),
+            append(&pool, SRC_SUBNET, slice.clone(), &*store, &log),
             Err(CertifiedSliceError::DecodeStreamError(
                 DecodeStreamError::InvalidSignature(_)
             ))
@@ -1222,7 +1241,7 @@ fn pool_append_invalid_slice(
 
         // Pool contents should be unchanged.
         assert_matches!(
-            pool.slice_stats(SRC_SUBNET),
+            slice_stats(&pool, SRC_SUBNET),
             (None, Some(messages_begin), count, byte_size)
                 if messages_begin == stream_begin
                     && count == prefix_msg_count
@@ -1230,17 +1249,15 @@ fn pool_append_invalid_slice(
         );
         assert_opt_slices_eq(
             Some(prefix.clone()),
-            pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None)
-                .unwrap()
-                .map(|(slice, _)| slice),
+            take_slice(&pool, SRC_SUBNET, Some(&stream_position), None, None),
         );
         stream_position.message_index = from;
         assert_eq!(
             (Some(stream_position.clone()), None, 0, 0),
-            pool.slice_stats(SRC_SUBNET)
+            slice_stats(&pool, SRC_SUBNET)
         );
 
-        pool.observe_pool_size_bytes();
+        observe_pool_size_bytes(&pool);
         assert_eq!(0, fixture.fetch_pool_size_bytes());
     });
 }
@@ -1276,27 +1293,24 @@ fn pool_append_invalid_slice_to_empty(
         certified_stream_store
             .expect_decode_certified_stream_slice()
             .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
-        let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-        let mut pool =
-            CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
 
         // `append()` should fail.
         assert_matches!(
-            pool.append(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log.clone()),
+            append(&pool, SRC_SUBNET, slice.clone(), &*store, &log),
             Err(CertifiedSliceError::DecodeStreamError(
                 DecodeStreamError::InvalidSignature(_)
             ))
         );
 
         // Pool should be untouched.
-        assert_eq!((None, None, 0, 0), pool.slice_stats(SRC_SUBNET));
+        assert_eq!((None, None, 0, 0), slice_stats(&pool, SRC_SUBNET));
         assert_opt_slices_eq(
             None,
-            pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None)
-                .unwrap()
-                .map(|(slice, _)| slice),
+            take_slice(&pool, SRC_SUBNET, Some(&stream_position), None, None),
         );
-        pool.observe_pool_size_bytes();
+        observe_pool_size_bytes(&pool);
         assert_eq!(0, fixture.fetch_pool_size_bytes());
     });
 }
@@ -1334,18 +1348,13 @@ fn pool_take_slice_respects_signal_limit(
         certified_stream_store
             .expect_decode_certified_stream_slice()
             .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
-        let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-        let mut pool =
-            CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
 
-        pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log.clone())
-            .unwrap();
-        let _ = pool
-            .take_slice(SRC_SUBNET, Some(&begin), None, None)
-            .unwrap()
-            .unwrap();
+        put(&pool, SRC_SUBNET, slice, &*store, &log).unwrap();
+        let _ = take_slice(&pool, SRC_SUBNET, Some(&begin), None, None).unwrap();
 
-        let (new_begin, _, _, _) = pool.slice_stats(SRC_SUBNET);
+        let (new_begin, _, _, _) = slice_stats(&pool, SRC_SUBNET);
         let messages_end = new_begin.unwrap().message_index;
 
         assert!(
@@ -1386,23 +1395,147 @@ fn pool_garbage_collect_deleted_subnet(
         certified_stream_store
             .expect_decode_certified_stream_slice()
             .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
-        let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-        let mut pool =
-            CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &MetricsRegistry::new());
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Mutex::new(CertifiedSlicePool::new(&MetricsRegistry::new()));
 
         // Register SRC_SUBNET as a known peer and pool a slice from it.
-        pool.garbage_collect(btreemap! {SRC_SUBNET => stream_position});
-        pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log).unwrap();
+        garbage_collect(&pool, btreemap! {SRC_SUBNET => stream_position});
+        put(&pool, SRC_SUBNET, slice, &*store, &log).unwrap();
 
         // Sanity check: SRC_SUBNET is a known peer with a pooled slice.
-        assert!(pool.peers().any(|&id| id == SRC_SUBNET));
-        assert!(!matches!(pool.slice_stats(SRC_SUBNET), (_, None, 0, 0)));
+        assert!(peers(&pool).contains(&SRC_SUBNET));
+        assert!(!matches!(slice_stats(&pool, SRC_SUBNET), (_, None, 0, 0)));
 
         // Simulate subnet deletion: call garbage_collect without SRC_SUBNET.
-        pool.garbage_collect(Default::default());
+        garbage_collect(&pool, Default::default());
 
         // Both the stream position and the slice should have been dropped.
-        assert!(pool.peers().next().is_none());
-        assert_eq!((None, None, 0, 0), pool.slice_stats(SRC_SUBNET));
+        assert!(peers(&pool).is_empty());
+        assert_eq!((None, None, 0, 0), slice_stats(&pool, SRC_SUBNET));
+    });
+}
+
+/// A `CertifiedStreamStore` that invokes the action set by
+/// `on_next_validate()` the next time a slice is validated; i.e. from the
+/// middle of a `put()` or `append()` call.
+#[derive(Default)]
+struct ConcurrentActionStore {
+    on_next_validate: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+}
+
+impl ConcurrentActionStore {
+    /// Sets the action to take the next time a slice is validated, replacing
+    /// any previously set one.
+    fn on_next_validate(&self, action: impl FnOnce() + Send + 'static) {
+        *self.on_next_validate.lock().unwrap() = Some(Box::new(action));
+    }
+}
+
+impl CertifiedStreamStore for ConcurrentActionStore {
+    fn decode_certified_stream_slice(
+        &self,
+        _remote_subnet: SubnetId,
+        _registry_version: RegistryVersion,
+        _certified_slice: &CertifiedStreamSlice,
+    ) -> Result<StreamSlice, DecodeStreamError> {
+        // Take the action, so any slice it validates in turn does not run it again.
+        let on_next_validate = self.on_next_validate.lock().unwrap().take();
+        if let Some(on_next_validate) = on_next_validate {
+            on_next_validate();
+        }
+
+        // Actual return value does not matter as long as it's `Ok(_)`.
+        Ok(StreamSliceBuilder::new().build())
+    }
+
+    fn encode_certified_stream_slice(
+        &self,
+        _remote_subnet: SubnetId,
+        _witness_begin: Option<StreamIndex>,
+        _msg_begin: Option<StreamIndex>,
+        _msg_limit: Option<usize>,
+        _byte_limit: Option<usize>,
+    ) -> Result<CertifiedStreamSlice, EncodeStreamError> {
+        unimplemented!()
+    }
+
+    fn decode_valid_certified_stream_slice(
+        &self,
+        _certified_slice: &CertifiedStreamSlice,
+    ) -> Result<StreamSlice, DecodeStreamError> {
+        unimplemented!()
+    }
+
+    fn subnets_with_certified_streams(&self) -> Vec<SubnetId> {
+        unimplemented!()
+    }
+}
+
+/// Asserts that the pool lock is not held, as must be the case while a slice is
+/// being validated.
+fn assert_pool_unlocked(pool: &Mutex<CertifiedSlicePool>) {
+    assert!(
+        pool.try_lock().is_ok(),
+        "pool lock held while validating a slice"
+    );
+}
+
+/// Tests that the pool lock is not held while a slice is being validated (which
+/// is the expensive part of `put()` and `append()`); and that a concurrent
+/// `append()` that lands meanwhile is simply overwritten.
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
+fn pool_append_concurrent_append(
+    #[strategy(arb_stream_slice(
+        3, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+) {
+    let (stream, from, msg_count) = test_slice;
+
+    with_test_replica_logger(|log| {
+        let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
+
+        // A slice covering the first message; a partial slice covering the second; and
+        // a longer slice, covering all messages.
+        let first_slice = fixture.get_slice(DST_SUBNET, from, 1);
+        let second_slice = fixture.get_partial_slice(DST_SUBNET, from, from.increment(), 1);
+        let full_slice = fixture.get_slice(DST_SUBNET, from, msg_count);
+
+        let store = Arc::new(ConcurrentActionStore::default());
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&fixture.metrics)));
+
+        // Pool the first message, checking that the lock is free while validating.
+        store.on_next_validate({
+            let pool = Arc::clone(&pool);
+            move || assert_pool_unlocked(&pool)
+        });
+        put(&pool, SRC_SUBNET, first_slice, &*store, &log).unwrap();
+
+        // Replace the pooled `first_slice` with `full_slice` during the next
+        // validation, simulating a concurrent `put()` / `append()`.
+        store.on_next_validate({
+            let pool = Arc::clone(&pool);
+            let store = Arc::clone(&store);
+            let log = log.clone();
+            move || {
+                assert_pool_unlocked(&pool);
+
+                put(&pool, SRC_SUBNET, full_slice, &*store, &log).unwrap();
+            }
+        });
+
+        // Appending the second message produces a 2 message slice.
+        append(&pool, SRC_SUBNET, second_slice, &*store, &log).unwrap();
+
+        // As with `put()`, the last writer wins, even though it pools a shorter slice.
+        // The remaining messages can be pulled later.
+        assert_matches!(
+            slice_stats(&pool, SRC_SUBNET),
+            (_, Some(messages_begin), 2, _) if messages_begin == from
+        );
     });
 }

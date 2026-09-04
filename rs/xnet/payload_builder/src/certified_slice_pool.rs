@@ -25,7 +25,7 @@ use messages::Messages;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom, TryInto};
-use std::sync::Arc;
+use std::sync::Mutex;
 
 const LABEL_STREAMS: &[u8] = b"streams";
 const LABEL_HEADER: &[u8] = b"header";
@@ -1099,23 +1099,16 @@ pub struct CertifiedSlicePool {
     /// advanced to the end of the slice returned by a `take_slice()` call.
     stream_positions: BTreeMap<SubnetId, ExpectedIndices>,
 
-    /// Used for validating incoming slices.
-    certified_stream_store: Arc<dyn CertifiedStreamStore>,
-
     metrics: CertifiedSlicePoolMetrics,
 }
 
 impl CertifiedSlicePool {
     /// Creates a new pool instance using the given `MetricsRegistry` for
     /// instrumentation.
-    pub fn new(
-        certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        metrics_registry: &MetricsRegistry,
-    ) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             slices: Default::default(),
             stream_positions: Default::default(),
-            certified_stream_store,
             metrics: CertifiedSlicePoolMetrics::new(metrics_registry),
         }
     }
@@ -1320,7 +1313,11 @@ impl CertifiedSlicePool {
     }
 
     /// Places the provided slice into the pool, after trimming off any prefix
-    /// before the corresponding `self.stream_positions` entry.
+    /// before the corresponding `stream_positions` entry.
+    ///
+    /// Decoding, unpacking and validating the slice (requiring an expensive BLS
+    /// signature verification) is done without holding the pool lock. The lock is
+    /// only taken to insert the slice.
     ///
     /// On success always replaces the pooled slice regardless of its contents,
     /// as slices may originate from malicious replicas and we would rather
@@ -1331,21 +1328,23 @@ impl CertifiedSlicePool {
     /// `slice` is malformed. Returns `Err(DecodeStreamError)` if the slice could
     /// not be decoded or its certification was invalid.
     pub fn put(
-        &mut self,
+        pool: &Mutex<Self>,
         subnet_id: SubnetId,
         slice: CertifiedStreamSlice,
+        certified_stream_store: &dyn CertifiedStreamStore,
         registry_version: RegistryVersion,
         log: ReplicaLogger,
     ) -> CertifiedSliceResult<()> {
         validate_slice(
             &slice,
             subnet_id,
-            self.certified_stream_store.as_ref(),
+            certified_stream_store,
             registry_version,
             log,
         )?;
+        let unpacked = slice.try_into()?;
 
-        self.put_impl(subnet_id, slice.try_into()?)
+        pool.lock().unwrap().put_impl(subnet_id, unpacked)
     }
 
     /// Appends a partial slice to the corresponding pool entry, trimming
@@ -1357,28 +1356,33 @@ impl CertifiedSlicePool {
     /// ones already in the pool and its `signals_end` must not regress. Its
     /// witness must cover the stream header and the concatenated messages.
     ///
+    /// Merging, packing and validating the merged slice (requiring an expensive
+    /// BLS signature verification) is done without holding the pool lock. The lock
+    /// is only taken to clone the pooled slice and to install the merged one.
+    ///
     /// Returns `Err(DecodeFailed)` if `partial` could not be deserialized.
     /// Returns `Err(InvalidPayload)`,  `Err(InvalidWitness)` or
-    /// `Err(WitnessPruningFailed)` if `self` or `partial` are malformed.
-    /// Returns `Err(InvalidAppend)` if the two slices do not match.
+    /// `Err(WitnessPruningFailed)` if the pooled slice or `partial` are
+    /// malformed. Returns `Err(InvalidAppend)` if the two slices do not match.
     /// Returns `Err(DecodeStreamError)` if the partial slice could not be decoded
     /// or the certification was invalid for the merged slice.
     pub fn append(
-        &mut self,
+        pool: &Mutex<Self>,
         subnet_id: SubnetId,
         partial: CertifiedStreamSlice,
+        certified_stream_store: &dyn CertifiedStreamStore,
         registry_version: RegistryVersion,
         log: ReplicaLogger,
     ) -> CertifiedSliceResult<()> {
-        let partial: UnpackedStreamSlice = partial.try_into()?;
+        // Clone the pooled slice, if any, instead of removing it: this way the
+        // payload builder can make use of it while we validate; and if the merge
+        // or the validation fail, we bail out without having mutated the pool.
+        let pooled = pool.lock().unwrap().slices.get(&subnet_id).cloned();
 
-        // Query the pool for an existing slice, without removing it. This way, if
-        // unpacking or validation fail, we can simply bail out without mutating the
-        // pool.
-        let slice = match self.slices.get(&subnet_id) {
+        let partial: UnpackedStreamSlice = partial.try_into()?;
+        let slice = match pooled {
             // We have a pooled slice, try appending to it.
-            Some(pooled) => {
-                let mut pooled = pooled.clone();
+            Some(mut pooled) => {
                 pooled.append(partial)?;
                 pooled
             }
@@ -1395,13 +1399,12 @@ impl CertifiedSlicePool {
         validate_slice(
             &slice.clone().into(),
             subnet_id,
-            self.certified_stream_store.as_ref(),
+            certified_stream_store,
             registry_version,
             log,
         )?;
 
-        self.put_impl(subnet_id, slice)?;
-        Ok(())
+        pool.lock().unwrap().put_impl(subnet_id, slice)
     }
 
     /// Garbage collects the provided slice and pools the rest, if any.
