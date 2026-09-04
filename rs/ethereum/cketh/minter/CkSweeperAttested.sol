@@ -42,7 +42,9 @@ contract CkSweeperAttested {
 
     /// Accepts plain ETH sends to a delegated deposit address, but not to the
     /// implementation itself: no attestation can ever recover to the contract's
-    /// own address, so ETH landing there would be locked forever. Otherwise
+    /// own address, so ETH landing there via receive() would be locked forever
+    /// (selfdestruct and coinbase payments can still deposit unsweepable ETH —
+    /// the guard closes the only path a plain send takes). Otherwise
     /// deliberately minimal: batched CEX withdrawals may forward value with only
     /// the 2'300-gas `transfer`/`send` stipend, and detection is balance-based
     /// so no event is needed.

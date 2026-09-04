@@ -26,7 +26,7 @@
 //! carries a minter attestation (a deposit-key signature binding the address to
 //! its IC account). Those sweeps are submitted by a non-minter relayer, and a
 //! separate test shows a forged attestation is rejected. A further test funds a
-//! *delegated* deposit address with plain ETH — accepted by the delegate's empty
+//! *delegated* deposit address with plain ETH — accepted by the delegate's
 //! `receive()`, while a fixed 21'000-gas send fails at the sender — and moves it
 //! to the minter through the attested `sweepEth`/`sweepEthBatch` entry points.
 //!
@@ -644,6 +644,73 @@ fn attested_sweep_moves_plain_eth_to_the_minter() {
     let events = received_events(&receipt, &helper);
     assert_eq!(events.len(), 1, "expected one ReceivedEthOrErc20 event");
     assert_eq!(events[0].amount, ETH_DEPOSIT_AMOUNT);
+}
+
+#[test]
+fn attested_eth_sweep_rejects_a_forged_attestation() {
+    let anvil = Anvil::start();
+    let chain_id = anvil.chain_id();
+
+    let minter = eth_address(&key_from_hex(MINTER_PRIVATE_KEY).public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+    let attacker_key = key_from_hex(ATTACKER_PRIVATE_KEY);
+    let attacker = eth_address(&attacker_key.public_key());
+
+    let Contracts {
+        helper, attested, ..
+    } = deploy_contracts(&anvil, &minter, &cex);
+
+    let principal = Principal::self_authenticating([0xE9]);
+    let key = derive_deposit_key(&principal);
+    let deposit = eth_address(&key.public_key());
+
+    let delegate_only = ICkSweeperAttested::sweepEthBatchCall { items: vec![] }.abi_encode();
+    assert!(
+        status_ok(&anvil.send_eip7702(
+            &attacker_key,
+            chain_id,
+            &attested,
+            delegate_only,
+            vec![sign_authorization(&key, chain_id, &attested, 0)]
+        )),
+        "delegation setup reverted"
+    );
+    let receipt = anvil.send_eth(&cex, &deposit, ETH_DEPOSIT_AMOUNT, None);
+    assert!(
+        status_ok(&receipt),
+        "funding the delegated deposit reverted"
+    );
+
+    let attacker_principal = Principal::self_authenticating([0xEA]);
+    let forged = attest(
+        &attacker_key,
+        chain_id,
+        &helper,
+        &attacker_principal,
+        &[0_u8; 32],
+    );
+    let attack = anvil.send_transaction(
+        &attacker,
+        Some(&deposit),
+        &ICkSweeperAttested::sweepEthCall {
+            principal: B256::from(encode_principal(&attacker_principal)),
+            subaccount: B256::ZERO,
+            r: B256::from(forged.r),
+            s: B256::from(forged.s),
+            v: forged.v,
+        }
+        .abi_encode(),
+        Some(300_000),
+    );
+    assert!(
+        !status_ok(&anvil.await_receipt(&attack)),
+        "a forged attestation must not move native ETH"
+    );
+    assert_eq!(
+        anvil.balance(&deposit),
+        ETH_DEPOSIT_AMOUNT,
+        "the ETH must stay at the deposit address"
+    );
 }
 
 #[test]
