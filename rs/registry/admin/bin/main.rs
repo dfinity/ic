@@ -4985,6 +4985,11 @@ async fn main() {
                     };
                     print_value(&key, version, record, opts.json);
                 }
+                Err(Error::KeyNotPresent(_)) if opts.json => {
+                    // Same shape as `print_value`, with nulls for the absent record.
+                    let entry = serde_json::json!({ "key": key, "version": null, "value": null });
+                    println!("{}", serde_json::to_string_pretty(&entry).unwrap());
+                }
                 Err(Error::KeyNotPresent(_)) => {
                     println!(
                         "There is no {key} record in the registry: no standard engine \
