@@ -1,11 +1,7 @@
-use std::time::Duration;
-
 use anyhow::Result;
 use futures::future::join_all;
-use slog::Logger;
-use tokio::runtime::{Builder, Runtime};
-
 use ic_consensus_system_test_upgrade_common::{
+    ALLOWED_FAILURES, UP_DOWNGRADE_OVERALL_TIMEOUT, UP_DOWNGRADE_PER_TEST_TIMEOUT,
     elect_target_version, get_chain_key_canister_and_public_key, upgrade,
 };
 use ic_consensus_system_test_utils::rw_message::{
@@ -32,14 +28,14 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{MessageCanister, block_on, get_app_subnet_and_node};
 use ic_types::Height;
+use slog::Logger;
 use slog::info;
+use std::time::Duration;
+use tokio::runtime::{Builder, Runtime};
 
 const SCHNORR_MSG_SIZE_BYTES: usize = 32;
 const DKG_INTERVAL: u64 = 29;
-const ALLOWED_FAILURES: usize = 1;
-const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
-const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(35 * 60);
-const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1;
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
 fn setup(env: TestEnv) {
