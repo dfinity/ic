@@ -219,6 +219,7 @@ rust_ic_test(
         "//rs/replicated_state",
         "//rs/sys",
         "//rs/test_utilities/execution_environment",
+        "//rs/test_utilities/metrics",
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
