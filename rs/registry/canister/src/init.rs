@@ -25,6 +25,11 @@ pub struct RegistryCanisterInitPayload {
     // Same deal as the swapping flags above, but for the blank
     // replica_version_id (for Cloud Engines) feature.
     pub is_blank_replica_version_id_for_cloud_engines_enabled: Option<bool>,
+
+    // Same deal as above, but for the Subnet Splitting feature.
+    // Used by system tests which exercise subnet splitting, and will
+    // go away once the feature is fully rolled out.
+    pub is_subnet_splitting_enabled: Option<bool>,
 }
 
 impl fmt::Display for RegistryCanisterInitPayload {
@@ -50,6 +55,7 @@ pub struct RegistryCanisterInitPayloadBuilder {
     swapping_whitelisted_callers: BTreeSet<PrincipalId>,
     swapping_enabled_subnets: BTreeSet<SubnetId>,
     is_blank_replica_version_id_for_cloud_engines_enabled: bool,
+    is_subnet_splitting_enabled: bool,
 }
 
 #[allow(clippy::new_without_default)]
@@ -61,6 +67,7 @@ impl RegistryCanisterInitPayloadBuilder {
             swapping_whitelisted_callers: BTreeSet::new(),
             swapping_enabled_subnets: BTreeSet::new(),
             is_blank_replica_version_id_for_cloud_engines_enabled: false,
+            is_subnet_splitting_enabled: false,
         }
     }
 
@@ -88,6 +95,7 @@ impl RegistryCanisterInitPayloadBuilder {
             is_blank_replica_version_id_for_cloud_engines_enabled: Some(
                 self.is_blank_replica_version_id_for_cloud_engines_enabled,
             ),
+            is_subnet_splitting_enabled: Some(self.is_subnet_splitting_enabled),
         }
     }
 
@@ -108,6 +116,11 @@ impl RegistryCanisterInitPayloadBuilder {
 
     pub fn enable_blank_replica_version_id_for_cloud_engines(&mut self) -> &mut Self {
         self.is_blank_replica_version_id_for_cloud_engines_enabled = true;
+        self
+    }
+
+    pub fn enable_subnet_splitting(&mut self) -> &mut Self {
+        self.is_subnet_splitting_enabled = true;
         self
     }
 }
