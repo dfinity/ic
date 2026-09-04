@@ -8,7 +8,7 @@ use crate::{
     signer::NodeSender,
     utils::nns_root_key_der_from_registry,
 };
-use ic_agent::{Agent, Identity, export::reqwest, identity::AnonymousIdentity};
+use ic_agent::{Agent, Identity, identity::AnonymousIdentity};
 use ic_logger::{ReplicaLogger, warn};
 use ic_registry_client_helpers::{api_boundary_node::ApiBoundaryNodeRegistry, node::NodeRegistry};
 use ic_types::{RegistryVersion, messages::MessageId};
@@ -57,7 +57,7 @@ impl AgentFactory {
     ) -> OrchestratorResult<Agent> {
         let url = self.random_api_boundary_node_url(version)?;
 
-        self.build(url, AnonymousIdentity, version, None)
+        self.build(url, AnonymousIdentity, version)
     }
 
     fn random_api_boundary_node_url(&self, version: RegistryVersion) -> OrchestratorResult<Url> {
@@ -138,7 +138,7 @@ impl AgentFactory {
         let identity = NodeSender::new(public_key, Arc::new(sign))
             .map_err(OrchestratorError::cloud_engine_error)?;
 
-        let agent = self.build(self.replica_url.clone(), identity, version, None)?;
+        let agent = self.build(self.replica_url.clone(), identity, version)?;
         self.operator_agent = Some(agent.clone());
 
         Ok(agent)
@@ -149,21 +149,17 @@ impl AgentFactory {
         url: Url,
         identity: I,
         version: RegistryVersion,
-        client: Option<reqwest::Client>,
     ) -> OrchestratorResult<Agent> {
-        let mut builder = Agent::builder()
+        let agent = Agent::builder()
             .with_url(url)
             .with_identity(identity)
             // On by default; set explicitly so the decision survives an
             // upstream default change.
-            .with_verify_query_signatures(true);
-        if let Some(client) = client {
-            builder = builder.with_http_client(client);
-        }
-
-        let agent = builder.build().map_err(|err| {
-            OrchestratorError::cloud_engine_error(format!("could not build an agent: {err}"))
-        })?;
+            .with_verify_query_signatures(true)
+            .build()
+            .map_err(|err| {
+                OrchestratorError::cloud_engine_error(format!("could not build an agent: {err}"))
+            })?;
         let root_key = nns_root_key_der_from_registry(self.registry.get_registry_client(), version)
             .map_err(OrchestratorError::cloud_engine_error)?;
         agent.set_root_key(root_key);

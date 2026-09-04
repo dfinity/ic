@@ -271,10 +271,7 @@ impl Orchestrator {
         let ic_gateway_process_config = IcGatewayProcessConfig {
             ic_binary_dir: args.ic_binary_directory.clone(),
             ic_gateway_env_file: args.ic_gateway_env_file.clone(),
-            acme_cache_dir: args
-                .orchestrator_data_directory
-                .join("ic-gateway")
-                .join("acme"),
+            acme_cache_dir: args.acme_cache_dir(),
         };
 
         // Published by the cloud engine task, consumed by the process manager.

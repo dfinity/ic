@@ -1093,7 +1093,7 @@ fn report_master_public_key_changed_metric(
 mod tests {
     use crate::catch_up_package_provider::LocalCUPReader;
     use crate::catch_up_package_provider::tests::mock_tls_config;
-    use crate::cloud_engine::GatewayConfig;
+    use crate::cloud_engine::config::GatewayConfig;
     use crate::process_manager::{Process, ProcessRunner};
     use crate::processes::{
         IcGatewayManager, IcGatewayProcess, IcGatewayProcessConfig, ProcessManager, ReplicaProcess,

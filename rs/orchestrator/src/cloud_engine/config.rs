@@ -4,14 +4,15 @@ use super::operator::{AcmeCredentials, HttpGatewayConfig};
 use crate::error::{OrchestratorError, OrchestratorResult};
 use idna::domain_to_ascii_strict;
 use serde::Serialize;
-use std::{fmt, path::Path};
+use std::{collections::HashMap, ffi::OsString, fmt, path::Path};
 use url::Url;
 
 /// A complete, validated engine configuration.
 ///
 /// `ic-gateway` terminates TLS for the engine, so it cannot run without all of
 /// these. An incomplete config is therefore not an error but simply nothing to
-/// apply, which [`TryFrom`] reports as [`Incomplete`](ConfigError::Incomplete).
+/// apply, which [`validate_gateway_config`] reports as
+/// [`Incomplete`](ConfigError::Incomplete).
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct GatewayConfig {
     pub base_domains: Vec<String>,
@@ -37,65 +38,63 @@ pub(crate) enum ConfigError {
     Invalid(String),
 }
 
-impl TryFrom<(HttpGatewayConfig, AcmeCredentials)> for GatewayConfig {
-    type Error = ConfigError;
-
-    fn try_from(
-        (gateway, acme): (HttpGatewayConfig, AcmeCredentials),
-    ) -> Result<Self, Self::Error> {
-        let base_domains = gateway
-            .base_domains
-            .filter(|domains| !domains.is_empty())
-            .ok_or(ConfigError::Incomplete("base_domains"))?;
+/// Turns what the operator canister handed out into a [`GatewayConfig`],
+/// rejecting values `ic-gateway` could not run with.
+pub(super) fn validate_gateway_config(
+    gateway: HttpGatewayConfig,
+    acme: AcmeCredentials,
+) -> Result<GatewayConfig, ConfigError> {
+    let base_domains = gateway
+        .base_domains
+        .filter(|domains| !domains.is_empty())
+        .ok_or(ConfigError::Incomplete("base_domains"))?
         // `ic-gateway` parses DOMAIN as a comma-separated list of FQDNs, so a
         // value it would reject must not reach it: it would exit at startup.
-        let base_domains = base_domains
-            .iter()
-            .map(|domain| match domain_to_ascii_strict(domain) {
-                Ok(ascii) if !ascii.is_empty() => Ok(ascii),
-                _ => Err(ConfigError::Invalid(format!(
-                    "{domain} is not a valid domain name"
-                ))),
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let dns_api_url = gateway
-            .dns_api_url
-            .ok_or(ConfigError::Incomplete("dns_api_url"))?;
-        let dns_api_url = Url::parse(&dns_api_url)
-            .map_err(|err| ConfigError::Invalid(format!("dns_api_url is not a URL: {err}")))?;
-        // The IC-DNS-LB client appends a path to this URL and rejects anything
-        // it cannot use as a base.
-        if dns_api_url.cannot_be_a_base() {
-            return Err(ConfigError::Invalid(
-                "dns_api_url cannot be used as a base URL".to_string(),
-            ));
-        }
-
-        let dns_api_key = gateway
-            .dns_api_key
-            .filter(|key| !key.is_empty())
-            .ok_or(ConfigError::Incomplete("dns_api_key"))?;
-
-        // All three ACME fields are needed together: `instant_acme` requires the
-        // directory URL to restore an account, and refuses one without a key.
-        let acme_account = AcmeAccount {
-            id: acme.id.ok_or(ConfigError::Incomplete("acme id"))?,
-            key_pkcs8: acme
-                .key_pkcs8
-                .ok_or(ConfigError::Incomplete("acme key_pkcs8"))?,
-            directory: acme
-                .directory
-                .ok_or(ConfigError::Incomplete("acme directory"))?,
-        };
-
-        Ok(Self {
-            base_domains,
-            dns_api_url,
-            dns_api_key,
-            acme_account,
+        .iter()
+        .map(|domain| match domain_to_ascii_strict(domain) {
+            Ok(ascii) if !ascii.is_empty() => Ok(ascii),
+            _ => Err(ConfigError::Invalid(format!(
+                "{domain} is not a valid domain name"
+            ))),
         })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let dns_api_url = gateway
+        .dns_api_url
+        .ok_or(ConfigError::Incomplete("dns_api_url"))?;
+    let dns_api_url = Url::parse(&dns_api_url)
+        .map_err(|err| ConfigError::Invalid(format!("dns_api_url is not a URL: {err}")))?;
+    // The IC-DNS-LB client appends a path to this URL and rejects anything
+    // it cannot use as a base.
+    if dns_api_url.cannot_be_a_base() {
+        return Err(ConfigError::Invalid(
+            "dns_api_url cannot be used as a base URL".to_string(),
+        ));
     }
+
+    let dns_api_key = gateway
+        .dns_api_key
+        .filter(|key| !key.is_empty())
+        .ok_or(ConfigError::Incomplete("dns_api_key"))?;
+
+    // All three ACME fields are needed together: `instant_acme` requires the
+    // directory URL to restore an account, and refuses one without a key.
+    let acme_account = AcmeAccount {
+        id: acme.id.ok_or(ConfigError::Incomplete("acme id"))?,
+        key_pkcs8: acme
+            .key_pkcs8
+            .ok_or(ConfigError::Incomplete("acme key_pkcs8"))?,
+        directory: acme
+            .directory
+            .ok_or(ConfigError::Incomplete("acme directory"))?,
+    };
+
+    Ok(GatewayConfig {
+        base_domains,
+        dns_api_url,
+        dns_api_key,
+        acme_account,
+    })
 }
 
 impl GatewayConfig {
@@ -108,29 +107,23 @@ impl GatewayConfig {
     pub(crate) fn env_overlay(
         &self,
         acme_cache_dir: &Path,
-    ) -> OrchestratorResult<Vec<(String, String)>> {
+    ) -> OrchestratorResult<HashMap<OsString, OsString>> {
         let account_credentials = serde_json::to_string(&self.acme_account).map_err(|err| {
             OrchestratorError::cloud_engine_error(format!(
                 "could not encode the ACME account: {err}"
             ))
         })?;
 
-        Ok(vec![
-            (
-                "ACME_CACHE_PATH".to_string(),
-                acme_cache_dir.display().to_string(),
-            ),
-            ("DOMAIN".to_string(), self.base_domains.join(",")),
-            (
-                "ACME_DNS_IC_DNS_LB_URLS".to_string(),
-                self.dns_api_url.to_string(),
-            ),
-            (
-                "ACME_DNS_IC_DNS_LB_TOKEN".to_string(),
-                self.dns_api_key.clone(),
-            ),
-            ("ACME_ACCOUNT_CREDS".to_string(), account_credentials),
-        ])
+        Ok([
+            ("ACME_CACHE_PATH", acme_cache_dir.display().to_string()),
+            ("DOMAIN", self.base_domains.join(",")),
+            ("ACME_DNS_IC_DNS_LB_URLS", self.dns_api_url.to_string()),
+            ("ACME_DNS_IC_DNS_LB_TOKEN", self.dns_api_key.clone()),
+            ("ACME_ACCOUNT_CREDS", account_credentials),
+        ]
+        .into_iter()
+        .map(|(key, value)| (OsString::from(key), OsString::from(value)))
+        .collect())
     }
 }
 
@@ -198,7 +191,7 @@ mod tests {
         gateway: HttpGatewayConfig,
         acme: AcmeCredentials,
     ) -> Result<GatewayConfig, ConfigError> {
-        GatewayConfig::try_from((gateway, acme))
+        validate_gateway_config(gateway, acme)
     }
 
     #[test]

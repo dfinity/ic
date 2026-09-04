@@ -1,5 +1,5 @@
 use crate::{
-    cloud_engine::GatewayConfig,
+    cloud_engine::config::GatewayConfig,
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
     process_manager::{Process, ProcessRunner, SingleProcessRunner},
@@ -191,19 +191,9 @@ impl Process for IcGatewayProcess {
                 }
             };
 
-        // `ic-gateway` writes its ACME account and certificates here.
-        std::fs::create_dir_all(&config.acme_cache_dir).map_err(|e| {
-            OrchestratorError::IoError(format!("Failed to create {:?}", config.acme_cache_dir), e)
-        })?;
-
         // The shipped file only carries policy; the engine's own values, the two
         // credentials among them, override it.
-        env.extend(
-            gateway_config
-                .env_overlay(&config.acme_cache_dir)?
-                .into_iter()
-                .map(|(k, v)| (OsString::from(k), OsString::from(v))),
-        );
+        env.extend(gateway_config.env_overlay(&config.acme_cache_dir)?);
 
         Ok(Self {
             ic_binary_dir: config.ic_binary_dir.clone(),
@@ -439,9 +429,7 @@ impl IcGatewayManager {
 
         // Restart only on a change we actually observed: with nothing applied
         // yet there is nothing to compare against, and `ensure_running` is a
-        // no-op when the process is already up. The explicit stop is needed
-        // because the process runner only compares versions, so an
-        // environment-only change would otherwise not take effect.
+        // no-op when the process is already up.
         if self.current_config.is_some() && self.current_config.as_ref() != Some(&gateway_config) {
             self.inner.stop()?;
             // `stop` only signals the process. While the old process is still
@@ -565,18 +553,18 @@ impl MultipleProcessesManager {
         );
 
         // Cloud-engine nodes run ic-gateway as a sidecar.
-        result = result.and(
-            if self
-                .registry
-                .is_cloud_engine_subnet(subnet_id, registry_version)?
-            {
-                let gateway_config = self.gateway_config.read().unwrap().clone();
+        if self
+            .registry
+            .is_cloud_engine_subnet(subnet_id, registry_version)?
+        {
+            let gateway_config = self.gateway_config.read().unwrap().clone();
+            result = result.and(
                 self.ic_gateway_manager
-                    .ensure_running_and_restarted_on_config_change(replica_version, gateway_config)
-            } else {
-                self.ic_gateway_manager.stop()
-            },
-        );
+                    .ensure_running_and_restarted_on_config_change(replica_version, gateway_config),
+            );
+        } else {
+            result = result.and(self.ic_gateway_manager.stop());
+        }
 
         result
     }
@@ -916,21 +904,6 @@ mod tests {
         let log = log.lock().unwrap();
         assert!(!log.running);
         assert_eq!(log.stops, 1);
-    }
-
-    #[test]
-    fn ic_gateway_acme_cache_is_created() {
-        let dir = tempdir().unwrap();
-        let (mut manager, _log) = ic_gateway_manager_for_test(dir.path());
-
-        ensure_gateway(
-            &mut manager,
-            Some(GatewayConfig::for_test("engine.example.com")),
-        )
-        .unwrap();
-
-        // The issued certificate's private key lands here.
-        assert!(dir.path().join("acme").is_dir());
     }
 
     #[test]

@@ -64,12 +64,12 @@ impl Discovery {
         }
 
         let agent = agent_factory.anonymous_via_api_boundary_node(version)?;
-        let candidate = self.ask_management_canister(&agent, own_subnet).await?;
-        let operator = self.validate(candidate, own_subnet, version)?;
-        info!(self.logger, "Resolved the engine operator: {}", operator);
-        self.resolved = Some(operator);
+        let candidate = self.lookup_operator_candidate(&agent, own_subnet).await?;
+        self.validate_operator_candidate(candidate, own_subnet, version)?;
+        info!(self.logger, "Resolved the engine operator: {}", candidate);
+        self.resolved = Some(candidate);
 
-        Ok(operator)
+        Ok(candidate)
     }
 
     /// The previously resolved id, but only if the local registry still
@@ -81,8 +81,8 @@ impl Discovery {
         version: RegistryVersion,
     ) -> Option<CanisterId> {
         let operator = self.resolved?;
-        match self.validate(operator.get(), own_subnet, version) {
-            Ok(operator) => Some(operator),
+        match self.validate_operator_candidate(operator, own_subnet, version) {
+            Ok(()) => Some(operator),
             Err(err) => {
                 warn!(
                     self.logger,
@@ -100,11 +100,14 @@ impl Discovery {
         self.resolved = None;
     }
 
-    async fn ask_management_canister(
+    /// The operator canister the engine management canister has on file for
+    /// `own_subnet`. Only a candidate: it comes from another subnet, so
+    /// [`Self::validate_operator_candidate`] has the last word.
+    async fn lookup_operator_candidate(
         &self,
         agent: &Agent,
         own_subnet: SubnetId,
-    ) -> OrchestratorResult<PrincipalId> {
+    ) -> OrchestratorResult<CanisterId> {
         let arg = Encode!(&GetEngineOperatorBySubnetArgs {
             subnet_id: Some(own_subnet.get().0),
         })
@@ -141,24 +144,19 @@ impl Discovery {
                     "the engine management canister does not know an operator for this subnet",
                 )
             })
+            .and_then(as_canister_id)
     }
 
     /// Accepts `candidate` only if the local registry independently confirms it
     /// is a canister on `own_subnet` and an admin of it. This is what keeps a
     /// hostile node of the management subnet from pointing us at an arbitrary
     /// canister.
-    fn validate(
+    fn validate_operator_candidate(
         &self,
-        candidate: PrincipalId,
+        candidate: CanisterId,
         own_subnet: SubnetId,
         version: RegistryVersion,
-    ) -> OrchestratorResult<CanisterId> {
-        let candidate = CanisterId::try_from_principal_id(candidate).map_err(|err| {
-            OrchestratorError::cloud_engine_error(format!(
-                "operator candidate is not a canister id: {err}"
-            ))
-        })?;
-
+    ) -> OrchestratorResult<()> {
         if !self
             .registry
             .get_subnet_canister_ranges(own_subnet, version)?
@@ -180,8 +178,18 @@ impl Discovery {
             )));
         }
 
-        Ok(candidate)
+        Ok(())
     }
+}
+
+/// The engine management canister answers with a plain principal, which does
+/// not have to be a canister id.
+fn as_canister_id(candidate: PrincipalId) -> OrchestratorResult<CanisterId> {
+    CanisterId::try_from_principal_id(candidate).map_err(|err| {
+        OrchestratorError::cloud_engine_error(format!(
+            "operator candidate is not a canister id: {err}"
+        ))
+    })
 }
 
 #[cfg(test)]
@@ -257,8 +265,8 @@ mod tests {
         let discovery = discovery_for_test(&[operator().get()]);
 
         assert_matches!(
-            discovery.validate(operator().get(), SUBNET_1, VERSION),
-            Ok(accepted) if accepted == operator()
+            discovery.validate_operator_candidate(operator(), SUBNET_1, VERSION),
+            Ok(())
         );
     }
 
@@ -270,7 +278,7 @@ mod tests {
         let discovery = discovery_for_test(&[foreign.get()]);
 
         assert_matches!(
-            discovery.validate(foreign.get(), SUBNET_1, VERSION),
+            discovery.validate_operator_candidate(foreign, SUBNET_1, VERSION),
             Err(OrchestratorError::CloudEngineError(msg)) if msg.contains("not hosted by")
         );
     }
@@ -283,7 +291,7 @@ mod tests {
         let bystander = CanisterId::from_u64(7);
 
         assert_matches!(
-            discovery.validate(bystander.get(), SUBNET_1, VERSION),
+            discovery.validate_operator_candidate(bystander, SUBNET_1, VERSION),
             Err(OrchestratorError::CloudEngineError(msg)) if msg.contains("not an admin")
         );
     }
@@ -291,10 +299,9 @@ mod tests {
     #[test]
     fn non_canister_principal_is_rejected() {
         let user = PrincipalId::new_self_authenticating(&[1, 2, 3]);
-        let discovery = discovery_for_test(&[user]);
 
         assert_matches!(
-            discovery.validate(user, SUBNET_1, VERSION),
+            as_canister_id(user),
             Err(OrchestratorError::CloudEngineError(msg)) if msg.contains("not a canister id")
         );
     }

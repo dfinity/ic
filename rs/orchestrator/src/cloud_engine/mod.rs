@@ -7,7 +7,7 @@
 //! to whoever runs `ic-gateway`.
 
 mod agent;
-mod config;
+pub(crate) mod config;
 mod discovery;
 mod operator;
 
@@ -15,16 +15,15 @@ use crate::{
     error::OrchestratorError, metrics::OrchestratorMetrics, registration::NodeRegistrationCrypto,
     registry_helper::RegistryHelper,
 };
-use config::ConfigError;
-pub(crate) use config::GatewayConfig;
+use agent::AgentFactory;
+use config::{ConfigError, GatewayConfig, validate_gateway_config};
 use discovery::Discovery;
 use ic_logger::{ReplicaLogger, info, warn};
-use ic_types::{CanisterId, RegistryVersion, SubnetId};
+use ic_types::{CanisterId, RegistryVersion, SubnetId, time::current_time};
 use operator::{OperatorClient, OperatorError};
 use std::{
     net::SocketAddr,
     sync::{Arc, RwLock},
-    time::SystemTime,
 };
 use url::Url;
 
@@ -35,16 +34,16 @@ const OUTCOME_NOT_READY: &str = "not_ready";
 const OUTCOME_ERROR: &str = "error";
 
 /// How many consecutive `NotReady` answers to tolerate before re-resolving the
-/// operator. A cold `isNode` cache resolves itself with the operator's next
-/// registry refetch, so a genuinely fresh operator recovers well within this
-/// budget; an operator that keeps not recognizing this node more likely is not
-/// (or no longer) our operator at all. At one check every 10 seconds this is
-/// about 5 minutes.
+/// operator. An operator that has not read this subnet's node list yet picks it
+/// up with its next registry refetch, so a genuinely fresh operator recovers
+/// well within this budget; an operator that keeps not recognizing this node
+/// more likely is not (or no longer) our operator at all. At one check every 10
+/// seconds this is about 5 minutes.
 const MAX_CONSECUTIVE_NOT_READY: u32 = 30;
 
 pub(crate) struct CloudEngineManager {
     registry: Arc<RegistryHelper>,
-    agent_factory: agent::AgentFactory,
+    agent_factory: AgentFactory,
     discovery: Discovery,
     /// The last config that passed validation, shared with the process manager
     /// that runs `ic-gateway`. Only ever replaced by another valid one, never
@@ -83,7 +82,7 @@ impl CloudEngineManager {
             };
 
         let agent_factory =
-            agent::AgentFactory::new(Arc::clone(&registry), crypto, replica_url, logger.clone());
+            AgentFactory::new(Arc::clone(&registry), crypto, replica_url, logger.clone());
         let discovery = Discovery::new(
             Arc::clone(&registry),
             engine_management_canister_id,
@@ -129,7 +128,7 @@ impl CloudEngineManager {
         }
 
         match self.fetch(subnet_id, version).await {
-            Ok(config) => {
+            Ok(new_config) => {
                 self.consecutive_not_ready = 0;
                 self.metrics
                     .cloud_engine_config_fetches
@@ -137,12 +136,12 @@ impl CloudEngineManager {
                     .inc();
                 self.metrics
                     .cloud_engine_config_last_success
-                    .set(unix_timestamp());
+                    .set(current_time().as_secs_since_unix_epoch() as i64);
 
                 let mut current_config = self.current_config.write().unwrap();
-                if current_config.as_ref() != Some(&config) {
-                    info!(self.logger, "New engine configuration: {:?}", config);
-                    *current_config = Some(config);
+                if current_config.as_ref() != Some(&new_config) {
+                    info!(self.logger, "New engine configuration: {:?}", new_config);
+                    *current_config = Some(new_config);
                 }
             }
             Err(FetchError::Incomplete(err)) => {
@@ -215,8 +214,9 @@ impl CloudEngineManager {
         let (gateway_config, acme_credentials) = match result {
             Ok(parts) => parts,
             Err(err) => {
-                // A cold `isNode` cache is expected; anything else suggests we
-                // resolved the wrong canister, so look it up again next time.
+                // An operator that has not read this subnet's node list yet is
+                // expected; anything else suggests we resolved the wrong
+                // canister, so look it up again next time.
                 if matches!(err, OperatorError::Failed(_)) {
                     self.discovery.invalidate();
                 }
@@ -224,7 +224,7 @@ impl CloudEngineManager {
             }
         };
 
-        GatewayConfig::try_from((gateway_config, acme_credentials)).map_err(FetchError::from)
+        validate_gateway_config(gateway_config, acme_credentials).map_err(FetchError::from)
     }
 }
 
@@ -258,10 +258,4 @@ impl From<ConfigError> for FetchError {
             ConfigError::Invalid(_) => Self::Failed(err.to_string()),
         }
     }
-}
-
-fn unix_timestamp() -> i64 {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map_or(0, |since_epoch| since_epoch.as_secs() as i64)
 }

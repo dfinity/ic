@@ -14,7 +14,7 @@ use ic_types::CanisterId;
 use serde::Deserialize;
 
 #[derive(CandidType, Deserialize, Debug)]
-pub(super) enum OperatorApiError {
+enum OperatorApiError {
     Unauthorized,
     NotFound,
     BadRequest(String),
@@ -46,9 +46,10 @@ pub(super) struct AcmeCredentials {
 /// Why a call to the operator did not yield a config.
 pub(super) enum OperatorError {
     /// The operator did not (yet) recognise us as one of its engine's nodes. Its
-    /// `isNode` check reads a transient cache that stays empty until the first
-    /// successful registry refetch after an install or upgrade, so this is
-    /// expected right after either and never fatal.
+    /// access control answers from the subnet's node list, which it keeps in a
+    /// transient cache that stays empty until its first successful registry
+    /// refetch after an install or upgrade, so this is expected right after
+    /// either and never fatal.
     NotReady,
     /// Transport, decoding, or any other operator-side failure.
     Failed(String),
