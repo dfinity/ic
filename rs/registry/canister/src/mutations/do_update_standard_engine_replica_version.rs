@@ -75,9 +75,12 @@ impl Registry {
             1.0 => &old_record.new_replica_version_id,
             0.0 => &old_record.old_replica_version_id,
             _ => panic!(
-                "Invalid standard engine replica version transition: the fleet is \
-                 currently split. Current record: {old_record:?}. Proposed new \
-                 record: {new_record:?}.",
+                "Invalid StandardEngineReplicaVersionRecord transition: the fleet is \
+                 currently split (that is, deployment_progress {} is strictly between \
+                 0.0 and 1.0). While the fleet is split, only deployment_progress \
+                 changes are allowed. Current value: {old_record:?}. Requested new \
+                 value: {new_record:?}.",
+                old_record.deployment_progress,
             ),
         };
 
