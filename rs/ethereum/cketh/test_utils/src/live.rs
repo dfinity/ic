@@ -156,6 +156,18 @@ pub struct Holding<'a> {
     pub amount: u128,
 }
 
+/// The ledger burn index of the sweeper funding the minter accepted most recently, if it has
+/// accepted one at all. The burn is what a funding is keyed by all the way through the withdrawal
+/// pipeline, so this is what its `FinalizedTransaction` will carry as `withdrawal_id`.
+fn accepted_funding_index(events: &[Event]) -> Option<Nat> {
+    events.iter().rev().find_map(|event| match &event.payload {
+        EventPayload::AcceptedSweeperFundingRequest {
+            ledger_burn_index, ..
+        } => Some(ledger_burn_index.clone()),
+        _ => None,
+    })
+}
+
 /// `token.contract.address`, parsed: every canister and anvil call the harness makes needs an
 /// [`Address`], not the raw string the orchestrator registered the token with.
 pub fn contract_address(token: &Erc20Token) -> Address {
@@ -875,28 +887,45 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         }
     }
 
-    /// Drives the minter until a funding has finalized, mining meanwhile so the minter's `finalized`
-    /// view keeps advancing.
+    /// Drives the minter until the funding it accepted most recently has finalized, whatever the
+    /// transaction's outcome — the fundings that fail are the point of this wait — mining meanwhile
+    /// so the minter's `finalized` view keeps advancing.
     ///
-    /// Costs at least one tick beyond the one that sent the transaction: fetching the receipt is the
-    /// *next* run of the withdrawal timer, and a single jump — however large — only ever makes a due
+    /// Costs at least one tick beyond the one that sent the transaction. Not because sending and
+    /// finalizing are separate passes — [`process_retrieve_eth_requests`] does both, in that order,
+    /// on every run — but because the receipt only counts once the transfer's block is *finalized*,
+    /// which trails `latest` by two blocks, i.e. by a poll of [`Self::settle`]; acting on it is then
+    /// the next run of the withdrawal timer, and a single jump, however large, only ever makes a due
     /// timer fire once.
     ///
-    /// Watched through the minter's own record of the finalization, whatever the transaction's
-    /// outcome — the point of this wait is the fundings that fail. A state the minter is either in
-    /// or not, rather than a change against a baseline: `process_retrieve_eth_requests` finalizes in
-    /// the same pass that sends, so a baseline read after the transfer appears on chain could
-    /// already carry the very finalization being waited for, and the wait would then sit out its
-    /// whole budget waiting for a second one. The age gauge would not do either: it reads zero both
-    /// when nothing is outstanding and when a funding was accepted less than a second of instance
-    /// time ago, which is every moment between the burn and the next tick.
+    /// Matched by ledger burn index rather than watched as a change in a counter. That the two
+    /// happen in one pass is exactly why a baseline is the wrong shape here: read once the transfer
+    /// is on chain, it could in principle already carry the finalization being waited for, and the
+    /// wait would then sit out its whole budget waiting for a second one that never comes. An index
+    /// the minter has either recorded or not cannot go wrong that way, and unlike "some transaction
+    /// finalized" it stays specific to the funding.
+    ///
+    /// [`process_retrieve_eth_requests`]: ic_cketh_minter::withdraw::process_retrieve_eth_requests
     pub fn await_funding_finalized(&self, max_ticks: u32) {
         self.drive_until(
             max_ticks,
-            |_| "the funding had not finalized".to_string(),
+            |setup| match accepted_funding_index(&setup.minter_events()) {
+                Some(index) => {
+                    format!("the funding burned at ledger index {index} had not finalized")
+                }
+                None => "the minter never accepted a funding to finalize".to_string(),
+            },
             |setup| {
-                setup.minter_events().iter().any(|event| {
-                    matches!(&event.payload, EventPayload::FinalizedTransaction { .. })
+                let events = setup.minter_events();
+                let Some(funding) = accepted_funding_index(&events) else {
+                    return false;
+                };
+                events.iter().any(|event| {
+                    matches!(
+                        &event.payload,
+                        EventPayload::FinalizedTransaction { withdrawal_id, .. }
+                            if *withdrawal_id == funding
+                    )
                 })
             },
         );
