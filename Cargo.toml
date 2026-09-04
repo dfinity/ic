@@ -403,6 +403,7 @@ members = [
     "rs/rust_canisters/dfn_json",
     "rs/rust_canisters/dfn_protobuf",
     "rs/rust_canisters/ecdsa",
+    "rs/rust_canisters/https_outcalls_test_canister",
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
     "rs/rust_canisters/messaging_test",

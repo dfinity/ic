@@ -104,6 +104,38 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "https_outcalls",
+    backend = "farm",  # Too big for the "local" backend.
+    # 1 System + 13 Application + 1 API boundary node + 1 ic-gateway VM + 1 UVM (httpbin), 6 vCPUs each.
+    cpus = MIN_LOCAL_CPUS + 16 * DEFAULT_VCPUS_PER_VM,
+    enable_metrics = True,
+    enable_uvm = True,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "CANDID_UI_WASM_PATH": "@candid_ui//file",
+        "HTTP_UVM_CONFIG_IMAGE_PATH": "//rs/tests/networking/canister_http:http_uvm_config_image",
+        "HTTPS_OUTCALLS_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/https_outcalls_test_canister",
+    },
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/networking/canister_http",
+        "//rs/types/cycles",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+        "@crate_index//:url",
+    ],
+)
+
+system_test_nns(
     name = "small_bitcoin",
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 64 + 2 * DEFAULT_VCPUS_PER_VM,  # 1 System node @ 64 vCPUs (subnet override) + 1 API boundary node + 1 ic-gateway VM @ 6 vCPUs.

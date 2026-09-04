@@ -1,0 +1,222 @@
+// The Candid interface of the HTTPS outcalls test canister.
+//
+// This file is what gets embedded in the wasm, and therefore what the Candid UI
+// renders — so unlike the interface `ic_cdk::export_candid!` generates, it names
+// every parameter. A test in `src/main.rs` checks the two stay structurally
+// equal; parameter names are not part of a Candid type, so only the shapes have
+// to match.
+
+// ============================ Management canister ============================
+// The types of the `http_request` and `flexible_http_request` endpoints, which
+// this canister hands back untouched.
+
+type http_header = record { name : text; value : text };
+
+type http_method = variant { get; head; post; put; delete; patch };
+
+type http_response = record {
+  status : nat;
+  headers : vec http_header;
+  body : blob;
+};
+
+type transform_args = record { response : http_response; context : blob };
+
+// Whether a resource was used, or its budget was exhausted before it could be.
+type resource_usage = variant { used : nat64; exceeded : reserved };
+type cycles_usage = variant { used : nat; exceeded : reserved };
+
+// What one node of a flexible outcall spent.
+type http_request_resource_report = record {
+  raw_response_bytes : opt resource_usage;
+  http_roundtrip_time_ms : opt resource_usage;
+  transform_instructions : opt resource_usage;
+  transformed_response_bytes : opt resource_usage;
+  cycles : opt cycles_usage;
+};
+
+type flexible_http_node_error = record { code : text; message : text };
+
+type flexible_http_node_detail = record {
+  node_id : principal;
+  report : http_request_resource_report;
+  error : opt flexible_http_node_error;
+};
+
+type flexible_http_global_error = variant {
+  invalid_parameters : reserved;
+  timeout : reserved;
+  out_of_cycles : reserved;
+  responses_too_large : reserved;
+  too_many_rejects : reserved;
+};
+
+type flexible_http_request_err = record {
+  global_error : opt flexible_http_global_error;
+  node_details : vec flexible_http_node_detail;
+  message : text;
+};
+
+type flexible_http_request_result = variant {
+  ok : vec http_response;
+  err : flexible_http_request_err;
+};
+
+// ============================== This canister ==============================
+
+// Which pricing model the outcall asks to be charged under. Leaving it out sends
+// no pricing version at all, which is what canisters predating the field do.
+type pricing_version = variant {
+  // Charge the whole estimated cost up front, refunding the remainder with the
+  // response.
+  legacy;
+  // Charge a base fee up front and only what the outcall actually used, crediting
+  // the rest back to the balance afterwards.
+  pay_as_you_go;
+};
+
+// Which of this canister's transform queries to run over the response. A
+// fully-replicated outcall only reaches consensus if every replica ends up with
+// byte-identical content, so anything varying per replica — a `Date` header, say
+// — has to be transformed away first.
+type transform = variant {
+  // Return the response unchanged. Use it to watch a fully-replicated outcall
+  // fail to agree; fine for non-replicated ones.
+  identity;
+  // Drop the headers, keep the status and body.
+  strip_headers;
+  // Drop the headers and replace the body with the transform context.
+  constant_body;
+  // Drop the headers and append the transform context to the body.
+  append_context;
+};
+
+// The replication of the outcall whose price `cost_http_request_v2` reports.
+type outcall_type = variant { fully_replicated; non_replicated; flexible };
+
+// Why a call to the management canister came back rejected. `code` is 0 when the
+// call never reached the management canister and so has no reject code.
+type call_reject = record { code : nat32; message : text };
+
+// What an `http_request` came back with, plus what it cost.
+//
+// `cycles_refunded` is what came back on the reply, and is absent when the call
+// never left the canister and so was never replied to — which is what happens
+// when it asks for more cycles than the canister holds. Under pay-as-you-go most
+// of the refund is instead credited to the balance a moment later, so query
+// `cycle_balance` again to see the final cost.
+type http_outcome = record {
+  result : variant { Ok : http_response; Err : call_reject };
+  cycles_refunded : opt nat;
+  balance_before : nat;
+  balance_after : nat;
+};
+
+// What a `flexible_http_request` came back with. Note the two layers of failure:
+// `Err` is the *call* being rejected, whereas `Ok(err)` is the outcall itself
+// reporting that it could not produce a response.
+type flexible_outcome = record {
+  result : variant { Ok : flexible_http_request_result; Err : call_reject };
+  cycles_refunded : opt nat;
+  balance_before : nat;
+  balance_after : nat;
+};
+
+service : {
+  // Every node of the subnet fetches the URL, and consensus only delivers a
+  // response they agree on byte for byte. Sends no `is_replicated`, which the
+  // replica treats as replicated.
+  //
+  // `headers` takes one `Name: Value` per entry, `body` is sent as UTF-8, and an
+  // absent `max_response_bytes` asks for the largest response allowed (2 MiB) —
+  // which legacy pricing charges for accordingly. `cycles` comes out of this
+  // canister's own balance.
+  http_request_fully_replicated : (
+    url : text,
+    method : http_method,
+    headers : vec text,
+    body : opt text,
+    max_response_bytes : opt nat64,
+    transform : opt transform,
+    transform_context : opt text,
+    pricing_version : opt pricing_version,
+    cycles : nat,
+  ) -> (http_outcome);
+
+  // A single node fetches the URL and its response is delivered without the
+  // others having to agree on it. Sends `is_replicated = false`; the arguments
+  // are otherwise those of `http_request_fully_replicated`.
+  http_request_non_replicated : (
+    url : text,
+    method : http_method,
+    headers : vec text,
+    body : opt text,
+    max_response_bytes : opt nat64,
+    transform : opt transform,
+    transform_context : opt text,
+    pricing_version : opt pricing_version,
+    cycles : nat,
+  ) -> (http_outcome);
+
+  // `total_requests` nodes fetch the URL and between `min_responses` and
+  // `max_responses` of their responses are delivered, so the nodes need not all
+  // agree — or even all answer. Leave all three counts at 0 to send no
+  // replication at all, asking the replica for its defaults (every node,
+  // floor(2n/3) + 1 responses required, all of them accepted).
+  //
+  // Flexible outcalls are always priced pay-as-you-go, hence no pricing version.
+  flexible_http_request : (
+    url : text,
+    method : http_method,
+    headers : vec text,
+    body : opt text,
+    max_response_bytes : opt nat64,
+    transform : opt transform,
+    transform_context : opt text,
+    total_requests : nat32,
+    min_responses : nat32,
+    max_responses : nat32,
+    cycles : nat,
+  ) -> (flexible_outcome);
+
+  // What legacy pricing says an outcall costs, via `ic0.cost_http_request`. The
+  // whole amount is charged up front, whatever the outcall goes on to use.
+  //
+  // `request_bytes` is the size of the request's variable parts — URL, headers,
+  // body and transform context. Pass 2_000_000 as `max_response_bytes` for a
+  // request that leaves it out.
+  cost_http_request : (request_bytes : nat64, max_response_bytes : nat64) -> (nat) query;
+
+  // What pay-as-you-go pricing says an outcall costs, via
+  // `ic0.cost_http_request_v2`. This prices the resources an outcall actually
+  // consumes, so it takes them all.
+  //
+  // An absent `outcall_type` prices a fully-replicated outcall, as the replica
+  // assumes for callers predating the field. The three counts are only read for
+  // `flexible`; leave them at 0 to price the replica's defaults.
+  //
+  // Nothing here is validated: asking the price of an outcall that could never be
+  // made simply reports a price nothing will ever be charged.
+  cost_http_request_v2 : (
+    outcall_type : opt outcall_type,
+    total_requests : nat32,
+    min_responses : nat32,
+    max_responses : nat32,
+    request_bytes : nat64,
+    http_roundtrip_time_ms : nat64,
+    raw_response_bytes : nat64,
+    transformed_response_bytes : nat64,
+    transform_instructions : nat64,
+  ) -> (nat) query;
+
+  // This canister's cycle balance — where pay-as-you-go refunds land, shortly
+  // after the response is delivered rather than on the reply itself.
+  cycle_balance : () -> (nat) query;
+  subnet_node_count : () -> (nat32) query;
+
+  // The transform queries the outcalls above reference by name; see `transform`.
+  identity : (transform_args) -> (http_response) query;
+  strip_headers : (transform_args) -> (http_response) query;
+  constant_body : (transform_args) -> (http_response) query;
+  append_context : (transform_args) -> (http_response) query;
+}
