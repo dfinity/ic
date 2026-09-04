@@ -11,14 +11,14 @@ tags: [cketh, ckerc20, minter, deposit, eip-7702]
 - [Non-goals](#non-goals)
 - [Design](#design)
   - [Addresses and contracts](#addresses-and-contracts)
-  - [End-to-end flows](#end-to-end-flows)
-  - [The ETH deposit flow (Phase 2)](#the-eth-deposit-flow-phase-2)
-  - [Step 0: Fund the transaction fees](#step-0-fund-the-transaction-fees-without-touching-the-cketh-backing)
-  - [Step 1: Retrieve the deposit address](#step-1-retrieve-the-deposit-address)
-  - [Step 2: Withdraw from the CEX](#step-2-withdraw-from-the-cex-to-the-deposit-address)
-  - [Step 3: Detect the deposit](#step-3-detect-the-deposit)
-  - [Step 4: Credit the deposit (mint)](#step-4-credit-the-deposit-mint)
-  - [Step 5: Sweep the funds to the minter](#step-5-sweep-the-funds-to-the-minter)
+  - [The ERC-20 deposit flow](#the-erc-20-deposit-flow)
+    - [Step 0: Fund the transaction fees](#step-0-fund-the-transaction-fees-without-touching-the-cketh-backing)
+    - [Step 1: Retrieve the deposit address](#step-1-retrieve-the-deposit-address)
+    - [Step 2: Withdraw from the CEX](#step-2-withdraw-from-the-cex-to-the-deposit-address)
+    - [Step 3: Detect the deposit](#step-3-detect-the-deposit)
+    - [Step 4: Credit the deposit (mint)](#step-4-credit-the-deposit-mint)
+    - [Step 5: Sweep the funds to the minter](#step-5-sweep-the-funds-to-the-minter)
+  - [The ETH deposit flow](#the-eth-deposit-flow)
 - [Implementation](#implementation)
   - [Constraints](#constraints)
   - [EIP-7702 primer](#eip-7702-primer-the-sweep-one-transaction-at-a-time)
@@ -74,7 +74,7 @@ The design is delivered in two phases:
 * **Phase 2 — ckETH**: native ETH transfers emit no logs, and a send with a
   fixed 21'000 gas limit cannot reach EIP-7702 delegated code; this phase has
   additional design constraints, described in
-  [The ETH deposit flow](#the-eth-deposit-flow-phase-2) and per step.
+  [The ETH deposit flow](#the-eth-deposit-flow) and per step.
 
 ## Requirements
 
@@ -210,8 +210,10 @@ _Requirements are grouped by phase, not numbered sequentially: `R11` and `R12` a
 The flow: **(0)** fund the transaction fees (a background precondition), then per
 deposit: **(1)** retrieve the deposit address, **(2)** withdraw from the CEX to it,
 **(3)** detect the deposit, **(4)** credit (mint) the ckToken, **(5)** sweep the
-funds to the minter. One section per step; each step states its decision in place,
-and the alternatives that were weighed and discarded are collected in
+funds to the minter. [The ERC-20 deposit flow](#the-erc-20-deposit-flow) walks
+these steps one subsection each, with each step's decision stated in place;
+[The ETH deposit flow](#the-eth-deposit-flow) then lists only what Phase 2
+changes. The alternatives that were weighed and discarded are collected in
 [Discussed Alternatives](#discussed-alternatives) at the bottom of this document.
 
 Two decisions shape everything below:
@@ -240,33 +242,6 @@ can sign for each of them, and funds there never depend on contract code.
 helper and the delegate hold no funds, a token contract holds everyone's ERC-20
 balances as storage slots.
 
-```mermaid
-flowchart LR
-    CEX["CEX hot wallet"]
-    subgraph IC["Internet Computer"]
-        Minter["ckETH minter canister<br/>one tECDSA master key"]
-    end
-    subgraph EOA["Minter-key EOAs — one derivation path per role"]
-        Main["main address — path []<br/>holds all backing funds (R6);<br/>sends withdrawals on its own nonce lane"]
-        Sweeper["sweeper address — path [3]<br/>holds prepaid gas only (R14);<br/>sends sweeps on its own nonce lane (R17)"]
-        Dep["deposit address (EOA) — path [1, principal, subaccount]<br/>one per IC account, shared across assets: receives ERC-20 transfers<br/>and (Phase 2) plain ETH; delegated to SweeperContract at its first sweep"]
-    end
-    subgraph SC["Deployed contracts — no minter key"]
-        S["SweeperContract — CkSweeperAttested (new)<br/>EIP-7702 sweeper delegate, deployed once;<br/>the deployed instance is also the batch entry point"]
-        H["Helper — DepositHelperWithSubaccount (existing)<br/>emits ReceivedEthOrErc20"]
-        T["Token — ERC-20 contract (USDT, USDC, ...)"]
-    end
-
-    Minter -. "signs for every EOA (tECDSA)" .-> EOA
-    CEX -- "Token.transfer(deposit address, amount)" --> T
-    Main -- "funding withdrawal (step 0)" --> Sweeper
-    Sweeper -- "sweep tx, to = SweeperContract:<br/>sweepErc20Batch(...) or sweepEthBatch(...)" --> S
-    S -- "delegated call: SweeperContract's code<br/>runs as the deposit address" --> Dep
-    Dep -- "approve + Helper.depositErc20(Token,<br/>balance, principal, subaccount)" --> H
-    H -- "Token.transferFrom(deposit address → main address)" --> T
-    T -. "swept balance now at the main address" .-> Main
-```
-
 The separation between the three minter-key roles is deliberate and
 load-bearing:
 
@@ -286,9 +261,28 @@ load-bearing:
   gas, ERC-20 and ETH alike, is paid by the sweeper address; because the minter
   holds their keys, funds there stay recoverable even without any contract.
 
-### End-to-end flows
+Two contracts are needed, only one of them new:
 
-Deposit of USDT from a CEX. Every transaction the minter submits (and every log
+* **Sweeper contract** (`CkSweeperAttested.sol`, **new**): a single immutable
+  contract, deployed once per network. It is the EIP-7702 delegate every
+  deposit address points its code at — under delegation its code runs *as* the
+  deposit address — and the deployed instance doubles as the permissionless
+  batch entry point (`sweepErc20Batch`, `sweepEthBatch`) the minter's sweep
+  transactions target. Details in
+  [Sweeper delegate contract](#sweeper-delegate-contract).
+* **Deposit helper** (`DepositHelperWithSubaccount.sol`, **already deployed**):
+  the existing helper every sweep goes through. It moves the funds to the main
+  address and emits the canonical `ReceivedEthOrErc20` event, which is what
+  lets the existing scrape→parse→dedup→mint pipeline credit swept deposits
+  unchanged (step 4).
+
+(Token contracts — USDT, USDC, … — are third parties' deployments; they only
+matter as the place ERC-20 balances live and `Transfer` logs come from.)
+
+### The ERC-20 deposit flow
+
+Deposit of USDT from a CEX, end to end; each step is detailed in its own
+subsection below. Every transaction the minter submits (and every log
 or balance it reads) goes through the EVM-RPC canister with multi-provider
 consensus — the CEX submits its own transfer directly; the boxes separate the
 minter-key EOAs from the deployed contracts:
@@ -337,65 +331,7 @@ sequenceDiagram
     Minter->>Ledger: mint 250 - fee to the user's account, fee to the minter fee account
 ```
 
-### The ETH deposit flow (Phase 2)
-
-**Decided
-([#11449](https://github.com/dfinity/ic/pull/11449), validated on mainnet — see
-the data point in step 1): ETH deposits reuse the account's ERC-20 deposit
-address and the same batch sweeper contract.** No second address, no second
-delegation, no second attestation:
-
-* The delegate carries an empty payable `receive()`, so a plain ETH send lands
-  at the deposit address whether or not it is already delegated: a code-less
-  address takes the usual 21'000 gas, a delegated one 21'055 (measured on anvil
-  and confirmed on mainnet), within the 2'300-gas `transfer`/`send` stipend of
-  contract-batched CEX withdrawals. A send with a *fixed* 21'000 limit to an
-  already-delegated address fails on the sender side — funds never leave the
-  exchange (`R12`).
-* ETH is swept exactly like a token, through the delegate's attested
-  `sweepEth`/`sweepEthBatch` entry points, which forward the address' whole ETH
-  balance through the helper's `depositEth`. The attestation digest binds only
-  the account — no asset — so the one recorded attestation covers ERC-20 and
-  ETH sweeps alike, and the sweep rides the sweeper address' nonce lane with
-  `R14`-prepaid gas: nothing is ever deducted from the deposit itself.
-* What stays different is detection: a plain ETH send emits no `Transfer` log,
-  so crediting is by finalized balance delta (`R11`) and sender screening is
-  weaker than for ERC-20 (step 3).
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant CEX
-    participant Minter as Minter canister
-    box Minter-key EOAs
-        participant D as deposit address — path [1, principal, subaccount]
-        participant Sw as sweeper address — path [3]
-        participant Main as main address — path []
-    end
-    box Deployed contracts
-        participant S as SweeperContract (delegate)
-        participant H as Helper (deposit helper)
-    end
-    participant Ledger as ckETH ledger
-
-    User->>Minter: deposit_eth()
-    Minter-->>User: the same deposit address as for ERC-20 (schema 1)
-    User->>CEX: withdraw ETH to the deposit address
-    CEX->>D: plain ETH send — 21'000 gas while code-less, 21'055 into the<br/>delegate's empty receive() once delegated (R12)
-    loop while the (address, ETH) pair is armed
-        Minter->>D: finalized ETH balance, read in the same<br/>deployless-batcher call as the ERC-20 scans
-    end
-    Note over Minter: balance delta detected (R11): queue the ETH sweep.<br/>No Transfer log exists, so sender screening is weaker (step 3)
-    Sw->>S: sweep tx on the sweeper's own nonce lane (R17), R14-prepaid gas:<br/>type 0x04 if the address is not yet delegated, else 0x02:<br/>sweepEthBatch([(deposit address, principal, subaccount, attestation)])
-    S->>D: sweepEth — delegated: SweeperContract's code runs as the deposit address
-    D->>H: depositEth{value: whole balance}(principal, subaccount)
-    H->>Main: forwards the ETH to the main address (R6)<br/>and emits ReceivedEthOrErc20
-    Minter->>H: eth_getLogs(helper contract, up to finalized)
-    Minter->>Ledger: mint ckETH to the user's account (existing pipeline, unchanged)
-```
-
-### Step 0: Fund the transaction fees without touching the ckETH backing
+#### Step 0: Fund the transaction fees without touching the ckETH backing
 
 The sweeper address must hold prepaid gas before any sweep is submitted (`R14`,
 burn-first); funding runs in the background, independently of any deposit.
@@ -508,7 +444,7 @@ sequenceDiagram
 Both coexist: sponsored when a caller offers to pay (and then the deposit is
 credited in full), minter-fronted otherwise — same pipeline either way.
 
-### Step 1: Retrieve the deposit address
+#### Step 1: Retrieve the deposit address
 
 Attribution is by **destination address** — the only channel a CEX supports (the
 sender is a shared hot wallet, plain transfers carry no memo). Each IC account gets a
@@ -569,7 +505,7 @@ unique, deterministic deposit address, derived from the minter's threshold-ECDSA
 schema-1 address takes ERC-20 transfers and (Phase 2) plain ETH alike, because
 the delegate accepts ETH in its empty payable `receive()` and sweeps it through
 the same attested batch entry points
-(see [The ETH deposit flow](#the-eth-deposit-flow-phase-2)). One address per
+(see [The ETH deposit flow](#the-eth-deposit-flow)). One address per
 account to register, scan, delegate and attest; the user pastes the same
 address whatever the asset. The residual risk — an exchange that sends ETH with
 a hard-coded 21'000 gas limit fails against an already-delegated address
@@ -612,7 +548,7 @@ forwarded, fit the empty `receive()` by construction but were not exercised on
 mainnet — hence the per-asset fallback kept in
 [Discussed Alternatives](#discussed-alternatives).
 
-### Step 2: Withdraw from the CEX to the deposit address
+#### Step 2: Withdraw from the CEX to the deposit address
 
 The user pastes the deposit address into the exchange withdrawal form; the CEX
 performs a plain ERC-20 `transfer` (or a native ETH send, Phase 2) from its hot
@@ -630,7 +566,7 @@ wallet. The design must absorb:
 
 No variants: the CEX side is not under our control.
 
-### Step 3: Detect the deposit
+#### Step 3: Detect the deposit
 
 After `deposit_erc20`, no further user or frontend action is required
 (`R15`): a two-step flow (retrieve, then claim) is not reliably implementable by a
@@ -788,7 +724,7 @@ after budget exhaustion waits for re-arming. The discarded triggers
 (claim-only endpoint, user-supplied transaction hash, unbounded continuous
 scraping) are in [Discussed Alternatives](#discussed-alternatives).
 
-### Step 4: Credit the deposit (mint)
+#### Step 4: Credit the deposit (mint)
 
 The deposited amount is minted in full: `amount - deposit_fee` to the depositor's
 account, and `deposit_fee` to a minter-controlled fee account **on the same ckToken
@@ -816,7 +752,7 @@ comparable to today's helper flow. The discarded alternative — minting on the
 finalized deposit through a new detection→mint path — is in
 [Discussed Alternatives](#discussed-alternatives).
 
-### Step 5: Sweep the funds to the minter
+#### Step 5: Sweep the funds to the minter
 
 Each ERC-20 deposit EOA signs (threshold ECDSA) **one** EIP-7702
 authorization — lazily, together with its first sweep, never at registration
@@ -875,9 +811,9 @@ delegate's `sweepEthBatch`, and the delegate forwards the whole balance through
 the helper's `depositEth{value}` under the same attestation check — the digest
 binds only the account, no asset, so the recorded attestation and delegation
 are shared with the address' ERC-20 sweeps
-(see [The ETH deposit flow](#the-eth-deposit-flow-phase-2)).
+(see [The ETH deposit flow](#the-eth-deposit-flow)).
 
-#### The one-time self-attestation in detail
+##### The one-time self-attestation in detail
 
 The attestation is a plain secp256k1 signature by the *deposit address' own
 derived key* over a domain-separated digest binding the address to its IC account:
@@ -941,6 +877,66 @@ function sweepErc20(
 * **One attestation covers every asset**: the digest names the account and the
   helper, never an asset, so the signature that authorizes an address' ERC-20
   sweeps authorizes its Phase 2 ETH sweeps unchanged.
+
+### The ETH deposit flow
+
+**Decided
+([#11449](https://github.com/dfinity/ic/pull/11449), validated on mainnet — see
+the data point in step 1): Phase 2 ETH deposits reuse the account's ERC-20
+deposit address and the same batch sweeper contract.** Everything from the
+ERC-20 flow above carries over unchanged — the address and its one delegation
+and attestation, the funding and enqueue machinery, the sweeper address' nonce
+lane and `R14`-prepaid gas, the helper event and the mint pipeline. Only three
+things differ:
+
+* **The deposit is a plain ETH send, not a token transfer.** The delegate
+  carries an empty payable `receive()`, so the send lands whether or not the
+  address is already delegated: a code-less address takes the usual 21'000 gas,
+  a delegated one 21'055 (measured on anvil and confirmed on mainnet), within
+  the 2'300-gas `transfer`/`send` stipend of contract-batched CEX withdrawals.
+  A send with a *fixed* 21'000 limit to an already-delegated address fails on
+  the sender side — funds never leave the exchange (`R12`).
+* **Detection is by balance delta, not logs.** A plain ETH send emits no
+  `Transfer` log, so crediting follows the finalized balance delta (`R11`) and
+  sender screening is weaker than for ERC-20 (step 3).
+* **The sweep enters through `sweepEth`/`sweepEthBatch`**, which forward the
+  address' whole ETH balance through the helper's `depositEth` — under the same
+  attestation check: the digest binds only the account, no asset, so the one
+  recorded attestation covers ERC-20 and ETH sweeps alike, and nothing is ever
+  deducted from the deposit itself.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant CEX
+    participant Minter as Minter canister
+    box Minter-key EOAs
+        participant D as deposit address — path [1, principal, subaccount]
+        participant Sw as sweeper address — path [3]
+        participant Main as main address — path []
+    end
+    box Deployed contracts
+        participant S as SweeperContract (delegate)
+        participant H as Helper (deposit helper)
+    end
+    participant Ledger as ckETH ledger
+
+    User->>Minter: deposit_eth()
+    Minter-->>User: the same deposit address as for ERC-20 (schema 1)
+    User->>CEX: withdraw ETH to the deposit address
+    CEX->>D: plain ETH send — 21'000 gas while code-less, 21'055 into the<br/>delegate's empty receive() once delegated (R12)
+    loop while the (address, ETH) pair is armed
+        Minter->>D: finalized ETH balance, read in the same<br/>deployless-batcher call as the ERC-20 scans
+    end
+    Note over Minter: balance delta detected (R11): queue the ETH sweep.<br/>No Transfer log exists, so sender screening is weaker (step 3)
+    Sw->>S: sweep tx on the sweeper's own nonce lane (R17), R14-prepaid gas:<br/>type 0x04 if the address is not yet delegated, else 0x02:<br/>sweepEthBatch([(deposit address, principal, subaccount, attestation)])
+    S->>D: sweepEth — delegated: SweeperContract's code runs as the deposit address
+    D->>H: depositEth{value: whole balance}(principal, subaccount)
+    H->>Main: forwards the ETH to the main address (R6)<br/>and emits ReceivedEthOrErc20
+    Minter->>H: eth_getLogs(helper contract, up to finalized)
+    Minter->>Ledger: mint ckETH to the user's account (existing pipeline, unchanged)
+```
 
 ## Implementation
 
@@ -1323,7 +1319,7 @@ Notes:
   forward the balance through the helper's `depositEth`
   ([#11449](https://github.com/dfinity/ic/pull/11449)). This is what lets
   Phase 2 accept plain ETH at the same delegated address and sweep it with the
-  same contract (see [The ETH deposit flow](#the-eth-deposit-flow-phase-2));
+  same contract (see [The ETH deposit flow](#the-eth-deposit-flow));
   the `receive()` is kept empty so it fits the 2'300-gas `transfer`/`send`
   stipend of contract-batched CEX withdrawals, and detection is balance-based,
   so it emits no event.
