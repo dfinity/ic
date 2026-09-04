@@ -2,6 +2,7 @@ use crate::{
     args::OrchestratorArgs,
     boundary_node::BoundaryNodeManager,
     catch_up_package_provider::{CatchUpPackageProvider, LocalCUPReader},
+    cloud_engine::CloudEngineManager,
     dashboard::{Dashboard, OrchestratorDashboard},
     firewall::Firewall,
     hostos_upgrade::HostosUpgrader,
@@ -77,6 +78,7 @@ pub struct Orchestrator {
     upgrade: Option<Upgrade>,
     hostos_upgrade: Option<HostosUpgrader>,
     boundary_node_manager: Option<BoundaryNodeManager>,
+    cloud_engine_manager: Option<CloudEngineManager>,
     firewall: Option<Firewall>,
     ssh_access_manager: Option<SshAccessManager>,
     orchestrator_dashboard: Option<OrchestratorDashboard>,
@@ -269,11 +271,19 @@ impl Orchestrator {
         let ic_gateway_process_config = IcGatewayProcessConfig {
             ic_binary_dir: args.ic_binary_directory.clone(),
             ic_gateway_env_file: args.ic_gateway_env_file.clone(),
+            acme_cache_dir: args
+                .orchestrator_data_directory
+                .join("ic-gateway")
+                .join("acme"),
         };
+
+        // Published by the cloud engine task, consumed by the process manager.
+        let gateway_config = Arc::new(RwLock::new(None));
 
         let processes_manager = Arc::new(RwLock::new(MultipleProcessesManager::new(
             replica_process_config,
             ic_gateway_process_config,
+            Arc::clone(&gateway_config),
             Arc::clone(&registry),
             Arc::clone(&metrics),
             logger.clone(),
@@ -357,6 +367,16 @@ impl Orchestrator {
             logger.clone(),
         );
 
+        let cloud_engine_manager = CloudEngineManager::new(
+            Arc::clone(&registry),
+            Arc::clone(&crypto) as _,
+            config.cloud_engine.engine_management_canister_id,
+            config.http_handler.listen_addr,
+            gateway_config,
+            Arc::clone(&metrics),
+            logger.clone(),
+        );
+
         let firewall = Firewall::new(
             node_id,
             Arc::clone(&registry),
@@ -403,6 +423,7 @@ impl Orchestrator {
             upgrade,
             hostos_upgrade,
             boundary_node_manager: Some(boundary_node),
+            cloud_engine_manager,
             firewall: Some(firewall),
             ssh_access_manager: Some(ssh_access_manager),
             orchestrator_dashboard,
@@ -567,6 +588,20 @@ impl Orchestrator {
             }
         }
 
+        async fn cloud_engine_check(
+            mut cloud_engine_manager: CloudEngineManager,
+            cancellation_token: CancellationToken,
+        ) {
+            loop {
+                cloud_engine_manager.check().await;
+
+                tokio::select! {
+                    _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
+                    _ = cancellation_token.cancelled() => break
+                }
+            }
+        }
+
         async fn key_rotation_check(
             subnet_assignment: Arc<RwLock<SubnetAssignment>>,
             registration: NodeRegistration,
@@ -650,6 +685,13 @@ impl Orchestrator {
             self.task_tracker.spawn(
                 "boundary_node_management",
                 boundary_node_check(boundary_node, cancellation_token.clone()),
+            );
+        }
+
+        if let Some(cloud_engine) = self.cloud_engine_manager.take() {
+            self.task_tracker.spawn(
+                "cloud_engine_management",
+                cloud_engine_check(cloud_engine, cancellation_token.clone()),
             );
         }
 

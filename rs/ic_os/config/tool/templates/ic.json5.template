@@ -373,7 +373,7 @@ table filter {\n\
     <<IPv4_UDP_RULES>>\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
-    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport 80 accept\n\
+    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport { 80, 443 } accept\n\
     log prefix \"Drop - default policy: \"\n\
   }\n\
 \n\
@@ -433,7 +433,7 @@ table ip6 filter {\n\
     ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 9314, 19531, 19100, 19522 } accept\n\
     # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS\n\
     ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept\n\
-    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 80 accept\n\
+    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport { 80, 443 } accept\n\
     # Custom templated rules\n\
     <<IPv6_TCP_RULES>>\n\
     <<IPv6_UDP_RULES>>\n\
@@ -627,6 +627,10 @@ table ip6 filter {\n\
         nns_url: "{{ nns_urls }}",
         nns_pub_key_pem: "/run/config/nns_public_key.pem",
         node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem"
+    },
+
+    cloud_engine: {
+        engine_management_canister_id: {{ engine_management_canister_id }},
     },
 
     malicious_behavior: {{ malicious_behavior }},

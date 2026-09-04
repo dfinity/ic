@@ -48,6 +48,7 @@ rust_library(
         "//rs/registry/helpers",
         "//rs/registry/keys",
         "//rs/registry/local_store",
+        "//rs/registry/routing_table",
         "//rs/sys",
         "//rs/types/management_canister_types",
         "//rs/types/types",

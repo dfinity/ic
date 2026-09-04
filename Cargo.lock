@@ -19522,6 +19522,7 @@ dependencies = [
  "ic-registry-local-store",
  "ic-registry-proto-data-provider",
  "ic-registry-replicator",
+ "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-sys",
  "ic-test-utilities-consensus",

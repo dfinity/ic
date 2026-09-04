@@ -2,7 +2,7 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::{KeyRotationStatus, OrchestratorMetrics},
     signer::{Hsm, NodeProviderSigner, NodeSender, Signer},
-    utils::https_endpoint_to_url,
+    utils::{https_endpoint_to_url, nns_root_key_der_from_registry},
 };
 use anyhow::Context as _;
 use attestation::SevAttestationPackage;
@@ -724,37 +724,12 @@ impl NodeRegistration {
     }
 
     fn get_nns_pub_key_der_from_registry(&self) -> Option<Vec<u8>> {
-        let version = self.registry_client.get_latest_version();
-        let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
-            Ok(Some(id)) => id,
-            err => {
-                warn!(self.log, "Failed to get root subnet id: {:?}", err);
-                return None;
-            }
-        };
-
-        let pub_key = match self
-            .registry_client
-            .get_threshold_signing_public_key_for_subnet(root_subnet_id, version)
-        {
-            Ok(Some(pub_key)) => pub_key,
-            Ok(None) => {
-                warn!(self.log, "NNS public key not set in the registry");
-                return None;
-            }
-            Err(e) => {
-                warn!(self.log, "Error when retrieving NNS public key: {:?}", e);
-                return None;
-            }
-        };
-
-        match threshold_sig_public_key_to_der(pub_key) {
-            Ok(der) => Some(der),
-            Err(e) => {
-                warn!(self.log, "Failed to convert NNS public key to DER: {:?}", e);
-                None
-            }
-        }
+        nns_root_key_der_from_registry(
+            self.registry_client.as_ref(),
+            self.registry_client.get_latest_version(),
+        )
+        .inspect_err(|err| warn!(self.log, "Failed to get the NNS public key: {}", err))
+        .ok()
     }
 
     async fn check_node_registered(&self) -> Result<(), CheckKeysWithRegistryError> {

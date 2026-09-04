@@ -81,6 +81,9 @@ pub(crate) enum OrchestratorError {
 
     /// The given node is missing a domain name at the given registry version.
     DomainNameMissingError(NodeId, RegistryVersion),
+
+    /// A step of the cloud engine configuration lookup failed.
+    CloudEngineError(String),
 }
 
 impl OrchestratorError {
@@ -90,6 +93,10 @@ impl OrchestratorError {
 
     pub(crate) fn invalid_configuration_error(msg: impl ToString) -> Self {
         OrchestratorError::InvalidConfigurationError(msg.to_string())
+    }
+
+    pub(crate) fn cloud_engine_error(msg: impl ToString) -> Self {
+        OrchestratorError::CloudEngineError(msg.to_string())
     }
 
     pub(crate) fn key_monitoring_error(msg: impl ToString) -> Self {
@@ -175,6 +182,12 @@ impl fmt::Display for OrchestratorError {
                 write!(
                     f,
                     "Node {node_id} does not have an associated domain name at registry version {registry_version}"
+                )
+            }
+            OrchestratorError::CloudEngineError(msg) => {
+                write!(
+                    f,
+                    "Failed to determine the cloud engine configuration: {msg}"
                 )
             }
         }

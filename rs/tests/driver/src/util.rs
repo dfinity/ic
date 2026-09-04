@@ -1575,6 +1575,7 @@ pub fn get_config() -> ConfigOptional {
         node_reward_type: "".to_string(),
         malicious_behavior: "null".to_string(),
         extra_api_boundary_node_trust_anchors_pem: "null".to_string(),
+        engine_management_canister_id: "null".to_string(),
     };
 
     let ic_json =
