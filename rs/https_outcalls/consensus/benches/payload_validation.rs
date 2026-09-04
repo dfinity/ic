@@ -44,6 +44,7 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use rayon::{ThreadPool, ThreadPoolBuilder};
 
 /// Registry version that the whole benchmark operates at. The subnet record,
 /// the node signing keys and the responses' metadata all use this version.
@@ -51,6 +52,21 @@ const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
 /// `min_responses` of the benchmark's flexible requests.
 const FLEXIBLE_MIN_RESPONSES: u32 = 1;
+
+/// Number of threads of the payload builder's thread pool. Matches
+/// `ic_consensus::consensus::MAX_CONSENSUS_THREADS`, i.e. the size of the pool
+/// the payload builder is given in production.
+const NUM_THREADS: usize = 16;
+
+/// The thread pool the benchmarked payload builder verifies signatures on.
+fn thread_pool() -> Arc<ThreadPool> {
+    Arc::new(
+        ThreadPoolBuilder::new()
+            .num_threads(NUM_THREADS)
+            .build()
+            .expect("Failed to create thread pool"),
+    )
+}
 
 /// A single benchmark configuration. Adjust the counts and `response_size` to
 /// benchmark different payload shapes.
@@ -232,6 +248,7 @@ fn build_target(
         deps.pool.get_cache(),
         crypto,
         state_manager,
+        thread_pool(),
         subnet_id,
         registry_client.clone(),
         &MetricsRegistry::new(),

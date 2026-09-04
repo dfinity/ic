@@ -37,6 +37,7 @@ rust_library(
         "@crate_index//:hex",
         "@crate_index//:prometheus",
         "@crate_index//:rand",
+        "@crate_index//:rayon",
         "@crate_index//:slog",
     ],
 )
@@ -90,6 +91,7 @@ rust_test(
         "@crate_index//:proptest",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
+        "@crate_index//:rayon",
         "@crate_index//:slog",
         "@crate_index//:strum",
     ],
@@ -99,7 +101,6 @@ rust_bench(
     name = "payload_validation_bench",
     testonly = True,
     srcs = ["benches/payload_validation.rs"],
-    pin_cpu = True,
     # The benchmark asserts that the payload it builds actually validates, so
     # running it once (criterion's test mode) guards against the payload drifting
     # out of sync with the validation rules.
@@ -124,5 +125,6 @@ rust_bench(
         "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:criterion",
+        "@crate_index//:rayon",
     ],
 )

@@ -525,6 +525,7 @@ fn start_consensus(
         consensus_pool_cache.clone(),
         consensus_crypto.clone(),
         state_reader.clone(),
+        consensus_thread_pool.clone(),
         subnet_id,
         registry_client.clone(),
         metrics_registry,

@@ -11,7 +11,9 @@ use ic_config::{
     state_manager::LsmtConfig,
     subnet_config::SubnetConfig,
 };
-use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
+use ic_consensus::consensus::{
+    MAX_CONSENSUS_THREADS, build_thread_pool, payload_builder::PayloadBuilderImpl,
+};
 use ic_consensus_cup_utils::make_registry_cup;
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
@@ -2190,6 +2192,7 @@ impl StateMachine {
             consensus_pool_cache.clone(),
             Arc::new(crypto),
             state_manager.clone(),
+            build_thread_pool(MAX_CONSENSUS_THREADS),
             subnet_id,
             registry_client.clone(),
             &metrics_registry,

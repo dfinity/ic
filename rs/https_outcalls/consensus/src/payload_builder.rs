@@ -60,6 +60,7 @@ use ic_types::{
     signature::BasicSigBatchEntry,
 };
 use ic_types_cycles::Cycles;
+use rayon::{ThreadPool, iter::ParallelIterator, slice::ParallelSlice};
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     sync::{Arc, RwLock},
@@ -97,6 +98,7 @@ pub struct CanisterHttpPayloadBuilderImpl {
     pool: Arc<RwLock<dyn CanisterHttpPool>>,
     crypto: Arc<dyn ConsensusCrypto>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    thread_pool: Arc<ThreadPool>,
     membership: Arc<Membership>,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient>,
@@ -111,6 +113,7 @@ impl CanisterHttpPayloadBuilderImpl {
         cache: Arc<dyn ConsensusPoolCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        thread_pool: Arc<ThreadPool>,
         subnet_id: SubnetId,
         registry: Arc<dyn RegistryClient>,
         metrics_registry: &MetricsRegistry,
@@ -122,6 +125,7 @@ impl CanisterHttpPayloadBuilderImpl {
             pool,
             crypto,
             state_reader,
+            thread_pool,
             membership,
             subnet_id,
             registry,
@@ -1237,10 +1241,19 @@ impl CanisterHttpPayloadBuilderImpl {
             sig_inputs.extend(response_share_sig_inputs(shares, context.registry_version));
         }
 
-        // Batch-verify the signatures of the deferred shares.
+        // Batch-verify the signatures of the deferred shares. The batch is split
+        // into as many chunks as the thread pool has threads, which verifies
+        // them in parallel.
         if !sig_inputs.is_empty() {
-            self.crypto
-                .verify_basic_sig_batch_multi_msg(&sig_inputs)
+            let chunk_size = sig_inputs
+                .len()
+                .div_ceil(self.thread_pool.current_num_threads().max(1));
+            self.thread_pool
+                .install(|| {
+                    sig_inputs
+                        .par_chunks(chunk_size)
+                        .try_for_each(|chunk| self.crypto.verify_basic_sig_batch_multi_msg(chunk))
+                })
                 .map_err(|err| {
                     CanisterHttpPayloadValidationError::InvalidArtifact(
                         InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
