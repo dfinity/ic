@@ -4,8 +4,8 @@
 //!
 //! [`LiveSetup`] is generic over the fixture it wraps, so the facilities every live test needs live
 //! in one place: buying minter time, depositing through the production helper contract, reading the
-//! minter's canister log, and arranging state on anvil. The flavours differ only in what they build
-//! and seed — [`LiveSetup::new_balance_scan`] for the ckERC20 balance scan,
+//! minter's metrics and canister log, and arranging state on anvil. The flavours differ only in
+//! what they build and seed — [`LiveSetup::new_balance_scan`] for the ckERC20 balance scan,
 //! [`LiveSetup::new_funding`] for sweeper fee funding, and [`LiveSetup::new_sweep`] for the sweep
 //! of detected ckERC20 deposits.
 //!
@@ -62,6 +62,7 @@ use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_minter::{BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL};
 use ic_ethereum_types::Address;
+use ic_http_types::{HttpRequest, HttpResponse};
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::PocketIc;
 use std::collections::BTreeMap;
@@ -77,6 +78,11 @@ use crate::ckerc20::{CkErc20Setup, Erc20Token};
 use crate::{
     CkEthSetup, EthereumBackend, MINTER_ADDRESS, SWEEPER_ADDRESS, minter_wasm, switch_to_live,
 };
+
+/// Deposited for an ordinary test principal by the empty-fee-account fixture, so that a funding
+/// still has deposit-backed ETH to spend. Comfortably above the 0.3 ETH funding target that the
+/// fixture's minimum withdrawal amount implies.
+const DEPOSIT_AMOUNT: u128 = 5_000_000_000_000_000_000; // 5 ETH
 
 const FEE_ACCOUNT_BALANCE: u128 = 1_000_000_000_000_000_000; // 1 ckETH
 
@@ -115,7 +121,7 @@ const POLL_INTERVAL: Duration = Duration::from_secs(1);
 /// How long any wait here gives the minter before it fails with its logs. Sized well inside the
 /// budget Bazel grants the target that runs these tests, so that a hang reports what the minter was
 /// doing rather than being killed with nothing to show.
-const AWAIT_DEADLINE: Duration = Duration::from_secs(60);
+pub const AWAIT_DEADLINE: Duration = Duration::from_secs(60);
 
 /// One balance-scan interval, plus slack so the scan is unambiguously due. Also long enough for the
 /// latest-block refresh the scan reads, which shares the interval, and short enough that an outcall
@@ -137,12 +143,31 @@ const CREDIT_TICKS: u32 = 6;
 
 const FUNDING_TICKS: u32 = 6;
 
+/// Cumulative ETH the minter has spent on funding transfers, which only a finalized funding moves.
+pub const SWEEPER_ETH_SPENT: &str = "cketh_minter_sweeper_funding_eth_spent_total";
+/// How far the ckETH burned for sweeping runs ahead of the ETH spent.
+pub const SWEEPER_BURNED_NOT_YET_SPENT: &str = "cketh_minter_sweeper_funding_burned_not_yet_spent";
+/// The lower bound the minter tracks on the sweeper address' balance.
+pub const SWEEPER_GAS_BALANCE: &str = "cketh_minter_sweeper_funding_gas_balance";
+
 /// A balance to place on the owned anvil node: `amount` of `token` credited to the `deposit`
 /// address, so the scan reads a real balance for that (address, token) pair.
 pub struct Holding<'a> {
     pub deposit: Address,
     pub token: &'a Erc20Token,
     pub amount: u128,
+}
+
+/// The ledger burn index of the sweeper funding the minter accepted most recently, if it has
+/// accepted one at all. The burn is what a funding is keyed by all the way through the withdrawal
+/// pipeline, so this is what its `FinalizedTransaction` will carry as `withdrawal_id`.
+fn accepted_funding_index(events: &[Event]) -> Option<Nat> {
+    events.iter().rev().find_map(|event| match &event.payload {
+        EventPayload::AcceptedSweeperFundingRequest {
+            ledger_burn_index, ..
+        } => Some(ledger_burn_index.clone()),
+        _ => None,
+    })
 }
 
 /// `token.contract.address`, parsed: every canister and anvil call the harness makes needs an
@@ -220,7 +245,7 @@ impl LiveSetup<CkErc20Setup> {
             "BUG: the minter derived a sweeper address other than the pinned SWEEPER_ADDRESS"
         );
         setup.await_eth_received(&sweeper, FUNDING_TICKS);
-        setup.await_funding_finalized();
+        setup.await_successful_funding();
         setup
     }
 
@@ -464,14 +489,37 @@ impl LiveSetup<CkEthSetup> {
     /// minter to act. Arming here instead would let the first check burn within milliseconds, before
     /// a test could read the pre-burn numbers.
     pub fn new_funding() -> Self {
+        let setup = Self::new_funding_fixture();
+        setup.fund_fee_account();
+        setup
+    }
+
+    /// As [`Self::new_funding`], but leaves the fee account empty, so that the first check that
+    /// could fund finds nothing to burn.
+    ///
+    /// The funding that check attempts must still get past the guard on deposit-backed ETH — this
+    /// fixture is for tests about the burn failing, not about that guard — so the deposit that backs
+    /// it is made for an ordinary depositor instead of for the fee account.
+    pub fn new_funding_with_empty_fee_account() -> Self {
+        let setup = Self::new_funding_fixture();
+        let depositor = Account {
+            owner: setup.cketh().caller.into(),
+            subaccount: None,
+        };
+        setup.deposit(depositor, DEPOSIT_AMOUNT);
+        setup.await_deposits_credited(&[depositor]);
+        setup
+    }
+
+    /// What both funding flavours are built on, with nothing deposited yet: the ckETH canisters
+    /// against an owned anvil node, live, with the production deposit helper deployed.
+    fn new_funding_fixture() -> Self {
         let anvil = Arc::new(Anvil::start_mainnet_like());
         let cketh = CkEthSetup::new(EthereumBackend::Anvil {
             anvil: Arc::clone(&anvil),
             sweep_contracts: None,
         });
-        let setup = Self::go_live(cketh, anvil).with_deposit_helper();
-        setup.fund_fee_account();
-        setup
+        Self::go_live(cketh, anvil).with_deposit_helper()
     }
 
     /// Deploys the production deposit helper (`DepositHelperWithSubaccount.sol`) against the address
@@ -526,7 +574,7 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
 
     /// Polls until `observe` produces a value, or fails with what the minter was doing. The shape
     /// every wait here had spelled out for itself; the sleep is [`POLL_INTERVAL`], as for the ticks.
-    fn poll_until<T>(
+    pub fn poll_until<T>(
         &self,
         deadline: Duration,
         what: impl Fn(&Self) -> String,
@@ -697,7 +745,10 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         }
     }
 
-    fn await_funding_finalized(&self) {
+    /// Drives the minter until a funding transfer has finalized *successfully*, which is what a
+    /// fixture that goes on to sweep needs: a sweeper address that can actually pay for the sweeps.
+    /// [`Self::await_funding_finalized`] is the weaker wait, for a test about a funding that fails.
+    fn await_successful_funding(&self) {
         self.drive_until(
             FUNDING_TICKS,
             |_| "the minter never finalized the funding transfer successfully".to_string(),
@@ -715,7 +766,7 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         );
     }
 
-    fn fund_fee_account(&self) {
+    pub fn fund_fee_account(&self) {
         // The fee account earns its ckETH the way it does in production — the ckETH ledger collects
         // its fees there — but at 2e12 wei a transfer it would take 150'000 transfers to reach the
         // funding target, so the harness deposits to that account directly instead. Deposited rather
@@ -756,6 +807,149 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
             |_| "the minter did not derive a sweeper address".to_string(),
             |setup| setup.sweeper_address(),
         )
+    }
+
+    /// The value of a minter metric, or `None` if it is not exported. Reads the same HTTP endpoint
+    /// an operator scrapes, so a test asserts on the numbers the minter publishes rather than on a
+    /// rendering of them.
+    fn metric(&self, name: &str) -> Option<f64> {
+        let request = HttpRequest {
+            method: "GET".to_string(),
+            url: "/metrics".to_string(),
+            headers: vec![],
+            body: serde_bytes::ByteBuf::new(),
+        };
+        let reply = self
+            .env()
+            .query_call(
+                self.minter_id(),
+                Principal::anonymous(),
+                "http_request",
+                Encode!(&request).unwrap(),
+            )
+            .expect("the metrics query was rejected");
+        let response = Decode!(&reply, HttpResponse).unwrap();
+        String::from_utf8_lossy(&response.body)
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .find_map(|line| {
+                let rest = line.strip_prefix(name)?.trim_start();
+                rest.split_whitespace().next()?.parse().ok()
+            })
+    }
+
+    /// As [`Self::metric`], for a metric a test knows the minter exports.
+    pub fn metric_value(&self, name: &str) -> f64 {
+        self.metric(name)
+            .unwrap_or_else(|| panic!("the minter does not export {name}"))
+    }
+
+    /// Waits until the minter has logged a line containing `needle`.
+    pub fn await_minter_log(&self, needle: &str) {
+        self.poll_until(
+            AWAIT_DEADLINE,
+            |_| format!("the minter never logged {needle:?}"),
+            |setup| {
+                setup
+                    .minter_logs()
+                    .iter()
+                    .any(|line| line.contains(needle))
+                    .then_some(())
+            },
+        )
+    }
+
+    /// Lets `ticks` withdrawal-timer ticks pass, giving the minter real time to act on each. The
+    /// window a bounded negative assertion watches, for a test whose "must not happen" is not a
+    /// balance the harness can poll for.
+    pub fn advance_ticks(&self, ticks: u32) {
+        self.settle(&mut |_| false);
+        for _ in 0..ticks {
+            self.env().advance_time(WITHDRAWAL_TICK);
+            self.settle(&mut |_| false);
+        }
+    }
+
+    /// Places `code` at `address`, so that a plain value transfer to it no longer succeeds: all
+    /// 21'000 gas of a bare transfer is intrinsic, leaving the callee none. Which makes this a
+    /// guarantee only for `code` whose first opcode costs something — code beginning with the
+    /// zero-cost `STOP` runs to completion on no gas at all and the transfer still succeeds.
+    pub fn set_code(&self, address: &Address, code: &[u8]) {
+        self.anvil.set_code(address, code);
+    }
+
+    /// The runtime bytecode at `address`, so a test can check that what it arranged is where it
+    /// meant to put it rather than assuming so.
+    pub fn code(&self, address: &Address) -> Vec<u8> {
+        self.anvil.code(address)
+    }
+
+    /// Asserts that `address` receives no ETH across `ticks` withdrawal-timer ticks. A bounded
+    /// negative check — the best available shape for "the minter must not do this" — and a stronger
+    /// one than watching the wall clock for the same number of seconds, since every tick is a
+    /// withdrawal-timer interval the minter genuinely runs.
+    pub fn assert_no_eth_received(&self, address: &Address, ticks: u32) {
+        let mut assert_empty = |setup: &Self| {
+            let balance = setup.anvil.eth_balance(address, "latest");
+            assert_eq!(
+                balance,
+                0,
+                "{address} unexpectedly received {balance} wei; minter logs:\n{}",
+                setup.minter_logs().join("\n")
+            );
+            false // Never satisfied: watching for the whole window is the point.
+        };
+        // Settles before the first tick as well as after the last, so a transfer already in flight
+        // is caught and the final tick's work is observed rather than merely started.
+        self.settle(&mut assert_empty);
+        for _ in 0..ticks {
+            self.env().advance_time(WITHDRAWAL_TICK);
+            self.settle(&mut assert_empty);
+        }
+    }
+
+    /// Drives the minter until the funding it accepted most recently has finalized, whatever the
+    /// transaction's outcome — the fundings that fail are the point of this wait — mining meanwhile
+    /// so the minter's `finalized` view keeps advancing.
+    ///
+    /// Costs at least one tick beyond the one that sent the transaction. Not because sending and
+    /// finalizing are separate passes — [`process_retrieve_eth_requests`] does both, in that order,
+    /// on every run — but because the receipt only counts once the transfer's block is *finalized*,
+    /// which trails `latest` by two blocks, i.e. by a poll of [`Self::settle`]; acting on it is then
+    /// the next run of the withdrawal timer, and a single jump, however large, only ever makes a due
+    /// timer fire once.
+    ///
+    /// Matched by ledger burn index rather than watched as a change in a counter. That the two
+    /// happen in one pass is exactly why a baseline is the wrong shape here: read once the transfer
+    /// is on chain, it could in principle already carry the finalization being waited for, and the
+    /// wait would then sit out its whole budget waiting for a second one that never comes. An index
+    /// the minter has either recorded or not cannot go wrong that way, and unlike "some transaction
+    /// finalized" it stays specific to the funding.
+    ///
+    /// [`process_retrieve_eth_requests`]: ic_cketh_minter::withdraw::process_retrieve_eth_requests
+    pub fn await_funding_finalized(&self, max_ticks: u32) {
+        self.drive_until(
+            max_ticks,
+            |setup| match accepted_funding_index(&setup.minter_events()) {
+                Some(index) => {
+                    format!("the funding burned at ledger index {index} had not finalized")
+                }
+                None => "the minter never accepted a funding to finalize".to_string(),
+            },
+            |setup| {
+                let events = setup.minter_events();
+                let Some(funding) = accepted_funding_index(&events) else {
+                    return false;
+                };
+                events.iter().any(|event| {
+                    matches!(
+                        &event.payload,
+                        EventPayload::FinalizedTransaction { withdrawal_id, .. }
+                            if *withdrawal_id == funding
+                    )
+                })
+            },
+        );
     }
 
     pub fn minter_address(&self) -> Address {

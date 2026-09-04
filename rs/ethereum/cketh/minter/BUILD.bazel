@@ -212,7 +212,6 @@ rust_ic_test_suite(
             # Run against a local foundry anvil node, not the IC test suite.
             "tests/deposit_from_cex_demo.rs",
             "tests/deposit_from_cex.rs",
-            "tests/sweeper_funding.rs",
         ],
     ),
     data = [
