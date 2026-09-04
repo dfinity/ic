@@ -125,6 +125,5 @@ rust_bench(
         "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:criterion",
-        "@crate_index//:rayon",
     ],
 )
