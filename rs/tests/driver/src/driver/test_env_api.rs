@@ -522,7 +522,7 @@ impl TopologySnapshot {
         )
     }
 
-    pub fn replica_version_records(&self) -> Result<Vec<(String, ReplicaVersionRecord)>> {
+    pub fn replica_version_records(&self) -> Result<Vec<ReplicaVersionRecord>> {
         self.local_registry
             .get_all_replica_version_records(self.registry_version)?
             .context("get_all_replica_version_records always returns Some (and it did not)")

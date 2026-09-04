@@ -21,7 +21,7 @@ pub async fn get_elected_replica_versions(topology: &TopologySnapshot) -> Vec<St
         .replica_version_records()
         .unwrap()
         .into_iter()
-        .map(|(k, _)| k)
+        .map(|v| v.replica_version_id)
         .collect()
 }
 

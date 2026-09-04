@@ -1504,9 +1504,8 @@ mod tests {
     }
 
     fn add_elected_measurement_to_registry(registry: &mut Registry, measurement: &[u8]) {
-        let replica_version_id = test_replica_version().to_string();
         let replica_version = ReplicaVersionRecord {
-            replica_version_id: Some(replica_version_id.clone()),
+            replica_version_id: test_replica_version().to_string(),
             release_package_sha256_hex: "".to_string(),
             release_package_urls: vec![],
             guest_launch_measurements: Some(GuestLaunchMeasurements {
@@ -1517,7 +1516,7 @@ mod tests {
             }),
         };
         registry.maybe_apply_mutation_internal(vec![update(
-            make_replica_version_key(replica_version_id).as_bytes(),
+            make_replica_version_key(&replica_version.replica_version_id).as_bytes(),
             replica_version.encode_to_vec(),
         )]);
     }
