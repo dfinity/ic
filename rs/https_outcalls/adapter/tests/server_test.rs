@@ -2,9 +2,17 @@
 // a self signed certificate.
 // We use `hyper-rustls` which uses Rustls, which supports the SSL_CERT_FILE variable.
 mod test {
+    use axum::{
+        Router,
+        body::Body,
+        http::{HeaderValue, StatusCode},
+        response::Response,
+        routing::{delete, get, head, patch, post, put},
+    };
     use bytes::Bytes;
     use http_body_util::Full;
     use hyper::Request;
+    use hyper::body::Incoming;
     use hyper_util::rt::{TokioExecutor, TokioIo};
     use ic_https_outcalls_adapter::{Config, IncomingSource};
     use ic_https_outcalls_service::{
@@ -22,13 +30,9 @@ mod test {
     use tokio::net::{TcpSocket, UnixStream};
     use tokio_rustls::TlsAcceptor;
     use tonic::transport::{Channel, Endpoint, Uri};
+    use tower::Service;
     use tower::service_fn;
     use uuid::Uuid;
-    use warp::{
-        Filter,
-        filters::BoxedFilter,
-        http::{Response, StatusCode, header::HeaderValue},
-    };
 
     #[cfg(feature = "http")]
     use socks5_impl::protocol::{
@@ -134,67 +138,67 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         dir
     }
 
-    fn warp_server() -> BoxedFilter<(impl warp::Reply,)> {
-        let basic_post = warp::post()
-            .and(warp::path("post"))
-            .and(warp::body::json())
-            .map(|req: u64| Response::builder().body(req.to_string()));
+    async fn handle_post(body: Bytes) -> String {
+        let req: u64 = serde_json::from_slice(&body).unwrap();
+        req.to_string()
+    }
 
-        let basic_get = warp::get()
-            .and(warp::path("get"))
-            .map(|| warp::reply::json(&"Hello"));
-        let invalid_header = warp::get().and(warp::path("invalid")).map(|| unsafe {
-            Response::builder()
-                .header(
-                    INVALID_HEADER_KEY,
-                    HeaderValue::from_maybe_shared_unchecked(INVALID_HEADER_VALUE.as_bytes()),
-                )
-                .header(
-                    VALID_HEADER_KEY,
-                    HeaderValue::from_maybe_shared_unchecked(VALID_HEADER_VALUE.as_bytes()),
-                )
-                .body("hi")
-        });
+    async fn handle_get() -> axum::Json<&'static str> {
+        axum::Json("Hello")
+    }
 
-        let get_response_size = warp::get()
-            .and(warp::path("size"))
-            .and(warp::body::json())
-            .map(|req: usize| Response::builder().body(vec![0_u8; req]));
+    async fn handle_invalid() -> Response {
+        // The test deliberately emits a header whose value is not valid ASCII to
+        // exercise the adapter's handling of it, hence `_unchecked`.
+        let invalid_value =
+            unsafe { HeaderValue::from_maybe_shared_unchecked(INVALID_HEADER_VALUE.as_bytes()) };
+        let valid_value =
+            unsafe { HeaderValue::from_maybe_shared_unchecked(VALID_HEADER_VALUE.as_bytes()) };
+        Response::builder()
+            .header(INVALID_HEADER_KEY, invalid_value)
+            .header(VALID_HEADER_KEY, valid_value)
+            .body(Body::from("hi"))
+            .unwrap()
+    }
 
-        let get_delay = warp::get()
-            .and(warp::path("delay"))
-            .and(warp::body::json())
-            .and_then(|req: u64| async move {
-                tokio::time::sleep(std::time::Duration::from_secs(req)).await;
-                Ok::<_, warp::Rejection>(warp::reply::reply())
-            });
+    async fn handle_size(body: Bytes) -> Vec<u8> {
+        let req: usize = serde_json::from_slice(&body).unwrap();
+        vec![0_u8; req]
+    }
 
-        let basic_head = warp::head().and(warp::path("head")).map(warp::reply::reply);
+    async fn handle_delay(body: Bytes) -> StatusCode {
+        let req: u64 = serde_json::from_slice(&body).unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(req)).await;
+        StatusCode::OK
+    }
 
-        let basic_put = warp::put()
-            .and(warp::path("put"))
-            .and(warp::body::bytes())
-            .map(|body: Bytes| Response::builder().body(body));
+    async fn handle_head() -> StatusCode {
+        StatusCode::OK
+    }
 
-        let basic_delete = warp::delete()
-            .and(warp::path("delete"))
-            .map(|| Response::builder().body("deleted"));
+    async fn handle_put(body: Bytes) -> Bytes {
+        body
+    }
 
-        let basic_patch = warp::patch()
-            .and(warp::path("patch"))
-            .and(warp::body::bytes())
-            .map(|body: Bytes| Response::builder().body(body));
+    async fn handle_delete() -> &'static str {
+        "deleted"
+    }
 
-        basic_post
-            .or(basic_get)
-            .or(basic_head)
-            .or(basic_put)
-            .or(basic_delete)
-            .or(basic_patch)
-            .or(get_response_size)
-            .or(get_delay)
-            .or(invalid_header)
-            .boxed()
+    async fn handle_patch(body: Bytes) -> Bytes {
+        body
+    }
+
+    fn router() -> Router {
+        Router::new()
+            .route("/post", post(handle_post))
+            .route("/get", get(handle_get))
+            .route("/invalid", get(handle_invalid))
+            .route("/size", get(handle_size))
+            .route("/delay", get(handle_delay))
+            .route("/head", head(handle_head))
+            .route("/put", put(handle_put))
+            .route("/delete", delete(handle_delete))
+            .route("/patch", patch(handle_patch))
     }
 
     fn cert_path(cert_dir: &TempDir) -> impl AsRef<Path> + use<> {
@@ -310,21 +314,64 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     }
 
     fn start_server(cert_dir: &TempDir) -> String {
-        let (addr, fut) = warp::serve(warp_server())
-            .tls()
-            .cert_path(cert_path(cert_dir))
-            .key_path(key_path(cert_dir))
-            .bind_ephemeral(([127, 0, 0, 1], 0));
+        let cert_file = std::fs::read(cert_path(cert_dir)).unwrap();
+        let certs = rustls_pemfile::certs(&mut cert_file.as_ref())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let key_file = std::fs::read(key_path(cert_dir)).unwrap();
+        let key = rustls_pemfile::private_key(&mut key_file.as_ref())
+            .unwrap()
+            .unwrap();
+        let mut tls_config = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .unwrap();
+        tls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        let acceptor = TlsAcceptor::from(Arc::new(tls_config));
 
-        tokio::spawn(fut);
-        format!("localhost:{}", addr.port())
+        // Bind synchronously so the ephemeral port is known before returning.
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        tokio::spawn(async move {
+            let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+            loop {
+                let Ok((tcp_stream, _)) = listener.accept().await else {
+                    continue;
+                };
+                let acceptor = acceptor.clone();
+                let router = router();
+                tokio::spawn(async move {
+                    let Ok(tls_stream) = acceptor.accept(tcp_stream).await else {
+                        return;
+                    };
+                    let service = hyper::service::service_fn(move |request: Request<Incoming>| {
+                        router.clone().call(request)
+                    });
+                    let _ = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+                        .serve_connection_with_upgrades(TokioIo::new(tls_stream), service)
+                        .await;
+                });
+            }
+        });
+
+        format!("localhost:{}", port)
     }
 
     #[cfg(feature = "http")]
     fn start_http_server(ip: IpAddr) -> String {
-        let (addr, fut) = warp::serve(warp_server()).bind_ephemeral((ip, 0));
+        let listener = std::net::TcpListener::bind((ip, 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
 
-        tokio::spawn(fut);
+        tokio::spawn(async move {
+            let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+            axum::serve(listener, router().into_make_service())
+                .await
+                .unwrap();
+        });
+
         format!("{}:{}", ip, addr.port())
     }
 

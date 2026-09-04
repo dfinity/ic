@@ -1985,11 +1985,6 @@ crate.spec(
     version = "^0.26.4",
 )
 crate.spec(
-    features = ["tls"],
-    package = "warp",
-    version = "^0.3.7",
-)
-crate.spec(
     features = [
         "wasmparser",
     ],
