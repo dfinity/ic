@@ -317,7 +317,7 @@ sequenceDiagram
     Note over Minter: balance detected: queue (deposit address, USDT) for sweeping.<br/>Scheduling hint only, no finality needed —<br/>a reorged deposit just wastes the sweep's gas
     Note over Minter,D: first sweep of this address only — sign with the deposit address' key (tECDSA):<br/>the one-time attestation of the account (principal, subaccount) and an EIP-7702<br/>authorization (delegate = SweeperContract), both recorded and reused by later sweeps
     Note over Minter,Sw: sweeper address already funded:<br/>ckETH burned from the fee account at funding time (R14)
-    Sw->>S: sweep tx on the sweeper's own nonce lane (R17), signed with path [3]:<br/>type 0x04 (0x02 once delegated), one token per tx, up to 20 deposits:<br/>sweepErc20Batch([(deposit address, principal, subaccount, attestation)], [USDT])
+    Sw->>S: sweep tx on the sweeper's own nonce lane (R17), signed with path [3]:<br/>type 0x04 (0x02 once delegated), one token per tx, up to 10 deposits:<br/>sweepErc20Batch([(deposit address, principal, subaccount, attestation)], [USDT])
     S->>D: sweepErc20 — delegated: SweeperContract's code runs as the deposit address
     Note right of D: ecrecover(attestation digest) must equal address(this):<br/>only the account attested by the deposit address' own key can be credited
     D->>T: approve(Helper, 250)
@@ -788,7 +788,7 @@ Sweeping is two background tasks feeding one transaction pipeline:
   token, because the delegate's batch entry point runs its whole token list
   against every deposit address it touches, so a mixed batch would pay a
   `balanceOf` on every `(address, token)` cross-product pair — most of them
-  holding nothing. Up to 20 deposits ride one transaction
+  holding nothing. Up to 10 deposits ride one transaction
   (`MAX_DEPOSITS_PER_SWEEP`, gas-bound). Per deposit the task signs the account
   attestation and the EIP-7702 authorization if it holds no recorded one yet —
   both are signed once per address, recorded, and reused by every later sweep.
@@ -799,9 +799,12 @@ Sweeping is two background tasks feeding one transaction pipeline:
 * The **send task** drives the sweeper pipeline through the same
   create → sign → send → resubmit → finalize state machine as user withdrawals,
   but signs with the sweeper derivation path `[3u8]` and tracks the sweeper
-  address' own transaction count (`R17`). A freshly enqueued sweep kicks it
-  immediately rather than waiting for its next tick: the mint follows the sweep
-  (step 4), so every interval spent waiting is crediting latency a user sees.
+  address' own transaction count (`R17`). The two tasks run on independent
+  timers — enqueue every minute, the pipeline every six
+  (`SWEEP_ENQUEUE_INTERVAL`, `PROCESS_SWEEPER_TRANSACTIONS_INTERVAL`) — so an
+  accepted sweep waits for the pipeline's next tick: since the mint follows the
+  sweep (step 4), those intervals bound the crediting latency a user sees on
+  top of detection.
   Confirmation is via transaction receipt, like withdrawals, emitting audit
   events (`R5`, `R8`).
 
@@ -1133,7 +1136,8 @@ tuple skipped by the protocol (e.g. stale nonce) makes the corresponding inner
 call hit a code-less address, which reverts the *whole* batch (atomic, funds
 safe, gas wasted — retry); mixed batches are fine (tuples only for
 not-yet-delegated addresses, already-delegated ones ride along without tuples);
-batch size is bounded only by gas (`N ≈ 20` per the sweeping policy in step 5).
+batch size is bounded by gas, and the sweeping policy caps it at `N = 10`
+(`MAX_DEPOSITS_PER_SWEEP`, step 5), comfortably under that bound.
 
 Delegation cannot be scoped to a single transaction: the original EIP-7702 draft
 was ephemeral but the final spec is persistent, tuples are all applied *before*
@@ -1329,7 +1333,7 @@ Notes:
   `balanceOf(address(this))` equals the amount `depositErc20` transfers. This is the
   same assumption as today's helper-contract deposit flow.
 * The integration harness deploys exactly this contract,
-  [`CkSweeperAttested.sol`](../minter/tests/deposit_from_cex_demo/CkSweeperAttested.sol).
+  [`CkSweeperAttested.sol`](../minter/CkSweeperAttested.sol).
 
 ### Test plan
 
@@ -1337,7 +1341,9 @@ A runnable end-to-end demonstration of the sweep mechanism (unfunded deposit EOA
 plain USDT-style transfers, single and batched type-`0x04` sweep transactions with gas
 paid by the minter, gas assertions) against a local dev node (any post-Pectra
 version) is available in
-[`deposit_from_cex_demo/`](../minter/tests/deposit_from_cex_demo/).
+[`deposit_from_cex_demo.rs`](../minter/tests/deposit_from_cex_demo.rs)
+(its Solidity support contracts sit in
+[`deposit_from_cex_demo/`](../minter/tests/deposit_from_cex_demo/)).
 It exercises the attested delegate against the *real*
 `DepositHelperWithSubaccount.sol` bytecode, asserting the emitted
 `ReceivedEthOrErc20` events carry the right principals, re-delegation of already
@@ -1410,7 +1416,8 @@ and HTTPS outcalls (both paid in cycles on the IC) and Ethereum gas (paid in ETH
 the sweeper address, backed by the fee account per `R14`). The scenarios below size a
 **single ERC-20 deposit to a fresh address, first sweep, under the decided
 helper-based sweep with one-time self-attestation**, for the two batch extremes
-and two latencies.
+— solo, and a full batch of 10 (`MAX_DEPOSITS_PER_SWEEP`, the sweeping policy's
+cap) — and two latencies.
 
 **Unit costs** — from the
 [IC cycle-cost reference](https://docs.internetcomputer.org/references/cycle-costs/),
@@ -1430,7 +1437,8 @@ logical × 3, each charged fully); reserved `max_response_bytes` ≈ 2 KB for sm
 at $2'500 and the attested harness' measured sweep gas (`ATTESTED_SCENARIOS`
 in the demo, all through the batch entry point): 98'075 gas for a single
 first-sweep deposit in a batch of one, 60'975 each at ten deposits of one
-token (609'750 total), 59'674 each at twenty (1'193'491).
+token (609'750 total), 59'674 each at twenty (1'193'491; the harness measures
+up to twenty, the production policy caps a batch at 10).
 
 **Detection schedule** — per armed `(address, token)` pair (each pair is one
 `balanceOf` sub-call), backing off over the 24h scanning window of
@@ -1463,8 +1471,8 @@ scan, and of addresses sharing its sweep):
 |---|---|---|---|---|---|
 | **B=1, swept ≤5 min** | 3 → $0.107 | ≈ $0.011 | **$0.118** | $0.25 | **$0.36** |
 | **B=1, swept ≤24h** | 3 → $0.107 | ≈ $0.037 | **$0.144** | $0.25 | **$0.39** |
-| **B=20, swept ≤5 min** | 2.05 → $0.073 | ≈ $0.0016 | **$0.075** | $0.15 | **$0.22** |
-| **B=20, swept ≤24h** | 2.05 → $0.073 | ≈ $0.0042 | **$0.077** | $0.15 | **$0.23** |
+| **B=10, swept ≤5 min** | 2.1 → $0.075 | ≈ $0.002 | **$0.077** | $0.15 | **$0.23** |
+| **B=10, swept ≤24h** | 2.1 → $0.075 | ≈ $0.006 | **$0.081** | $0.15 | **$0.23** |
 
 Signatures: one EIP-7702 authorization and one account attestation (both by the
 deposit key) plus one outer sweep-transaction signature (the sweeper key, shared
@@ -1472,7 +1480,7 @@ deposit key) plus one outer sweep-transaction signature (the sweeper key, shared
 window before detection; the sweep itself is enqueued as soon as the balance is
 seen (step 5), so latency only moves outcall cost. Ethereum gas is unchanged by
 latency and scales linearly with the gas price (B=1: $0.025 / $0.25 / $2.45 at
-0.1 / 1 / 10 gwei; B=20 ≈ 40% less).
+0.1 / 1 / 10 gwei; B=10 ≈ 38% less).
 
 **Takeaways:**
 
@@ -1481,8 +1489,8 @@ latency and scales linearly with the gas price (B=1: $0.025 / $0.25 / $2.45 at
   sub-cent even for a full-day solo scan.
 * **Ethereum gas is the swing factor**, with a crossover near **≈ 0.5 gwei**: below it
   the signatures set the floor, above it gas dominates.
-* **Batching trims gas by ≈ 40% and shares the outer signature**; the big win is
-  outcalls, collapsed ≈ 7×.
+* **Batching trims gas by ≈ 38% and shares the outer signature**; the big win is
+  outcalls, collapsed ≈ 5–6×.
 * **Fee floor (`R7`):** to break even excluding gas, `deposit_fee` must cover ≈ $0.08
   (batched) to ≈ $0.14 (solo, full-window scan) of IC resources plus the prevailing
   sweep gas — so at low gas the signatures, not the gas, set the floor. The estimate is
@@ -1593,7 +1601,7 @@ on.
 | Variant | Pros | Cons |
 |---|---|---|
 | **Single shared address** with permanent delegation (chosen): the delegate carries an empty payable `receive()` and attested `sweepEth`/`sweepEthBatch` entry points | One address, one authorization, one attestation per account — across assets; ETH sweeps reuse the whole ERC-20 sweeping machinery (`R14` gas, `R17` lane) | The delegate must accept ETH (guarded against sends to the implementation itself); a sender hard-coding the 21'000 gas limit fails against a delegated address — safely, at the sender (`R12`), and not observed at Binance/Kraken |
-| **Per-asset addresses** (previously chosen): ERC-20 address (schema 1, delegated once, permanently) + ETH address (schema 2, never delegated) | ETH address never has code → fixed-21'000-gas CEX withdrawals always work (`R12`), no failure window; ETH sweeps need no EIP-7702 at all (deposit pays its own gas, 21'000 gas, cheapest possible) | Two addresses per account to register/scan; user must use the right address per asset; ETH sweeps need their own send path (key-signed, fee-capped against the deposit) instead of reusing the sweeper lane. Kept as the fallback should an exchange's ETH withdrawal path prove incompatible with a delegated address |
+| **Per-asset addresses** (previously chosen): ERC-20 address (schema 1, delegated once, permanently) + ETH address (schema 2, never delegated) | ETH address never has code → fixed-21'000-gas CEX withdrawals always work (`R12`), no failure window; ETH sweeps need no EIP-7702 at all (a key-signed `depositEth` helper call, gas paid from the deposit) | Two addresses per account to register/scan; user must use the right address per asset; ETH sweeps need their own send path (key-signed, fee-capped against the deposit) instead of reusing the sweeper lane. Kept as the fallback should an exchange's ETH withdrawal path prove incompatible with a delegated address |
 | **Single shared address** with *set-and-clear* delegation (install delegate, sweep, re-delegate to `address(0)`) | One address per account | Two tECDSA signatures + ≈ 2 × 12'500–25'000 gas per sweep cycle; short window in which fixed-gas ETH transfers fail at the sender; more complex delegation lifecycle |
 
 ### What triggers detection (step 3)
