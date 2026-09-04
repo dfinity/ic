@@ -88,6 +88,7 @@ use ic_protobuf::registry::{
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::ReplicaVersionRecord,
     routing_table::v1::CanisterMigrations,
+    standard_engine_replica_version::v1::StandardEngineReplicaVersionRecord,
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
@@ -107,8 +108,8 @@ use ic_registry_keys::{
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
-    make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
-    make_unassigned_nodes_config_record_key,
+    make_replica_version_key, make_standard_engine_replica_version_record_key,
+    make_subnet_list_record_key, make_subnet_record_key, make_unassigned_nodes_config_record_key,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -367,6 +368,9 @@ enum SubCommand {
 
     /// Get the latest routing table.
     GetRoutingTable(GetRoutingTableCmd),
+
+    /// Get the replica version(s) that Cloud Engines run by default.
+    GetStandardEngineReplicaVersion,
 
     /// Get the last version of a subnet from the registry.
     GetSubnet(GetSubnetCmd),
@@ -4956,6 +4960,41 @@ async fn main() {
                 .map(|id_vec| format!("{:?}", PrincipalId::try_from(id_vec).unwrap()))
                 .collect();
             println!("{}", serde_json::to_string_pretty(&value).unwrap());
+        }
+        SubCommand::GetStandardEngineReplicaVersion => {
+            // The proto type does not derive Serialize.
+            #[derive(Debug, Serialize)]
+            struct StandardEngineReplicaVersion {
+                new_replica_version_id: String,
+                old_replica_version_id: String,
+                deployment_progress: f64,
+            }
+
+            let key = make_standard_engine_replica_version_record_key();
+            match registry_canister
+                .get_value_with_update(key.as_bytes().to_vec(), None)
+                .await
+            {
+                Ok((bytes, version)) => {
+                    let record = StandardEngineReplicaVersionRecord::decode(&bytes[..])
+                        .expect("Error decoding value from registry.");
+                    let record = StandardEngineReplicaVersion {
+                        new_replica_version_id: record.new_replica_version_id,
+                        old_replica_version_id: record.old_replica_version_id,
+                        deployment_progress: record.deployment_progress,
+                    };
+                    print_value(&key, version, record, opts.json);
+                }
+                Err(Error::KeyNotPresent(_)) => {
+                    println!(
+                        "There is no {key} record in the registry: no standard engine \
+                         replica version has been set yet."
+                    );
+                }
+                Err(error) => {
+                    panic!("Error getting value from registry: {error:?}");
+                }
+            }
         }
         SubCommand::GetGuestOSVersion(get_guestos_version_cmd) => {
             let key = make_replica_version_key(&get_guestos_version_cmd.guestos_version_id)
