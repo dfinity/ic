@@ -123,8 +123,10 @@ const AWAIT_DEADLINE: Duration = Duration::from_secs(60);
 const SCAN_TICK: Duration = Duration::from_secs(BALANCE_SCAN_INTERVAL.as_secs() + 5);
 
 /// A budget, not a cost: one tick refreshes the latest block height the scan needs, the next scans;
-/// the spares cover a tick lost to an outcall the jump timed out.
-const SCAN_TICKS: u32 = 4;
+/// the spares cover a tick lost to an outcall the jump timed out, and the blocks the pair's
+/// block-based backoff gap demands before it is due again — up to 300 block-seconds (25 blocks)
+/// once an address has been scanned a few times, against the ~10 blocks each tick's settle mines.
+const SCAN_TICKS: u32 = 8;
 
 /// A budget, not a cost: the sweep path crosses the enqueue, send, and finalization timers, and
 /// driving stops the moment the expected transactions are on chain.
@@ -334,28 +336,47 @@ impl LiveSetup<CkErc20Setup> {
         }
     }
 
-    /// Waits until the minter's periodic balance scan has scanned `caller`'s deposit address —
-    /// observed through `deposit_erc20`'s own status — and returns that response. An address counts
-    /// as scanned once its status is `Scanning` with `scan_count >= 1` (a below-minimum address,
-    /// advanced in place) or `AwaitingSweep` (a funded address, detected and queued). Either proves
-    /// the `eth_call` against anvil succeeded and decoded, since a failing batch never advances or
-    /// queues an address. Buys balance-scan ticks rather than waiting the interval out, and panics
-    /// if no scan completes within [`SCAN_TICKS`] of them.
+    /// Waits until the minter's periodic balance scan has scanned `caller`'s deposit address *at a
+    /// block where its funding is visible* — observed through `deposit_erc20`'s own status — and
+    /// returns that response. An address counts as scanned once its status is `AwaitingSweep` (a
+    /// funded address, detected and queued — terminal by construction) or `Scanning` with
+    /// `scan_count >= 1` and a `last_scanned_block` at or past the chain head as of entry (a
+    /// below-minimum address, advanced in place). Either proves the `eth_call` against anvil
+    /// succeeded, decoded, and read the funded balance. Buys balance-scan ticks rather than waiting
+    /// the interval out, and panics if no such scan completes within [`SCAN_TICKS`] of them.
+    ///
+    /// The pinned-block requirement is what makes the wait sound: the scan reads every balance at
+    /// the minter's *cached* latest block height, refreshed on its own thirty-second timer — so a
+    /// scan can run after [`Self::credit_deposits`] funded the addresses and still read them at a
+    /// pre-funding block, bumping `scan_count` without having seen the funds. Accepting any
+    /// `scan_count >= 1` returned that transient verdict and made the caller's `AwaitingSweep`
+    /// assertion flaky; a scan pinned at or past the entry head (the funding is mined before a
+    /// test awaits its scan) cannot have missed the balance.
     pub fn await_scan(
         &self,
         caller: Principal,
         subaccount: [u8; 32],
         token: &Erc20Token,
     ) -> DepositErc20Response {
+        let funded_by = Nat::from(self.anvil.block_number());
         let mut scanned = None;
         self.drive_until_with(
             SCAN_TICK,
             SCAN_TICKS,
-            |_| "the deposit address was not scanned".to_string(),
+            |_| format!("the deposit address was not scanned at or past block {funded_by}"),
             |setup| {
                 let progress = setup.deposit_erc20(caller, subaccount, token);
                 let is_scanned = match &progress.status {
-                    DepositStatus::Scanning { scan_count, .. } => *scan_count >= 1,
+                    DepositStatus::Scanning {
+                        scan_count,
+                        last_scanned_block,
+                        ..
+                    } => {
+                        *scan_count >= 1
+                            && last_scanned_block
+                                .as_ref()
+                                .is_some_and(|block| *block >= funded_by)
+                    }
                     DepositStatus::AwaitingSweep(_) => true,
                 };
                 if is_scanned {
