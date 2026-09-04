@@ -34,6 +34,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             interrupted_during_execution: item.interrupted_during_execution,
             certified_data: item.certified_data.clone(),
             consumed_cycles: Some((&item.consumed_cycles).into()),
+            consumed_cycles_as_counter: Some((&item.consumed_cycles_as_counter).into()),
             stable_memory_size64: item.stable_memory_size.get() as u64,
             heap_delta_debit: item.heap_delta_debit.get(),
             install_code_debit: item.install_code_debit.get(),
@@ -102,6 +103,14 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         let consumed_cycles =
             try_from_option_field(value.consumed_cycles, "CanisterStateBits::consumed_cycles")
                 .unwrap_or_default();
+        // Absent in checkpoints written before the field was introduced; the
+        // scheduler backfills it from `consumed_cycles` (see
+        // `SystemState::migrate_consumed_cycles_to_counter`).
+        let consumed_cycles_as_counter: NominalCycles = try_from_option_field(
+            value.consumed_cycles_as_counter,
+            "CanisterStateBits::consumed_cycles_as_counter",
+        )
+        .unwrap_or_default();
 
         let mut controllers = BTreeSet::new();
         for controller in value.controllers.into_iter() {
@@ -191,6 +200,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             interrupted_during_execution: value.interrupted_during_execution,
             certified_data: value.certified_data,
             consumed_cycles,
+            consumed_cycles_as_counter,
             stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
             heap_delta_debit: NumBytes::from(value.heap_delta_debit),
             install_code_debit: NumInstructions::from(value.install_code_debit),

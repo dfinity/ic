@@ -19,6 +19,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types_cycles::NominalCyclesTesting;
 use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles};
 use itertools::Itertools;
 use proptest::prelude::*;
@@ -45,6 +46,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         interrupted_during_execution: 0,
         certified_data: vec![],
         consumed_cycles: NominalCycles::zero(),
+        consumed_cycles_as_counter: NominalCycles::zero(),
         stable_memory_size: NumWasmPages::from(0),
         heap_delta_debit: NumBytes::from(0),
         install_code_debit: NumInstructions::from(0),
@@ -132,6 +134,51 @@ fn test_encode_decode_non_empty_controllers() {
     expected_controllers.insert(canister_test_id(0).get());
     expected_controllers.insert(IC_00.into());
     assert_eq!(canister_state_bits.controllers, expected_controllers);
+}
+
+#[test]
+fn test_encode_decode_consumed_cycles_as_counter() {
+    let canister_state_bits = CanisterStateBits {
+        consumed_cycles: NominalCycles::new(1000),
+        consumed_cycles_as_counter: NominalCycles::new(900),
+        ..default_canister_state_bits()
+    };
+
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+
+    assert_eq!(
+        canister_state_bits.consumed_cycles,
+        NominalCycles::new(1000)
+    );
+    assert_eq!(
+        canister_state_bits.consumed_cycles_as_counter,
+        NominalCycles::new(900)
+    );
+}
+
+/// The field is absent in checkpoints written before it was introduced; the
+/// scheduler backfills it from `consumed_cycles`.
+#[test]
+fn test_decode_missing_consumed_cycles_as_counter() {
+    let canister_state_bits = CanisterStateBits {
+        consumed_cycles: NominalCycles::new(1000),
+        consumed_cycles_as_counter: NominalCycles::new(900),
+        ..default_canister_state_bits()
+    };
+
+    let mut pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    pb_bits.consumed_cycles_as_counter = None;
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+
+    assert_eq!(
+        canister_state_bits.consumed_cycles,
+        NominalCycles::new(1000)
+    );
+    assert_eq!(
+        canister_state_bits.consumed_cycles_as_counter,
+        NominalCycles::zero()
+    );
 }
 
 #[test]

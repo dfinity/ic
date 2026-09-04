@@ -1126,6 +1126,22 @@ impl SchedulerImpl {
 
                 // Abort all paused execution before the checkpoint.
                 abort_all_paused_executions(state, &self.exec_env, cost_schedule, &self.log);
+
+                // Backfill the monotonic `consumed_cycles_as_counter` of every
+                // canister from its `consumed_cycles` gauge, which predates it.
+                //
+                // Only done on checkpoint rounds, and only after the paused
+                // executions above have been aborted: a paused execution holds a
+                // prepayment that is not part of the replicated state, which would
+                // make the backfill overestimate the counter (see
+                // `SystemState::outstanding_prepayments`). Aborting materializes
+                // those prepayments into the canisters' task queues.
+                //
+                // Unconditional and idempotent, like
+                // `migrate_outcalls_cycles_to_use_cases` above: it is a no-op once a
+                // canister has been backfilled, and self-healing if a downgrade
+                // dropped the counter.
+                migrate_consumed_cycles_to_counters(state);
             }
             ExecutionRoundType::OrdinaryRound => {
                 self.abort_paused_executions_above_limit(state);
@@ -2160,4 +2176,47 @@ pub fn abort_all_paused_executions(
     for canister in canister_states.hot_values_mut() {
         abort_canister(canister, subnet_schedule, exec_env, cost_schedule, log);
     }
+}
+
+/// Backfills the monotonic `CanisterMetrics::consumed_cycles_as_counter` of every
+/// canister from its `consumed_cycles` gauge, which predates it and thus holds the
+/// full history. See `SystemState::migrate_consumed_cycles_to_counter`.
+///
+/// Must only be called with no paused executions left (i.e. on a checkpoint round,
+/// after `abort_all_paused_executions`); canisters that still have one are skipped,
+/// as their prepayment is not part of the replicated state.
+fn migrate_consumed_cycles_to_counters(state: &mut ReplicatedState) {
+    state.canisters_for_each_mut(|_id, canister| {
+        let metrics = canister.system_state.canister_metrics();
+        // A canister with a paused execution is skipped, its prepayment is not part
+        // of the replicated state. This should not happen when called as documented,
+        // but it is not worth a panic.
+        let Some(outstanding) = canister.system_state.outstanding_prepayments() else {
+            debug_assert!(false, "Called with a paused execution left over");
+            return;
+        };
+        let derived = metrics.consumed_cycles() - outstanding;
+        match derived.cmp(&metrics.consumed_cycles_as_counter()) {
+            // Not backfilled yet, or a downgrade dropped the counter. Only take a
+            // mutable reference here, so that this stays a read-only pass once every
+            // canister has been backfilled (`Arc::make_mut` clones the canister).
+            std::cmp::Ordering::Greater => {
+                Arc::make_mut(canister)
+                    .system_state
+                    .migrate_consumed_cycles_to_counter();
+            }
+            // The invariant that makes the backfill exact; see
+            // `SystemState::outstanding_prepayments`.
+            std::cmp::Ordering::Equal => {}
+            std::cmp::Ordering::Less => debug_assert!(
+                false,
+                "Canister {}: consumed cycles counter {} above the gauge {} net of the \
+                 {} outstanding prepayments",
+                canister.canister_id(),
+                metrics.consumed_cycles_as_counter(),
+                metrics.consumed_cycles(),
+                outstanding,
+            ),
+        }
+    });
 }

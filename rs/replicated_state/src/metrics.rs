@@ -164,7 +164,9 @@ impl ReplicatedStateMetrics {
             ),
             consumed_cycles: metrics_registry.gauge(
                 "replicated_state_consumed_cycles_since_replica_started",
-                "Number of cycles consumed",
+                "Number of cycles consumed. Monotonic, except across replica \
+                 restarts and subnet splits: a prepayment is only accounted for \
+                 once the refund it produces is known.",
             ),
             consumed_cycles_by_use_case: metrics_registry.gauge_vec(
                 "replicated_state_consumed_cycles_from_replica_start",
@@ -416,6 +418,7 @@ impl ReplicatedStateMetrics {
 
         let mut consumed_cycles_total_by_use_case = BTreeMap::new();
         let mut consumed_cycles_total_by_use_case_as_counters = BTreeMap::new();
+        let mut consumed_cycles_by_canisters_as_counter = NominalCycles::zero();
 
         let mut ingress_queue_message_count = 0;
         let mut ingress_queue_size_bytes = 0;
@@ -480,6 +483,10 @@ impl ReplicatedStateMetrics {
                     .canister_metrics()
                     .consumed_cycles_by_use_cases(),
             );
+            consumed_cycles_by_canisters_as_counter += canister
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_as_counter();
             // For the purpose of exporting the total counters to prometheus, filter out HTTPS
             // outcalls from canister level metrics as they will be added later from the subnet level metrics.
             // This only applies for the counter version of metrics as the gauge version only updates
@@ -570,14 +577,24 @@ impl ReplicatedStateMetrics {
                 .get_consumed_cycles_by_use_case(),
         );
 
-        // Read from the shared definition rather than re-folding, so the gauge cannot
-        // drift from the certified state tree. The per-use-case breakdowns below do
-        // still fold over the canisters, as no aggregate holds them.
+        // The monotonic counterpart of the certified
+        // `SubnetMetrics::consumed_cycles_total_including_canisters()`, from which it
+        // differs by exactly the prepayments whose refund is not known yet: the
+        // subnet-level aggregate (monotonic already, as subnet-level use cases are
+        // never refunded and a deleted canister's consumption is moved into
+        // `consumed_cycles_by_deleted_canisters`) plus the canisters' monotonic
+        // counters. Exported in place of the certified total, which it tracks
+        // closely, so that existing rules and dashboards need no change.
+        //
+        // Still a gauge, not a Prometheus `Counter`: the value is recomputed from the
+        // state, so a replica resuming from a checkpoint re-exports a lower value
+        // than it had reached before; and an online subnet split hands the migrating
+        // canisters' consumption over to the other subnet (retaining it here would
+        // count it on both). Both need the same high water mark treatment as the
+        // non-monotonic value did.
         self.consumed_cycles.set(
-            state
-                .metadata
-                .subnet_metrics
-                .consumed_cycles_total_including_canisters()
+            (state.metadata.subnet_metrics.consumed_cycles_total()
+                + consumed_cycles_by_canisters_as_counter)
                 .get() as f64,
         );
 

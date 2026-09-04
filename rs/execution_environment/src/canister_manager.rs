@@ -1379,6 +1379,13 @@ impl CanisterManager {
         );
 
         // Leftover cycles in the canister are considered `consumed`.
+        //
+        // Note that the canister's `consumed_cycles` gauge (rather than its monotonic
+        // `consumed_cycles_as_counter`) is what is moved into the subnet metrics
+        // below. The two are equal here: a canister can only be deleted while
+        // `Stopped` and with empty queues, so it has no callback and no execution
+        // left holding an outstanding prepayment (see
+        // `SystemState::outstanding_prepayments`).
         let leftover_cycles = self
             .cycles_account_manager
             .leftover_cycles_for_canister_to_deleted(
