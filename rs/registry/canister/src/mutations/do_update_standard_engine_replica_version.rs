@@ -487,7 +487,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected.")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn should_panic_if_new_version_not_elected() {
         // Step 1: Prepare the world.
         let mut registry = REGISTRY.clone();
@@ -507,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't elected.")]
+    #[should_panic(expected = "Using a replica version that isn't elected")]
     fn should_panic_if_old_version_not_elected() {
         // Step 1: Prepare the world.
         let mut registry = REGISTRY.clone();

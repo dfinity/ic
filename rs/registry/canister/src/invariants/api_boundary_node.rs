@@ -6,7 +6,7 @@ use std::{
 use ic_base_types::NodeId;
 
 use super::common::{
-    InvariantCheckError, RegistrySnapshot, get_api_boundary_node_ids_from_snapshot,
+    InvariantCheckError, RegistrySnapshot, get_api_boundary_node_records_from_snapshot,
     get_node_record_from_snapshot,
 };
 
@@ -28,8 +28,7 @@ pub(crate) fn check_api_boundary_node_invariants(
     // - An attempt to read the related NodeRecord for an API BN would fail and cause ReadRegistryError::Transient()
     // - Transient registry errors are retried in `message_route.rs` code. However, in this case it's not helpful, the error is persistent in nature
     // - As a result, the subnet is stalled
-    let api_boundary_node_ids = get_api_boundary_node_ids_from_snapshot(snapshot)?;
-    for api_bn_id in api_boundary_node_ids {
+    for api_bn_id in get_api_boundary_node_records_from_snapshot(snapshot).into_keys() {
         let node_record = get_node_record_from_snapshot(api_bn_id, snapshot)?;
         let Some(node_record) = node_record else {
             return Err(InvariantCheckError {

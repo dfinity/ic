@@ -408,7 +408,7 @@ mod tests {
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
-            replica_version_id: ReplicaVersion::from_str("").unwrap(),
+            replica_version_id: ReplicaVersion::from_str("123").unwrap(),
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
             initial_chain_key_configs_to_request: None,
