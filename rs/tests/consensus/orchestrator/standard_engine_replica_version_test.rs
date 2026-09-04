@@ -92,7 +92,7 @@ use futures::future;
 use ic_base_types::SubnetId;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_upgrade_common::elect_target_version;
-use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version_with_time, get_assigned_replica_version,
 };
@@ -109,8 +109,7 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Node},
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            NnsCustomizations, TopologySnapshot,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, TopologySnapshot,
         },
     },
     nns::{
@@ -187,10 +186,7 @@ fn setup(env: TestEnv) {
         .expect("failed to setup IC under test");
 
     info!(logger, "[Step 1] Install NNS.");
-    install_nns_with_customizations_and_check_progress(
-        env.topology_snapshot(),
-        NnsCustomizations::default(),
-    );
+    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 /// Creates a Cloud Engine with a blank `replica_version_id` out of
