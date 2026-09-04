@@ -461,6 +461,22 @@ with Phase 2):
 | **Single shared address** with *set-and-clear* delegation (install delegate, sweep, re-delegate to `address(0)`) | One address per account | Two tECDSA signatures + ≈ 2 × 12'500–25'000 gas per sweep cycle; short window in which fixed-gas ETH transfers fail at the sender; more complex delegation lifecycle |
 | **Single shared address** with permanent delegation | One address, one authorization ever | Breaks ETH deposits entirely: plain sends to a delegated address without `receive()` revert — funds bounce at the CEX (`R12` holds, but ETH deposits are impossible) |
 
+**Mainnet data point (2026-09-04, DEFI-2993,
+[#11449](https://github.com/dfinity/ic/pull/11449)):** with an empty payable
+`receive()` on the delegate (kept empty to fit the 2'300-gas `transfer`/`send`
+stipend) plus attested `sweepEth`/`sweepEthBatch` entry points, real ETH
+withdrawals from **Binance** and **Kraken** both reached an
+EIP-7702-delegated address — top-level sends with gas limits of 207'128 (flat)
+and 31'830 (estimate-based) respectively, 21'055 gas used in both cases,
+matching the anvil measurement exactly — and were swept back permissionlessly.
+Neither exchange hardcodes a 21'000 gas limit or refuses an address carrying a
+delegation designator, so the third variant's "ETH deposits are impossible"
+did not materialize for these two exchanges. The per-asset split stays the
+decided default (exchange behavior is heterogeneous and contract-batched
+withdrawal paths, where the 2'300-gas stipend could still bite, remain
+untested), but the shared permanently-delegated address is a viable Phase 2
+candidate; per-exchange results in DEFI-2993.
+
 ### Step 2: Withdraw from the CEX to the deposit address
 
 The user pastes the deposit address into the exchange withdrawal form; the CEX
