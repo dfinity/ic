@@ -379,6 +379,26 @@ impl Anvil {
             .unwrap_or_else(|e| panic!("not a u64 transaction count {count}: {e}"))
     }
 
+    pub fn authorization_nonces(&self, tx_hash: &str) -> Vec<u64> {
+        let transaction = self.rpc("eth_getTransactionByHash", serde_json::json!([tx_hash]));
+        assert!(
+            !transaction.is_null(),
+            "no transaction {tx_hash} on the chain"
+        );
+        transaction["authorizationList"]
+            .as_array()
+            .unwrap_or_else(|| panic!("transaction {tx_hash} carries no authorization list"))
+            .iter()
+            .map(|tuple| {
+                let nonce = tuple["nonce"].as_str().unwrap_or_else(|| {
+                    panic!("authorization tuple of {tx_hash} has no hex nonce: {tuple}")
+                });
+                u64::from_str_radix(nonce.trim_start_matches("0x"), 16)
+                    .unwrap_or_else(|e| panic!("not a u64 nonce {nonce}: {e}"))
+            })
+            .collect()
+    }
+
     /// Credits `address` with `wei` of ETH (foundry's `anvil_setBalance`). The minter's sweeper
     /// address is funded this way rather than through the ckETH burn-and-withdraw pipeline, which is
     /// a separate concern from sweeping.
@@ -620,6 +640,12 @@ fn decode_address(data: &[u8]) -> Address {
     Address::new(
         <[u8; 20]>::try_from(&data[12..32]).expect("a 32-byte word holds a 20-byte address"),
     )
+}
+
+pub fn delegation_designator(delegate: &Address) -> Vec<u8> {
+    let mut designator = vec![0xef, 0x01, 0x00];
+    designator.extend_from_slice(delegate.as_ref());
+    designator
 }
 
 /// What a transaction the harness went looking for actually did on chain.
