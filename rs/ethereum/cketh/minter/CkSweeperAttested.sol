@@ -33,16 +33,22 @@ struct SweepItem {
 /// its (r, s, v) components.
 contract CkSweeperAttested {
     address private immutable HELPER;
+    address private immutable SELF;
 
     constructor(address helper) {
         HELPER = helper;
+        SELF = address(this);
     }
 
-    /// Accepts plain ETH sends to a delegated deposit address. Deliberately
-    /// empty: batched CEX withdrawals may forward value with only the 2'300-gas
-    /// `transfer`/`send` stipend, which any extra logic would exceed, and
-    /// detection is balance-based so no event is needed.
-    receive() external payable {}
+    /// Accepts plain ETH sends to a delegated deposit address, but not to the
+    /// implementation itself: no attestation can ever recover to the contract's
+    /// own address, so ETH landing there would be locked forever. Otherwise
+    /// deliberately minimal: batched CEX withdrawals may forward value with only
+    /// the 2'300-gas `transfer`/`send` stipend, and detection is balance-based
+    /// so no event is needed.
+    receive() external payable {
+        require(address(this) != SELF, "implementation cannot be swept");
+    }
 
     /// The attestation digest: keccak256 over a fixed-length, domain-separated
     /// preimage. The ASCII prefix (first byte 0x63) cannot collide with typed

@@ -646,6 +646,70 @@ fn attested_sweep_moves_plain_eth_to_the_minter() {
     assert_eq!(events[0].amount, ETH_DEPOSIT_AMOUNT);
 }
 
+#[test]
+fn a_stipend_transfer_from_a_contract_reaches_a_delegated_deposit_address() {
+    let anvil = Anvil::start();
+    let chain_id = anvil.chain_id();
+
+    let minter_key = key_from_hex(MINTER_PRIVATE_KEY);
+    let minter = eth_address(&minter_key.public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+
+    let Contracts { attested, .. } = deploy_contracts(&anvil, &minter, &cex);
+    let forwarder = anvil.deploy(
+        &cex,
+        &deploy_code(&compile("STIPEND_FORWARDER_SOL", "StipendForwarder"), &[]),
+    );
+
+    let key = derive_deposit_key(&Principal::self_authenticating([0xE8]));
+    let deposit = eth_address(&key.public_key());
+    let delegate_only = ICkSweeperAttested::sweepEthBatchCall { items: vec![] }.abi_encode();
+    assert!(
+        status_ok(&anvil.send_eip7702(
+            &minter_key,
+            chain_id,
+            &attested,
+            delegate_only,
+            vec![sign_authorization(&key, chain_id, &attested, 0)]
+        )),
+        "delegation setup reverted"
+    );
+    assert!(!anvil.code(&deposit).is_empty(), "deposit not delegated");
+
+    let tx = anvil.send_transaction_with_value(
+        &cex,
+        Some(&forwarder),
+        &IStipendForwarder::forwardCall {
+            to: alloy_address(&deposit),
+        }
+        .abi_encode(),
+        None,
+        Some(ETH_DEPOSIT_AMOUNT),
+    );
+    assert!(
+        status_ok(&anvil.await_receipt(&tx)),
+        "a 2'300-gas-stipend transfer into the delegated receive() must succeed"
+    );
+    assert_eq!(anvil.balance(&deposit), ETH_DEPOSIT_AMOUNT);
+}
+
+#[test]
+fn the_sweeper_implementation_rejects_plain_eth() {
+    let anvil = Anvil::start();
+
+    let minter = eth_address(&key_from_hex(MINTER_PRIVATE_KEY).public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+
+    let Contracts { attested, .. } = deploy_contracts(&anvil, &minter, &cex);
+
+    let receipt = anvil.send_eth(&cex, &attested, ETH_DEPOSIT_AMOUNT, Some(50_000));
+    assert!(
+        !status_ok(&receipt),
+        "ETH sent to the implementation contract would be locked forever, so it must bounce"
+    );
+    assert_eq!(anvil.balance(&attested), 0);
+}
+
 struct Contracts {
     usdt: Address,
     helper: Address,
@@ -1101,6 +1165,12 @@ sol! {
         uint8 v;
     }
 
+    /// `StipendForwarder.sol`: forwards ETH with `transfer`'s 2'300-gas stipend,
+    /// the worst-case sender profile of a contract-batched CEX withdrawal.
+    interface IStipendForwarder {
+        function forward(address to) external payable;
+    }
+
     interface ICkSweeperAttested {
         function sweepErc20(
             address[] tokens,
@@ -1330,12 +1400,26 @@ impl Anvil {
         data: &[u8],
         gas: Option<u64>,
     ) -> String {
+        self.send_transaction_with_value(from, to, data, gas, None)
+    }
+
+    fn send_transaction_with_value(
+        &self,
+        from: &Address,
+        to: Option<&Address>,
+        data: &[u8],
+        gas: Option<u64>,
+        value: Option<u128>,
+    ) -> String {
         let mut tx = serde_json::json!({"from": to_hex(from.as_ref()), "input": to_hex(data)});
         if let Some(to) = to {
             tx["to"] = serde_json::json!(to_hex(to.as_ref()));
         }
         if let Some(gas) = gas {
             tx["gas"] = serde_json::json!(format!("0x{gas:x}"));
+        }
+        if let Some(value) = value {
+            tx["value"] = serde_json::json!(format!("0x{value:x}"));
         }
         self.rpc("eth_sendTransaction", serde_json::json!([tx]))
             .as_str()

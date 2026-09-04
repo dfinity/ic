@@ -461,21 +461,38 @@ with Phase 2):
 | **Single shared address** with *set-and-clear* delegation (install delegate, sweep, re-delegate to `address(0)`) | One address per account | Two tECDSA signatures + ≈ 2 × 12'500–25'000 gas per sweep cycle; short window in which fixed-gas ETH transfers fail at the sender; more complex delegation lifecycle |
 | **Single shared address** with permanent delegation | One address, one authorization ever | Breaks ETH deposits entirely: plain sends to a delegated address without `receive()` revert — funds bounce at the CEX (`R12` holds, but ETH deposits are impossible) |
 
-**Mainnet data point (2026-09-04, DEFI-2993,
+**Mainnet data point (2026-09-04,
 [#11449](https://github.com/dfinity/ic/pull/11449)):** with an empty payable
-`receive()` on the delegate (kept empty to fit the 2'300-gas `transfer`/`send`
-stipend) plus attested `sweepEth`/`sweepEthBatch` entry points, real ETH
-withdrawals from **Binance** and **Kraken** both reached an
-EIP-7702-delegated address — top-level sends with gas limits of 207'128 (flat)
-and 31'830 (estimate-based) respectively, 21'055 gas used in both cases,
-matching the anvil measurement exactly — and were swept back permissionlessly.
+`receive()` on the delegate (kept minimal to fit the 2'300-gas
+`transfer`/`send` stipend) plus attested `sweepEth`/`sweepEthBatch` entry
+points, real ETH withdrawals from **Binance**
+([before delegation](https://etherscan.io/tx/0xaa13310032da7fc310f451f23d013e4b9e69c24bd201ac5cc57b54b15b0afbf2),
+[after](https://etherscan.io/tx/0x59cbb83ac893da16789b15d0494b7c3e5f382e1254f259d9c6fbcef5e45747c1))
+and **Kraken**
+([after](https://etherscan.io/tx/0x3b1dbd6c29b5f56d71c0ce1baae931f8e519852775be199fe62575ba6361b864))
+reached the delegated deposit EOA
+[`0x5e5402ed…`](https://etherscan.io/address/0x5e5402edfe155b5116f1f84d0b97b9e74f5ebc85),
+delegated to the sweeper
+[`0x3983baa1…`](https://etherscan.io/address/0x3983baa1703f69e76669768164c822918e843a25)
+— top-level sends with gas limits of 207'128 (flat) and 31'830
+(estimate-based) respectively, 21'055 gas used in both cases, matching the
+anvil measurement exactly. The funds were swept back permissionlessly through
+a private helper deployment
+[`0x3fc2640f…`](https://etherscan.io/address/0x3fc2640f8529cfafc5bf47ca2bcd05eb51d94c7b)
+to the EOA standing in for the minter,
+[`0x91eba053…`](https://etherscan.io/address/0x91eba053fc03bcac1328de38925f0a1ab9dba586):
+[delegation + first sweep](https://etherscan.io/tx/0x909cab5a08442b7ede39752cb25b497c72d5992cd0fc8c6ee9ac888eb9ff6c98)
+(type-4),
+[second Binance sweep](https://etherscan.io/tx/0xc8e7df2413212215ef2dd27b603d92b99a04ef180b8fa87eebdf6787d4cb715a)
+and
+[Kraken sweep](https://etherscan.io/tx/0x8e7f014001124afe3294f709971ed2de67f7e89f8f338724044af7a75acad8f2).
 Neither exchange hardcodes a 21'000 gas limit or refuses an address carrying a
 delegation designator, so the third variant's "ETH deposits are impossible"
 did not materialize for these two exchanges. The per-asset split stays the
 decided default (exchange behavior is heterogeneous and contract-batched
 withdrawal paths, where the 2'300-gas stipend could still bite, remain
 untested), but the shared permanently-delegated address is a viable Phase 2
-candidate; per-exchange results in DEFI-2993.
+candidate.
 
 ### Step 2: Withdraw from the CEX to the deposit address
 
@@ -1061,10 +1078,16 @@ Notes:
   is the EOA, so the batch gate cannot be written as `msg.sender == address(this)`.
 * The approval is for exactly `balance` and is consumed in full within the same
   call — no standing allowance toward the helper ever survives a sweep.
-* No `receive()`/`fallback` and no ETH sweep entry point on purpose: plain ETH
-  sends to a delegated ERC-20 address must fail rather than be silently accepted
-  (`R12`); Phase 2 ETH addresses are never delegated and sweep via a key-signed
-  `depositEth` call (step 5).
+* The delegate carries an empty payable `receive()` — guarded to revert on the
+  implementation address itself, where no attestation can ever recover and ETH
+  would be locked — plus attested `sweepEth`/`sweepEthBatch` entry points that
+  forward the balance through the helper's `depositEth`
+  ([#11449](https://github.com/dfinity/ic/pull/11449)). This keeps the
+  single-shared-address variant open for Phase 2 (see the mainnet data point in
+  step 1); under the decided per-asset layout the schema-2 ETH addresses are
+  never delegated and sweep via a key-signed `depositEth` call (step 5), and a
+  plain ETH send to a delegated ERC-20 address is accepted as a recoverable
+  wrong-asset deposit (see Non-goals) rather than bounced.
 * Reentrancy is moot: no storage, and funds can only move through the helper
   toward the minter's main address.
 * Supported tokens are assumed standard: non-fee-on-transfer and non-rebasing, so
