@@ -7,6 +7,7 @@ use std::sync::Arc;
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
 use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_https_outcalls_consensus::payload_builder::{CanisterHttpPayloadBuilderImpl, PastPayloads};
 use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
@@ -44,7 +45,6 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
-use rayon::{ThreadPool, ThreadPoolBuilder};
 
 /// Registry version that the whole benchmark operates at. The subnet record,
 /// the node signing keys and the responses' metadata all use this version.
@@ -52,21 +52,6 @@ const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
 /// `min_responses` of the benchmark's flexible requests.
 const FLEXIBLE_MIN_RESPONSES: u32 = 1;
-
-/// Number of threads of the payload builder's thread pool. Matches
-/// `ic_consensus::consensus::MAX_CONSENSUS_THREADS`, i.e. the size of the pool
-/// the payload builder is given in production.
-const NUM_THREADS: usize = 16;
-
-/// The thread pool the benchmarked payload builder verifies signatures on.
-fn thread_pool() -> Arc<ThreadPool> {
-    Arc::new(
-        ThreadPoolBuilder::new()
-            .num_threads(NUM_THREADS)
-            .build()
-            .expect("Failed to create thread pool"),
-    )
-}
 
 /// A single benchmark configuration. Adjust the counts and `response_size` to
 /// benchmark different payload shapes.
@@ -248,7 +233,7 @@ fn build_target(
         deps.pool.get_cache(),
         crypto,
         state_manager,
-        thread_pool(),
+        build_thread_pool(MAX_CONSENSUS_THREADS),
         subnet_id,
         registry_client.clone(),
         &MetricsRegistry::new(),

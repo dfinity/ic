@@ -110,6 +110,7 @@ rust_bench(
         ":consensus",
         "//rs/config",
         "//rs/consensus/mocks",
+        "//rs/consensus/utils",
         "//rs/crypto/temp_crypto",
         "//rs/https_outcalls/pricing",
         "//rs/interfaces",

@@ -12,6 +12,7 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+use ic_consensus_utils::build_thread_pool;
 use ic_error_types::RejectCode;
 use ic_https_outcalls_pricing::fees::{
     consensus_fee, flexible_initial_spent, max_usage_fee, min_flexible_consensus_cost,
@@ -71,7 +72,6 @@ use ic_types::{
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use rand::Rng;
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
-use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::DerefMut,
@@ -1987,16 +1987,10 @@ pub(crate) fn metadata_to_shares(
         .collect()
 }
 
-/// The thread pool the payload builder under test verifies signatures on.
-/// We use only 1 thread to avoid non-deterministic test failures.
-fn test_thread_pool() -> Arc<ThreadPool> {
-    Arc::new(
-        ThreadPoolBuilder::new()
-            .num_threads(1)
-            .build()
-            .expect("Failed to create thread pool"),
-    )
-}
+/// The number of threads of the thread pool the payload builder under test
+/// verifies signatures on. We use only 1 thread to avoid non-deterministic test
+/// failures.
+const TEST_THREADS: usize = 1;
 
 /// Mock up a test node, which has the feature enabled
 pub(crate) fn test_config_with_http_feature<T>(
@@ -2037,7 +2031,7 @@ pub(crate) fn test_config_with_http_feature<T>(
             pool.get_cache(),
             crypto,
             state_manager,
-            test_thread_pool(),
+            build_thread_pool(TEST_THREADS),
             subnet_test_id(0),
             registry,
             &MetricsRegistry::new(),
