@@ -1301,6 +1301,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
             topic: item.topic.and_then(topic_id_to_api),
+            execution_reply: item.execution_reply,
         }
     }
 }
@@ -1334,6 +1335,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
             topic: item.topic.map(|topic| i32::from(pb::Topic::from(topic))),
+            execution_reply: item.execution_reply,
         }
     }
 }

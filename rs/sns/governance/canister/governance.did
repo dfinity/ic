@@ -703,6 +703,7 @@ type ProposalData = record {
   is_eligible_for_rewards : bool;
   executed_timestamp_seconds : nat64;
   topic : opt Topic;
+  execution_reply : opt blob;
 };
 
 type ProposalId = record {
