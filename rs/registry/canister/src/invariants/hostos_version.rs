@@ -31,7 +31,7 @@ pub(crate) fn check_hostos_version_invariants(
     let elected_set: BTreeSet<&String> = elected_versions.keys().collect();
     if !elected_set.is_superset(&versions_in_use) {
         panic!(
-            "Using a version that isn't elected: {:?}.",
+            "Using a HostOS version that isn't elected: {:?}.",
             versions_in_use.difference(&elected_set).collect::<Vec<_>>()
         );
     }

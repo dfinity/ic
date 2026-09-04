@@ -282,8 +282,7 @@ fn get_firewall_rules(snapshot: &RegistrySnapshot, record_key: String) -> Option
     if snapshot.contains_key(record_key.as_bytes()) {
         Some(
             get_value_from_snapshot(snapshot, &record_key)
-                .ok()
-                .flatten()
+                .unwrap()
                 .unwrap_or_else(|| panic!("Could not find firewall rules: {record_key}")),
         )
     } else {

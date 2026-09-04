@@ -17,9 +17,9 @@ pub(crate) fn check_unassigned_nodes_config_invariants(
 ) -> Result<(), InvariantCheckError> {
     println!("{LOG_PREFIX}check_unassigned_nodes_config_invariants");
 
-    if let Some(config) = get_value_from_snapshot::<UnassignedNodesConfigRecord, _>(
+    if let Some(config) = get_value_from_snapshot::<UnassignedNodesConfigRecord>(
         snapshot,
-        make_unassigned_nodes_config_record_key(),
+        &make_unassigned_nodes_config_record_key(),
     )? && config.ssh_readonly_access.len() > MAX_NUM_SSH_KEYS
     {
         return Err(InvariantCheckError {

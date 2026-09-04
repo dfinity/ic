@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use crate::{
+    common::LOG_PREFIX,
     flags::is_blank_replica_version_id_for_cloud_engines_enabled,
     invariants::common::{
         InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
@@ -9,6 +10,8 @@ use crate::{
     },
 };
 
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::{
     replica_version::v1::ReplicaVersionRecord,
@@ -62,7 +65,7 @@ pub(crate) fn check_replica_version_invariants(
     let elected_set: BTreeSet<&String> = elected_versions.keys().collect();
     if !elected_set.is_superset(&versions_in_use) {
         panic!(
-            "Using a version that isn't elected: {:?}.",
+            "Using a replica version that isn't elected: {:?}.",
             versions_in_use.difference(&elected_set).collect::<Vec<_>>()
         );
     }
@@ -74,21 +77,30 @@ pub(crate) fn check_replica_version_invariants(
             panic!("Elected an invalid version ID: {err}");
         }
 
+        let ReplicaVersionRecord {
+            release_package_sha256_hex,
+            release_package_urls,
+            guest_launch_measurements,
+            replica_version_id,
+            // NOTE: Do not use `..` here! This stands to ensure every field is
+            // considered during validation.
+        } = record;
+
         // Check whether release package URLs (update image) and corresponding hash are well-formed.
         // As file-based URLs are only used in test-deployments, we disallow file:/// URLs.
         assert_valid_urls_and_hash(
-            &record.release_package_urls,
-            &record.release_package_sha256_hex,
+            &release_package_urls,
+            &release_package_sha256_hex,
             false, // allow_file_url
         );
 
         // Check that all measured versions are valid
-        if let Some(Err(defects)) = record.guest_launch_measurements.map(|v| v.validate()) {
+        if let Some(Err(defects)) = guest_launch_measurements.map(|v| v.validate()) {
             panic!("guest_launch_measurements are not valid. Defects: {defects:?}");
         }
 
         // Enforce that the stored version always matches the key
-        if let Some(replica_version_id) = record.replica_version_id {
+        if let Some(replica_version_id) = replica_version_id {
             assert_eq!(replica_version_id, version);
         }
     }
@@ -97,9 +109,8 @@ pub(crate) fn check_replica_version_invariants(
 }
 
 fn get_subnet_record(snapshot: &RegistrySnapshot, subnet_id: SubnetId) -> SubnetRecord {
-    get_value_from_snapshot(snapshot, make_subnet_record_key(subnet_id))
-        .ok()
-        .flatten()
+    get_value_from_snapshot(snapshot, &make_subnet_record_key(subnet_id))
+        .unwrap()
         .unwrap_or_else(|| panic!("Could not get subnet record for subnet: {subnet_id}"))
 }
 
@@ -155,14 +166,21 @@ pub(crate) fn has_launch_measurements(
     replica_version_id: &str,
     snapshot: &RegistrySnapshot,
 ) -> bool {
-    get_value_from_snapshot::<ReplicaVersionRecord, _>(
+    match get_value_from_snapshot::<ReplicaVersionRecord>(
         snapshot,
-        make_replica_version_key(replica_version_id),
+        &make_replica_version_key(replica_version_id),
     )
-    .ok()
-    .flatten()
-    .and_then(|replica_version_record| replica_version_record.guest_launch_measurements)
-    .is_some()
+    .unwrap()
+    {
+        Some(replica_version_record) => replica_version_record.guest_launch_measurements.is_some(),
+        None => {
+            println!(
+                "{LOG_PREFIX}no record with id {replica_version_id} in has_launch_measurements exists."
+            );
+
+            false
+        }
+    }
 }
 
 /// Returns the replica versions referenced by the

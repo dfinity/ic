@@ -19,9 +19,9 @@ use ic_registry_keys::make_standard_engine_replica_version_record_key;
 pub(crate) fn check_standard_engine_replica_version_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    let Some(record) = get_value_from_snapshot::<StandardEngineReplicaVersionRecord, _>(
+    let Some(record) = get_value_from_snapshot::<StandardEngineReplicaVersionRecord>(
         snapshot,
-        make_standard_engine_replica_version_record_key(),
+        &make_standard_engine_replica_version_record_key(),
     )?
     else {
         // If there is no record yet, then we are trivially valid.

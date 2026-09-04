@@ -47,7 +47,7 @@ impl error::Error for InvariantCheckError {
     }
 }
 
-fn scan_snapshot_for_prefix<T: Message + Default>(
+fn registry_snapshot_range<T: Message + Default>(
     snapshot: &RegistrySnapshot,
     prefix: &str,
 ) -> Result<BTreeMap<String, T>, InvariantCheckError> {
@@ -66,7 +66,7 @@ fn scan_snapshot_for_prefix<T: Message + Default>(
             })?
             .to_string();
         let value = T::decode(v.as_slice()).map_err(|err| InvariantCheckError {
-            msg: format!("Deserialize registry value failed with {err}"),
+            msg: format!("Deserialize registry value for key '{key}' failed with {err}"),
             source: None,
         })?;
 
@@ -78,7 +78,7 @@ fn scan_snapshot_for_prefix<T: Message + Default>(
 
 /// Returns all node records in the snapshot.
 pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> BTreeMap<NodeId, NodeRecord> {
-    scan_snapshot_for_prefix::<NodeRecord>(snapshot, NODE_RECORD_KEY_PREFIX)
+    registry_snapshot_range::<NodeRecord>(snapshot, NODE_RECORD_KEY_PREFIX)
         .unwrap()
         .into_iter()
         .map(|(k, v)| (NodeId::from(k.parse::<PrincipalId>().unwrap()), v))
@@ -89,18 +89,19 @@ pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> BTreeMap<Node
 pub(crate) fn get_all_replica_version_records(
     snapshot: &RegistrySnapshot,
 ) -> BTreeMap<String, ReplicaVersionRecord> {
-    scan_snapshot_for_prefix::<ReplicaVersionRecord>(snapshot, REPLICA_VERSION_KEY_PREFIX).unwrap()
+    registry_snapshot_range::<ReplicaVersionRecord>(snapshot, REPLICA_VERSION_KEY_PREFIX).unwrap()
 }
 
 // Retrieve all records that serve as lists of subnets that can sign with chain keys
 pub(crate) fn get_all_chain_key_signing_subnet_list_records(
     snapshot: &RegistrySnapshot,
 ) -> BTreeMap<String, ChainKeyEnabledSubnetList> {
-    scan_snapshot_for_prefix::<ChainKeyEnabledSubnetList>(
+    registry_snapshot_range::<ChainKeyEnabledSubnetList>(
         snapshot,
         CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX,
     )
     .unwrap()
+    // TODO: Cleanup downstream users, and remove this workaround.
     .into_iter()
     // Preserve the prefix for crypto code, which depends on it downstream.
     .map(|(k, v)| (format!("{CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX}{k}"), v))
@@ -111,29 +112,29 @@ pub(crate) fn get_all_chain_key_signing_subnet_list_records(
 pub(crate) fn get_all_hostos_version_records(
     snapshot: &RegistrySnapshot,
 ) -> BTreeMap<String, HostosVersionRecord> {
-    scan_snapshot_for_prefix::<HostosVersionRecord>(snapshot, HOSTOS_VERSION_KEY_PREFIX).unwrap()
+    registry_snapshot_range::<HostosVersionRecord>(snapshot, HOSTOS_VERSION_KEY_PREFIX).unwrap()
 }
 
 /// Returns all api boundary node records from the snapshot.
 pub(crate) fn get_api_boundary_node_records_from_snapshot(
     snapshot: &RegistrySnapshot,
 ) -> BTreeMap<NodeId, ApiBoundaryNodeRecord> {
-    scan_snapshot_for_prefix::<ApiBoundaryNodeRecord>(snapshot, API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
+    registry_snapshot_range::<ApiBoundaryNodeRecord>(snapshot, API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
         .unwrap()
         .into_iter()
         .map(|(k, v)| (NodeId::from(k.parse::<PrincipalId>().unwrap()), v))
         .collect()
 }
 
-pub(crate) fn get_value_from_snapshot<T: Message + Default, U: AsRef<str>>(
+pub(crate) fn get_value_from_snapshot<T: Message + Default>(
     snapshot: &RegistrySnapshot,
-    key: U,
+    key: &str,
 ) -> Result<Option<T>, InvariantCheckError> {
     snapshot
-        .get(key.as_ref().as_bytes())
+        .get(key.as_bytes())
         .map(|v| {
             T::decode(v.as_slice()).map_err(|err| InvariantCheckError {
-                msg: format!("Deserialize registry value failed with {err}"),
+                msg: format!("Deserialize registry value for key '{key}' failed with {err}"),
                 source: None,
             })
         })
@@ -145,11 +146,11 @@ pub(crate) fn get_node_record_from_snapshot(
     key: NodeId,
     snapshot: &RegistrySnapshot,
 ) -> Result<Option<NodeRecord>, InvariantCheckError> {
-    get_value_from_snapshot::<NodeRecord, _>(snapshot, make_node_record_key(key))
+    get_value_from_snapshot::<NodeRecord>(snapshot, &make_node_record_key(key))
 }
 
 pub(crate) fn get_subnet_ids_from_snapshot(snapshot: &RegistrySnapshot) -> BTreeSet<SubnetId> {
-    get_value_from_snapshot::<SubnetListRecord, _>(snapshot, make_subnet_list_record_key())
+    get_value_from_snapshot::<SubnetListRecord>(snapshot, &make_subnet_list_record_key())
         .unwrap()
         .map(|r| {
             r.subnets
@@ -158,6 +159,16 @@ pub(crate) fn get_subnet_ids_from_snapshot(snapshot: &RegistrySnapshot) -> BTree
                 .collect()
         })
         .unwrap_or_default()
+}
+
+pub(crate) fn assert_sha256(s: &str) {
+    if s.bytes().any(|x| !x.is_ascii_hexdigit()) {
+        panic!("Hash contains at least one invalid character: `{s}`");
+    }
+
+    if s.len() != 64 {
+        panic!("Hash is an invalid length: `{s}`");
+    }
 }
 
 pub(crate) fn assert_valid_urls_and_hash(urls: &[String], hash: &str, allow_file_url: bool) {
@@ -169,13 +180,7 @@ pub(crate) fn assert_valid_urls_and_hash(urls: &[String], hash: &str, allow_file
         return;
     }
 
-    if hash.bytes().any(|x| !x.is_ascii_hexdigit()) {
-        panic!("Hash contains at least one invalid character: `{hash}`");
-    }
-
-    if hash.len() != 64 {
-        panic!("Hash is an invalid length: `{hash}`");
-    }
+    assert_sha256(hash);
 
     urls.iter().for_each(|url|
         // File URLs are used in test deployments. We only disallow non-ASCII.
@@ -239,6 +244,6 @@ mod tests {
             vec![0],                  // incorrect value, not an encoded ApiBoundaryNodeRecord
         );
         // this call should panic when decoding the ApiBoundaryNodeRecord
-        get_value_from_snapshot::<ApiBoundaryNodeRecord, _>(&snapshot, key).unwrap();
+        get_value_from_snapshot::<ApiBoundaryNodeRecord>(&snapshot, &key).unwrap();
     }
 }
