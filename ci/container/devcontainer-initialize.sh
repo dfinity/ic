@@ -9,7 +9,7 @@ WORKSPACE="${1:?usage: $0 <local workspace folder> <devcontainer id>}"
 DEVCONTAINER_ID="${2:?usage: $0 <local workspace folder> <devcontainer id>}"
 
 # The directories and files that devcontainer.json bind-mounts must exist.
-mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.claude ~/.local/share/fish /tmp/ict_testnets
+mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.claude ~/.local/share/fish
 touch ~/.zsh_history ~/.bash_history
 
 # Give the dev container of this checkout its own bazel output base (see the
