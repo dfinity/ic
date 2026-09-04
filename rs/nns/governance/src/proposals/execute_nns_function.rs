@@ -459,6 +459,7 @@ pub enum ValidNnsFunction {
     SplitSubnet,
     DeleteSubnet,
     SetDefaultInitialDkgSubnet,
+    MergeSubnets,
 }
 
 impl ValidNnsFunction {
@@ -592,6 +593,7 @@ impl ValidNnsFunction {
             ValidNnsFunction::SetDefaultInitialDkgSubnet => {
                 (REGISTRY_CANISTER_ID, "set_default_initial_dkg_subnet")
             }
+            ValidNnsFunction::MergeSubnets => (REGISTRY_CANISTER_ID, "merge_subnets"),
         }
     }
 
@@ -623,7 +625,8 @@ impl ValidNnsFunction {
             | ValidNnsFunction::SetSubnetOperationalLevel
             | ValidNnsFunction::SplitSubnet
             | ValidNnsFunction::DeleteSubnet
-            | ValidNnsFunction::SetDefaultInitialDkgSubnet => Topic::SubnetManagement,
+            | ValidNnsFunction::SetDefaultInitialDkgSubnet
+            | ValidNnsFunction::MergeSubnets => Topic::SubnetManagement,
 
             ValidNnsFunction::ReviseElectedGuestosVersions
             | ValidNnsFunction::ReviseElectedHostosVersions => Topic::IcOsVersionElection,
@@ -714,6 +717,7 @@ impl ValidNnsFunction {
             ValidNnsFunction::SplitSubnet => "Split subnet",
             ValidNnsFunction::DeleteSubnet => "Delete Subnet",
             ValidNnsFunction::SetDefaultInitialDkgSubnet => "Set Default Initial DKG Subnet",
+            ValidNnsFunction::MergeSubnets => "Merge subnets",
         }
     }
 
@@ -944,6 +948,11 @@ impl ValidNnsFunction {
                 calls are routed when no subnet is specified explicitly in the request. If unset, \
                 such requests are routed to the calling subnet (NNS)."
             }
+            ValidNnsFunction::MergeSubnets => {
+                "Merge a subnet into another subnet: in the routing table, reassigns all \
+                canister ranges hosted by the source subnet to the destination subnet. The source \
+                subnet is not deleted."
+            }
         }
     }
 }
@@ -1033,6 +1042,7 @@ impl TryFrom<NnsFunction> for ValidNnsFunction {
                 Ok(ValidNnsFunction::SetSubnetOperationalLevel)
             }
             NnsFunction::SplitSubnet => Ok(ValidNnsFunction::SplitSubnet),
+            NnsFunction::MergeSubnets => Ok(ValidNnsFunction::MergeSubnets),
             NnsFunction::DeleteSubnet => Ok(ValidNnsFunction::DeleteSubnet),
             NnsFunction::SetDefaultInitialDkgSubnet => {
                 Ok(ValidNnsFunction::SetDefaultInitialDkgSubnet)
