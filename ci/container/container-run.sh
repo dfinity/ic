@@ -141,7 +141,19 @@ if [ "$DEVENV" = true ] && [ "$RUNTIME" = podman ]; then
     fi
 fi
 
-WORKDIR="/ic"
+# Mount the checkout at the same (canonical, symlink-resolved) absolute path
+# it has on the host, and use it as the working directory. This
+# - gives every checkout its own default bazel output base
+#   ($CTR_CACHE_DIR/bazel/_bazel_$CTR_USER/<md5 of the workspace path>) while
+#   the install base, repository cache and repo contents cache in the shared
+#   output_user_root stay shared. Bazel cannot recognize a server that runs in
+#   another container (separate PID namespaces), so two containers on one
+#   output base kill each other's server ("Server terminated abruptly (error
+#   code: 14 ...)");
+# - makes the absolute `gitdir:` pointers of linked git worktrees resolve
+#   (together with the GIT_COMMON_DIR mount below);
+# - keeps host paths valid inside the container.
+WORKDIR="$REPO_ROOT"
 
 # the docker image creates two users: ubuntu (1000) and buildifier (1001). Here we ensure the correct home is used.
 HOST_UID="$(id -u)"
@@ -167,9 +179,9 @@ CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
 
 # make sure we have all bind-mounts
 # ~/.aws, ~/.ssh: credentials forwarded to the container
-# ~/.cache: used as cache persisted across containers (cargo, etc)
+# $CACHE_DIR (~/.cache or -c/--cache-dir): caches persisted across containers (bazel, cargo, etc)
 # ~/.claude: persisted claude settings
-mkdir -p ~/.{aws,ssh,cache,claude}
+mkdir -p ~/.{aws,ssh,claude} "$CACHE_DIR"
 
 RUNTIME_RUN_ARGS=(
     -w "$WORKDIR"
@@ -194,7 +206,7 @@ RUNTIME_RUN_ARGS=(
     # ensures processes are reaped correctly
     --init
 
-    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"       # mount the local repo checkout
+    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"       # the checkout, at its host path
     --mount type=bind,source="${CACHE_DIR}",target="${CTR_CACHE_DIR}" # persisted root for caches (cargo, etc)
 
     # mount credentials & settings
@@ -205,35 +217,6 @@ RUNTIME_RUN_ARGS=(
     --mount type=tmpfs,target="/tmp/containers" # expected by ic-os build
 )
 
-# Give every checkout its own bazel output base.
-#
-# Bazel derives the default output base from the md5 of the workspace path.
-# Every checkout is mounted at the same path ($WORKDIR) with the same cache
-# dir, so containers started from different checkouts (git worktrees or
-# clones) would all use one output base. Each container also has its own PID
-# namespace, so bazel's client cannot recognize the other container's server
-# (it verifies the server pid via /proc), starts a second server in the same
-# output base, and the first server then kills itself: its client fails with
-# "Server terminated abruptly (error code: 14 ...)". Keying the output base on
-# the host path of the checkout avoids this while keeping the install base,
-# the repository cache and the repo contents cache (all of which live in the
-# shared output_user_root) shared between checkouts.
-#
-# Bazel reads the rc files named in $BAZELRC in addition to the workspace
-# .bazelrc (including its user.bazelrc import) and ~/.bazelrc, so the rest of
-# the repository's bazel configuration still applies. The variable only
-# exists inside the container, so host-side bazel invocations are unaffected.
-# Keep only characters that are safe in the rc line, in $BAZELRC (comma-separated) and in
-# a filename; the path hash below keeps the key unique.
-REPO_NAME="$(printf '%s' "$(basename "$REPO_ROOT")" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_' | cut -c1-64)"
-OUTPUT_BASE_KEY="$REPO_NAME-$(printf '%s' "$REPO_ROOT" | sha256sum | cut -c1-8)"
-OUTPUT_BASE="$CTR_CACHE_DIR/bazel/_bazel_$CTR_USER/$OUTPUT_BASE_KEY"
-BAZELRC_REL="container-run/$OUTPUT_BASE_KEY.bazelrc" # relative to the cache dir
-mkdir -p "$(dirname "$CACHE_DIR/$BAZELRC_REL")"
-echo "startup --output_base=$OUTPUT_BASE" >"$CACHE_DIR/$BAZELRC_REL"
-RUNTIME_RUN_ARGS+=(-e BAZELRC="$CTR_CACHE_DIR/$BAZELRC_REL")
-eprintln "Using bazel output base '$OUTPUT_BASE'"
-
 # Support linked git worktrees (`git worktree add`).
 #
 # A linked worktree's .git is a file pointing into the main repository's .git
@@ -242,8 +225,8 @@ eprintln "Using bazel output base '$OUTPUT_BASE'"
 # build script under cargo, ...) would fail with "not a git repository".
 # Bind-mount the common git dir at its host path so that the pointer resolves.
 #
-# Inside such a container `git worktree list` reports the linked worktrees as
-# "prunable" because their host checkout paths are not visible, so never run
+# Inside a container `git worktree list` reports the *other* worktrees as
+# "prunable" because their host checkouts are not mounted, so never run
 # `git worktree prune|repair|move|remove` in the container. For the same
 # reason gc's automatic worktree pruning is disabled via GIT_CONFIG_*.
 GIT_COMMON_DIR="$(cd "$REPO_ROOT" && realpath "$(git rev-parse --git-common-dir)")"
