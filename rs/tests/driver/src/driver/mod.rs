@@ -4,6 +4,7 @@ pub mod bootstrap;
 pub mod config;
 pub mod constants;
 pub mod context;
+mod dev_root_ca;
 pub mod driver_setup;
 pub mod dsl;
 pub mod event;

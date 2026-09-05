@@ -316,11 +316,14 @@ def system_test(
     _local_only_deps["ENV_DEPS__OVMF_CODE_PATH"] = "//:OVMF_CODE_4M.fd"
     _local_only_deps["ENV_DEPS__OVMF_VARS_PATH"] = "//:OVMF_VARS_4M.fd"
 
-    # The dev root CA, which the local backend's ic-gateway uses to issue its TLS
-    # certificate: every dev IC-OS image installs this CA into
+    # The dev root CA. Every dev IC-OS image installs it into
     # /usr/local/share/ca-certificates in the `output_dev` stage of the GuestOS and
-    # HostOS Dockerfiles, so a node trusts the gateway with no node-side config.
-    # See `IcGatewayVm::load_or_create_local_playnet`.
+    # HostOS Dockerfiles, so a node trusts the local ic-gateway with no node-side
+    # config. Two consumers: the gateway issues its TLS certificate from it (see
+    # `IcGatewayVm::load_or_create_local_playnet`, which needs the key), and the
+    # driver installs the cert into its own trust store at startup for the same
+    # reason a node has it (`LocalBackend::install_dev_root_ca`) -- so the cert is
+    # read by *every* local target, not just the ones that stand up a gateway.
     #
     # Local-only on purpose. The Farm backend uses a playnet certificate and never
     # reads these, and a runtime dep reaches *every* variant's runfiles -- which for
