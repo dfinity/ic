@@ -1323,11 +1323,18 @@ fn from_state_manager_error(e: StateManagerError) -> XNetPayloadValidationError 
 /// Slice pool soft upper limit in bytes. Actual size may go over this limit, as
 /// we're polling multiple subnets in parallel and we don't want to discard
 /// slices that we've already pulled.
-pub const POOL_BYTE_SIZE_SOFT_CAP: usize = 10 << 20;
+pub const POOL_BYTE_SIZE_SOFT_CAP: usize = 128 << 20;
 
-/// Hard maximum slice size in bytes. We only pool up to 4 MB from any one
-/// stream.
-pub const POOL_SLICE_BYTE_SIZE_MAX: usize = 4 << 20;
+/// Hard maximum slice size in bytes. We only pool up to 8 MB (two blocks' worth
+/// of payload) from any one stream.
+pub const POOLED_SLICE_BYTE_SIZE_MAX: usize = 8 << 20;
+
+/// Divisor applied to the space left in the pool to obtain the maximum size of
+/// a pooled slice, so that a few backlogged streams cannot take over the pool.
+/// Yields `POOLED_SLICE_BYTE_SIZE_MAX` while the pool is empty, less as it
+/// fills up.
+pub const POOLED_SLICE_BYTE_SIZE_DIVISOR: usize =
+    POOL_BYTE_SIZE_SOFT_CAP / POOLED_SLICE_BYTE_SIZE_MAX;
 
 /// Conservative minimum slice size in bytes. We stop trying to add slices to
 /// the payload once we're this close to the payload size limit.
@@ -1341,6 +1348,13 @@ pub struct RefillStreamSliceIndices {
     pub byte_limit: usize,
 }
 
+/// Reduces `slice_byte_size` to account for overhead in the `XNetEndpoint`
+/// request, which only counts message bytes (measured: 350 bytes for
+/// certification plus base witness, 2% for large payloads).
+pub fn adjusted_byte_limit(slice_byte_size: usize) -> usize {
+    slice_byte_size.saturating_sub(350) * 98 / 100
+}
+
 /// Computes `RefillStreamSliceIndices` for every subnet whose stream slices should be refilled
 /// in the given certified slice pool owned by the given subnet.
 pub fn refill_stream_slice_indices(
@@ -1349,20 +1363,23 @@ pub fn refill_stream_slice_indices(
 ) -> impl Iterator<Item = (SubnetId, RefillStreamSliceIndices)> {
     let mut result: BTreeMap<SubnetId, RefillStreamSliceIndices> = BTreeMap::new();
 
-    let pool_slice_stats = {
+    let (pool_bytes_left, pool_slice_stats) = {
         let pool = pool_lock.lock().unwrap();
 
-        if pool.byte_size() > POOL_BYTE_SIZE_SOFT_CAP {
-            // Abort if pool is already full.
-            return result.into_iter();
-        }
-
-        pool.peers()
-            // Skip our own subnet, the loopback stream is routed separately.
-            .filter(|&&subnet_id| subnet_id != own_subnet_id)
-            .map(|&subnet_id| (subnet_id, pool.slice_stats(subnet_id)))
-            .collect::<BTreeMap<_, _>>()
+        (
+            POOL_BYTE_SIZE_SOFT_CAP.saturating_sub(pool.byte_size()),
+            pool.peers()
+                // Skip our own subnet, the loopback stream is routed separately.
+                .filter(|&&subnet_id| subnet_id != own_subnet_id)
+                .map(|&subnet_id| (subnet_id, pool.slice_stats(subnet_id)))
+                .collect::<BTreeMap<_, _>>(),
+        )
     };
+
+    // Maximum byte size of any one pooled slice, applied uniformly across slices:
+    // as the pool fills up, we aim to fill what is left of it with (more, but)
+    // smaller slices.
+    let slice_byte_size_max = pool_bytes_left / POOLED_SLICE_BYTE_SIZE_DIVISOR;
 
     for (subnet_id, slice_stats) in pool_slice_stats {
         let (stream_position, messages_begin, msg_count, byte_size) = match slice_stats {
@@ -1380,7 +1397,7 @@ pub fn refill_stream_slice_indices(
             Some(messages_begin) if messages_begin == stream_position.message_index => (
                 stream_position.message_index,
                 stream_position.message_index + (msg_count as u64).into(),
-                POOL_SLICE_BYTE_SIZE_MAX.saturating_sub(byte_size),
+                slice_byte_size_max.saturating_sub(byte_size),
             ),
 
             // No pooled stream, or pooled stream does not begin at cached stream position, pull
@@ -1388,12 +1405,12 @@ pub fn refill_stream_slice_indices(
             _ => (
                 stream_position.message_index,
                 stream_position.message_index,
-                POOL_SLICE_BYTE_SIZE_MAX,
+                slice_byte_size_max,
             ),
         };
 
         if slice_byte_limit < SLICE_BYTE_SIZE_MIN {
-            // No more space left in the pool for this slice, bail out.
+            // No more space left in the pool for this slice, skip it.
             continue;
         }
 
@@ -1402,9 +1419,7 @@ pub fn refill_stream_slice_indices(
             RefillStreamSliceIndices {
                 witness_begin,
                 msg_begin,
-                // XNetEndpoint only counts message bytes, allow some overhead (measuread: 350
-                // bytes for certification plus base witness, 2% for large payloads).
-                byte_limit: (slice_byte_limit.saturating_sub(350)) * 98 / 100,
+                byte_limit: adjusted_byte_limit(slice_byte_limit),
             },
         );
     }
@@ -1760,8 +1775,8 @@ impl XNetClientImpl {
         let response_body_size = metrics_registry.histogram_vec(
             METRIC_RESPONSE_BODY_SIZE,
             "Response body (encoded slice) size in bytes, by decode status.",
-            // 10 B - 5 MB
-            decimal_buckets(1, 6),
+            // 10 B - 50 MB
+            decimal_buckets(1, 7),
             &[LABEL_STATUS],
         );
         response_body_size.with_label_values(&[STATUS_SUCCESS]);
@@ -1803,7 +1818,7 @@ impl XNetClient for XNetClientImpl {
             let status = response.status();
 
             let content =
-                http_body_util::Limited::new(response.into_body(), 5 * POOL_SLICE_BYTE_SIZE_MAX)
+                http_body_util::Limited::new(response.into_body(), 2 * POOLED_SLICE_BYTE_SIZE_MAX)
                     .collect()
                     .await
                     .map(|collected| collected.to_bytes())
@@ -1875,8 +1890,8 @@ impl XNetClientError {
 pub mod testing {
     pub use super::{
         EndpointLocator, GenRangeFn, LABEL_STATUS, METRIC_BUILD_PAYLOAD_DURATION,
-        METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE, POOL_SLICE_BYTE_SIZE_MAX, PoolRefillTask,
-        ProximityMap, RefillTaskHandle, STATUS_SUCCESS, XNetClient, XNetClientError,
-        XNetEndpointResolver, XNetPayloadBuilderMetrics,
+        METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE, POOLED_SLICE_BYTE_SIZE_MAX,
+        PoolRefillTask, ProximityMap, RefillTaskHandle, STATUS_SUCCESS, XNetClient,
+        XNetClientError, XNetEndpointResolver, XNetPayloadBuilderMetrics,
     };
 }

@@ -28,7 +28,7 @@ use ic_test_utilities_state::{
 };
 use ic_test_utilities_types::ids::{
     NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_42, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4,
-    SUBNET_5,
+    SUBNET_5, subnet_test_id,
 };
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::batch::{ValidationContext, XNetPayload};
@@ -38,8 +38,9 @@ use ic_types::{CountBytes, Height, NodeId, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice};
 use ic_xnet_payload_builder::testing::*;
 use ic_xnet_payload_builder::{
-    ExpectedIndices, LABEL_STATUS, MAX_SIGNALS, METRIC_PULL_ATTEMPT_COUNT, XNetPayloadBuilderImpl,
-    XNetSlicePoolImpl,
+    ExpectedIndices, LABEL_STATUS, MAX_SIGNALS, METRIC_PULL_ATTEMPT_COUNT, POOL_BYTE_SIZE_SOFT_CAP,
+    POOLED_SLICE_BYTE_SIZE_DIVISOR, XNetPayloadBuilderImpl, XNetSlicePoolImpl, adjusted_byte_limit,
+    refill_stream_slice_indices,
 };
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
@@ -969,6 +970,76 @@ enum FakeXNetClientError {
     NoContent,
 }
 
+/// Tests that with an empty pool we pull the full `POOLED_SLICE_BYTE_SIZE_MAX`
+/// from every subnet (as opposed to progressively less).
+#[test]
+fn refill_stream_slice_indices_byte_limits_empty_pool() {
+    let metrics_registry = MetricsRegistry::new();
+    let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+        Arc::new(MockCertifiedStreamStore::new()) as Arc<_>,
+        &metrics_registry,
+    )));
+    // A dozen peer subnets with cached stream positions, but nothing pooled.
+    pool.lock().unwrap().garbage_collect(
+        (1..=12)
+            .map(|i| (subnet_test_id(i), ExpectedIndices::default()))
+            .collect(),
+    );
+
+    let byte_limits = refill_stream_slice_indices(Arc::clone(&pool), OWN_SUBNET)
+        .map(|(_, indices)| indices.byte_limit)
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        vec![adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX); 12],
+        byte_limits
+    );
+}
+
+/// Tests that a pooled slice lowers the maximum slice size for all subnets; and
+/// that the subnet that it was pooled for is only allowed the difference.
+#[test]
+fn refill_stream_slice_indices_byte_limits_non_empty_pool() {
+    with_test_replica_logger(|log| {
+        let stream = out_stream_with_message(0.into(), 0.into());
+        let slice = in_slice(&stream, 0.into(), 0.into(), 1, &log);
+        let mut certified_stream_store = MockCertifiedStreamStore::new();
+        // Actual return value does not matter as long as it's `Ok(_)`.
+        certified_stream_store
+            .expect_decode_certified_stream_slice()
+            .returning(move |_, _, _| Ok(stream.slice(0.into(), None)));
+
+        let metrics_registry = MetricsRegistry::new();
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            Arc::new(certified_stream_store) as Arc<_>,
+            &metrics_registry,
+        )));
+        // A dozen peer subnets with cached stream positions, plus a 13th with a pooled
+        // slice.
+        pool.lock()
+            .unwrap()
+            .put(subnet_test_id(13), slice, REGISTRY_VERSION, log.clone())
+            .unwrap();
+        pool.lock().unwrap().garbage_collect(
+            (1..=13)
+                .map(|i| (subnet_test_id(i), ExpectedIndices::default()))
+                .collect(),
+        );
+        let pooled_byte_size = pool.lock().unwrap().byte_size();
+
+        let byte_limits = refill_stream_slice_indices(Arc::clone(&pool), OWN_SUBNET)
+            .map(|(_, indices)| indices.byte_limit)
+            .collect::<Vec<_>>();
+
+        let slice_byte_size_max =
+            (POOL_BYTE_SIZE_SOFT_CAP - pooled_byte_size) / POOLED_SLICE_BYTE_SIZE_DIVISOR;
+        assert!(0 < pooled_byte_size && slice_byte_size_max < POOLED_SLICE_BYTE_SIZE_MAX);
+        let mut expected_byte_limits = vec![adjusted_byte_limit(slice_byte_size_max); 12];
+        expected_byte_limits.push(adjusted_byte_limit(slice_byte_size_max - pooled_byte_size));
+        assert_eq!(expected_byte_limits, byte_limits);
+    });
+}
+
 /// Tests refilling an empty pool.
 #[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn refill_pool_empty(
@@ -1021,7 +1092,7 @@ fn refill_pool_empty(
             proximity_map,
             log.clone(),
         );
-        let byte_limit = (POOL_SLICE_BYTE_SIZE_MAX - 350) * 98 / 100;
+        let byte_limit = adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX);
         let url = endpoint_resolver
             .xnet_endpoint_url(REMOTE_SUBNET, from, from, byte_limit)
             .unwrap()
@@ -1151,7 +1222,10 @@ fn refill_pool_append(
             proximity_map,
             log.clone(),
         );
-        let byte_limit = (POOL_SLICE_BYTE_SIZE_MAX - prefix_size_bytes - 350) * 98 / 100;
+        // The pooled prefix takes up pool space, lowering the maximum slice size.
+        let slice_byte_size_max =
+            (POOL_BYTE_SIZE_SOFT_CAP - prefix_size_bytes) / POOLED_SLICE_BYTE_SIZE_DIVISOR;
+        let byte_limit = adjusted_byte_limit(slice_byte_size_max - prefix_size_bytes);
         let url = endpoint_resolver
             .xnet_endpoint_url(REMOTE_SUBNET, stream_begin, from, byte_limit)
             .unwrap()
@@ -1250,7 +1324,7 @@ fn refill_pool_put_invalid_slice(
             proximity_map,
             log.clone(),
         );
-        let byte_limit = (POOL_SLICE_BYTE_SIZE_MAX - 350) * 98 / 100;
+        let byte_limit = adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX);
         let url = endpoint_resolver
             .xnet_endpoint_url(REMOTE_SUBNET, from, from, byte_limit)
             .unwrap()
@@ -1380,7 +1454,10 @@ fn refill_pool_append_invalid_slice(
             proximity_map,
             log.clone(),
         );
-        let byte_limit = (POOL_SLICE_BYTE_SIZE_MAX - prefix_size_bytes - 350) * 98 / 100;
+        // The pooled prefix takes up pool space, lowering the maximum slice size.
+        let slice_byte_size_max =
+            (POOL_BYTE_SIZE_SOFT_CAP - prefix_size_bytes) / POOLED_SLICE_BYTE_SIZE_DIVISOR;
+        let byte_limit = adjusted_byte_limit(slice_byte_size_max - prefix_size_bytes);
         let url = endpoint_resolver
             .xnet_endpoint_url(REMOTE_SUBNET, stream_begin, from, byte_limit)
             .unwrap()
