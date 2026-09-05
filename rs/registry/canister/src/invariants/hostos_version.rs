@@ -1,10 +1,10 @@
+use std::collections::BTreeSet;
+
 use crate::invariants::common::{
     InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
-    get_all_hostos_version_records, get_all_node_records, get_value_from_snapshot,
+    get_all_hostos_version_records, get_all_node_records,
 };
 
-use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
-use ic_registry_keys::make_hostos_version_key;
 use ic_types::hostos_version::HostosVersion;
 
 /// A predicate on the HostOS version records contained in a registry
@@ -20,34 +20,36 @@ use ic_types::hostos_version::HostosVersion;
 pub(crate) fn check_hostos_version_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    let mut all_versions = Vec::new();
-
     // Collect all referenced HostOS versions
-    let node_versions = get_all_hostos_versions_of_nodes(snapshot);
-    all_versions.extend(node_versions);
+    let versions_in_use = get_all_hostos_versions_of_nodes(snapshot);
+
+    // Re-collect since we can't compare `BTreeSet<String>` with `BTreeSet<&String>` with `is_superset`.
+    let versions_in_use: BTreeSet<_> = versions_in_use.iter().collect();
 
     // Get the current list of registered HostOS versions
-    let registered_versions = get_all_hostos_version_records(snapshot);
+    let elected_versions = get_all_hostos_version_records(snapshot);
+    let elected_set: BTreeSet<_> = elected_versions.keys().collect();
+    assert!(
+        elected_set.is_superset(&versions_in_use),
+        "Using a version that isn't elected. Elected versions: {elected_set:?}, in use: {versions_in_use:?}."
+    );
+    assert!(
+        elected_set.iter().all(|v| !v.trim().is_empty()),
+        "Elected an empty version ID."
+    );
 
-    all_versions.extend(registered_versions.into_iter().map(|v| v.hostos_version_id));
-    all_versions.dedup();
-
-    for version in all_versions {
+    for (key, record) in elected_versions {
         // Enforce that the version ID is well-formed, so that consumers reading
         // it back out of the Registry can turn it into a HostosVersion.
-        if let Err(err) = HostosVersion::try_from(version.as_str()) {
+        if let Err(err) = HostosVersion::try_from(key.as_str()) {
             panic!("Registered an invalid HostOS version ID: {err}");
         }
-
-        // Check that every referenced version exists, i.e. we can only set a
-        // Node's version to one that has already been added to the registry.
-        let r = get_hostos_version_record(snapshot, version);
 
         // Check whether release package URLs (update image) and corresponding hash are well-formed.
         // As file-based URLs are only used in test-deployments, we disallow file:/// URLs.
         assert_valid_urls_and_hash(
-            &r.release_package_urls,
-            &r.release_package_sha256_hex,
+            &record.release_package_urls,
+            &record.release_package_sha256_hex,
             false,
         );
     }
@@ -55,14 +57,9 @@ pub(crate) fn check_hostos_version_invariants(
     Ok(())
 }
 
-fn get_hostos_version_record(snapshot: &RegistrySnapshot, version: String) -> HostosVersionRecord {
-    get_value_from_snapshot(snapshot, make_hostos_version_key(version.clone()))
-        .unwrap_or_else(|| panic!("Could not find HostOS version: {version}"))
-}
-
 /// Returns the list of HostOS versions where each version is referred to
 /// by at least one node.
-fn get_all_hostos_versions_of_nodes(snapshot: &RegistrySnapshot) -> Vec<String> {
+fn get_all_hostos_versions_of_nodes(snapshot: &RegistrySnapshot) -> BTreeSet<String> {
     get_all_node_records(snapshot)
         .into_values()
         .filter_map(|node_record| node_record.hostos_version_id)
@@ -71,9 +68,9 @@ fn get_all_hostos_versions_of_nodes(snapshot: &RegistrySnapshot) -> Vec<String> 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use crate::common::test_helpers::invariant_compliant_registry;
+    use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
+    use ic_registry_keys::make_hostos_version_key;
     use ic_registry_transport::{insert, pb::v1::RegistryMutation};
     use prost::Message;
 

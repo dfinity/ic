@@ -22,7 +22,8 @@ pub(crate) fn check_standard_engine_replica_version_invariants(
     let Some(record) = get_value_from_snapshot::<StandardEngineReplicaVersionRecord>(
         snapshot,
         make_standard_engine_replica_version_record_key(),
-    ) else {
+    )?
+    else {
         // If there is no record yet, then we are trivially valid.
         return Ok(());
     };

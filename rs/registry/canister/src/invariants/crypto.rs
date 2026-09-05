@@ -432,9 +432,9 @@ fn check_high_threshold_public_key_matches_the_one_in_cup(
         let high_threshold_public_key_bytes: Option<PublicKey> = get_value_from_snapshot(
             snapshot,
             make_crypto_threshold_signing_pubkey_key(subnet_id),
-        );
+        )?;
         let cup_contents_bytes: Option<CatchUpPackageContents> =
-            get_value_from_snapshot(snapshot, make_catch_up_package_contents_key(subnet_id));
+            get_value_from_snapshot(snapshot, make_catch_up_package_contents_key(subnet_id))?;
         if let (Some(high_threshold_public_key_proto), Some(cup_contents)) =
             (high_threshold_public_key_bytes, cup_contents_bytes)
         {
