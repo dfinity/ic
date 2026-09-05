@@ -1140,7 +1140,6 @@ impl Step for UploadAndHostTarStep {
 
         let upload_dir = UploadAndHostTarStep::get_upload_dir_name();
 
-        ssh_helper.ssh("nix-env -i daemonize python3".to_string())?;
         ssh_helper.ssh(format!(
             "mkdir -p {upload_dir}",
             upload_dir = upload_dir.display()

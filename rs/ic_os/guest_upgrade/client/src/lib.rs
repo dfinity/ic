@@ -1,5 +1,6 @@
 use crate::tls::SkipServerCertificateCheck;
 use anyhow::{Context, Error, Result, anyhow, bail};
+use attestation::SevAttestationPackage;
 use attestation::attestation_package::{
     AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
@@ -21,6 +22,7 @@ use rcgen::CertifiedKey;
 use rustls::ClientConfig;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
+use sev::firmware::guest::AttestationReport;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
 use std::io::Write;
@@ -232,19 +234,13 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .get_guest_launch_measurements(registry_version)
             .map_err(|e| anyhow!("Failed to get elected measurements from registry: {e}"))?;
 
-        // Verify the server's attestation report. This is to ensure that the key comes from a
-        // trusted source. Without this check, an attacker could start with a malicious GuestOS,
-        // inject malicious files into the data partition then trigger an upgrade to a
-        // legit version. The malicious data would remain on the data partition.
-        ParsedSevAttestationPackage::parse(
+        verify_server_attestation_package(
             server_attestation_package,
+            &my_attestation_report,
+            &custom_data,
+            elected_measurements,
             self.sev_root_certificate_verification,
-        )
-        .verify_measurement(&elected_measurements)
-        .verify_custom_data(&custom_data)
-        .verify_chip_id(&[my_attestation_report.chip_id])
-        .verify_guest_policy()
-        .context("Server attestation report verification failed")?;
+        )?;
 
         let disk_encryption_key = disk_encryption_data
             .key
@@ -347,6 +343,32 @@ impl DiskEncryptionKeyExchangeClientAgent {
             server_public_key_der,
         ))
     }
+}
+
+pub fn verify_server_attestation_package(
+    server_attestation_package: SevAttestationPackage,
+    my_attestation_report: &AttestationReport,
+    custom_data: &GetDiskEncryptionKeyTokenCustomData<'_>,
+    mut elected_measurements: Vec<Vec<u8>>,
+    sev_root_certificate_verification: SevRootCertificateVerification,
+) -> Result<()> {
+    // Our own launch measurement is not eligible: without this check, an attacker
+    // occupying the server endpoint could reflect our own attestation package back to us.
+    elected_measurements.retain(|measurement| {
+        measurement.as_slice() != my_attestation_report.measurement.as_slice()
+    });
+
+    ParsedSevAttestationPackage::parse(
+        server_attestation_package,
+        sev_root_certificate_verification,
+    )
+    .verify_measurement(&elected_measurements)
+    .verify_custom_data(custom_data)
+    .verify_chip_id(&[my_attestation_report.chip_id])
+    .verify_guest_policy()
+    .context("Server attestation report verification failed")?;
+
+    Ok(())
 }
 
 fn extract_server_public_key_der(conn: &MaybeHttpsStream<TokioIo<TcpStream>>) -> Result<Vec<u8>> {

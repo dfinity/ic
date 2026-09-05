@@ -1,18 +1,14 @@
-use std::time::Duration;
-
 use anyhow::Result;
 use futures::future::join_all;
-use slog::Logger;
-use tokio::runtime::{Builder, Runtime};
-
 use ic_consensus_system_test_upgrade_common::{
+    ALLOWED_FAILURES, UP_DOWNGRADE_OVERALL_TIMEOUT, UP_DOWNGRADE_PER_TEST_TIMEOUT,
     elect_target_version, get_chain_key_canister_and_public_key, upgrade,
 };
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg_with_retries, install_nns_and_check_progress,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    ChainSignatureRequest, make_key_ids_for_all_schemes,
+    ChainSignatureRequest, make_key_ids_for_all_idkg_schemes,
 };
 use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
@@ -32,14 +28,14 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{MessageCanister, block_on, get_app_subnet_and_node};
 use ic_types::Height;
+use slog::Logger;
 use slog::info;
+use std::time::Duration;
+use tokio::runtime::{Builder, Runtime};
 
 const SCHNORR_MSG_SIZE_BYTES: usize = 32;
 const DKG_INTERVAL: u64 = 29;
-const ALLOWED_FAILURES: usize = 1;
-const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
-const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(35 * 60);
-const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1;
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
 fn setup(env: TestEnv) {
@@ -47,7 +43,8 @@ fn setup(env: TestEnv) {
         .add_nodes(SUBNET_SIZE)
         .with_dkg_interval_length(Height::from(DKG_INTERVAL))
         .with_chain_key_config(ChainKeyConfig {
-            key_configs: make_key_ids_for_all_schemes()
+            // TODO: Switch back to `make_key_ids_for_all_schemes` once mainnet version changes
+            key_configs: make_key_ids_for_all_idkg_schemes()
                 .into_iter()
                 .map(|key_id| KeyConfig {
                     max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
@@ -76,7 +73,8 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let target_version = elect_target_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let key_ids = make_key_ids_for_all_schemes();
+    // TODO: Switch back to `make_key_ids_for_all_schemes` once mainnet version changes
+    let key_ids = make_key_ids_for_all_idkg_schemes();
     let ecdsa_state = get_chain_key_canister_and_public_key(
         &env,
         &nns_node,
