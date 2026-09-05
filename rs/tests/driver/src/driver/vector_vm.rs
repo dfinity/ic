@@ -5,6 +5,7 @@ use std::{
     path::Path,
 };
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use slog::{Logger, debug, info, warn};
@@ -265,10 +266,14 @@ impl VectorVm {
             return Ok(());
         };
 
-        let deployed_vm = env.get_deployed_universal_vm("vector").unwrap();
+        // Return errors instead of panicking: this runs in the vector_logging
+        // task which supervises the whole test plan, so a panic here would fail
+        // the entire test run just because the log-shipping VM is unreachable.
+        // The caller (the loop in `vector_logging_task`) warns and retries.
+        let deployed_vm = env.get_deployed_universal_vm("vector")?;
         let session = deployed_vm
             .block_on_ssh_session()
-            .unwrap_or_else(|e| panic!("Failed to setup SSH session to vector because: {e:?}!",));
+            .context("Failed to setup SSH session to vector")?;
 
         std::fs::write(
             vector_local_dir.join("generated_config.json"),
@@ -309,7 +314,7 @@ docker run -d --name vector \
         "#,
                     ),
                 )
-                .unwrap();
+                .context("Failed to run vector container")?;
             self.container_running = true;
 
             emit_kibana_url_event(&log, &infra_group_name, &self.start_time);
@@ -317,7 +322,7 @@ docker run -d --name vector \
             info!(log, "Issuing command to reload vector configuration.");
             deployed_vm
                 .block_on_bash_script_from_session(&session, "docker kill --signal=HUP vector")
-                .unwrap();
+                .context("Failed to reload vector configuration")?;
         }
 
         info!(log, "Vector targets sync complete.");
