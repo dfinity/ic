@@ -31,6 +31,8 @@ pub mod tx;
 pub mod withdraw;
 
 #[cfg(test)]
+mod deposit_cost;
+#[cfg(test)]
 pub mod test_fixtures;
 #[cfg(test)]
 mod tests;

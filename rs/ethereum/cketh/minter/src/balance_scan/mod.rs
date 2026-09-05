@@ -35,7 +35,7 @@ use ic_ethereum_types::Address;
 /// tick — and a chunk that ever exceeds a provider's gas cap fails *every* time, permanently
 /// stalling its pairs. 1_000 keeps a comfortable margin against that for the current token set;
 /// re-measure (and lower if needed) if the supported tokens grow or skew more gas-heavy.
-const MAX_CALLS_PER_BATCH: usize = 1_000;
+pub(crate) const MAX_CALLS_PER_BATCH: usize = 1_000;
 
 pub async fn balance_scan<T: TimeProvider>(time_provider: &T) {
     let now = Timestamp::from_nanos(time_provider.time());

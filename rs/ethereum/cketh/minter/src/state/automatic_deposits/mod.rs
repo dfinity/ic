@@ -31,7 +31,7 @@ pub const DEPOSIT_ADDRESS_SCAN_WINDOW: Duration = Duration::from_secs(24 * 60 * 
 /// ramps up to five-minute gaps, then settles to hourly scans until the 24h window
 /// closes. Once the schedule is exhausted the deposit is no longer scanned (it
 /// expires at 24h anyway).
-const SCAN_GAP_SECS: [u64; 33] = [
+pub(crate) const SCAN_GAP_SECS: [u64; 33] = [
     // Burst then ramp: cumulative 1_800s (30min) over the first ten scans.
     30, 30, 60, 120, 120, 240, 300, 300, 300, 300,
     // Hourly tail up to the 24h window: 23 more scans of 3_600s (82_800s), for a
