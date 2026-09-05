@@ -261,15 +261,17 @@ if [ -n "$WT" ]; then
         sleep 1
     done
     if [ -e "$TMPCACHE/.main-ready" ]; then
-        if run_in "$WT" bash -c 'timeout 600 bazel version >/dev/null 2>&1; bazel shutdown >/dev/null 2>&1 || true; touch "$HOME/.cache/.wt-done"'; then
+        # Propagate bazel's exit status; the marker below is set from the host
+        # regardless, so the main container never waits for a failed run.
+        if run_in "$WT" bash -c 'timeout 600 bazel version >/dev/null 2>&1; rc=$?; bazel shutdown >/dev/null 2>&1 || true; exit $rc'; then
             ok "worktree container ran bazel"
         else
             nok "worktree container ran bazel"
         fi
     else
         nok "main container became ready"
-        touch "$TMPCACHE/.wt-done"
     fi
+    touch "$TMPCACHE/.wt-done"
     if wait "$main_job"; then
         ok "main checkout's bazel server pid unchanged"
     else
