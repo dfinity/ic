@@ -12,8 +12,9 @@ use ic_management_canister_types_private::{
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterQueues, CanisterState, ExecutionTask, IngressHistoryState, InputSource, OutputRequest,
-    RefundPool, ReplicatedState, SchedulerState, StateError, SystemMetadata, SystemState,
+    CallContext, CallOrigin, CanisterQueues, CanisterState, ExecutionTask, IngressHistoryState,
+    InputSource, OutputRequest, RefundPool, ReplicatedState, SchedulerState, StateError,
+    SystemMetadata, SystemState,
     canister_state::{
         canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
         execution_state::{CustomSection, CustomSectionType, WasmMetadata},
@@ -41,8 +42,8 @@ use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::batch::RawQueryStats;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{
-    CallbackId, CanisterCall, CanisterMessage, MAX_RESPONSE_COUNT_BYTES, Payload, Refund,
-    RejectContext, Request, RequestOrResponse, Response, SubnetMessage,
+    CallbackId, CanisterCall, CanisterMessage, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload,
+    Refund, RejectContext, Request, RequestMetadata, RequestOrResponse, Response, SubnetMessage,
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::StreamIndex;
@@ -53,6 +54,7 @@ use ic_types_cycles::{
 };
 use maplit::btreemap;
 use proptest::prelude::*;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem::size_of;
 use std::sync::Arc;
@@ -1446,6 +1448,146 @@ fn online_split() {
 
     // Everything else should be unchanged.
     assert_eq!(expected, state_b);
+}
+
+#[test]
+fn after_merge() {
+    const CANISTER_1: CanisterId = CanisterId::from_u64(1);
+    const CANISTER_2: CanisterId = CanisterId::from_u64(2);
+    const CANISTERS: [CanisterId; 2] = [CANISTER_1, CANISTER_2];
+
+    // A time different from the state time (`UNIX_EPOCH`), so that pre-existing
+    // ingress history entries can be told apart from newly recorded ones.
+    let before = Time::from_nanos_since_unix_epoch(13);
+
+    // Makes a not yet responded call context with the given origin.
+    fn open_call_context(call_origin: CallOrigin) -> CallContext {
+        CallContext::new(
+            call_origin,
+            false, // responded
+            false, // deleted
+            Cycles::zero(),
+            UNIX_EPOCH,
+            RequestMetadata::for_new_call_tree(UNIX_EPOCH),
+            None,
+        )
+    }
+
+    // Makes an ingress call origin for the given message.
+    fn ingress_origin(message: u64) -> CallOrigin {
+        CallOrigin::Ingress(
+            user_test_id(message),
+            message_test_id(message),
+            "update".into(),
+        )
+    }
+
+    // Makes an ingress status with the given receiver, message and state.
+    let ingress_status = |receiver: CanisterId, message: u64, time, state| IngressStatus::Known {
+        receiver: receiver.get(),
+        user_id: user_test_id(message),
+        time,
+        state,
+    };
+
+    let mut fixture = ReplicatedStateFixture::with_canisters(&CANISTERS);
+
+    // An in-progress ingress message to `CANISTER_1`, with no ingress history entry.
+    let canister_1 = fixture.state.canister_state_make_mut(&CANISTER_1).unwrap();
+    canister_1
+        .system_state
+        .with_call_context(open_call_context(ingress_origin(1)));
+    // An ingress message that was already responded to; and an in-progress canister
+    // update call. Neither should be recorded in the ingress history.
+    canister_1.system_state.with_call_context(CallContext::new(
+        ingress_origin(2),
+        true,  // responded
+        false, // deleted
+        Cycles::zero(),
+        UNIX_EPOCH,
+        RequestMetadata::for_new_call_tree(UNIX_EPOCH),
+        None,
+    ));
+    canister_1
+        .system_state
+        .with_call_context(open_call_context(CallOrigin::CanisterUpdate(
+            CANISTER_2,
+            CallbackId::from(3),
+            NO_DEADLINE,
+            "update".into(),
+        )));
+
+    // Three in-progress ingress messages to `CANISTER_2`: one with no ingress
+    // history entry; one already recorded as `Processing`; and one recorded with an
+    // unexpected status.
+    let canister_2 = fixture.state.canister_state_make_mut(&CANISTER_2).unwrap();
+    for message in [4, 5, 6] {
+        canister_2
+            .system_state
+            .with_call_context(open_call_context(ingress_origin(message)));
+    }
+    let processing_5 = ingress_status(CANISTER_2, 5, before, IngressState::Processing);
+    let received_6 = ingress_status(CANISTER_2, 6, before, IngressState::Received);
+    for (message, status) in [(5, processing_5.clone()), (6, received_6.clone())] {
+        fixture.state.metadata.ingress_history.insert(
+            message_test_id(message),
+            status,
+            before,
+            NumBytes::from(u64::MAX),
+            |_| {},
+        );
+    }
+
+    let mut state = fixture.state;
+    state.metadata.subnet_merged = true;
+
+    let unexpected_statuses = RefCell::new(Vec::new());
+    state.after_merge(NumBytes::from(u64::MAX), |message_id, status| {
+        unexpected_statuses
+            .borrow_mut()
+            .push((message_id.clone(), status.clone()));
+    });
+
+    // The merge marker was reset.
+    assert!(!state.metadata.subnet_merged);
+
+    // Only the `Received` entry of message 6 was reported as unexpected.
+    assert_eq!(
+        vec![(message_test_id(6), received_6.clone())],
+        unexpected_statuses.into_inner()
+    );
+
+    // Messages 1 and 4 were recorded as `Processing` at the state time; the existing
+    // entries of messages 5 and 6 were left alone; and nothing else was recorded.
+    let expected = BTreeMap::from([
+        (
+            message_test_id(1),
+            ingress_status(CANISTER_1, 1, UNIX_EPOCH, IngressState::Processing),
+        ),
+        (
+            message_test_id(4),
+            ingress_status(CANISTER_2, 4, UNIX_EPOCH, IngressState::Processing),
+        ),
+        (message_test_id(5), processing_5),
+        (message_test_id(6), received_6),
+    ]);
+    assert_eq!(
+        expected,
+        state
+            .metadata
+            .ingress_history
+            .statuses()
+            .map(|(message_id, status)| (message_id.clone(), status.clone()))
+            .collect::<BTreeMap<_, _>>()
+    );
+}
+
+#[test]
+#[should_panic(expected = "Not a state resulting from a subnet merge")]
+fn after_merge_without_merge_marker() {
+    ReplicatedStateFixture::new()
+        .state
+        .after_merge(NumBytes::from(u64::MAX), |_, _| {});
 }
 
 #[test]

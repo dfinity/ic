@@ -1,7 +1,7 @@
 use crate::canister_state::queues::{
     CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool,
 };
-use crate::canister_state::system_state::{CanisterOutputQueuesIterator, push_input};
+use crate::canister_state::system_state::{CallOrigin, CanisterOutputQueuesIterator, push_input};
 use crate::metadata_state::subnet_call_context_manager::{
     PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
 };
@@ -30,7 +30,7 @@ use ic_types::{
     CanisterId, NumBytes, SubnetId, Time,
     batch::{ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
-    ingress::IngressStatus,
+    ingress::{IngressState, IngressStatus},
     messages::{
         CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
     },
@@ -1620,6 +1620,85 @@ impl ReplicatedState {
 
         // Reset query stats after subnet split.
         *epoch_query_stats = RawQueryStats::default();
+    }
+
+    /// Makes adjustments to the replicated state during the first round after a
+    /// subnet merge: resets the "subnet was merged" marker and records all
+    /// not yet responded ingress-induced call contexts as `Processing` in the
+    /// ingress history.
+    ///
+    /// The ingress history of the merged subnet does not necessarily cover the
+    /// in-progress ingress messages of all merged subnets, so the corresponding
+    /// entries are (re)created here, ensuring that every in-progress ingress
+    /// message can be tracked to completion.
+    ///
+    /// Only call contexts of canisters are considered; subnet call contexts are
+    /// ignored, as subnet merging ensures that the subnets being merged have no
+    /// in-progress subnet call contexts.
+    ///
+    /// A message that already has an ingress history entry is left alone; its
+    /// status is expected to be `Processing`, anything else is reported via
+    /// `on_unexpected_ingress_status()` (as it indicates a bug).
+    pub fn after_merge(
+        &mut self,
+        ingress_memory_capacity: NumBytes,
+        on_unexpected_ingress_status: impl Fn(&MessageId, &IngressStatus),
+    ) {
+        assert!(
+            self.metadata.subnet_merged,
+            "Not a state resulting from a subnet merge"
+        );
+        self.metadata.subnet_merged = false;
+
+        let time = self.time();
+        let ingress_statuses = self
+            .canisters_iter()
+            .flat_map(|canister_state| {
+                let receiver = canister_state.canister_id().get();
+                canister_state
+                    .system_state
+                    .call_context_manager()
+                    .into_iter()
+                    .flat_map(|ccm| ccm.call_contexts().values())
+                    .filter(|call_context| !call_context.has_responded())
+                    .filter_map(move |call_context| match call_context.call_origin() {
+                        CallOrigin::Ingress(user_id, message_id, _) => Some((
+                            message_id.clone(),
+                            IngressStatus::Known {
+                                receiver,
+                                user_id: *user_id,
+                                time,
+                                state: IngressState::Processing,
+                            },
+                        )),
+                        CallOrigin::CanisterUpdate(..)
+                        | CallOrigin::Query(..)
+                        | CallOrigin::CanisterQuery(..)
+                        | CallOrigin::SystemTask => None,
+                    })
+            })
+            .collect::<Vec<_>>();
+
+        for (message_id, status) in ingress_statuses {
+            match self.metadata.ingress_history.get(&message_id).cloned() {
+                // No entry yet, record the in-progress ingress message.
+                None => {
+                    self.set_ingress_status(message_id, status, ingress_memory_capacity, |_| {});
+                }
+
+                // Already recorded as `Processing`, nothing to do.
+                Some(IngressStatus::Known {
+                    state: IngressState::Processing,
+                    ..
+                }) => {}
+
+                // Any other status indicates a bug, report it. The existing entry is
+                // preserved, as overwriting a terminal status would be worse.
+                Some(unexpected_status) => {
+                    on_unexpected_ingress_status(&message_id, &unexpected_status)
+                }
+            }
+        }
     }
 
     /// Splits the replicated state during a special DSM round, retaining only the

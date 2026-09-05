@@ -68,6 +68,14 @@ enum Opt {
         path: PathBuf,
     },
 
+    /// Prints the batch time of a checkpoint, in nanoseconds since the Epoch.
+    #[clap(name = "checkpoint_time")]
+    CheckpointTime {
+        /// Path to a checkpoint.
+        #[clap(long = "state")]
+        path: PathBuf,
+    },
+
     /// Verifies whether the textual representation
     /// of a manifest matches its root hash.
     #[clap(name = "verify_manifest")]
@@ -256,6 +264,7 @@ pub(crate) fn main_inner(args: Vec<String>) {
             heights,
         } => commands::copy::do_copy(source, destination, heights.into()),
         Opt::Manifest { path } => commands::manifest::do_compute_manifest(path),
+        Opt::CheckpointTime { path } => commands::checkpoint_time::do_print_checkpoint_time(path),
         Opt::VerifyManifest { file } => commands::verify_manifest::do_verify_manifest(&file),
         Opt::ListStates { config } => commands::list::do_list(config),
         Opt::Decode { file } => commands::decode::do_decode(file),

@@ -5550,6 +5550,11 @@ pub enum NnsFunction {
     /// `SetupInitialDKG` requests without an explicit subnet id are routed to the
     /// calling subnet (NNS).
     SetDefaultInitialDkgSubnet = 58,
+    /// Merge a subnet into another subnet: the canister ID ranges of the source
+    /// subnet are merged into the canister ID range set of the destination subnet,
+    /// so that all canisters that used to be hosted by the source subnet are routed
+    /// to the destination subnet.
+    MergeSubnets = 59,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5626,6 +5631,7 @@ impl NnsFunction {
             Self::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
             Self::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
             Self::SetDefaultInitialDkgSubnet => "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET",
+            Self::MergeSubnets => "NNS_FUNCTION_MERGE_SUBNETS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5709,6 +5715,7 @@ impl NnsFunction {
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
             "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
             "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET" => Some(Self::SetDefaultInitialDkgSubnet),
+            "NNS_FUNCTION_MERGE_SUBNETS" => Some(Self::MergeSubnets),
             _ => None,
         }
     }
