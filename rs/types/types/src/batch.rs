@@ -73,6 +73,23 @@ pub enum BatchContent {
         // Used for sanity checks
         other_subnet_id: SubnetId,
     },
+    /// Persists the state produced by the preceding rounds into a checkpoint,
+    /// without inducting, executing or routing any messages.
+    ///
+    /// Unlike `Data { requires_full_state_hash: true, .. }`, no round is executed:
+    /// no messages are inducted or executed and no canister is charged for its
+    /// resource allocation. All the state machine does is what creating a
+    /// checkpoint requires, namely aborting paused executions and wiping
+    /// `SystemMetadata` caches.
+    ///
+    /// The per-round bookkeeping that message routing applies around the state
+    /// machine is not skipped, though: the batch time advances, the state is
+    /// canonicalized and the subnet metrics are refreshed as they are for any
+    /// other checkpoint round. The result is therefore a checkpoint of the state
+    /// the preceding rounds produced, not a byte-for-byte copy of it.
+    ///
+    /// Checkpointing rounds are always checkpoint ("full state hash") rounds.
+    CheckpointingWithoutExecution,
 }
 
 /// The `Batch` provided to Message Routing for deterministic processing.
@@ -91,8 +108,9 @@ pub struct Batch {
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
     pub time: Time,
-    /// Information about block makers
-    pub blockmaker_metrics: BlockmakerMetrics,
+    /// Information about block makers. `None` for batches that do not correspond
+    /// to a finalized block, so that no blockmaker is credited for them.
+    pub blockmaker_metrics: Option<BlockmakerMetrics>,
     /// The current replica version.
     pub replica_version: ReplicaVersion,
 }
@@ -107,8 +125,8 @@ impl Batch {
                 ..
             } => *requires_full_state_hash,
 
-            // Subnet splitting always requires a checkpoint.
-            BatchContent::Splitting { .. } => true,
+            // Subnet splitting and checkpointing always require a checkpoint.
+            BatchContent::Splitting { .. } | BatchContent::CheckpointingWithoutExecution => true,
         }
     }
 }

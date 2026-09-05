@@ -17,7 +17,7 @@
 use crate::{
     cmd::{ReplayToolArgs, SubCommand},
     ingress::*,
-    player::{Player, ReplayResult},
+    player::{Player, ReplayOutput, ReplayResult},
 };
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -34,7 +34,8 @@ pub mod player;
 mod registry_helper;
 mod validator;
 
-/// Replays the past blocks and creates a checkpoint of the latest state.
+/// Replays the past blocks and, if `create_checkpoint` is set, creates a checkpoint of
+/// the latest state.
 /// # An example of how to set the arguments
 /// ```
 /// use ic_replay::cmd::ClapSubnetId;
@@ -62,6 +63,7 @@ mod validator;
 ///     })),
 ///     skip_prompts: true,
 ///     replica_version: None,
+///     create_checkpoint: false,
 /// };
 /// // Once the arguments are set well, the local store and spool directories are populated;
 /// // replay function could be called as follows:
@@ -100,17 +102,22 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             .0;
 
         let target_height = args.replay_until_height;
-        if let Some(h) = target_height {
-            let question = format!("The checkpoint created at height {h} ")
-                + "cannot be used for deterministic state computation if it is not a CUP height.\n"
-                + "Continue?";
-            if !args.skip_prompts && !consent_given(&question) {
-                return;
-            }
-        }
 
         if let Some(SubCommand::RestoreFromBackup(cmd)) = subcmd {
             let _enter_guard = rt.enter();
+
+            // Restoring from a backup delivers no extra batch: unless the target
+            // height is a CUP height, no checkpoint is created at it and the restore
+            // makes no persistent progress beyond the latest CUP at or below it.
+            if let Some(h) = target_height {
+                let question = format!("No checkpoint will be created at height {h} ")
+                    + "unless it is a CUP height, so the restore will make no persistent\n"
+                    + "progress beyond the latest CUP at or below this height.\n"
+                    + "Continue?";
+                if !args.skip_prompts && !consent_given(&question) {
+                    return;
+                }
+            }
 
             let mut player = Player::new_for_backup(
                 cfg,
@@ -120,16 +127,37 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 &cmd.registry_local_store_path,
                 subnet_id,
                 cmd.start_height,
-            )
-            .with_replay_target_height(target_height);
+                target_height,
+            );
             *res_clone.borrow_mut() = player.restore_from_backup(cmd.start_height + 1);
             return;
         }
 
         {
             let _enter_guard = rt.enter();
-            let player = Player::new(cfg, subnet_id, args.replica_version)
-                .with_replay_target_height(target_height);
+
+            // The checkpoint holding the state replayed up to the target height can
+            // only be used for deterministic state computation if the target height is
+            // a CUP height. (The checkpoint itself is one height further up, created by
+            // the extra batch, unless the target height is a CUP height.)
+            if let Some(h) = target_height
+                && args.create_checkpoint
+            {
+                let question = format!("The checkpoint of the state replayed up to height {h} ")
+                    + "cannot be used for deterministic state computation if it is not a CUP height.\n"
+                    + "Continue?";
+                if !args.skip_prompts && !consent_given(&question) {
+                    return;
+                }
+            }
+
+            let player = Player::new(
+                cfg,
+                subnet_id,
+                args.replica_version,
+                target_height,
+                args.create_checkpoint,
+            );
 
             if let Some(SubCommand::GetRecoveryCup(cmd)) = subcmd {
                 cmd_get_recovery_cup(&player, cmd).unwrap();
@@ -193,12 +221,15 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             };
 
             *res_clone.borrow_mut() = match player.replay(extra) {
-                Ok(state_params) => {
+                Ok(replay_output) => {
                     if let Some(SubCommand::UpdateRegistryLocalStore) = subcmd {
                         player.update_registry_local_store();
-                        Ok(player.get_latest_state_params(None, Vec::new()))
+                        Ok(ReplayOutput {
+                            state_params: player.get_latest_state_params(None, Vec::new()),
+                            extra_batches: replay_output.extra_batches,
+                        })
                     } else {
-                        Ok(state_params)
+                        Ok(replay_output)
                     }
                 }
                 err => err,

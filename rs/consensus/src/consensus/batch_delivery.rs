@@ -245,10 +245,6 @@ fn deliver_batches(
         };
         let (consensus_responses, canister_http_spent) =
             generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
-        // This flag can only be true, if we've called deliver_batches with a height
-        // limit.  In this case we also want to have a checkpoint for that last height.
-        let persist_batch = Some(height) == max_batch_height_to_deliver;
-        let requires_full_state_hash = block.payload.is_summary() || persist_batch;
         let batch_content = match block.payload.as_ref() {
             BlockPayload::Summary(_summary_payload) => {
                 if let Some(scheduled) = subnet_splitting::is_split_scheduled(&block) {
@@ -290,7 +286,7 @@ fn deliver_batches(
                         chain_key_data,
                         consensus_responses,
                         canister_http_spent,
-                        requires_full_state_hash,
+                        requires_full_state_hash: true,
                     }
                 }
             }
@@ -309,7 +305,7 @@ fn deliver_batches(
                     chain_key_data,
                     consensus_responses,
                     canister_http_spent,
-                    requires_full_state_hash,
+                    requires_full_state_hash: false,
                 }
             }
         };
@@ -358,7 +354,7 @@ fn deliver_batches(
 
             registry_version: block.context.registry_version,
             time: block.context.time,
-            blockmaker_metrics,
+            blockmaker_metrics: Some(blockmaker_metrics),
             replica_version: replica_version.clone(),
         };
 
@@ -670,6 +666,54 @@ mod tests {
     const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
 
     const TARGET_ID: NiDkgTargetId = NiDkgTargetId::new([8; 32]);
+
+    /// `requires_full_state_hash` selects `ExecutionRoundType::CheckpointRound`,
+    /// which changes execution. It must therefore depend only on the block, so
+    /// that a caller bounding the delivery (i.e. `ic-replay`) still executes each
+    /// round exactly the way the subnet executed it.
+    #[test]
+    fn requires_full_state_hash_ignores_max_batch_height_to_deliver() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let dkg_interval_length = 9;
+            let Dependencies {
+                registry,
+                mut pool,
+                replica_config,
+                ..
+            } = DependenciesBuilder::new(pool_config, 1)
+                .with_dkg_interval_length(dkg_interval_length)
+                .build();
+            let subnet_id = replica_config.subnet_id;
+
+            // Summary blocks are at heights 0, 10, ...; finalize a few rounds and
+            // stop short of the next summary height.
+            let target_height = Height::from(5);
+            pool.advance_round_normal_operation_n(target_height.get());
+
+            let membership = Membership::new(pool.get_cache(), registry.clone(), subnet_id);
+            let message_routing = FakeMessageRouting::new();
+
+            let last_delivered = deliver_batches_for_ic_replay(
+                &message_routing,
+                &membership,
+                &PoolReader::new(&pool),
+                registry.as_ref(),
+                &no_op_logger(),
+                subnet_id,
+                Some(target_height),
+            )
+            .expect("failed to deliver batches");
+            assert_eq!(last_delivered, target_height);
+
+            let batches = message_routing.batches.read().unwrap();
+            let last_batch = batches.last().expect("no batch was delivered");
+            assert_eq!(last_batch.batch_number, target_height);
+            assert!(
+                !last_batch.requires_full_state_hash(),
+                "the batch at the delivery bound must not be a checkpoint round"
+            );
+        })
+    }
 
     const EXPECTED_FRESH_SUBNET_ID_STR: &str =
         "icdrs-3sfmz-hm6r3-cdzf5-cfroa-3cddh-aght7-azz25-eo34b-4strl-wae";

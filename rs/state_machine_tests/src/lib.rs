@@ -3186,7 +3186,7 @@ impl StateMachine {
         let batch = Batch {
             batch_number,
             batch_summary,
-            blockmaker_metrics,
+            blockmaker_metrics: Some(blockmaker_metrics),
             content,
             randomness: Randomness::from(seed),
             registry_version: self.registry_client.get_latest_version(),

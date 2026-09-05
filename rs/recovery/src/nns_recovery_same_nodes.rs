@@ -447,10 +447,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     )))
                 }
             }
-            StepType::ValidateReplayOutput => Ok(Box::new(self.recovery.get_validate_replay_step(
-                self.params.subnet_id,
-                u64::from(self.params.upgrade_version.is_some()),
-            ))),
+            StepType::ValidateReplayOutput => Ok(Box::new(
+                self.recovery
+                    .get_validate_replay_step(self.params.subnet_id),
+            )),
 
             StepType::UpdateRegistryLocalStore => {
                 if self.params.upgrade_version.is_none() {

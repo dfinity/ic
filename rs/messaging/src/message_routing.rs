@@ -1437,20 +1437,22 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             .registry_reader
             .read_registry(registry_version, state.metadata.own_subnet_id);
 
-        self.metrics.blocks_proposed_total.inc();
-        self.metrics
-            .blocks_not_proposed_total
-            .inc_by(batch.blockmaker_metrics.failed_blockmakers.len() as u64);
-        for failed_blockmaker in &batch.blockmaker_metrics.failed_blockmakers {
+        if let Some(blockmaker_metrics) = &batch.blockmaker_metrics {
+            self.metrics.blocks_proposed_total.inc();
             self.metrics
-                .blocks_not_proposed_by_blockmaker_total
-                .with_label_values(&[&failed_blockmaker.to_string()])
-                .inc();
+                .blocks_not_proposed_total
+                .inc_by(blockmaker_metrics.failed_blockmakers.len() as u64);
+            for failed_blockmaker in &blockmaker_metrics.failed_blockmakers {
+                self.metrics
+                    .blocks_not_proposed_by_blockmaker_total
+                    .with_label_values(&[&failed_blockmaker.to_string()])
+                    .inc();
+            }
+            state
+                .metadata
+                .blockmaker_metrics_time_series
+                .observe(batch.time, blockmaker_metrics);
         }
-        state
-            .metadata
-            .blockmaker_metrics_time_series
-            .observe(batch.time, &batch.blockmaker_metrics);
         read_registry_timer.observe_duration();
 
         let batch_summary = batch.batch_summary.clone();
@@ -1568,6 +1570,9 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         // Get only ingress out of the batch_messages
         let signed_ingress_msgs = match batch.content {
             BatchContent::Data { batch_messages, .. } => batch_messages.signed_ingress_msgs,
+            BatchContent::CheckpointingWithoutExecution => {
+                unimplemented!("Checkpointing without execution is not supported here")
+            }
             BatchContent::Splitting { .. } => unimplemented!("Subnet splitting is not yet enabled"),
         };
 

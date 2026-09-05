@@ -1046,7 +1046,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             randomness: Randomness::new([123; 32]),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
             replica_version: test_replica_version(),
         });
         let latest_state = state_manager.get_latest_state().take();
@@ -2338,7 +2338,7 @@ fn process_batch_updates_subnet_metrics() {
             randomness: Randomness::new([123; 32]),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
             replica_version: test_replica_version(),
         });
 
@@ -2409,7 +2409,7 @@ fn process_batch_resets_split_marker() {
             randomness: Randomness::new([123; 32]),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(1),
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
             replica_version: test_replica_version(),
         });
 

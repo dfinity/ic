@@ -39,16 +39,24 @@ pub struct ReplayToolArgs {
     pub data_root: Option<PathBuf>,
 
     #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
+    /// The replay will stop at this height.
     pub replay_until_height: Option<u64>,
 
     #[clap(long)]
     /// Whether or not to skip prompts for user input.
     pub skip_prompts: bool,
 
+    /// Persist the replayed state by creating a checkpoint of it, unless it is
+    /// checkpointed already, which is the case when the last replayed block is a
+    /// summary block. Without this flag such a replay leaves its tip in memory only
+    /// and can be re-run as often as needed; pass it once the replayed state should
+    /// be committed.
+    #[clap(long)]
+    pub create_checkpoint: bool,
+
     /// The replica version under which the extra messages of the subcommand are
-    /// executed. Only needed if no consensus pool is available, otherwise the version is taken from
-    /// its finalized tip.
+    /// executed. Required if no consensus pool is available, otherwise the version is
+    /// taken from its finalized tip and this argument is ignored.
     #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 }

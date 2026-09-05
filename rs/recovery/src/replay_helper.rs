@@ -7,8 +7,9 @@ use crate::{
 use ic_base_types::{CanisterId, SubnetId};
 use ic_replay::{
     cmd::{ClapSubnetId, ReplayToolArgs, SubCommand},
-    player::{ReplayError, StateParams},
+    player::{ReplayError, ReplayOutput},
 };
+use ic_types::ReplicaVersion;
 use std::{path::PathBuf, str::FromStr};
 
 pub const OUTPUT_FILE_NAME: &str = "replay_result.txt";
@@ -24,7 +25,9 @@ pub async fn replay(
     replay_until_height: Option<u64>,
     output: PathBuf,
     skip_prompts: bool,
-) -> RecoveryResult<StateParams> {
+    create_checkpoint: bool,
+    replica_version: Option<ReplicaVersion>,
+) -> RecoveryResult<ReplayOutput> {
     let args = ReplayToolArgs {
         subnet_id: Some(ClapSubnetId::from_str(&subnet_id.to_string()).unwrap()),
         config: Some(config),
@@ -33,18 +36,19 @@ pub async fn replay(
         subcmd,
         data_root: Some(data_root),
         skip_prompts,
-        replica_version: None,
+        create_checkpoint,
+        replica_version,
     };
     // Since replay output needs to be persisted anyway in case the recovery process
     // is restarted, we avoid declaring a return value and moving out of the
     // closure, and instead directly write to file.
     let output_file = output.clone();
     tokio::task::spawn_blocking(move || match ic_replay::replay(args) {
-        Ok(state_params) | Err(ReplayError::UpgradeDetected(state_params)) => {
-            store_replay_output(state_params, output_file)
+        Ok(replay_output) | Err(ReplayError::UpgradeDetected(replay_output)) => {
+            store_replay_output(replay_output, output_file)
         }
-        Err(ReplayError::ManualInspectionRequired(state_params)) => {
-            store_replay_output(state_params, output_file)?;
+        Err(ReplayError::ManualInspectionRequired(replay_output)) => {
+            store_replay_output(replay_output, output_file)?;
             Err(RecoveryError::OutputError(
                 "Replay finished successfully, but manual inspection and/or re-run is recommended."
                     .into(),
@@ -62,20 +66,23 @@ pub async fn replay(
     read_output(output)
 }
 
-pub fn store_replay_output(state_params: StateParams, output_file: PathBuf) -> RecoveryResult<()> {
-    let json = serde_json::to_string(&state_params).map_err(|e| {
+pub fn store_replay_output(
+    replay_output: ReplayOutput,
+    output_file: PathBuf,
+) -> RecoveryResult<()> {
+    let json = serde_json::to_string(&replay_output).map_err(|e| {
         RecoveryError::invalid_output_error(format!("failed to serialize ic-replay output: {e}"))
     })?;
-    println!("{state_params:?}");
+    println!("{replay_output:?}");
     write_file(&output_file, json)
 }
 
 /// Read the replay output written to the given file.
 /// File content is expected to be JSON format
-pub fn read_output(output_file: PathBuf) -> RecoveryResult<StateParams> {
+pub fn read_output(output_file: PathBuf) -> RecoveryResult<ReplayOutput> {
     let content = read_file(&output_file)?;
-    let state_params: StateParams = serde_json::from_str(&content).map_err(|e| {
+    let replay_output: ReplayOutput = serde_json::from_str(&content).map_err(|e| {
         RecoveryError::invalid_output_error(format!("Failed to deserialize ic-replay output: {e}"))
     })?;
-    Ok(state_params)
+    Ok(replay_output)
 }
