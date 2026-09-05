@@ -1,6 +1,7 @@
 name: Publish Release
 
 permissions:
+  attestations: read
   contents: write
 
 on:
@@ -26,36 +27,62 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+      # `required: true` is only enforced by the web UI; an API-triggered
+      # dispatch can omit the input, and the empty tag name would fall
+      # through to checking out the dispatched branch below.
+      - name: Require a tag name on manual dispatch
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag-name == '' }}
+        run: |
+          echo "The tag-name input must not be empty" >&2
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.inputs.tag-name || github.ref }}
+          # Qualify the dispatched tag name as a tag ref: a tag that doesn't
+          # exist fails the checkout, and a branch sharing the tag's name can
+          # no longer shadow it, so HEAD is always the commit of the tag the
+          # release is attached to.
+          ref: ${{ github.event.inputs.tag-name && format('refs/tags/{0}', github.event.inputs.tag-name) || github.ref }}
 
-      - name: Collect Release Artifacts
+      - name: Determine release commit
+        id: commit
         run: |
-          set -euxo pipefail
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
 
-          CI_COMMIT_SHA=$(git rev-parse HEAD)
-          DOWNLOAD_PREFIX="https://download.dfinity.systems/ic/${CI_COMMIT_SHA}"
+      # Every CDN download below is verified against the build-provenance
+      # attestation created by the attest-uploads job of release-testing.yml
+      # for this exact commit, and the release aborts on any mismatch.
+      # Pinning the release-testing.yml signer
+      # also enforces that a release-* tag can only ship commits that went
+      # through the release-qualification pipeline.
+      - name: Download and verify release binaries
+        uses: ./.github/actions/fetch-verified-artifacts
+        with:
+          commit: ${{ steps.commit.outputs.sha }}
+          signer-workflow: dfinity/ic/.github/workflows/release-testing.yml
+          # release-* tags ship release-qualified commits only: accept
+          # attestations minted from release branches, not from a
+          # workflow_dispatch of release-testing.yml on some other ref.
+          source-ref-regex: refs/heads/(rc--|hotfix-)[^/]+
+          out-dir: ${{ runner.temp }}/release-binaries
+          gh-token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            binaries/x86_64-linux/ic-admin.gz ic-admin-x86_64-linux.gz
+            binaries/x86_64-linux/pocket-ic.gz pocket-ic-x86_64-linux.gz
+            binaries/x86_64-darwin/pocket-ic.gz pocket-ic-x86_64-darwin.gz
+            binaries/arm64-linux/pocket-ic.gz pocket-ic-arm64-linux.gz
+            binaries/arm64-linux/ic-admin.gz ic-admin-arm64-linux.gz
+            binaries/arm64-linux/sns.gz sns-arm64-linux.gz
+            binaries/arm64-darwin/pocket-ic.gz pocket-ic-arm64-darwin.gz
+            binaries/arm64-darwin/ic-admin.gz ic-admin-arm64-darwin.gz
+            binaries/arm64-darwin/sns.gz sns-arm64-darwin.gz
 
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.zst" -o setup-os-img.tar.zst
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.zst" -o update-os-img.tar.zst
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/ic-admin.gz" -o ic-admin-x86_64-linux.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/pocket-ic.gz" -o pocket-ic-x86_64-linux.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/pocket-ic.gz" -o pocket-ic-x86_64-darwin.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-linux/pocket-ic.gz" -o pocket-ic-arm64-linux.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-linux/ic-admin.gz" -o ic-admin-arm64-linux.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-linux/sns.gz" -o sns-arm64-linux.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-darwin/pocket-ic.gz" -o pocket-ic-arm64-darwin.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-darwin/ic-admin.gz" -o ic-admin-arm64-darwin.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-darwin/sns.gz" -o sns-arm64-darwin.gz
-          sha256sum *.gz > sha256sums.txt
-
-          echo "DOWNLOAD_PREFIX=${DOWNLOAD_PREFIX}" >> "$GITHUB_ENV"
-
-      - name: Collect Canister Artifacts
+      - name: Compose canister download list
+        id: canister_list
         run: |
-          set -euxo pipefail
+          set -euo pipefail
 
           # full list of canisters we build: $repo_root/publish/canisters/BUILD.bazel
           # here we make a tarball from subset of the full list
@@ -81,34 +108,55 @@ jobs:
             "sns-wasm-canister.wasm"
           )
 
-          mkdir canisters && pushd canisters
-          for C in "${CANISTERS[@]}"; do
-            curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/canisters/${C}.gz" -O
-            curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/canisters/${C}.gz.did" -O
-          done
-          tar -cf canisters.tar *.gz *.did
-          mv canisters.tar ..
-          popd
+          {
+            echo 'files<<EOF'
+            for C in "${CANISTERS[@]}"; do
+              echo "canisters/${C}.gz"
+              echo "canisters/${C}.gz.did"
+            done
+            echo 'EOF'
+          } >>"$GITHUB_OUTPUT"
 
-          sha256sum *.tar >> sha256sums.txt
+      - name: Download and verify canisters
+        uses: ./.github/actions/fetch-verified-artifacts
+        with:
+          commit: ${{ steps.commit.outputs.sha }}
+          signer-workflow: dfinity/ic/.github/workflows/release-testing.yml
+          # release-* tags ship release-qualified commits only: accept
+          # attestations minted from release branches, not from a
+          # workflow_dispatch of release-testing.yml on some other ref.
+          source-ref-regex: refs/heads/(rc--|hotfix-)[^/]+
+          out-dir: ${{ runner.temp }}/release-canisters
+          gh-token: ${{ secrets.GITHUB_TOKEN }}
+          files: ${{ steps.canister_list.outputs.files }}
+
+      - name: Bundle canisters and collect checksums
+        run: |
+          set -euo pipefail
+
+          (cd "$RUNNER_TEMP/release-canisters" && tar -cf "$GITHUB_WORKSPACE/canisters.tar" *.gz *.did)
+
+          cp "$RUNNER_TEMP/release-binaries/SHA256SUMS" sha256sums.txt
+          sha256sum canisters.tar >>sha256sums.txt
+
+          cat sha256sums.txt
 
       - name: Publish Release
-        # v0.1.15
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+        uses: softprops/action-gh-release@5be0e66d93ac7ed76da52eca8bb058f665c3a5fe # v2.4.2
         if: ${{ github.event_name == 'push' || github.event.inputs.dry-run == 'false' }}
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           body: "IC ${{ env.RELEASE_TAG }}"
+          fail_on_unmatched_files: true
           files: |
             canisters.tar
-            setup-os-img.tar.gz
-            update-os-img.tar.gz
-            ic-admin-x86_64-linux.gz
-            ic-admin-arm64-linux.gz
-            ic-admin-arm64-darwin.gz
-            pocket-ic-x86_64-linux.gz
-            pocket-ic-x86_64-darwin.gz
-            pocket-ic-arm64-linux.gz
-            pocket-ic-arm64-darwin.gz
-            sns-arm64-linux.gz
-            sns-arm64-darwin.gz
             sha256sums.txt
+            ${{ runner.temp }}/release-binaries/ic-admin-x86_64-linux.gz
+            ${{ runner.temp }}/release-binaries/ic-admin-arm64-linux.gz
+            ${{ runner.temp }}/release-binaries/ic-admin-arm64-darwin.gz
+            ${{ runner.temp }}/release-binaries/pocket-ic-x86_64-linux.gz
+            ${{ runner.temp }}/release-binaries/pocket-ic-x86_64-darwin.gz
+            ${{ runner.temp }}/release-binaries/pocket-ic-arm64-linux.gz
+            ${{ runner.temp }}/release-binaries/pocket-ic-arm64-darwin.gz
+            ${{ runner.temp }}/release-binaries/sns-arm64-linux.gz
+            ${{ runner.temp }}/release-binaries/sns-arm64-darwin.gz
