@@ -1300,7 +1300,7 @@ async fn zero_total_reward_shares() {
             total_available_e8s_equivalent: None,
         }),
         sns_metadata: Some(SnsMetadata {
-            logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
+            logo: Some("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC".to_string()),
             url: Some("https://internetcomputer.org/".to_string()),
             name: Some("ServiceNervousSystemTest".to_string()),
             description: Some("A project testing the SNS".to_string()),
@@ -1544,7 +1544,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
 
         sns_metadata: Some(SnsMetadata {
             url: Some("https://internetcomputer.org/".to_string()),
-            logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
+            logo: Some("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC".to_string()),
             name: Some("foo bar baz".to_string()),
             description: Some("foo bar baz".to_string()),
         }),

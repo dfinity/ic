@@ -464,12 +464,12 @@ impl SnsInitPayload {
         Self {
             token_symbol: Some("TEST".to_string()),
             token_name: Some("PlaceHolder".to_string()),
-            token_logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
+            token_logo: Some("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC".to_string()),
             initial_token_distribution: Some(FractionalDeveloperVotingPower(
                 FractionalDVP::with_valid_values_for_testing(),
             )),
             fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(5822).to_string()],
-            logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
+            logo: Some("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC".to_string()),
             name: Some("ServiceNervousSystemTest".to_string()),
             url: Some("https://internetcomputer.org/".to_string()),
             description: Some("Description of an SNS Project".to_string()),
@@ -2636,7 +2636,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
         let transaction_fee = 10_000;
         let token_symbol = "SNS".to_string();
         let token_name = "ServiceNervousSystem Coin".to_string();
-        let token_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+        let token_logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC".to_string();
 
         let sns_init_payload = SnsInitPayload {
             token_name: Some(token_name.clone()),
@@ -2937,7 +2937,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
 
         {
             let sns_init_payload = SnsInitPayload {
-                token_logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
+                token_logo: Some("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC".to_string()),
                 ..sns_init_payload.clone()
             };
             sns_init_payload.validate_post_execution().unwrap();
