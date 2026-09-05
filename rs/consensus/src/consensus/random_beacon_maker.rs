@@ -74,7 +74,7 @@ impl RandomBeaconMaker {
                 let content = RandomBeaconContent::new(
                     next_height,
                     ic_types::crypto::crypto_hash(&beacon),
-                    self.replica_config.replica_version.clone(),
+                    self.replica_config.replica_version().clone(),
                 );
                 // One might wonder whether it is appropriate to use the
                 // dkg_id from the start_block at h to generate the

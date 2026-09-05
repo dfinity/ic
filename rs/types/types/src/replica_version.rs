@@ -102,3 +102,18 @@ mod test {
         assert!(ReplicaVersion::from_str("?+").is_err());
     }
 }
+
+/// The node's platform versions: the GuestOS version the node booted from and
+/// the replica binary version.
+///
+/// Under normal conditions the two are the same. During a GuestOS fast
+/// upgrade, binaries from the target (new) GuestOS are hot-swapped in the
+/// running (old) GuestOS, so the replica version is ahead of the GuestOS
+/// version until the node reboots into the target GuestOS.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct PlatformVersion {
+    /// The GuestOS version the node booted from.
+    pub guestos_version: ReplicaVersion,
+    /// The replica binary version, possibly hot-swapped by a fast upgrade.
+    pub replica_version: ReplicaVersion,
+}

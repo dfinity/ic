@@ -32,7 +32,7 @@ use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{ReplicaVersion, SubnetId, hostos_version::HostosVersion};
+use ic_types::{PlatformVersion, ReplicaVersion, SubnetId, hostos_version::HostosVersion};
 use std::{
     collections::HashMap,
     convert::TryFrom,
@@ -134,11 +134,20 @@ impl Orchestrator {
         .unwrap()?;
 
         let metrics_registry = MetricsRegistry::global();
-        let replica_version = load_version_from_file(&logger, &args.version_file)
+        let replica_version = load_version_from_file(&logger, &args.replica_version_file)
             .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
+        let guestos_version = load_version_from_file(&logger, &args.guestos_version_file)
+            .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
+        let platform_version = PlatformVersion {
+            guestos_version: guestos_version.clone(),
+            replica_version: replica_version.clone(),
+        };
         info!(
             logger,
-            "Orchestrator started: version={}, config={:?}", replica_version, config
+            "Orchestrator started: replica_version={}, guestos_version={}, config={:?}",
+            replica_version,
+            guestos_version,
+            config
         );
         UtilityCommand::notify_host(
             format!("node-id {node_id}: starting with version {replica_version}").as_str(),
@@ -230,7 +239,7 @@ impl Orchestrator {
 
         metrics
             .orchestrator_info
-            .with_label_values(&[replica_version.as_ref()])
+            .with_label_values(&[replica_version.as_ref(), guestos_version.as_ref()])
             .set(1);
 
         let mut registration = NodeRegistration::new(
@@ -300,7 +309,7 @@ impl Orchestrator {
                 manageboot_runner,
                 cup_provider,
                 Arc::clone(&subnet_assignment),
-                replica_version.clone(),
+                platform_version,
                 args.replica_config_file.clone(),
                 node_id,
                 Arc::clone(&registry_replicator) as _,
@@ -352,7 +361,9 @@ impl Orchestrator {
         let boundary_node = BoundaryNodeManager::new(
             Arc::clone(&registry),
             ic_boundary_manager,
-            replica_version.clone(),
+            // Boundary nodes don't run fast upgrades, the corresponding binary is not
+            // overlaid.
+            guestos_version.clone(),
             node_id,
             logger.clone(),
         );

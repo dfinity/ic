@@ -7,7 +7,7 @@ use crate::{
 use ic_config::crypto::CryptoConfig;
 use ic_logger::{ReplicaLogger, info};
 use ic_protobuf::registry::subnet::v1::SubnetType;
-use ic_types::{RegistryVersion, ReplicaVersion, SubnetId};
+use ic_types::{PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId};
 use nix::unistd::Pid;
 use std::{collections::HashMap, ffi::OsString, path::PathBuf, sync::Arc};
 
@@ -24,7 +24,7 @@ pub(crate) struct ReplicaProcessConfig {
 
 pub(crate) struct ReplicaProcess {
     ic_binary_dir: PathBuf,
-    replica_version: ReplicaVersion,
+    platform_version: PlatformVersion,
     cup_path: PathBuf,
     replica_config_file: PathBuf,
     subnet_id: SubnetId,
@@ -34,15 +34,15 @@ impl Process for ReplicaProcess {
     const NAME: &'static str = "replica";
     type Version = ReplicaVersion;
     type Config = ReplicaProcessConfig;
-    type Args = (ReplicaVersion, SubnetId);
+    type Args = (PlatformVersion, SubnetId);
 
     fn build(
         config: &Self::Config,
-        (replica_version, subnet_id): Self::Args,
+        (platform_version, subnet_id): Self::Args,
     ) -> OrchestratorResult<Self> {
         Ok(Self {
             ic_binary_dir: config.ic_binary_dir.clone(),
-            replica_version,
+            platform_version,
             cup_path: config.cup_path.clone(),
             replica_config_file: config.replica_config_file.clone(),
             subnet_id,
@@ -50,15 +50,17 @@ impl Process for ReplicaProcess {
     }
 
     fn get_version(&self) -> &Self::Version {
-        &self.replica_version
+        &self.platform_version.replica_version
     }
     fn get_binary(&self) -> PathBuf {
         self.ic_binary_dir.join(Self::NAME)
     }
     fn get_args(&self) -> Vec<OsString> {
         vec![
+            OsString::from("--guestos-version"),
+            self.platform_version.guestos_version.to_string().into(),
             OsString::from("--replica-version"),
-            self.replica_version.to_string().into(),
+            self.platform_version.replica_version.to_string().into(),
             OsString::from("--config-file"),
             self.replica_config_file.clone().into(),
             OsString::from("--catch-up-package"),
@@ -454,14 +456,14 @@ impl MultipleProcessesManager {
     /// starts ic-gateway.
     pub(crate) fn start_all(
         &mut self,
-        replica_version: ReplicaVersion,
+        platform_version: PlatformVersion,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
         let mut result = Ok(());
         result = result.and(
             self.replica_manager
-                .ensure_running((replica_version.clone(), subnet_id)),
+                .ensure_running((platform_version.clone(), subnet_id)),
         );
 
         // Cloud-engine nodes run ic-gateway as a sidecar, but only once the
@@ -477,7 +479,10 @@ impl MultipleProcessesManager {
                     result = result.and(self.ic_gateway_manager.stop());
                 }
                 Some(SubnetType::CloudEngine) => {
-                    result = result.and(self.ic_gateway_manager.ensure_running(replica_version));
+                    result = result.and(
+                        self.ic_gateway_manager
+                            .ensure_running(platform_version.replica_version),
+                    );
                 }
             }
         }
