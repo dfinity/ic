@@ -1,0 +1,202 @@
+name: Fetch Verified Artifacts
+description: |
+  Download artifacts from the CDN (download.dfinity.systems) and verify every
+  one of them against the build-provenance attestation of the pipeline that
+  built them, aborting on any mismatch.
+
+  For each directory named in `files`, the directory's SHA256SUMS is fetched
+  and verified with `gh attestation verify --source-digest <commit>` via
+  ci/scripts/fetch-attested-sums.sh; each artifact is then downloaded and
+  checked against the verified sums with `sha256sum --check`. The out-dir
+  finally receives a SHA256SUMS file listing the verified hashes under the
+  files' local names, ready to be published as release verification data —
+  the published checksums are the verified build-time values, not re-hashes
+  of whatever was downloaded.
+inputs:
+  commit:
+    required: true
+    description: 40-hex git commit id whose artifacts to fetch (the CDN path segment).
+  signer-workflow:
+    required: true
+    description: |
+      Workflow whose attest-uploads job must have attested the upload:
+      dfinity/ic/.github/workflows/ci-kickoff.yml for master commits,
+      dfinity/ic/.github/workflows/release-testing.yml for rc--*/hotfix-*
+      commits.
+  source-ref-regex:
+    required: true
+    description: |
+      Regex (anchored by the verifier) that the attestation's source git ref
+      must match: "refs/heads/master" for master commits,
+      "refs/heads/(rc--|hotfix-)[^/]+" for release-qualification
+      branches.
+  files:
+    required: true
+    description: |
+      Files to fetch, one per line: "<cdn-relative-path> [<local-name>]",
+      e.g. "canisters/ic-icrc1-ledger.wasm.gz" or
+      "canisters/ic-icrc1-ledger.wasm.gz.did ledger.did". The path is
+      relative to https://download.dfinity.systems/ic/<commit>/; local-name
+      defaults to the path's basename.
+  out-dir:
+    required: false
+    default: ''
+    description: Directory to place the verified files in (created if needed; a fresh temp dir when unset).
+  gh-token:
+    required: true
+    description: Token for `gh attestation verify` (github.token suffices for the public dfinity/ic attestations).
+outputs:
+  out-dir:
+    description: Directory containing the verified files and their SHA256SUMS.
+    value: ${{ steps.fetch.outputs.out-dir }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup gh cli
+      shell: bash
+      env:
+        GH_CLI_VERSION: 2.98.0
+        # sha256 of gh_${GH_CLI_VERSION}_linux_amd64.tar.gz. When bumping the
+        # version, take the new value from that release's
+        # gh_${GH_CLI_VERSION}_checksums.txt asset.
+        GH_CLI_SHA256: 3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de
+      run: |
+        set -eEuo pipefail
+
+        cd "$(mktemp -d)"
+
+        # Without --fail, 4xx and 5xx are considered "success", because UNIX.
+        curl \
+          --location https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_amd64.tar.gz \
+          --output gh_cli.tar.gz \
+          --fail \
+          --retry 7
+
+        # Release assets are mutable under an existing tag, so the URL alone is
+        # not a trust anchor: verify against the checksum pinned above before
+        # unpacking or running anything.
+        echo "${GH_CLI_SHA256}  gh_cli.tar.gz" | sha256sum --check
+
+        tar -xf gh_cli.tar.gz
+        chmod +x "./gh_${GH_CLI_VERSION}_linux_amd64/bin/gh"
+        sudo cp "./gh_${GH_CLI_VERSION}_linux_amd64/bin/gh" /usr/local/bin/
+        rm -rf gh_cli.tar.gz "gh_${GH_CLI_VERSION}_linux_amd64"
+
+        gh --version
+
+    - name: Fetch and verify artifacts
+      id: fetch
+      shell: bash
+      env:
+        COMMIT: ${{ inputs.commit }}
+        SIGNER_WORKFLOW: ${{ inputs.signer-workflow }}
+        SOURCE_REF_REGEX: ${{ inputs.source-ref-regex }}
+        FILES: ${{ inputs.files }}
+        OUT_DIR: ${{ inputs.out-dir }}
+        GH_TOKEN: ${{ inputs.gh-token }}
+      run: |
+        set -euo pipefail
+        shopt -s inherit_errexit
+
+        out_dir="${OUT_DIR:-$(mktemp -d)}"
+        mkdir -p "$out_dir"
+        # The out-dir's contract is "exactly the files this invocation
+        # verified": refuse a non-empty directory rather than mixing stale,
+        # unverified files in with the verified ones.
+        if [ -n "$(find -H "$out_dir" -mindepth 1 -print -quit)" ]; then
+          echo "ERROR: out-dir '$out_dir' is not empty" >&2
+          exit 1
+        fi
+        sums_cache="$(mktemp -d)"
+
+        # Fetch (once per directory) the CDN SHA256SUMS, verified against the
+        # build's attestation, and set $sums to its local path. Everything
+        # else is verified locally against it. This deliberately runs in the
+        # main shell and reports via a variable instead of echoing from a
+        # command substitution: a $(...) subshell would swallow the
+        # verifier's failure and hand back the path of an UNVERIFIED file.
+        # The verifier also writes to a temp name that is only moved to the
+        # cache path on success, so no later iteration can mistake a failed
+        # download for a verified one.
+        ensure_verified_sums_for_dir() { # <cdn-subdir>; sets $sums
+          local dir="$1"
+          # Key the cache by a hash of the exact directory string.
+          sums="$sums_cache/$(printf '%s' "$dir" | sha256sum | cut -d' ' -f1).SHA256SUMS"
+          if ! [ -f "$sums" ]; then
+            "$GITHUB_WORKSPACE/ci/scripts/fetch-attested-sums.sh" \
+              "$COMMIT" "$dir" "$SIGNER_WORKFLOW" "$SOURCE_REF_REGEX" "$sums.unverified"
+            mv "$sums.unverified" "$sums"
+          fi
+        }
+
+        : >"$out_dir/SHA256SUMS"
+
+        while IFS= read -r line; do
+          # allow blank lines for readability of the `files` input
+          [[ -z "${line//[[:space:]]/}" ]] && continue
+
+          read -r rel local_name extra <<<"$line"
+          if [ -n "${extra:-}" ]; then
+            echo "ERROR: expected '<cdn-relative-path> [<local-name>]', got: $line" >&2
+            exit 1
+          fi
+          local_name="${local_name:-$(basename "$rel")}"
+
+          # The path is interpolated into a URL and the local name into a
+          # filesystem path: restrict both to a safe character set and reject
+          # traversal. fetch-attested-sums.sh re-validates the directory part.
+          if ! [[ "$rel" =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)+$ ]] || [[ "/$rel/" == *"/./"* ]] || [[ "/$rel/" == *"/../"* ]]; then
+            echo "ERROR: invalid cdn-relative-path: $rel" >&2
+            exit 1
+          fi
+          # Same shape as ARTIFACT_NAME_PATTERN in
+          # ci/src/mainnet_revisions/mainnet_revisions.py: leading
+          # alphanumeric (no '-' that could read as an option, no '.'),
+          # at most 128 characters. SHA256SUMS is reserved for the emitted
+          # checksum file.
+          if ! [[ "$local_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || [ "$local_name" = "SHA256SUMS" ]; then
+            echo "ERROR: invalid local-name: $local_name" >&2
+            exit 1
+          fi
+          # out_dir starts empty, so an existing file means two `files`
+          # entries mapped to the same local name — the second would
+          # overwrite the first while SHA256SUMS listed both.
+          if [ -e "$out_dir/$local_name" ]; then
+            echo "ERROR: duplicate local-name: $local_name" >&2
+            exit 1
+          fi
+
+          dir="$(dirname "$rel")"
+          base="$(basename "$rel")"
+          ensure_verified_sums_for_dir "$dir"
+
+          expected="$(awk -v n="$base" '$NF == n { print $1; exit }' "$sums")"
+          if ! [[ "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "ERROR: no sha256 for '$base' in the verified $dir/SHA256SUMS" >&2
+            exit 1
+          fi
+
+          echo "Fetching $rel -> $local_name"
+          curl -fsSL --retry 3 \
+            "https://download.dfinity.systems/ic/$COMMIT/$rel" \
+            -o "$out_dir/$local_name"
+
+          # Abort on any CDN substitution: the expected hash comes from the
+          # attested SHA256SUMS, not from the downloaded bytes.
+          echo "$expected  $out_dir/$local_name" | sha256sum --check
+
+          echo "$expected  $local_name" >>"$out_dir/SHA256SUMS"
+        done <<<"$FILES"
+
+        if ! [ -s "$out_dir/SHA256SUMS" ]; then
+          echo "ERROR: no files were fetched ('files' input was empty?)" >&2
+          exit 1
+        fi
+
+        LC_ALL=C sort -o "$out_dir/SHA256SUMS" -k2 "$out_dir/SHA256SUMS"
+
+        echo "Verified files in $out_dir:"
+        cat "$out_dir/SHA256SUMS"
+
+        echo "out-dir=$out_dir" >>"$GITHUB_OUTPUT"

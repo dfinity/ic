@@ -20,6 +20,9 @@
 # Release Workflow:
 # 1. Pick a commit on the master branch for which the FI nightly test passed, and verify that artifacts are available in
 #    the CDN (e.g., verify that https://download.dfinity.systems/ic/${commit}/canisters/ic-icrc1-ledger.wasm.gz exists).
+#    The commit's CDN uploads must carry a build-provenance attestation (created by the attest-uploads job of the
+#    ci-kickoff pipeline for every master commit): this workflow verifies every downloaded artifact against it and
+#    fails otherwise, so tags on commits that predate the attestation rollout cannot be released with this workflow.
 # 2. Create a release candidate tag: ledger-suite-{type}-YYYY-MM-DD.rc1
 #    - This creates a prerelease for testing
 #    - If issues are found, create .rc2, .rc3, etc. with fixes
@@ -40,6 +43,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
+      attestations: read
       contents: write
 
     steps:
@@ -152,162 +156,42 @@ jobs:
 
             console.log(`Set variables for ${releaseType} release: ${{ steps.parse_tag.outputs.tag_name }}`);
 
-      - name: Download artifacts and SHA256SUMS
+      - name: Compose download list
+        id: file_list
+        env:
+          WASM_FILES: ${{ steps.variables.outputs.wasm_files }}
+          DID_MAPPINGS: ${{ steps.variables.outputs.did_mappings }}
+        run: |
+          set -euo pipefail
+          # One "<cdn-relative-path> [<local-name>]" line per artifact; DID
+          # files are verified under their CDN name and stored renamed.
+          {
+            echo 'files<<EOF'
+            jq -r '.[] | "canisters/\(.)"' <<<"$WASM_FILES"
+            jq -r '.[] | "canisters/\(.source) \(.target)"' <<<"$DID_MAPPINGS"
+            echo 'EOF'
+          } >>"$GITHUB_OUTPUT"
+
+      # Downloads every artifact and verifies its bytes against the CDN's
+      # canisters/SHA256SUMS, which is itself verified against the
+      # build-provenance attestation created by the attest-uploads job of the
+      # ci-kickoff pipeline for this exact commit. Any CDN substitution fails
+      # the release instead of being republished with matching checksums.
+      # The SHA256SUMS this emits into out-dir
+      # lists the verified hashes under the release filenames and is published
+      # as the release's verification data.
+      - name: Download and verify artifacts and SHA256SUMS
         id: download
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: ./.github/actions/fetch-verified-artifacts
         with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            const os = require('os');
-
-            // Create temporary directory
-            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-'));
-            console.log(`Created temporary directory: ${tempDir}`);
-            core.setOutput('temp_dir_artifacts', tempDir);
-
-            // Get configuration
-            const tagCommit = '${{ steps.parse_tag.outputs.tag_commit }}';
-            const releaseType = '${{ steps.parse_tag.outputs.release_type }}';
-            const baseUrl = `https://download.dfinity.systems/ic/${tagCommit}/canisters`;
-            const sha256SumsUrl = `${baseUrl}/SHA256SUMS`;
-
-            console.log(`Downloading artifacts from: ${baseUrl}`);
-            console.log(`Tag commit: ${tagCommit}`);
-            console.log(`Release type: ${releaseType}`);
-
-            // Parse file lists from step outputs
-            const wasmFiles = JSON.parse('${{ steps.variables.outputs.wasm_files }}');
-            const didMappings = JSON.parse('${{ steps.variables.outputs.did_mappings }}');
-
-            console.log(`WASM files (${wasmFiles.length}):`, wasmFiles);
-            console.log(`DID mappings (${didMappings.length}):`, didMappings.map(m => `${m.source} -> ${m.target}`));
-
-            // Helper function to escape filename for regex
-            function escapeForRegex(filename) {
-              return filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            }
-
-            async function downloadFile(url, targetPath, description) {
-              try {
-                console.log(`  Downloading ${description}...`);
-                const response = await fetch(url);
-                if (!response.ok) {
-                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                const buffer = await response.arrayBuffer();
-                fs.writeFileSync(targetPath, new Uint8Array(buffer));
-                console.log(`  Downloaded: ${description}`);
-                return true;
-              } catch (error) {
-                console.error(`  Failed to download ${description}: ${error.message}`);
-                return false;
-              }
-            }
-
-            // Download WASM files
-            console.log("Downloading WASM files...");
-            const downloadedFiles = [];
-            for (const wasmFile of wasmFiles) {
-              const url = `${baseUrl}/${wasmFile}`;
-              const targetPath = path.join(tempDir, wasmFile);
-              if (await downloadFile(url, targetPath, wasmFile)) {
-                downloadedFiles.push(wasmFile);
-              } else {
-                throw new Error(`Failed to download required WASM file: ${wasmFile}`);
-              }
-            }
-
-            // Download and rename DID files
-            console.log("Downloading and renaming DID files...");
-            const renamedDidFiles = [];
-            for (const mapping of didMappings) {
-              const url = `${baseUrl}/${mapping.source}`;
-              const targetPath = path.join(tempDir, mapping.target);
-              if (await downloadFile(url, targetPath, `${mapping.source} -> ${mapping.target}`)) {
-                downloadedFiles.push(mapping.target);
-                renamedDidFiles.push(mapping);
-              } else {
-                throw new Error(`Failed to download required DID file: ${mapping.source}`);
-              }
-            }
-
-            // Download SHA256SUMS file
-            console.log(`Downloading official SHA256SUMS from: ${sha256SumsUrl}`);
-            const sha256SumsPath = path.join(tempDir, 'SHA256SUMS.full');
-            if (!await downloadFile(sha256SumsUrl, sha256SumsPath, 'SHA256SUMS')) {
-              throw new Error(`Failed to download SHA256SUMS from ${sha256SumsUrl}`);
-            }
-
-            // Process SHA256SUMS
-            console.log("Pruning SHA256SUMS to include only downloaded files...");
-            const fullSha256Sums = fs.readFileSync(sha256SumsPath, 'utf8');
-            const lines = fullSha256Sums.split('\n').filter(line => line.trim());
-
-            let prunedSha256Sums = [];
-            let foundCount = 0;
-
-            // Process WASM files
-            for (const wasmFile of wasmFiles) {
-              const pattern = new RegExp(`\\s+${escapeForRegex(wasmFile)}$`);
-              const matchingLine = lines.find(line => pattern.test(line));
-              if (matchingLine) {
-                console.log(`  Found checksum for: ${wasmFile}`);
-                prunedSha256Sums.push(matchingLine);
-                foundCount++;
-              } else {
-                console.error(`  Error: No checksum found for required file: ${wasmFile}`);
-                console.error(`  Available checksums:`, lines.slice(0, 10));
-                throw new Error(`Missing checksum for ${wasmFile}`);
-              }
-            }
-
-            // Process DID files (with renaming)
-            for (const mapping of renamedDidFiles) {
-              const pattern = new RegExp(`\\s+${escapeForRegex(mapping.source)}$`);
-              const matchingLine = lines.find(line => pattern.test(line));
-              if (matchingLine) {
-                const checksum = matchingLine.split(/\s+/)[0];
-                const renamedLine = `${checksum}  ${mapping.target}`;
-                console.log(`  Found checksum for: ${mapping.source} -> updating to ${mapping.target}`);
-                prunedSha256Sums.push(renamedLine);
-                foundCount++;
-              } else {
-                console.error(`  Error: No checksum found for required DID file: ${mapping.source}`);
-                console.error(`  Available checksums:`, lines.slice(0, 10));
-                throw new Error(`Missing checksum for ${mapping.source}`);
-              }
-            }
-
-            // Write pruned SHA256SUMS
-            const finalSha256SumsPath = path.join(tempDir, 'SHA256SUMS');
-            fs.writeFileSync(finalSha256SumsPath, prunedSha256Sums.join('\n') + '\n');
-
-            console.log(`Pruned SHA256SUMS contains ${foundCount} checksums:`);
-            console.log(prunedSha256Sums.map(line => `  ${line}`).join('\n'));
-
-            // Verify checksum count
-            const wasmFileCount = wasmFiles.length;
-            const didFileCount = didMappings.length;
-            const expectedTotal = wasmFileCount + didFileCount;
-            console.log(`Verification: Found ${foundCount} checksums (Expected: ${wasmFileCount} WASM + ${didFileCount} DID = ${expectedTotal} total)`);
-
-            if (foundCount !== expectedTotal) {
-              throw new Error(`Checksum count mismatch! Expected: ${expectedTotal} checksums (${wasmFileCount} WASM + ${didFileCount} DID), Found: ${foundCount} checksums`);
-            }
-
-            console.log(`Checksum verification passed: Found checksums for all ${expectedTotal} files`);
-
-            // List downloaded files
-            console.log("Downloaded files:");
-            const files = fs.readdirSync(tempDir);
-            files.forEach(file => {
-              const stats = fs.statSync(path.join(tempDir, file));
-              console.log(`  ${file} (${stats.size} bytes)`);
-            });
-
-            // Clean up full SHA256SUMS file
-            fs.unlinkSync(sha256SumsPath);
+          commit: ${{ steps.parse_tag.outputs.tag_commit }}
+          signer-workflow: dfinity/ic/.github/workflows/ci-kickoff.yml
+          # Ledger-suite tags point at master commits; only attestations
+          # minted from master itself are acceptable (ci-kickoff.yml also
+          # runs for other refs).
+          source-ref-regex: refs/heads/master
+          files: ${{ steps.file_list.outputs.files }}
+          gh-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get previous release tag
         id: prev_tag
@@ -468,7 +352,7 @@ jobs:
             const tagName = '${{ steps.parse_tag.outputs.tag_name }}';
             const upgradeFrom = '${{ steps.variables.outputs.upgrade_from }}';
             const repository = '${{ github.repository }}';
-            const tempDirArtifacts = '${{ steps.download.outputs.temp_dir_artifacts }}';
+            const tempDirArtifacts = '${{ steps.download.outputs.out-dir }}';
 
             // Parse WASM files from JSON array
             const wasmFiles = JSON.parse('${{ steps.variables.outputs.wasm_files }}');
@@ -575,7 +459,7 @@ jobs:
             const path = require('path');
             const { execSync } = require('child_process');
 
-            const tempDirArtifacts = '${{ steps.download.outputs.temp_dir_artifacts }}';
+            const tempDirArtifacts = '${{ steps.download.outputs.out-dir }}';
 
             console.log(`Verifying all required files are present in ${tempDirArtifacts}...`);
 
@@ -639,7 +523,7 @@ jobs:
           tag_name: ${{ steps.parse_tag.outputs.tag_name }}
           name: ${{ steps.parse_tag.outputs.tag_name }}
           body_path: ${{ steps.release_body.outputs.release_body_file }}
-          files: ${{ steps.download.outputs.temp_dir_artifacts }}/*
+          files: ${{ steps.download.outputs.out-dir }}/*
           draft: true
           prerelease: true
           make_latest: false
