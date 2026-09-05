@@ -23,24 +23,28 @@
   // output base from the workspace path.
   "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
   "workspaceFolder": "${localWorkspaceFolder}",
-  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history",
-  // Runs once per container creation, inside the container. The checkout is
-  // mounted at its host path, so bazel's default output base (md5 of that
-  // path) would be the one ci/container/container-run.sh containers use for
-  // the same checkout; bazel cannot see a server that runs in another
-  // container (separate PID namespaces) and the two would kill each other's
-  // server. Pin a devcontainer-specific output base via the container-local
-  // ~/.bazelrc (not a host file; a rebuild recreates it). The install base and
-  // the repository cache stay shared under the same output_user_root.
-  // Lifecycle commands run from the workspace folder; the output base is derived
-  // from $PWD (not from an interpolated path) and init.sh is given in array form
-  // so that a checkout path with spaces or quotes cannot break them.
-  "postCreateCommand": "echo \"startup --output_base=$HOME/.cache/bazel/_bazel_$(id -un)/devcontainer-$(printf %s \"$PWD\" | md5sum | cut -c1-32)\" > ~/.bazelrc",
+  // Runs on the host, by `devcontainer up` itself, before the container is
+  // created or started (so it does not depend on VS Code running the
+  // in-container lifecycle commands). Besides creating the bind-mount sources
+  // it writes the rc file that pins this devcontainer's bazel output base (see
+  // BAZELRC below): the checkout is mounted at its host path, so bazel's
+  // default output base (md5 of that path) would be the one
+  // ci/container/container-run.sh containers use for the same checkout; bazel
+  // cannot see a server that runs in another container (separate PID
+  // namespaces) and the two would kill each other's server. ${devcontainerId}
+  // is unique per local folder and stable across rebuilds. The install base
+  // and the repository cache stay shared under the same output_user_root, and
+  // bazel/bazel_clean.sh removes the rc file with the rest of ~/.cache/bazel.
+  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/bazel/devcontainer ~/.cache/cargo ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history && echo 'startup --output_base=/home/ubuntu/.cache/bazel/_bazel_ubuntu/devcontainer-${devcontainerId}' > ~/.cache/bazel/devcontainer/${devcontainerId}.bazelrc",
+  // Array form so that a checkout path with spaces cannot break it.
   "postStartCommand": ["${containerWorkspaceFolder}/ci/container/init.sh"],
   "containerEnv": {
     "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
     "HOSTUSER": "${localEnv:USER}",
     "LANG": "C.UTF-8",
+    // Bazel reads this rc file in addition to the workspace .bazelrc; it is
+    // written by initializeCommand (see above) into the mounted ~/.cache.
+    "BAZELRC": "/home/ubuntu/.cache/bazel/devcontainer/${devcontainerId}.bazelrc",
     // Same as ci/container/container-run.sh: the checkout's .git/worktrees/*
     // entries point at host paths of other worktrees that are not mounted here,
     // so git considers them prunable and `git gc --auto` could prune them from
