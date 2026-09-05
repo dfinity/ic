@@ -153,6 +153,9 @@ fi
 # - makes the absolute `gitdir:` pointers of linked git worktrees resolve
 #   (together with the GIT_COMMON_DIR mount below);
 # - keeps host paths valid inside the container.
+# The VS Code devcontainer (.devcontainer/devcontainer.json) mounts the
+# checkout the same way but pins its own output base, so the two never share
+# one.
 WORKDIR="$REPO_ROOT"
 
 # the docker image creates two users: ubuntu (1000) and buildifier (1001). Here we ensure the correct home is used.

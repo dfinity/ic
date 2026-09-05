@@ -17,14 +17,37 @@
     "--mount",
     "type=tmpfs,target=/tmp/containers"
   ],
-  "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
-  "workspaceFolder": "/ic",
+  // Mount the checkout at the same absolute path it has on the host and use it
+  // as the working directory, like ci/container/container-run.sh does: host
+  // paths stay valid inside the container and bazel derives a per-checkout
+  // output base from the workspace path.
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+  "workspaceFolder": "${localWorkspaceFolder}",
   "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history",
-  "postStartCommand": "/ic/ci/container/init.sh",
+  // Runs once per container creation, inside the container. The checkout is
+  // mounted at its host path, so bazel's default output base (md5 of that
+  // path) would be the one ci/container/container-run.sh containers use for
+  // the same checkout; bazel cannot see a server that runs in another
+  // container (separate PID namespaces) and the two would kill each other's
+  // server. Pin a devcontainer-specific output base via the container-local
+  // ~/.bazelrc (not a host file; a rebuild recreates it). The install base and
+  // the repository cache stay shared under the same output_user_root.
+  // Lifecycle commands run from the workspace folder; the output base is derived
+  // from $PWD (not from an interpolated path) and init.sh is given in array form
+  // so that a checkout path with spaces or quotes cannot break them.
+  "postCreateCommand": "echo \"startup --output_base=$HOME/.cache/bazel/_bazel_$(id -un)/devcontainer-$(printf %s \"$PWD\" | md5sum | cut -c1-32)\" > ~/.bazelrc",
+  "postStartCommand": ["${containerWorkspaceFolder}/ci/container/init.sh"],
   "containerEnv": {
     "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
     "HOSTUSER": "${localEnv:USER}",
-    "LANG": "C.UTF-8"
+    "LANG": "C.UTF-8",
+    // Same as ci/container/container-run.sh: the checkout's .git/worktrees/*
+    // entries point at host paths of other worktrees that are not mounted here,
+    // so git considers them prunable and `git gc --auto` could prune them from
+    // the host after gc.worktreePruneExpire (default: 3 months).
+    "GIT_CONFIG_COUNT": "1",
+    "GIT_CONFIG_KEY_0": "gc.worktreePruneExpire",
+    "GIT_CONFIG_VALUE_0": "never"
   },
   "mounts": [
     {
@@ -73,11 +96,10 @@
         "tamasfe.even-better-toml"
       ],
       "settings": {
-        // Exclude bazel output directories from search
+        // Exclude bazel output directories (bazel-bin, bazel-out, bazel-testlogs
+        // and the bazel-<checkout directory name> symlink) from search
         "search.exclude": {
-          "bazel-bin/": true,
-          "bazel-ic/": true,
-          "bazel-out/": true,
+          "bazel-*/": true,
           "targets/": true
         },
         // rust-analyzer runs `cargo` with RUSTUP_AUTO_INSTALL=0, so a freshly
