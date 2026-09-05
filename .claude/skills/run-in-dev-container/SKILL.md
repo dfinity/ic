@@ -47,7 +47,12 @@ runtime's daemon isn't reachable it prints which command it tried.
 - The repo is mounted at `/ic` and that's the working directory, so invoke
   repo-local scripts with a relative path, e.g.
   `CONTAINER_RUNTIME=docker ./ci/container/container-run.sh ./path/to/script.sh`.
-- The image is pulled from `ghcr.io` on first use (large, one-time).
+- The image is pulled from `ghcr.io` on first use (large, one-time) by the
+  digest committed in `ci/container/ic-dev.digest`; If `ci/container/Dockerfile`,
+  `init.sh` or `files/*` differ from what `ci/container/TAG` was built from
+  (you edited them, or the autobuild's commit hasn't landed on your branch yet)
+  the script refuses to run; `CONTAINER_RUN_ALLOW_UNPINNED=1` makes it build the
+  image locally instead, which is slow.
 - Anything the command writes under `/ic` (or `~/.cache`) persists on the host,
   since those are bind-mounted.
 - Don't nest: the script refuses to run inside an existing container.

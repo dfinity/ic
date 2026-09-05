@@ -45,7 +45,7 @@ jobs:
           if grep $image_tag ci/container/TAG; then
             echo "build_image=false" >> "$GITHUB_OUTPUT"
             echo "Update with this image already in this PR!"
-            echo "Modify ci/container/TAG with random string to trigger new build."
+            echo "Modify ci/container/TAG with a random string to trigger a new build."
           else
             echo "build_image=true" >> "$GITHUB_OUTPUT"
             echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
@@ -160,10 +160,20 @@ jobs:
           set -xeuo pipefail
 
           IMAGE_PREFIX="ghcr.io/dfinity/"
-          IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build@${{ needs.ic-build-image.outputs.ic-build-imagedigest }}"
-          IMG_NAME_IC_DEV="${IMAGE_PREFIX}ic-dev@${{ needs.ic-build-image.outputs.ic-dev-imagedigest }}"
+          IC_BUILD_DIGEST='${{ needs.ic-build-image.outputs.ic-build-imagedigest }}'
+          IC_DEV_DIGEST='${{ needs.ic-build-image.outputs.ic-dev-imagedigest }}'
+          for digest in "$IC_BUILD_DIGEST" "$IC_DEV_DIGEST"; do
+            if ! [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::malformed image digest '$digest'"
+              exit 1
+            fi
+          done
+          IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build@${IC_BUILD_DIGEST}"
+          IMG_NAME_IC_DEV="${IMAGE_PREFIX}ic-dev@${IC_DEV_DIGEST}"
 
           echo '${{ needs.build-image-prep.outputs.image_tag }}' > ci/container/TAG
+          echo "$IC_BUILD_DIGEST" > ci/container/ic-build.digest
+          echo "$IC_DEV_DIGEST" > ci/container/ic-dev.digest
           pushd .devcontainer
           sed -i -E "s|${IMAGE_PREFIX}ic-dev(:\|@)[^\"]{5,}|$IMG_NAME_IC_DEV|g" -- *
           popd

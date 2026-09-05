@@ -108,21 +108,92 @@ if ! "${CONTAINER_CMD[@]}" info >/dev/null 2>&1; then
     exit 1
 fi
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
-IMAGE="ghcr.io/dfinity/$IMAGE_NAME:$IMAGE_TAG"
+die() {
+    warn "$@"
+    exit 1
+}
 
-# Check for a locally-available image (podman has `image exists`; docker doesn't,
-# so use `image inspect`) and pull or build it if it's missing.
-if [ "$RUNTIME" = docker ]; then
-    image_exists_cmd=("${CONTAINER_CMD[@]}" image inspect "$IMAGE")
-else
-    image_exists_cmd=("${CONTAINER_CMD[@]}" image exists "$IMAGE")
-fi
-if ! "${image_exists_cmd[@]}" >/dev/null 2>&1; then
-    if ! "${CONTAINER_CMD[@]}" pull "$IMAGE"; then
-        "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
+case "$IMAGE_NAME" in
+    ic-dev | ic-build) ;;
+    *) die "Unknown image '$IMAGE_NAME' (expected ic-dev or ic-build)" ;;
+esac
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+IMAGE_REPO="ghcr.io/dfinity/$IMAGE_NAME"
+IMAGE_TAG="$("$REPO_ROOT"/ci/container/get-image-tag.sh)"
+PINNED_TAG="$(<"$REPO_ROOT/ci/container/TAG")"
+DIGEST_FILE="$REPO_ROOT/ci/container/$IMAGE_NAME.digest"
+# By default the script refuses to run any image that is not verified against
+# the committed digest pin. CONTAINER_RUN_ALLOW_UNPINNED=1 opts out for this run:
+# build the image locally from the checkout when no reviewed pin exists for the
+# working tree, or reuse an existing local image when the pinned pull fails.
+# Only the exact value 1 opts out, so that 0, false or a typo cannot silently
+# disable the check.
+case "${CONTAINER_RUN_ALLOW_UNPINNED:-}" in
+    "") ALLOW_UNPINNED="" ;;
+    1) ALLOW_UNPINNED=1 ;;
+    *) die "CONTAINER_RUN_ALLOW_UNPINNED must be unset or exactly '1' (got '${CONTAINER_RUN_ALLOW_UNPINNED}')" ;;
+esac
+# Set when the image about to run is NOT verified against a reviewed digest pin
+# (built locally, or an existing local image reused because the pull failed).
+LOCAL_IMAGE=false
+
+image_exists() {
+    if [ "$RUNTIME" = docker ]; then
+        "${CONTAINER_CMD[@]}" image inspect "$1" >/dev/null 2>&1
+    else
+        "${CONTAINER_CMD[@]}" image exists "$1"
     fi
+}
+
+build_locally() {
+    if [ -z "$ALLOW_UNPINNED" ]; then
+        die "$1; refusing to build an unpinned image locally (set CONTAINER_RUN_ALLOW_UNPINNED=1 to run an image that is not verified against the committed digest)"
+    fi
+    warn "$1; building $IMAGE_REPO:$IMAGE_TAG locally from the checkout (this takes a while)"
+    "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME" --container-cmd "${CONTAINER_CMD[*]}"
+    IMAGE="$IMAGE_REPO:$IMAGE_TAG"
+    LOCAL_IMAGE=true
+}
+
+if [ "$IMAGE_TAG" = "$PINNED_TAG" ]; then
+    [ -f "$DIGEST_FILE" ] || die "$DIGEST_FILE is missing: refusing to pull an unpinned image"
+    IMAGE_DIGEST="$(<"$DIGEST_FILE")"
+    if ! [[ $IMAGE_DIGEST =~ ^sha256:[0-9a-f]{64}$ ]]; then
+        die "$DIGEST_FILE is malformed ('$IMAGE_DIGEST'): refusing to pull an unpinned image"
+    fi
+    IMAGE="$IMAGE_REPO@$IMAGE_DIGEST"
+    if ! image_exists "$IMAGE" && image_exists "$IMAGE_REPO:$IMAGE_TAG"; then
+        eprintln "Local image $IMAGE_REPO:$IMAGE_TAG is not verified against the pin (e.g. built locally); pulling the pinned image $IMAGE instead (one-time download)."
+    fi
+    if image_exists "$IMAGE" || "${CONTAINER_CMD[@]}" pull "$IMAGE"; then
+        "${CONTAINER_CMD[@]}" tag "$IMAGE" "$IMAGE_REPO:$IMAGE_TAG" \
+            || die "Failed to tag the verified image $IMAGE as $IMAGE_REPO:$IMAGE_TAG"
+    elif [ -n "$ALLOW_UNPINNED" ] && image_exists "$IMAGE_REPO:$IMAGE_TAG"; then
+        warn "Pinned image $IMAGE could not be pulled (offline?); reusing the existing local image $IMAGE_REPO:$IMAGE_TAG, which is NOT verified against the pin (CONTAINER_RUN_ALLOW_UNPINNED is set)."
+        IMAGE="$IMAGE_REPO:$IMAGE_TAG"
+        LOCAL_IMAGE=true
+    else
+        build_locally "Pinned image $IMAGE could not be pulled"
+    fi
+else
+    warn "ci/container/{Dockerfile,init.sh,files/*} differ from what ci/container/TAG was built from:"
+    warn "  computed tag: $IMAGE_TAG"
+    warn "  pinned tag:   $PINNED_TAG"
+    warn "No reviewed digest pin exists for the computed tag, and registry tags are mutable and unverified, so it is never pulled."
+    warn "If you pushed this change, wait for the 'Container IC Build Image' workflow to commit TAG and *.digest to your branch, then 'git pull' and re-run."
+    if [ -z "$ALLOW_UNPINNED" ]; then
+        die "No reviewed digest pin exists for tag $IMAGE_TAG; refusing to run an unpinned image (set CONTAINER_RUN_ALLOW_UNPINNED=1 to build it locally from the checkout, or to reuse an existing local $IMAGE_REPO:$IMAGE_TAG)"
+    fi
+    IMAGE="$IMAGE_REPO:$IMAGE_TAG"
+    image_exists "$IMAGE" || build_locally "No reviewed digest pin exists for tag $IMAGE_TAG"
+    LOCAL_IMAGE=true
+fi
+
+if [ "$LOCAL_IMAGE" = true ]; then
+    warn "Using image $IMAGE (NOT verified against a reviewed digest pin; CONTAINER_RUN_ALLOW_UNPINNED is set)"
+else
+    eprintln "Using image $IMAGE (verified against ci/container/$IMAGE_NAME.digest)"
 fi
 
 # On the devenv we issue a warning if the images start taking up a lot of space.
@@ -350,4 +421,4 @@ if [ -f "$HOME/.container-run.conf" ]; then
 fi
 
 set -x
-exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" "$IMAGE" "${cmd[@]}"
+exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" --pull=never "$IMAGE" "${cmd[@]}"

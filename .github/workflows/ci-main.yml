@@ -61,6 +61,8 @@ jobs:
             fuzzers:
               - ".github/workflows/ci-main.yml"
               - "ci/container/TAG"
+              - "ci/container/ic-build.digest"
+              - "ci/container/ic-dev.digest"
               - "bin/fuzzing/*.sh"
               - "**/BUILD.bazel"
               - "**/*.bzl"
@@ -812,6 +814,8 @@ jobs:
               - "**/*.lock"
               - "ci/scripts/rust-lint.sh"
               - "ci/container/TAG"
+              - "ci/container/ic-build.digest"
+              - "ci/container/ic-dev.digest"
               - ".github/**"
       - name: Run Cargo ${{ matrix.name }} Linux
         if: |
@@ -858,20 +862,196 @@ jobs:
     with:
       commit-sha: ${{ github.sha }}
 
+  test-container-run-preflight:
+    # Decides once whether the test-container-run matrix below runs at all, so
+    # its legs only allocate runners when the container tooling changed (or on
+    # master and the release branches).
+    name: Test Container Run preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      # 'true' only when the container tests are due and ci/container/TAG is in
+      # sync with the container inputs; 'false' or empty otherwise.
+      run: ${{ steps.sync.outputs.in_sync }}
+    steps:
+      - *checkout
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        with:
+          ref: ${{ inputs.commit-sha }}
+          filters: |
+            container-run:
+              - '.github/workflows/ci-main.yml'
+              - '.github/workflows/ci-pr-only.yml'
+              - '.github/workflows/container-autobuild.yml'
+              - 'ci/container/**'
+            pins:
+              - '.devcontainer/**'
+              - '.github/workflows/**'
+      - name: Decide whether to run
+        id: decide
+        if: |
+          steps.filter.outputs.container-run == 'true' ||
+          env.BRANCH_NAME == 'master' ||
+          startsWith(env.BRANCH_NAME, 'rc--') ||
+          startsWith(env.BRANCH_NAME, 'hotfix-')
+        run: echo "run=true" >> "$GITHUB_OUTPUT"
+      - name: Check the digest pins are consistent
+        if: steps.decide.outputs.run == 'true' || steps.filter.outputs.pins == 'true'
+        run: |
+          # ci/container/*.digest, the ic-dev pin in .devcontainer/ and the ic-build
+          # pins in the workflows are all written by container-autobuild.yml and
+          # must agree.
+          set -euo pipefail
+          prefix="ghcr.io/dfinity/"
+          dev_digest="$(< ci/container/ic-dev.digest)"
+          build_digest="$(< ci/container/ic-build.digest)"
+          for digest in "$dev_digest" "$build_digest"; do
+            if ! [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::malformed digest '$digest' in ci/container/*.digest (they are written by container-autobuild.yml)"
+              exit 1
+            fi
+          done
+          # Every reference to either image (":tag" or "@digest", well-formed or
+          # not) in both consumer locations must be exactly the pinned digest
+          # reference, so a reference changed to a mutable tag or a malformed
+          # digest is rejected too, not only a mismatching well-formed one. At
+          # least one reference per image must exist (it does today), which also
+          # guards against the grep pattern going stale.
+          check_refs() {
+            local image=$1 digest=$2 refs
+            # grep exits 1 when nothing matches; treat that as an empty set so the
+            # comparison below reports it instead of pipefail aborting the step.
+            refs="$({ grep -rhoE "${prefix}${image}[:@][^\"'[:space:]]+" .devcontainer .github/workflows || true; } | sort -u)"
+            if [ "$refs" != "${prefix}${image}@${digest}" ]; then
+              echo "::error file=ci/container/${image}.digest::every ${image} reference in .devcontainer/ and .github/workflows/ must be ${prefix}${image}@${digest} (ci/container/${image}.digest; all are written by container-autobuild.yml), found:"
+              echo "${refs:-<none>}"
+              exit 1
+            fi
+          }
+          check_refs ic-dev "$dev_digest"
+          check_refs ic-build "$build_digest"
+      - name: Check ci/container/TAG matches the container inputs
+        id: sync
+        if: steps.decide.outputs.run == 'true'
+        run: |
+          # When TAG is out of sync there is no reviewed digest for the working
+          # tree and container-run.sh refuses to run (it only builds locally with
+          # CONTAINER_RUN_ALLOW_UNPINNED=1), so every test-container-run leg
+          # would fail. On a pull request that state is transient: the
+          # container-autobuild.yml bot commit brings TAG and *.digest in sync and
+          # re-triggers CI. (PRs from forks cannot change the container inputs:
+          # touching ci/* closes them automatically, see
+          # .github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST.)
+          # Anywhere else (push to master, the merge queue, release-testing on
+          # rc--/hotfix-, a manual dispatch) it means that commit never landed,
+          # so fail.
+          set -euo pipefail
+          computed="$(ci/container/get-image-tag.sh)"
+          pinned="$(< ci/container/TAG)"
+          if [ "$computed" = "$pinned" ]; then
+            echo "in_sync=true" >> "$GITHUB_OUTPUT"
+          elif [ "$CI_EVENT_NAME" = pull_request ]; then
+            echo "::notice file=ci/container/TAG::ci/container/TAG ($pinned) does not match the container inputs (computed $computed); skipping the container-run tests: the Container IC Build Image workflow will commit TAG and *.digest to this branch and re-trigger CI"
+            echo "in_sync=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error file=ci/container/TAG::ci/container/TAG ($pinned) does not match the container inputs (computed $computed): the container-autobuild.yml commit did not land on $BRANCH_NAME ($CI_EVENT_NAME)"
+            exit 1
+          fi
   test-container-run:
     name: Test Container Run ${{ matrix.name }}
+    needs: test-container-run-preflight
+    if: needs.test-container-run-preflight.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - name: TestCase 1
+          # Happy paths: the pinned image is pulled by digest, verified and run.
+          - name: ic-dev default
+            setup: ""
             command: ""
-          - name: TestCase 2
+            expect: success
+            runtime: podman
+          - name: ic-build
+            setup: ""
             command: "--image ic-build bash"
+            expect: success
+            runtime: podman
+          # A local image squatting on the tag must be ignored: the pinned digest
+          # is pulled and run instead, and the tag is re-pointed to it (checked by
+          # the "Verify the poisoned tag ..." step below). The squatter is an
+          # empty image that cannot run anything, so a successful `true` already
+          # proves the pinned image ran.
+          - name: poisoned local tag
+            setup: |
+              tar -cf empty.tar -T /dev/null
+              repo=ghcr.io/dfinity
+              sudo podman import empty.tar "$repo/ic-dev:$(< ci/container/TAG)"
+            command: "true"
+            expect: success
+            runtime: podman
+          # A tampered pin must be refused before anything is pulled or built.
+          - name: malformed pin refused
+            setup: echo not-a-digest > ci/container/ic-dev.digest
+            command: "true"
+            expect: "refusing to pull an unpinned image"
+            runtime: podman
+          # A well-formed pin the registry does not serve: the pull fails and, by
+          # default, neither a local build nor a cached image is used.
+          - name: unknown digest refused
+            setup: printf 'sha256:%064d\n' 0 > ci/container/ic-dev.digest
+            command: "true"
+            expect: "refusing to build an unpinned image locally"
+            runtime: podman
+          # The same failed pull while a local image squats on the tag: the cached
+          # mutable-tag image must not be run either (only
+          # CONTAINER_RUN_ALLOW_UNPINNED=1 permits that), so this still refuses.
+          - name: unknown digest with poisoned local tag refused
+            setup: |
+              tar -cf empty.tar -T /dev/null
+              repo=ghcr.io/dfinity
+              sudo podman import empty.tar "$repo/ic-dev:$(< ci/container/TAG)"
+              printf 'sha256:%064d\n' 0 > ci/container/ic-dev.digest
+            command: "true"
+            expect: "refusing to build an unpinned image locally"
+            runtime: podman
+          # Edited container inputs (ci/container/{Dockerfile,init.sh,files/*}): no
+          # reviewed digest exists for the computed tag, so by default the script
+          # refuses without pulling or building anything. The setup step edits the
+          # input after the preflight job's TAG-sync gate has passed on the pristine
+          # checkout.
+          - name: edited inputs refused
+            setup: echo '# edited after the sync check' >> ci/container/Dockerfile
+            command: "true"
+            expect: "refusing to run an unpinned image"
+            runtime: podman
+          # With the explicit opt-out, an image cached under the computed tag is
+          # reused instead of being rebuilt, and the script must say that it is
+          # unverified. The cache is seeded by re-tagging the pinned image.
+          - name: edited inputs with opt-out reuses local image
+            setup: |
+              echo '# edited after the sync check' >> ci/container/Dockerfile
+              repo=ghcr.io/dfinity
+              pinned="$repo/ic-dev@$(< ci/container/ic-dev.digest)"
+              sudo podman pull "$pinned"
+              sudo podman tag "$pinned" "$repo/ic-dev:$(ci/container/get-image-tag.sh)"
+            command: "true"
+            allow_unpinned: "1"
+            expect: success
+            expect_warning: "NOT verified against a reviewed digest pin"
+            runtime: podman
+          - name: docker runtime
+            setup: ""
+            command: "true"
+            expect: success
+            runtime: docker
     steps:
       - *checkout
       - name: Workaround for actions/runner-images#14473 (crun pinning)
+        if: matrix.runtime == 'podman'
         run: |
           # Workaround for actions/runner-images#14473:
           # Podman 5.x on ubuntu-24.04/22.04 picks /usr/bin/crun (1.14.1) over
@@ -887,21 +1067,71 @@ jobs:
           if command -v podman &>/dev/null && [ -x /usr/local/bin/crun ]; then
             echo 'PODMAN_RUN_USR_ARGS=(--runtime /usr/local/bin/crun)' >>~/.container-run.conf
           fi
-      - name: Filter Relevant Files
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
-        id: filter
-        with:
-          ref: ${{ inputs.commit-sha }}
-          filters: |
-            container-run:
-              - '.github/workflows/ci-pr-only.yml'
-              - '.github/workflows/container-autobuild.yml'
-              - 'ci/container/**'
+      - name: Set up "${{ matrix.name }}"
+        if: matrix.setup != ''
+        run: ${{ matrix.setup }}
       - name: Test Container Run
-        if: |
-          steps.filter.outputs.container-run == 'true' ||
-          env.BRANCH_NAME == 'master' ||
-          startsWith(env.BRANCH_NAME, 'rc--') ||
-          startsWith(env.BRANCH_NAME, 'hotfix-')
+        env:
+          CONTAINER_RUNTIME: ${{ matrix.runtime }}
+          # Empty for every leg that does not set allow_unpinned, which the script
+          # treats as unset.
+          CONTAINER_RUN_ALLOW_UNPINNED: ${{ matrix.allow_unpinned }}
         run: |
-          ./ci/container/container-run.sh ${{ matrix.command }}
+          set -euo pipefail
+          if [ "${{ matrix.expect }}" = success ]; then
+            set +e
+            out="$(./ci/container/container-run.sh ${{ matrix.command }} 2>&1)"
+            rc=$?
+            set -e
+            printf '%s\n' "$out"
+            if [ "$rc" -ne 0 ]; then
+              echo "::error::container-run.sh exited with $rc"
+              exit 1
+            fi
+          else
+            # A tampered pin or edited inputs must fail fast: not succeed, not hit
+            # the timeout, and not fall through to a local build that merely times
+            # the job out. Snapshot the store first: a refusal must leave it
+            # untouched (nothing pulled or built) and must not have run anything,
+            # in particular not an image the setup step cached under a tag.
+            images_before="$(sudo podman images --no-trunc -q | sort -u)"
+            containers_before="$(sudo podman ps -aq)"
+            set +e
+            out="$(timeout 300 ./ci/container/container-run.sh ${{ matrix.command }} 2>&1)"
+            rc=$?
+            set -e
+            printf '%s\n' "$out"
+            if [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ]; then
+              echo "::error::expected container-run.sh to refuse quickly, got exit code $rc"
+              exit 1
+            fi
+            if ! grep -qF -- "${{ matrix.expect }}" <<<"$out"; then
+              echo "::error::expected the output to contain '${{ matrix.expect }}'"
+              exit 1
+            fi
+            if [ "$(sudo podman images --no-trunc -q | sort -u)" != "$images_before" ]; then
+              echo "::error::an image was pulled or built despite the refusal"
+              exit 1
+            fi
+            if [ "$(sudo podman ps -aq)" != "$containers_before" ]; then
+              echo "::error::a container was run despite the refusal"
+              exit 1
+            fi
+          fi
+          if [ -n "${{ matrix.expect_warning }}" ] && ! grep -qF -- "${{ matrix.expect_warning }}" <<<"$out"; then
+            echo "::error::expected the output to contain '${{ matrix.expect_warning }}'"
+            exit 1
+          fi
+      - name: Verify the poisoned tag was re-pointed to the verified image
+        if: matrix.name == 'poisoned local tag'
+        run: |
+          set -euo pipefail
+          repo=ghcr.io/dfinity
+          tag="$repo/ic-dev:$(< ci/container/TAG)"
+          want="$repo/ic-dev@$(< ci/container/ic-dev.digest)"
+          digests="$(sudo podman image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$tag")"
+          printf '%s\n' "$digests"
+          if ! grep -qxF "$want" <<<"$digests"; then
+            echo "::error::$tag does not carry the pinned digest $want after the run"
+            exit 1
+          fi

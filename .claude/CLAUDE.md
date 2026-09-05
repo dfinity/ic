@@ -2,9 +2,10 @@
 
 All commands should be run from the repository root (`/ic`).
 
-Never manually edit `ci/container/TAG`. It is bumped only by the
+Never manually edit `ci/container/TAG`, `ci/container/ic-dev.digest` or
+`ci/container/ic-build.digest`. They are written only by the
 `container-autobuild.yml` GitHub Actions workflow, which builds the new
-dev-container image and pushes it to the registry *before* the tag change
+dev-container image and pushes it to the registry *before* the tag and digest changes
 takes effect. Hand-editing it points the tag at an image that was never built
 or published, breaking CI for everyone. If the dev container image genuinely
 needs to change (e.g. `ci/container/Dockerfile` was edited), let that workflow
