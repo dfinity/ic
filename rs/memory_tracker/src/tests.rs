@@ -17,7 +17,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    AccessKind, DeterministicMemoryTracker, DirtyPageTracking, MemoryLimits,
+    AbortReason, AccessKind, DeterministicMemoryTracker, DirtyPageTracking, MemoryLimits,
     conversions::OS_PAGES_IN_WASM_PAGE,
 };
 
@@ -32,6 +32,33 @@ fn setup(
     page_delta: Vec<PageIndex>,
     dirty_page_tracking: DirtyPageTracking,
 ) -> (DeterministicMemoryTracker, PageMap, *mut c_void, Vec<u8>) {
+    let (tracker, page_map, memory, vec, _aborts) = setup_with_access_limit(
+        checkpoint_pages,
+        memory_pages,
+        page_delta,
+        dirty_page_tracking,
+        // Effectively unlimited: the whole tracked region may be accessed.
+        NumOsPages::new(memory_pages as u64),
+    );
+    (tracker, page_map, memory, vec)
+}
+
+/// Like `setup`, but with an explicit per-message access limit. Also returns the
+/// list of abort reasons the tracker reported, in order.
+#[allow(clippy::type_complexity)]
+fn setup_with_access_limit(
+    checkpoint_pages: usize,
+    memory_pages: usize,
+    page_delta: Vec<PageIndex>,
+    dirty_page_tracking: DirtyPageTracking,
+    max_accessed_pages: NumOsPages,
+) -> (
+    DeterministicMemoryTracker,
+    PageMap,
+    *mut c_void,
+    Vec<u8>,
+    Arc<Mutex<Vec<AbortReason>>>,
+) {
     let mut vec = vec![0_u8; memory_pages * PAGE_SIZE];
     let tmpfile = tempfile::Builder::new().prefix("test").tempfile().unwrap();
     for page in 0..checkpoint_pages {
@@ -70,6 +97,9 @@ fn setup(
     }
     .as_ptr();
 
+    let aborts = Arc::new(Mutex::new(Vec::new()));
+    let recorded_aborts = Arc::clone(&aborts);
+
     let tracker = DeterministicMemoryTracker::new(
         memory,
         NumBytes::new((memory_pages * PAGE_SIZE) as u64),
@@ -79,13 +109,17 @@ fn setup(
         MemoryLimits {
             max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
             max_dirty_pages: NumOsPages::new(memory_pages as u64),
+            max_accessed_pages,
         },
         /* page_overhead not relevant in these tests */ 1,
         Arc::new(SignalMutex::new(|_| {})),
+        Arc::new(SignalMutex::new(move |reason: AbortReason| {
+            recorded_aborts.lock().unwrap().push(reason);
+        })),
     )
     .unwrap();
 
-    (tracker, page_map, memory, vec)
+    (tracker, page_map, memory, vec, aborts)
 }
 
 fn with_setup<F>(
@@ -530,5 +564,91 @@ fn deterministic_memory_tracker_correctly_count_access_and_dirty_pages(
                 assert_eq!(tracker.take_dirty_pages().len(), 0);
             }
         },
+    );
+}
+
+/// Accessing exactly the limit must not abort: the default limit is the whole
+/// heap, so a message touching all of it has to keep working.
+#[rstest]
+fn access_limit_is_not_exceeded_at_the_limit(
+    #[values(DirtyPageTracking::Ignore, DirtyPageTracking::Track)]
+    dirty_page_tracking: DirtyPageTracking,
+    #[values(AccessKind::Read, AccessKind::Write)] access_kind: AccessKind,
+) {
+    let wasm_pages = 4;
+    let memory_pages = wasm_pages * OS_PAGES_IN_WASM_PAGE;
+    let (tracker, _page_map, _memory, _vec, aborts) = setup_with_access_limit(
+        0,
+        memory_pages,
+        vec![],
+        dirty_page_tracking,
+        NumOsPages::new(memory_pages as u64),
+    );
+
+    for wasm_page in 0..wasm_pages {
+        sigsegv(
+            &tracker,
+            PageIndex::new((wasm_page * OS_PAGES_IN_WASM_PAGE) as u64),
+            access_kind,
+        );
+    }
+
+    assert_eq!(tracker.num_accessed_pages(), memory_pages);
+    assert_eq!(*aborts.lock().unwrap(), vec![]);
+}
+
+/// Both reads and writes count towards the single access limit, and the
+/// violation is reported once, when the limit is first exceeded.
+#[rstest]
+fn access_limit_exceeded_aborts_once(
+    #[values(DirtyPageTracking::Ignore, DirtyPageTracking::Track)]
+    dirty_page_tracking: DirtyPageTracking,
+    #[values(AccessKind::Read, AccessKind::Write)] access_kind: AccessKind,
+) {
+    // Allow two Wasm pages worth of OS pages, then access four Wasm pages.
+    let allowed_wasm_pages = 2;
+    let wasm_pages = 4;
+    let memory_pages = wasm_pages * OS_PAGES_IN_WASM_PAGE;
+    let (tracker, _page_map, _memory, _vec, aborts) = setup_with_access_limit(
+        0,
+        memory_pages,
+        vec![],
+        dirty_page_tracking,
+        NumOsPages::new((allowed_wasm_pages * OS_PAGES_IN_WASM_PAGE) as u64),
+    );
+
+    for wasm_page in 0..allowed_wasm_pages {
+        sigsegv(
+            &tracker,
+            PageIndex::new((wasm_page * OS_PAGES_IN_WASM_PAGE) as u64),
+            access_kind,
+        );
+    }
+    assert_eq!(*aborts.lock().unwrap(), vec![]);
+
+    // The next Wasm page crosses the limit.
+    sigsegv(
+        &tracker,
+        PageIndex::new((allowed_wasm_pages * OS_PAGES_IN_WASM_PAGE) as u64),
+        access_kind,
+    );
+    assert_eq!(
+        *aborts.lock().unwrap(),
+        vec![AbortReason::WasmPagesAccessLimitExceeded]
+    );
+
+    // Faults after the violation report it again; the embedder keeps only the
+    // first one, so the reported error does not depend on how many follow.
+    sigsegv(
+        &tracker,
+        PageIndex::new(((allowed_wasm_pages + 1) * OS_PAGES_IN_WASM_PAGE) as u64),
+        access_kind,
+    );
+    assert_eq!(
+        *aborts.lock().unwrap(),
+        vec![
+            AbortReason::WasmPagesAccessLimitExceeded,
+            AbortReason::WasmPagesAccessLimitExceeded
+        ]
     );
 }

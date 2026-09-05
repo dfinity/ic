@@ -31,16 +31,18 @@ use ic_types::{
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{
-    DeterministicMemoryTracker, DirtyPageTracking, MemoryLimits, signal_mutex::SignalMutex,
+    AbortReason, DeterministicMemoryTracker, DirtyPageTracking, MemoryLimits,
+    signal_mutex::SignalMutex,
 };
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
     ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    INSTRUCTIONS_COUNTER_GLOBAL_NAME, WasmMemoryType,
+    INSTRUCTIONS_COUNTER_GLOBAL_NAME, PENDING_TRAP_CODE_GLOBAL_NAME, WasmMemoryType,
 };
 use crate::{
-    serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
+    InternalErrorCode, serialized_module::SerializedModuleBytes,
+    wasm_utils::validation::wasmtime_validation_config,
 };
 
 use super::InstanceRunResult;
@@ -164,6 +166,7 @@ fn get_exported_globals<T>(instance: &Instance, store: &mut Store<T>) -> Vec<was
     const TO_IGNORE: &[&str] = &[
         DIRTY_PAGES_COUNTER_GLOBAL_NAME,
         ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+        PENDING_TRAP_CODE_GLOBAL_NAME,
     ];
 
     instance
@@ -314,6 +317,7 @@ impl WasmtimeEmbedder {
                     self.config.feature_flags,
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
+                    self.config.wasm_memory_accessed_page_limit,
                     main_memory_type,
                 );
             }
@@ -323,6 +327,7 @@ impl WasmtimeEmbedder {
                     self.config.feature_flags,
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
+                    self.config.wasm_memory_accessed_page_limit,
                     main_memory_type,
                 );
             }
@@ -446,32 +451,41 @@ impl WasmtimeEmbedder {
         };
 
         // Compute dirty page limit and access page limit based on the message type.
-        let (current_dirty_page_limit, current_accessed_limit) = match system_api {
-            Some(ref system_api) => (
-                system_api.get_page_limit(&self.config.stable_memory_dirty_page_limit),
-                system_api.get_page_limit(&self.config.stable_memory_accessed_page_limit),
-            ),
+        let (current_dirty_page_limit, current_accessed_limit, current_heap_accessed_limit) =
+            match system_api {
+                Some(ref system_api) => (
+                    system_api.get_page_limit(&self.config.stable_memory_dirty_page_limit),
+                    system_api.get_page_limit(&self.config.stable_memory_accessed_page_limit),
+                    system_api.get_page_limit(&self.config.wasm_memory_accessed_page_limit),
+                ),
 
-            // If system api is not present, then this function has been called from
-            // get_initial_globals_and_memory(). In this case, the number of
-            // dirty pages does not matter as the canister is not running.
-            None => (
-                self.config.stable_memory_dirty_page_limit.message,
-                self.config.stable_memory_accessed_page_limit.message,
-            ),
-        };
+                // If system api is not present, then this function has been called from
+                // get_initial_globals_and_memory(). In this case, the number of
+                // dirty pages does not matter as the canister is not running.
+                None => (
+                    self.config.stable_memory_dirty_page_limit.message,
+                    self.config.stable_memory_accessed_page_limit.message,
+                    self.config.wasm_memory_accessed_page_limit.message,
+                ),
+            };
 
-        let stable_memory_limits = MemoryLimits {
-            max_memory_size: self.config.max_stable_memory_size,
-            max_dirty_pages: current_dirty_page_limit,
-        };
         let max_heap_memory_size = self
             .config
             .max_wasm_memory_size
             .max(self.config.max_wasm64_memory_size);
+        let stable_memory_limits = MemoryLimits {
+            max_memory_size: self.config.max_stable_memory_size,
+            max_dirty_pages: current_dirty_page_limit,
+            // Stable memory accesses are limited by the bytemap counters in the
+            // Wasm-native system API implementation, not by the tracker.
+            max_accessed_pages: NumOsPages::new(
+                self.config.max_stable_memory_size.get() / PAGE_SIZE as u64,
+            ),
+        };
         let heap_memory_limits = MemoryLimits {
             max_memory_size: max_heap_memory_size,
             max_dirty_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
+            max_accessed_pages: current_heap_accessed_limit,
         };
 
         let mut store = Store::new(
@@ -581,6 +595,12 @@ impl WasmtimeEmbedder {
             .set(&mut store, Val::I64(current_accessed_limit.get() as i64))
             .expect("Couldn't set dirty page counter global");
 
+        // The global is excluded from the persisted globals, so it is already
+        // zero (no trap pending) and only needs to be read out here.
+        let pending_trap_code_global = instance
+            .get_global(&mut store, PENDING_TRAP_CODE_GLOBAL_NAME)
+            .expect("Pending trap code global should have been added by instrumentation.");
+
         let mut memories = HashMap::new();
         for mem_info in self.list_memory_infos(modification_tracking, heap_memory, stable_memory) {
             let memory_limits = match mem_info.memory_type {
@@ -634,6 +654,38 @@ impl WasmtimeEmbedder {
             }
         };
 
+        // Create a closure that aborts the execution by recording a pending
+        // trap code, which the instrumented Wasm raises at the next reentrant
+        // block start. The error message is built by `internal_trap`.
+        //
+        // SAFETY: We store a raw pointer to the Store and a copy of the Global.
+        // These remain valid for the lifetime of the WasmtimeInstance because:
+        // 1. The Store is pinned (heap-allocated) and owned by WasmtimeInstance
+        // 2. The Global is a lightweight handle that references data in the Store
+        // 3. The memory tracker (which holds this closure) is also owned by WasmtimeInstance
+        // 4. All are dropped together when WasmtimeInstance is dropped
+        let abort_execution: Arc<SignalMutex<dyn FnMut(AbortReason) + Send>> = {
+            // StorePtr::new requires a Pin, enforcing that the store is pinned.
+            let mut store_ptr = StorePtr::new(store.as_mut());
+            let global_copy = pending_trap_code_global;
+
+            Arc::new(SignalMutex::new(move |reason: AbortReason| {
+                let code = match reason {
+                    AbortReason::WasmPagesAccessLimitExceeded => {
+                        InternalErrorCode::HeapAccessLimitExceeded
+                    }
+                };
+                // SAFETY: Accessing the Store and Global from the signal handler.
+                // Both pointers are guaranteed valid by the lifetime relationship described above.
+                unsafe {
+                    let store_ref = store_ptr.get();
+                    if let Val::I32(0) = global_copy.get(&mut *store_ref) {
+                        let _ = global_copy.set(store_ref, Val::I32(code as i32));
+                    }
+                }
+            }))
+        };
+
         let signal_stack = WasmtimeSignalStack::new();
         let mut main_memory_type = WasmMemoryType::Wasm32;
         if let Some(mem) = instance.get_memory(&mut *store, WASM_HEAP_MEMORY_NAME)
@@ -648,6 +700,7 @@ impl WasmtimeEmbedder {
             self.log.clone(),
             self.config.page_overhead,
             subtract_instruction_counter,
+            abort_execution,
         );
 
         Ok(WasmtimeInstance {
@@ -801,6 +854,7 @@ fn sigsegv_memory_tracker<S>(
     log: ReplicaLogger,
     page_overhead: NumInstructions,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
+    abort_execution: Arc<SignalMutex<dyn FnMut(AbortReason) + Send>>,
 ) -> HashMap<CanisterMemoryType, Arc<SignalMutex<DeterministicMemoryTracker>>> {
     let mut tracked_memories = vec![];
     let mut result = HashMap::new();
@@ -842,6 +896,7 @@ fn sigsegv_memory_tracker<S>(
                     memory_limits,
                     page_overhead.get(),
                     subtract_instruction_counter.clone(),
+                    abort_execution.clone(),
                 )
                 .expect("failed to instantiate SIGSEGV memory tracker"),
             ))
