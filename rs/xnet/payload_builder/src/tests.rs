@@ -61,6 +61,7 @@ fn resolve_xnet_endpoint(remote_node_index: u64, log: ReplicaLogger) -> Endpoint
         mock_gen_range_low(remote_node_index, 3),
         LOCAL_NODE,
         registry.clone(),
+        Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics)),
         &metrics,
         log.clone(),
     ));

@@ -10,6 +10,8 @@ mod tests;
 #[cfg(test)]
 mod xnet_client_tests;
 
+pub use proximity::{GenRangeFn, ProximityMap, UNHEALTHY_NODE_TTL, UnhealthyNodes};
+
 use crate::certified_slice_pool::{
     CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes,
 };
@@ -47,7 +49,6 @@ use ic_types::{Height, NodeId, NumBytes, RegistryVersion, SubnetId};
 use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
-pub use proximity::{GenRangeFn, ProximityMap};
 use rand::{Rng, rngs::StdRng, thread_rng};
 use std::collections::{BTreeMap, VecDeque};
 use std::net::SocketAddr;
@@ -336,9 +337,13 @@ impl XNetPayloadBuilderImpl {
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> XNetPayloadBuilderImpl {
+        // Shared by the node selection of every component talking to other
+        // subnets: `ProximityMap` below, the advert task once it exists.
+        let unhealthy_nodes = Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, metrics_registry));
         let proximity_map = Arc::new(ProximityMap::new(
             node_id,
             registry.clone(),
+            unhealthy_nodes.clone(),
             metrics_registry,
             log.clone(),
         ));
@@ -346,6 +351,7 @@ impl XNetPayloadBuilderImpl {
             metrics_registry,
             tls_handshake,
             proximity_map.clone(),
+            unhealthy_nodes,
         ));
 
         let deterministic_rng_for_testing = Arc::new(None);
@@ -1718,6 +1724,9 @@ struct XNetClientImpl {
 
     /// Proximity map to update after every query with the time-to-first-byte.
     proximity_map: Arc<ProximityMap>,
+
+    /// Unhealthy node set to update after every query with its outcome.
+    unhealthy_nodes: Arc<UnhealthyNodes>,
 }
 
 impl XNetClientImpl {
@@ -1727,6 +1736,7 @@ impl XNetClientImpl {
         metrics_registry: &MetricsRegistry,
         tls: Arc<dyn TlsConfig>,
         proximity_map: Arc<ProximityMap>,
+        unhealthy_nodes: Arc<UnhealthyNodes>,
     ) -> XNetClientImpl {
         #[cfg(not(test))]
         let https = TlsConnector::new(tls);
@@ -1771,13 +1781,11 @@ impl XNetClientImpl {
             http_client,
             response_body_size,
             proximity_map,
+            unhealthy_nodes,
         }
     }
-}
 
-#[async_trait]
-impl XNetClient for XNetClientImpl {
-    async fn query(
+    async fn query_impl(
         &self,
         endpoint: &EndpointLocator,
     ) -> Result<CertifiedStreamSlice, XNetClientError> {
@@ -1841,6 +1849,25 @@ impl XNetClient for XNetClientImpl {
     }
 }
 
+#[async_trait]
+impl XNetClient for XNetClientImpl {
+    async fn query(
+        &self,
+        endpoint: &EndpointLocator,
+    ) -> Result<CertifiedStreamSlice, XNetClientError> {
+        let result = self.query_impl(endpoint).await;
+
+        // Record whether the node served the request, so that node selection
+        // can skip the ones that don't.
+        match &result {
+            Err(e) if e.is_node_failure() => self.unhealthy_nodes.observe_failure(endpoint.node_id),
+            _ => self.unhealthy_nodes.observe_success(endpoint.node_id),
+        }
+
+        result
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum XNetClientError {
     #[error("XNet request timed out")]
@@ -1858,6 +1885,32 @@ pub enum XNetClientError {
 }
 
 impl XNetClientError {
+    /// Returns `true` if this error means that the node failed to serve the
+    /// request: we could not connect to it, it timed out, or it responded with
+    /// a 5xx status code or something we could not make sense of. Whereas a 204
+    /// (`NoContent`) or 4xx status code point to a (likely) healthy node.
+    fn is_node_failure(&self) -> bool {
+        match self {
+            // Self-explanatory.
+            XNetClientError::Timeout
+            // Could be anything, but usually "XNet request failed: client error (Connect)".
+            | XNetClientError::RequestFailed(..)
+            // Not observed in the wild, but it would likely imply a misbehaving server (e.g.
+            // oversized response).
+            | XNetClientError::BodyReadError(..)
+            // Not observed in the wild, but it would likely imply a misbehaving server.
+            | XNetClientError::ProxyDecodeError(..) => true,
+
+            // Only a failure if the server returned a 5xx status code. Even though 503 is
+            // transient (full queue), it is probably a good idea to give the server some
+            // breathing room.
+            XNetClientError::ErrorResponse(status_code, ..) => status_code.is_server_error(),
+
+            // Definitely not an error, there's merely no new content.
+            XNetClientError::NoContent => false,
+        }
+    }
+
     /// Maps an `XNetClientError` to a `status` label value.
     fn to_label_value(&self) -> String {
         match self {
@@ -1876,7 +1929,7 @@ pub mod testing {
     pub use super::{
         EndpointLocator, GenRangeFn, LABEL_STATUS, METRIC_BUILD_PAYLOAD_DURATION,
         METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE, POOL_SLICE_BYTE_SIZE_MAX, PoolRefillTask,
-        ProximityMap, RefillTaskHandle, STATUS_SUCCESS, XNetClient, XNetClientError,
-        XNetEndpointResolver, XNetPayloadBuilderMetrics,
+        ProximityMap, RefillTaskHandle, STATUS_SUCCESS, UNHEALTHY_NODE_TTL, UnhealthyNodes,
+        XNetClient, XNetClientError, XNetEndpointResolver, XNetPayloadBuilderMetrics,
     };
 }
