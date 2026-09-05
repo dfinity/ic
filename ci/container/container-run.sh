@@ -217,6 +217,19 @@ RUNTIME_RUN_ARGS=(
     --mount type=tmpfs,target="/tmp/containers" # expected by ic-os build
 )
 
+# Inside a container `git worktree list` reports worktrees other than the
+# current one as "prunable" because their host checkouts are not mounted, so
+# never run `git worktree prune|repair|move|remove` in a container. For the
+# same reason gc's automatic worktree pruning is disabled in every container,
+# not only when started from a linked worktree: `git gc --auto` in a
+# main-checkout container could otherwise prune host worktrees idle for longer
+# than gc.worktreePruneExpire (default: 3 months).
+RUNTIME_RUN_ARGS+=(
+    -e GIT_CONFIG_COUNT=1
+    -e GIT_CONFIG_KEY_0=gc.worktreePruneExpire
+    -e GIT_CONFIG_VALUE_0=never
+)
+
 # Support linked git worktrees (`git worktree add`).
 #
 # A linked worktree's .git is a file pointing into the main repository's .git
@@ -224,20 +237,10 @@ RUNTIME_RUN_ARGS=(
 # git (and everything that uses it: --config=stamped, rust-lint.sh, ic-admin's
 # build script under cargo, ...) would fail with "not a git repository".
 # Bind-mount the common git dir at its host path so that the pointer resolves.
-#
-# Inside a container `git worktree list` reports the *other* worktrees as
-# "prunable" because their host checkouts are not mounted, so never run
-# `git worktree prune|repair|move|remove` in the container. For the same
-# reason gc's automatic worktree pruning is disabled via GIT_CONFIG_*.
 GIT_COMMON_DIR="$(cd "$REPO_ROOT" && realpath "$(git rev-parse --git-common-dir)")"
 if [ "$GIT_COMMON_DIR" != "$REPO_ROOT/.git" ]; then
     eprintln "Detected linked git worktree; mounting '$GIT_COMMON_DIR'"
-    RUNTIME_RUN_ARGS+=(
-        --mount type=bind,source="$GIT_COMMON_DIR",target="$GIT_COMMON_DIR"
-        -e GIT_CONFIG_COUNT=1
-        -e GIT_CONFIG_KEY_0=gc.worktreePruneExpire
-        -e GIT_CONFIG_VALUE_0=never
-    )
+    RUNTIME_RUN_ARGS+=(--mount type=bind,source="$GIT_COMMON_DIR",target="$GIT_COMMON_DIR")
 fi
 
 # Privilege/isolation flags required by the IC-OS guest build, per runtime.
