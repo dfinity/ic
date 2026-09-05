@@ -223,10 +223,9 @@ RUNTIME_RUN_ARGS=(
 # .bazelrc (including its user.bazelrc import) and ~/.bazelrc, so the rest of
 # the repository's bazel configuration still applies. The variable only
 # exists inside the container, so host-side bazel invocations are unaffected.
-# Keep only characters that are safe in the rc line, in $BAZELRC (comma-separated) and in
-# a filename; the path hash below keeps the key unique.
-REPO_NAME="$(printf '%s' "$(basename "$REPO_ROOT")" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_' | cut -c1-64)"
-OUTPUT_BASE_KEY="$REPO_NAME-$(printf '%s' "$REPO_ROOT" | sha256sum | cut -c1-8)"
+# The key (sanitized basename plus a hash of the host path) comes from a helper
+# shared with the VS Code dev container (see .devcontainer/devcontainer.json).
+OUTPUT_BASE_KEY="$("$REPO_ROOT"/ci/container/bazel-output-base-key.sh "$REPO_ROOT")"
 OUTPUT_BASE="$CTR_CACHE_DIR/bazel/_bazel_$CTR_USER/$OUTPUT_BASE_KEY"
 BAZELRC_REL="container-run/$OUTPUT_BASE_KEY.bazelrc" # relative to the cache dir
 mkdir -p "$(dirname "$CACHE_DIR/$BAZELRC_REL")"

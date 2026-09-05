@@ -114,6 +114,8 @@ Notes:
 
 Linked git worktrees (`git worktree add`) are supported: the main repository's `.git` directory is bind-mounted at its host path so that git works inside the container. There `git worktree list` shows the linked worktrees as `prunable` because their checkouts are not visible in the container, so never run `git worktree prune`, `repair`, `move` or `remove` inside a container (gc's automatic worktree pruning is disabled via `gc.worktreePruneExpire=never`).
 
+The VS Code dev container (`.devcontainer/devcontainer.json`) does the same: its `initializeCommand` runs `ci/container/devcontainer-initialize.sh` on the host, which writes the rc file `~/.cache/container-run/devcontainer-<devcontainer id>.bazelrc` (the id is a stable per-checkout hash provided by the Dev Container tooling), and `containerEnv` points `BAZELRC` at it. Its output base is `~/.cache/bazel/_bazel_ubuntu/devcontainer-<basename>-<hash>`, deliberately different from the `container-run.sh` one of the same checkout: the two containers run in separate PID namespaces, so the Bazel extension's background queries would otherwise kill a server running in the other container. After updating, run "Dev Containers: Rebuild Container" once so that the new `containerEnv` takes effect. Git does not work in a dev container opened on a linked worktree, because VS Code's experimental worktree support is skipped when `workspaceMount` is customized (see [microsoft/vscode-remote-release#11478](https://github.com/microsoft/vscode-remote-release/issues/11478)); use `container-run.sh` for worktrees.
+
 To isolate everything, including the install base, repository cache and cargo target dir, use a separate cache directory instead:
 
 ```bash
