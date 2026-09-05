@@ -110,7 +110,7 @@ impl StreamBuilderMetrics {
         );
         let stream_signals = metrics_registry.int_gauge_vec(
             METRIC_STREAM_SIGNALS,
-            "Signals currently enqueued in streams, by remote subnet.",
+            "Reject signals currently enqueued in streams, by remote subnet.",
             &[LABEL_REMOTE],
         );
         let signals_end = metrics_registry.int_gauge_vec(
@@ -768,12 +768,12 @@ impl StreamBuilderImpl {
                     stream.messages().len(),
                     stream.count_bytes(),
                     stream.messages_begin(),
-                    stream.signals_begin(),
+                    stream.reject_signals().len(),
                     stream.signals_end(),
                 )
             })
             .for_each(
-                |(subnet, len, size_bytes, begin, signals_begin, signals_end)| {
+                |(subnet, len, size_bytes, begin, reject_signal_count, signals_end)| {
                     self.metrics
                         .stream_messages
                         .with_label_values(&[&subnet])
@@ -789,7 +789,7 @@ impl StreamBuilderImpl {
                     self.metrics
                         .stream_signals
                         .with_label_values(&[&subnet])
-                        .set((signals_end - signals_begin).get() as i64);
+                        .set(reject_signal_count as i64);
                     self.metrics
                         .signals_end
                         .with_label_values(&[&subnet])

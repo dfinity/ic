@@ -1490,13 +1490,6 @@ pub struct Stream {
     /// Indexed queue of outgoing messages.
     messages: StreamIndexedQueue<StreamMessage>,
 
-    /// Index of the first signal that may not have been observed by the remote
-    /// subnet, updated from the `begin` in the reverse stream header.
-    ///
-    /// If `messages` is empty and this is equal to `signals_end`, then there is
-    /// definitely nothing in this stream for the remote subnet to induct.
-    signals_begin: StreamIndex,
-
     /// Index of the next expected reverse stream message.
     ///
     /// Conceptually we use a gap-free queue containing one signal for each
@@ -1508,7 +1501,7 @@ pub struct Stream {
     ///
     /// Invariants:
     ///  * `reject_signals[i].index < reject_signals[i+1].index`
-    ///  * `signals_begin <= reject_signals[i].index < signals_end`
+    ///  * `reject_signals[i].index < signals_end`
     reject_signals: VecDeque<RejectSignal>,
 
     /// Estimated byte size of `self.messages`.
@@ -1527,7 +1520,6 @@ pub struct Stream {
 impl Default for Stream {
     fn default() -> Self {
         let messages = Default::default();
-        let signals_begin = Default::default();
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
         let messages_size_bytes = Self::calculate_size_bytes(&messages);
@@ -1538,7 +1530,6 @@ impl Default for Stream {
         let guaranteed_response_counts = BTreeMap::default();
         Self {
             messages,
-            signals_begin,
             signals_end,
             reject_signals,
             messages_size_bytes,
@@ -1709,10 +1700,8 @@ impl Stream {
 
     /// Garbage collects signals before `new_signals_begin`.
     pub fn discard_signals_before(&mut self, new_signals_begin: StreamIndex) {
-        debug_assert!(new_signals_begin >= self.signals_begin);
         debug_assert!(new_signals_begin <= self.signals_end);
 
-        self.signals_begin = new_signals_begin;
         while let Some(reject_signal) = self.reject_signals.front() {
             if reject_signal.index < new_signals_begin {
                 self.reject_signals.pop_front();
@@ -1727,15 +1716,23 @@ impl Stream {
         &self.reject_signals
     }
 
-    /// Returns the index of the first signal that may not have been observed by
-    /// the remote subnet.
-    pub fn signals_begin(&self) -> StreamIndex {
-        self.signals_begin
-    }
-
-    /// Returns `true` if the stream is empty, i.e. it holds no messages or signals.
-    pub fn is_empty(&self) -> bool {
-        self.messages.is_empty() && self.signals_end == self.signals_begin
+    /// Returns the index of the first reject signal at or after `from_index`, if
+    /// any.
+    ///
+    /// This allows us to decide whether inducting a slice will allow us to garbage
+    /// collect any reject signals, based on its `header.begin()`. `None` means that
+    /// no slice can, whatever its `header.begin()`.
+    pub fn next_reject_signal_index(&self, from_index: StreamIndex) -> Option<StreamIndex> {
+        let next_reject_signal_pos: usize = match self
+            .reject_signals
+            .binary_search_by(|reject_signal| reject_signal.index.cmp(&from_index))
+        {
+            Ok(pos) => pos,
+            Err(pos) => pos,
+        };
+        self.reject_signals
+            .get(next_reject_signal_pos)
+            .map(|reject_signal| reject_signal.index)
     }
 
     /// Returns the index just beyond the last sent signal.
@@ -2495,7 +2492,6 @@ pub mod testing {
         /// Creates a new `Stream` with the given `messages` and signals.
         fn with_signals(
             messages: StreamIndexedQueue<StreamMessage>,
-            signals_begin: StreamIndex,
             signals_end: StreamIndex,
             reject_signals: VecDeque<RejectSignal>,
         ) -> Stream;
@@ -2503,12 +2499,11 @@ pub mod testing {
 
     impl StreamTesting for Stream {
         fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Stream {
-            Stream::with_signals(messages, StreamIndex::new(0), signals_end, VecDeque::new())
+            Stream::with_signals(messages, signals_end, VecDeque::new())
         }
 
         fn with_signals(
             messages: StreamIndexedQueue<StreamMessage>,
-            signals_begin: StreamIndex,
             signals_end: StreamIndex,
             reject_signals: VecDeque<RejectSignal>,
         ) -> Self {
@@ -2517,7 +2512,6 @@ pub mod testing {
             let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
             Self {
                 messages,
-                signals_begin,
                 signals_end,
                 reject_signals,
                 messages_size_bytes,

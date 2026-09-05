@@ -2455,6 +2455,55 @@ fn stream_discard_signals_before_drops_all_signals() {
 }
 
 #[test]
+fn stream_next_reject_signal_index() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+
+    // With no reject signals, `None` is returned for any `from_index`.
+    assert_eq!(None, stream.next_reject_signal_index(0.into()));
+    assert_eq!(None, stream.next_reject_signal_index(153.into()));
+
+    stream.reject_signals = VecDeque::from([
+        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::QueueFull, 139.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 142.into()),
+    ]);
+
+    // Before the first reject signal: the first reject signal.
+    assert_eq!(Some(138.into()), stream.next_reject_signal_index(0.into()));
+    assert_eq!(
+        Some(138.into()),
+        stream.next_reject_signal_index(137.into())
+    );
+    // At a reject signal: that same reject signal.
+    assert_eq!(
+        Some(138.into()),
+        stream.next_reject_signal_index(138.into())
+    );
+    assert_eq!(
+        Some(139.into()),
+        stream.next_reject_signal_index(139.into())
+    );
+    assert_eq!(
+        Some(142.into()),
+        stream.next_reject_signal_index(142.into())
+    );
+    // Between reject signals: the following reject signal.
+    assert_eq!(
+        Some(142.into()),
+        stream.next_reject_signal_index(140.into())
+    );
+    // Past all reject signals: `None`.
+    assert_eq!(None, stream.next_reject_signal_index(143.into()));
+    assert_eq!(None, stream.next_reject_signal_index(153.into()));
+}
+
+#[test]
 fn stream_pushing_signals_increments_signals_end() {
     let mut stream = generate_stream(
         MessageConfig {
@@ -2514,7 +2563,6 @@ fn stream_roundtrip_encoding() {
 
     let mut stream = Stream::with_signals(
         messages,
-        130.into(),
         153.into(),
         [RejectSignal::new(
             RejectReason::CanisterMigrating,
@@ -2536,7 +2584,6 @@ fn deserializing_stream_fails_for_bad_signals() {
     let stream = pb_queues::Stream {
         messages_begin: 0,
         messages: Vec::new(),
-        signals_begin: 150,
         signals_end: 153,
         reject_signals: Vec::new(),
         reverse_stream_flags: None,
@@ -2581,15 +2628,6 @@ fn deserializing_stream_fails_for_bad_signals() {
         "reject signals not strictly sorted, received [151, 150]",
     );
 
-    // Deserializing a stream with reject signals before `signals_begin` should fail.
-    assert_invalid_reject_signals(
-        vec![pb_queues::RejectSignal {
-            reason: 1,
-            index: 149,
-        }],
-        "first reject signal RejectSignal { reason: CanisterMigrating, index: 149 } before signals_begin 150",
-    );
-
     // Deserializing a stream with reject signals after `signals_end` should fail.
     assert_invalid_reject_signals(
         vec![pb_queues::RejectSignal {
@@ -2598,14 +2636,6 @@ fn deserializing_stream_fails_for_bad_signals() {
         }],
         "reject signals not strictly sorted, received [153, 153]",
     );
-
-    let bad_stream = pb_queues::Stream {
-        signals_begin: 153,
-        signals_end: 150,
-        ..stream
-    };
-    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(deserialized_result, Err(ProxyDecodeError::Other(err_msg)) if err_msg == "signals_begin 153 after signals_end 150");
 }
 
 #[test]

@@ -421,6 +421,7 @@ async fn validate_slice() {
         const EXPECTED: ExpectedIndices = ExpectedIndices {
             message_index: SIGNAL_END,   // Assume no intervening payloads.
             signal_index: MESSAGE_BEGIN, // Assume we no signals for existing messages.
+            gced_message_index: None,    // Assume we hold no reject signals.
         };
 
         // State with stream for `SUBNET_1`.
@@ -467,6 +468,7 @@ async fn validate_slice() {
             SliceValidationResult::Valid {
                 messages_end: EXPECTED.message_index.increment(),
                 signals_end: EXPECTED.signal_index,
+                gced_message_index: None,
                 message_count: 1,
                 byte_size: 1,
             },
@@ -554,6 +556,7 @@ async fn validate_slice_invalid_signature() {
         let expected = ExpectedIndices {
             message_index: StreamIndex::new(2),
             signal_index: StreamIndex::new(3),
+            gced_message_index: None,
         };
 
         let validation_context = get_validation_context_for_test();
@@ -590,6 +593,7 @@ async fn validate_slice_above_msg_limit() {
         const EXPECTED: ExpectedIndices = ExpectedIndices {
             message_index: StreamIndex::new(SIGNAL_END), // Assume no intervening payloads.
             signal_index: StreamIndex::new(MESSAGE_BEGIN), // Assume no signals for existing msgs.
+            gced_message_index: None,                    // Assume no reject signals.
         };
 
         // State of a `System` subnet with a stream for `SUBNET_1`.
@@ -636,6 +640,7 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: expected_message.into(),
                 signals_end: (signal_index + 1).into(),
+                gced_message_index: None,
                 message_count: 0,
                 byte_size: 1,
             },
@@ -655,6 +660,7 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: (expected_message + 1).into(),
                 signals_end: signal_index.into(),
+                gced_message_index: None,
                 message_count: 1,
                 byte_size: 1,
             },
@@ -712,6 +718,7 @@ async fn validate_slice_above_signal_limit() {
                 &ExpectedIndices {
                     message_index: slice_begin.into(),
                     signal_index: SIGNALS_END.into(),
+                    gced_message_index: None,
                 },
                 &validation_context,
                 state,
@@ -727,6 +734,7 @@ async fn validate_slice_above_signal_limit() {
             SliceValidationResult::Valid {
                 messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
+                gced_message_index: None,
                 message_count: MAX_STREAM_MESSAGES / 2,
                 byte_size: 1,
             }
@@ -741,6 +749,7 @@ async fn validate_slice_above_signal_limit() {
             SliceValidationResult::Valid {
                 messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
+                gced_message_index: None,
                 message_count: 20,
                 byte_size: 1,
             }
@@ -774,6 +783,7 @@ async fn validate_slice_loopback_stream() {
         const EXPECTED: ExpectedIndices = ExpectedIndices {
             message_index: SIGNAL_END,   // Assume no intervening payloads.
             signal_index: MESSAGE_BEGIN, // Assume we no signals for existing messages.
+            gced_message_index: None,    // Assume we hold no reject signals.
         };
 
         // State with loopback stream.
@@ -878,4 +888,165 @@ fn get_xnet_payload_builder_for_test(
     )
     // Any slice, empty or not, has byte size 1.
     .with_count_bytes_fn(|_| Ok(1))
+}
+
+/// Reject signals held by the fixture state below, plus its `signals_end`.
+const FIRST_REJECT_SIGNAL: u64 = 5;
+const SECOND_REJECT_SIGNAL: u64 = 9;
+const FIXTURE_SIGNALS_END: u64 = 12;
+
+/// Creates a `FakeStateManager` holding a state with a stream to `SUBNET_1`,
+/// with reject signals at `FIRST_REJECT_SIGNAL` and `SECOND_REJECT_SIGNAL` and
+/// `signals_end` at `FIXTURE_SIGNALS_END`.
+fn state_manager_with_reject_signals_fixture() -> FakeStateManager {
+    use ic_replicated_state::Stream;
+    use ic_replicated_state::testing::StreamTesting;
+    use ic_types::xnet::StreamIndexedQueue;
+    use std::collections::VecDeque;
+
+    let stream = Stream::with_signals(
+        StreamIndexedQueue::with_begin(StreamIndex::new(0)),
+        StreamIndex::new(FIXTURE_SIGNALS_END),
+        VecDeque::from([
+            RejectSignal::new(
+                RejectReason::CanisterMigrating,
+                StreamIndex::new(FIRST_REJECT_SIGNAL),
+            ),
+            RejectSignal::new(
+                RejectReason::CanisterNotFound,
+                StreamIndex::new(SECOND_REJECT_SIGNAL),
+            ),
+        ]),
+    );
+
+    let state_manager = FakeStateManager::new();
+    put_replicated_state_for_testing(&state_manager, btreemap![SUBNET_1 => stream]);
+    state_manager
+}
+
+/// A message-less slice from `SUBNET_1`, with the given `header.begin()`.
+fn messageless_slice_with_begin(begin: u64) -> CertifiedStreamSlice {
+    make_certified_stream_slice(
+        SUBNET_1,
+        StreamConfig {
+            message_begin: begin,
+            message_end: begin,
+            signal_end: 0,
+        },
+    )
+}
+
+/// `gced_message_index` must be the first reject signal at or after the highest
+/// header `begin` across the past payloads, i.e. the first reject signal we will
+/// still hold after inducting them.
+#[tokio::test]
+async fn expected_indices_for_stream_reject_signal_gc() {
+    with_test_replica_logger(|log| {
+        let state_manager = state_manager_with_reject_signals_fixture();
+
+        let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager.clone(), log);
+        let state = state_manager.get_state_at(CERTIFIED_HEIGHT).unwrap().take();
+
+        let gced_message_index = |payloads: &[&XNetPayload]| {
+            xnet_payload_builder
+                .expected_indices_for_stream(SUBNET_1, &state, payloads)
+                .gced_message_index
+        };
+        let payload = |begin: u64| XNetPayload {
+            stream_slices: btreemap![SUBNET_1 => messageless_slice_with_begin(begin)],
+        };
+
+        // With no past payloads, the first reject signal we hold.
+        assert_eq!(
+            Some(StreamIndex::new(FIRST_REJECT_SIGNAL)),
+            gced_message_index(&[])
+        );
+
+        // A payload not reaching the first reject signal changes nothing.
+        assert_eq!(
+            Some(StreamIndex::new(FIRST_REJECT_SIGNAL)),
+            gced_message_index(&[&payload(FIRST_REJECT_SIGNAL)])
+        );
+
+        // A payload garbage collecting the first reject signal leaves the second.
+        assert_eq!(
+            Some(StreamIndex::new(SECOND_REJECT_SIGNAL)),
+            gced_message_index(&[&payload(FIRST_REJECT_SIGNAL + 1)])
+        );
+
+        // A payload garbage collecting both reject signals leaves none.
+        assert_eq!(
+            None,
+            gced_message_index(&[&payload(SECOND_REJECT_SIGNAL + 1)])
+        );
+
+        // The highest header `begin` across the payloads is what counts, whatever the
+        // order they are given in.
+        assert_eq!(
+            Some(StreamIndex::new(SECOND_REJECT_SIGNAL)),
+            gced_message_index(&[
+                &payload(FIRST_REJECT_SIGNAL),
+                &payload(FIRST_REJECT_SIGNAL + 1)
+            ])
+        );
+    });
+}
+
+/// A message-less slice carrying no new signals is `Empty` unless its header `begin`
+/// is past a reject signal we still hold after the past payloads.
+///
+/// The slice is a terminal one: the remote subnet's stream is empty at our
+/// `signals_end`, so its `begin` is fixed and what varies is how many of our reject
+/// signals the past payloads have already accounted for.
+#[tokio::test]
+async fn validate_slice_reject_signal_gc() {
+    with_test_replica_logger(|log| {
+        let state_manager = state_manager_with_reject_signals_fixture();
+
+        let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager.clone(), log);
+        let validation_context = get_validation_context_for_test();
+        let state = state_manager.get_state_at(CERTIFIED_HEIGHT).unwrap().take();
+
+        let slice = messageless_slice_with_begin(FIXTURE_SIGNALS_END);
+        let validate = |payloads: &[&XNetPayload]| {
+            let expected =
+                xnet_payload_builder.expected_indices_for_stream(SUBNET_1, &state, payloads);
+            xnet_payload_builder.validate_slice(
+                SUBNET_1,
+                &slice,
+                &expected,
+                &validation_context,
+                &state,
+                slog::Level::Warning,
+            )
+        };
+
+        // With both reject signals outstanding, the slice garbage collects them, so it
+        // is not empty. `gced_message_index` is `None`: none are left afterwards.
+        let valid = SliceValidationResult::Valid {
+            messages_end: StreamIndex::new(FIXTURE_SIGNALS_END),
+            signals_end: StreamIndex::new(0),
+            gced_message_index: None,
+            message_count: 0,
+            byte_size: 1,
+        };
+        assert_eq!(valid, validate(&[]));
+
+        // Same with a past payload that garbage collects only the first reject signal:
+        // the slice still garbage collects the second.
+        let payload_with_begin = |begin: u64| XNetPayload {
+            stream_slices: btreemap![SUBNET_1 => messageless_slice_with_begin(begin)],
+        };
+        assert_eq!(
+            valid,
+            validate(&[&payload_with_begin(FIRST_REJECT_SIGNAL + 1)])
+        );
+
+        // But once a past payload has garbage collected both, the slice would garbage
+        // collect nothing and is empty.
+        assert_eq!(
+            SliceValidationResult::Empty,
+            validate(&[&payload_with_begin(SECOND_REJECT_SIGNAL + 1)])
+        );
+    });
 }
