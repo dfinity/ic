@@ -52,7 +52,7 @@ use ic_management_canister_types_private::{
 };
 use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
-    hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH,
+    hash_to_hex_string, ledger_validation,
 };
 use ic_nervous_system_common_validation::validate_url;
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
@@ -1677,22 +1677,7 @@ impl SnsMetadata {
     }
 
     pub fn validate_logo(logo: &str) -> Result<(), String> {
-        const PREFIX: &str = "data:image/png;base64,";
-        // TODO: Should we check that it's a valid PNG?
-        if logo.len() > MAX_LOGO_LENGTH {
-            return Err(format!(
-                "SnsMetadata.logo must be less than {MAX_LOGO_LENGTH} characters, roughly 256 Kb"
-            ));
-        }
-        if !logo.starts_with(PREFIX) {
-            return Err(format!(
-                "SnsMetadata.logo must be a base64 encoded PNG, but the provided string does't begin with `{PREFIX}`."
-            ));
-        }
-        if base64::decode(&logo[PREFIX.len()..]).is_err() {
-            return Err("Couldn't decode base64 in SnsMetadata.logo".to_string());
-        }
-        Ok(())
+        ledger_validation::validate_logo(logo, "SnsMetadata.logo")
     }
 
     pub fn validate_name(name: &str) -> Result<(), String> {
@@ -1727,7 +1712,7 @@ impl SnsMetadata {
 
     pub fn with_default_values_for_testing() -> Self {
         SnsMetadata {
-            logo: Some("data:image/png;base64,".to_string()),
+            logo: Some("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC".to_string()),
             url: Some("https://dfinity.org".to_string()),
             name: Some("SNS-Name".to_string()),
             description: Some("SNS-Description".to_string()),

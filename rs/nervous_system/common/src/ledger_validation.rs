@@ -83,25 +83,61 @@ pub fn validate_token_name(token_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn validate_token_logo(token_logo: &str) -> Result<(), String> {
+const PNG_SIGNATURE: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+pub fn validate_logo(logo: &str, field_name: &str) -> Result<(), String> {
     const PREFIX: &str = "data:image/png;base64,";
 
-    if token_logo.len() > MAX_LOGO_LENGTH {
+    if logo.len() > MAX_LOGO_LENGTH {
         return Err(format!(
-            "Error: token_logo must be less than {MAX_LOGO_LENGTH} characters, roughly 256 Kb"
+            "{field_name} must be less than {MAX_LOGO_LENGTH} characters, roughly 256 Kb"
         ));
     }
 
-    if !token_logo.starts_with(PREFIX) {
+    if !logo.starts_with(PREFIX) {
         return Err(format!(
-            "Error: token_logo must be a base64 encoded PNG, but the provided \
-            string doesn't begin with `{PREFIX}`."
+            "{field_name} must be a base64 encoded PNG, but the provided string does not begin with `{PREFIX}`."
         ));
     }
 
-    if base64::decode(&token_logo[PREFIX.len()..]).is_err() {
-        return Err("Couldn't decode base64 in SnsMetadata.logo".to_string());
+    let logo_bytes = match base64::decode(&logo[PREFIX.len()..]) {
+        Ok(logo_bytes) => logo_bytes,
+        Err(err) => return Err(format!("Couldn't decode base64 in {field_name}: {err}")),
+    };
+
+    if !logo_bytes.starts_with(&PNG_SIGNATURE) {
+        return Err(format!(
+            "{field_name} must be a PNG, but the decoded bytes are not."
+        ));
     }
 
     Ok(())
+}
+
+pub fn validate_token_logo(token_logo: &str) -> Result<(), String> {
+    validate_logo(token_logo, "token_logo")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_token_logo;
+
+    const VALID_PNG_LOGO: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
+
+    #[test]
+    fn test_validate_token_logo_accepts_a_real_png() {
+        validate_token_logo(VALID_PNG_LOGO).unwrap();
+    }
+
+    #[test]
+    fn test_validate_token_logo_rejects_valid_base64_that_is_not_a_png() {
+        let err =
+            validate_token_logo("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==").unwrap_err();
+        assert!(err.contains("PNG"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn test_validate_token_logo_rejects_wrong_prefix() {
+        validate_token_logo("not-a-logo").unwrap_err();
+    }
 }
