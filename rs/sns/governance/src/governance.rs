@@ -1,4 +1,5 @@
 use crate::{
+    MAX_SCALAR_FIELD_LEN_BYTES,
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
@@ -1762,6 +1763,20 @@ impl Governance {
         }
     }
 
+    /// Records the raw reply bytes from a successfully executed
+    /// ExecuteGenericNervousSystemFunction proposal, for transparency/auditability.
+    ///
+    /// The SNS cannot decode this reply (its Candid schema is unknown), so
+    /// the bytes are stored as-is, truncated to at most
+    /// `MAX_SCALAR_FIELD_LEN_BYTES` bytes to bound governance's stable memory
+    /// usage against a misbehaving or malicious target canister.
+    fn set_proposal_execution_reply(&mut self, pid: u64, mut execution_reply: Vec<u8>) {
+        execution_reply.truncate(MAX_SCALAR_FIELD_LEN_BYTES);
+        if let Some(proposal) = self.proto.proposals.get_mut(&pid) {
+            proposal.execution_reply = Some(execution_reply);
+        }
+    }
+
     /// Returns the latest reward event.
     pub fn latest_reward_event(&self) -> RewardEvent {
         self.proto
@@ -2170,10 +2185,12 @@ impl Governance {
                     Err(e) => Err(e),
                 }
             }
-            Action::ExecuteGenericNervousSystemFunction(call) => {
-                self.perform_execute_generic_nervous_system_function(call)
-                    .await
-            }
+            Action::ExecuteGenericNervousSystemFunction(call) => self
+                .perform_execute_generic_nervous_system_function(call)
+                .await
+                .map(|execution_reply| {
+                    self.set_proposal_execution_reply(proposal_id, execution_reply);
+                }),
             Action::ExecuteExtensionOperation(execute_extension_operation) => {
                 self.perform_execute_extension_operation(execute_extension_operation)
                     .await
@@ -2529,10 +2546,11 @@ impl Governance {
     }
 
     /// Executes a (non-native) nervous system function as a result of an adopted proposal.
+    /// On success, returns the raw reply bytes from the target canister.
     async fn perform_execute_generic_nervous_system_function(
         &self,
         call: ExecuteGenericNervousSystemFunction,
-    ) -> Result<(), GovernanceError> {
+    ) -> Result<Vec<u8>, GovernanceError> {
         match self
             .proto
             .id_to_nervous_system_functions
@@ -3654,6 +3672,9 @@ impl Governance {
             is_eligible_for_rewards: true,
             action_auxiliary,
             topic: Some(i32::from(proposal_topic)),
+
+            // A new proposal has not been executed yet, so there is no reply.
+            execution_reply: ProposalData::default().execution_reply,
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -6721,6 +6742,9 @@ mod test_helpers;
 
 #[cfg(test)]
 mod get_metrics;
+
+#[cfg(test)]
+mod execute_generic_nervous_system_function_tests;
 
 #[cfg(feature = "canbench-rs")]
 mod benches;
