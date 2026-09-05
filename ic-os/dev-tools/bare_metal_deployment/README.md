@@ -17,7 +17,7 @@ Reserve the target machine in Dee before deploying.
     
 Must be run inside the devenv container. Use `./ci/container/container-run.sh`.
 
-The config files must be accessible from inside the container - e.g., at the root of the ic directory, which maps to `/ic` inside the container.
+The config files must be accessible from inside the container - e.g. anywhere inside the ic checkout, which the dev container mounts at the same path as on the host.
 
 ```bash
 bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \

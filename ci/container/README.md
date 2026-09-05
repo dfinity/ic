@@ -67,29 +67,19 @@ Using script `container-run.sh` is required and supported way for building and t
 
 ### What you need to know
 
-Script `container-run.sh` creates a rootful podman container with various arguments as seen below.
+`container-run.sh` starts a fresh, throw-away (`--rm`) container from the pinned `ghcr.io/dfinity/ic-dev` image (or `ic-build` with `--image ic-build`) and runs the given command in it, or an interactive shell if no command is given. It supports two container runtimes, selected with `CONTAINER_RUNTIME=podman` (the default; rootful and `--privileged`) or `CONTAINER_RUNTIME=docker`. The exact `podman run`/`docker run` command is printed (`set -x`) right before the container starts.
 
-```bash
-sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host -w /ic \
-  -u 1000:1001 -e HOSTUSER=john -e VERSION=8bb1564701c56424f77f16ef067599a1c1dc7c37 \
-  --hostname=devenv-container --add-host devenv-container:127.0.0.1 \
-  --entrypoint= --init --hostuser=john \
-  --mount type=bind,source=/home/john/dev/ic-ctr-run-usr-cfg,target=/ic \
-  --mount type=bind,source=/home/john,target=/home/john \
-  --mount type=bind,source=/home/john /.cache,target=/home/ubuntu/.cache \
-  --mount type=bind,source=/home/john/.ssh,target=/home/ubuntu/.ssh \
-  --mount type=bind,source=/home/john/.aws,target=/home/ubuntu/.aws \
-  --mount type=bind,source=/home/john/.gitconfig,target=/home/ubuntu/.gitconfig \
-  --mount type=bind,source=/home/john/.bash_history,target=/home/ubuntu/.bash_history \
-  --mount type=bind,source=/home/john/.local/share/fish,target=/home/ubuntu/.local/share/fish \
-  --mount type=bind,source=/home/john/.zsh_history,target=/home/ubuntu/.zsh_history \
-  -v /tmp/ssh-XXXXQAO7kF/agent.113731:/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent -w /ic \
-  ghcr.io/dfinity/ic-dev:221b79c4f4a966eae67a3f9ef7f20f4c5583d5bc38df17c94128804687a84c29 /usr/bin/fish
-```
+What the container sees:
+
+- The checkout (`git rev-parse --show-toplevel`) is bind-mounted at **the same absolute path as on the host** (canonical, i.e. with symlinks resolved) and is the working directory. Host paths therefore stay valid inside the container, and so do the absolute `gitdir:` pointers of linked git worktrees (`git worktree add`), whose main `.git` directory is bind-mounted at its host path as well. Nothing is mounted at `/ic`.
+- The container user matches the host uid: `ubuntu` (1000, home `/home/ubuntu`) or `buildifier` (1001, home `/home/buildifier`). Any other uid falls back to `root` with a warning; files created by the container are then root-owned.
+- `~/.cache` (or the directory given with `-c`/`--cache-dir`) is mounted at the container user's `~/.cache`. It holds bazel's output_user_root (output bases, install base, repository cache) and persists across containers. `~/.aws`, `~/.ssh` and `~/.claude` are mounted into the container user's home too, and the ssh agent socket is forwarded if one is running.
+- On a devenv, `~/.gitconfig` and the shell history files are mounted as well and `CARGO_TARGET_DIR` is set to `~/.cache/cargo`.
+- Extra `podman run`/`docker run` arguments come from `~/.container-run.conf` (see below).
 
 ### How to use custom config
 
-User can create config `$HOME/.container-run.conf`, with `podman run` arguments, that provide way of adding custom bind-mounts etc. Config file requires array variable `PODMAN_RUN_USR_ARGS` with arguments accepted by `podman run` (see `podman run --help`). See example config from `.container-run.conf` below:
+User can create config `$HOME/.container-run.conf`, with `podman run` arguments, that provide way of adding custom bind-mounts etc. Config file requires array variable `PODMAN_RUN_USR_ARGS` with arguments accepted by `podman run` (see `podman run --help`). The same arguments are passed to `docker run` when `CONTAINER_RUNTIME=docker`, so keep them runtime-neutral, or guard them inside the file on the script's `$RUNTIME` variable (`podman` or `docker`; the file is sourced by `container-run.sh` with `set -u` in effect, and `CONTAINER_RUNTIME` itself may be unset), e.g. `if [ "$RUNTIME" = docker ]; then PODMAN_RUN_USR_ARGS+=(...); fi`. See example config from `.container-run.conf` below:
 
 ```bash
 PODMAN_RUN_USR_ARGS=(
@@ -101,22 +91,23 @@ PODMAN_RUN_USR_ARGS=(
 
 ### Running containers from several checkouts (git worktrees, clones) at once
 
-Bazel derives its default output base from the workspace path, and every checkout is mounted at `/ic` with the same `~/.cache`, so containers started from different checkouts would share one output base. Bazel cannot recognize a server that runs in another container (each container has its own PID namespace), so the second container would start another server in the same output base and the first one would die with `Server terminated abruptly (error code: 14, ...)`.
+Bazel derives its default output base from the workspace path: `~/.cache/bazel/_bazel_<user>/<md5 of the workspace path>`. Because the checkout is mounted at its host path, every checkout gets its own output base inside the container, while the install base, the repository cache and the repo contents cache (all under the shared `~/.cache/bazel/_bazel_<user>/`) are shared between checkouts. Containers started from different checkouts can run bazel concurrently.
 
-`container-run.sh` therefore gives every checkout its own output base, `~/.cache/bazel/_bazel_ubuntu/<basename>-<hash of the host path>`, by pointing `BAZELRC` at a generated rc file under `~/.cache/container-run/`. The install base, the repository cache and the repo contents cache stay shared, and the rest of the repository's bazel configuration (`.bazelrc`, `user.bazelrc`) still applies. Containers started from different checkouts can run bazel concurrently.
+This matters because bazel cannot recognize a server that runs in another container (each container has its own PID namespace): if two containers used the same output base, the second one would start another server in it and the first one would die with `Server terminated abruptly (error code: 14, ...)`.
 
 Notes:
 
-- The first run from a checkout builds from scratch (the remote cache helps). The previously shared output base `~/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0` can be deleted to reclaim disk space once no container uses it anymore.
-- Two containers started from the *same* checkout still share an output base and must not run bazel at the same time. For a second shell in a running container use `sudo podman exec -it <container> bash` (on a devenv: `sudo podman --root /hoststorage/podman-root exec -it <container> bash`).
-- The injected rc file is read after the workspace `.bazelrc` and `user.bazelrc`, so a `startup --output_base` in `user.bazelrc` is overridden inside the container.
-- `~/.cache/cargo` (`CARGO_TARGET_DIR`) is still shared between all checkouts; concurrent cargo builds serialize on its lock and invalidate each other's artifacts.
+- Two containers started from the *same* checkout share an output base and must not run bazel at the same time. For a second shell in a running container use `sudo podman exec -it <container> bash` (on a devenv: `sudo podman --root /hoststorage/podman-root exec -it <container> bash`; with docker: `docker exec -it <container> bash`).
+- The VS Code devcontainer (`.devcontainer/devcontainer.json`) mounts the checkout at its host path as well but pins its own output base, `devcontainer-<md5 of the workspace path>`, via a `~/.bazelrc` inside the devcontainer. It therefore never collides with a `container-run.sh` container on the same checkout; the two do not share bazel build results, but they do share the install base, the repository cache and `~/.cache/cargo`.
+- If your host user is `ubuntu` with uid 1000 or `buildifier` with uid 1001 (e.g. on the release verification VM) and you use the default cache directory, bazel on the host and bazel in a `container-run.sh` container use the same output base for a checkout; do not run them concurrently.
+- `~/.cache/cargo` (`CARGO_TARGET_DIR` on devenvs and in the devcontainer) is shared between all checkouts; concurrent cargo builds serialize on its lock and invalidate each other's artifacts.
+- Bazel creates its convenience symlinks (`bazel-bin`, `bazel-out`, `bazel-testlogs`, `bazel-<directory name of the checkout>`) in every checkout; they are gitignored.
+- The first bazel run from a checkout after switching to this layout builds from scratch (the remote cache helps). Output bases from earlier layouts are no longer used and can be deleted once no container uses them: `~/.cache/bazel/_bazel_<user>/6d065581cce7ad9076e3b8db2b3afaf0` (the former shared base for `/ic`), `~/.cache/bazel/_bazel_<user>/<checkout directory name>-<8 hex digits>` and `~/.cache/container-run/`.
 
-Linked git worktrees (`git worktree add`) are supported: the main repository's `.git` directory is bind-mounted at its host path so that git works inside the container. There `git worktree list` shows the linked worktrees as `prunable` because their checkouts are not visible in the container, so never run `git worktree prune`, `repair`, `move` or `remove` inside a container (gc's automatic worktree pruning is disabled via `gc.worktreePruneExpire=never`).
+Linked git worktrees (`git worktree add`) are supported by `container-run.sh` (not by the devcontainer, whose mounts are static): the main repository's `.git` directory is bind-mounted at its host path so that git works inside the container. Inside a container `git worktree list` reports the *other* worktrees as `prunable` because their checkouts are not mounted, so never run `git worktree prune`, `repair`, `move` or `remove` inside a container; manage worktrees on the host. gc's automatic worktree pruning is disabled in every container (`container-run.sh` and the devcontainer) via `gc.worktreePruneExpire=never`.
 
-To isolate everything, including the install base, repository cache and cargo target dir, use a separate cache directory instead:
+To isolate everything, including the install base, repository cache and cargo target dir, use a separate cache directory instead (it is created if missing):
 
 ```bash
-mkdir ~/.cache2
 ./ci/container/container-run.sh -c ~/.cache2
 ```
