@@ -3167,13 +3167,15 @@ fn flexible_invalid_callback_id_mismatch_in_response() {
             &payload_to_bytes_max_4mb(payload),
             &[],
         );
+        // The signed metadata still carries the group's callback id, so the
+        // mismatch surfaces as the response not matching the metadata.
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::ShareCallbackIdMismatch { callback_id: cb_id, mismatched_id: mm_id }
+                    InvalidCanisterHttpPayloadReason::InvalidMetadata { metadata_id, content_id }
                 )
-            )) if cb_id == callback_id && mm_id == mismatched_id
+            )) if metadata_id == callback_id && content_id == mismatched_id
         );
     });
 }

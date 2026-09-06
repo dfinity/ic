@@ -499,9 +499,7 @@ impl CanisterHttpPoolManagerImpl {
                 };
 
                 // Invalidate shares whose claimed spent cycles exceed what a
-                // single replica is allowed to consume. Free subnets charge
-                // nothing, so their spend (used only for cost accounting) may
-                // exceed the zero allowance, up to `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
+                // single replica is allowed to consume.
                 if let Err(err) = check_spent_within_limit(&share.content.payment_receipt, context)
                 {
                     return Some(CanisterHttpChangeAction::HandleInvalid(

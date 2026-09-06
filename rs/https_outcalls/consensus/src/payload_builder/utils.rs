@@ -432,9 +432,9 @@ pub(crate) fn aggregate_shares(
 
 /// Validates a single [`FlexibleCanisterHttpResponseWithProof`].
 ///
-/// Checks callback-id consistency, share validity (using
-/// [`validate_response_share`]), and that the signed metadata describes the
-/// response (using [`check_metadata_matches_content`]).
+/// Checks share validity (using [`validate_response_share`]) and that the
+/// signed metadata describes the response (using
+/// [`check_metadata_matches_content`]).
 ///
 /// **NOTE**: The signature on the share is not verified. Callers are expected
 /// to batch-verify the signatures of all shares in the surrounding group via
@@ -446,13 +446,6 @@ pub(crate) fn validate_flexible_response_with_proof(
     seen_signers: &mut HashSet<NodeId>,
     context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    if response_with_proof.response.id != callback_id {
-        return Err(InvalidCanisterHttpPayloadReason::ShareCallbackIdMismatch {
-            callback_id,
-            mismatched_id: response_with_proof.response.id,
-        });
-    }
-
     validate_response_share(
         &response_with_proof.proof,
         callback_id,

@@ -636,10 +636,10 @@ impl CanisterHttpPayloadBuilderImpl {
 
             // Every signer belongs to the committee at this point, so all of them
             // count towards the threshold.
-            if shares.len() < effective_threshold {
+            if seen_signers.len() < effective_threshold {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::NotEnoughSigners {
                     committee: effective_committee.into_iter().collect(),
-                    signers: shares.iter().map(|share| share.signature.signer).collect(),
+                    signers: seen_signers.into_iter().collect(),
                     expected_threshold: effective_threshold,
                 });
             }
