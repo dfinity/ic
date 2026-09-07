@@ -29,28 +29,27 @@ pub struct RefundPool {
     #[validate_eq(Ignore)]
     total: Cycles,
 
-    /// Transient: number of refunds ever pushed into the pool and the cycles they
-    /// held in total. Replica-local metrics, not part of the pool's contents (see
-    /// [`Self::eq()`]): they are zero on a pool loaded from a checkpoint, i.e. they
-    /// only cover the refunds pushed since replica start.
+    /// Transient: replica-local metrics, not part of the pool's contents (see
+    /// [`Self::eq()`]). Not persisted across checkpoints, so the refunds of a pool
+    /// loaded from one are counted as pushed, rather than starting over from zero.
     #[validate_eq(Ignore)]
-    pushed: PushedRefunds,
+    metrics: RefundPoolMetrics,
 }
 
 /// Cumulative count of the refunds pushed into a [`RefundPool`] and of the cycles
 /// they held.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct PushedRefunds {
+pub struct RefundPoolMetrics {
     /// Number of refunds pushed into the pool.
-    pub refunds: u64,
+    pub pushed_refunds: u64,
 
     /// Cycles held by those refunds in total.
-    pub cycles: Cycles,
+    pub pushed_cycles: Cycles,
 }
 
-/// Compares the pooled refunds only: [`RefundPool::pushed()`] is a replica-local
-/// metric, covering the refunds pushed since replica start, not part of the pool's
-/// contents. `amounts` and `total` are both derived from `refunds`.
+/// Compares the pooled refunds only: [`RefundPool::metrics()`] is replica-local,
+/// not part of the pool's contents. `amounts` and `total` are both derived from
+/// `refunds`.
 impl PartialEq for RefundPool {
     fn eq(&self, other: &Self) -> bool {
         self.refunds == other.refunds
@@ -65,7 +64,7 @@ impl RefundPool {
             refunds: BTreeSet::new(),
             amounts: BTreeMap::new(),
             total: Cycles::zero(),
-            pushed: PushedRefunds::default(),
+            metrics: RefundPoolMetrics::default(),
         }
     }
 
@@ -96,8 +95,8 @@ impl RefundPool {
 
         self.total += cycles;
 
-        self.pushed.refunds += 1;
-        self.pushed.cycles += cycles;
+        self.metrics.pushed_refunds += 1;
+        self.metrics.pushed_cycles += cycles;
 
         debug_assert_eq!(self.amounts.len(), self.refunds.len());
         debug_assert_eq!(self.compute_total(), self.total);
@@ -135,16 +134,10 @@ impl RefundPool {
         self.total
     }
 
-    /// Returns the number of refunds ever pushed into the pool and the cycles they
-    /// held in total, since replica start.
-    pub fn pushed(&self) -> PushedRefunds {
-        self.pushed
-    }
-
-    /// Clears the [`Self::pushed()`] metrics. Called after loading the pool from a
-    /// checkpoint, so that they only cover the refunds pushed since replica start.
-    pub(crate) fn clear_pushed(&mut self) {
-        self.pushed = PushedRefunds::default();
+    /// Returns the pool's metrics: the number of refunds ever pushed into it and
+    /// the cycles they held in total.
+    pub fn metrics(&self) -> RefundPoolMetrics {
+        self.metrics
     }
 
     /// Computes the total amount of pooled cycles.

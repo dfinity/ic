@@ -4050,13 +4050,14 @@ mod mainnet_compatibility_tests {
             assert_eq!(make_refund_pool(), refunds);
         }
 
-        /// The refunds of a pool loaded from a checkpoint were not pushed by this
-        /// replica, so they are not counted as pushed.
+        /// The pool's metrics are not persisted, but a pool loaded from a checkpoint
+        /// counts the refunds it holds as pushed, rather than starting over from zero.
         #[test]
-        fn deserialized_pool_has_no_pushed_refunds() {
+        fn deserialized_pool_counts_loaded_refunds_as_pushed() {
             let refund_pool = make_refund_pool();
-            assert_eq!(3, refund_pool.pushed().refunds);
-            assert_eq!(Cycles::new(500), refund_pool.pushed().cycles);
+            // Three pushes, merged into the two refunds that are persisted.
+            assert_eq!(3, refund_pool.metrics().pushed_refunds);
+            assert_eq!(Cycles::new(500), refund_pool.metrics().pushed_cycles);
 
             let proto_refunds: pb_queues::Refunds = (&refund_pool).into();
             let deserialized = refunds::RefundPool::try_from((
@@ -4066,8 +4067,8 @@ mod mainnet_compatibility_tests {
             .unwrap();
 
             assert_eq!(refund_pool, deserialized);
-            assert_eq!(0, deserialized.pushed().refunds);
-            assert_eq!(Cycles::zero(), deserialized.pushed().cycles);
+            assert_eq!(2, deserialized.metrics().pushed_refunds);
+            assert_eq!(Cycles::new(500), deserialized.metrics().pushed_cycles);
         }
     }
 }
