@@ -1652,11 +1652,14 @@ impl SystemState {
     /// executing on one subnet, but for which a response may only be produced by
     /// another subnet.
     pub fn drop_in_progress_management_calls_after_split(&mut self) {
-        // Remove aborted install code task.
+        // Remove aborted install code task and fully refund the prepaid execution
+        // cycles.
         //
         // Note that this cannot be a paused install code task, because we abort all
         // paused tasks before triggering the split.
-        self.task_queue.remove_aborted_install_code_task();
+        if let Some(prepaid_execution_cycles) = self.task_queue.remove_aborted_install_code_task() {
+            self.refund_cycles(prepaid_execution_cycles, prepaid_execution_cycles);
+        }
 
         // Roll back `Stopping` canister states to `Running` and drop all their stop
         // contexts (the calls corresponding to the dropped stop contexts will be
