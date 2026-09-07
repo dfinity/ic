@@ -1433,7 +1433,6 @@ pub struct PoolRefillTask {
 
 impl PoolRefillTask {
     /// Starts an async task that fills the slice pool in the background.
-    #[allow(clippy::too_many_arguments)]
     pub fn start(
         pool: Arc<Mutex<CertifiedSlicePool>>,
         endpoint_resolver: XNetEndpointResolver,

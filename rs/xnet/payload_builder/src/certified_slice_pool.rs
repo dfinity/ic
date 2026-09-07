@@ -264,16 +264,16 @@ mod messages {
             let postfix = self.messages.split_off(to);
             let prefix = self.messages;
 
-            // Update the estimated size and put back the postfix if not empty.
-            self.count_bytes = byte_size(&postfix)?;
-
             if prefix.is_empty() {
+                // Nothing taken, restore the messages.
                 self.messages = postfix;
                 Ok((None, Some(self)))
             } else if postfix.is_empty() {
+                // Return all messages, drop `self`.
                 Ok((Some(prefix), None))
             } else {
-                // Both prefix and postfix are non-empty.
+                // Both prefix and postfix are non-empty. Retain the postfix.
+                self.count_bytes = byte_size(&postfix)?;
                 Ok((Some(prefix), Some(Self::new(postfix)?)))
             }
         }
@@ -1344,7 +1344,8 @@ impl CertifiedSlicePool {
         )?;
         let unpacked = slice.try_into()?;
 
-        pool.lock().unwrap().put_impl(subnet_id, unpacked)
+        let result = pool.lock().unwrap().put_impl(subnet_id, unpacked);
+        result.map(|_| ())
     }
 
     /// Appends a partial slice to the corresponding pool entry, trimming
@@ -1374,12 +1375,12 @@ impl CertifiedSlicePool {
         registry_version: RegistryVersion,
         log: ReplicaLogger,
     ) -> CertifiedSliceResult<()> {
+        let partial: UnpackedStreamSlice = partial.try_into()?;
+
         // Clone the pooled slice, if any, instead of removing it: this way the
         // payload builder can make use of it while we validate; and if the merge
         // or the validation fail, we bail out without having mutated the pool.
         let pooled = pool.lock().unwrap().slices.get(&subnet_id).cloned();
-
-        let partial: UnpackedStreamSlice = partial.try_into()?;
         let slice = match pooled {
             // We have a pooled slice, try appending to it.
             Some(mut pooled) => {
@@ -1404,29 +1405,30 @@ impl CertifiedSlicePool {
             log,
         )?;
 
-        pool.lock().unwrap().put_impl(subnet_id, slice)
+        let result = pool.lock().unwrap().put_impl(subnet_id, slice);
+        result.map(|_| ())
     }
 
     /// Garbage collects the provided slice and pools the rest, if any.
     ///
+    /// Returns the displaced slice if any, to be dropped outside the pool lock.
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
     /// `unpacked` is malformed.
     fn put_impl(
         &mut self,
         subnet_id: SubnetId,
         mut unpacked: UnpackedStreamSlice,
-    ) -> CertifiedSliceResult<()> {
+    ) -> CertifiedSliceResult<Option<UnpackedStreamSlice>> {
         // Trim off everything before the cached stream position.
         if let Some(cutoff) = self.stream_positions.get(&subnet_id) {
             unpacked = match unpacked.garbage_collect(cutoff)? {
                 Some(unpacked) => unpacked,
                 // Bail out if nothing left.
-                None => return Ok(()),
+                None => return Ok(None),
             };
         }
 
-        self.slices.insert(subnet_id, unpacked);
-        Ok(())
+        Ok(self.slices.insert(subnet_id, unpacked))
     }
 
     /// Observes the total size of all pooled slices.
