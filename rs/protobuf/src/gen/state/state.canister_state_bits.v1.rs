@@ -706,6 +706,12 @@ pub struct CanisterStateBits {
     pub interrupted_during_execution: u64,
     #[prost(message, optional, tag = "22")]
     pub consumed_cycles: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+    /// Total cycles consumed by the canister, monotonic: unlike `consumed_cycles`,
+    /// which is increased on prepayment and decreased on refund, this is only ever
+    /// increased, by the actually consumed amount once the refund is known.
+    #[prost(message, optional, tag = "71")]
+    pub consumed_cycles_monotonic:
+        ::core::option::Option<super::super::super::types::v1::NominalCycles>,
     #[prost(uint64, tag = "23")]
     pub freeze_threshold: u64,
     #[prost(message, repeated, tag = "25")]
@@ -744,23 +750,12 @@ pub struct CanisterStateBits {
     /// happens the refund amount is subtracted from consumed amount.
     #[prost(message, repeated, tag = "36")]
     pub consumed_cycles_by_use_cases: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
-    /// Consumed cycles by use case presented as counters. The consumed amount is
-    /// only updated once the refund is known to perform a single accounting step.
-    /// These counters facilitate programming retrieval of metrics and performing
+    /// Consumed cycles by use case, monotonic. The consumed amount is only updated
+    /// once the refund is known, to perform a single accounting step. These
+    /// monotonic amounts facilitate programming retrieval of metrics and performing
     /// various aggregations on them more easily than their gauge counterparts.
     #[prost(message, repeated, tag = "65")]
-    pub consumed_cycles_by_use_cases_as_counters: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
-    /// Total cycles consumed by the canister, presented as a counter: unlike
-    /// `consumed_cycles`, which is lowered again whenever a refund is issued, this
-    /// is only ever increased, by the actually consumed amount once the refund of a
-    /// prepayment is known.
-    ///
-    /// Covers exactly the same use cases as `consumed_cycles`, i.e. everything
-    /// except HTTPS outcalls, which are only tracked at the subnet level (and, for
-    /// the canister, in `consumed_cycles_by_use_cases_as_counters`).
-    #[prost(message, optional, tag = "71")]
-    pub consumed_cycles_as_counter:
-        ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+    pub consumed_cycles_by_use_cases_monotonic: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]
     pub canister_history: ::core::option::Option<CanisterHistory>,
     /// Resource reservation cycles.

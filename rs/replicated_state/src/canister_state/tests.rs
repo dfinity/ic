@@ -1033,7 +1033,7 @@ fn full_refund_resets_consumed_cycles() {
         assert_eq!(
             system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases_as_counters()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&use_case),
             Some(&NominalCycles::zero()),
             "{ctx}"
@@ -1475,11 +1475,11 @@ fn drops_aborted_canister_install_after_split() {
     assert_eq!(expected_state, canister_state);
 }
 
-/// The monotonic `consumed_cycles_as_counter` is only bumped once the refund of a
-/// prepayment is known, by the actually consumed amount; unlike the gauge, which is
-/// bumped by the prepayment and lowered again by the refund.
+/// `consumed_cycles_monotonic` is only bumped once the refund of a prepayment is
+/// known, by the actually consumed amount; unlike the gauge, which is bumped by the
+/// prepayment and lowered again by the refund.
 #[test]
-fn consumed_cycles_as_counter_accounts_for_refundable_use_cases_at_refund() {
+fn consumed_cycles_monotonic_accounts_for_refundable_use_cases_at_refund() {
     fn test<T: CyclesUseCaseRefundableKind>(cost_schedule: CanisterCyclesCostSchedule) {
         let mut system_state = CanisterStateFixture::new().canister_state.system_state;
         let ctx = format!(
@@ -1495,9 +1495,9 @@ fn consumed_cycles_as_counter_accounts_for_refundable_use_cases_at_refund() {
             prepaid.nominal(),
             "{ctx}"
         );
-        // Nothing on the counter yet, the refund is not known.
+        // Nothing accounted for yet, the refund is not known.
         assert_eq!(
-            system_state.canister_metrics().consumed_cycles_as_counter(),
+            system_state.canister_metrics().consumed_cycles_monotonic(),
             NominalCycles::zero(),
             "{ctx}"
         );
@@ -1509,7 +1509,7 @@ fn consumed_cycles_as_counter_accounts_for_refundable_use_cases_at_refund() {
             "{ctx}"
         );
         assert_eq!(
-            system_state.canister_metrics().consumed_cycles_as_counter(),
+            system_state.canister_metrics().consumed_cycles_monotonic(),
             (prepaid - refund).nominal(),
             "{ctx}"
         );
@@ -1524,9 +1524,10 @@ fn consumed_cycles_as_counter_accounts_for_refundable_use_cases_at_refund() {
     }
 }
 
-/// A use case that is never refunded is accounted for on the counter right away.
+/// A direct charge, i.e. one made without a prepayment (and thus never refunded),
+/// is accounted for right away.
 #[test]
-fn consumed_cycles_as_counter_accounts_for_final_use_cases_at_prepayment() {
+fn consumed_cycles_monotonic_accounts_for_direct_charges_right_away() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let charge =
         CompoundCycles::<MemoryUseCase>::new(Cycles::new(1000), CanisterCyclesCostSchedule::Normal);
@@ -1538,31 +1539,31 @@ fn consumed_cycles_as_counter_accounts_for_final_use_cases_at_prepayment() {
         charge.nominal()
     );
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles_as_counter(),
+        system_state.canister_metrics().consumed_cycles_monotonic(),
         charge.nominal()
     );
 }
 
-/// A full refund lowers the gauge back to zero but must not lower the counter, which
-/// was never bumped in the first place.
+/// A full refund lowers the gauge back to zero but must not lower
+/// `consumed_cycles_monotonic`, which was never bumped in the first place.
 #[test]
-fn full_refund_does_not_lower_consumed_cycles_as_counter() {
+fn full_refund_does_not_lower_consumed_cycles_monotonic() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
-    let final_charge = CompoundCycles::<MemoryUseCase>::new(Cycles::new(500), cost_schedule);
+    let direct_charge = CompoundCycles::<MemoryUseCase>::new(Cycles::new(500), cost_schedule);
     let prepaid = CompoundCycles::<Instructions>::new(Cycles::new(1000), cost_schedule);
 
-    system_state.consume_cycles(final_charge);
+    system_state.consume_cycles(direct_charge);
     system_state.consume_cycles(prepaid);
     system_state.refund_cycles(prepaid, prepaid);
 
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        final_charge.nominal()
+        direct_charge.nominal()
     );
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles_as_counter(),
-        final_charge.nominal()
+        system_state.canister_metrics().consumed_cycles_monotonic(),
+        direct_charge.nominal()
     );
 }
 
@@ -1586,15 +1587,20 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
         });
 
     // The prepayment was taken out of the balance and is in the consumed cycles
-    // gauge; nothing has been consumed for good yet, so the counter is still zero.
+    // gauge; nothing has been consumed for good yet, so the monotonic amounts are
+    // still zero.
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
         prepaid.nominal()
     );
     assert_eq!(
+        system_state.canister_metrics().consumed_cycles_monotonic(),
+        NominalCycles::zero()
+    );
+    assert_eq!(
         system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions),
         Some(&NominalCycles::zero())
     );
@@ -1604,7 +1610,8 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
     canister_state.drop_in_progress_management_calls_after_split();
 
     // The prepayment is refunded in full, so the balance is whole again and the gauge
-    // is back to zero. Nothing was consumed, so the counter stays at zero too.
+    // is back to zero. Nothing was consumed, so the monotonic amounts stay at zero
+    // too.
     let system_state = &canister_state.system_state;
     assert_eq!(system_state.balance(), balance_before + prepaid.real());
     assert_eq!(
@@ -1612,9 +1619,13 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
         NominalCycles::zero()
     );
     assert_eq!(
+        system_state.canister_metrics().consumed_cycles_monotonic(),
+        NominalCycles::zero()
+    );
+    assert_eq!(
         system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions),
         Some(&NominalCycles::zero())
     );

@@ -471,6 +471,10 @@ message CanisterStateBits {
   bytes certified_data = 20;
   uint64 interrupted_during_execution = 21;
   types.v1.NominalCycles consumed_cycles = 22;
+  // Total cycles consumed by the canister, monotonic: unlike `consumed_cycles`,
+  // which is increased on prepayment and decreased on refund, this is only ever
+  // increased, by the actually consumed amount once the refund is known.
+  types.v1.NominalCycles consumed_cycles_monotonic = 71;
   uint64 freeze_threshold = 23;
   repeated types.v1.PrincipalId controllers = 25;
   state.queues.v1.Cycles cycles_balance = 26;
@@ -497,20 +501,11 @@ message CanisterStateBits {
   // the respective amount is added to the consumed amount while when a refund
   // happens the refund amount is subtracted from consumed amount.
   repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases = 36;
-  // Consumed cycles by use case presented as counters. The consumed amount is
-  // only updated once the refund is known to perform a single accounting step.
-  // These counters facilitate programming retrieval of metrics and performing
+  // Consumed cycles by use case, monotonic. The consumed amount is only updated
+  // once the refund is known, to perform a single accounting step. These
+  // monotonic amounts facilitate programming retrieval of metrics and performing
   // various aggregations on them more easily than their gauge counterparts.
-  repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases_as_counters = 65;
-  // Total cycles consumed by the canister, presented as a counter: unlike
-  // `consumed_cycles`, which is lowered again whenever a refund is issued, this
-  // is only ever increased, by the actually consumed amount once the refund of a
-  // prepayment is known.
-  //
-  // Covers exactly the same use cases as `consumed_cycles`, i.e. everything
-  // except HTTPS outcalls, which are only tracked at the subnet level (and, for
-  // the canister, in `consumed_cycles_by_use_cases_as_counters`).
-  types.v1.NominalCycles consumed_cycles_as_counter = 71;
+  repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases_monotonic = 65;
   CanisterHistory canister_history = 37;
   // Resource reservation cycles.
   state.queues.v1.Cycles reserved_balance = 38;

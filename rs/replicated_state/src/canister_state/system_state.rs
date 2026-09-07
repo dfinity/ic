@@ -279,9 +279,9 @@ pub struct CanisterMetrics {
     instructions_executed: NumInstructions,
     load_metrics: LoadMetrics,
     consumed_cycles: NominalCycles,
-    consumed_cycles_as_counter: NominalCycles,
+    consumed_cycles_monotonic: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
-    consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
+    consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
 impl CanisterMetrics {
@@ -291,9 +291,9 @@ impl CanisterMetrics {
         executed: u64,
         interrupted_during_execution: u64,
         consumed_cycles: NominalCycles,
-        consumed_cycles_as_counter: NominalCycles,
+        consumed_cycles_monotonic: NominalCycles,
         consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
-        consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
+        consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
         instructions_executed: NumInstructions,
         load_metrics: LoadMetrics,
     ) -> Self {
@@ -303,9 +303,9 @@ impl CanisterMetrics {
             executed,
             interrupted_during_execution,
             consumed_cycles,
-            consumed_cycles_as_counter,
+            consumed_cycles_monotonic,
             consumed_cycles_by_use_cases,
-            consumed_cycles_by_use_cases_as_counters,
+            consumed_cycles_by_use_cases_monotonic,
             instructions_executed,
             load_metrics,
         }
@@ -336,27 +336,28 @@ impl CanisterMetrics {
     }
 
     /// The monotonic counterpart of [`Self::consumed_cycles`]: it is only ever
-    /// increased, by the actually consumed amount (prepayment minus refund) once
-    /// the refund of a prepayment is known. The gauge above, in contrast, is raised
-    /// by the prepayment and lowered again by the refund.
+    /// increased, by the actually consumed amount (prepayment minus refund) once the
+    /// refund is known; or right away, for a direct charge made without a prepayment
+    /// (e.g. for memory usage). The gauge above, in contrast, is raised by the
+    /// prepayment and lowered again by the refund.
     ///
     /// Exactly the scalar equivalent of
-    /// [`Self::consumed_cycles_by_use_cases_as_counters`], summed over the use cases
+    /// [`Self::consumed_cycles_by_use_cases_monotonic`], summed over the use cases
     /// that [`Self::consumed_cycles`] covers, i.e. everything except HTTPS outcalls,
     /// which are only tracked at the subnet level (and, for the canister, in the
-    /// by-use-case counters).
-    pub fn consumed_cycles_as_counter(&self) -> NominalCycles {
-        self.consumed_cycles_as_counter
+    /// by-use-case map).
+    pub fn consumed_cycles_monotonic(&self) -> NominalCycles {
+        self.consumed_cycles_monotonic
     }
 
     pub fn consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_cases
     }
 
-    pub fn consumed_cycles_by_use_cases_as_counters(
+    pub fn consumed_cycles_by_use_cases_monotonic(
         &self,
     ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
-        &self.consumed_cycles_by_use_cases_as_counters
+        &self.consumed_cycles_by_use_cases_monotonic
     }
 
     pub fn observe_round_scheduled(&mut self) {
@@ -2163,7 +2164,7 @@ impl SystemState {
     pub fn observe_consumed_cycles_for_https_outcall(&mut self, amount: NominalCycles) {
         *self
             .canister_metrics
-            .consumed_cycles_by_use_cases_as_counters
+            .consumed_cycles_by_use_cases_monotonic
             .entry(CyclesUseCase::HTTPOutcalls)
             .or_insert_with(NominalCycles::zero) += amount;
     }
@@ -2199,7 +2200,7 @@ impl SystemState {
 
         // Skip only if there is nothing to record at all. Note that a refund equal to
         // its prepayment still has to lower the gauge by the refunded amount, even
-        // though it contributes nothing to the monotonic counter.
+        // though it contributes nothing to the monotonic amounts.
         if prepayment == NominalCycles::zero() && refund == NominalCycles::zero() {
             return;
         }
@@ -2207,10 +2208,9 @@ impl SystemState {
         let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
             &mut self.canister_metrics.consumed_cycles_by_use_cases;
         let use_case_consumption = metric.entry(use_case).or_insert_with(NominalCycles::zero);
-        let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> = &mut self
-            .canister_metrics
-            .consumed_cycles_by_use_cases_as_counters;
-        let use_case_consumption_as_counter =
+        let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
+            &mut self.canister_metrics.consumed_cycles_by_use_cases_monotonic;
+        let use_case_consumption_monotonic =
             metric.entry(use_case).or_insert_with(NominalCycles::zero);
 
         match consuming_cycles {
@@ -2220,7 +2220,7 @@ impl SystemState {
                 match use_case {
                     CyclesUseCase::Instructions | CyclesUseCase::RequestAndResponseTransmission => {
                         // These use cases are accounted for during refund
-                        // for the counter metrics.
+                        // for the monotonic metrics.
                     }
                     CyclesUseCase::Memory
                     | CyclesUseCase::ComputeAllocation
@@ -2228,8 +2228,8 @@ impl SystemState {
                     | CyclesUseCase::IngressInduction
                     | CyclesUseCase::CanisterCreation
                     | CyclesUseCase::BurnedCycles => {
-                        *use_case_consumption_as_counter += prepayment;
-                        self.canister_metrics.consumed_cycles_as_counter += prepayment;
+                        *use_case_consumption_monotonic += prepayment;
+                        self.canister_metrics.consumed_cycles_monotonic += prepayment;
                     }
 
                     CyclesUseCase::ECDSAOutcalls
@@ -2245,8 +2245,8 @@ impl SystemState {
             ConsumingCycles::Refund => {
                 *use_case_consumption -= refund;
                 self.canister_metrics.consumed_cycles -= refund;
-                *use_case_consumption_as_counter += prepayment - refund;
-                self.canister_metrics.consumed_cycles_as_counter += prepayment - refund;
+                *use_case_consumption_monotonic += prepayment - refund;
+                self.canister_metrics.consumed_cycles_monotonic += prepayment - refund;
             }
         }
     }
