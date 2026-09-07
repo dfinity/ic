@@ -6011,17 +6011,8 @@ impl Governance {
                         );
                     }
 
-                    let reward_shares = BigUint::from(
-                        neuron_reward_shares
-                            // Truncates the fractional part. Other than that, this is not lossy
-                            // because reward shares are sums of u64 ballot voting powers.
-                            .trunc()
-                            .mantissa()
-                            // Converts to u128. The sign is not lost because this is in the > 0
-                            // branch.
-                            .unsigned_abs(),
-                    )
-                    .to_bytes_be();
+                    let reward_shares =
+                        BigUint::from(neuron_reward_shares.as_i128().unsigned_abs()).to_bytes_be();
 
                     neuron.latest_reward_event_participation = Some(RewardEventParticipation {
                         reward_event_end_timestamp_seconds,
