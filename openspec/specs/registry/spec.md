@@ -458,6 +458,22 @@ Subnet splitting creates a new subnet by splitting an existing subnet's canister
 - **AND** the specified canister ranges must be hosted by the source subnet
 - **AND** the split must not violate routing table invariants
 
+### Requirement: Subnet Merging
+
+Subnet merging is the inverse of subnet splitting: it reroutes a source subnet's canister ID ranges into a destination subnet.
+
+#### Scenario: Merge subnet operation
+- **WHEN** a `merge_subnets` registry mutation is submitted with a source and a destination subnet
+- **THEN** all canister ID ranges hosted by the source subnet are rerouted to the destination subnet
+- **AND** only the routing table is updated: neither subnet record is modified, and in particular the source subnet is not deleted
+- **AND** this is only one step of the merge process — by the time this mutation is applied, both subnets are expected to already be halted with empty streams between them, and the destination subnet is only unhalted afterwards
+
+#### Scenario: Merge subnet validation
+- **WHEN** a subnet merge is processed
+- **THEN** the source and destination subnets must be distinct and must both already exist in the registry
+- **AND** the source subnet must host at least one canister ID range
+- **AND** the merge is rejected if the source subnet's ranges overlap an ongoing canister migration, since rerouting them would break the recorded migration trace
+
 ### Requirement: Engine Deletion
 
 CloudEngine subnets can be deleted, cascading registry cleanup.
