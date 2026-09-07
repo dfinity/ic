@@ -68,4 +68,20 @@ impl<K: Ord, V: HasLabel> PoolSection<K, V> {
     pub(crate) fn values(&self) -> std::collections::btree_map::Values<'_, K, V> {
         self.messages.values()
     }
+
+    /// Removes all entries for which `predicate` returns `true` and returns
+    /// their keys, instrumenting each removal the same way as [`Self::remove`].
+    pub(crate) fn extract_if_keys<F>(&mut self, mut predicate: F) -> Vec<K>
+    where
+        F: FnMut(&K, &V) -> bool,
+    {
+        self.messages
+            .extract_if(.., |key, value| predicate(key, value))
+            .map(|(key, value)| {
+                self.metrics
+                    .observe_remove(MESSAGE_SIZE_BYTES, value.label());
+                key
+            })
+            .collect()
+    }
 }
