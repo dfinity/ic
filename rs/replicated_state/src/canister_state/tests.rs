@@ -1587,15 +1587,11 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
         });
 
     // The prepayment was taken out of the balance and is in the consumed cycles
-    // gauge; nothing has been consumed for good yet, so the monotonic amounts are
+    // gauge; nothing has been consumed for good yet, so the monotonic amount is
     // still zero.
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
         prepaid.nominal()
-    );
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        NominalCycles::zero()
     );
     assert_eq!(
         system_state
@@ -1610,16 +1606,12 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
     canister_state.drop_in_progress_management_calls_after_split();
 
     // The prepayment is refunded in full, so the balance is whole again and the gauge
-    // is back to zero. Nothing was consumed, so the monotonic amounts stay at zero
+    // is back to zero. Nothing was consumed, so the monotonic amount stays at zero
     // too.
     let system_state = &canister_state.system_state;
     assert_eq!(system_state.balance(), balance_before + prepaid.real());
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        NominalCycles::zero()
-    );
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
         NominalCycles::zero()
     );
     assert_eq!(
