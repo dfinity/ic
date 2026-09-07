@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::File;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 /// Number of bytes to use for the LUKS2 volume key
@@ -89,12 +89,12 @@ pub(crate) struct KeyslotParameters {
     pub(crate) key_size: Option<usize>,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum LuksHeaderLocation<'a> {
+#[derive(Clone, Debug)]
+pub enum LuksHeaderLocation {
     /// Use the attached LUKS header on the device.
     Attached,
     /// Use the detached LUKS header at the specified path.
-    Detached(&'a Path),
+    Detached(PathBuf),
 }
 
 /// Obtains a cryptsetup handle for `device_path`.
@@ -110,7 +110,7 @@ fn obtain_crypt_device_handle(
 
     match header_location {
         LuksHeaderLocation::Detached(header_path) => {
-            obtain_crypt_device_handle_with_detached_header(device_path, header_path)
+            obtain_crypt_device_handle_with_detached_header(device_path, &header_path)
                 .with_context(|| format!("Detached header {} failed", header_path.display()))
         }
         LuksHeaderLocation::Attached => {
@@ -216,7 +216,7 @@ pub fn format_crypt_device(
     header_location: LuksHeaderLocation,
     passphrase: &[u8],
 ) -> Result<CryptDevice> {
-    if let LuksHeaderLocation::Detached(header_path) = header_location {
+    if let LuksHeaderLocation::Detached(ref header_path) = header_location {
         File::create(header_path)
             .context("Failed to create detached LUKS header file")?
             .set_len(16 * 1024 * 1024)

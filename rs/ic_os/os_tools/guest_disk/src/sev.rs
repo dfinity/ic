@@ -55,9 +55,9 @@ pub struct SevDiskEncryption {
 }
 
 impl SevDiskEncryption {
-    fn header_location(&self, partition: Partition) -> LuksHeaderLocation<'_> {
+    fn header_location(&self, partition: Partition) -> LuksHeaderLocation {
         match partition {
-            Partition::Store => LuksHeaderLocation::Detached(&self.store_luks_header_path),
+            Partition::Store => LuksHeaderLocation::Detached(self.store_luks_header_path.clone()),
             Partition::Var => LuksHeaderLocation::Attached,
         }
     }
@@ -86,9 +86,9 @@ impl DiskEncryption for SevDiskEncryption {
         // derived at the current TCB (but only if this is the Default VM).
         if token.sev_metadata.tcb_version != sev_metadata.tcb_version {
             if self.guest_vm_type == GuestVMType::Default {
-                rekey(
+                rekey_crypt_device(
+                    &mut crypt_device,
                     device_path,
-                    self.header_location(partition),
                     passphrase.as_bytes(),
                     self.sev_firmware.as_mut(),
                 )?;
@@ -204,6 +204,18 @@ pub fn rekey(
     old_key: &[u8],
     sev_firmware: &mut dyn SevGuestFirmware,
 ) -> Result<()> {
+    let mut crypt_device = open_luks2_device(device_path, header_location, false)
+        .context("Failed to open the LUKS2 device")?;
+    rekey_crypt_device(&mut crypt_device, device_path, old_key, sev_firmware)
+}
+
+/// Same as [`rekey`], but on an already-open crypt device.
+fn rekey_crypt_device(
+    crypt_device: &mut CryptDevice,
+    device_path: &Path,
+    old_key: &[u8],
+    sev_firmware: &mut dyn SevGuestFirmware,
+) -> Result<()> {
     info!("Re-keying the LUKS2 header for {}", device_path.display());
     let sev_metadata = get_sev_metadata_for_luks(sev_firmware)?;
     let new_key = derive_key_from_sev_measurement(
@@ -212,9 +224,6 @@ pub fn rekey(
         sev_metadata.tcb_version,
     )
     .context("Failed to derive the new SEV key for the device")?;
-
-    let mut crypt_device = open_luks2_device(device_path, header_location, false)
-        .context("Failed to open the LUKS2 device")?;
 
     // Unlock with the old key (searching all keyslots) and set the first keyslot to the
     // new key. Fails if the old key does not unlock any keyslot.
@@ -229,9 +238,9 @@ pub fn rekey(
             new_key.as_bytes(),
         )
         .context("Failed to replace the old key with the new SEV-derived key")?;
-    // Removes the keyslots that legacy headers may still carry.
-    destroy_keyslots_except_first(&mut crypt_device)?;
-    write_keyslot_token(&mut crypt_device, sev_metadata)
+    // Remove the keyslots that legacy headers may still carry.
+    destroy_keyslots_except_first(crypt_device)?;
+    write_keyslot_token(crypt_device, sev_metadata)
         .context("Failed to write SEV keyslot metadata")?;
 
     Ok(())
