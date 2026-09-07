@@ -22,7 +22,8 @@
 #    the CDN (e.g., verify that https://download.dfinity.systems/ic/${commit}/canisters/ic-icrc1-ledger.wasm.gz exists).
 #    The commit's CDN uploads must carry a build-provenance attestation (created by the attest-uploads job of the
 #    ci-kickoff pipeline for every master commit): this workflow verifies every downloaded artifact against it and
-#    fails otherwise, so tags on commits that predate the attestation rollout cannot be released with this workflow.
+#    fails otherwise, so tags on commits that predate the attestation rollout and verification should not be released
+#    with this workflow.
 # 2. Create a release candidate tag: ledger-suite-{type}-YYYY-MM-DD.rc1
 #    - This creates a prerelease for testing
 #    - If issues are found, create .rc2, .rc3, etc. with fixes
