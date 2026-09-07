@@ -66,12 +66,25 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
     // is interrupted outright leaves the staging directory behind, which is why
     // it is not silently reused: whoever cleans it up should know it is there.
     let staging = staging_path(&output)?;
-    if staging.exists() {
-        return Err(format!(
-            "{} exists, presumably left behind by an interrupted merge; remove it to retry",
-            staging.display()
-        ));
+    if let Some(parent) = staging.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
     }
+    // Creating the staging directory is what claims it, rather than a check that
+    // it is free: the check would let two merges of the same output both proceed
+    // into it, and the one that failed first would clean up while the other was
+    // still assembling. Creating it is a single step that only one of them can
+    // win, and the cleanup below is then this merge's to do.
+    fs::create_dir(&staging).map_err(|err| {
+        if err.kind() == std::io::ErrorKind::AlreadyExists {
+            format!(
+                "{} exists, presumably left behind by an interrupted merge; remove it to retry",
+                staging.display()
+            )
+        } else {
+            format!("failed to create {}: {err}", staging.display())
+        }
+    })?;
 
     let mut renamed = false;
     let result = (|| -> Result<(), String> {
