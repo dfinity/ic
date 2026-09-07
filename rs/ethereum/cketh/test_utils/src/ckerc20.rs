@@ -547,7 +547,7 @@ impl DepositCkErc20 {
         }
     }
 
-    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+    pub fn to_log_entry(&self) -> alloy_rpc_types_eth::Log {
         match self {
             Self::CkErc20(params) => params.to_log_entry(),
             Self::CkErc20WithSubaccount(params) => params.to_log_entry(),
@@ -577,7 +577,7 @@ impl DepositCkErc20Params {
         }
     }
 
-    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+    pub fn to_log_entry(&self) -> alloy_rpc_types_eth::Log {
         let amount_hex = format!("0x{:0>64x}", self.ckerc20_amount);
         let topics = vec![
             RECEIVED_ERC20_EVENT_TOPIC.to_string(),
@@ -642,7 +642,7 @@ impl DepositCkErc20WithSubaccountParams {
         }
     }
 
-    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+    pub fn to_log_entry(&self) -> alloy_rpc_types_eth::Log {
         let data = {
             let amount_hex = format!("{:0>64x}", self.ckerc20_amount);
             assert_eq!(amount_hex.len(), 64);
@@ -664,7 +664,7 @@ impl DepositCkErc20WithSubaccountParams {
             ),
             format!(
                 "0x000000000000000000000000{}",
-                ethers_core::utils::hex::encode(self.from_address.as_ref())
+                hex::encode(self.from_address.as_ref())
             ),
             encode_principal(self.recipient),
         ];
@@ -701,7 +701,7 @@ fn erc20_default_deposit_transaction_data() -> DepositTransactionData {
 pub struct CkErc20DepositFlow {
     pub setup: CkErc20Setup,
     params: DepositCkErc20,
-    override_erc20_log_entry: Box<dyn Fn(ethers_core::types::Log) -> ethers_core::types::Log>,
+    override_erc20_log_entry: Box<dyn Fn(alloy_rpc_types_eth::Log) -> alloy_rpc_types_eth::Log>,
 }
 
 impl AsRef<CkEthSetup> for CkErc20DepositFlow {
@@ -720,7 +720,7 @@ impl CkErc20DepositFlow {
     }
 
     pub fn with_override_erc20_log_entry<
-        F: Fn(ethers_core::types::Log) -> ethers_core::types::Log + 'static,
+        F: Fn(alloy_rpc_types_eth::Log) -> alloy_rpc_types_eth::Log + 'static,
     >(
         mut self,
         override_mock: F,
@@ -1096,40 +1096,20 @@ impl DepositErc20Flow {
     }
 }
 
-#[allow(deprecated)]
 pub fn erc20_transfer_data(expected_address: &Address, expected_amount: &Erc20Value) -> Vec<u8> {
-    use ethers_core::abi::{Param, ParamType, Token};
+    use alloy_sol_types::{SolCall, sol};
 
-    let erc20_transfer = ethers_core::abi::Function {
-        name: "transfer".to_string(),
-        inputs: vec![
-            Param {
-                name: "_to".to_string(),
-                kind: ParamType::Address,
-                internal_type: None,
-            },
-            Param {
-                name: "_value".to_string(),
-                kind: ParamType::Uint(256),
-                internal_type: None,
-            },
-        ],
-        outputs: vec![Param {
-            name: "success".to_string(),
-            kind: ParamType::Bool,
-            internal_type: None,
-        }],
-        constant: None,
-        state_mutability: ethers_core::abi::StateMutability::NonPayable,
-    };
+    sol! {
+        function transfer(address to, uint256 value) external returns (bool success);
+    }
+
     assert_eq!(
-        erc20_transfer.short_signature().to_vec(),
+        transferCall::SELECTOR.to_vec(),
         hex::decode("a9059cbb").unwrap()
     );
-    erc20_transfer
-        .encode_input(&[
-            Token::Address(expected_address.to_string().parse().unwrap()),
-            Token::Uint(expected_amount.to_be_bytes().into()),
-        ])
-        .expect("failed to encode transfer data")
+    transferCall {
+        to: alloy_primitives::Address::from(expected_address.into_bytes()),
+        value: alloy_primitives::U256::from_be_bytes(expected_amount.to_be_bytes()),
+    }
+    .abi_encode()
 }

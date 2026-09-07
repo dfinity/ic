@@ -2160,12 +2160,12 @@ impl Validator {
 pub mod test {
     use super::*;
     use crate::consensus::{
-        MAX_CONSENSUS_THREADS, block_maker::get_block_maker_delay, build_thread_pool,
-        catchup_package_maker::CatchUpPackageMaker,
+        block_maker::get_block_maker_delay, catchup_package_maker::CatchUpPackageMaker,
     };
     use assert_matches::assert_matches;
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder, RefMockPayloadBuilder};
+    use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool};
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::{
         messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,

@@ -15,6 +15,7 @@ pub fn derive_key_from_sev_measurement(
 ) -> Result<String> {
     let mut field_select = GuestFieldSelect::default();
     field_select.set_measurement(true);
+    field_select.set_guest_policy(true);
 
     let derived_key = sev_firmware
         .get_derived_key(Some(1), DerivedKey::new(false, field_select, 0, 0, 0, None))
@@ -57,6 +58,10 @@ mod tests {
         let mut mock_sev_guest_firmware = MockSevGuestFirmware::new();
         mock_sev_guest_firmware
             .expect_get_derived_key()
+            .withf(|_, request| {
+                request.guest_field_select.get_guest_policy()
+                    && request.guest_field_select.get_measurement()
+            })
             .returning(|_, _| Ok([42; 32]));
 
         assert_eq!(

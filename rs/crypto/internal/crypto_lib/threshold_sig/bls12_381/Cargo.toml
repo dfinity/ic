@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-cached = { workspace = true }
 hex = { workspace = true }
 ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type" }
 ic-crypto-internal-seed = { path = "../../seed" }
@@ -16,6 +15,7 @@ ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-types = { path = "../../../../../types/types" }
+ic-utils-mem-lru = { path = "../../../../../utils/mem-lru" }
 parking_lot = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

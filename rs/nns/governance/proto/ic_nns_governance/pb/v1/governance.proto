@@ -514,10 +514,8 @@ enum NnsFunction {
   // calling subnet (NNS).
   NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET = 58;
 
-  // Merge a subnet into another subnet: the canister ID ranges of the source
-  // subnet are merged into the canister ID range set of the destination subnet,
-  // so that all canisters that used to be hosted by the source subnet are routed
-  // to the destination subnet.
+  // Merge a subnet into another subnet: in the routing table, reassigns all
+  // canister ranges hosted by the source subnet to the destination subnet.
   NNS_FUNCTION_MERGE_SUBNETS = 59;
 }
 

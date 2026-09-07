@@ -3,6 +3,7 @@ use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::canister_state_bits::v1::CyclesAccount as pbCyclesAccount;
 use ic_protobuf::state::queues::v1::Cycles as PbCycles;
+use ic_utils_thousands::separate_with_underscores;
 use serde::{Deserialize, Serialize};
 use std::array::TryFromSliceError;
 use std::iter::Sum;
@@ -10,7 +11,6 @@ use std::{
     fmt,
     ops::{Add, AddAssign, Div, Mul, Sub, SubAssign},
 };
-use thousands::Separable;
 
 /// Struct to be used for updates to the canister's balance. They are maintained as a
 /// simple u128. We implement our own arithmetic functions on them so that we
@@ -228,7 +228,7 @@ impl Sum for Cycles {
 
 impl fmt::Display for Cycles {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.separate_with_underscores())
+        write!(f, "{}", separate_with_underscores(self.0))
     }
 }
 

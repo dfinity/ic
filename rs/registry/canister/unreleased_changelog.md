@@ -21,13 +21,16 @@ on the process that this file is part of, see
   `HostosVersion` accept, so until now, it was possible to elect a version that consumers could not read
   back out of the Registry.
 
-* `merge_subnets` endpoint, callable through a `MergeSubnets` proposal. It takes a source and a
-  destination subnet ID, and merges the canister ID ranges of the source subnet into the canister
-  ID range set of the destination subnet, i.e., the canisters hosted by the source subnet are
-  routed to the destination subnet afterwards. Only the routing table is updated: neither subnet
-  record is modified and the source subnet is not deleted.
+* `merge_subnets` endpoint, callable through a `MergeSubnets` proposal. It merges a subnet into
+  another subnet: in the routing table, reassigns all canister ranges hosted by the source subnet
+  to the destination subnet. Only the routing table is updated: neither subnet record is modified
+  and the source subnet is not deleted.
 
 ## Changed
+
+* `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
+  fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward
+  (`deployment_progress == 1.0`).
 
 ## Deprecated
 

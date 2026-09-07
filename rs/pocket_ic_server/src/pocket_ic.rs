@@ -569,7 +569,7 @@ struct PocketIcStateDir {
 
 impl PocketIcStateDir {
     fn new(state_dir: Option<PathBuf>) -> Result<Self, String> {
-        if wsl::is_wsl()
+        if *ic_sys::IS_WSL
             && let Some(state_dir) = state_dir
         {
             let temp_dir = TempDir::new()

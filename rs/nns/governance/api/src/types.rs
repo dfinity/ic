@@ -4335,10 +4335,8 @@ pub enum NnsFunction {
     /// `SetupInitialDKG` requests without an explicit subnet id are routed to the
     /// calling subnet (NNS).
     SetDefaultInitialDkgSubnet = 58,
-    /// Merge a subnet into another subnet: the canister ID ranges of the source
-    /// subnet are merged into the canister ID range set of the destination subnet,
-    /// so that all canisters that used to be hosted by the source subnet are routed
-    /// to the destination subnet.
+    /// Merge a subnet into another subnet: in the routing table, reassigns all
+    /// canister ranges hosted by the source subnet to the destination subnet.
     MergeSubnets = 59,
 }
 impl NnsFunction {
