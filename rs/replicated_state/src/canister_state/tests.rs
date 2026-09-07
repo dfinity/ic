@@ -1475,6 +1475,53 @@ fn drops_aborted_canister_install_after_split() {
     assert_eq!(expected_state, canister_state);
 }
 
+/// The cycles prepaid for an `install_code` that a subnet split drops are refunded
+/// in full: the execution is never retried (subnet A' rejects the corresponding
+/// call), so the canister has nothing to show for them.
+#[test]
+fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let prepaid = CompoundCycles::<Instructions>::new(Cycles::new(1000), cost_schedule);
+    let mut canister_state = CanisterStateFixture::new().canister_state;
+
+    let system_state = &mut canister_state.system_state;
+    system_state.consume_cycles(prepaid);
+    system_state
+        .task_queue
+        .enqueue(ExecutionTask::AbortedInstallCode {
+            message: CanisterCall::Request(Arc::new(RequestBuilder::new().build())),
+            call_id: InstallCodeCallId::new(0),
+            prepaid_execution_cycles: prepaid,
+        });
+
+    // The prepayment was taken out of the balance and is in the consumed cycles
+    // gauge; nothing has been consumed for good yet, so the counter is still zero.
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        prepaid.nominal()
+    );
+    let balance_before = system_state.balance();
+    assert_eq!(balance_before, INITIAL_CYCLES - prepaid.real());
+
+    canister_state.drop_in_progress_management_calls_after_split();
+
+    // The prepayment is refunded in full, so the balance is whole again and the gauge
+    // is back to zero. Nothing was consumed, so the counter stays at zero too.
+    let system_state = &canister_state.system_state;
+    assert_eq!(system_state.balance(), balance_before + prepaid.real());
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        NominalCycles::zero()
+    );
+    assert_eq!(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters()
+            .get(&CyclesUseCase::Instructions),
+        Some(&NominalCycles::zero())
+    );
+}
+
 #[test]
 fn reverts_stopping_status_after_split() {
     let mut canister_state = CanisterStateFixture::new().canister_state;
