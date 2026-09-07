@@ -115,6 +115,22 @@ enum Opt {
         bytes: String,
     },
 
+    /// Assembles the merged state, as part of a subnet merge.
+    #[clap(name = "merge")]
+    Merge {
+        /// Path to the checkpoint of the destination subnet, which the merged
+        /// state is based on.
+        #[clap(long, required = true)]
+        base: PathBuf,
+        /// Path to the checkpoint of the source subnet, whose canisters and
+        /// canister snapshots are added to those of the destination subnet.
+        #[clap(long, required = true)]
+        source: PathBuf,
+        /// Path the merged checkpoint is written to. Must not exist yet.
+        #[clap(long, required = true)]
+        output: PathBuf,
+    },
+
     /// Prunes a replicated state, as part of a subnet split.
     #[clap(name = "split")]
     #[clap(group(
@@ -268,6 +284,11 @@ pub(crate) fn main_inner(args: Vec<String>) {
         Opt::PrincipalFromBytes { bytes } => {
             commands::convert_ids::do_principal_from_byte_string(bytes)
         }
+        Opt::Merge {
+            base,
+            source,
+            output,
+        } => commands::merge::do_merge(base, source, output),
         Opt::Split {
             root,
             subnet_id,
