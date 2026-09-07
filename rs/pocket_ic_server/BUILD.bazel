@@ -53,6 +53,7 @@ LIB_DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_machine_tests",
     "//rs/state_manager",
+    "//rs/sys",
     "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
@@ -103,7 +104,6 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:wat",
-    "@crate_index//:wsl",
 ]
 
 TEST_DEPENDENCIES = [

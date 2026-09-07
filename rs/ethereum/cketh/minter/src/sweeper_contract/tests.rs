@@ -24,35 +24,42 @@ fn should_call_the_function_the_delegate_exposes() {
 
 #[test]
 fn should_encode_a_batch_sweep() {
-    use ethers_core::abi::{Token, encode};
+    use alloy_primitives::{Address, B256};
+    use alloy_sol_types::{SolValue, sol};
+
+    sol! {
+        struct SweepItem {
+            address deposit;
+            bytes32 principal;
+            bytes32 subaccount;
+            bytes32 r;
+            bytes32 s;
+            uint8 v;
+        }
+    }
 
     let (items, tokens) = sweep();
 
     let data = encode_sweep_erc20_batch(&items, &tokens);
 
-    let expected_arguments = encode(&[
-        Token::Array(
-            items
-                .iter()
-                .map(|item| {
-                    Token::Tuple(vec![
-                        Token::Address(item.deposit.as_address().into_bytes().into()),
-                        Token::FixedBytes(encode_principal(&item.account.owner).to_vec()),
-                        Token::FixedBytes(item.account.effective_subaccount().to_vec()),
-                        Token::FixedBytes(item.attestation.r.to_be_bytes().to_vec()),
-                        Token::FixedBytes(item.attestation.s.to_be_bytes().to_vec()),
-                        Token::Uint((27 + u8::from(item.attestation.signature_y_parity)).into()),
-                    ])
-                })
-                .collect(),
-        ),
-        Token::Array(
-            tokens
-                .iter()
-                .map(|token| Token::Address(token.into_bytes().into()))
-                .collect(),
-        ),
-    ]);
+    let expected_arguments = (
+        items
+            .iter()
+            .map(|item| SweepItem {
+                deposit: Address::from(item.deposit.as_address().into_bytes()),
+                principal: B256::from(encode_principal(&item.account.owner)),
+                subaccount: B256::from(item.account.effective_subaccount()),
+                r: B256::from(item.attestation.r.to_be_bytes()),
+                s: B256::from(item.attestation.s.to_be_bytes()),
+                v: 27 + u8::from(item.attestation.signature_y_parity),
+            })
+            .collect::<Vec<_>>(),
+        tokens
+            .iter()
+            .map(|token| Address::from(token.into_bytes()))
+            .collect::<Vec<_>>(),
+    )
+        .abi_encode_params();
 
     assert_eq!(&data[4..], expected_arguments.as_slice());
 }

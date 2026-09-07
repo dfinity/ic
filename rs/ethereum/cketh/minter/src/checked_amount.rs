@@ -216,15 +216,15 @@ impl<Unit> From<CheckedAmountOf<Unit>> for candid::Nat {
 
 impl<Unit> fmt::Debug for CheckedAmountOf<Unit> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use thousands::Separable;
-        write!(f, "{}", self.0.separate_with_underscores())
+        use ic_utils_thousands::separate_with_underscores;
+        write!(f, "{}", separate_with_underscores(self.0))
     }
 }
 
 impl<Unit> fmt::Display for CheckedAmountOf<Unit> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use thousands::Separable;
-        write!(f, "{}", self.0.separate_with_underscores())
+        use ic_utils_thousands::separate_with_underscores;
+        write!(f, "{}", separate_with_underscores(self.0))
     }
 }
 

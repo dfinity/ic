@@ -2719,6 +2719,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_flexible_http_requests_disabled(mut self) -> Self {
+        self.execution_config.flexible_http_requests = FlagStatus::Disabled;
+        self
+    }
+
     pub fn without_composite_queries(mut self) -> Self {
         self.execution_config.composite_queries = FlagStatus::Disabled;
         self

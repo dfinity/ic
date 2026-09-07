@@ -158,10 +158,10 @@ pub fn make_registry_cup_from_cup_contents(
 pub fn make_registry_cup(
     registry: &dyn RegistryClient,
     subnet_id: SubnetId,
+    registry_version: RegistryVersion,
     logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
-    let versioned_record = match registry.get_cup_contents(subnet_id, registry.get_latest_version())
-    {
+    let versioned_record = match registry.get_cup_contents(subnet_id, registry_version) {
         Ok(versioned_record) => versioned_record,
         Err(e) => {
             warn!(
@@ -320,8 +320,13 @@ mod tests {
     #[test]
     fn test_make_registry_cup() {
         let registry_client = setup_registry(/*registry_store_uri=*/ None);
-        let result =
-            make_registry_cup(&registry_client, subnet_test_id(0), &no_op_logger()).unwrap();
+        let result = make_registry_cup(
+            &registry_client,
+            subnet_test_id(0),
+            registry_client.get_latest_version(),
+            &no_op_logger(),
+        )
+        .unwrap();
 
         assert_eq!(
             result.content.state_hash.get_ref(),
@@ -360,8 +365,13 @@ mod tests {
                 .unwrap_or(LATEST_REGISTRY_VERSION);
 
             let registry_client = setup_registry(registry_store_uri.clone());
-            let cup = make_registry_cup(&registry_client, subnet_test_id(0), &no_op_logger())
-                .expect("Failed to create the registry CUP");
+            let cup = make_registry_cup(
+                &registry_client,
+                subnet_test_id(0),
+                registry_client.get_latest_version(),
+                &no_op_logger(),
+            )
+            .expect("Failed to create the registry CUP");
 
             assert_eq!(
                 cup.content.registry_version(),
