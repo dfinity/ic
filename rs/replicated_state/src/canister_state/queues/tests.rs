@@ -4047,7 +4047,13 @@ mod mainnet_compatibility_tests {
             ))
             .expect("Failed to convert the protobuf to RefundPool");
 
-            assert_eq!(make_refund_pool(), refunds);
+            // Only the pooled refunds are compared: a checkpoint written before the
+            // metrics were persisted has none, in which case they are inferred from
+            // the persisted refunds (see `deserialize_without_metrics_infers_them()`).
+            assert_eq!(
+                make_refund_pool().iter().collect::<Vec<_>>(),
+                refunds.iter().collect::<Vec<_>>()
+            );
         }
 
         /// The pool's metrics are persisted, so pushes merged into a single pooled
@@ -4069,6 +4075,29 @@ mod mainnet_compatibility_tests {
 
             assert_eq!(refund_pool, deserialized);
             assert_eq!(3, deserialized.metrics().pushed_refunds);
+            assert_eq!(Cycles::new(500), deserialized.metrics().pushed_cycles);
+        }
+
+        /// A checkpoint written before the metrics were persisted has none, so they
+        /// are inferred from the persisted refunds: one push each.
+        #[test]
+        fn deserialize_without_metrics_infers_them() {
+            let refund_pool = make_refund_pool();
+            let mut proto_refunds: pb_queues::Refunds = (&refund_pool).into();
+            proto_refunds.metrics = None;
+
+            let deserialized = refunds::RefundPool::try_from((
+                proto_refunds,
+                &StrictMetrics as &dyn CheckpointLoadingMetrics,
+            ))
+            .unwrap();
+
+            // The same refunds, but only two pushes; holding the same cycles in total.
+            assert_eq!(
+                refund_pool.iter().collect::<Vec<_>>(),
+                deserialized.iter().collect::<Vec<_>>()
+            );
+            assert_eq!(2, deserialized.metrics().pushed_refunds);
             assert_eq!(Cycles::new(500), deserialized.metrics().pushed_cycles);
         }
     }
