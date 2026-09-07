@@ -2,16 +2,14 @@ name: Fetch Verified Artifacts
 description: |
   Download artifacts from the CDN (download.dfinity.systems) and verify every
   one of them against the build-provenance attestation of the pipeline that
-  built them, aborting on any mismatch.
+  built them.
 
-  For each directory named in `files`, the directory's SHA256SUMS is fetched
-  and verified with `gh attestation verify --source-digest <commit>` via
-  ci/scripts/fetch-attested-sums.sh; each artifact is then downloaded and
-  checked against the verified sums with `sha256sum --check`. The out-dir
-  finally receives a SHA256SUMS file listing the verified hashes under the
-  files' local names, ready to be published as release verification data —
-  the published checksums are the verified build-time values, not re-hashes
-  of whatever was downloaded.
+  For each directory named in `files`, the directory's SHA256SUMS is fetched and
+  verified with `gh attestation verify --source-digest <commit>`; each artifact
+  is then downloaded and checked against the verified sums with `sha256sum
+  --check`. The out-dir finally receives a SHA256SUMS file listing the verified
+  hashes under the files' local names, ready to be published as release
+  verification data.
 inputs:
   commit:
     required: true
@@ -44,7 +42,7 @@ inputs:
     description: Directory to place the verified files in (created if needed; a fresh temp dir when unset).
   gh-token:
     required: true
-    description: Token for `gh attestation verify` (github.token suffices for the public dfinity/ic attestations).
+    description: Token for `gh attestation verify`.
 outputs:
   out-dir:
     description: Directory containing the verified files and their SHA256SUMS.
@@ -57,8 +55,8 @@ runs:
       shell: bash
       env:
         GH_CLI_VERSION: 2.98.0
-        # sha256 of gh_${GH_CLI_VERSION}_linux_amd64.tar.gz. When bumping the
-        # version, take the new value from that release's
+        # sha256 of gh_${GH_CLI_VERSION}_linux_amd64.tar.gz.
+        # When bumping the version, take the new value from that release's
         # gh_${GH_CLI_VERSION}_checksums.txt asset.
         GH_CLI_SHA256: 3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de
       run: |
@@ -66,16 +64,12 @@ runs:
 
         cd "$(mktemp -d)"
 
-        # Without --fail, 4xx and 5xx are considered "success", because UNIX.
         curl \
           --location https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_amd64.tar.gz \
           --output gh_cli.tar.gz \
           --fail \
           --retry 7
 
-        # Release assets are mutable under an existing tag, so the URL alone is
-        # not a trust anchor: verify against the checksum pinned above before
-        # unpacking or running anything.
         echo "${GH_CLI_SHA256}  gh_cli.tar.gz" | sha256sum --check
 
         tar -xf gh_cli.tar.gz
@@ -101,34 +95,12 @@ runs:
 
         out_dir="${OUT_DIR:-$(mktemp -d)}"
         mkdir -p "$out_dir"
-        # The out-dir's contract is "exactly the files this invocation
-        # verified": refuse a non-empty directory rather than mixing stale,
-        # unverified files in with the verified ones.
+        # The out-dir should be empty to ensure all its files are verified.
         if [ -n "$(find -H "$out_dir" -mindepth 1 -print -quit)" ]; then
           echo "ERROR: out-dir '$out_dir' is not empty" >&2
           exit 1
         fi
         sums_cache="$(mktemp -d)"
-
-        # Fetch (once per directory) the CDN SHA256SUMS, verified against the
-        # build's attestation, and set $sums to its local path. Everything
-        # else is verified locally against it. This deliberately runs in the
-        # main shell and reports via a variable instead of echoing from a
-        # command substitution: a $(...) subshell would swallow the
-        # verifier's failure and hand back the path of an UNVERIFIED file.
-        # The verifier also writes to a temp name that is only moved to the
-        # cache path on success, so no later iteration can mistake a failed
-        # download for a verified one.
-        ensure_verified_sums_for_dir() { # <cdn-subdir>; sets $sums
-          local dir="$1"
-          # Key the cache by a hash of the exact directory string.
-          sums="$sums_cache/$(printf '%s' "$dir" | sha256sum | cut -d' ' -f1).SHA256SUMS"
-          if ! [ -f "$sums" ]; then
-            "$GITHUB_WORKSPACE/ci/scripts/fetch-attested-sums.sh" \
-              "$COMMIT" "$dir" "$SIGNER_WORKFLOW" "$SOURCE_REF_REGEX" "$sums.unverified"
-            mv "$sums.unverified" "$sums"
-          fi
-        }
 
         : >"$out_dir/SHA256SUMS"
 
@@ -169,7 +141,15 @@ runs:
 
           dir="$(dirname "$rel")"
           base="$(basename "$rel")"
-          ensure_verified_sums_for_dir "$dir"
+
+          # Fetch the directory's SHA256SUMS once, verified against the build's
+          # attestation, and cache it under a hash of the directory's path.
+          sums="$sums_cache/$(printf '%s' "$dir" | sha256sum | cut -d' ' -f1).SHA256SUMS"
+          if ! [ -f "$sums" ]; then
+            "$GITHUB_WORKSPACE/ci/scripts/fetch-attested-sums.sh" \
+              "$COMMIT" "$dir" "$SIGNER_WORKFLOW" "$SOURCE_REF_REGEX" "$sums.unverified"
+            mv "$sums.unverified" "$sums"
+          fi
 
           expected="$(awk -v n="$base" '$NF == n { print $1; exit }' "$sums")"
           if ! [[ "$expected" =~ ^[0-9a-f]{64}$ ]]; then
