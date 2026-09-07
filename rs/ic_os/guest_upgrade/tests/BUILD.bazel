@@ -26,8 +26,8 @@ rust_test(
         "@crate_index//:futures",
         "@crate_index//:rand",
         "@crate_index//:rustls",
+        "@crate_index//:sev",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
-        "@crate_index//:sev",
     ],
 )
