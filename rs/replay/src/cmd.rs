@@ -47,7 +47,7 @@ pub struct ReplayToolArgs {
     pub skip_prompts: bool,
 
     #[clap(long)]
-    /// The GuestOS version to report; defaults to the replica version.
+    /// The GuestOS version the validator uses; defaults to the replica version.
     pub guestos_version: Option<ReplicaVersion>,
 
     /// The replica version under which the extra messages of the subcommand are
