@@ -7,8 +7,8 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The height of a checkpoint is part of the name of its directory, which the
-/// caller picks, so the layout below is only ever used to name files within it.
+/// A `CheckpointLayout` has to be given a height, but the merge only asks it for
+/// the paths of files inside the checkpoint, and those do not depend on one.
 const HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED: Height = Height::new(0);
 
 /// Assembles the checkpoint at `output` from the checkpoints at `base` and
@@ -22,8 +22,7 @@ const HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED: Height = Height::new(0);
 ///
 /// File contents are hard linked rather than copied, so this is cheap no matter
 /// how large the two states are. That makes `output` share the storage of
-/// `base` and `source`, which is sound because checkpoints are immutable: the
-/// links are only ever read afterwards.
+/// `base` and `source`, which is sound because checkpoints are immutable.
 pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), String> {
     for (path, name) in [(&base, "base"), (&source, "source")] {
         if !path.is_dir() {
@@ -52,9 +51,6 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
     }
     // The canisters of the two subnets are disjoint, as the source subnet hosts
     // the canister ID ranges that the merge reassigns to the destination subnet.
-    // A collision would mean that the two checkpoints do not belong to the same
-    // merge, so refuse rather than pick a winner. Before anything is assembled:
-    // this is the one failure the caller is at all likely to hit.
     for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
         if let Some(name) = common_entry(&base.join(dir), &source.join(dir))? {
             return Err(format!(
@@ -90,9 +86,10 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
         })?;
         renamed = true;
 
-        // The rename itself has to reach the disk, as the state manager syncs the
-        // directory a checkpoint was renamed into. Through the resolved path: the
-        // parent of a bare relative one is the empty path, which opens nothing.
+        // A rename is not durable until the directory it happened in is synced,
+        // so the checkpoint could otherwise be back at the staging path after a
+        // crash. Through the resolved path: the parent of a bare relative one is
+        // the empty path, which opens nothing.
         let parent = resolved_output
             .parent()
             .expect("a resolved path is absolute, so it has a parent");
@@ -135,26 +132,11 @@ fn assemble(base: &Path, source: &Path, staging: &Path) -> Result<(), String> {
         .serialize(pb_metadata::SubnetMerged { merged: true })
         .map_err(|err| format!("failed to write the subnet merged marker: {err:?}"))?;
 
-    // `base` was a checkpoint of a running subnet, so it holds neither marker;
-    // but a state that was downloaded and reassembled by hand may, and the state
-    // manager must not take the result for unverified. Both markers have to go: a
-    // state sync marker alone makes `checkpoint_status()` report
-    // `UnverifiedStateSync`, whether or not the unverified marker is there.
-    for marker in [
-        layout.unverified_checkpoint_marker(),
-        layout.state_sync_checkpoint_marker(),
-    ] {
-        if marker.exists() {
-            fs::remove_file(&marker)
-                .map_err(|err| format!("failed to remove {}: {err}", marker.display()))?;
-        }
-    }
-
     // The files of a checkpoint are read-only, and the ones linked in already
     // are, being the very files of `base` and `source`; the marker written above
     // is not. Mark and sync as the state manager does before a directory it
-    // assembled becomes a checkpoint. Directories stay writable, which is what a
-    // checkpoint's directories look like too.
+    // assembled becomes a checkpoint. Directories stay writable, as they are in a
+    // checkpoint the state manager wrote: only its files are marked.
     layout
         .mark_files_readonly_and_sync(/* thread_pool= */ None, /* perform_sync= */ true)
         .map_err(|err| format!("failed to mark the merged checkpoint read-only: {err:?}"))?;
@@ -275,8 +257,8 @@ fn read_dir(dir: &Path) -> Result<Vec<fs::DirEntry>, String> {
 mod tests {
     use super::*;
     use ic_state_layout::{
-        CheckpointStatus, CompleteCheckpointLayout, STATE_SYNC_CHECKPOINT_MARKER,
-        SUBNET_MERGED_FILE, UNVERIFIED_CHECKPOINT_MARKER,
+        CANISTER_FILE, CompleteCheckpointLayout, SNAPSHOT_FILE, SUBNET_MERGED_FILE,
+        SYSTEM_METADATA_FILE,
     };
     use std::os::unix::fs::MetadataExt;
     use tempfile::TempDir;
@@ -287,12 +269,15 @@ mod tests {
     fn checkpoint(root: &Path, name: &str, canisters: &[&str]) -> PathBuf {
         let checkpoint = root.join(name);
         fs::create_dir_all(&checkpoint).unwrap();
-        fs::write(checkpoint.join("system_metadata.pbuf"), name).unwrap();
+        fs::write(checkpoint.join(SYSTEM_METADATA_FILE), name).unwrap();
         for canister in canisters {
-            for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
+            for (dir, file) in [
+                (CANISTER_STATES_DIR, CANISTER_FILE),
+                (SNAPSHOTS_DIR, SNAPSHOT_FILE),
+            ] {
                 let canister_dir = checkpoint.join(dir).join(canister);
                 fs::create_dir_all(&canister_dir).unwrap();
-                fs::write(canister_dir.join("canister.pbuf"), *canister).unwrap();
+                fs::write(canister_dir.join(file), *canister).unwrap();
             }
         }
         checkpoint
@@ -332,7 +317,7 @@ mod tests {
         do_merge(base, source, output.clone()).unwrap();
 
         assert_eq!(
-            fs::read_to_string(output.join("system_metadata.pbuf")).unwrap(),
+            fs::read_to_string(output.join(SYSTEM_METADATA_FILE)).unwrap(),
             "base"
         );
     }
@@ -350,7 +335,7 @@ mod tests {
         let canister = |root: &Path, canister: &str| {
             root.join(CANISTER_STATES_DIR)
                 .join(canister)
-                .join("canister.pbuf")
+                .join(CANISTER_FILE)
         };
         assert_eq!(
             inode(canister(&output, "c1")),
@@ -382,19 +367,6 @@ mod tests {
     }
 
     #[test]
-    fn merge_removes_the_unverified_checkpoint_marker() {
-        let tmp = TempDir::new().unwrap();
-        let base = checkpoint(tmp.path(), "base", &["c1"]);
-        fs::write(base.join(UNVERIFIED_CHECKPOINT_MARKER), "").unwrap();
-        let source = checkpoint(tmp.path(), "source", &["c2"]);
-        let output = tmp.path().join("merged");
-
-        do_merge(base, source, output.clone()).unwrap();
-
-        assert!(!output.join(UNVERIFIED_CHECKPOINT_MARKER).exists());
-    }
-
-    #[test]
     fn merge_makes_the_files_read_only() {
         let tmp = TempDir::new().unwrap();
         let base = checkpoint(tmp.path(), "base", &["c1"]);
@@ -410,8 +382,11 @@ mod tests {
             fs::metadata(&marker).unwrap().permissions().readonly(),
             "the subnet merged marker is writable",
         );
-        for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
-            let canister = output.join(dir).join("c1").join("canister.pbuf");
+        for (dir, file) in [
+            (CANISTER_STATES_DIR, CANISTER_FILE),
+            (SNAPSHOTS_DIR, SNAPSHOT_FILE),
+        ] {
+            let canister = output.join(dir).join("c1").join(file);
             assert!(
                 fs::metadata(&canister).unwrap().permissions().readonly(),
                 "{} is writable",
@@ -426,32 +401,6 @@ mod tests {
                 .permissions()
                 .readonly(),
             "the canister states directory is read-only",
-        );
-    }
-
-    #[test]
-    fn merge_removes_the_state_sync_checkpoint_marker() {
-        let tmp = TempDir::new().unwrap();
-        let base = checkpoint(tmp.path(), "base", &["c1"]);
-        // A state sync marker on its own makes `checkpoint_status()` report
-        // `UnverifiedStateSync`, so the merge has to drop it as well.
-        fs::write(base.join(STATE_SYNC_CHECKPOINT_MARKER), "").unwrap();
-        fs::write(base.join(UNVERIFIED_CHECKPOINT_MARKER), "").unwrap();
-        let source = checkpoint(tmp.path(), "source", &["c2"]);
-        let output = tmp.path().join("merged");
-
-        do_merge(base, source, output.clone()).unwrap();
-
-        assert!(!output.join(STATE_SYNC_CHECKPOINT_MARKER).exists());
-        assert!(!output.join(UNVERIFIED_CHECKPOINT_MARKER).exists());
-        let layout = CompleteCheckpointLayout::new_untracked(
-            output,
-            HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED,
-        )
-        .unwrap();
-        assert!(
-            matches!(layout.checkpoint_status(), CheckpointStatus::Verified),
-            "the merged checkpoint is not verified",
         );
     }
 
