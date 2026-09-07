@@ -192,7 +192,7 @@ fn deliver_batches(
                 log,
             ) {
                 Some(Status::Halting | Status::Halted) => {
-                    debug!(
+                    info!(
                         every_n_seconds => 5,
                         log,
                         "Batch of height {} is not delivered because replica is halted",
