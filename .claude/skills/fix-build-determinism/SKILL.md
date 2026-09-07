@@ -61,8 +61,8 @@ See the **run-in-dev-container** skill for how to invoke `container-run.sh`
 ./ci/container/container-run.sh ./hunt --build-options='--config=local' //my:target
 
 # to *diagnose* (step 3 needs the two builds' outputs to survive the container),
-# point --root at a bind-mounted path under /ic so the artifacts persist on the host:
-./ci/container/container-run.sh ./hunt --root /ic/,hunt --build-options='--config=local' //my:target
+# point --root at a path inside the checkout (mounted at its host path) so the artifacts persist on the host:
+./ci/container/container-run.sh ./hunt --root "$PWD/,hunt" --build-options='--config=local' //my:target
 ```
 
 Gotchas:
@@ -70,7 +70,7 @@ Gotchas:
   current branch) for a hunt run to pick it up. Iterate: commit → hunt → repeat.
 - With the default tempdir, the checkouts/output bases live in the container's
   `/tmp` and vanish when the container exits — fine for a verdict, but use
-  `--root` under `/ic` when you need to inspect artifacts.
+  `--root` inside the checkout when you need to inspect artifacts.
 - Bazel marks its output trees read-only. To clean the hunt root between runs:
   `chmod -R u+w <root> && rm -rf <root>`.
 - Point `--root` at a path on the same filesystem as the repo for faster
