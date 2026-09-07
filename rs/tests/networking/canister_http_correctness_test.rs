@@ -2693,7 +2693,11 @@ where
                         RejectionCode::DestinationInvalid => RejectCode::DestinationInvalid,
                         RejectionCode::CanisterReject => RejectCode::CanisterReject,
                         RejectionCode::CanisterError => RejectCode::CanisterError,
-                        RejectionCode::NoError | RejectionCode::Unknown => {
+                        // `ic_agent::agent::RejectCode` has no counterpart for these; the
+                        // proxy canister's unbounded-wait calls never report `SysUnknown`.
+                        RejectionCode::NoError
+                        | RejectionCode::SysUnknown
+                        | RejectionCode::Unknown => {
                             panic!("Invalid rejection code.")
                         }
                     };
