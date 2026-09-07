@@ -1361,17 +1361,26 @@ fn online_split() {
     take_shapshot(CANISTER_2);
 
     // Add aborted `install_code` tasks to both canisters, with the same prepayment.
-    // The prepayment is actually charged to the canister, as the in-progress
-    // `install_code` would have done, so that the refund below has something to
-    // return and cycle conservation is verifiable.
-    let prepaid_install_code_cycles =
-        CompoundCycles::<Instructions>::new(Cycles::new(3), CanisterCyclesCostSchedule::Normal);
+    let prepaid_install_code_cycles = CompoundCycles::<Instructions>::new(
+        Cycles::new(1_000_000),
+        CanisterCyclesCostSchedule::Normal,
+    );
     let mut add_aborted_install_code_task = |canister_id| {
         let canister = fixture.state.canister_state_make_mut(&canister_id).unwrap();
         let balance_before_prepayment = canister.system_state.balance();
         canister
             .system_state
             .consume_cycles(prepaid_install_code_cycles);
+        // The prepayment was consumed in full: out of the balance and into the
+        // consumed cycles gauge.
+        assert_eq!(
+            canister.system_state.balance(),
+            balance_before_prepayment - prepaid_install_code_cycles.real()
+        );
+        assert_eq!(
+            canister.system_state.canister_metrics().consumed_cycles(),
+            prepaid_install_code_cycles.nominal()
+        );
         canister
             .system_state
             .task_queue

@@ -1500,6 +1500,13 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
         system_state.canister_metrics().consumed_cycles(),
         prepaid.nominal()
     );
+    assert_eq!(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters()
+            .get(&CyclesUseCase::Instructions),
+        Some(&NominalCycles::zero())
+    );
     let balance_before = system_state.balance();
     assert_eq!(balance_before, INITIAL_CYCLES - prepaid.real());
 
