@@ -1996,8 +1996,8 @@ impl StateMachine {
             let mut low_threshold_transcript_record = ni_dkg_transcript;
             low_threshold_transcript_record.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
             let initial_transcript_records = SetupInitialDKGResponse {
-                low_threshold_transcript_record: high_threshold_transcript_record.into(),
-                high_threshold_transcript_record: low_threshold_transcript_record.into(),
+                low_threshold_transcript_record: low_threshold_transcript_record.into(),
+                high_threshold_transcript_record: high_threshold_transcript_record.into(),
                 fresh_subnet_id: subnet_id,
                 subnet_threshold_public_key: public_key.into(),
             };

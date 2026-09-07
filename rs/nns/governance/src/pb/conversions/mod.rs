@@ -3942,6 +3942,7 @@ impl From<pb::NnsFunction> for api::NnsFunction {
                 api::NnsFunction::SetSubnetOperationalLevel
             }
             pb::NnsFunction::SplitSubnet => api::NnsFunction::SplitSubnet,
+            pb::NnsFunction::MergeSubnets => api::NnsFunction::MergeSubnets,
             pb::NnsFunction::DeleteSubnet => api::NnsFunction::DeleteSubnet,
             pb::NnsFunction::SetDefaultInitialDkgSubnet => {
                 api::NnsFunction::SetDefaultInitialDkgSubnet
@@ -4042,6 +4043,7 @@ impl From<api::NnsFunction> for pb::NnsFunction {
                 pb::NnsFunction::SetSubnetOperationalLevel
             }
             api::NnsFunction::SplitSubnet => pb::NnsFunction::SplitSubnet,
+            api::NnsFunction::MergeSubnets => pb::NnsFunction::MergeSubnets,
             api::NnsFunction::DeleteSubnet => pb::NnsFunction::DeleteSubnet,
             api::NnsFunction::SetDefaultInitialDkgSubnet => {
                 pb::NnsFunction::SetDefaultInitialDkgSubnet

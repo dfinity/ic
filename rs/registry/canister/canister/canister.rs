@@ -79,6 +79,7 @@ use registry_canister::{
         firewall::{
             AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
         },
+        merge_subnets::MergeSubnetsPayload,
         node_management::{
             do_remove_node_directly::RemoveNodeDirectlyPayload,
             do_remove_nodes::RemoveNodesPayload,
@@ -1080,6 +1081,24 @@ fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) {
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
                 "{LOG_PREFIX} Reroute canister ranges failed: {error_message}"
+            ))
+        });
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update merge_subnets")]
+fn merge_subnets() {
+    check_caller_is_governance_and_log("merge_subnets");
+    over(candid_one, merge_subnets_);
+}
+
+#[candid_method(update, rename = "merge_subnets")]
+fn merge_subnets_(payload: MergeSubnetsPayload) {
+    registry_mut()
+        .merge_subnets(payload)
+        .unwrap_or_else(|error_message| {
+            trap_with(&format!(
+                "{LOG_PREFIX} Merge subnets failed: {error_message}"
             ))
         });
     recertify_registry();
