@@ -1605,8 +1605,8 @@ fn witness_count_bytes(
 ///  * Its `messages_end`: more messages are better (and subjectively weighted
 ///    higher than more signals).
 ///  * Its `signals_end`: more signals are better.
-///  * Its stream `begin`: a higher one allows us to garbage collect more of our
-///    messages.
+///  * Its stream `begin`: a higher one allows us to garbage collect more
+///    signals and, as a result, induct more messages.
 ///
 /// Slices beginning after the cached stream position are not hypothetical: the
 /// stream position may regress whenever we built a payload for a block that did
