@@ -3783,6 +3783,84 @@ fn time_out_messages_produces_refunds() {
 /// These tests are used to check the compatibility with the mainnet version.
 /// They are not meant to be run as part of the regular test suite (hence the ignore attributes),
 /// but instead invoked from the compiled test binary by a separate compatibility test.
+/// Tests for the `RefundPool` protobuf conversions. Deliberately outside
+/// `mainnet_compatibility_tests`, whose `serialize` / `deserialize` test names are
+/// used as filters by `queues_compatibility_test`, which requires that they match
+/// exactly one test each.
+#[cfg(test)]
+mod refund_pool_proto_tests {
+    use super::*;
+    use prost::Message;
+
+    const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
+    const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
+
+    /// A pool filled by three pushes, two of them merged into a single refund.
+    fn make_refund_pool() -> refunds::RefundPool {
+        let mut refund_pool = refunds::RefundPool::new();
+
+        refund_pool.add(CANISTER_ID, Cycles::new(100));
+        refund_pool.add(OTHER_CANISTER_ID, Cycles::new(200));
+        refund_pool.add(CANISTER_ID, Cycles::new(200));
+
+        refund_pool
+    }
+
+    fn decode(proto_refunds: pb_queues::Refunds) -> refunds::RefundPool {
+        refunds::RefundPool::try_from((
+            proto_refunds,
+            &StrictMetrics as &dyn CheckpointLoadingMetrics,
+        ))
+        .unwrap()
+    }
+
+    /// The pool's metrics are persisted, so pushes merged into a single pooled
+    /// refund are still counted separately after a round trip.
+    #[test]
+    fn roundtrip_preserves_pool_metrics() {
+        let refund_pool = make_refund_pool();
+        // Three pushes, merged into the two refunds that are persisted.
+        assert_eq!(2, refund_pool.len());
+        assert_eq!(3, refund_pool.metrics().pushed_refunds);
+        assert_eq!(Cycles::new(500), refund_pool.metrics().pushed_cycles);
+
+        let decoded = decode((&refund_pool).into());
+
+        assert_eq!(refund_pool, decoded);
+        assert_eq!(3, decoded.metrics().pushed_refunds);
+        assert_eq!(Cycles::new(500), decoded.metrics().pushed_cycles);
+    }
+
+    /// A pristine pool serializes to an empty proto, so that no `refunds.pbuf` is
+    /// written into the checkpoint for it.
+    #[test]
+    fn pristine_pool_encodes_to_nothing() {
+        let proto_refunds: pb_queues::Refunds = (&refunds::RefundPool::default()).into();
+
+        assert_eq!(pb_queues::Refunds::default(), proto_refunds);
+        assert!(proto_refunds.encode_to_vec().is_empty());
+    }
+
+    /// A checkpoint written before the metrics were persisted has none, so they are
+    /// inferred from the persisted refunds: one push each.
+    #[test]
+    fn pool_without_persisted_metrics_infers_them() {
+        let refund_pool = make_refund_pool();
+        let mut proto_refunds: pb_queues::Refunds = (&refund_pool).into();
+        proto_refunds.metrics = None;
+
+        let decoded = decode(proto_refunds);
+
+        // The same refunds, but only two pushes; holding the same cycles in total.
+        assert_eq!(
+            refund_pool.iter().collect::<Vec<_>>(),
+            decoded.iter().collect::<Vec<_>>()
+        );
+        assert_eq!(2, decoded.metrics().pushed_refunds);
+        assert_eq!(Cycles::new(500), decoded.metrics().pushed_cycles);
+    }
+}
+
 mod mainnet_compatibility_tests {
     use prost::Message;
     use std::fs::File;
@@ -4054,61 +4132,6 @@ mod mainnet_compatibility_tests {
                 make_refund_pool().iter().collect::<Vec<_>>(),
                 refunds.iter().collect::<Vec<_>>()
             );
-        }
-
-        /// The pool's metrics are persisted, so pushes merged into a single pooled
-        /// refund are still counted separately after a round trip.
-        #[test]
-        fn roundtrip_preserves_pool_metrics() {
-            let refund_pool = make_refund_pool();
-            // Three pushes, merged into the two refunds that are persisted.
-            assert_eq!(2, refund_pool.len());
-            assert_eq!(3, refund_pool.metrics().pushed_refunds);
-            assert_eq!(Cycles::new(500), refund_pool.metrics().pushed_cycles);
-
-            let proto_refunds: pb_queues::Refunds = (&refund_pool).into();
-            let deserialized = refunds::RefundPool::try_from((
-                proto_refunds,
-                &StrictMetrics as &dyn CheckpointLoadingMetrics,
-            ))
-            .unwrap();
-
-            assert_eq!(refund_pool, deserialized);
-            assert_eq!(3, deserialized.metrics().pushed_refunds);
-            assert_eq!(Cycles::new(500), deserialized.metrics().pushed_cycles);
-        }
-
-        /// A pristine pool serializes to an empty proto, so that no `refunds.pbuf` is
-        /// written into the checkpoint for it.
-        #[test]
-        fn pristine_pool_serializes_to_empty_proto() {
-            let proto_refunds: pb_queues::Refunds = (&refunds::RefundPool::default()).into();
-
-            assert_eq!(pb_queues::Refunds::default(), proto_refunds);
-            assert!(proto_refunds.encode_to_vec().is_empty());
-        }
-
-        /// A checkpoint written before the metrics were persisted has none, so they
-        /// are inferred from the persisted refunds: one push each.
-        #[test]
-        fn deserialize_without_metrics_infers_them() {
-            let refund_pool = make_refund_pool();
-            let mut proto_refunds: pb_queues::Refunds = (&refund_pool).into();
-            proto_refunds.metrics = None;
-
-            let deserialized = refunds::RefundPool::try_from((
-                proto_refunds,
-                &StrictMetrics as &dyn CheckpointLoadingMetrics,
-            ))
-            .unwrap();
-
-            // The same refunds, but only two pushes; holding the same cycles in total.
-            assert_eq!(
-                refund_pool.iter().collect::<Vec<_>>(),
-                deserialized.iter().collect::<Vec<_>>()
-            );
-            assert_eq!(2, deserialized.metrics().pushed_refunds);
-            assert_eq!(Cycles::new(500), deserialized.metrics().pushed_cycles);
         }
     }
 }
