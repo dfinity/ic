@@ -817,9 +817,7 @@ fn divergence_response_validation_test() {
                         InvalidCanisterHttpPayloadReason::DivergenceProofContainsMultipleCallbackIds,
                     ),
                 )) => (),
-                x => panic!(
-                    "Expected DivergenceProofContainsMultipleCallbackIds, got {x:?}"
-                ),
+                x => panic!("Expected DivergenceProofContainsMultipleCallbackIds, got {x:?}"),
             }
         });
     }
@@ -873,12 +871,10 @@ fn divergence_duplicate_signer_rejected() {
             match validation_result {
                 Err(ValidationError::InvalidArtifact(
                     InvalidPayloadReason::InvalidCanisterHttpPayload(
-                        InvalidCanisterHttpPayloadReason::DivergenceDuplicateSigner {
-                            signer, ..
-                        },
+                        InvalidCanisterHttpPayloadReason::DuplicateShareSigner { signer, .. },
                     ),
                 )) => assert_eq!(signer, node_test_id(0)),
-                x => panic!("Expected DivergenceDuplicateSigner, got {x:?}"),
+                x => panic!("Expected DuplicateShareSigner, got {x:?}"),
             }
         });
     }
@@ -1554,20 +1550,16 @@ fn validate_payload_fails_for_non_replicated_response_with_wrong_signer() {
 
         // ASSERT
         // Validation must fail because the effective committee for this request is just
-        // `[delegated_node_id]`. Since the only signature present is from
-        // `wrong_signer_node_id`, there will be no valid signers and one invalid signer.
+        // `[delegated_node_id]`, so the only signature present is from a non-member.
         match validation_result {
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::SignersNotMembers {
-                        invalid_signers, ..
-                    },
+                    InvalidCanisterHttpPayloadReason::ShareSignerNotInCommittee { signer, .. },
                 ),
             )) => {
-                // The `invalid_signers` list should contain our one wrong signer.
-                assert_eq!(invalid_signers, vec![wrong_signer_node_id]);
+                assert_eq!(signer, wrong_signer_node_id);
             }
-            res => panic!("Expected SignersNotMembers error, but got {res:?}"),
+            res => panic!("Expected ShareSignerNotInCommittee error, but got {res:?}"),
         }
     });
 }
@@ -3191,13 +3183,15 @@ fn flexible_invalid_callback_id_mismatch_in_response() {
             &payload_to_bytes_max_4mb(payload),
             &[],
         );
+        // The signed metadata still carries the group's callback id, so the
+        // mismatch surfaces as the response not matching the metadata.
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::ShareCallbackIdMismatch { callback_id: cb_id, mismatched_id: mm_id }
+                    InvalidCanisterHttpPayloadReason::InvalidMetadata { metadata_id, content_id }
                 )
-            )) if cb_id == callback_id && mm_id == mismatched_id
+            )) if metadata_id == callback_id && content_id == mismatched_id
         );
     });
 }
