@@ -24,9 +24,9 @@ use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, Syste
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
 use ic_test_utilities_metrics::{
-    HistogramStats, MetricVec, fetch_counter, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
-    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_counter, fetch_int_gauge,
-    fetch_int_gauge_vec, metric_vec, nonzero_values,
+    HistogramStats, MetricVec, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
+    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec,
+    metric_vec, nonzero_values,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
@@ -865,19 +865,19 @@ fn replicated_state_metrics_pooled_refunds() {
 
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
     let registry = observe(&state);
-    assert_eq!(Some(0), fetch_int_counter(&registry, NAME));
-    assert_eq!(Some(0.), fetch_counter(&registry, CYCLES_NAME));
+    assert_eq!(Some(0), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(0.), fetch_gauge(&registry, CYCLES_NAME));
 
     state.add_refund(canister_test_id(1), Cycles::new(13));
     let registry = observe(&state);
-    assert_eq!(Some(1), fetch_int_counter(&registry, NAME));
-    assert_eq!(Some(13.), fetch_counter(&registry, CYCLES_NAME));
+    assert_eq!(Some(1), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(13.), fetch_gauge(&registry, CYCLES_NAME));
 
     // A zero refund is a no-op for the pool, so it is not counted.
     state.add_refund(canister_test_id(1), Cycles::zero());
     let registry = observe(&state);
-    assert_eq!(Some(1), fetch_int_counter(&registry, NAME));
-    assert_eq!(Some(13.), fetch_counter(&registry, CYCLES_NAME));
+    assert_eq!(Some(1), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(13.), fetch_gauge(&registry, CYCLES_NAME));
 
     // A second refund to the same canister is counted as a second push, even though
     // it is merged into the same pool entry.
@@ -887,8 +887,8 @@ fn replicated_state_metrics_pooled_refunds() {
         Some(1),
         fetch_int_gauge(&registry, "replicated_state_pending_refunds")
     );
-    assert_eq!(Some(2), fetch_int_counter(&registry, NAME));
-    assert_eq!(Some(42.), fetch_counter(&registry, CYCLES_NAME));
+    assert_eq!(Some(2), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(42.), fetch_gauge(&registry, CYCLES_NAME));
 
     // Draining the pool does not affect the counts.
     state.take_refunds(|_| true);
@@ -897,8 +897,8 @@ fn replicated_state_metrics_pooled_refunds() {
         Some(0),
         fetch_int_gauge(&registry, "replicated_state_pending_refunds")
     );
-    assert_eq!(Some(2), fetch_int_counter(&registry, NAME));
-    assert_eq!(Some(42.), fetch_counter(&registry, CYCLES_NAME));
+    assert_eq!(Some(2), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(42.), fetch_gauge(&registry, CYCLES_NAME));
 }
 
 #[test]

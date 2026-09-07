@@ -115,13 +115,18 @@ message Refund {
   Cycles amount = 2;
 }
 
+// The number of refunds ever pushed into a refund pool and the cycles they held in
+// total. Persisted so that refunds merged into a single pooled refund are still
+// counted separately after loading a checkpoint.
+message RefundPoolMetrics {
+  uint64 pushed_refunds = 1;
+  Cycles pushed_cycles = 2;
+}
+
 message Refunds {
   repeated Refund refunds = 1;
-  // Metrics: the number of refunds ever pushed into the pool and the cycles they
-  // held in total. Persisted so that refunds merged into a single pooled refund
-  // are still counted separately after loading a checkpoint.
-  uint64 pushed_refunds = 2;
-  Cycles pushed_cycles = 3;
+  // Unset iff no refund was ever pushed into the pool.
+  RefundPoolMetrics metrics = 2;
 }
 
 message StreamMessage {

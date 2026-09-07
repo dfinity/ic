@@ -159,11 +159,33 @@ impl From<&RefundPool> for pb_queues::Refunds {
         let metrics = item.metrics();
         Refunds {
             refunds: item.iter().map(|refund| refund.into()).collect(),
-            pushed_refunds: metrics.pushed_refunds,
-            // Left unset if zero, so that an empty pool serializes to an empty proto
-            // (and is thus omitted from the checkpoint).
-            pushed_cycles: (!metrics.pushed_cycles.is_zero()).then(|| metrics.pushed_cycles.into()),
+            // Left unset if no refund was ever pushed, so that a pristine pool
+            // serializes to an empty proto (and is thus omitted from the checkpoint).
+            metrics: (metrics != RefundPoolMetrics::default()).then(|| metrics.into()),
         }
+    }
+}
+
+impl From<RefundPoolMetrics> for pb_queues::RefundPoolMetrics {
+    fn from(item: RefundPoolMetrics) -> Self {
+        Self {
+            pushed_refunds: item.pushed_refunds,
+            pushed_cycles: Some(item.pushed_cycles.into()),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::RefundPoolMetrics> for RefundPoolMetrics {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_queues::RefundPoolMetrics) -> Result<Self, Self::Error> {
+        Ok(Self {
+            pushed_refunds: item.pushed_refunds,
+            pushed_cycles: try_from_option_field(
+                item.pushed_cycles,
+                "RefundPoolMetrics::pushed_cycles",
+            )?,
+        })
     }
 }
 
@@ -191,14 +213,9 @@ impl TryFrom<(pb_queues::Refunds, &dyn CheckpointLoadingMetrics)> for RefundPool
 
         // The metrics cover all refunds ever pushed, including those already merged
         // into the refunds loaded above, so take them as persisted.
-        pool.set_metrics(RefundPoolMetrics {
-            pushed_refunds: item.pushed_refunds,
-            pushed_cycles: item
-                .pushed_cycles
-                .map(Cycles::try_from)
-                .transpose()?
-                .unwrap_or_default(),
-        });
+        if let Some(metrics) = item.metrics {
+            pool.set_metrics(metrics.try_into()?);
+        }
 
         Ok(pool)
     }

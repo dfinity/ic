@@ -134,17 +134,23 @@ pub struct Refund {
     #[prost(message, optional, tag = "2")]
     pub amount: ::core::option::Option<Cycles>,
 }
+/// The number of refunds ever pushed into a refund pool and the cycles they held in
+/// total. Persisted so that refunds merged into a single pooled refund are still
+/// counted separately after loading a checkpoint.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RefundPoolMetrics {
+    #[prost(uint64, tag = "1")]
+    pub pushed_refunds: u64,
+    #[prost(message, optional, tag = "2")]
+    pub pushed_cycles: ::core::option::Option<Cycles>,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Refunds {
     #[prost(message, repeated, tag = "1")]
     pub refunds: ::prost::alloc::vec::Vec<Refund>,
-    /// Metrics: the number of refunds ever pushed into the pool and the cycles they
-    /// held in total. Persisted so that refunds merged into a single pooled refund
-    /// are still counted separately after loading a checkpoint.
-    #[prost(uint64, tag = "2")]
-    pub pushed_refunds: u64,
-    #[prost(message, optional, tag = "3")]
-    pub pushed_cycles: ::core::option::Option<Cycles>,
+    /// Unset iff no refund was ever pushed into the pool.
+    #[prost(message, optional, tag = "2")]
+    pub metrics: ::core::option::Option<RefundPoolMetrics>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StreamMessage {

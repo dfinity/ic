@@ -14,8 +14,7 @@ use ic_types::{
 };
 use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use prometheus::{
-    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntGauge,
-    IntGaugeVec,
+    CounterVec, Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntGauge, IntGaugeVec,
 };
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -73,8 +72,8 @@ pub struct ReplicatedStateMetrics {
     subnet_call_contexts: IntGaugeVec,
     pending_refunds: IntGauge,
     pending_refunds_cycles: Gauge,
-    pooled_refunds: IntCounter,
-    pooled_refunds_cycles: Counter,
+    pooled_refunds: IntGauge,
+    pooled_refunds_cycles: Gauge,
     total_canister_balance: Gauge,
     total_canister_reserved_balance: Gauge,
     canister_paused_execution: Histogram,
@@ -245,11 +244,11 @@ impl ReplicatedStateMetrics {
                 "replicated_state_pending_refunds_cycles",
                 "Total value in Cycles of pending anonymous refunds, i.e. refunds accumulated at the subnet level, not yet routed into streams.",
             ),
-            pooled_refunds: metrics_registry.int_counter(
+            pooled_refunds: metrics_registry.int_gauge(
                 "replicated_state_pooled_refunds_total",
                 "Number of anonymous refunds ever pushed into the refund pool. Part of the replicated state, so it may rewind to the value at the loaded checkpoint on a replica restart or a state sync.",
             ),
-            pooled_refunds_cycles: metrics_registry.counter(
+            pooled_refunds_cycles: metrics_registry.gauge(
                 "replicated_state_pooled_refunds_cycles_total",
                 "Total value in Cycles of the anonymous refunds ever pushed into the refund pool. Part of the replicated state, so it may rewind to the value at the loaded checkpoint on a replica restart or a state sync.",
             ),
@@ -682,16 +681,13 @@ impl ReplicatedStateMetrics {
         self.pending_refunds_cycles
             .set(state.refunds().total().get() as f64);
 
-        // Cumulative counts, maintained by the pool itself, so `reset()` and count
-        // back up rather than incrementing (they may rewind to the value at the
-        // loaded checkpoint on a replica restart or a state sync).
+        // Cumulative counts, but maintained by the pool itself (and persisted along
+        // with it), so they are reported as gauges.
         let refund_pool_metrics = state.refunds().metrics();
-        self.pooled_refunds.reset();
         self.pooled_refunds
-            .inc_by(refund_pool_metrics.pushed_refunds);
-        self.pooled_refunds_cycles.reset();
+            .set(refund_pool_metrics.pushed_refunds as i64);
         self.pooled_refunds_cycles
-            .inc_by(refund_pool_metrics.pushed_cycles.get() as f64);
+            .set(refund_pool_metrics.pushed_cycles.get() as f64);
 
         self.canisters_not_in_routing_table
             .set(canisters_not_in_routing_table);
