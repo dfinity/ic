@@ -44,12 +44,12 @@ Use the following command to build images:
 
    $ bazel build //ic-os/{setupos,hostos,guestos}/envs/<TARGET>/...
 
-All IC-OS image build outputs are stored under `/ic/bazel-bin/ic-os/{setupos,hostos,guestos}/envs/<TARGET>`
+All IC-OS image build outputs are stored under `bazel-bin/ic-os/{setupos,hostos,guestos}/envs/<TARGET>` (relative to the repository root)
 
 Example:
 
    $ bazel build //ic-os/guestos/envs/dev/...
-   # This will output a GuestOS image in /ic/bazel-bin/ic-os/guestos/envs/dev
+   # This will output a GuestOS image in bazel-bin/ic-os/guestos/envs/dev
 
 == Under the hood: Building an image
 
