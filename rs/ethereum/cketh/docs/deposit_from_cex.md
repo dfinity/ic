@@ -157,10 +157,10 @@ _Requirements are grouped by phase, not numbered sequentially: `R11` and `R12` a
 
 ### Phase 2 (ckETH)
 
-* `R11`: If the finalized ETH balance of a deposit address exceeds the sum of all
-  previously credited (minus swept) amounts by at least the minimum ETH deposit
-  amount, the minter mints the difference minus the deposit fee to the associated
-  account, exactly once per balance observation (monotone accounting: total credited
+* `R11`: Once the ETH balance of a deposit address is detected at or above the
+  minimum ETH deposit amount, the entire balance is swept and the swept amount
+  minus the deposit fee is credited to the associated account, exactly once per
+  sweep (dedup by the sweep's helper event; monotone accounting: total credited
   never exceeds total received).
 * `R12`: A plain ETH transfer sent with a fixed 21'000 gas limit to a deposit address
   MUST NOT be permanently locked: it either succeeds (a code-less address takes
@@ -202,8 +202,7 @@ _Requirements are grouped by phase, not numbered sequentially: `R11` and `R12` a
   * An account's ETH deposits (Phase 2) reuse its ERC-20 deposit address, so there
     is no wrong-address case between the two asset classes; an *unsupported* ERC-20
     token sent there is not credited automatically, but funds always remain
-    recoverable (key-controlled addresses, `R12` guarantees no loss on the sender
-    side).
+    recoverable at the key-controlled address (`R4`).
 
 ## Design
 
@@ -561,7 +560,8 @@ wallet. The design must absorb:
   internal transaction (contract-batched withdrawal) for ETH.
 * ERC-20 transfers always emit a `Transfer` log and never execute recipient code, so
   a delegated ERC-20 deposit address is harmless to the sender. Native ETH sends
-  execute recipient code — hence the per-asset address layout of step 1.
+  execute recipient code — hence the delegate's minimal `receive()` and the
+  fixed-21'000-gas caveat (`R12`).
 * Amounts below the per-token minimum, and unsupported ERC-20 tokens, are not
   credited (`R4`) — the minimum is both fee economics and the anti-DoS bound
   against forced unprofitable sweeps. Nothing is lost: funds sit at a
@@ -626,8 +626,9 @@ key) handed to the sweeper, and is no longer re-scanned; the pair's siblings —
 other tokens at the same address — keep scanning, and the rest cost nothing
 further this tick. A balance is only ever a trigger, never a source of truth (see
 the screening discussion below). For native ETH (Phase 2), the batcher reads the
-address' ETH balance in the same call and the finalized balance delta *is* the
-observation (`R11`) — there are no logs to confirm against.
+address' ETH balance in the same latest-block call; the balance delta is only
+the sweep trigger (`R11`) — there are no logs to confirm against, and the mint
+follows the sweep's finalized helper event like any other deposit (step 4).
 
 **Filter 2 — logs and screening.** For the filter-1 candidates, a single `eth_getLogs` from
 the **minimum of the candidates' last observed block numbers** over at most 500
@@ -772,8 +773,9 @@ storage-less sweeper delegate (`CkSweeperAttested`,
 transactions are sent from the **dedicated sweeper address** (tECDSA-derived
 with derivation path `[3u8]` — its own schema tag, no account components),
 whose nonce sequence is independent of the main address' so that a stuck sweep
-can never delay a withdrawal (`R17`); the sweeper address holds only gas money
-(funded by ckETH withdrawals from the fee account, step 0) while swept funds
+can never delay a withdrawal (`R17`); the sweeper address is funded by the
+minter with only gas money (ckETH withdrawals from the fee account, step 0)
+while swept funds
 always land at the main address (`R6`). No deposit address is ever pre-funded
 for gas: every sweep — ERC-20 or, Phase 2, ETH — is paid for by the sweeper
 address, and an ETH deposit is forwarded in full, nothing deducted.
@@ -913,8 +915,9 @@ things differ:
   A send with a *fixed* 21'000 limit to an already-delegated address fails on
   the sender side — funds never leave the exchange (`R12`).
 * **Detection is by balance delta, not logs.** A plain ETH send emits no
-  `Transfer` log, so crediting follows the finalized balance delta (`R11`) and
-  sender screening is weaker than for ERC-20 (step 3).
+  `Transfer` log, so the latest-block balance delta is what triggers the sweep
+  (`R11`) — the mint still follows the sweep's finalized helper event like any
+  other (step 4) — and sender screening is weaker than for ERC-20 (step 3).
 * **The sweep enters through `sweepEth`/`sweepEthBatch`**, which forward the
   address' whole ETH balance through the helper's `depositEth` — under the same
   attestation check: the digest binds only the account, no asset, so the one
@@ -943,7 +946,7 @@ sequenceDiagram
     User->>CEX: withdraw ETH to the deposit address
     CEX->>D: plain ETH send — 21'000 gas while code-less, 21'095 into the<br/>delegate's minimal receive() once delegated (R12)
     loop while the (address, ETH) pair is armed
-        Minter->>D: finalized ETH balance, read in the same<br/>deployless-batcher call as the ERC-20 scans
+        Minter->>D: latest-block ETH balance, read in the same<br/>deployless-batcher call as the ERC-20 scans
     end
     Note over Minter: balance delta detected (R11): queue the ETH sweep.<br/>No Transfer log exists, so sender screening is weaker (step 3)
     Sw->>S: sweep tx on the sweeper's own nonce lane (R17), R14-prepaid gas:<br/>type 0x04 if the address is not yet delegated, else 0x02:<br/>sweepEthBatch([(deposit address, principal, subaccount, attestation)])
@@ -1189,6 +1192,7 @@ the minter can `sign_with_ecdsa` for it under the same `path`. The paths are
 master key (+ root chain code)
 ├── []                            → minter main address      (MAIN_DERIVATION_PATH; withdrawals, R6 destination)
 ├── [1, principal, subaccount]    → deposit address, one per IC account (ERC-20 and, Phase 2, ETH)
+├── [2, principal, subaccount]    → reserved (CKETH_DEPOSIT_SCHEMA_TAG; the discarded per-asset ETH address — defined in code, never derived)
 └── [3]                           → dedicated sweeper address (R17; its own schema tag, no account components)
 ```
 
@@ -1375,12 +1379,13 @@ Notes:
   same contract (see [The ETH deposit flow](#the-eth-deposit-flow)); it is kept
   that minimal so it fits the 2'300-gas `transfer`/`send` stipend of
   contract-batched CEX withdrawals, and detection is balance-based, so it emits
-  no event. **Open decision** for the finalized Phase 2 delegate (proposed on
-  [#11449](https://github.com/dfinity/ic/pull/11449)): replace the guard with
-  an unguarded `receive()` plus a `rescueEth()` on the implementation — zero
-  extra gas on the hot deposit path and ETH sent to the implementation becomes
-  recoverable instead of bounced, at the price of an immutable recovery
-  principal chosen at deployment.
+  no event. **Decided: keep the guard** (discussed on
+  [#11449](https://github.com/dfinity/ic/pull/11449)): the alternative — an
+  unguarded `receive()` plus a `rescueEth()` on the implementation — would zero
+  the hot-path cost and make ETH sent to the implementation recoverable instead
+  of bounced, but it adds another permissionless entry point to review and an
+  immutable recovery principal to govern; the guard's ~40 gas per deposit is
+  negligible.
 * Reentrancy is moot: no storage, and funds can only move through the helper
   toward the minter's main address.
 * Supported tokens are assumed standard: non-fee-on-transfer and non-rebasing, so
@@ -1402,7 +1407,10 @@ It exercises the attested delegate against the *real*
 `DepositHelperWithSubaccount.sol` bytecode, asserting the emitted
 `ReceivedEthOrErc20` events carry the right principals, re-delegation of already
 delegated deposit EOAs, and the rejection of a sweep whose attestation does not
-match the supplied account.
+match the supplied account. The ETH flow is covered too: plain sends to
+code-less and delegated addresses — including the 2'300-gas stipend path via
+`StipendForwarder.sol` and the `receive()` gas assertion — and permissionless
+`sweepEth`/`sweepEthBatch` sweeps submitted by a non-minter relayer.
 
 Unit tests (in `tests.rs` files per module, helpers in `test_fixtures.rs`):
 
