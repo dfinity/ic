@@ -1219,7 +1219,10 @@ mod tests {
     };
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::log::log_entry::v1::LogEntry;
-    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetSplittingArgs,
+        catch_up_package_contents::CupType,
+    };
     use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
     use ic_protobuf::registry::{
         replica_version::v1::ReplicaVersionRecord,
@@ -1621,7 +1624,6 @@ mod tests {
         }
         let cup_provider = CatchUpPackageProvider::new(
             registry.clone(),
-            metrics.clone(),
             LocalCUPReader::new(cup_dir, logger.clone()),
             Arc::new(CryptoReturningOk::default()),
             Arc::new(mock_tls_config()),
@@ -3041,12 +3043,28 @@ mod tests {
             );
         }
 
-        // The split itself: the two nodes end up in different subnets.
+        // The split itself: the source subnet's CUP contents record is marked with
+        // `CupType::SubnetSplitting`, and the two nodes end up in different subnets. The former is
+        // how the orchestrator detects the pending split.
         add_subnet_list_record(
             &data_provider,
             SPLIT_REGISTRY_VERSION.get(),
             vec![SUBNET_42, SOURCE_SUBNET_ID, DESTINATION_SUBNET_ID],
         );
+        data_provider
+            .add(
+                &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
+                SPLIT_REGISTRY_VERSION,
+                Some(CatchUpPackageContents {
+                    cup_type: Some(CupType::SubnetSplitting(SubnetSplittingArgs {
+                        destination_subnet_id: Some(ic_types::subnet_id_into_protobuf(
+                            DESTINATION_SUBNET_ID,
+                        )),
+                    })),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
         for (subnet_id, member) in [(new_subnet_id, node_id), (other_subnet_id, other_node_id)] {
             add_subnet_record_to_provider(
                 &data_provider,
@@ -3075,25 +3093,15 @@ mod tests {
     /// Simulates a subnet split, without a replica version upgrade, from the point of view of a
     /// node that ends up either in the source subnet or in the destination subnet.
     ///
-    /// The first peer the orchestrator reaches serves the post-split CUP of either our own half of
-    /// the split, or of the other half. In the latter case, we should detect that the CUP is for
-    /// the wrong subnet and ignore it, and only pick up the CUP of our own subnet on the next
-    /// iteration of the upgrade loop.
-    ///
-    /// In all cases, the iteration adopting the post-split CUP must restart the replica if and
-    /// only if we ended up in the destination subnet, as only that subnet's public key changed. A
-    /// further iteration must then be a no-op, i.e. the replica must not be restarted over and
-    /// over again for the same post-split CUP.
+    /// The iteration adopting the post-split CUP must restart the replica if and only if we ended
+    /// up in the destination subnet, as only that subnet's public key changed. A further iteration
+    /// must then be a no-op, i.e. the replica must not be restarted over and over again for the
+    /// same post-split CUP.
     #[rstest]
-    #[case::source_reaches_own_subnet_first(SOURCE_SUBNET_ID, SOURCE_SUBNET_ID)]
-    #[case::source_reaches_other_subnet_first(SOURCE_SUBNET_ID, DESTINATION_SUBNET_ID)]
-    #[case::destination_reaches_own_subnet_first(DESTINATION_SUBNET_ID, DESTINATION_SUBNET_ID)]
-    #[case::destination_reaches_other_subnet_first(DESTINATION_SUBNET_ID, SOURCE_SUBNET_ID)]
+    #[case::stays_in_source(SOURCE_SUBNET_ID)]
+    #[case::moves_to_destination(DESTINATION_SUBNET_ID)]
     #[tokio::test]
-    async fn test_subnet_split_scenarios(
-        #[case] new_subnet_id: SubnetId,
-        #[case] first_served_subnet_id: SubnetId,
-    ) {
+    async fn test_subnet_split_scenarios(#[case] new_subnet_id: SubnetId) {
         let node_id = NODE_1;
         let other_node_id = NODE_2;
         let current_replica_version = ReplicaVersion::try_from("replica_version_0.1").unwrap();
@@ -3103,18 +3111,10 @@ mod tests {
         // key changed.
         let should_restart_replica = new_subnet_id != SOURCE_SUBNET_ID;
 
-        let first_cup_committee = if first_served_subnet_id == new_subnet_id {
-            vec![node_id]
-        } else {
-            vec![other_node_id]
-        };
-        let (server_addr, served_cup) =
-            start_cup_server(pb::CatchUpPackage::from(make_post_split_cup(
-                first_cup_committee,
-                post_split_cup_height,
-                first_served_subnet_id,
-            )))
-            .await;
+        let (server_addr, _served_cup) = start_cup_server(pb::CatchUpPackage::from(
+            make_post_split_cup(vec![node_id], post_split_cup_height, new_subnet_id),
+        ))
+        .await;
 
         let test_scenario = UpgradeTestScenario {
             node_id,
@@ -3162,36 +3162,9 @@ mod tests {
             .unwrap()
         };
 
-        if first_served_subnet_id != new_subnet_id {
-            // The peer CUP belongs to the other half of the split, so it must be ignored and we
-            // keep the local CUP. A node that is destined for the destination subnet will see that
-            // its latest CUP still includes it, but not at the latest registry version, so it is
-            // effectively `Leaving`.
-            let expected_flow = if should_restart_replica {
-                OrchestratorControlFlow::Leaving(SOURCE_SUBNET_ID)
-            } else {
-                OrchestratorControlFlow::Assigned(SOURCE_SUBNET_ID)
-            };
-            assert_eq!(upgrade_loop.check().await.unwrap(), expected_flow);
-            assert_eq!(
-                upgrade_loop.subnet_assignment(),
-                SubnetAssignment::Assigned(SOURCE_SUBNET_ID)
-            );
-            assert_eq!(local_cup().height(), local_cup_height);
-            assert!(upgrade_loop.is_replica_running());
-
-            // The peer now serves the post-split CUP of our own subnet, which we should pick up on
-            // the next iteration.
-            *served_cup.lock().unwrap() = pb::CatchUpPackage::from(make_post_split_cup(
-                vec![node_id],
-                post_split_cup_height,
-                new_subnet_id,
-            ));
-        }
-
-        // The iteration adopting the post-split CUP of our own subnet. Note that when we didn't
-        // detect the split yet, the peers are selected from the subnet of the *local* CUP, while
-        // otherwise they are selected from our new subnet.
+        // The iteration adopting the post-split CUP of our own subnet. The pending split recorded
+        // in the registry reroutes the peer selection from the local CUP's subnet to our new
+        // subnet.
         assert_eq!(
             upgrade_loop.check().await.unwrap(),
             OrchestratorControlFlow::Assigned(new_subnet_id)
@@ -3206,7 +3179,6 @@ mod tests {
             SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })
         );
         assert!(upgrade_loop.is_replica_running());
-        assert!(!upgrade_loop.is_ic_gateway_running());
 
         // One more iteration: the post-split CUP is already applied and the peer doesn't serve a
         // higher one, so nothing should happen anymore. In particular, the replica must not be
@@ -3220,20 +3192,18 @@ mod tests {
             SubnetAssignment::Assigned(new_subnet_id)
         );
         assert_eq!(local_cup().height(), post_split_cup_height);
+        assert_eq!(
+            local_cup().subnet_splitting_status(),
+            SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })
+        );
         assert!(upgrade_loop.is_replica_running());
 
         // `drain_logs` consumes the logger, and the upgrade loop, the CUP provider and the process
         // managers each log through their own clone of it. So assert on the totals of all
         // iterations at once, which is unambiguous as every message below is expected in exactly
         // one of them.
-        let expected_ignored_cups = usize::from(first_served_subnet_id != new_subnet_id);
         let expected_restarts = usize::from(should_restart_replica);
         LogEntriesAssert::assert_that(logger.drain_logs())
-            .has_exactly_n_messages_containing(
-                expected_ignored_cups,
-                &Level::Info,
-                "because it is for the other subnet",
-            )
             .has_exactly_n_messages_containing(
                 expected_restarts,
                 &Level::Info,
