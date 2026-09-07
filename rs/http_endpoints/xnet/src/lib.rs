@@ -66,14 +66,14 @@ impl XNetEndpointMetrics {
             slice_payload_size: metrics_registry.histogram(
                 METRIC_SLICE_PAYLOAD_SIZE,
                 "Slice payload sizes",
-                // 10 B - 5 MB
-                decimal_buckets(1, 6),
+                // 10 B - 50 MB
+                decimal_buckets(1, 7),
             ),
             response_size: metrics_registry.histogram_vec(
                 METRIC_RESPONSE_SIZE,
                 "Status 200 response size in bytes, by resource",
-                // 10 B - 5 MB
-                decimal_buckets(1, 6),
+                // 10 B - 50 MB
+                decimal_buckets(1, 7),
                 &["resource"],
             ),
             connections_total: metrics_registry.int_counter(
