@@ -70,28 +70,27 @@ lazy_static! {
         );
 }
 
-/// Returns the extra instruction overhead charged by the deterministic memory
-/// tracker for `n_wasm_pages` Wasm pages first accessed without dirty tracking
-/// (e.g. read-only accesses or non-replicated execution).
+/// Returns the number of *instructions* the deterministic memory tracker
+/// charges for first accessing `n_wasm_pages` Wasm pages without dirty tracking
+/// (read-only accesses or non-replicated execution).
 ///
 /// Each first-accessed Wasm page (64 KiB) triggers `mark_wasm_page_accessed`,
-/// which charges `page_overhead` instructions per OS page in-band via the
-/// SIGSEGV handler.  The number of OS pages per Wasm page varies by platform
+/// which charges `DEFAULT_PAGE_OVERHEAD` instructions per OS page in-band via
+/// the SIGSEGV handler. The number of OS pages per Wasm page varies by platform
 /// (4 KiB pages on Linux, 16 KiB on arm64-darwin).
-pub fn deterministic_tracker_overhead(n_wasm_pages: u64) -> u64 {
+pub fn dmt_access_instructions(n_wasm_pages: u64) -> u64 {
     const WASM_PAGE_SIZE: u64 = 65536;
     n_wasm_pages * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64) * DEFAULT_PAGE_OVERHEAD.get()
 }
 
-/// Returns the extra instruction overhead charged by the deterministic memory
-/// tracker for `n_wasm_pages` Wasm heap pages first written in replicated
-/// execution (DirtyPageTracking::Track).
+/// Returns the number of *instructions* the deterministic memory tracker
+/// charges for first writing `n_wasm_pages` Wasm pages with dirty tracking
+/// (replicated execution, `DirtyPageTracking::Track`).
 ///
-/// Each first-written Wasm page triggers both `mark_wasm_page_accessed` and
-/// `mark_wasm_page_dirty` via the SIGSEGV handler, charging `page_overhead`
-/// instructions twice per OS page.
-pub fn deterministic_tracker_write_overhead(n_wasm_pages: u64) -> u64 {
-    2 * deterministic_tracker_overhead(n_wasm_pages)
+/// Each such page triggers both `mark_wasm_page_accessed` and
+/// `mark_wasm_page_dirty`, i.e. it is charged twice per OS page.
+pub fn dmt_write_instructions(n_wasm_pages: u64) -> u64 {
+    2 * dmt_access_instructions(n_wasm_pages)
 }
 
 /// Pieces needed to execute a benchmark.

@@ -56,7 +56,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            520000006 + common::deterministic_tracker_overhead(1),
+            520000006 + common::dmt_access_instructions(1),
         ),
         common::Benchmark(
             "wasm64/ic0_data_certificate_copy()/1B".into(),
@@ -66,7 +66,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            520000006 + common::deterministic_tracker_overhead(1),
+            520000006 + common::dmt_access_instructions(1),
         ),
         common::Benchmark(
             "wasm32/ic0_data_certificate_copy()/64B".into(),
@@ -76,7 +76,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            583000006 + common::deterministic_tracker_overhead(1),
+            583000006 + common::dmt_access_instructions(1),
         ),
         common::Benchmark(
             "wasm64/ic0_data_certificate_copy()/64B".into(),
@@ -86,7 +86,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            583000006 + common::deterministic_tracker_overhead(1),
+            583000006 + common::dmt_access_instructions(1),
         ),
     ];
     let sender = PrincipalId::new_node_test_id(common::REMOTE_CANISTER_ID);

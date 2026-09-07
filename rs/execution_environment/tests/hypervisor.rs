@@ -7879,7 +7879,7 @@ fn division_by_zero() {
 
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
-fn charge_for_dirty_pages() {
+fn charge_for_accessed_and_dirty_pages() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
         .with_metering_type(ic_config::embedders::MeteringType::New)
