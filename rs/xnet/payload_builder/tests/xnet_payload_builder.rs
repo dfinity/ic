@@ -1011,6 +1011,7 @@ fn refill_pool_empty(
         let proximity_map = Arc::new(ProximityMap::new(
             OWN_NODE,
             registry.clone(),
+            Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics_registry)),
             &metrics_registry,
             log.clone(),
         ));
@@ -1141,6 +1142,7 @@ fn refill_pool_append(
         let proximity_map = Arc::new(ProximityMap::new(
             OWN_NODE,
             registry.clone(),
+            Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics_registry)),
             &metrics_registry,
             log.clone(),
         ));
@@ -1240,6 +1242,7 @@ fn refill_pool_put_invalid_slice(
         let proximity_map = Arc::new(ProximityMap::new(
             OWN_NODE,
             registry.clone(),
+            Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics_registry)),
             &metrics_registry,
             log.clone(),
         ));
@@ -1370,6 +1373,7 @@ fn refill_pool_append_invalid_slice(
         let proximity_map = Arc::new(ProximityMap::new(
             OWN_NODE,
             registry.clone(),
+            Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics_registry)),
             &metrics_registry,
             log.clone(),
         ));
