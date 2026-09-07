@@ -36,10 +36,10 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
     if output.exists() {
         return Err(format!("{} already exists", output.display()));
     }
-    // An output under one of the inputs would be linked into itself: it is
-    // created before the input is listed, so the linking would descend into it
-    // over and over. Resolve the paths first, as either side may reach the same
-    // directory through a link or a `..`.
+    // An output under one of the inputs would be linked into itself, as the
+    // linking creates it before listing the input it reads. Resolve the paths
+    // first, as either side may reach the same directory through a link or a
+    // `..`.
     let resolved_output = resolve(&output)?;
     for (input, name) in [(&base, "base"), (&source, "source")] {
         if resolved_output.starts_with(resolve(input)?) {
@@ -50,32 +50,74 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
             ));
         }
     }
-
-    link_tree(&base, &output)?;
-
+    // The canisters of the two subnets are disjoint, as the source subnet hosts
+    // the canister ID ranges that the merge reassigns to the destination subnet.
+    // A collision would mean that the two checkpoints do not belong to the same
+    // merge, so refuse rather than pick a winner. Before anything is assembled:
+    // this is the one failure the caller is at all likely to hit.
     for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
-        let source_dir = source.join(dir);
-        if !source_dir.exists() {
-            continue;
-        }
-        let output_dir = output.join(dir);
-        // The canisters of the two subnets are disjoint, as the source subnet
-        // hosts the canister ID ranges that the merge reassigns to the
-        // destination subnet. A collision would mean that the two checkpoints
-        // do not belong to the same merge, so refuse rather than pick a winner.
-        if let Some(name) = common_entry(&output_dir, &source_dir)? {
+        if let Some(name) = common_entry(&base.join(dir), &source.join(dir))? {
             return Err(format!(
-                "{} holds {name} in both {} and {}",
-                dir,
+                "{dir} holds {name} in both {} and {}",
                 base.display(),
                 source.display()
             ));
         }
-        link_tree(&source_dir, &output_dir)?;
+    }
+
+    // Assemble next to the output and rename when done, so that a merge that
+    // fails halfway leaves no directory where a checkpoint is expected. One that
+    // is interrupted outright leaves the staging directory behind, which is why
+    // it is not silently reused: whoever cleans it up should know it is there.
+    let staging = staging_path(&output)?;
+    if staging.exists() {
+        return Err(format!(
+            "{} exists, presumably left behind by an interrupted merge; remove it to retry",
+            staging.display()
+        ));
+    }
+
+    let result = assemble(&base, &source, &staging).and_then(|()| {
+        fs::rename(&staging, &output).map_err(|err| {
+            format!(
+                "failed to move {} to {}: {err}",
+                staging.display(),
+                output.display()
+            )
+        })?;
+        // The rename itself has to reach the disk, as the state manager syncs the
+        // directory a checkpoint was renamed into. Through the resolved path: the
+        // parent of a bare relative one is the empty path, which opens nothing.
+        let parent = resolved_output
+            .parent()
+            .expect("a resolved path is absolute, so it has a parent");
+        fs::File::open(parent)
+            .and_then(|dir| dir.sync_all())
+            .map_err(|err| format!("failed to sync {}: {err}", parent.display()))?;
+        Ok(())
+    });
+    if result.is_err() {
+        // A no-op once the rename went through. The original error is what the
+        // caller needs to see, so a failure to clean up must not replace it.
+        let _ = fs::remove_dir_all(&staging);
+    }
+
+    result
+}
+
+/// Assembles the merged checkpoint at `staging`, which must not exist.
+fn assemble(base: &Path, source: &Path, staging: &Path) -> Result<(), String> {
+    link_tree(base, staging)?;
+
+    for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
+        let source_dir = source.join(dir);
+        if source_dir.exists() {
+            link_tree(&source_dir, &staging.join(dir))?;
+        }
     }
 
     let layout = CheckpointLayout::<WriteOnly>::new_untracked(
-        output.clone(),
+        staging.to_path_buf(),
         HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED,
     )
     .map_err(|err| format!("failed to create the checkpoint layout: {err:?}"))?;
@@ -86,7 +128,7 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
 
     // `base` was a checkpoint of a running subnet, so it holds neither marker;
     // but a state that was downloaded and reassembled by hand may, and the state
-    // manager must not take `output` for unverified. Both markers have to go: a
+    // manager must not take the result for unverified. Both markers have to go: a
     // state sync marker alone makes `checkpoint_status()` report
     // `UnverifiedStateSync`, whether or not the unverified marker is there.
     for marker in [
@@ -109,6 +151,22 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
         .map_err(|err| format!("failed to mark the merged checkpoint read-only: {err:?}"))?;
 
     Ok(())
+}
+
+/// The directory the merged checkpoint is assembled in: a sibling of `output`,
+/// so that the two are on the same file system and the hard links and the rename
+/// both work.
+///
+/// The name is not one a checkpoint can have -- checkpoint directories are named
+/// after a height in hexadecimal -- so the staging directory is recognizable as
+/// what it is for as long as it exists.
+fn staging_path(output: &Path) -> Result<PathBuf, String> {
+    let name = output
+        .file_name()
+        .ok_or_else(|| format!("the output {} has no file name", output.display()))?;
+    let mut staging = name.to_os_string();
+    staging.push(".merging");
+    Ok(output.with_file_name(staging))
 }
 
 /// Replicates the directory tree rooted at `from` under `to`, hard linking every
@@ -151,8 +209,13 @@ fn link_tree(from: &Path, to: &Path) -> Result<(), String> {
 /// enough for the nesting check: what an existing directory is nested under does
 /// not change by appending to it.
 fn resolve(path: &Path) -> Result<PathBuf, String> {
+    // Absolute first: the ancestors of a bare relative path run out before
+    // reaching the directory it is relative to, which is the one that exists.
+    let absolute = std::path::absolute(path)
+        .map_err(|err| format!("failed to resolve {}: {err}", path.display()))?;
+
     let mut suffix = PathBuf::new();
-    let mut existing = path;
+    let mut existing = absolute.as_path();
     loop {
         if existing.exists() {
             return Ok(existing
@@ -437,6 +500,63 @@ mod tests {
         let err = do_merge(base, source, output).unwrap_err();
 
         assert!(err.contains("already exists"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn resolve_handles_a_relative_path() {
+        // A bare relative output used to run out of ancestors before reaching the
+        // directory it is relative to, and was rejected as having none.
+        let resolved = resolve(Path::new("merged")).unwrap();
+
+        assert!(
+            resolved.is_absolute(),
+            "{} is not absolute",
+            resolved.display()
+        );
+        assert_eq!(resolved.file_name().unwrap(), "merged");
+        assert_eq!(
+            resolved,
+            std::env::current_dir().unwrap().join("merged"),
+            "a relative path should resolve against the working directory",
+        );
+    }
+
+    #[test]
+    fn merge_refuses_an_existing_staging_directory() {
+        let tmp = TempDir::new().unwrap();
+        let base = checkpoint(tmp.path(), "base", &["c1"]);
+        let source = checkpoint(tmp.path(), "source", &["c2"]);
+        let output = tmp.path().join("merged");
+        // What an interrupted merge would have left behind.
+        fs::create_dir(staging_path(&output).unwrap()).unwrap();
+
+        let err = do_merge(base, source, output.clone()).unwrap_err();
+
+        assert!(err.contains("interrupted merge"), "unexpected error: {err}");
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn merge_leaves_nothing_behind_when_it_fails() {
+        let tmp = TempDir::new().unwrap();
+        let base = checkpoint(tmp.path(), "base", &["c1"]);
+        let source = checkpoint(tmp.path(), "source", &["c2"]);
+        // A link that resolves to nothing cannot be hard linked, so the merge
+        // fails after the base checkpoint has been linked in.
+        std::os::unix::fs::symlink(
+            tmp.path().join("nowhere"),
+            source.join(CANISTER_STATES_DIR).join("c2").join("dangling"),
+        )
+        .unwrap();
+        let output = tmp.path().join("merged");
+
+        do_merge(base, source, output.clone()).unwrap_err();
+
+        assert!(!output.exists(), "the output was left behind");
+        assert!(
+            !staging_path(&output).unwrap().exists(),
+            "the staging directory was left behind",
+        );
     }
 
     #[test]
