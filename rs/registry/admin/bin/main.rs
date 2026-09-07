@@ -2,6 +2,7 @@
 use crate::helpers::*;
 use anyhow::anyhow;
 use async_trait::async_trait;
+use base64::prelude::*;
 use candid::{CandidType, Decode, Encode, Principal};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, ValueEnum};
 use create_subnet::ProposeToCreateSubnetCmd;
@@ -7259,7 +7260,8 @@ fn parse_nns_public_key(
         let nns_key = if let Some(path) = nns_public_key_pem_file {
             parse_threshold_sig_key_from_pem_file(&path).expect("Failed to parse PEM file.")
         } else {
-            let decoded_nns_mainnet_key = base64::decode(IC_ROOT_PUBLIC_KEY_BASE64)
+            let decoded_nns_mainnet_key = BASE64_STANDARD
+                .decode(IC_ROOT_PUBLIC_KEY_BASE64)
                 .expect("Failed to decode mainnet public key from base64.");
             parse_threshold_sig_key_from_der(&decoded_nns_mainnet_key)
                 .expect("Failed to decode mainnet public key.")

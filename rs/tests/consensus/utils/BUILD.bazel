@@ -35,7 +35,7 @@ rust_library(
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:leb128",
-        "@crate_index//:openssh-keys",
+        "@crate_index//:base64",
         "@crate_index//:prost",
         "@crate_index//:rand",
         "@crate_index//:reqwest",

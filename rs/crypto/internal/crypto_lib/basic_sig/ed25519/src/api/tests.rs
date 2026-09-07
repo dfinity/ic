@@ -18,6 +18,7 @@ mod keygen {
 
 mod serialization {
     use crate::public_key_from_der;
+    use base64::prelude::*;
 
     // Example DER-pk from https://tools.ietf.org/html/rfc8410#section-10.1
     const PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE";
@@ -27,13 +28,13 @@ mod serialization {
 
     #[test]
     fn should_correctly_parse_der_encoded_pk() {
-        let pk_der = base64::decode(PK_DER_BASE64).unwrap();
+        let pk_der = BASE64_STANDARD.decode(PK_DER_BASE64).unwrap();
         let _pk = public_key_from_der(&pk_der).unwrap();
     }
 
     #[test]
     fn should_fail_parsing_a_corrupted_der_encoded_pk() {
-        let mut pk_der = base64::decode(PK_DER_BASE64).unwrap();
+        let mut pk_der = BASE64_STANDARD.decode(PK_DER_BASE64).unwrap();
         pk_der[0] += 1;
         let pk_result = public_key_from_der(&pk_der);
         assert!(pk_result.is_err());
@@ -42,7 +43,7 @@ mod serialization {
 
     #[test]
     fn should_fail_parsing_der_encoded_pk_with_wrong_oid() {
-        let mut pk_der = base64::decode(PK_DER_BASE64).unwrap();
+        let mut pk_der = BASE64_STANDARD.decode(PK_DER_BASE64).unwrap();
         // OID starts at 7-th byte and is 3-bytes long.
         pk_der[6] += 1;
         let pk_result = public_key_from_der(&pk_der);

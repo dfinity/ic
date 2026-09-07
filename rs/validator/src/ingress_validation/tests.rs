@@ -1,5 +1,6 @@
 use super::*;
 use assert_matches::assert_matches;
+use base64::prelude::*;
 use ic_crypto_standalone_sig_verifier::ed25519_public_key_to_der;
 use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
@@ -23,8 +24,9 @@ fn plain_authentication_correct_signature_passes() {
         "MwqQH8l2vCNhRTzYmBA95p7tQWg4S0G4v0zyIiX21H6c6E1oL8xWDuOe67Yh98yt6z8n84D875I2qmvLliWODA==";
 
     let user_signature = UserSignature {
-        signature: base64::decode(signature).unwrap(),
-        signer_pubkey: ed25519_public_key_to_der(base64::decode(pubkey_base64).unwrap()).unwrap(),
+        signature: BASE64_STANDARD.decode(signature).unwrap(),
+        signer_pubkey: ed25519_public_key_to_der(BASE64_STANDARD.decode(pubkey_base64).unwrap())
+            .unwrap(),
         sender_delegation: None,
     };
 
@@ -41,8 +43,9 @@ fn plain_authentication_correct_signature_passes() {
 
     // Same signature as above with empty delegations specified. Should also pass.
     let user_signature = UserSignature {
-        signature: base64::decode(signature).unwrap(),
-        signer_pubkey: ed25519_public_key_to_der(base64::decode(pubkey_base64).unwrap()).unwrap(),
+        signature: BASE64_STANDARD.decode(signature).unwrap(),
+        signer_pubkey: ed25519_public_key_to_der(BASE64_STANDARD.decode(pubkey_base64).unwrap())
+            .unwrap(),
         sender_delegation: Some(Vec::new()),
     };
 
@@ -71,8 +74,9 @@ fn plain_authentication_incorrect_signature_passes() {
         "nWfuICAf29zspOaoGUcn/xIFUtnUiZRsbhxgZywz6OzRTHKoY32sU78uE0z8UFcbInkzwDtw+4PP2JQrnwHtCw==";
 
     let user_signature = UserSignature {
-        signature: base64::decode(signature).unwrap(),
-        signer_pubkey: ed25519_public_key_to_der(base64::decode(pubkey_base64).unwrap()).unwrap(),
+        signature: BASE64_STANDARD.decode(signature).unwrap(),
+        signer_pubkey: ed25519_public_key_to_der(BASE64_STANDARD.decode(pubkey_base64).unwrap())
+            .unwrap(),
         sender_delegation: None,
     };
 
@@ -104,17 +108,21 @@ fn plain_authentication_with_one_delegation() {
     // Keypair 1 delegates to keypair 2.
 
     let pk1 = ed25519_public_key_to_der(
-        base64::decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=").unwrap(),
+        BASE64_STANDARD
+            .decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=")
+            .unwrap(),
     )
     .unwrap();
     let pk2 = ed25519_public_key_to_der(
-        base64::decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=").unwrap(),
+        BASE64_STANDARD
+            .decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=")
+            .unwrap(),
     )
     .unwrap();
     let delegation = Delegation::new(pk2, UNIX_EPOCH);
 
     // Signature of sk1 for the delegation above.
-    let delegation_signature = base64::decode(
+    let delegation_signature = BASE64_STANDARD.decode(
         "QhNcIhRQalYnRK4WJ3KWIrfqMIC1RAiehoGU/rqDbfzvz4trSBH0THxJY+P7J7dJ63HPXiBa1vYnSfVjbpoCCg==",
     )
     .unwrap();
@@ -126,7 +134,7 @@ fn plain_authentication_with_one_delegation() {
     let signed_delegation = SignedDelegation::new(delegation, delegation_signature);
 
     let user_signature = UserSignature {
-        signature: base64::decode(message_id_signature).unwrap(),
+        signature: BASE64_STANDARD.decode(message_id_signature).unwrap(),
         signer_pubkey: pk1,
         sender_delegation: Some(vec![signed_delegation]),
     };
@@ -172,17 +180,21 @@ fn plain_authentication_with_one_scoped_delegation() {
     // Keypair 1 delegates to keypair 2.
 
     let pk1 = ed25519_public_key_to_der(
-        base64::decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=").unwrap(),
+        BASE64_STANDARD
+            .decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=")
+            .unwrap(),
     )
     .unwrap();
     let pk2 = ed25519_public_key_to_der(
-        base64::decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=").unwrap(),
+        BASE64_STANDARD
+            .decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=")
+            .unwrap(),
     )
     .unwrap();
     let delegation = Delegation::new(pk2, UNIX_EPOCH).with_targets(vec![canister_test_id(1)]);
 
     // Signature of sk1 for the delegation above.
-    let delegation_signature = base64::decode(
+    let delegation_signature = BASE64_STANDARD.decode(
         "yULx4bstJpKWTcymC3T9kQUVC0fD04pxuHtMSOH2c9NkM5AqplrRmJgeb92p583nuexafMS6SXWfmWszSo14CA==",
     )
     .unwrap();
@@ -194,7 +206,7 @@ fn plain_authentication_with_one_scoped_delegation() {
     let signed_delegation = SignedDelegation::new(delegation, delegation_signature);
 
     let user_signature = UserSignature {
-        signature: base64::decode(message_id_signature).unwrap(),
+        signature: BASE64_STANDARD.decode(message_id_signature).unwrap(),
         signer_pubkey: pk1,
         sender_delegation: Some(vec![signed_delegation]),
     };
@@ -306,19 +318,27 @@ fn plain_authentication_with_multiple_delegations() {
     //
     // Each keypair delegates to the one below it.
     let pk1 = ed25519_public_key_to_der(
-        base64::decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=").unwrap(),
+        BASE64_STANDARD
+            .decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=")
+            .unwrap(),
     )
     .unwrap();
     let pk2 = ed25519_public_key_to_der(
-        base64::decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=").unwrap(),
+        BASE64_STANDARD
+            .decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=")
+            .unwrap(),
     )
     .unwrap();
     let pk3 = ed25519_public_key_to_der(
-        base64::decode("02aktrssfFxcxrf18Fx6nENqaxgVLC+e+x3Y3tunQPs=").unwrap(),
+        BASE64_STANDARD
+            .decode("02aktrssfFxcxrf18Fx6nENqaxgVLC+e+x3Y3tunQPs=")
+            .unwrap(),
     )
     .unwrap();
     let pk4 = ed25519_public_key_to_der(
-        base64::decode("b9k9ldofRsdXBrcfHoInQGhhtzbGCVBb9Kpcw2ij2Ck=").unwrap(),
+        BASE64_STANDARD
+            .decode("b9k9ldofRsdXBrcfHoInQGhhtzbGCVBb9Kpcw2ij2Ck=")
+            .unwrap(),
     )
     .unwrap();
 
@@ -327,7 +347,7 @@ fn plain_authentication_with_multiple_delegations() {
         .with_targets(vec![canister_test_id(1), canister_test_id(2)]);
 
     // Signature of SK1 for `delegation` above.
-    let delegation_signature = base64::decode(
+    let delegation_signature = BASE64_STANDARD.decode(
         "R1LC9wYXfuWn1BjTJHWF8ANyxyTVqEJzhybvOMxgn9gERpqdQoh+BhsLue3byTp7X1uEtc44QYKLIH1adajHCg==",
     )
     .unwrap();
@@ -335,7 +355,7 @@ fn plain_authentication_with_multiple_delegations() {
     // KP2 delegating to KP3.
     let delegation_2 = Delegation::new(pk3, UNIX_EPOCH + Duration::new(2, 0));
     // Signature of SK2 for delegation_2
-    let delegation_2_signature = base64::decode(
+    let delegation_2_signature = BASE64_STANDARD.decode(
         "rP1xtpEK9ypS+I4JU5rywZNQjYMa0JsVXR+a2DkmShbXQ08s0PmUh6KaGmP56YJtI1hIz3ZELlYKvw+M/jAcCA==",
     )
     .unwrap();
@@ -344,7 +364,7 @@ fn plain_authentication_with_multiple_delegations() {
     let delegation_3 = Delegation::new(pk4, UNIX_EPOCH + Duration::new(3, 0))
         .with_targets(vec![canister_test_id(1)]);
     // Signature of SK3 for delegation_3
-    let delegation_3_signature = base64::decode(
+    let delegation_3_signature = BASE64_STANDARD.decode(
         "a/hTCL8yOijzFIcHdcE0uvt2dj3WQdTiMLPX+xI8mWC0wRt+CYlMoFTc6JlfBopEJDrDwdEBz1n6/S8R2A/CCQ==",
     )
     .unwrap();
@@ -358,7 +378,7 @@ fn plain_authentication_with_multiple_delegations() {
     let signed_delegation_3 = SignedDelegation::new(delegation_3, delegation_3_signature);
 
     let user_signature = UserSignature {
-        signature: base64::decode(message_id_signature).unwrap(),
+        signature: BASE64_STANDARD.decode(message_id_signature).unwrap(),
         signer_pubkey: pk1,
         sender_delegation: Some(vec![
             signed_delegation,
@@ -412,8 +432,9 @@ fn plain_authentication_with_malformed_delegation() {
         "MwqQH8l2vCNhRTzYmBA95p7tQWg4S0G4v0zyIiX21H6c6E1oL8xWDuOe67Yh98yt6z8n84D875I2qmvLliWODA==";
 
     let user_signature = UserSignature {
-        signature: base64::decode(signature).unwrap(),
-        signer_pubkey: ed25519_public_key_to_der(base64::decode(pubkey_base64).unwrap()).unwrap(),
+        signature: BASE64_STANDARD.decode(signature).unwrap(),
+        signer_pubkey: ed25519_public_key_to_der(BASE64_STANDARD.decode(pubkey_base64).unwrap())
+            .unwrap(),
         // Add a malformed delegation.
         sender_delegation: Some(vec![SignedDelegation::new(
             Delegation::new(
@@ -449,15 +470,19 @@ fn plain_authentication_with_invalid_delegation() {
     // SK2: LDFkTfdAOC4kGVyOUaf0rZs2W6+hWo2YqSAU59m/agQ=
     // PK2: SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=
 
-    let pk1 = base64::decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=").unwrap();
-    let pk2 = base64::decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=").unwrap();
+    let pk1 = BASE64_STANDARD
+        .decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=")
+        .unwrap();
+    let pk2 = BASE64_STANDARD
+        .decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=")
+        .unwrap();
 
     // KP1 delegating to KP2.
     let delegation = Delegation::new(pk2, UNIX_EPOCH + Duration::new(4, 0));
     // Faulty delegation signature. The correct one should be:
     // f5uiR36pRe4VL1k2VTwSvZGmViFTUZxZoh/IeYA183DgK1lhDLRpln57+2Ik2Mkqs5H/
     // G8jwx1+FQ/RZFaX1Dw==
-    let delegation_signature = base64::decode(
+    let delegation_signature = BASE64_STANDARD.decode(
         "HnM9ZfEg1E/+KPFBf6JGMS/TwtbjWVIm9PwG8vxbb74p0NBT98kDwtaT4TU0rSxm7WcWLNf7GnPu4b+0VroNBw==",
     )
     .unwrap();
@@ -469,7 +494,7 @@ fn plain_authentication_with_invalid_delegation() {
     let signed_delegation = SignedDelegation::new(delegation, delegation_signature);
 
     let user_signature = UserSignature {
-        signature: base64::decode(message_id_signature).unwrap(),
+        signature: BASE64_STANDARD.decode(message_id_signature).unwrap(),
         signer_pubkey: pk1,
         sender_delegation: Some(vec![signed_delegation]),
     };

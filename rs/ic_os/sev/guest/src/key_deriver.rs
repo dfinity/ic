@@ -1,6 +1,7 @@
 use crate::firmware::SevGuestFirmware;
 use anyhow::Context;
 use anyhow::Result;
+use base64::prelude::*;
 use hkdf::SimpleHkdf;
 use sev::firmware::guest::{DerivedKey, GuestFieldSelect};
 use sha2::Sha256;
@@ -27,7 +28,7 @@ pub fn derive_key_from_sev_measurement(
         .expand_multi_info(key.as_info().as_slice(), &mut output)
         .unwrap();
 
-    Ok(base64::encode(&output))
+    Ok(BASE64_STANDARD.encode(&output))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

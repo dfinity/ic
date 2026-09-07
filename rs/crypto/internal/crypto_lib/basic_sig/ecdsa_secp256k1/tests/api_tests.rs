@@ -66,6 +66,7 @@ fn new_keypair(
 }
 
 mod keygen {
+    use base64::prelude::*;
     use ic_crypto_internal_basic_sig_ecdsa_secp256k1::*;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
@@ -99,7 +100,9 @@ mod keygen {
 
     #[test]
     fn should_fail_parsing_non_secp256k1_key_without_panic() {
-        let pk_der = base64::decode(crate::ED25519_PK_DER_BASE64).unwrap();
+        let pk_der = BASE64_STANDARD
+            .decode(crate::ED25519_PK_DER_BASE64)
+            .unwrap();
         let pk_result = public_key_from_der(&pk_der);
         assert!(pk_result.is_err());
         assert!(pk_result.unwrap_err().is_malformed_public_key());
