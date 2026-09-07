@@ -685,7 +685,7 @@ impl ReplicatedStateMetrics {
         // with it), so they are reported as gauges.
         let refund_pool_metrics = state.refunds().metrics();
         self.pooled_refunds
-            .set(refund_pool_metrics.pushed_refunds as i64);
+            .set(i64::try_from(refund_pool_metrics.pushed_refunds).unwrap_or(i64::MAX));
         self.pooled_refunds_cycles
             .set(refund_pool_metrics.pushed_cycles.get() as f64);
 

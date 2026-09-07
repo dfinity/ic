@@ -83,7 +83,8 @@ impl RefundPool {
 
         self.total += cycles;
 
-        self.metrics.pushed_refunds += 1;
+        // Saturating, to stay monotonic even if a persisted count was maxed out.
+        self.metrics.pushed_refunds = self.metrics.pushed_refunds.saturating_add(1);
         self.metrics.pushed_cycles += cycles;
 
         debug_assert_eq!(self.amounts.len(), self.refunds.len());
