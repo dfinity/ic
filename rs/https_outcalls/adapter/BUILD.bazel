@@ -243,6 +243,8 @@ rust_test_suite(
         "//rs/monitoring/metrics",
         "//rs/test_utilities/net",
         "@crate_index//:async-stream",
+        "@crate_index//:axum",
+        "@crate_index//:axum-server",
         "@crate_index//:bytes",
         "@crate_index//:futures",
         "@crate_index//:http",
@@ -269,7 +271,6 @@ rust_test_suite(
         "@crate_index//:tonic",
         "@crate_index//:tower",
         "@crate_index//:uuid",
-        "@crate_index//:warp",
     ],
 )
 
@@ -287,6 +288,8 @@ rust_test_suite(
         "//rs/monitoring/metrics",
         "//rs/test_utilities/net",
         "@crate_index//:async-stream",
+        "@crate_index//:axum",
+        "@crate_index//:axum-server",
         "@crate_index//:bytes",
         "@crate_index//:futures",
         "@crate_index//:http",
@@ -313,6 +316,5 @@ rust_test_suite(
         "@crate_index//:tonic",
         "@crate_index//:tower",
         "@crate_index//:uuid",
-        "@crate_index//:warp",
     ],
 )

@@ -35,6 +35,8 @@ tower = { workspace = true }
 
 [dev-dependencies]
 async-stream = { workspace = true }
+axum = { workspace = true }
+axum-server = { workspace = true }
 bytes = { workspace = true }
 ic-test-utilities-net = { path = "../../test_utilities/net" }
 once_cell = { workspace = true }
@@ -45,7 +47,6 @@ socks5-impl = { version = "0.6", features = ["tokio"] }
 tempfile = { workspace = true }
 tokio-rustls = { workspace = true }
 uuid = { workspace = true }
-warp = { workspace = true }
 
 [features]
 http = []
