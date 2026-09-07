@@ -14,7 +14,7 @@ mod tests;
 ///
 /// Refunds are ordered by amount (larger amounts first). Ties are broken by
 /// recipient (smaller IDs first).
-#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
+#[derive(Clone, Debug, Default, ValidateEq)]
 pub struct RefundPool {
     /// Refund priority queue. Holds all refunds, ordered by amount.
     ///
@@ -28,7 +28,36 @@ pub struct RefundPool {
     /// Transient: total amount of pooled cycles.
     #[validate_eq(Ignore)]
     total: Cycles,
+
+    /// Transient: number of refunds ever pushed into the pool and the cycles they
+    /// held in total. Replica-local metrics, not part of the pool's contents (see
+    /// [`Self::eq()`]): they are zero on a pool loaded from a checkpoint, i.e. they
+    /// only cover the refunds pushed since replica start.
+    #[validate_eq(Ignore)]
+    pushed: PushedRefunds,
 }
+
+/// Cumulative count of the refunds pushed into a [`RefundPool`] and of the cycles
+/// they held.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PushedRefunds {
+    /// Number of refunds pushed into the pool.
+    pub refunds: u64,
+
+    /// Cycles held by those refunds in total.
+    pub cycles: Cycles,
+}
+
+/// Compares the pooled refunds only: [`RefundPool::pushed()`] is a replica-local
+/// metric, covering the refunds pushed since replica start, not part of the pool's
+/// contents. `amounts` and `total` are both derived from `refunds`.
+impl PartialEq for RefundPool {
+    fn eq(&self, other: &Self) -> bool {
+        self.refunds == other.refunds
+    }
+}
+
+impl Eq for RefundPool {}
 
 impl RefundPool {
     pub fn new() -> Self {
@@ -36,6 +65,7 @@ impl RefundPool {
             refunds: BTreeSet::new(),
             amounts: BTreeMap::new(),
             total: Cycles::zero(),
+            pushed: PushedRefunds::default(),
         }
     }
 
@@ -65,6 +95,9 @@ impl RefundPool {
         assert!(self.refunds.insert(Refund::anonymous(receiver, amount)));
 
         self.total += cycles;
+
+        self.pushed.refunds += 1;
+        self.pushed.cycles += cycles;
 
         debug_assert_eq!(self.amounts.len(), self.refunds.len());
         debug_assert_eq!(self.compute_total(), self.total);
@@ -100,6 +133,18 @@ impl RefundPool {
     /// Returns the total amount of pooled cycles.
     pub fn total(&self) -> Cycles {
         self.total
+    }
+
+    /// Returns the number of refunds ever pushed into the pool and the cycles they
+    /// held in total, since replica start.
+    pub fn pushed(&self) -> PushedRefunds {
+        self.pushed
+    }
+
+    /// Clears the [`Self::pushed()`] metrics. Called after loading the pool from a
+    /// checkpoint, so that they only cover the refunds pushed since replica start.
+    pub(crate) fn clear_pushed(&mut self) {
+        self.pushed = PushedRefunds::default();
     }
 
     /// Computes the total amount of pooled cycles.

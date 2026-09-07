@@ -183,6 +183,8 @@ impl TryFrom<(pb_queues::Refunds, &dyn CheckpointLoadingMetrics)> for RefundPool
                 ));
             }
         }
+        // The refunds loaded above were not pushed by this replica.
+        pool.clear_pushed();
         Ok(pool)
     }
 }

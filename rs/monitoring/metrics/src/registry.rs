@@ -1,8 +1,8 @@
 use crate::adapter_metrics_registry::AdapterMetricsRegistry;
 use ic_adapter_metrics_client::AdapterMetrics;
 use prometheus::{
-    CounterVec, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec,
-    IntGauge, IntGaugeVec, Opts,
+    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, IntCounter,
+    IntCounterVec, IntGauge, IntGaugeVec, Opts,
     core::{Collector, Desc},
     proto::MetricFamily,
 };
@@ -102,6 +102,11 @@ impl MetricsRegistry {
     /// Create and register a `GaugeVec`.
     pub fn gauge_vec<S: Into<String>>(&self, name: S, help: S, label_names: &[&str]) -> GaugeVec {
         self.register(GaugeVec::new(Opts::new(name, help), label_names).unwrap())
+    }
+
+    /// Create and register a `Counter`.
+    pub fn counter<S: Into<String>>(&self, name: S, help: S) -> Counter {
+        self.register(Counter::new(name, help).unwrap())
     }
 
     /// Create and register a `CounterVec`.

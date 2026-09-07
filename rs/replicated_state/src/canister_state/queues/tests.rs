@@ -4049,5 +4049,25 @@ mod mainnet_compatibility_tests {
 
             assert_eq!(make_refund_pool(), refunds);
         }
+
+        /// The refunds of a pool loaded from a checkpoint were not pushed by this
+        /// replica, so they are not counted as pushed.
+        #[test]
+        fn deserialized_pool_has_no_pushed_refunds() {
+            let refund_pool = make_refund_pool();
+            assert_eq!(3, refund_pool.pushed().refunds);
+            assert_eq!(Cycles::new(500), refund_pool.pushed().cycles);
+
+            let proto_refunds: pb_queues::Refunds = (&refund_pool).into();
+            let deserialized = refunds::RefundPool::try_from((
+                proto_refunds,
+                &StrictMetrics as &dyn CheckpointLoadingMetrics,
+            ))
+            .unwrap();
+
+            assert_eq!(refund_pool, deserialized);
+            assert_eq!(0, deserialized.pushed().refunds);
+            assert_eq!(Cycles::zero(), deserialized.pushed().cycles);
+        }
     }
 }

@@ -173,3 +173,52 @@ fn test_retain() {
     assert!(pool.is_empty());
     assert_eq!(pool.total(), Cycles::zero());
 }
+
+#[test]
+fn test_pushed_counts_every_push() {
+    let mut pool = RefundPool::new();
+    let canister_id1 = CanisterId::from(1);
+    let canister_id2 = CanisterId::from(2);
+
+    assert_eq!(0, pool.pushed().refunds);
+    assert_eq!(Cycles::zero(), pool.pushed().cycles);
+
+    // A zero refund is a no-op, so it is not counted as pushed.
+    pool.add(canister_id1, Cycles::zero());
+    assert_eq!(0, pool.pushed().refunds);
+    assert_eq!(Cycles::zero(), pool.pushed().cycles);
+
+    // Two refunds to the same canister are counted as two pushes, even though they
+    // are merged into a single pool entry.
+    pool.add(canister_id1, Cycles::new(1000));
+    pool.add(canister_id1, Cycles::new(500));
+    pool.add(canister_id2, Cycles::new(2000));
+
+    assert_eq!(2, pool.len());
+    assert_eq!(3, pool.pushed().refunds);
+    assert_eq!(Cycles::new(3500), pool.pushed().cycles);
+
+    // Draining the pool does not affect the counts.
+    pool.retain(|_| false);
+
+    assert!(pool.is_empty());
+    assert_eq!(Cycles::zero(), pool.total());
+    assert_eq!(3, pool.pushed().refunds);
+    assert_eq!(Cycles::new(3500), pool.pushed().cycles);
+}
+
+/// The push counts are replica-local metrics, not part of the pool's contents, so
+/// pools holding the same refunds are equal regardless of how they were filled.
+#[test]
+fn test_pushed_is_not_part_of_equality() {
+    let mut pool = RefundPool::new();
+    pool.add(CanisterId::from(1), Cycles::new(1000));
+    pool.add(CanisterId::from(1), Cycles::new(500));
+
+    let mut same_contents = RefundPool::new();
+    same_contents.add(CanisterId::from(1), Cycles::new(1500));
+
+    assert_eq!(1, same_contents.pushed().refunds);
+    assert_eq!(2, pool.pushed().refunds);
+    assert_eq!(same_contents, pool);
+}

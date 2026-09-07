@@ -28,7 +28,10 @@ use ic_types::{
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::AmountOf;
-pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY, refunds::RefundPool};
+pub use queues::{
+    CanisterQueues, DEFAULT_QUEUE_CAPACITY,
+    refunds::{PushedRefunds, RefundPool},
+};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;

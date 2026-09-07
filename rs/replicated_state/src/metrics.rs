@@ -14,7 +14,8 @@ use ic_types::{
 };
 use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use prometheus::{
-    CounterVec, Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntGauge, IntGaugeVec,
+    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntGauge,
+    IntGaugeVec,
 };
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -72,6 +73,8 @@ pub struct ReplicatedStateMetrics {
     subnet_call_contexts: IntGaugeVec,
     pending_refunds: IntGauge,
     pending_refunds_cycles: Gauge,
+    pooled_refunds: IntCounter,
+    pooled_refunds_cycles: Counter,
     total_canister_balance: Gauge,
     total_canister_reserved_balance: Gauge,
     canister_paused_execution: Histogram,
@@ -241,6 +244,14 @@ impl ReplicatedStateMetrics {
             pending_refunds_cycles: metrics_registry.gauge(
                 "replicated_state_pending_refunds_cycles",
                 "Total value in Cycles of pending anonymous refunds, i.e. refunds accumulated at the subnet level, not yet routed into streams.",
+            ),
+            pooled_refunds: metrics_registry.int_counter(
+                "replicated_state_pooled_refunds_total",
+                "Number of anonymous refunds pushed into the refund pool since replica start.",
+            ),
+            pooled_refunds_cycles: metrics_registry.counter(
+                "replicated_state_pooled_refunds_cycles_total",
+                "Total value in Cycles of the anonymous refunds pushed into the refund pool since replica start.",
             ),
             total_canister_balance: metrics_registry.gauge(
                 "scheduler_canister_balance_cycles_total",
@@ -670,6 +681,16 @@ impl ReplicatedStateMetrics {
         self.pending_refunds.set(state.refunds().len() as i64);
         self.pending_refunds_cycles
             .set(state.refunds().total().get() as f64);
+
+        // Cumulative counts, maintained by the pool itself, so `reset()` and count
+        // back up rather than incrementing (they drop back to zero on a restart or
+        // a state sync).
+        let pushed = state.refunds().pushed();
+        self.pooled_refunds.reset();
+        self.pooled_refunds.inc_by(pushed.refunds);
+        self.pooled_refunds_cycles.reset();
+        self.pooled_refunds_cycles
+            .inc_by(pushed.cycles.get() as f64);
 
         self.canisters_not_in_routing_table
             .set(canisters_not_in_routing_table);
