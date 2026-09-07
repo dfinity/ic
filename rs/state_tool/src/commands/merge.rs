@@ -77,7 +77,10 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
         ));
     }
 
-    let result = assemble(&base, &source, &staging).and_then(|()| {
+    let mut renamed = false;
+    let result = (|| -> Result<(), String> {
+        assemble(&base, &source, &staging)?;
+
         fs::rename(&staging, &output).map_err(|err| {
             format!(
                 "failed to move {} to {}: {err}",
@@ -85,6 +88,8 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
                 output.display()
             )
         })?;
+        renamed = true;
+
         // The rename itself has to reach the disk, as the state manager syncs the
         // directory a checkpoint was renamed into. Through the resolved path: the
         // parent of a bare relative one is the empty path, which opens nothing.
@@ -94,12 +99,16 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
         fs::File::open(parent)
             .and_then(|dir| dir.sync_all())
             .map_err(|err| format!("failed to sync {}: {err}", parent.display()))?;
+
         Ok(())
-    });
+    })();
     if result.is_err() {
-        // A no-op once the rename went through. The original error is what the
-        // caller needs to see, so a failure to clean up must not replace it.
-        let _ = fs::remove_dir_all(&staging);
+        // Whichever of the two the work is sitting in: a merge that reports a
+        // failure must not leave a checkpoint behind, not even a complete one
+        // whose durability is all that could not be established. The original
+        // error is what the caller needs to see, so a failure to clean up must
+        // not replace it.
+        let _ = fs::remove_dir_all(if renamed { &output } else { &staging });
     }
 
     result
@@ -541,13 +550,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let base = checkpoint(tmp.path(), "base", &["c1"]);
         let source = checkpoint(tmp.path(), "source", &["c2"]);
-        // A link that resolves to nothing cannot be hard linked, so the merge
-        // fails after the base checkpoint has been linked in.
-        std::os::unix::fs::symlink(
-            tmp.path().join("nowhere"),
-            source.join(CANISTER_STATES_DIR).join("c2").join("dangling"),
-        )
-        .unwrap();
+        // A directory where the subnet merged marker belongs cannot be written as
+        // a file, so the merge fails with both checkpoints already linked in.
+        fs::create_dir(base.join(SUBNET_MERGED_FILE)).unwrap();
         let output = tmp.path().join("merged");
 
         do_merge(base, source, output.clone()).unwrap_err();
