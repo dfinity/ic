@@ -11,6 +11,7 @@ use crate::state::audit::process_event;
 use crate::state::automatic_deposits::{DepositRequest, ScanTarget};
 use crate::state::event::{AutomaticDeposit, EventType};
 use crate::state::{TaskType, mutate_state, read_state};
+use crate::time::TimeProvider;
 use crate::timed_sized_map::Timestamp;
 use batcher::BalanceOfCall;
 use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
@@ -36,17 +37,18 @@ use ic_ethereum_types::Address;
 /// re-measure (and lower if needed) if the supported tokens grow or skew more gas-heavy.
 const MAX_CALLS_PER_BATCH: usize = 1_000;
 
-pub async fn balance_scan() {
-    let now = Timestamp::from_nanos(ic_cdk::api::time());
+pub async fn balance_scan<T: TimeProvider>(time_provider: &T) {
+    let now = Timestamp::from_nanos(time_provider.time());
     // TODO DEFI-2923: use a lower threshold rpc client, e.g. 2-out-of-3 since we use latest block height
     // and only to notify the sweeper (no minting)
     let client = read_state(rpc_client);
-    scan(now, client).await;
+    scan(now, client, time_provider).await;
 }
 
-async fn scan<R: Runtime>(
+async fn scan<R: Runtime, T: TimeProvider>(
     now: Timestamp,
     client: EvmRpcClient<R, CandidResponseConverter, DoubleCycles>,
+    time_provider: &T,
 ) {
     let _guard = match TimerGuard::new(TaskType::BalanceScan) {
         Ok(guard) => guard,
@@ -87,9 +89,11 @@ async fn scan<R: Runtime>(
     mutate_state(|s| {
         for outcome in outcomes {
             match outcome {
-                ScanOutcome::Detected(deposit) => {
-                    process_event(s, EventType::AutomaticDepositReceived(deposit))
-                }
+                ScanOutcome::Detected(deposit) => process_event(
+                    s,
+                    EventType::AutomaticDepositReceived(deposit),
+                    time_provider,
+                ),
                 ScanOutcome::NothingFound(request) => {
                     s.automatic_deposits
                         .record_scan(now, &request, latest_block)

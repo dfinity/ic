@@ -31,8 +31,7 @@ use ic_types::{
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{
-    DirtyPageTracking, MemoryLimits, MissingPageHandlerKind, SigsegvMemoryTracker,
-    signal_mutex::SignalMutex,
+    DeterministicMemoryTracker, DirtyPageTracking, MemoryLimits, signal_mutex::SignalMutex,
 };
 use signal_stack::WasmtimeSignalStack;
 
@@ -248,9 +247,9 @@ pub struct WasmtimeEmbedder {
     log: ReplicaLogger,
     config: EmbeddersConfig,
     // Each time a new memory is created it is added to this map.  Each time a
-    // `SigsegvMemoryTracker` is created it will look up the corresponding memory in the map
+    // `DeterministicMemoryTracker` is created it will look up the corresponding memory in the map
     // and remove it. So memories will only be in this map for the time between module
-    // instantiation and creation of the corresponding `SigsegvMemoryTracker`.
+    // instantiation and creation of the corresponding `DeterministicMemoryTracker`.
     created_memories: Arc<Mutex<HashMap<MemoryStart, MemoryPageSize>>>,
 }
 
@@ -647,7 +646,7 @@ impl WasmtimeEmbedder {
             memories,
             &mut *store,
             self.log.clone(),
-            self.config.dirty_page_overhead,
+            self.config.page_overhead,
             subtract_instruction_counter,
         );
 
@@ -802,7 +801,7 @@ fn sigsegv_memory_tracker<S>(
     log: ReplicaLogger,
     page_overhead: NumInstructions,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
-) -> HashMap<CanisterMemoryType, Arc<SignalMutex<SigsegvMemoryTracker>>> {
+) -> HashMap<CanisterMemoryType, Arc<SignalMutex<DeterministicMemoryTracker>>> {
     let mut tracked_memories = vec![];
     let mut result = HashMap::new();
     for (
@@ -834,13 +833,12 @@ fn sigsegv_memory_tracker<S>(
             }
 
             Arc::new(SignalMutex::new(
-                memory_tracker::new(
+                DeterministicMemoryTracker::new(
                     base,
                     NumBytes::new(size as u64),
                     log.clone(),
                     dirty_page_tracking,
                     page_map,
-                    Some(MissingPageHandlerKind::Deterministic),
                     memory_limits,
                     page_overhead.get(),
                     subtract_instruction_counter.clone(),
@@ -907,8 +905,6 @@ pub struct PageAccessResults {
     pub wasm_accessed_os_pages_count: usize,
     /// Non-deterministic number of accessed Wasm (64 KiB) pages (read + write).
     pub wasm_accessed_wasm_pages_count: usize,
-    pub wasm_read_before_write_count: usize,
-    pub wasm_direct_write_count: usize,
     pub wasm_sigsegv_count: usize,
     pub wasm_mmap_count: usize,
     pub wasm_mprotect_count: usize,
@@ -916,20 +912,17 @@ pub struct PageAccessResults {
     pub wasm_sigsegv_handler_duration: Duration,
     pub stable_dirty_pages: Vec<PageIndex>,
     pub stable_accessed_pages: usize,
-    pub stable_read_before_write_count: usize,
-    pub stable_direct_write_count: usize,
     pub stable_sigsegv_count: usize,
     pub stable_mmap_count: usize,
     pub stable_mprotect_count: usize,
     pub stable_copy_page_count: usize,
     pub stable_sigsegv_handler_duration: Duration,
-    pub dmt_projected_message_cost: usize,
 }
 
 /// Encapsulates a Wasmtime instance on the Internet Computer.
 pub struct WasmtimeInstance {
     instance: wasmtime::Instance,
-    memory_trackers: HashMap<CanisterMemoryType, Arc<SignalMutex<SigsegvMemoryTracker>>>,
+    memory_trackers: HashMap<CanisterMemoryType, Arc<SignalMutex<DeterministicMemoryTracker>>>,
     signal_stack: WasmtimeSignalStack,
     log: ReplicaLogger,
     instance_stats: InstanceStats,
@@ -1002,10 +995,9 @@ impl WasmtimeInstance {
                 .unwrap()
                 .lock();
 
-            let speculatively_dirty_pages = wasm_tracker.take_speculatively_dirty_pages();
             let dirty_pages = wasm_tracker.take_dirty_pages();
             let (wasm_dirty_os_pages_count, wasm_dirty_wasm_pages_count) =
-                dirty_os_and_wasm_pages(&speculatively_dirty_pages, &dirty_pages);
+                dirty_os_and_wasm_pages(&dirty_pages);
 
             let accessed_pages = wasm_tracker.take_accessed_pages();
             let (wasm_accessed_os_pages_count, wasm_accessed_wasm_pages_count) =
@@ -1014,8 +1006,7 @@ impl WasmtimeInstance {
             let wasm_dirty_pages = match self.modification_tracking {
                 ModificationTracking::Track => dirty_pages
                     .into_iter()
-                    .chain(speculatively_dirty_pages)
-                    .filter_map(|p| wasm_tracker.validate_speculatively_dirty_page(p))
+                    .filter_map(|p| wasm_tracker.validate_dirty_page(p))
                     .collect::<Vec<PageIndex>>(),
                 ModificationTracking::Ignore => vec![],
             };
@@ -1034,8 +1025,6 @@ impl WasmtimeInstance {
                     wasm_dirty_wasm_pages_count,
                     wasm_accessed_os_pages_count,
                     wasm_accessed_wasm_pages_count,
-                    wasm_read_before_write_count: wasm_tracker.metrics().read_before_write_count(),
-                    wasm_direct_write_count: wasm_tracker.metrics().direct_write_count(),
                     wasm_sigsegv_count: wasm_tracker.metrics().sigsegv_count(),
                     wasm_mmap_count: wasm_tracker.metrics().mmap_count(),
                     wasm_mprotect_count: wasm_tracker.metrics().mprotect_count(),
@@ -1056,9 +1045,6 @@ impl WasmtimeInstance {
             let stable_sigsegv_handler_duration =
                 stable_tracker.metrics().sigsegv_handler_duration();
 
-            // total cost of the message if the DMT charges for all page accesses. Overwritten later.
-            let dmt_projected_page_cost = 0;
-
             Ok(PageAccessResults {
                 wasm_dirty_pages,
                 wasm_num_accessed_pages: wasm_tracker.num_accessed_pages(),
@@ -1066,8 +1052,6 @@ impl WasmtimeInstance {
                 wasm_dirty_wasm_pages_count,
                 wasm_accessed_os_pages_count,
                 wasm_accessed_wasm_pages_count,
-                wasm_read_before_write_count: wasm_tracker.metrics().read_before_write_count(),
-                wasm_direct_write_count: wasm_tracker.metrics().direct_write_count(),
                 wasm_sigsegv_count: wasm_tracker.metrics().sigsegv_count(),
                 wasm_mmap_count: wasm_tracker.metrics().mmap_count(),
                 wasm_mprotect_count: wasm_tracker.metrics().mprotect_count(),
@@ -1075,14 +1059,11 @@ impl WasmtimeInstance {
                 wasm_sigsegv_handler_duration,
                 stable_dirty_pages,
                 stable_accessed_pages,
-                stable_read_before_write_count: stable_tracker.metrics().read_before_write_count(),
-                stable_direct_write_count: stable_tracker.metrics().direct_write_count(),
                 stable_sigsegv_count: stable_tracker.metrics().sigsegv_count(),
                 stable_mmap_count: stable_tracker.metrics().mmap_count(),
                 stable_mprotect_count: stable_tracker.metrics().mprotect_count(),
                 stable_copy_page_count: stable_tracker.metrics().copy_page_count(),
                 stable_sigsegv_handler_duration,
-                dmt_projected_message_cost: dmt_projected_page_cost,
             })
         }
     }
@@ -1110,8 +1091,6 @@ impl WasmtimeInstance {
             wasm_dirty_pages: res.wasm_dirty_pages.len(),
             wasm_dirty_os_pages_count: res.wasm_dirty_os_pages_count,
             wasm_dirty_wasm_pages_count: res.wasm_dirty_wasm_pages_count,
-            wasm_read_before_write_count: res.wasm_read_before_write_count,
-            wasm_direct_write_count: res.wasm_direct_write_count,
             wasm_sigsegv_count: res.wasm_sigsegv_count,
             wasm_mmap_count: res.wasm_mmap_count,
             wasm_mprotect_count: res.wasm_mprotect_count,
@@ -1119,14 +1098,11 @@ impl WasmtimeInstance {
             wasm_sigsegv_handler_duration: res.wasm_sigsegv_handler_duration,
             stable_accessed_pages: res.stable_accessed_pages,
             stable_dirty_pages: res.stable_dirty_pages.len(),
-            stable_read_before_write_count: res.stable_read_before_write_count,
-            stable_direct_write_count: res.stable_direct_write_count,
             stable_sigsegv_count: res.stable_sigsegv_count,
             stable_mmap_count: res.stable_mmap_count,
             stable_mprotect_count: res.stable_mprotect_count,
             stable_copy_page_count: res.stable_copy_page_count,
             stable_sigsegv_handler_duration: res.stable_sigsegv_handler_duration,
-            dmt_projected_message_cost: res.dmt_projected_message_cost,
         };
     }
 
@@ -1237,7 +1213,7 @@ impl WasmtimeInstance {
                 result: &mut Vec<PageIndex>,
                 page_index: usize,
                 heap_memory: &[u8],
-                tracker: &SigsegvMemoryTracker,
+                tracker: &DeterministicMemoryTracker,
                 written: u8,
             ) -> HypervisorResult<()> {
                 let index = PageIndex::new(page_index as u64);
@@ -1429,17 +1405,10 @@ fn accessed_os_and_wasm_pages(accessed_pages: &[PageIndex]) -> (usize, usize) {
     (accessed_pages.len(), wasm_pages.len())
 }
 
-fn dirty_os_and_wasm_pages(
-    speculatively_dirty_pages: &[PageIndex],
-    dirty_pages: &[PageIndex],
-) -> (usize, usize) {
-    let wasm_pages: HashSet<u64> = speculatively_dirty_pages
+fn dirty_os_and_wasm_pages(dirty_pages: &[PageIndex]) -> (usize, usize) {
+    let wasm_pages: HashSet<u64> = dirty_pages
         .iter()
-        .chain(dirty_pages.iter())
         .map(|&os_index| os_index.get() / OS_PAGES_PER_WASM_PAGE as u64)
         .collect();
-    (
-        dirty_pages.len() + speculatively_dirty_pages.len(),
-        wasm_pages.len(),
-    )
+    (dirty_pages.len(), wasm_pages.len())
 }

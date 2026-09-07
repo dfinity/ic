@@ -197,6 +197,7 @@ impl CatchUpPackageMaker {
                 self.membership.registry_client.as_ref(),
                 self.membership.subnet_id,
                 pool,
+                &self.replica_config.replica_version,
                 &self.log,
             ) == Some(true)
         };
@@ -515,7 +516,7 @@ mod tests {
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, insert_initial_dkg_transcript};
-    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
     use ic_types::{
         CryptoHashOfState, Height, NodeId, RegistryVersion,
         consensus::{
@@ -1099,6 +1100,7 @@ mod tests {
                 .with_replica_config(ReplicaConfig {
                     node_id,
                     subnet_id: SOURCE_SUBNET_ID,
+                    replica_version: test_replica_version(),
                 })
                 .build();
                 // Manually insert DKG transcripts at the splitting version to simulate what the
@@ -1198,6 +1200,23 @@ mod tests {
                 let expected_block = post_split_block(expected_new_subnet_id);
                 let other_block = post_split_block(other_subnet_id);
 
+                // Like a genesis or recovery CUP block, a post-split block is built from registry
+                // CUP contents, and records the same registry version in its DKG summary and in
+                // its validation context.
+                assert_eq!(
+                    expected_block
+                        .payload
+                        .as_ref()
+                        .as_summary()
+                        .dkg
+                        .registry_version,
+                    expected_block.context.registry_version,
+                );
+                assert_eq!(
+                    expected_block.context.registry_version,
+                    SPLITTING_REGISTRY_VERSION,
+                );
+
                 // The DKG transcripts of the post-split block are the ones of the subnet the node
                 // lands on, i.e. their committee is that subnet's membership ...
                 let expected_committee =
@@ -1292,6 +1311,7 @@ mod tests {
                     .with_replica_config(ReplicaConfig {
                         node_id: NODE_5,
                         subnet_id: SOURCE_SUBNET_ID,
+                        replica_version: test_replica_version(),
                     })
                     .build();
 

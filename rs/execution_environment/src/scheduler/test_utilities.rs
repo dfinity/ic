@@ -52,7 +52,7 @@ use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, subnet_test_id, user_test_id},
+    ids::{canister_test_id, subnet_test_id, test_replica_version, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
@@ -858,7 +858,7 @@ impl Default for SchedulerTestBuilder {
             master_public_key_ids: vec![],
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: BTreeSet::new(),
         }
@@ -958,13 +958,6 @@ impl SchedulerTestBuilder {
     pub fn with_round_summary(self, round_summary: ExecutionRoundSummary) -> Self {
         Self {
             round_summary: Some(round_summary),
-            ..self
-        }
-    }
-
-    pub fn with_replica_version(self, replica_version: ReplicaVersion) -> Self {
-        Self {
-            replica_version,
             ..self
         }
     }
@@ -1397,7 +1390,6 @@ impl TestWasmExecutorCore {
         let instance_stats = InstanceStats {
             wasm_accessed_pages: message.dirty_pages,
             wasm_dirty_pages: message.dirty_pages,
-            wasm_read_before_write_count: message.dirty_pages,
             ..Default::default()
         };
         let slice = SliceExecutionOutput {

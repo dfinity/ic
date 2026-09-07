@@ -151,6 +151,10 @@ impl CanisterManager {
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Ic00Method::NodeMetricsHistory)
+            // Unreachable for `SubnetMetrics`: `extract_effective_canister_id`
+            // rejects it earlier, at the ingress filter. Listed for exhaustiveness
+            // and as defence in depth.
+            | Ok(Ic00Method::SubnetMetrics)
             | Ok(Ic00Method::SubnetInfo)
             // `RenameCanister` can only be called from the NNS subnet.
             | Ok(Ic00Method::RenameCanister) => Err(UserError::new(

@@ -37,9 +37,15 @@ use crate::metrics::CanisterHttpPayloadBuilderMetrics;
 pub(crate) fn check_response_consistency(
     response: &CanisterHttpResponseWithConsensus,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    let content = &response.content;
-    let metadata = &response.proof.metadata;
+    check_metadata_matches_content(&response.proof.metadata, &response.content)
+}
 
+/// Checks that the `metadata` describes `content`: same callback id,
+/// content hash, content size and `is_reject` flag.
+pub(crate) fn check_metadata_matches_content(
+    metadata: &CanisterHttpResponseMetadata,
+    content: &CanisterHttpResponse,
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
     // Check metadata field consistency
     if metadata.id != content.id {
         return Err(InvalidCanisterHttpPayloadReason::InvalidMetadata {
@@ -426,8 +432,9 @@ pub(crate) fn aggregate_shares(
 
 /// Validates a single [`FlexibleCanisterHttpResponseWithProof`].
 ///
-/// Checks callback-id consistency, share validity (using
-/// [`validate_response_share`]), content hash, and content size.
+/// Checks share validity (using [`validate_response_share`]) and that the
+/// signed metadata describes the response (using
+/// [`check_metadata_matches_content`]).
 ///
 /// **NOTE**: The signature on the share is not verified. Callers are expected
 /// to batch-verify the signatures of all shares in the surrounding group via
@@ -439,13 +446,6 @@ pub(crate) fn validate_flexible_response_with_proof(
     seen_signers: &mut HashSet<NodeId>,
     context: &CanisterHttpRequestContext,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    if response_with_proof.response.id != callback_id {
-        return Err(InvalidCanisterHttpPayloadReason::ShareCallbackIdMismatch {
-            callback_id,
-            mismatched_id: response_with_proof.response.id,
-        });
-    }
-
     validate_response_share(
         &response_with_proof.proof,
         callback_id,
@@ -454,31 +454,10 @@ pub(crate) fn validate_flexible_response_with_proof(
         context,
     )?;
 
-    let calculated_hash = crypto_hash(&response_with_proof.response);
-    if &calculated_hash != response_with_proof.proof.content.content_hash() {
-        return Err(InvalidCanisterHttpPayloadReason::ContentHashMismatch {
-            metadata_hash: response_with_proof.proof.content.content_hash().clone(),
-            calculated_hash,
-        });
-    }
-
-    let calculated_size = response_with_proof.response.content.count_bytes() as u32;
-    if calculated_size != response_with_proof.proof.content.content_size() {
-        return Err(InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
-            metadata_size: response_with_proof.proof.content.content_size(),
-            calculated_size,
-        });
-    }
-
-    let calculated_is_reject = response_with_proof.response.content.is_reject();
-    if calculated_is_reject != response_with_proof.proof.content.is_reject() {
-        return Err(InvalidCanisterHttpPayloadReason::IsRejectMismatch {
-            metadata_is_reject: response_with_proof.proof.content.is_reject(),
-            calculated_is_reject,
-        });
-    }
-
-    Ok(())
+    check_metadata_matches_content(
+        &response_with_proof.proof.content.metadata,
+        &response_with_proof.response,
+    )
 }
 
 /// Validates a single [`CanisterHttpResponseShare`]'s metadata against the
@@ -1039,8 +1018,9 @@ fn fund_flexible_selection<'a>(
 mod tests {
     use super::*;
     use ic_error_types::RejectCode;
+    use ic_test_utilities_types::ids::test_replica_version;
     use ic_types::{
-        CanisterId, NumberOfNodes, ReplicaVersion,
+        CanisterId, NumberOfNodes,
         canister_http::{
             CANDID_OVERHEAD_RESERVE_BYTES, CanisterHttpMethod, CanisterHttpReject,
             MAX_CANISTER_HTTP_RESPONSE_BYTES, MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
@@ -1167,7 +1147,7 @@ mod tests {
             content_hash: CryptoHashOf::new(CryptoHash(vec![])),
             content_size,
             is_reject,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         };
         check_content_size_within_limit(&metadata, callback_id, context)
     }

@@ -66,6 +66,26 @@ jobs:
       commit-sha: ${{ github.sha }}
       release-build: 'true'
 
+  attest-uploads:
+    name: Attest Uploaded Artifacts
+    runs-on: ubuntu-latest
+    needs: [ci-main]
+    # Attestations exist only for the public repo: a build from ic-private
+    # gets attested when its branch is pushed to dfinity/ic as a hotfix-*
+    # branch and is re-built and re-uploaded byte-identically there.
+    if: needs.ci-main.outputs.release-build == 'true' && github.repository == 'dfinity/ic'
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+      - uses: ./.github/actions/attest-uploads
+        with:
+          manifest-sha256: ${{ needs.ci-main.outputs.manifest-sha256 }}
+
   setup-guest-os-qualification:
     name: Setting up guest os qualification pipeline
     runs-on: &dind-large-setup

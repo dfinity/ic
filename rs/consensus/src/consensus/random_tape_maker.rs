@@ -130,7 +130,7 @@ impl RandomTapeMaker {
         height: Height,
         pool: &PoolReader<'_>,
     ) -> Option<RandomTapeShare> {
-        let content = RandomTapeContent::new(height);
+        let content = RandomTapeContent::new(height, self.replica_config.replica_version.clone());
 
         if let Some(dkg_id) = active_low_threshold_nidkg_id(pool.as_cache(), height) {
             match self
@@ -266,7 +266,10 @@ mod tests {
             round.advance();
             round.advance();
             pool.insert_validated(ConsensusMessage::RandomTape(RandomTape::fake(
-                RandomTapeContent::new(Height::from(7)),
+                RandomTapeContent::new(
+                    Height::from(7),
+                    ic_test_utilities_types::ids::test_replica_version(),
+                ),
             )));
 
             let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));

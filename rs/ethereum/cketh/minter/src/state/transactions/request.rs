@@ -215,17 +215,17 @@ impl PipelineRequest for SweepRequest {
         );
         assert_eq!(
             transaction.amount(),
-            &self.amount,
-            "BUG: sweep transaction amount should equal the request amount"
+            &Wei::ZERO,
+            "BUG: an ERC-20 sweep moves its tokens through call data, not as value"
         );
         assert_eq!(
             transaction.data(),
-            self.data,
+            self.call_data(),
             "BUG: sweep transaction should carry the request's call data"
         );
         assert_eq!(
             transaction.authorizations(),
-            self.authorizations.as_slice(),
+            self.authorizations().as_slice(),
             "BUG: sweep transaction should install exactly the request's delegations"
         );
     }
@@ -268,11 +268,11 @@ impl PipelineRequest for SweepRequest {
                 max_fee_per_gas,
                 gas_limit,
                 destination: self.destination,
-                amount: self.amount,
-                data: self.data.clone(),
+                amount: Wei::ZERO,
+                data: self.call_data(),
                 access_list: Default::default(),
             },
-            self.authorizations.clone(),
+            self.authorizations(),
         ))
     }
 }

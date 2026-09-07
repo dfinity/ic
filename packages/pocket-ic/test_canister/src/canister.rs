@@ -20,7 +20,7 @@ use serde_bytes::ByteBuf;
 ///
 /// The variants and their ordering define the `RejectionCode` variant declared in
 /// `canister.did`, so the numbering must stay in sync with the reject codes of the
-/// [IC interface specification](https://internetcomputer.org/docs/references/ic-interface-spec#reject-codes).
+/// [IC interface specification](https://docs.internetcomputer.org/references/ic-interface-spec/https-interface/#reject-codes).
 #[derive(Copy, Clone, Debug, CandidType, Deserialize)]
 pub enum RejectionCode {
     NoError,
@@ -29,6 +29,9 @@ pub enum RejectionCode {
     DestinationInvalid,
     CanisterReject,
     CanisterError,
+    SysUnknown,
+    /// The reject code reported by the system is not one the interface
+    /// specification defines.
     Unknown,
 }
 
@@ -43,21 +46,29 @@ impl RejectionCode {
             3 => Self::DestinationInvalid,
             4 => Self::CanisterReject,
             5 => Self::CanisterError,
+            6 => Self::SysUnknown,
             _ => Self::Unknown,
         }
     }
 }
 
-/// Translates a failed call into the reject code and message `canister_http`
-/// reports back over Candid.
-fn map_call_error(err: CallError) -> (RejectionCode, String) {
-    match err {
+/// Translates a failed call into the reject code and message the endpoints below
+/// report back over Candid.
+///
+/// The match is deliberately exhaustive (rather than using a catch-all arm) so
+/// that a new [`CallError`] variant forces us to revisit this mapping.
+fn map_call_error(err: impl Into<CallError>) -> (RejectionCode, String) {
+    match err.into() {
+        // The call was rejected and the system assigned a reject code; report it.
         CallError::CallRejected(rejected) => (
             RejectionCode::from_raw(rejected.raw_reject_code()),
             rejected.reject_message().to_string(),
         ),
-        // Nothing reached the callee, so there is no reject code to report.
-        other => (RejectionCode::Unknown, other.to_string()),
+        // None of these carry a system-assigned reject code, so there is no
+        // faithful code to report; surface them as `Unknown`.
+        err @ (CallError::CandidDecodeFailed(_)
+        | CallError::InsufficientLiquidCycleBalance(_)
+        | CallError::CallPerformFailed(_)) => (RejectionCode::Unknown, err.to_string()),
     }
 }
 
@@ -430,6 +441,29 @@ async fn canister_http_with_transform(http_server_addr: String) -> HttpRequestRe
 }
 
 // inter-canister calls
+
+/// Proxies a call to `method` of `callee`, passing the already Candid-encoded
+/// `args` verbatim and attaching `cycles` cycles.
+///
+/// Both the argument and the reply are passed through undecoded, so a test can use
+/// the callee's authoritative Candid types instead of copies maintained here. That
+/// is what makes it possible to call a management canister endpoint
+/// `ic-cdk-management-canister` does not expose (`flexible_http_request`) or to set
+/// a field it does not expose (`http_request`'s `pricing_version`).
+#[update]
+async fn proxy_call(
+    callee: Principal,
+    method: String,
+    args: ByteBuf,
+    cycles: u128,
+) -> Result<ByteBuf, (RejectionCode, String)> {
+    Call::unbounded_wait(callee, &method)
+        .with_raw_args(&args)
+        .with_cycles(cycles)
+        .await
+        .map(|response| ByteBuf::from(response.into_bytes()))
+        .map_err(map_call_error)
+}
 
 #[update]
 async fn whoami() -> String {

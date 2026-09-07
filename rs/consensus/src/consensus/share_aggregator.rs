@@ -271,7 +271,7 @@ mod tests {
     use ic_test_utilities_consensus::fake::{FakeContentSigner, FakeSigner};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, insert_initial_dkg_transcript};
-    use ic_test_utilities_types::ids::node_test_id;
+    use ic_test_utilities_types::ids::{node_test_id, test_replica_version};
     use ic_types::{
         CryptoHashOfState, NodeId, RegistryVersion, SubnetId,
         consensus::{
@@ -540,6 +540,7 @@ mod tests {
                 .with_replica_config(ReplicaConfig {
                     node_id: NODE_1,
                     subnet_id: SOURCE_SUBNET_ID,
+                    replica_version: test_replica_version(),
                 })
                 .build();
                 // Manually insert DKG transcripts at the splitting version to simulate what the
@@ -590,6 +591,7 @@ mod tests {
                         ReplicaConfig {
                             node_id,
                             subnet_id: SOURCE_SUBNET_ID,
+                            replica_version: test_replica_version(),
                         },
                         membership.clone(),
                         crypto.clone(),

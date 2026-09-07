@@ -80,6 +80,7 @@ rust_test(
         "//rs/registry/keys",
         "//rs/registry/transport",
         "//rs/rust_canisters/canister_test",
+        "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:candid",

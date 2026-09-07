@@ -727,7 +727,9 @@ mod tests {
         idkg::*,
     };
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id, subnet_test_id, test_replica_version, user_test_id,
+    };
     use ic_types::{
         Height, Randomness, RegistryVersion,
         batch::BatchPayload,
@@ -1483,6 +1485,7 @@ mod tests {
                     certified_height: Height::from(42),
                     time: UNIX_EPOCH,
                 },
+                test_replica_version(),
             );
             assert_proposal_conversion(b);
 

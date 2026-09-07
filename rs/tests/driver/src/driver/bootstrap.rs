@@ -485,25 +485,43 @@ pub fn setup_and_start_nested_vms(
             )?;
 
             if node.get_vm()?.bare_metal {
-                setup_baremetal_instance(&t_env, &node, &config_image)
-                    .context("Setting up baremetal instance failed")
-            } else {
-                let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
-                    &t_group_name,
-                    &config_image,
-                    NESTED_CONFIG_IMAGE_PATH,
-                )?);
-                let setupos_image =
-                    AttachImageSpec::via_url(get_setupos_img_url(&t_env), get_setupos_img_sha256());
-                t_farm.attach_disk_images(
-                    &t_group_name,
-                    &vm_name,
-                    "usb-storage",
-                    vec![setupos_image, config_image_spec],
-                )?;
-                t_farm.start_vm(&t_group_name, &vm_name)?;
-                Ok(())
+                return setup_baremetal_instance(&t_env, &node, &config_image)
+                    .context("Setting up baremetal instance failed");
             }
+
+            match SystemTestBackend::read_attribute(&t_env) {
+                SystemTestBackend::Farm => {
+                    let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
+                        &t_group_name,
+                        &config_image,
+                        NESTED_CONFIG_IMAGE_PATH,
+                    )?);
+                    let setupos_image = AttachImageSpec::via_url(
+                        get_setupos_img_url(&t_env),
+                        get_setupos_img_sha256(),
+                    );
+                    t_farm.attach_disk_images(
+                        &t_group_name,
+                        &vm_name,
+                        "usb-storage",
+                        vec![setupos_image, config_image_spec],
+                    )?;
+                    t_farm.start_vm(&t_group_name, &vm_name)?;
+                }
+                SystemTestBackend::Local => {
+                    let backend = LocalBackend::from_test_env(&t_env)?;
+                    // The image is already on disk here, so take its path
+                    // directly rather than the content-addressed URL the Farm arm
+                    // hands to the Farm host; `attach_disk_images` extracts it.
+                    let var = "ENV_DEPS__SETUPOS_DISK_IMG_PATH";
+                    let setupos_image = PathBuf::from(
+                        std::env::var(var).with_context(|| format!("Failed to read '{var}'"))?,
+                    );
+                    backend.attach_disk_images(&vm_name, &[setupos_image, config_image])?;
+                    backend.start_vm(&t_group_name, &vm_name)?;
+                }
+            }
+            Ok(())
         }));
     }
 

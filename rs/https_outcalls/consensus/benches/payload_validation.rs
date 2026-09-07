@@ -7,6 +7,7 @@ use std::sync::Arc;
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
 use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_https_outcalls_consensus::payload_builder::{CanisterHttpPayloadBuilderImpl, PastPayloads};
 use ic_https_outcalls_pricing::fees::{flexible_initial_spent, non_flexible_initial_spent};
@@ -20,11 +21,11 @@ use ic_test_utilities::artifact_pool_config::with_test_pool_config;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
-    ids::{node_test_id, subnet_test_id},
+    ids::{node_test_id, subnet_test_id, test_replica_version},
     messages::RequestBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NodeId, NumberOfNodes, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NodeId, NumberOfNodes, RegistryVersion,
     batch::{
         CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         ValidationContext,
@@ -232,6 +233,7 @@ fn build_target(
         deps.pool.get_cache(),
         crypto,
         state_manager,
+        build_thread_pool(MAX_CONSENSUS_THREADS),
         subnet_id,
         registry_client.clone(),
         &MetricsRegistry::new(),
@@ -498,7 +500,7 @@ fn response_and_metadata(
         content_hash: crypto_hash(&response),
         content_size: response.content.count_bytes() as u32,
         is_reject: response.content.is_reject(),
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     };
     (response, metadata)
 }

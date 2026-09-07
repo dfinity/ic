@@ -4,9 +4,9 @@ use crate::payload_builder::tests::{
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
-use ic_test_utilities_types::ids::node_test_id;
+use ic_test_utilities_types::ids::{node_test_id, test_replica_version};
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion, Time,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, Time,
     batch::ValidationContext,
     canister_http::{
         CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpReject, CanisterHttpRequestContext,
@@ -367,7 +367,7 @@ fn make_metadata(response: &CanisterHttpResponse) -> CanisterHttpResponseMetadat
         content_hash: crypto_hash(response),
         content_size: response.content.count_bytes() as u32,
         is_reject: response.content.is_reject(),
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     }
 }
 
@@ -513,7 +513,7 @@ fn prop_random_metadata() -> impl Strategy<Value = CanisterHttpResponseMetadata>
             content_hash: CryptoHashOf::new(CryptoHash(hash.to_vec())),
             content_size,
             is_reject,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         }
     })
 }
