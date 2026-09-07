@@ -3780,9 +3780,6 @@ fn time_out_messages_produces_refunds() {
     );
 }
 
-/// These tests are used to check the compatibility with the mainnet version.
-/// They are not meant to be run as part of the regular test suite (hence the ignore attributes),
-/// but instead invoked from the compiled test binary by a separate compatibility test.
 /// Tests for the `RefundPool` protobuf conversions. Deliberately outside
 /// `mainnet_compatibility_tests`, whose `serialize` / `deserialize` test names are
 /// used as filters by `queues_compatibility_test`, which requires that they match
@@ -3861,6 +3858,9 @@ mod refund_pool_proto_tests {
     }
 }
 
+/// These tests are used to check the compatibility with the mainnet version.
+/// They are not meant to be run as part of the regular test suite (hence the ignore attributes),
+/// but instead invoked from the compiled test binary by a separate compatibility test.
 mod mainnet_compatibility_tests {
     use prost::Message;
     use std::fs::File;
@@ -4127,7 +4127,7 @@ mod mainnet_compatibility_tests {
 
             // Only the pooled refunds are compared: a checkpoint written before the
             // metrics were persisted has none, in which case they are inferred from
-            // the persisted refunds (see `deserialize_without_metrics_infers_them()`).
+            // the persisted refunds (see `pool_without_persisted_metrics_infers_them()`).
             assert_eq!(
                 make_refund_pool().iter().collect::<Vec<_>>(),
                 refunds.iter().collect::<Vec<_>>()
