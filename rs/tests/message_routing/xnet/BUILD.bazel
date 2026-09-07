@@ -25,7 +25,6 @@ system_test_nns(
 
 system_test_nns(
     name = "xnet_slo_3_subnets_hotfix_test",
-    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_required_host_features = ["performance"],
     cpus = MIN_LOCAL_CPUS + 3 * 4 * DEFAULT_VCPUS_PER_VM,  # 3 subnets * 4 nodes * 6 vCPUs.
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
@@ -44,7 +43,6 @@ system_test_nns(
 
 system_test_nns(
     name = "xnet_slo_3_subnets_test",
-    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_required_host_features = ["performance"],
     cpus = MIN_LOCAL_CPUS + 3 * 4 * DEFAULT_VCPUS_PER_VM,  # 3 subnets * 4 nodes * 6 vCPUs.
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.

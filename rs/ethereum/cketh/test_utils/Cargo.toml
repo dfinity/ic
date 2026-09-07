@@ -7,9 +7,13 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
+alloy-consensus = { workspace = true }
+alloy-eips = { workspace = true }
+alloy-primitives = { workspace = true }
+alloy-rpc-types-eth = { workspace = true }
+alloy-sol-types = { workspace = true }
 assert_matches = { workspace = true }
 candid = { workspace = true }
-ethers-core = { workspace = true }
 evm_rpc_types = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }

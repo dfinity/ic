@@ -13,7 +13,7 @@ const TIB: u64 = 1024 * GIB;
 
 const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Enabled;
 
-const FLEXIBLE_HTTP_REQUESTS_FEATURE: FlagStatus = FlagStatus::Disabled;
+const FLEXIBLE_HTTP_REQUESTS_FEATURE: FlagStatus = FlagStatus::Enabled;
 
 pub const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = 4 * KIB;
 pub const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = 4 * KIB + 4 * KIB + TEST_DEFAULT_LOG_MEMORY_LIMIT; // header, index table, data region

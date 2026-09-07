@@ -42,10 +42,10 @@ use ic_management_canister_types_private::{
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
-    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
-    VetKdPublicKeyResult,
+    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, SubnetMetricsArgs, SubnetMetricsResponse,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1891,6 +1891,20 @@ impl ExecutionEnvironment {
                 }
             },
 
+            Ok(Ic00Method::SubnetMetrics) => match &msg {
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::SubnetMetrics)
+                }
+                CanisterCall::Request(_) => {
+                    let res = SubnetMetricsArgs::decode(payload)
+                        .and_then(|args| self.subnet_metrics(&state, current_round, args));
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res.map(|res| (res, None)),
+                        refund: msg.take_cycles(),
+                    }
+                }
+            },
+
             Ok(Ic00Method::SubnetInfo) => match &msg {
                 CanisterCall::Ingress(_) => self.reject_unexpected_ingress(Ic00Method::SubnetInfo),
                 CanisterCall::Request(_) => {
@@ -3387,6 +3401,60 @@ impl ExecutionEnvironment {
         let res = SubnetInfoResponse {
             replica_version: replica_version.to_string(),
             registry_version: registry_version.get(),
+        };
+        Ok(Encode!(&res).unwrap())
+    }
+
+    /// Computes the response to the `subnet_metrics` management canister method.
+    ///
+    /// Charges no round instructions: every field comes from adding up a fixed
+    /// number of already-aggregated `SubnetMetrics` fields, so there is no work
+    /// here to price. See the `counts_toward_round_limit: false` grouping in
+    /// `ic00_permissions.rs`.
+    fn subnet_metrics(
+        &self,
+        state: &ReplicatedState,
+        current_round: ExecutionRound,
+        args: SubnetMetricsArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        if args.subnet_id != self.own_subnet_id.get() {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Provided target subnet ID {} does not match current subnet ID {}.",
+                    args.subnet_id, self.own_subnet_id
+                ),
+            ));
+        }
+        let metrics = &state.metadata.subnet_metrics;
+        // The same stored aggregate the certified state tree at
+        // `/subnet/<subnet_id>/metrics` reads from certification version `V29` on, so
+        // the two cannot drift. It is refreshed on every `commit_and_certify`
+        // (`rs/state_manager/src/lib.rs`), so a call executing in round N reads the
+        // end-of-round-(N-1) value -- the same one-round lag as `num_canisters`
+        // below. Reading it rather than recomputing the total is also what keeps a
+        // canister deleted earlier in this same round from being counted twice.
+        let consumed_cycles_total = metrics.consumed_cycles_total_including_canisters();
+        let res = SubnetMetricsResponse {
+            // The height of the block in whose execution this call is processed.
+            // `ExecutionRound` is numerically the finalized consensus block
+            // height; see `rs/messaging/src/state_machine.rs`.
+            block_height: candid::Nat::from(current_round.get()),
+            // `num_canisters` and `update_transactions_total` are written at the
+            // *end* of a round (`message_routing.rs`, `scheduler.rs`), so a call
+            // executing in round N reports the end-of-round-(N-1) values. That
+            // one-round lag is what `read_state` reports for height N-1 too, so the
+            // two agree; it is nonetheless not literally "current".
+            num_canisters: candid::Nat::from(metrics.num_canisters),
+            // Read from the stored `SubnetMetrics` field rather than recomputed
+            // live, so that the value agrees with the certified state tree. Note
+            // that message routing only refreshes the stored field every 10
+            // rounds by design (`rs/messaging/src/message_routing.rs`), so
+            // recomputing it here would make `subnet_metrics` disagree with
+            // `read_state` on 9 rounds out of 10.
+            canister_state_bytes: candid::Nat::from(metrics.canister_state_bytes.get()),
+            consumed_cycles_total: candid::Nat::from(consumed_cycles_total.get()),
+            update_transactions_total: candid::Nat::from(metrics.update_transactions_total),
         };
         Ok(Encode!(&res).unwrap())
     }
