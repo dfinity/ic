@@ -107,7 +107,7 @@ mod keygen {
 
     #[test]
     fn should_fail_parsing_non_ecdsa_key_without_panic() {
-        let pk_der = BASE64_STANDARD
+        let pk_der = BASE64_STANDARD_NO_PAD
             .decode(crate::ED25519_PK_DER_BASE64)
             .unwrap();
         let pk_result = public_key_from_der(&pk_der);

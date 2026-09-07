@@ -1,5 +1,5 @@
 {
-  "checksum": "272e56147ce2beca733ed8b78c2dd0fc94a26db84f19d2a00af47a008c1661a2",
+  "checksum": "045c2124b66060700903b339fc81a146c46b89aadce8fc576e1b43f16fc597fc",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -8303,7 +8303,7 @@
               "target": "futures_util"
             },
             {
-              "id": "headers 0.4.0",
+              "id": "headers 0.4.1",
               "target": "headers"
             },
             {
@@ -9012,53 +9012,6 @@
         "CC0-1.0"
       ],
       "license_file": null
-    },
-    "base64 0.21.6": {
-      "name": "base64",
-      "version": "0.21.6",
-      "package_url": "https://github.com/marshallpierce/rust-base64",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/base64/0.21.6/download",
-          "sha256": "c79fed4cdb43e993fcdadc7e58a09fd0e3e649c4436fa11da71c9f1f3ee7feb9"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "base64",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "base64",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.21.6"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "base64 0.22.1": {
       "name": "base64",
@@ -32470,14 +32423,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "headers 0.4.0": {
+    "headers 0.4.1": {
       "name": "headers",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "package_url": "https://github.com/hyperium/headers",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/headers/0.4.0/download",
-          "sha256": "322106e6bd0cba2d5ead589ddb8150a13d7c4217cf80d7c4f682ca994ccc6aa9"
+          "url": "https://static.crates.io/crates/headers/0.4.1/download",
+          "sha256": "b3314d5adb5d94bcdf56771f2e50dbbc80bb4bdf88967526706205ac9eff24eb"
         }
       },
       "targets": [
@@ -32502,7 +32455,7 @@
         "deps": {
           "common": [
             {
-              "id": "base64 0.21.6",
+              "id": "base64 0.22.1",
               "target": "base64"
             },
             {
@@ -32532,8 +32485,8 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "0.4.0"
+        "edition": "2018",
+        "version": "0.4.1"
       },
       "license": "MIT",
       "license_ids": [

@@ -151,7 +151,7 @@ mod tests {
 
                     let client_data = ClientData {
                         r#type: "brunettes".to_string(),
-                        challenge: BASE64_STANDARD.encode(msg),
+                        challenge: BASE64_URL_SAFE_NO_PAD.encode(msg),
                         origin: "https://localhost/".to_string(),
                     };
 
