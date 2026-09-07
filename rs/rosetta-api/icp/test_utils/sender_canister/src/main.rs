@@ -27,10 +27,13 @@ async fn send(calls: Vec<SendArg>) -> Vec<SendResult> {
 
 fn map_call_error(err: CallFailed) -> (RejectionCode, String) {
     match err {
+        // The call was rejected and the system assigned a reject code; report it.
         CallFailed::CallRejected(rejected) => (
             RejectionCode::from_raw(rejected.raw_reject_code()),
             rejected.reject_message().to_string(),
         ),
+        // Neither of these produced a response from the callee, so there is no
+        // callee-assigned reject code to report; surface them as `Unknown`.
         CallFailed::InsufficientLiquidCycleBalance(e) => (RejectionCode::Unknown, e.to_string()),
         CallFailed::CallPerformFailed(e) => (RejectionCode::Unknown, e.to_string()),
     }

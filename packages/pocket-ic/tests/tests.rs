@@ -61,6 +61,7 @@ enum RejectionCode {
     DestinationInvalid,
     CanisterReject,
     CanisterError,
+    SysUnknown,
     Unknown,
 }
 

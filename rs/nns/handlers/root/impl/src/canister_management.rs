@@ -2,7 +2,7 @@ use crate::PROXIED_CANISTER_CALLS_TRACKER;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
     api::{debug_print, msg_caller},
-    call::{Call, CallFailed, Error as IcCdkCallError, RejectCode},
+    call::{Call, CallFailed, Error as IcCdkCallError},
 };
 use ic_management_canister_types_private::{
     self as management_canister, CanisterInstallMode::Install, CanisterSettingsArgsBuilder,
@@ -17,7 +17,7 @@ use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracke
 use ic_nervous_system_root::change_canister::{
     AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest, start_canister, stop_canister,
 };
-use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_nervous_system_runtime::{CdkRuntime, Runtime, into_reject_code_and_message};
 use ic_nervous_system_string::humanize_blob;
 use ic_nns_common::{
     registry::{get_value, mutate_registry},
@@ -339,25 +339,7 @@ pub async fn create_canister_and_install_code(
 /// [`try_to_create_and_install_canister`] reports. Reports the same numeric codes
 /// that the deprecated `ic_cdk::api::call` did.
 fn format_call_error(err: IcCdkCallError) -> String {
-    let (code, message) = match err {
-        IcCdkCallError::CallRejected(rejected) => (
-            rejected.raw_reject_code() as i32,
-            rejected.reject_message().to_string(),
-        ),
-        // A response that cannot be decoded means the callee misbehaved.
-        IcCdkCallError::CandidDecodeFailed(err) => {
-            (RejectCode::CanisterError as i32, err.to_string())
-        }
-        // Neither of these ever left this canister, so the call may well succeed
-        // if retried.
-        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
-        IcCdkCallError::CallPerformFailed(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
-    };
-
+    let (code, message) = into_reject_code_and_message(err);
     format!("error code {code}: {message}")
 }
 

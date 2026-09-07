@@ -3,11 +3,13 @@ pub use ic_management_canister_types::CanisterSettings;
 use candid::{CandidType, Nat};
 use ic_cdk::{
     api::msg_caller,
-    call::{Call, Error as IcCdkCallError, RejectCode},
+    call::{Call, RejectCode},
 };
 use std::time::{Duration, SystemTime};
 
 use dfn_protobuf::{ProtoBuf, ToProto};
+
+pub use ic_nervous_system_runtime::into_reject_code_and_message;
 
 use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
@@ -63,33 +65,6 @@ pub fn ic0_mint_cycles128(amount: Cycles) -> Cycles {
 /// caller that returns principalId instead of Principal
 pub fn caller() -> PrincipalId {
     PrincipalId::from(msg_caller())
-}
-
-/// Translates a failed call into the `(reject code, message)` pair that [`call_protobuf`]
-/// and this canister's error messages report.
-///
-/// The match is deliberately exhaustive (rather than using a catch-all arm) so
-/// that a new [`IcCdkCallError`] variant forces us to revisit this mapping
-/// instead of silently classifying it as [`RejectCode::SysTransient`].
-pub fn into_reject_code_and_message(err: IcCdkCallError) -> (i32, String) {
-    match err {
-        IcCdkCallError::CallRejected(rejected) => (
-            rejected.raw_reject_code() as i32,
-            rejected.reject_message().to_string(),
-        ),
-        // A response that cannot be decoded means the callee misbehaved.
-        IcCdkCallError::CandidDecodeFailed(err) => {
-            (RejectCode::CanisterError as i32, err.to_string())
-        }
-        // Neither of these ever left this canister, so the call may well succeed
-        // if retried.
-        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
-        IcCdkCallError::CallPerformFailed(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
-    }
 }
 
 /// A Protobuf codec failure is not a reject, so no `RejectCode` really describes it.

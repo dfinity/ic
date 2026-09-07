@@ -17,7 +17,7 @@ use ic_management_canister_types_private::{
 ///
 /// The variants and their ordering define the `variant` this canister exposes
 /// over Candid, so the numbering must stay in sync with the reject codes of the
-/// [IC interface specification](https://internetcomputer.org/docs/references/ic-interface-spec#reject-codes).
+/// [IC interface specification](https://docs.internetcomputer.org/references/ic-interface-spec/https-interface/#reject-codes).
 #[derive(Copy, Clone, Debug, CandidType, Deserialize)]
 pub enum RejectionCode {
     NoError,
@@ -26,6 +26,9 @@ pub enum RejectionCode {
     DestinationInvalid,
     CanisterReject,
     CanisterError,
+    SysUnknown,
+    /// The reject code reported by the system is not one the interface
+    /// specification defines.
     Unknown,
 }
 
@@ -40,6 +43,7 @@ impl RejectionCode {
             3 => Self::DestinationInvalid,
             4 => Self::CanisterReject,
             5 => Self::CanisterError,
+            6 => Self::SysUnknown,
             _ => Self::Unknown,
         }
     }

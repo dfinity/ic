@@ -4,7 +4,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use ic_base_types::PrincipalId;
-use ic_cdk::call::{Call, Error as IcCdkCallError, RejectCode};
+use ic_cdk::call::{Call, Error as IcCdkCallError};
 use ic_nervous_system_clients::canister_status::MemoryMetrics;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -75,30 +75,8 @@ impl NnsRootCanisterClient for NnsRootCanisterClientImpl {
 
 /// Translates a failed call into the `(reject code, message)` pair that
 /// [`NnsRootCanisterClientImpl`] reports to its callers.
-///
-/// The match is deliberately exhaustive (rather than using a catch-all arm) so
-/// that a new [`IcCdkCallError`] variant forces us to revisit this mapping
-/// instead of silently classifying it as [`RejectCode::SysTransient`].
 fn into_reject_code_and_message(err: IcCdkCallError) -> (Option<i32>, String) {
-    let (code, message) = match err {
-        IcCdkCallError::CallRejected(rejected) => (
-            rejected.raw_reject_code() as i32,
-            rejected.reject_message().to_string(),
-        ),
-        // A response that cannot be decoded means the callee misbehaved.
-        IcCdkCallError::CandidDecodeFailed(err) => {
-            (RejectCode::CanisterError as i32, err.to_string())
-        }
-        // Neither of these ever left this canister, so the call may well succeed
-        // if retried.
-        IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
-        IcCdkCallError::CallPerformFailed(err) => {
-            (RejectCode::SysTransient as i32, err.to_string())
-        }
-    };
-
+    let (code, message) = ic_nervous_system_runtime::into_reject_code_and_message(err);
     (Some(code), message)
 }
 
