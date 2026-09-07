@@ -83,28 +83,29 @@ Runbook::
    nodes reports in its journal that it is halted. Record the heights of the
    checkpoints they halted at.
 13. Stop the replicas of both subnets and download the states they halted at.
-   Assemble the merged state as a new checkpoint of `R`, at the next multiple of
-   the DKG interval after the height `R` halted at, so that `R`'s own checkpoint
-   is left untouched: the canisters and canister snapshots of `M` are added to
-   those of `R`, and the result is marked as the product of a subnet merge. The
-   ingress history of `M` is deliberately not merged in: the marker makes the
-   replica re-register the ingress messages of the merged-in canisters that are
-   still in progress. Compute the block time the merged state starts from, which
-   must be larger than the times of both checkpoints, and the hash of its
-   manifest.
-14. Add the merged state to the checkpoints of `R`'s node, leaving its replica
-   stopped.
-15. Submit (and adopt) a `MergeSubnets` NNS proposal for `M` and `R`, which
+   Assemble the merged state locally, as a checkpoint at the next multiple of the
+   DKG interval after the height `R` halted at: the canisters and canister
+   snapshots of `M` are added to those of `R`, and the result is marked as the
+   product of a subnet merge. The ingress history of `M` is deliberately not
+   merged in: the marker makes the replica re-register the ingress messages of
+   the merged-in canisters that are still in progress. Compute the block time the
+   merged state starts from, which must be larger than the times of both
+   checkpoints, and the hash of its manifest.
+14. Submit (and adopt) a `MergeSubnets` NNS proposal for `M` and `R`, which
    reroutes the canister ID ranges of `M` to `R`, and then a `RecoverSubnet` NNS
    proposal for `R`, which creates a recovery CUP for `R` at the merged state,
    running a fresh DKG for `R`'s membership. Recovering a subnet that was
    instructed to halt at its next CUP replaces that instruction with a plain
    halt, so `R` stays halted for now.
-16. Start `R`'s replica and wait until it adopted the recovery CUP. Only now: a
-   replica started before the recovery CUP exists resumes from the checkpoint
-   `R` halted at, which does not hold the canisters of `M`. Then submit (and
-   adopt) an `UpdateConfigOfSubnet` NNS proposal unhalting `R` and wait until it
-   is healthy.
+15. Upload the merged state to `R`'s node, replacing the state directory holding
+   the checkpoint it halted at, and restart its replica. Deleting that checkpoint
+   is what makes the recovery unambiguous: it does not hold the canisters of `M`,
+   so a replica coming up on it would serve a state that silently lost them, and
+   the merged state is now the only one `R` can resume from. The recovery CUP of
+   step 14 has to exist by this point, as the replica is restarted right away.
+16. Wait until `R` reports the recovery CUP, i.e. it did come up on the merged
+   state. Then submit (and adopt) an `UpdateConfigOfSubnet` NNS proposal unhalting
+   `R` and wait until it is healthy.
 17. Check that `U8`, now served by `R`, kept the stable memory, the snapshot and
    (up to what an idle canister burns) the cycles balance of step 4, and that
    `UR`, which `R` hosted all along, is undisturbed and can call `U8` now that
@@ -134,10 +135,9 @@ use ic_agent::{Agent, RequestId, agent::RequestStatusResponse};
 use ic_management_canister_types::{SnapshotId, TakeCanisterSnapshotArgs};
 use ic_nns_governance_api::NnsFunction;
 use ic_recovery::registry_helper::RegistryPollingStrategy;
-use ic_recovery::ssh_helper::SshHelper;
-use ic_recovery::steps::Step;
-use ic_recovery::util::SshUser;
-use ic_recovery::{IC_STATE_DIR, Recovery, RecoveryArgs};
+use ic_recovery::steps::{Step, UploadStateAndRestartStep};
+use ic_recovery::util::{DataLocation, SshUser};
+use ic_recovery::{IC_STATE_DIR, Recovery, RecoveryArgs, STATES_METADATA};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_layout::StateLayout;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
@@ -785,8 +785,8 @@ async fn run(env: TestEnv) {
 
     // Step 13: Assemble the merged state: `R`'s state at the checkpoint it
     // halted at, with the canisters (and canister snapshots) of `M` added to it,
-    // as a new checkpoint at the next multiple of the DKG interval, so that
-    // `R`'s own checkpoint is left untouched.
+    // as a checkpoint at the next multiple of the DKG interval, which is the
+    // first height a recovery CUP for `R` can be created at.
     //
     // Taking `R`'s system metadata and subnet queues wholesale, i.e. dropping
     // `M`'s, is only sound because `M`'s were empty, which is what the merge
@@ -798,7 +798,7 @@ async fn run(env: TestEnv) {
     let merged_height = r_height + CHECKPOINT_INTERVAL;
     info!(
         logger,
-        "Step 13: Assembling the merged state as checkpoint {merged_height} of R"
+        "Step 13: Assembling the merged state as checkpoint {merged_height}"
     );
 
     // The replicas have to be stopped before their states are touched: the state
@@ -827,32 +827,39 @@ async fn run(env: TestEnv) {
             .get_public_url(),
         m_dir: env.get_path("recovery_m"),
         r_dir: env.get_path("recovery_r"),
+        merged_dir: env.get_path("recovery_merged"),
         m_node_ip: m_node.get_ip_addr(),
         r_node_ip: r_node.get_ip_addr(),
         m_height,
         r_height,
         merged_height,
     };
-    let (merged_time, state_hash) = tokio::task::spawn_blocking(move || merge.exec())
-        .await
-        .expect("the state merging task panicked");
+    let (merged_time, state_hash) = {
+        let merge = merge.clone();
+        tokio::task::spawn_blocking(move || merge.assemble())
+            .await
+            .expect("the state merging task panicked")
+    };
     info!(
         logger,
-        "Step 14 done: R holds the merged state, which hashes to {} and starts at {merged_time}",
+        "Step 13 done: the merged state hashes to {} and starts at {merged_time}",
         hex::encode(&state_hash),
     );
 
-    // Step 15: Merge `M` into `R`: reroute `M`'s canister ID ranges to `R`, and
-    // recover `R` at the merged state.
+    // Step 14: Merge `M` into `R`: reroute `M`'s canister ID ranges to `R`, and
+    // recover `R` at the merged state. Both proposals have to be executed before
+    // the merged state is uploaded in step 15, which restarts `R`'s replica: a
+    // replica that comes up before the recovery CUP exists has nothing to resume
+    // from, as the upload replaced the state it halted at.
     info!(
         logger,
-        "Step 15: Submitting the MergeSubnets proposal for M -> R"
+        "Step 14: Submitting the MergeSubnets proposal for M -> R"
     );
     let merge_registry_version =
         merge_subnets(&env, m_subnet.subnet_id, r_subnet.subnet_id, &logger).await;
     info!(
         logger,
-        "Step 15: M is merged into R as of registry version {merge_registry_version}"
+        "Step 14: M is merged into R as of registry version {merge_registry_version}"
     );
 
     // `merge_subnets` only updates the routing table: making `R` resume from the
@@ -861,7 +868,7 @@ async fn run(env: TestEnv) {
     // merged and stays available throughout.
     info!(
         logger,
-        "Step 15: Submitting the RecoverSubnet proposal for R at height {merged_height}"
+        "Step 14: Submitting the RecoverSubnet proposal for R at height {merged_height}"
     );
     let recovery_registry_version = recover_subnet(
         &env,
@@ -874,24 +881,24 @@ async fn run(env: TestEnv) {
     .await;
     info!(
         logger,
-        "Step 15 done: R is recovered at the merged state as of registry version \
+        "Step 14 done: R is recovered at the merged state as of registry version \
          {recovery_registry_version}"
     );
 
-    // Step 16: Start `R`'s replica, now that the recovery CUP exists. Starting it
-    // any earlier would have it resume from its own checkpoint, which does not
-    // hold the canisters of `M`.
-    info!(logger, "Step 16: Starting the replica of subnet R");
-    r_node
-        .block_on_bash_script_async("sudo systemctl start ic-replica")
+    // Step 15: Upload the merged state to `R`, replacing the state it halted at,
+    // and restart its replica. The recovery CUP of step 14 exists by now, so the
+    // replica comes up on the merged state.
+    info!(logger, "Step 15: Uploading the merged state to R");
+    tokio::task::spawn_blocking(move || merge.upload_merged_state())
         .await
-        .expect("failed to start the replica of subnet R");
-    // Whether `R` resumes from the merged state or from the checkpoint it halted
-    // at is not something to leave to chance: a replica that started before its
-    // node had synced the registry version holding the recovery CUP would come
-    // up on the latter, silently serving a state without the canisters of `M`.
-    // Wait for the node to report exactly the recovery CUP, so that this fails
-    // loudly and promptly instead.
+        .expect("the state uploading task panicked");
+    info!(logger, "Step 15 done: R holds the merged state");
+
+    // Step 16: Wait until `R` came up on the merged state and lift its halt.
+    //
+    // That the merged state is the only checkpoint `R` has does not by itself
+    // mean it resumed from it, so wait for the node to report exactly the
+    // recovery CUP.
     {
         let logger = logger.clone();
         let node_ip = r_node.get_ip_addr();
@@ -1080,12 +1087,20 @@ async fn run(env: TestEnv) {
 /// This is a plain struct of owned data rather than a closure over the test's
 /// state because it has to be moved onto a blocking thread: `ic-recovery` blocks
 /// on its own runtime, which a thread driving the test's runtime cannot do.
+#[derive(Clone)]
 struct MergeStateArgs {
     logger: Logger,
     admin_key_file: PathBuf,
     nns_url: Url,
     m_dir: PathBuf,
     r_dir: PathBuf,
+    /// Recovery directory holding nothing but the merged checkpoint, which is
+    /// what makes it uploadable as a whole: the upload step insists that the
+    /// directory it uploads hold a single checkpoint.
+    ///
+    /// Besides the checkpoint it holds the states metadata, which the upload step
+    /// transfers alongside it.
+    merged_dir: PathBuf,
     m_node_ip: IpAddr,
     r_node_ip: IpAddr,
     m_height: u64,
@@ -1094,9 +1109,13 @@ struct MergeStateArgs {
 }
 
 impl MergeStateArgs {
+    /// Downloads the states the two subnets halted at and assembles the merged
+    /// state from them, as a checkpoint of `merged_dir`.
+    ///
     /// Returns the block time the recovered destination subnet should start from
-    /// and the hash of the manifest of the merged state.
-    fn exec(self) -> (u64, Vec<u8>) {
+    /// and the hash of the manifest of the merged state, i.e. what the recovery
+    /// proposal of the destination subnet has to carry.
+    fn assemble(&self) -> (u64, Vec<u8>) {
         let m_recovery = self.recovery(self.m_dir.clone());
         let r_recovery = self.recovery(self.r_dir.clone());
 
@@ -1124,9 +1143,9 @@ impl MergeStateArgs {
             m_checkpoints.join(StateLayout::checkpoint_name(Height::from(self.m_height)));
         let r_checkpoint =
             r_checkpoints.join(StateLayout::checkpoint_name(Height::from(self.r_height)));
-        let merged_checkpoint = r_checkpoints.join(StateLayout::checkpoint_name(Height::from(
-            self.merged_height,
-        )));
+        let merged_checkpoint = self.merged_dir.join(IC_STATE_DIR).join("checkpoints").join(
+            StateLayout::checkpoint_name(Height::from(self.merged_height)),
+        );
 
         // The block time the recovered subnet starts from has to be larger than
         // the times of both checkpoints the merged state is assembled from.
@@ -1139,71 +1158,57 @@ impl MergeStateArgs {
         );
 
         assemble_merged_checkpoint(&r_checkpoint, &m_checkpoint, &merged_checkpoint);
-        let state_hash = manifest_root_hash(&merged_checkpoint);
 
-        self.upload_merged_checkpoint(&merged_checkpoint);
+        // The upload step of step 15 transfers the states metadata alongside the
+        // checkpoint, and rsync is given every path it transfers as an explicit
+        // source, so a missing one fails the whole transfer: take `R`'s along.
+        //
+        // It is a manifest cache, which the state manager recomputes for the
+        // checkpoints it finds whenever it is missing or does not describe them,
+        // and the heights it names here are the ones `R` held before the merge,
+        // none of which the merged state directory has. That is the same mismatch
+        // a plain subnet recovery uploads, where the metadata comes from the state
+        // that was downloaded and the checkpoint from the replay that followed.
+        std::fs::copy(
+            r_recovery.work_dir.join(IC_STATE_DIR).join(STATES_METADATA),
+            self.merged_dir.join(IC_STATE_DIR).join(STATES_METADATA),
+        )
+        .expect("failed to copy the states metadata of subnet R");
 
-        (merged_time, state_hash)
+        (merged_time, manifest_root_hash(&merged_checkpoint))
     }
 
-    /// Adds `merged_checkpoint` to the checkpoints of the destination node,
-    /// leaving its replica stopped.
+    /// Uploads the merged state to the destination node, replacing its state
+    /// directory, and restarts its replica.
     ///
-    /// Not `Recovery::get_upload_state_and_restart_step`: that one replaces the
-    /// whole state directory (and insists that it hold a single checkpoint),
-    /// which would delete the checkpoint the destination subnet halted at. That
-    /// checkpoint is meant to survive the merge untouched, so the merged state is
-    /// added next to it instead.
-    fn upload_merged_checkpoint(&self, merged_checkpoint: &Path) {
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            SshUser::Admin,
-            self.r_node_ip,
-            /* require_confirmation= */ false,
-            Some(self.admin_key_file.clone()),
-        );
-        let staging = PathBuf::from("/var/lib/ic/data/merged_state");
-
-        info!(
-            self.logger,
-            "Uploading the merged state to {}",
-            staging.display()
-        );
-        // `/var/lib/ic/data` is not writable by the SSH user, so the staging
-        // directory has to be created with `sudo` and then handed over to it, or
-        // the `rsync` below (which runs as that user) cannot write into it.
-        ssh_helper
-            .ssh(format!(
-                "set -e;
-                 sudo rm -rf {staging};
-                 sudo mkdir -p {staging};
-                 sudo chown -R {ssh_user} {staging};",
-                staging = staging.display(),
-                ssh_user = SshUser::Admin,
-            ))
-            .expect("failed to prepare the staging directory on R");
-        ssh_helper
-            .rsync(
-                format!("{}/", merged_checkpoint.display()),
-                ssh_helper.remote_path(staging.join("")),
-            )
-            .expect("failed to rsync the merged state to R");
-
-        info!(self.logger, "Installing the merged state on R");
-        let name = StateLayout::checkpoint_name(Height::from(self.merged_height));
-        ssh_helper
-            .ssh(format!(
-                "set -e;
-                 CHECKPOINTS={NODE_IC_STATE_DIR}/checkpoints;
-                 OWNER_UID=$(sudo stat -c '%u' $CHECKPOINTS);
-                 GROUP_UID=$(sudo stat -c '%g' $CHECKPOINTS);
-                 sudo mv {staging} $CHECKPOINTS/{name};
-                 sudo chown -R \"$OWNER_UID:$GROUP_UID\" $CHECKPOINTS/{name};
-                 sudo chmod -R a-w $CHECKPOINTS/{name};
-                 sudo systemctl restart setup-permissions;",
-                staging = staging.display(),
-            ))
-            .expect("failed to install the merged state on R");
+    /// This deletes the checkpoint the destination subnet halted at, which is
+    /// what makes the recovery unambiguous: that checkpoint does not hold the
+    /// canisters of the source subnet, so a replica coming up on it would serve
+    /// a state that silently lost them. With the state directory replaced, the
+    /// merged state is the only one the replica can resume from.
+    ///
+    /// The recovery CUP has to exist by the time this runs, since the replica is
+    /// restarted right away.
+    ///
+    /// `UploadStateAndRestartStep` rather than
+    /// `Recovery::get_upload_state_and_restart_step`: the latter hardcodes the
+    /// check that the uploaded checkpoint matches the height an `ic-replay` run
+    /// reported, and this merge runs no `ic-replay`. Subnet splitting builds the
+    /// step directly for the same reason.
+    fn upload_merged_state(&self) {
+        info!(self.logger, "Uploading the merged state to R");
+        UploadStateAndRestartStep {
+            logger: self.logger.clone(),
+            ssh_user: SshUser::Admin,
+            upload_method: DataLocation::Remote(self.r_node_ip),
+            work_dir: self.merged_dir.clone(),
+            data_src: self.merged_dir.join(IC_STATE_DIR),
+            require_confirmation: false,
+            key_file: Some(self.admin_key_file.clone()),
+            check_ic_replay_height: false,
+        }
+        .exec()
+        .expect("failed to upload the merged state to subnet R");
     }
 
     fn recovery(&self, dir: PathBuf) -> Recovery {
