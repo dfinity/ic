@@ -17,4 +17,6 @@ on the process that this file is part of, see
 
 ## Fixed
 
+- Failed ICP burns are now retried after successful CMC notification processing instead of only being logged.
+
 ## Security
