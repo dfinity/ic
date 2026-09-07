@@ -4339,14 +4339,14 @@ async fn test_split_neuron_succeeds() {
         .proto
         .neurons
         .get_mut(&setup.neuron_id.to_string())
-        .expect("Missing orig neuron!")
+        .unwrap()
         .latest_reward_event_participation = Some(original_participation.clone());
     let orig_neuron = setup
         .governance
         .proto
         .neurons
         .get(&setup.neuron_id.to_string())
-        .expect("Missing orig neuron!")
+        .unwrap()
         .clone();
     let split = manage_neuron::Split {
         amount_e8s: split_amount_e8s,

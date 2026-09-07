@@ -1618,20 +1618,19 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             .neurons
             .get(&neuron.id.as_ref().unwrap().to_string())
             .unwrap();
-        let public_neuron = pb_api::Neuron::from(neuron.clone());
-        if weight == 0 {
-            assert_eq!(public_neuron.latest_reward_event_participation, None);
+        let api_neuron = pb_api::Neuron::from(neuron.clone());
+        let expected_participation = if weight == 0 {
+            None
         } else {
-            let participation = public_neuron
-                .latest_reward_event_participation
-                .as_ref()
-                .unwrap();
-            assert_eq!(
-                participation.reward_event_end_timestamp_seconds,
-                Some(reward_event_end_timestamp_seconds),
-            );
-            assert_eq!(participation.reward_shares, Some(candid::Nat::from(weight)),);
-        }
+            Some(pb_api::neuron::RewardEventParticipation {
+                reward_event_end_timestamp_seconds: Some(reward_event_end_timestamp_seconds),
+                reward_shares: Some(candid::Nat::from(weight)),
+            })
+        };
+        assert_eq!(
+            api_neuron.latest_reward_event_participation, expected_participation,
+            "{neuron:#?}",
+        );
         let expected_share = i2d(weight) / dec!(5);
         let observed_reward = if weight == 3 {
             // auto-staking neuron

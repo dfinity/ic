@@ -1,13 +1,25 @@
 use super::{test_helpers::*, *};
+use crate::{
+    pb::v1::{Motion, VotingRewardsParameters},
+    types::test_helpers::NativeEnvironment,
+};
 use ic_nervous_system_canisters::cmc::FakeCmc;
-use ic_nervous_system_common::ONE_DAY_SECONDS;
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_sns_governance_api::pb::v1 as pb_api;
+use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use num_bigint::BigUint;
-use prost::Message;
 
-use crate::pb::v1::{Motion, VotingRewardsParameters};
-use crate::types::test_helpers::NativeEnvironment;
+// 1 day is the usual value, at least for SNSs that take after NNS.
+const ROUND_DURATION_SECONDS: u64 = ONE_DAY_SECONDS;
+const NEURON_STAKE_E8S: u64 = 100 * E8;
+
+lazy_static! {
+    static ref ALICE_ID: NeuronId = neuron_id(1);
+    static ref BOB_ID: NeuronId = neuron_id(2);
+    static ref CAROL_ID: NeuronId = neuron_id(3);
+    static ref FOLLOWER_ID: NeuronId = neuron_id(4);
+}
 
 fn neuron_id(id: u8) -> NeuronId {
     NeuronId { id: vec![id; 32] }
@@ -17,7 +29,7 @@ fn neuron(id: &NeuronId) -> Neuron {
     Neuron {
         id: Some(id.clone()),
         permissions: A_NEURON.permissions.clone(),
-        cached_neuron_stake_e8s: 100,
+        cached_neuron_stake_e8s: NEURON_STAKE_E8S,
         aging_since_timestamp_seconds: 1,
         dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_DAY_SECONDS)),
         voting_power_percentage_multiplier: 100,
@@ -39,41 +51,37 @@ fn proposal_data(id: u64, ballots: BTreeMap<String, Ballot>) -> ProposalData {
     }
 }
 
-fn governance_with_neurons(neurons: Vec<Neuron>) -> (Governance, u64) {
-    let round_duration_seconds = ONE_DAY_SECONDS;
+fn governance_with_neurons(neurons: Vec<Neuron>) -> Governance {
+    let previous_reward_event_timestamp_seconds = 10 * ROUND_DURATION_SECONDS;
     let mut environment = NativeEnvironment::new(Some(CanisterId::from_u64(1)));
-    environment.now = 11 * round_duration_seconds;
+    environment.now = previous_reward_event_timestamp_seconds + ROUND_DURATION_SECONDS;
     let mut proto = basic_governance_proto();
+    proto.genesis_timestamp_seconds = previous_reward_event_timestamp_seconds;
+    proto.latest_reward_event = Some(RewardEvent {
+        actual_timestamp_seconds: previous_reward_event_timestamp_seconds,
+        end_timestamp_seconds: Some(previous_reward_event_timestamp_seconds),
+        rounds_since_last_distribution: Some(0),
+        total_available_e8s_equivalent: Some(0),
+        ..Default::default()
+    });
     proto.neurons = neurons
         .into_iter()
         .map(|neuron| (neuron.id.as_ref().unwrap().to_string(), neuron))
         .collect();
     proto.parameters.as_mut().unwrap().voting_rewards_parameters = Some(VotingRewardsParameters {
-        round_duration_seconds: Some(round_duration_seconds),
+        round_duration_seconds: Some(ROUND_DURATION_SECONDS),
         reward_rate_transition_duration_seconds: Some(1),
         initial_reward_rate_basis_points: Some(0),
         final_reward_rate_basis_points: Some(0),
     });
 
-    let mut governance = Governance::new(
+    Governance::new(
         proto.try_into().unwrap(),
         Box::new(environment),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
         Box::new(FakeCmc::new()),
-    );
-    governance.env.set_time_warp(TimeWarp {
-        delta_s: i64::try_from(round_duration_seconds).unwrap(),
-    });
-
-    (governance, round_duration_seconds)
-}
-
-fn reward_shares(neuron: &Neuron) -> Option<BigUint> {
-    neuron
-        .latest_reward_event_participation
-        .as_ref()
-        .map(|participation| BigUint::from_bytes_be(&participation.reward_shares))
+    )
 }
 
 fn cascaded_ballots(
@@ -100,33 +108,35 @@ fn cascaded_ballots(
                 Ballot {
                     vote: Vote::Unspecified as i32,
                     voting_power: *voting_power,
-                    cast_timestamp_seconds: 1,
+                    cast_timestamp_seconds: 0,
                 },
             )
         })
         .collect::<BTreeMap<_, _>>();
 
+    // Alice casts her vote. Follower follows.
     Governance::cast_vote_and_cascade_follow(
         &ProposalId { id: proposal_id },
         alice_id,
         alice_vote,
         motion_function_id,
         &function_followee_index,
-        &btreemap! {},
+        &btreemap! {}, // topic_follower_index
         neurons,
-        1,
+        1, // now_seconds
         &mut ballots,
         Topic::Governance,
     );
+    // Bob casts his vote.
     Governance::cast_vote_and_cascade_follow(
         &ProposalId { id: proposal_id },
         bob_id,
         bob_vote,
         motion_function_id,
         &function_followee_index,
-        &btreemap! {},
+        &btreemap! {}, // topic_follower_index
         neurons,
-        1,
+        1, // now_seconds
         &mut ballots,
         Topic::Governance,
     );
@@ -135,22 +145,18 @@ fn cascaded_ballots(
 }
 
 #[test]
-fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
+fn test_records_exact_reward_shares_when_native_rewards_are_zero() {
     // Step 1: Prepare neurons and three proposals. The follower's ballots are populated through
     // the production cascade implementation.
-    let alice_id = neuron_id(1);
-    let bob_id = neuron_id(2);
-    let carol_id = neuron_id(3);
-    let follower_id = neuron_id(4);
-    let mut follower = neuron(&follower_id);
+    let mut follower = neuron(&FOLLOWER_ID);
     let motion_function_id = u64::from(&Action::Motion(Motion::default()));
     follower.followees = btreemap! {
-        motion_function_id => Followees { followees: vec![alice_id.clone()] },
+        motion_function_id => Followees { followees: vec![ALICE_ID.clone()] },
     };
-    let (mut governance, _) = governance_with_neurons(vec![
-        neuron(&alice_id),
-        neuron(&bob_id),
-        neuron(&carol_id),
+    let mut governance = governance_with_neurons(vec![
+        neuron(&ALICE_ID),
+        neuron(&BOB_ID),
+        neuron(&CAROL_ID),
         follower,
     ]);
     // i2d(ballot.voting_power) currently requires each voting power to fit in i64,
@@ -160,14 +166,14 @@ fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
         1,
         &governance.proto.neurons,
         &btreemap! {
-            alice_id.clone() => maximum_reward_share_contribution,
-            bob_id.clone() => 20,
-            carol_id.clone() => 30,
-            follower_id.clone() => 40,
+            ALICE_ID.clone() => maximum_reward_share_contribution,
+            BOB_ID.clone() => 20 * E8,
+            CAROL_ID.clone() => 30 * E8,
+            FOLLOWER_ID.clone() => 40 * E8,
         },
-        &alice_id,
-        &bob_id,
-        &follower_id,
+        &ALICE_ID,
+        &BOB_ID,
+        &FOLLOWER_ID,
         Vote::Yes,
         Vote::No,
     );
@@ -175,14 +181,14 @@ fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
         2,
         &governance.proto.neurons,
         &btreemap! {
-            alice_id.clone() => maximum_reward_share_contribution,
-            bob_id.clone() => 25,
-            carol_id.clone() => 35,
-            follower_id.clone() => 45,
+            ALICE_ID.clone() => maximum_reward_share_contribution,
+            BOB_ID.clone() => 25 * E8,
+            CAROL_ID.clone() => 35 * E8,
+            FOLLOWER_ID.clone() => 45 * E8,
         },
-        &alice_id,
-        &bob_id,
-        &follower_id,
+        &ALICE_ID,
+        &BOB_ID,
+        &FOLLOWER_ID,
         Vote::No,
         Vote::Yes,
     );
@@ -190,14 +196,14 @@ fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
         3,
         &governance.proto.neurons,
         &btreemap! {
-            alice_id.clone() => 2,
-            bob_id.clone() => 0,
-            carol_id.clone() => 0,
-            follower_id.clone() => 0,
+            ALICE_ID.clone() => NEURON_STAKE_E8S,
+            BOB_ID.clone() => 30 * E8,
+            CAROL_ID.clone() => 40 * E8,
+            FOLLOWER_ID.clone() => 50 * E8,
         },
-        &alice_id,
-        &bob_id,
-        &follower_id,
+        &ALICE_ID,
+        &BOB_ID,
+        &FOLLOWER_ID,
         Vote::Yes,
         Vote::No,
     );
@@ -232,32 +238,32 @@ fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
 
     for (neuron_id, expected_shares) in [
         (
-            &alice_id,
-            Some(BigUint::from(u64::MAX) + BigUint::from(1_u8)),
+            &*ALICE_ID,
+            Some(
+                BigUint::from(maximum_reward_share_contribution) * 2_u8
+                    + BigUint::from(NEURON_STAKE_E8S),
+            ),
         ),
-        (&bob_id, Some(BigUint::from(45_u8))),
-        (&carol_id, None),
-        (&follower_id, Some(BigUint::from(85_u8))),
+        (&*BOB_ID, Some(BigUint::from(75 * E8))),
+        (&*CAROL_ID, None),
+        (&*FOLLOWER_ID, Some(BigUint::from(135 * E8))),
     ] {
         let neuron = governance
             .proto
             .neurons
             .get(&neuron_id.to_string())
             .unwrap();
-        let participated = expected_shares.is_some();
-        assert_eq!(reward_shares(neuron), expected_shares);
+        let expected_participation =
+            expected_shares.map(|reward_shares| RewardEventParticipation {
+                reward_event_end_timestamp_seconds: event_timestamp_seconds,
+                reward_shares: reward_shares.to_bytes_be(),
+            });
+        assert_eq!(
+            neuron.latest_reward_event_participation,
+            expected_participation,
+        );
         assert_eq!(neuron.maturity_e8s_equivalent, 0);
         assert_eq!(neuron.staked_maturity_e8s_equivalent.unwrap_or_default(), 0);
-        if participated {
-            assert_eq!(
-                neuron
-                    .latest_reward_event_participation
-                    .as_ref()
-                    .unwrap()
-                    .reward_event_end_timestamp_seconds,
-                event_timestamp_seconds,
-            );
-        }
     }
     assert!(
         governance
@@ -289,19 +295,24 @@ fn test_records_exact_canonical_reward_shares_when_native_rewards_are_zero() {
 }
 
 #[test]
-fn test_replaces_only_positive_participants_and_retains_older_event_tags() {
-    // Step 1: Prepare two neurons and an event in which only Alice participates.
-    let alice_id = neuron_id(1);
-    let bob_id = neuron_id(2);
-    let (mut governance, round_duration_seconds) =
-        governance_with_neurons(vec![neuron(&alice_id), neuron(&bob_id)]);
+fn test_updates_only_participants_in_each_reward_event() {
+    // Step 1: Prepare the world: two neurons and a voting reward round in which both participate.
+    let mut governance = governance_with_neurons(vec![neuron(&ALICE_ID), neuron(&BOB_ID)]);
     governance.proto.proposals.insert(
         1,
         proposal_data(
             1,
             btreemap! {
-                alice_id.to_string() => Ballot { vote: Vote::Yes as i32, voting_power: 10, ..Default::default() },
-                bob_id.to_string() => Ballot { vote: Vote::Unspecified as i32, voting_power: 20, ..Default::default() },
+                ALICE_ID.to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power: 10 * E8,
+                    cast_timestamp_seconds: 1,
+                },
+                BOB_ID.to_string() => Ballot {
+                    vote: Vote::No as i32,
+                    voting_power: 20 * E8,
+                    cast_timestamp_seconds: 1,
+                },
             },
         ),
     );
@@ -310,68 +321,87 @@ fn test_replaces_only_positive_participants_and_retains_older_event_tags() {
         .latest_reward_event()
         .end_timestamp_seconds
         .unwrap();
+    assert_eq!(
+        governance
+            .proto
+            .neurons
+            .get(&BOB_ID.to_string())
+            .unwrap()
+            .latest_reward_event_participation,
+        Some(RewardEventParticipation {
+            reward_event_end_timestamp_seconds: event_1_timestamp_seconds,
+            reward_shares: BigUint::from(20 * E8).to_bytes_be(),
+        }),
+    );
 
-    // Step 2: Advance one event and settle a proposal in which only Bob participates.
+    // Step 2: Run code under test. Here, another voting reward round occurs, except this time,
+    // only Bob participates.
     governance.env.set_time_warp(TimeWarp {
-        delta_s: i64::try_from(round_duration_seconds).unwrap(),
+        delta_s: i64::try_from(ROUND_DURATION_SECONDS).unwrap(),
     });
     governance.proto.proposals.insert(
         2,
         proposal_data(
             2,
             btreemap! {
-                alice_id.to_string() => Ballot { vote: Vote::Unspecified as i32, voting_power: 30, ..Default::default() },
-                bob_id.to_string() => Ballot { vote: Vote::No as i32, voting_power: 40, ..Default::default() },
+                ALICE_ID.to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power: 30 * E8,
+                    cast_timestamp_seconds: 0,
+                },
+                BOB_ID.to_string() => Ballot {
+                    vote: Vote::No as i32,
+                    voting_power: 40 * E8,
+                    cast_timestamp_seconds: 2,
+                },
             },
         ),
     );
     governance.distribute_rewards(Tokens::from_e8s(0));
 
-    // Step 3: Alice retains event 1; Bob is tagged with event 2.
+    // Step 3: Verify results: Bob's participation gets updated. Alice's does not.
     let event_2_timestamp_seconds = governance
         .latest_reward_event()
         .end_timestamp_seconds
         .unwrap();
-    assert_ne!(event_1_timestamp_seconds, event_2_timestamp_seconds);
-    let alice = governance.proto.neurons.get(&alice_id.to_string()).unwrap();
-    let bob = governance.proto.neurons.get(&bob_id.to_string()).unwrap();
-    assert_eq!(reward_shares(alice), Some(BigUint::from(10_u8)));
     assert_eq!(
+        event_2_timestamp_seconds,
+        event_1_timestamp_seconds + ROUND_DURATION_SECONDS,
+    );
+    let alice = governance.proto.neurons.get(&ALICE_ID.to_string()).unwrap();
+    let bob = governance.proto.neurons.get(&BOB_ID.to_string()).unwrap();
+    assert_ne!(
         alice
             .latest_reward_event_participation
             .as_ref()
-            .unwrap()
-            .reward_event_end_timestamp_seconds,
-        event_1_timestamp_seconds,
+            .map(|participation| participation.reward_event_end_timestamp_seconds),
+        Some(event_2_timestamp_seconds),
     );
-    assert_eq!(reward_shares(bob), Some(BigUint::from(40_u8)));
     assert_eq!(
-        bob.latest_reward_event_participation
-            .as_ref()
-            .unwrap()
-            .reward_event_end_timestamp_seconds,
-        event_2_timestamp_seconds,
+        bob.latest_reward_event_participation,
+        Some(RewardEventParticipation {
+            reward_event_end_timestamp_seconds: event_2_timestamp_seconds,
+            reward_shares: BigUint::from(40 * E8).to_bytes_be(),
+        }),
     );
 }
 
 #[test]
 fn test_neuron_apis_and_pb_api_conversion_preserve_participation() {
     // Step 1: Prepare.
-    let alice_id = neuron_id(1);
-    let bob_id = neuron_id(2);
     let reward_shares = BigUint::from(u64::MAX) + BigUint::from(1_u8);
     let participation = RewardEventParticipation {
         reward_event_end_timestamp_seconds: 123,
         reward_shares: reward_shares.to_bytes_be(),
     };
-    let mut alice = neuron(&alice_id);
+    let mut alice = neuron(&ALICE_ID);
     alice.latest_reward_event_participation = Some(participation.clone());
-    let (governance, _) = governance_with_neurons(vec![alice, neuron(&bob_id)]);
+    let governance = governance_with_neurons(vec![alice, neuron(&BOB_ID)]);
 
     // Step 2: Run.
     let fetched_alice = governance
         .get_neuron(GetNeuron {
-            neuron_id: Some(alice_id.clone()),
+            neuron_id: Some(ALICE_ID.clone()),
         })
         .result
         .unwrap()
@@ -384,7 +414,7 @@ fn test_neuron_apis_and_pb_api_conversion_preserve_participation() {
         })
         .neurons
         .into_iter()
-        .find(|neuron| neuron.id.as_ref() == Some(&alice_id))
+        .find(|neuron| neuron.id.as_ref() == Some(&ALICE_ID))
         .unwrap();
 
     // Step 3: Verify.
@@ -397,59 +427,16 @@ fn test_neuron_apis_and_pb_api_conversion_preserve_participation() {
         Some(participation.clone()),
     );
 
-    let public_alice = pb_api::Neuron::from(listed_alice);
-    let public_participation = public_alice
-        .latest_reward_event_participation
-        .as_ref()
-        .unwrap();
+    let api_alice = pb_api::Neuron::from(listed_alice);
     assert_eq!(
-        public_participation.reward_event_end_timestamp_seconds,
-        Some(123),
+        api_alice.latest_reward_event_participation,
+        Some(pb_api::neuron::RewardEventParticipation {
+            reward_event_end_timestamp_seconds: Some(123),
+            reward_shares: Some(candid::Nat(reward_shares)),
+        }),
     );
     assert_eq!(
-        public_participation.reward_shares,
-        Some(candid::Nat(reward_shares)),
-    );
-    assert_eq!(
-        Neuron::from(public_alice).latest_reward_event_participation,
+        Neuron::from(api_alice).latest_reward_event_participation,
         Some(participation),
     );
-}
-
-#[test]
-fn test_legacy_neuron_decodes_without_participation() {
-    // Step 1: Define the relevant subsets of the previous stable-state protobuf schema.
-    #[derive(Clone, PartialEq, Message)]
-    struct LegacyNeuron {
-        #[prost(message, optional, tag = "1")]
-        id: Option<NeuronId>,
-        #[prost(uint64, tag = "3")]
-        cached_neuron_stake_e8s: u64,
-    }
-    #[derive(Clone, PartialEq, Message)]
-    struct LegacyGovernance {
-        #[prost(btree_map = "string, message", tag = "1")]
-        neurons: BTreeMap<String, LegacyNeuron>,
-    }
-    let neuron_id = neuron_id(7);
-    let legacy_neuron = LegacyNeuron {
-        id: Some(neuron_id.clone()),
-        cached_neuron_stake_e8s: 123_456,
-    };
-    let legacy_governance = LegacyGovernance {
-        neurons: btreemap! {
-            neuron_id.to_string() => legacy_neuron,
-        },
-    };
-    let encoded = legacy_governance.encode_to_vec();
-
-    // Step 2: Decode the legacy stable state with the current Governance schema.
-    let decoded = GovernanceProto::decode(encoded.as_slice()).unwrap();
-    let decoded_neuron = &decoded.neurons[&neuron_id.to_string()];
-
-    // Step 3: Verify old neuron fields survive the real Governance.neurons path and the new field
-    // has protobuf absence semantics.
-    assert_eq!(decoded_neuron.id, Some(neuron_id));
-    assert_eq!(decoded_neuron.cached_neuron_stake_e8s, 123_456);
-    assert_eq!(decoded_neuron.latest_reward_event_participation, None);
 }

@@ -141,7 +141,8 @@ pub struct Neuron {
     /// The neuron's positive reward shares from its most recent participating reward event,
     /// tagged with that event's end timestamp. An absent participation or a timestamp that differs
     /// from `latest_reward_event.end_timestamp_seconds` means zero shares for that event. A neuron
-    /// may retain participation from an older event.
+    /// might have a stale value here from an earlier voting reward event because old values are not
+    /// cleaned up.
     pub latest_reward_event_participation: Option<neuron::RewardEventParticipation>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
@@ -241,7 +242,7 @@ pub mod neuron {
     pub struct RewardEventParticipation {
         /// The end timestamp of the reward event that calculated these shares.
         pub reward_event_end_timestamp_seconds: Option<u64>,
-        /// The non-negative sum of the neuron's canonical ballot voting power over all
+        /// The sum of the neuron's voting power over all
         /// reward-eligible Yes and No ballots in proposals settled by this event.
         pub reward_shares: Option<candid::Nat>,
     }
