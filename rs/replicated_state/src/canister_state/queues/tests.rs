@@ -4050,12 +4050,13 @@ mod mainnet_compatibility_tests {
             assert_eq!(make_refund_pool(), refunds);
         }
 
-        /// The pool's metrics are not persisted, but a pool loaded from a checkpoint
-        /// counts the refunds it holds as pushed, rather than starting over from zero.
+        /// The pool's metrics are persisted, so pushes merged into a single pooled
+        /// refund are still counted separately after a round trip.
         #[test]
-        fn deserialized_pool_counts_loaded_refunds_as_pushed() {
+        fn roundtrip_preserves_pool_metrics() {
             let refund_pool = make_refund_pool();
             // Three pushes, merged into the two refunds that are persisted.
+            assert_eq!(2, refund_pool.len());
             assert_eq!(3, refund_pool.metrics().pushed_refunds);
             assert_eq!(Cycles::new(500), refund_pool.metrics().pushed_cycles);
 
@@ -4067,7 +4068,7 @@ mod mainnet_compatibility_tests {
             .unwrap();
 
             assert_eq!(refund_pool, deserialized);
-            assert_eq!(2, deserialized.metrics().pushed_refunds);
+            assert_eq!(3, deserialized.metrics().pushed_refunds);
             assert_eq!(Cycles::new(500), deserialized.metrics().pushed_cycles);
         }
     }

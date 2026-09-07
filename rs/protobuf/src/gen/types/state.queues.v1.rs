@@ -138,6 +138,13 @@ pub struct Refund {
 pub struct Refunds {
     #[prost(message, repeated, tag = "1")]
     pub refunds: ::prost::alloc::vec::Vec<Refund>,
+    /// Metrics: the number of refunds ever pushed into the pool and the cycles they
+    /// held in total. Persisted so that refunds merged into a single pooled refund
+    /// are still counted separately after loading a checkpoint.
+    #[prost(uint64, tag = "2")]
+    pub pushed_refunds: u64,
+    #[prost(message, optional, tag = "3")]
+    pub pushed_cycles: ::core::option::Option<Cycles>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StreamMessage {

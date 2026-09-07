@@ -247,11 +247,11 @@ impl ReplicatedStateMetrics {
             ),
             pooled_refunds: metrics_registry.int_counter(
                 "replicated_state_pooled_refunds_total",
-                "Number of anonymous refunds pushed into the refund pool. Not persisted, so it restarts from the number of refunds in the pool loaded on a replica restart or a state sync.",
+                "Number of anonymous refunds ever pushed into the refund pool. Part of the replicated state, so it may rewind to the value at the loaded checkpoint on a replica restart or a state sync.",
             ),
             pooled_refunds_cycles: metrics_registry.counter(
                 "replicated_state_pooled_refunds_cycles_total",
-                "Total value in Cycles of the anonymous refunds pushed into the refund pool. Not persisted, so it restarts from the cycles in the pool loaded on a replica restart or a state sync.",
+                "Total value in Cycles of the anonymous refunds ever pushed into the refund pool. Part of the replicated state, so it may rewind to the value at the loaded checkpoint on a replica restart or a state sync.",
             ),
             total_canister_balance: metrics_registry.gauge(
                 "scheduler_canister_balance_cycles_total",
@@ -683,8 +683,8 @@ impl ReplicatedStateMetrics {
             .set(state.refunds().total().get() as f64);
 
         // Cumulative counts, maintained by the pool itself, so `reset()` and count
-        // back up rather than incrementing (they may go down on a replica restart or
-        // a state sync, which replace the pool along with its metrics).
+        // back up rather than incrementing (they may rewind to the value at the
+        // loaded checkpoint on a replica restart or a state sync).
         let refund_pool_metrics = state.refunds().metrics();
         self.pooled_refunds.reset();
         self.pooled_refunds

@@ -1,4 +1,4 @@
-use super::refunds::RefundPool;
+use super::refunds::{RefundPool, RefundPoolMetrics};
 use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::queues::v1::Refunds;
@@ -156,8 +156,13 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 
 impl From<&RefundPool> for pb_queues::Refunds {
     fn from(item: &RefundPool) -> Self {
+        let metrics = item.metrics();
         Refunds {
             refunds: item.iter().map(|refund| refund.into()).collect(),
+            pushed_refunds: metrics.pushed_refunds,
+            // Left unset if zero, so that an empty pool serializes to an empty proto
+            // (and is thus omitted from the checkpoint).
+            pushed_cycles: (!metrics.pushed_cycles.is_zero()).then(|| metrics.pushed_cycles.into()),
         }
     }
 }
@@ -183,6 +188,18 @@ impl TryFrom<(pb_queues::Refunds, &dyn CheckpointLoadingMetrics)> for RefundPool
                 ));
             }
         }
+
+        // The metrics cover all refunds ever pushed, including those already merged
+        // into the refunds loaded above, so take them as persisted.
+        pool.set_metrics(RefundPoolMetrics {
+            pushed_refunds: item.pushed_refunds,
+            pushed_cycles: item
+                .pushed_cycles
+                .map(Cycles::try_from)
+                .transpose()?
+                .unwrap_or_default(),
+        });
+
         Ok(pool)
     }
 }

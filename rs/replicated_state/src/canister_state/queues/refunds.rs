@@ -14,7 +14,7 @@ mod tests;
 ///
 /// Refunds are ordered by amount (larger amounts first). Ties are broken by
 /// recipient (smaller IDs first).
-#[derive(Clone, Debug, Default, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct RefundPool {
     /// Refund priority queue. Holds all refunds, ordered by amount.
     ///
@@ -29,16 +29,15 @@ pub struct RefundPool {
     #[validate_eq(Ignore)]
     total: Cycles,
 
-    /// Transient: replica-local metrics, not part of the pool's contents (see
-    /// [`Self::eq()`]). Not persisted across checkpoints, so the refunds of a pool
-    /// loaded from one are counted as pushed, rather than starting over from zero.
-    #[validate_eq(Ignore)]
+    /// Metrics only, with no bearing on the pooled refunds. Persisted, so that
+    /// refunds merged into a single pooled refund are still counted separately
+    /// after loading a checkpoint.
     metrics: RefundPoolMetrics,
 }
 
 /// Cumulative count of the refunds pushed into a [`RefundPool`] and of the cycles
 /// they held.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
 pub struct RefundPoolMetrics {
     /// Number of refunds pushed into the pool.
     pub pushed_refunds: u64,
@@ -46,17 +45,6 @@ pub struct RefundPoolMetrics {
     /// Cycles held by those refunds in total.
     pub pushed_cycles: Cycles,
 }
-
-/// Compares the pooled refunds only: [`RefundPool::metrics()`] is replica-local,
-/// not part of the pool's contents. `amounts` and `total` are both derived from
-/// `refunds`.
-impl PartialEq for RefundPool {
-    fn eq(&self, other: &Self) -> bool {
-        self.refunds == other.refunds
-    }
-}
-
-impl Eq for RefundPool {}
 
 impl RefundPool {
     pub fn new() -> Self {
@@ -138,6 +126,11 @@ impl RefundPool {
     /// the cycles they held in total.
     pub fn metrics(&self) -> RefundPoolMetrics {
         self.metrics
+    }
+
+    /// Sets the pool's metrics, when loading it from a checkpoint.
+    pub(crate) fn set_metrics(&mut self, metrics: RefundPoolMetrics) {
+        self.metrics = metrics;
     }
 
     /// Computes the total amount of pooled cycles.

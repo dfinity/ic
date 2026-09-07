@@ -207,10 +207,10 @@ fn test_metrics_count_every_push() {
     assert_eq!(Cycles::new(3500), pool.metrics().pushed_cycles);
 }
 
-/// The pool's metrics are replica-local, not part of its contents, so pools holding
-/// the same refunds are equal regardless of how they were filled.
+/// The pool's metrics are part of it, so two pools holding the same refunds differ
+/// if they were filled by a different number of pushes.
 #[test]
-fn test_metrics_are_not_part_of_equality() {
+fn test_metrics_are_part_of_equality() {
     let mut pool = RefundPool::new();
     pool.add(CanisterId::from(1), Cycles::new(1000));
     pool.add(CanisterId::from(1), Cycles::new(500));
@@ -218,7 +218,11 @@ fn test_metrics_are_not_part_of_equality() {
     let mut same_contents = RefundPool::new();
     same_contents.add(CanisterId::from(1), Cycles::new(1500));
 
+    assert_eq!(
+        collect_iter(&pool).as_slice(),
+        collect_iter(&same_contents).as_slice()
+    );
     assert_eq!(1, same_contents.metrics().pushed_refunds);
     assert_eq!(2, pool.metrics().pushed_refunds);
-    assert_eq!(same_contents, pool);
+    assert_ne!(same_contents, pool);
 }

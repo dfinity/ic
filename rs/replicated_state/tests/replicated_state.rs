@@ -1436,10 +1436,11 @@ fn online_split() {
     canister_state.system_state.task_queue = Default::default();
     expected.put_canister_state(canister_state_arc);
 
-    // Streams, subnet queues and refunds should be empty.
+    // Streams, subnet queues and refunds should be empty. Subnet B starts off with
+    // a brand new refund pool, so its metrics start from zero, too.
     expected.take_streams();
     expected.put_subnet_queues(Default::default());
-    expected.take_refunds(|_| true);
+    expected.put_refunds(Default::default());
 
     // And the split marker should be set.
     expected.metadata.subnet_split_from = Some(SUBNET_A);

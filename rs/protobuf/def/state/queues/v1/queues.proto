@@ -117,6 +117,11 @@ message Refund {
 
 message Refunds {
   repeated Refund refunds = 1;
+  // Metrics: the number of refunds ever pushed into the pool and the cycles they
+  // held in total. Persisted so that refunds merged into a single pooled refund
+  // are still counted separately after loading a checkpoint.
+  uint64 pushed_refunds = 2;
+  Cycles pushed_cycles = 3;
 }
 
 message StreamMessage {

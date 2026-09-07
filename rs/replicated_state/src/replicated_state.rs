@@ -1896,6 +1896,10 @@ pub mod testing {
         /// Testing only: Replaces `self.subnet_queues` with `subnet_queues`
         fn put_subnet_queues(&mut self, subnet_queues: CanisterQueues);
 
+        /// Testing only: Replaces `self.refunds` with `refunds`. As opposed to
+        /// [`ReplicatedState::take_refunds()`], this also resets the pool's metrics.
+        fn put_refunds(&mut self, refunds: RefundPool);
+
         /// Testing only: Replaces `SystemMetadata::streams` with the provided
         /// ones.
         fn with_streams(&mut self, streams: StreamMap);
@@ -1920,6 +1924,10 @@ pub mod testing {
 
         fn put_subnet_queues(&mut self, subnet_queues: CanisterQueues) {
             self.subnet_queues = subnet_queues;
+        }
+
+        fn put_refunds(&mut self, refunds: RefundPool) {
+            self.refunds = refunds;
         }
 
         fn with_streams(&mut self, streams: StreamMap) {
