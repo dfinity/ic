@@ -44,8 +44,8 @@ proxies:
       - regex: guestos_version
         actions:
           - keep
-      # Replica binary version metric.
-      - regex: binary_version
+      # Replica version metric.
+      - regex: replica_version
         actions:
           - keep
       # Clock synchronization status.

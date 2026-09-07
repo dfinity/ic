@@ -80,15 +80,15 @@ def icos_build(
             tags = ["manual"],
         )
 
-    # A separate copy of the version file installed as binary_version.txt in
-    # the rootfs, holding the replica binary version. During a fast upgrade,
-    # the overlay ships a new version and the file will be mounted over.
-    # version.txt above is not mounted over so it can be used to read the base
-    # GuestOS version.
+    # A separate copy of the version file installed as replica_version.txt in
+    # the rootfs, holding the version of the replica and related binaries.
+    # During a fast upgrade, the overlay ships a new version and the file will
+    # be mounted over. version.txt above is not mounted over so it can be used
+    # to read the base GuestOS version.
     copy_file(
-        name = "copy_binary_version_txt",
+        name = "copy_replica_version_txt",
         src = ic_version,
-        out = "binary_version.txt",
+        out = "replica_version.txt",
         allow_symlink = True,
         visibility = ["//visibility:public"],
         tags = ["manual"],
@@ -96,9 +96,9 @@ def icos_build(
 
     if upgrades:
         native.genrule(
-            name = "test_binary_version_txt",
-            srcs = [":copy_binary_version_txt"],
-            outs = ["binary_version-test.txt"],
+            name = "test_replica_version_txt",
+            srcs = [":copy_replica_version_txt"],
+            outs = ["replica_version-test.txt"],
             cmd = "sed -e 's/.*/&-test/' < $< > $@",
             visibility = ["//visibility:public"],
             tags = ["manual"],
@@ -238,7 +238,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         partition_root_hash = partition_root + "-hash"
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
         version_txt = "version" + test_suffix + ".txt"
-        binary_version_txt = "binary_version" + test_suffix + ".txt"
+        replica_version_txt = "replica_version" + test_suffix + ".txt"
         boot_args = "boot" + test_suffix + "_args"
         launch_measurements = "launch-measurements" + test_suffix + ".json"
 
@@ -253,7 +253,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                 k: v
                 for k, v in (image_deps["rootfs"].items() + [
                     (version_txt, "/opt/ic/share/version.txt:0644"),
-                    (binary_version_txt, "/opt/ic/share/binary_version.txt:0644"),
+                    (replica_version_txt, "/opt/ic/share/replica_version.txt:0644"),
                 ])
             },
             target_compatible_with = ["@platforms//os:linux"],

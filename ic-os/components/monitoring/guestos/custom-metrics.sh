@@ -10,7 +10,7 @@ source /opt/ic/bin/config.sh
 
 MICROCODE_FILE="/sys/devices/system/cpu/cpu0/microcode/version"
 GUESTOS_VERSION_FILE="/opt/ic/share/version.txt"
-BINARY_VERSION_FILE="/opt/ic/share/binary_version.txt"
+REPLICA_VERSION_FILE="/opt/ic/share/replica_version.txt"
 STATE_ROOT_PATH="/var/lib/ic"
 
 function update_guestos_version_metric() {
@@ -29,19 +29,19 @@ function update_guestos_version_metric() {
         "gauge"
 }
 
-function update_binary_version_metric() {
-    if [ -r ${BINARY_VERSION_FILE} ]; then
-        BINARY_VERSION=$(cat ${BINARY_VERSION_FILE})
-        BINARY_VERSION_OK=1
+function update_replica_version_metric() {
+    if [ -r ${REPLICA_VERSION_FILE} ]; then
+        REPLICA_VERSION=$(cat ${REPLICA_VERSION_FILE})
+        REPLICA_VERSION_OK=1
     else
-        BINARY_VERSION="unknown"
-        BINARY_VERSION_OK=0
+        REPLICA_VERSION="unknown"
+        REPLICA_VERSION_OK=0
     fi
-    write_log "Binary version ${BINARY_VERSION}"
-    write_metric_attr "binary_version" \
-        "{version=\"${BINARY_VERSION}\"}" \
-        "${BINARY_VERSION_OK}" \
-        "Replica binary version string" \
+    write_log "Replica version ${REPLICA_VERSION}"
+    write_metric_attr "replica_version" \
+        "{version=\"${REPLICA_VERSION}\"}" \
+        "${REPLICA_VERSION_OK}" \
+        "Replica version string" \
         "gauge"
 }
 
@@ -94,7 +94,7 @@ function update_tee_metrics() {
 
 function main() {
     update_guestos_version_metric
-    update_binary_version_metric
+    update_replica_version_metric
     update_guestos_boot_action_metric
     update_config_version_metric
     update_tee_metrics
