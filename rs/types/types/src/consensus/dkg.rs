@@ -4,7 +4,6 @@ use super::*;
 use crate::{
     ReplicaVersion,
     artifact::PbArtifact,
-    backwards_compatibility::BackwardsCompatible,
     crypto::threshold_sig::ni_dkg::{
         NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
         config::NiDkgConfig,
@@ -453,7 +452,7 @@ impl From<&DkgSummary> for pb::Summary {
             // otherwise decode the empty repeated field above into `Some(vec![])` and hash its
             // length prefix, where this version hashes nothing. It may only stop being set once no
             // replica version that reads it is deployed any more.
-            transcripts_for_remote_subnets_removed: Some(true),
+            transcripts_for_remote_subnets_removed: true,
             remote_dkg_attempts: build_remote_dkg_attempts_vec(&summary.remote_dkg_attempts),
             subnet_splitting_status: Some(pb::summary::SubnetSplittingStatus::from(
                 summary.subnet_splitting_status,
