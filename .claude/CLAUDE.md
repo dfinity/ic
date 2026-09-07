@@ -8,11 +8,13 @@ devcontainer) the checkout is mounted at the same absolute path as on the host
 Never manually edit `ci/container/TAG`, `ci/container/ic-dev.digest` or
 `ci/container/ic-build.digest`. They are written only by the
 `container-autobuild.yml` GitHub Actions workflow, which builds the new
-dev-container image and pushes it to the registry *before* the tag and digest changes
-takes effect. Hand-editing it points the tag at an image that was never built
-or published, breaking CI for everyone. If the dev container image genuinely
-needs to change (e.g. `ci/container/Dockerfile` was edited), let that workflow
-bump `TAG` — don't do it in your commit.
+dev-container image and pushes it to the registry *before* the new tag and
+digests take effect. A hand-edited `TAG` names an image that was never built or
+published, and a hand-edited `.digest` names content the registry does not
+serve, so `container-run.sh` refuses to run; either way CI breaks for everyone.
+If the dev container image genuinely needs to change (e.g.
+`ci/container/Dockerfile` was edited), let that workflow bump `TAG` and the
+digests — don't do it in your commit.
 
 # Rust
 
