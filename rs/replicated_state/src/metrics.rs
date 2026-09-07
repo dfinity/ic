@@ -246,11 +246,11 @@ impl ReplicatedStateMetrics {
             ),
             pooled_refunds: metrics_registry.int_gauge(
                 "replicated_state_pooled_refunds_total",
-                "Number of anonymous refunds ever pushed into the refund pool. Part of the replicated state, so it may rewind to the value at the loaded checkpoint on a replica restart or a state sync.",
+                "Number of anonymous refunds ever pushed into the refund pool.",
             ),
             pooled_refunds_cycles: metrics_registry.gauge(
                 "replicated_state_pooled_refunds_cycles_total",
-                "Total value in Cycles of the anonymous refunds ever pushed into the refund pool. Part of the replicated state, so it may rewind to the value at the loaded checkpoint on a replica restart or a state sync.",
+                "Total value in Cycles of the anonymous refunds ever pushed into the refund pool.",
             ),
             total_canister_balance: metrics_registry.gauge(
                 "scheduler_canister_balance_cycles_total",

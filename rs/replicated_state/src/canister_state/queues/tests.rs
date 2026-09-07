@@ -3780,10 +3780,13 @@ fn time_out_messages_produces_refunds() {
     );
 }
 
-/// Tests for the `RefundPool` protobuf conversions. Deliberately outside
-/// `mainnet_compatibility_tests`, whose `serialize` / `deserialize` test names are
-/// used as filters by `queues_compatibility_test`, which requires that they match
-/// exactly one test each.
+/// Tests for the `RefundPool` protobuf conversions.
+///
+/// Kept out of `mainnet_compatibility_tests` because `queues_compatibility_test`
+/// runs the tests of `refunds_test` by passing `refunds_test::serialize` and
+/// `refunds_test::deserialize` to the test binary as name filters; and asserts that
+/// exactly one test ran. As these filters match on substrings, any other test in
+/// that module whose name contains `serialize` would break it.
 #[cfg(test)]
 mod refund_pool_proto_tests {
     use super::*;
