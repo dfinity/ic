@@ -139,10 +139,7 @@ use ic_recovery::steps::Step;
 use ic_recovery::util::SshUser;
 use ic_recovery::{IC_STATE_DIR, Recovery, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_layout::{
-    CANISTER_STATES_DIR, SNAPSHOTS_DIR, SUBNET_MERGED_FILE, StateLayout,
-    UNVERIFIED_CHECKPOINT_MARKER,
-};
+use ic_state_layout::StateLayout;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -1141,12 +1138,7 @@ impl MergeStateArgs {
             "M halted at time {m_time}, R at {r_time}; the merged state starts at {merged_time}"
         );
 
-        assemble_merged_checkpoint(
-            &r_checkpoint,
-            &m_checkpoint,
-            &merged_checkpoint,
-            &self.logger,
-        );
+        assemble_merged_checkpoint(&r_checkpoint, &m_checkpoint, &merged_checkpoint);
         let state_hash = manifest_root_hash(&merged_checkpoint);
 
         self.upload_merged_checkpoint(&merged_checkpoint);
@@ -1233,60 +1225,18 @@ impl MergeStateArgs {
     }
 }
 
-/// Copies the checkpoint at `base` to `merged`, replacing its canisters and
-/// canister snapshots with the union of those of `base` and of `source`, and
-/// marks the result as the product of a subnet merge.
-///
-/// Only the canisters and their snapshots are taken over from `source`: its
-/// ingress history is not, as the `subnet_merged` marker makes the replica
-/// re-register the ingress messages of the merged-in canisters that are still in
-/// progress. Everything else (system metadata, subnet queues, ...) is `base`'s.
-fn assemble_merged_checkpoint(base: &Path, source: &Path, merged: &Path, logger: &Logger) {
-    // Checkpoints are read-only and `rsync` preserved that, so the downloaded
-    // trees have to be made writable before anything can be assembled in them.
-    for path in [base, source] {
-        run_local(&format!(
-            "chmod -R u+w {}",
-            path.parent().expect("a checkpoint has a parent").display()
-        ));
-    }
-    // `cp -al` hard links the file contents rather than copying them, which
-    // keeps this cheap. The links are only ever read afterwards, except for the
-    // marker written below, which is a fresh file.
-    run_local(&format!("cp -al {} {}", base.display(), merged.display()));
-    run_local(&format!("chmod -R u+w {}", merged.display()));
-    for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
-        let source_dir = source.join(dir);
-        if !source_dir.exists() {
-            info!(logger, "{} holds no {dir}", source.display());
-            continue;
-        }
-        run_local(&format!(
-            "mkdir -p {merged_dir} && cp -al {source_dir}/. {merged_dir}/",
-            merged_dir = merged.join(dir).display(),
-            source_dir = source_dir.display(),
-        ));
-    }
-    // A `SubnetMerged` message with `merged` (field 1) set to `true`.
-    std::fs::write(merged.join(SUBNET_MERGED_FILE), [0x08, 0x01])
-        .expect("failed to write the subnet merged marker");
-    // The uploaded checkpoint must not look unverified to the state manager.
-    let _ = std::fs::remove_file(merged.join(UNVERIFIED_CHECKPOINT_MARKER));
-}
-
-/// Runs `script` locally, panicking with its output if it fails.
-fn run_local(script: &str) {
-    let output = Command::new("bash")
-        .arg("-c")
-        .arg(script)
-        .output()
-        .unwrap_or_else(|e| panic!("failed to run {script:?}: {e}"));
-    assert!(
-        output.status.success(),
-        "{script:?} failed: {}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
+/// Assembles the checkpoint at `merged` from the checkpoints at `base` and
+/// `source`, i.e. runs the state side of the subnet merge.
+fn assemble_merged_checkpoint(base: &Path, source: &Path, merged: &Path) {
+    state_tool(&[
+        "merge",
+        "--base",
+        &base.display().to_string(),
+        "--source",
+        &source.display().to_string(),
+        "--output",
+        &merged.display().to_string(),
+    ]);
 }
 
 /// Submits (and adopts) the `MergeSubnets` proposal rerouting the canister ID
