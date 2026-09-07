@@ -1475,6 +1475,97 @@ fn drops_aborted_canister_install_after_split() {
     assert_eq!(expected_state, canister_state);
 }
 
+/// The monotonic `consumed_cycles_as_counter` is only bumped once the refund of a
+/// prepayment is known, by the actually consumed amount; unlike the gauge, which is
+/// bumped by the prepayment and lowered again by the refund.
+#[test]
+fn consumed_cycles_as_counter_accounts_for_refundable_use_cases_at_refund() {
+    fn test<T: CyclesUseCaseRefundableKind>(cost_schedule: CanisterCyclesCostSchedule) {
+        let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+        let ctx = format!(
+            "{:?} with {cost_schedule:?} cost schedule",
+            T::cycles_use_case()
+        );
+        let prepaid = CompoundCycles::<T>::new(Cycles::new(1000), cost_schedule);
+        let refund = CompoundCycles::<T>::new(Cycles::new(100), cost_schedule);
+
+        system_state.consume_cycles(prepaid);
+        assert_eq!(
+            system_state.canister_metrics().consumed_cycles(),
+            prepaid.nominal(),
+            "{ctx}"
+        );
+        // Nothing on the counter yet, the refund is not known.
+        assert_eq!(
+            system_state.canister_metrics().consumed_cycles_as_counter(),
+            NominalCycles::zero(),
+            "{ctx}"
+        );
+
+        system_state.refund_cycles(prepaid, refund);
+        assert_eq!(
+            system_state.canister_metrics().consumed_cycles(),
+            (prepaid - refund).nominal(),
+            "{ctx}"
+        );
+        assert_eq!(
+            system_state.canister_metrics().consumed_cycles_as_counter(),
+            (prepaid - refund).nominal(),
+            "{ctx}"
+        );
+    }
+
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        test::<Instructions>(cost_schedule);
+        test::<RequestAndResponseTransmission>(cost_schedule);
+    }
+}
+
+/// A use case that is never refunded is accounted for on the counter right away.
+#[test]
+fn consumed_cycles_as_counter_accounts_for_final_use_cases_at_prepayment() {
+    let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+    let charge =
+        CompoundCycles::<MemoryUseCase>::new(Cycles::new(1000), CanisterCyclesCostSchedule::Normal);
+
+    system_state.consume_cycles(charge);
+
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        charge.nominal()
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles_as_counter(),
+        charge.nominal()
+    );
+}
+
+/// A full refund lowers the gauge back to zero but must not lower the counter, which
+/// was never bumped in the first place.
+#[test]
+fn full_refund_does_not_lower_consumed_cycles_as_counter() {
+    let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let final_charge = CompoundCycles::<MemoryUseCase>::new(Cycles::new(500), cost_schedule);
+    let prepaid = CompoundCycles::<Instructions>::new(Cycles::new(1000), cost_schedule);
+
+    system_state.consume_cycles(final_charge);
+    system_state.consume_cycles(prepaid);
+    system_state.refund_cycles(prepaid, prepaid);
+
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        final_charge.nominal()
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles_as_counter(),
+        final_charge.nominal()
+    );
+}
+
 #[test]
 fn reverts_stopping_status_after_split() {
     let mut canister_state = CanisterStateFixture::new().canister_state;

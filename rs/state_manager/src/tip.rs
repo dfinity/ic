@@ -1425,6 +1425,10 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .system_state
                 .canister_metrics()
                 .consumed_cycles(),
+            consumed_cycles_as_counter: canister_state
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_as_counter(),
             stable_memory_size: canister_state
                 .execution_state
                 .as_ref()

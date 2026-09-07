@@ -502,6 +502,15 @@ message CanisterStateBits {
   // These counters facilitate programming retrieval of metrics and performing
   // various aggregations on them more easily than their gauge counterparts.
   repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases_as_counters = 65;
+  // Total cycles consumed by the canister, presented as a counter: unlike
+  // `consumed_cycles`, which is lowered again whenever a refund is issued, this
+  // is only ever increased, by the actually consumed amount once the refund of a
+  // prepayment is known.
+  //
+  // Covers exactly the same use cases as `consumed_cycles`, i.e. everything
+  // except HTTPS outcalls, which are only tracked at the subnet level (and, for
+  // the canister, in `consumed_cycles_by_use_cases_as_counters`).
+  types.v1.NominalCycles consumed_cycles_as_counter = 71;
   CanisterHistory canister_history = 37;
   // Resource reservation cycles.
   state.queues.v1.Cycles reserved_balance = 38;
