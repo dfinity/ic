@@ -9,12 +9,14 @@ use ic_types::{CanisterId, Time, batch::CanisterHttpSpent, canister_http::Refund
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, HTTPOutcalls, NominalCycles,
 };
-use prometheus::{HistogramVec, IntCounterVec};
+use prometheus::{HistogramVec, IntCounter, IntCounterVec};
 use std::collections::BTreeMap;
 
 const METRIC_ACCOUNTING_ERRORS_TOTAL: &str = "mr_canister_http_accounting_errors_total";
 const METRIC_REFUNDED_CYCLES: &str = "mr_canister_http_refunded_cycles";
 const METRIC_REFUNDED_FRACTION: &str = "mr_canister_http_refunded_fraction";
+const METRIC_POOLED_REFUNDS: &str = "mr_pooled_refunds_total";
+const METRIC_POOLED_REFUND_CYCLES: &str = "mr_pooled_refund_cycles_total";
 
 /// One billion cycles, the unit the cycle metrics are reported in.
 const B_CYCLES: f64 = 1_000_000_000.0;
@@ -68,6 +70,17 @@ pub(crate) struct CanisterHttpSpentMetrics {
     /// assigned to the request had reported by then. Observed together with
     /// [`Self::refunded_cycles`], except for contexts with nothing to refund.
     refunded_fraction: HistogramVec,
+
+    /// How many anonymous refunds were pushed into the refund pool since replica
+    /// start. One refund is pushed per canister per payload (or per timeout round),
+    /// aggregating all of the canister's refunds within it; zero-amount refunds are
+    /// not pushed. HTTP outcalls are currently the only source of pooled refunds.
+    pooled_refunds: IntCounter,
+
+    /// How many cycles the anonymous refunds pushed into the refund pool since
+    /// replica start held in total. Observed together with
+    /// [`Self::pooled_refunds`].
+    pooled_refund_cycles: IntCounter,
 }
 
 impl CanisterHttpSpentMetrics {
@@ -108,10 +121,23 @@ impl CanisterHttpSpentMetrics {
             refunded_fraction.with_label_values(&[status]);
         }
 
+        let pooled_refunds = metrics_registry.int_counter(
+            METRIC_POOLED_REFUNDS,
+            "Count of anonymous refunds pushed into the refund pool, for Message Routing to \
+             deliver to their recipients.",
+        );
+
+        let pooled_refund_cycles = metrics_registry.int_counter(
+            METRIC_POOLED_REFUND_CYCLES,
+            "Count of cycles held in total by the anonymous refunds pushed into the refund pool.",
+        );
+
         Self {
             accounting_errors,
             refunded_cycles,
             refunded_fraction,
+            pooled_refunds,
+            pooled_refund_cycles,
         }
     }
 
@@ -132,6 +158,14 @@ impl CanisterHttpSpentMetrics {
                     / refund_status.refundable_cycles.get() as f64,
             );
         }
+    }
+
+    /// Observes an anonymous refund of `amount` cycles being pushed into the
+    /// refund pool.
+    fn observe_pooled_refund(&self, amount: Cycles) {
+        self.pooled_refunds.inc();
+        self.pooled_refund_cycles
+            .inc_by(amount.get().try_into().unwrap_or(u64::MAX));
     }
 }
 
@@ -251,7 +285,7 @@ pub(crate) fn deliver_canister_http_spent(
         }
     }
 
-    apply_accounting(state, accounting);
+    apply_accounting(state, accounting, metrics);
 }
 
 /// Times out delivered `CanisterHttpRequestContext`s and refunds the calling
@@ -296,7 +330,7 @@ pub(crate) fn refund_timed_out_canister_http_contexts(
         metrics.observe_refunds(status, &context.refund_status);
     }
 
-    apply_accounting(state, accounting);
+    apply_accounting(state, accounting, metrics);
 }
 
 /// Applies a reported spend of `amount`, covered by `allowance`, against the
@@ -390,11 +424,16 @@ fn apply_capped(
 fn apply_accounting(
     state: &mut ReplicatedState,
     accounting: BTreeMap<CanisterId, CanisterAccounting>,
+    metrics: &CanisterHttpSpentMetrics,
 ) {
     let mut subnet_consumed = NominalCycles::zero();
     for (sender, accounting) in accounting {
         subnet_consumed += accounting.consumed;
         state.add_refund(sender, accounting.refund);
+        // A zero refund is a no-op for the pool, so don't count it as pushed.
+        if !accounting.refund.is_zero() {
+            metrics.observe_pooled_refund(accounting.refund);
+        }
         if !accounting.consumed.is_zero()
             && let Some(canister) = state.canister_state_make_mut(&sender)
         {
@@ -419,7 +458,8 @@ mod tests {
     use ic_replicated_state::ReplicatedState;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
     use ic_test_utilities_metrics::{
-        HistogramStats, Labels, MetricVec, fetch_histogram_vec_stats, fetch_int_counter_vec, labels,
+        HistogramStats, Labels, MetricVec, fetch_histogram_vec_stats, fetch_int_counter,
+        fetch_int_counter_vec, labels,
     };
     use ic_test_utilities_state::{CanisterStateBuilder, ReplicatedStateBuilder};
     use ic_test_utilities_types::ids::{canister_test_id, node_test_id};
@@ -757,6 +797,21 @@ mod tests {
         assert_refunds(metrics_registry, status, 0, Cycles::zero(), (0, 0.0));
     }
 
+    /// Asserts that `count` anonymous refunds, holding `cycles` cycles in total,
+    /// were pushed into the refund pool.
+    fn assert_pooled_refunds(metrics_registry: &MetricsRegistry, count: u64, cycles: Cycles) {
+        assert_eq!(
+            Some(count),
+            fetch_int_counter(metrics_registry, METRIC_POOLED_REFUNDS),
+            "unexpected number of pooled refunds"
+        );
+        assert_eq!(
+            Some(cycles.get() as u64),
+            fetch_int_counter(metrics_registry, METRIC_POOLED_REFUND_CYCLES),
+            "unexpected pooled refund cycles"
+        );
+    }
+
     /// An initial report on a normal subnet pools the collective refund
     /// (`allowance * nodes − spent`) and reports the spent cycles as consumed.
     #[test]
@@ -918,6 +973,8 @@ mod tests {
         let status = get_refund_status(&state, Cycles::zero());
         assert_eq!(status.refunded_cycles, Cycles::zero());
         assert_eq!(status.refunding_nodes, node_set(&[1, 2, 3]));
+        // A zero refund is not pushed into the pool.
+        assert_pooled_refunds(&metrics_registry, 0, Cycles::zero());
         assert_errors(&[], &metrics_registry);
     }
 
@@ -1010,6 +1067,7 @@ mod tests {
             get_refund_status(&state, allowance * 3_usize).refunding_nodes,
             node_set(&[1, 2])
         );
+        assert_pooled_refunds(&metrics_registry, 1, Cycles::new(850));
         assert_errors(&[], &metrics_registry);
 
         // Second report repeats node 1 (must be ignored) and adds node 3.
@@ -1030,6 +1088,13 @@ mod tests {
         assert_eq!(
             get_refund_status(&state, allowance * 3_usize).refunding_nodes,
             node_set(&[1, 2, 3])
+        );
+        // One refund was pushed per payload, even though both merged into a single
+        // pool entry, of 1_150 cycles.
+        assert_pooled_refunds(&metrics_registry, 2, Cycles::new(1_150));
+        assert_eq!(
+            pooled_refunds(&state),
+            BTreeMap::from([(caller, Cycles::new(1_150))])
         );
         // Node 1's repeated report was observed as an error.
         assert_errors(&[(ERROR_DUPLICATE_NODE_REPORT, 1)], &metrics_registry);
@@ -1331,6 +1396,7 @@ mod tests {
         );
         // ...and the consumed cycles are still reported on the caller itself.
         assert_eq!(consumed(&state, caller), 9_500);
+        assert_pooled_refunds(&metrics_registry, 1, Cycles::new(3_500));
         assert_errors(&[], &metrics_registry);
     }
 
@@ -1383,6 +1449,7 @@ mod tests {
                 (other_caller, Cycles::new(1_000)),
             ])
         );
+        assert_pooled_refunds(&metrics_registry, 2, Cycles::new(4_500));
         assert_errors(&[], &metrics_registry);
     }
 
@@ -1415,6 +1482,7 @@ mod tests {
                 .delivered_canister_http_request_contexts
                 .is_empty()
         );
+        assert_pooled_refunds(&metrics_registry, 1, refundable);
         assert_errors(&[], &metrics_registry);
     }
 
