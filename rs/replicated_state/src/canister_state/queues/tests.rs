@@ -4078,6 +4078,16 @@ mod mainnet_compatibility_tests {
             assert_eq!(Cycles::new(500), deserialized.metrics().pushed_cycles);
         }
 
+        /// A pristine pool serializes to an empty proto, so that no `refunds.pbuf` is
+        /// written into the checkpoint for it.
+        #[test]
+        fn pristine_pool_serializes_to_empty_proto() {
+            let proto_refunds: pb_queues::Refunds = (&refunds::RefundPool::default()).into();
+
+            assert_eq!(pb_queues::Refunds::default(), proto_refunds);
+            assert!(proto_refunds.encode_to_vec().is_empty());
+        }
+
         /// A checkpoint written before the metrics were persisted has none, so they
         /// are inferred from the persisted refunds: one push each.
         #[test]

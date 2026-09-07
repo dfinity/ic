@@ -148,7 +148,9 @@ pub struct RefundPoolMetrics {
 pub struct Refunds {
     #[prost(message, repeated, tag = "1")]
     pub refunds: ::prost::alloc::vec::Vec<Refund>,
-    /// Unset iff no refund was ever pushed into the pool.
+    /// Unset for a pristine pool, i.e. one that no refund was ever pushed into; as
+    /// well as in checkpoints written before this field was introduced, in which case
+    /// the metrics are inferred from the refunds above (one push each).
     #[prost(message, optional, tag = "2")]
     pub metrics: ::core::option::Option<RefundPoolMetrics>,
 }
