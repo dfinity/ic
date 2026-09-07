@@ -1361,10 +1361,17 @@ fn online_split() {
     take_shapshot(CANISTER_2);
 
     // Add aborted `install_code` tasks to both canisters, with the same prepayment.
+    // The prepayment is actually charged to the canister, as the in-progress
+    // `install_code` would have done, so that the refund below has something to
+    // return and cycle conservation is verifiable.
     let prepaid_install_code_cycles =
         CompoundCycles::<Instructions>::new(Cycles::new(3), CanisterCyclesCostSchedule::Normal);
     let mut add_aborted_install_code_task = |canister_id| {
         let canister = fixture.state.canister_state_make_mut(&canister_id).unwrap();
+        let balance_before_prepayment = canister.system_state.balance();
+        canister
+            .system_state
+            .consume_cycles(prepaid_install_code_cycles);
         canister
             .system_state
             .task_queue
@@ -1375,9 +1382,10 @@ fn online_split() {
             });
         // Canister must be in the subnet schedule.
         fixture.state.canister_priority_mut(canister_id);
+        balance_before_prepayment
     };
     add_aborted_install_code_task(CANISTER_1);
-    add_aborted_install_code_task(CANISTER_2);
+    let canister_2_balance_before_prepayment = add_aborted_install_code_task(CANISTER_2);
 
     //
     // Split off subnet A'.
@@ -1449,6 +1457,17 @@ fn online_split() {
 
     // Everything else should be unchanged.
     assert_eq!(expected, state_b);
+
+    // And, explicitly: the prepayment was refunded in full, so `CANISTER_2` is back
+    // to the balance it had before it was charged.
+    assert_eq!(
+        state_b
+            .canister_state(&CANISTER_2)
+            .unwrap()
+            .system_state
+            .balance(),
+        canister_2_balance_before_prepayment
+    );
 }
 
 #[test]
