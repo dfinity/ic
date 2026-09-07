@@ -8,15 +8,17 @@ use ic_config::{
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_utils::instrumentation::{WasmMemoryType, instruction_to_cost},
-    wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS,
+    wasmtime_embedder::system_api::{
+        MAX_CALL_TIMEOUT_SECONDS, MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE,
+    },
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, MessageMemoryUsage};
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId,
-    TakeCanisterSnapshotArgs, VetKdCurve, VetKdKeyId,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Payload, ReplicationCounts, SchnorrAlgorithm,
+    SchnorrKeyId, TakeCanisterSnapshotArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -45,11 +47,12 @@ use ic_types::messages::{
 use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, ComputeAllocation, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
-    PrincipalId, Time,
+    NumberOfNodes, PrincipalId, Time,
+    canister_http::ReplicationKind,
     ingress::{IngressState, IngressStatus, WasmResult},
     methods::WasmMethod,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -3292,6 +3295,77 @@ fn ic0_subnet_self_copy_works() {
     );
 }
 
+const SUBNET_SELF_NODE_COUNT_WAT: &str = r#"
+        (module
+            (import "ic0" "subnet_self_node_count"
+                (func $subnet_self_node_count (result i32))
+            )
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+            (func (export "canister_update test")
+                ;; heap[0..4] = $subnet_self_node_count()
+                (i32.store (i32.const 0) (call $subnet_self_node_count))
+                ;; return heap[0..4]
+                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                (call $msg_reply)
+            )
+            (memory 1 1)
+        )"#;
+
+#[test]
+fn ic0_subnet_self_node_count_works() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.canister_from_wat(SUBNET_SELF_NODE_COUNT_WAT).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(
+        WasmResult::Reply((test.subnet_size() as u32).to_le_bytes().to_vec()),
+        result
+    );
+}
+
+#[test]
+fn ic0_subnet_self_node_count_reflects_subnet_size() {
+    // A size that differs from the default, so that the returned value cannot
+    // accidentally match a hard-coded default.
+    const SUBNET_SIZE: usize = 34;
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_size(SUBNET_SIZE)
+        .build();
+    assert_eq!(test.subnet_size(), SUBNET_SIZE);
+    let canister_id = test.canister_from_wat(SUBNET_SELF_NODE_COUNT_WAT).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(
+        WasmResult::Reply((SUBNET_SIZE as u32).to_le_bytes().to_vec()),
+        result
+    );
+}
+
+#[test]
+fn ic0_subnet_self_node_count_traps_in_start() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "subnet_self_node_count"
+                (func $subnet_self_node_count (result i32))
+            )
+            (func $start
+                (drop (call $subnet_self_node_count))
+            )
+            (start $start)
+            (func (export "canister_update test"))
+            (memory 1 1)
+        )"#;
+    let err = test.canister_from_wat(wat).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(
+        err.description()
+            .contains(r#""ic0.subnet_self_node_count" cannot be executed in start mode"#),
+        "unexpected error: {}",
+        err.description()
+    );
+}
+
 #[test]
 fn ic0_call_new_must_be_called_first() {
     let mut test = ExecutionTestBuilder::new().build();
@@ -4407,9 +4481,7 @@ fn wasm64_ic0_msg_cycles_accept128_works_for_calls() {
 
 #[test]
 fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (func (export "canister_update write")
@@ -4424,12 +4496,19 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "write", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());
+    // The canister reads one Wasm page and writes another. Page faults are
+    // handled at Wasm page granularity, so each of them is reported as all of
+    // its constituent OS pages (16 on 4 KiB hosts, 4 on 16 KiB hosts).
+    let os_pages_per_wasm_page = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as f64;
     assert_eq!(
         fetch_histogram_vec_stats(test.metrics_registry(), "sandboxed_execution_dirty_pages"),
         metric_vec(&[
             (
                 &[("api_type", "update"), ("memory_type", "wasm")],
-                HistogramStats { count: 1, sum: 1.0 }
+                HistogramStats {
+                    count: 1,
+                    sum: os_pages_per_wasm_page
+                }
             ),
             (
                 &[("api_type", "update"), ("memory_type", "stable")],
@@ -4447,9 +4526,7 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
         match mem_type.as_ref().map(|a| String::as_ref(*a)) {
             Some("wasm") => {
                 assert_eq!(stats.count, 1);
-                // We can't match exactly here because on MacOS the page size is different (16 KiB) so the
-                // number of reported pages is different.
-                assert_ge!(stats.sum, 2.0)
+                assert_eq!(stats.sum, 2.0 * os_pages_per_wasm_page)
             }
             Some("stable") => {
                 assert_eq!(stats.count, 1);
@@ -4468,9 +4545,7 @@ fn wasm_page_metrics_are_recorded_for_many_writes(
     #[case] inject_trap: &str,
     #[case] expected_error_code: ErrorCode,
 ) {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = format!(
         r#"
         (module
@@ -4497,7 +4572,11 @@ fn wasm_page_metrics_are_recorded_for_many_writes(
                 &[("api_type", "update"), ("memory_type", "wasm")],
                 HistogramStats {
                     count: 1,
-                    sum: 262145.0 // (1GiB + 4096) / 4096
+                    // The loop writes to every OS page between 0 and 1 GiB, so
+                    // it dirties all 16385 Wasm pages of the heap. Page faults
+                    // are handled at Wasm page granularity, so every one of
+                    // them is reported as all of its constituent OS pages.
+                    sum: 16385.0 * (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as f64
                 }
             ),
             (
@@ -4511,9 +4590,7 @@ fn wasm_page_metrics_are_recorded_for_many_writes(
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn query_stable_memory_metrics_are_recorded() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     // The following canister will touch 2 pages worth of stable memory.
     let wat = r#"
         (module
@@ -4708,9 +4785,7 @@ fn upgrade_without_pre_and_post_upgrade_succeeds() {
 
 #[test]
 fn install_code_calls_canister_init_and_start() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(true)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
@@ -4737,7 +4812,7 @@ fn install_code_calls_canister_init_and_start() {
     // Linux, 4 on 16 KiB hosts such as arm64-darwin).
     let os_pages_per_wasm_page = WASM_PAGE_SIZE_IN_BYTES as u64 / PAGE_SIZE as u64;
     let dirty_heap_cost =
-        NumInstructions::from(2 * os_pages_per_wasm_page * 2 * test.dirty_heap_page_overhead());
+        NumInstructions::from(2 * os_pages_per_wasm_page * 2 * test.heap_page_overhead());
     assert_eq!(
         // Function is 1 instruction.
         DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
@@ -5143,9 +5218,7 @@ fn cannot_execute_query_on_stopped_canister() {
 
 #[test]
 fn ic0_trap_preserves_some_cycles() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "trap" (func $ic_trap (param i32) (param i32)))
@@ -5165,12 +5238,17 @@ fn ic0_trap_preserves_some_cycles() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
+    // `ic0.trap` reads the trap message from the single Wasm page holding the
+    // data segment. Page faults are handled at Wasm page granularity, so the
+    // read is charged for all of the OS pages that Wasm page consists of.
+    let os_pages_per_wasm_page = WASM_PAGE_SIZE_IN_BYTES as u64 / PAGE_SIZE as u64;
     let expected_executed_instructions = NumInstructions::from(
         instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
             + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
             + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 }, WasmMemoryType::Wasm32)
             + bytes_and_logging_cost(12) as u64 /* trap data */
-            + 1, // Function is 1 instruction.
+            + 1 // Function is 1 instruction.
+            + os_pages_per_wasm_page * test.heap_page_overhead(),
     );
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
     assert_eq!(
@@ -7846,7 +7924,7 @@ fn charge_for_dirty_pages() {
     test.ingress(canister_id, "test2", vec![]).unwrap();
     let i2 = test.canister_executed_instructions(canister_id);
 
-    let cdi = ic_config::subnet_config::SchedulerConfig::application_subnet().dirty_page_overhead;
+    let cdi = ic_config::subnet_config::SchedulerConfig::application_subnet().page_overhead;
     // test2 writes to the next Wasm page, i.e. (1 read + 1 write)x16=32 OS pages.
     assert_eq!((i2 - i1) - (i1 - i0), cdi * 32);
 }
@@ -8598,7 +8676,6 @@ fn yield_triggers_dts_slice_with_many_dirty_pages() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_manual_execution()
-        .with_deterministic_memory_tracker_enabled(false)
         .with_max_dirty_pages_optimization_embedder_config(pages_to_touch - 1)
         .build();
 
@@ -9322,7 +9399,7 @@ fn invoke_cost_call() {
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost,);
 }
 
@@ -9342,7 +9419,7 @@ fn invoke_cost_create_canister() {
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost.real());
 }
 
@@ -9366,34 +9443,59 @@ fn invoke_cost_http_request() {
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost.real());
 }
 
-#[test]
-fn invoke_cost_http_request_v2() {
-    #[derive(CandidType)]
-    struct CostHttpRequestV2Params {
-        request_bytes: u64,
-        http_roundtrip_time_ms: u64,
-        raw_response_bytes: u64,
-        transformed_response_bytes: u64,
-        transform_instructions: u64,
-    }
+#[derive(CandidType)]
+struct CostHttpRequestV2Params {
+    request_bytes: u64,
+    http_roundtrip_time_ms: u64,
+    raw_response_bytes: u64,
+    transformed_response_bytes: u64,
+    transform_instructions: u64,
+    outcall_type: Option<CostHttpRequestOutcallType>,
+}
+
+#[derive(CandidType, serde::Deserialize)]
+enum CostHttpRequestOutcallType {
+    #[serde(rename = "fully_replicated")]
+    FullyReplicated(candid::Reserved),
+    #[serde(rename = "non_replicated")]
+    NonReplicated(candid::Reserved),
+    #[serde(rename = "flexible")]
+    Flexible(Option<ReplicationCounts>),
+}
+
+/// Asks a canister for the cost of an HTTP outcall of the given `outcall_type` via
+/// `ic0.cost_http_request_v2` and asserts that it matches the cost of the same
+/// outcall with the given `replication_kind`.
+fn assert_cost_http_request_v2(
+    outcall_type: Option<CostHttpRequestOutcallType>,
+    replication_kind: ReplicationKind,
+) {
+    assert_cost_http_request_v2_params(
+        CostHttpRequestV2Params {
+            request_bytes: 1000,
+            http_roundtrip_time_ms: 2_000,
+            raw_response_bytes: 1_000_000,
+            transformed_response_bytes: 800_000,
+            transform_instructions: 500_000_000,
+            outcall_type,
+        },
+        replication_kind,
+    );
+}
+
+/// Asks a canister for the cost of the HTTP outcall described by `params` via
+/// `ic0.cost_http_request_v2` and asserts that it matches the cost of the same
+/// outcall with the given `replication_kind`.
+fn assert_cost_http_request_v2_params(
+    params: CostHttpRequestV2Params,
+    replication_kind: ReplicationKind,
+) {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let request_bytes = 1000;
-    let http_roundtrip_time_ms = 2_000;
-    let raw_response_bytes = 1_000_000;
-    let transformed_response_bytes = 800_000;
-    let transform_instructions = 500_000_000;
-    let params = CostHttpRequestV2Params {
-        request_bytes,
-        http_roundtrip_time_ms,
-        raw_response_bytes,
-        transformed_response_bytes,
-        transform_instructions,
-    };
     let params_blob = Encode!(&params).unwrap();
 
     let payload = wasm()
@@ -9403,16 +9505,138 @@ fn invoke_cost_http_request_v2() {
         .build();
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test.cycles_account_manager().http_request_fee_v2(
-        request_bytes.into(),
-        Duration::from_millis(http_roundtrip_time_ms),
-        raw_response_bytes.into(),
-        transform_instructions.into(),
-        transformed_response_bytes.into(),
+        params.request_bytes.into(),
+        Duration::from_millis(params.http_roundtrip_time_ms),
+        params.raw_response_bytes.into(),
+        params.transform_instructions.into(),
+        params.transformed_response_bytes.into(),
+        replication_kind,
         test.get_own_subnet_cycles_config(),
     );
     let bytes = get_reply(res);
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost.real());
+}
+
+#[test]
+fn invoke_cost_http_request_v2() {
+    // An absent `outcall_type` prices a fully-replicated outcall, as does the
+    // explicit variant.
+    assert_cost_http_request_v2(None, ReplicationKind::FullyReplicated);
+    assert_cost_http_request_v2(
+        Some(CostHttpRequestOutcallType::FullyReplicated(
+            candid::Reserved,
+        )),
+        ReplicationKind::FullyReplicated,
+    );
+}
+
+#[test]
+fn invoke_cost_http_request_v2_non_replicated() {
+    assert_cost_http_request_v2(
+        Some(CostHttpRequestOutcallType::NonReplicated(candid::Reserved)),
+        ReplicationKind::NonReplicated,
+    );
+}
+
+#[test]
+fn invoke_cost_http_request_v2_flexible() {
+    assert_cost_http_request_v2(
+        Some(CostHttpRequestOutcallType::Flexible(Some(
+            ReplicationCounts {
+                total_requests: 4,
+                min_responses: 2,
+                max_responses: 3,
+            },
+        ))),
+        ReplicationKind::Flexible {
+            total_requests: 4,
+            min_responses: 2,
+            max_responses: 3,
+        },
+    );
+}
+
+#[test]
+fn invoke_cost_http_request_v2_flexible_without_counts_uses_the_defaults() {
+    let subnet_size = ExecutionTestBuilder::new().build().subnet_size();
+    assert_cost_http_request_v2(
+        Some(CostHttpRequestOutcallType::Flexible(None)),
+        ReplicationKind::default_flexible(NumberOfNodes::from(subnet_size as u32)),
+    );
+}
+
+#[test]
+fn cost_http_request_v2_is_free_on_system_subnet() {
+    cost_http_request_v2_is_free_on(
+        ExecutionTestBuilder::new()
+            .with_subnet_type(SubnetType::System)
+            .build(),
+    );
+}
+
+#[test]
+fn cost_http_request_v2_is_free_on_free_cost_schedule() {
+    cost_http_request_v2_is_free_on(
+        ExecutionTestBuilder::new()
+            .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+            .build(),
+    );
+}
+
+fn cost_http_request_v2_is_free_on(mut test: ExecutionTest) {
+    let canister_id = test.universal_canister().unwrap();
+    let params_blob = Encode!(&CostHttpRequestV2Params {
+        request_bytes: 1000,
+        http_roundtrip_time_ms: 2_000,
+        raw_response_bytes: 500_000,
+        transformed_response_bytes: 1_000,
+        transform_instructions: 1_000_000,
+        outcall_type: None,
+    })
+    .unwrap();
+
+    let payload = wasm()
+        .cost_http_request_v2(&params_blob)
+        .reply_data_append()
+        .reply()
+        .build();
+    let bytes = get_reply(test.ingress(canister_id, "update", payload));
+    assert_eq!(Cycles::try_from(&bytes).unwrap(), Cycles::zero());
+}
+
+#[test]
+fn cost_http_request_v2_accepts_maximal_params() {
+    // The largest params a caller can send: every value at its maximum, with the
+    // `outcall_type` variant that encodes largest.
+    let params = CostHttpRequestV2Params {
+        request_bytes: u64::MAX,
+        http_roundtrip_time_ms: u64::MAX,
+        raw_response_bytes: u64::MAX,
+        transformed_response_bytes: u64::MAX,
+        transform_instructions: u64::MAX,
+        outcall_type: Some(CostHttpRequestOutcallType::Flexible(Some(
+            ReplicationCounts {
+                total_requests: u32::MAX,
+                min_responses: u32::MAX,
+                max_responses: u32::MAX,
+            },
+        ))),
+    };
+    // They encode to exactly the maximum size, so they have to pass the size check
+    // and decode within the skipping quota rather than being rejected as too large.
+    assert_eq!(
+        Encode!(&params).unwrap().len(),
+        MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE
+    );
+    assert_cost_http_request_v2_params(
+        params,
+        ReplicationKind::Flexible {
+            total_requests: u32::MAX,
+            min_responses: u32::MAX,
+            max_responses: u32::MAX,
+        },
+    );
 }
 
 #[test]
@@ -9424,6 +9648,7 @@ fn cost_http_request_v2_fails_with_too_big_candid() {
         raw_response_bytes: u64,
         transformed_response_bytes: u64,
         transform_instructions: u64,
+        outcall_type: Option<CostHttpRequestOutcallType>,
         garbage: Vec<u8>,
     }
     let mut test = ExecutionTestBuilder::new().build();
@@ -9433,18 +9658,19 @@ fn cost_http_request_v2_fails_with_too_big_candid() {
     let raw_response_bytes = 1_000_000;
     let transformed_response_bytes = 800_000;
     let transform_instructions = 500_000_000;
-    let garbage = "Some garbage to DoS the System API by making Candid decoding more expensive"
-        .as_bytes()
-        .into();
+    // Some garbage to DoS the System API by making Candid decoding more expensive.
+    let garbage = vec![b'x'; 2 * MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE];
     let params = CostHttpRequestV2ParamsExtended {
         request_bytes,
         http_roundtrip_time_ms,
         raw_response_bytes,
         transformed_response_bytes,
         transform_instructions,
+        outcall_type: None,
         garbage,
     };
     let params_blob = Encode!(&params).unwrap();
+    assert!(params_blob.len() > 2 * MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE);
 
     let payload = wasm()
         .cost_http_request_v2(&params_blob)
@@ -9479,7 +9705,7 @@ fn invoke_cost_sign_with_ecdsa() {
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost.real());
 }
 
@@ -9593,7 +9819,7 @@ fn invoke_cost_sign_with_schnorr() {
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost.real());
 }
 
@@ -9672,7 +9898,7 @@ fn invoke_cost_vetkd_derive_key() {
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
-    let actual_cost = Cycles::from(&bytes);
+    let actual_cost = Cycles::try_from(&bytes).unwrap();
     assert_eq!(actual_cost, expected_cost.real());
 }
 
@@ -10129,9 +10355,7 @@ fn page_metrics_are_recorded(
     #[case] maybe_trap: &str,
     #[case] expected_code: ErrorCode,
 ) {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_memory_tracker_enabled(false)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = format!(
         r#"
         (module
@@ -10165,25 +10389,18 @@ fn page_metrics_are_recorded(
     assert_eq!(err.code(), expected_code);
 
     const OS_PAGES_PER_WASM_PAGE: f64 = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as f64;
-    let (
-        api_type,
-        wasm_dirty_os_pages,
-        wasm_dirty_wasm_pages,
-        wasm_accessed_os_pages,
-        wasm_accessed_wasm_pages,
-    ) = if call_type == "query" {
-        // At the moment, queries do not report Wasm dirty pages and over-estimate
-        // Wasm accessed pages. This will be fixed in a future PR.
-        (
-            "replicated query",
-            0.0,
-            0.0,
-            384.0,
-            384.0 / OS_PAGES_PER_WASM_PAGE,
-        )
+    // The canister touches the heap at offsets 0 and 4 MiB, i.e. two Wasm pages.
+    const TOUCHED_WASM_PAGES: f64 = 2.0;
+    let (api_type, wasm_dirty_wasm_pages) = if call_type == "query" {
+        // At the moment, queries do not report Wasm dirty pages. This will be
+        // fixed in a future PR.
+        ("replicated query", 0.0)
     } else {
-        ("update", 2.0, 2.0, 2.0, 2.0)
+        ("update", TOUCHED_WASM_PAGES)
     };
+    let wasm_dirty_os_pages = wasm_dirty_wasm_pages * OS_PAGES_PER_WASM_PAGE;
+    let wasm_accessed_wasm_pages = TOUCHED_WASM_PAGES;
+    let wasm_accessed_os_pages = TOUCHED_WASM_PAGES * OS_PAGES_PER_WASM_PAGE;
     assert_eq!(
         fetch_histogram_vec_stats(test.metrics_registry(), "sandboxed_execution_dirty_pages"),
         metric_vec(&[

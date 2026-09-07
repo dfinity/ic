@@ -24,6 +24,9 @@ ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "27ba16a68aa312de66f2ebd0f16665f1429eee36"
 
+# Fork of `comparable` migrated to syn 2 (upstream still uses syn 1).
+COMPARABLE_REV = "8338f595496454f9e770389e2edc0d96e137a4e9"
+
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 
 # Rust crates.
@@ -57,6 +60,38 @@ crate.spec(
     ],
     package = "aide",
     version = "^0.14.2",
+)
+crate.spec(
+    features = [
+        "k256",
+        "serde",
+    ],
+    package = "alloy-consensus",
+    version = "^1.8.3",
+)
+crate.spec(
+    features = [
+        "k256",
+        "serde",
+    ],
+    package = "alloy-eips",
+    version = "^1.8.3",
+)
+crate.spec(
+    features = [
+        "k256",
+        "serde",
+    ],
+    package = "alloy-primitives",
+    version = "^1.6.0",
+)
+crate.spec(
+    package = "alloy-rpc-types-eth",
+    version = "^1.8.3",
+)
+crate.spec(
+    package = "alloy-sol-types",
+    version = "^1.6.0",
 )
 crate.spec(
     features = [
@@ -240,17 +275,12 @@ crate.spec(
     version = "^1.11.1",
 )
 crate.spec(
-    default_features = False,
-    package = "cached",
-    version = "^0.49",
-)
-crate.spec(
     package = "canbench-rs",
     version = "0.7.0",
 )
 crate.spec(
     package = "candid",
-    version = "^0.10.34",
+    version = "^0.10.35",
 )
 crate.spec(
     package = "cargo_metadata",
@@ -318,8 +348,9 @@ crate.spec(
     features = [
         "derive",
     ],
+    git = "https://github.com/dfinity/comparable",
     package = "comparable",
-    version = "^0.5",
+    rev = COMPARABLE_REV,
 )
 crate.spec(
     package = "console",
@@ -449,10 +480,6 @@ crate.spec(
     features = ["print"],
     package = "escargot",
     version = "^0.5.7",
-)
-crate.spec(
-    package = "ethers-core",
-    version = "^2.0.7",
 )
 crate.spec(
     features = ["serde"],
@@ -688,10 +715,12 @@ crate.spec(
 crate.spec(
     features = [
         "acme-alpn",
+        "acme-dns",
+        "clients-hyper",
         "pubsub",
     ],
     package = "ic-bn-lib",
-    version = "^0.5.0",
+    version = "^0.7.0",
 )
 crate.spec(
     package = "ic-btc-interface",
@@ -703,7 +732,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-canister-runtime",
-    version = "^0.2.0",
+    version = "^0.2.3",
 )
 crate.spec(
     git = "https://github.com/dfinity/ic-canister-sig-creation.git",
@@ -716,7 +745,11 @@ crate.spec(
 )
 crate.spec(
     package = "ic-cdk",
-    version = "^0.19.0",
+    version = "^0.20.2",
+)
+crate.spec(
+    package = "ic-cdk-bitcoin-canister",
+    version = "^0.2.0",
 )
 crate.spec(
     package = "ic-cdk-executor",
@@ -747,10 +780,10 @@ crate.spec(
     version = "^0.3.0",
 )
 crate.spec(
-    default_features = False,
+    features = ["acme"],
     git = "https://github.com/dfinity/ic-gateway",
     package = "ic-gateway",
-    rev = "3e015f17b8ad302a42fd1ac68b7b139867b71c5f",
+    tag = "v0.6.5",
 )
 crate.spec(
     package = "ic-http-certification",
@@ -854,7 +887,7 @@ crate.spec(
 )
 crate.spec(
     package = "indoc",
-    version = "^1.0.9",
+    version = "^2.0.7",
 )
 crate.spec(
     package = "inferno",
@@ -962,6 +995,10 @@ crate.spec(
     version = "^0.5.0",
 )
 crate.spec(
+    package = "libsystemd",
+    version = "0.7.2",
+)
+crate.spec(
     package = "little-loadshedder",
     version = "^0.2.0",
 )
@@ -1010,7 +1047,7 @@ crate.spec(
 )
 crate.spec(
     package = "maxminddb",
-    version = "^0.24",
+    version = "^0.29",
 )
 crate.spec(
     package = "memchr",
@@ -1030,7 +1067,7 @@ crate.spec(
 )
 crate.spec(
     package = "mockall",
-    version = "^0.13.1",
+    version = "^0.15.0",
 )
 crate.spec(
     package = "mockito",
@@ -1203,15 +1240,11 @@ crate.spec(
     # https://github.com/tikv/pprof-rs
     git = "https://github.com/dfinity/pprof-rs",
     package = "pprof",
-    rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a",
+    rev = "9159b45ecc3540d7fc44c6a6e70a173676cfa771",
 )
 crate.spec(
     package = "predicates",
     version = "^3.1.2",
-)
-crate.spec(
-    package = "pretty-bytes",
-    version = "^0.2.2",
 )
 crate.spec(
     package = "pretty_assertions",
@@ -1222,7 +1255,7 @@ crate.spec(
         "serde",
     ],
     package = "priority-queue",
-    version = "^1.3.1",
+    version = "^2.7.0",
 )
 crate.spec(
     package = "proc-macro2",
@@ -1344,6 +1377,7 @@ crate.spec(
 )
 crate.spec(
     features = [
+        "x509-parser",
         "zeroize",
     ],
     package = "rcgen",
@@ -1432,12 +1466,14 @@ crate.spec(
     version = "^0.37.0",
 )
 crate.spec(
+    default_features = False,
+    features = ["serde"],
     package = "rust_decimal",
-    version = "^1.36.0",
+    version = "^1.42",
 )
 crate.spec(
     package = "rust_decimal_macros",
-    version = "^1.36.0",
+    version = "^1.40",
 )
 crate.spec(
     package = "rustc-demangle",
@@ -1697,10 +1733,6 @@ crate.spec(
     version = "0.37",
 )
 crate.spec(
-    package = "systemd",
-    version = "0.10",
-)
-crate.spec(
     package = "sys-mount",
     version = "3.0",
 )
@@ -1716,6 +1748,7 @@ crate.spec(
     features = [
         "full",
     ],
+    # Pinned to a fork because the published `tarpc` uses syn 3, while the rest of this repo (still) uses syn 2.
     git = "https://github.com/dfinity/tarpc",
     package = "tarpc",
     rev = "cddf1c64011d00f36016146e8447bef99531030c",
@@ -1726,7 +1759,7 @@ crate.spec(
 )
 crate.spec(
     package = "test-strategy",
-    version = "^0.3.1",
+    version = "^0.4.0",
 )
 crate.spec(
     package = "textplots",
@@ -1742,10 +1775,6 @@ crate.spec(
 crate.spec(
     package = "thiserror",
     version = "=2.0.18",
-)
-crate.spec(
-    package = "thousands",
-    version = "^0.2.0",
 )
 crate.spec(
     package = "threadpool",
@@ -1811,7 +1840,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-tungstenite",
-    version = "^0.26.0",
+    version = "^0.29",
 )
 crate.spec(
     features = [
@@ -1896,7 +1925,7 @@ crate.spec(
 )
 crate.spec(
     package = "tracing-serde",
-    version = "^0.1.3",
+    version = "^0.2",
 )
 crate.spec(
     package = "tracing-slog",
@@ -1956,11 +1985,6 @@ crate.spec(
     version = "^0.26.4",
 )
 crate.spec(
-    features = ["tls"],
-    package = "warp",
-    version = "^0.3.7",
-)
-crate.spec(
     features = [
         "wasmparser",
     ],
@@ -2015,10 +2039,6 @@ crate.spec(
     features = ["parallel"],
     package = "wirm",
     version = "4.0.4",
-)
-crate.spec(
-    package = "wsl",
-    version = "^0.1.0",
 )
 crate.spec(
     default_features = False,
@@ -2198,6 +2218,13 @@ crate.annotation(
 crate.annotation(
     build_script_env = {"PCRE2_SYS_STATIC": "1"},
     crate = "pcre2-sys",
+    # Patch for determinism issues: the build script enumerates the bundled
+    # PCRE2 C sources with an unsorted `read_dir`, so the archive member order
+    # depends on the build machine's filesystem and leaks into binaries that
+    # link it (the STT_FILE symbol order), making the GuestOS image
+    # non-reproducible across machines. The patch sorts the sources.
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:pcre2-sys.patch"],
 )
 crate.annotation(
     # Disabling the libudev probe makes the vendored libusb fall back to its
@@ -2217,10 +2244,6 @@ crate.annotation(
 crate.annotation(
     crate = "libcryptsetup-rs-sys",
     link_deps = ["@@//third_party:cryptsetup"],
-)
-crate.annotation(
-    crate = "libsystemd-sys",
-    link_deps = ["@@//third_party:systemd"],
 )
 crate.annotation(
     crate = "virt-sys",

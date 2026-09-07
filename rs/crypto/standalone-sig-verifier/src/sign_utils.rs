@@ -6,7 +6,9 @@ use crate::algorithm_identifiers::{
 };
 use ic_crypto_iccsa as iccsa;
 use ic_crypto_internal_basic_sig_cose as cose;
-use ic_crypto_internal_basic_sig_der_utils::algo_id_and_public_key_bytes_from_der;
+use ic_crypto_internal_basic_sig_der_utils::{
+    PkixAlgorithmIdentifier, algo_id_and_public_key_bytes_from_der,
+};
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_types::crypto::{AlgorithmId, BasicSig, CryptoError, CryptoResult, UserPublicKey};
 
@@ -111,11 +113,29 @@ pub fn user_public_key_from_bytes(
         return Err(CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::Unspecified,
             key_bytes: Some(bytes.to_vec()),
-            internal_error: "Unsupported or unparsable public key".to_string(),
+            internal_error: format!(
+                "Unsupported public key algorithm identifier: {}",
+                algorithm_identifier_for_error(&pkix_algo_id)
+            ),
         });
     };
 
     Ok((UserPublicKey { key, algorithm_id }, content_type))
+}
+
+/// Renders a parsed algorithm identifier for an error message, truncating
+/// long identifiers.
+fn algorithm_identifier_for_error(algo_id: &PkixAlgorithmIdentifier) -> String {
+    const MAX_CHARS: usize = 256;
+    let rendered = format!("{algo_id:?}");
+    if rendered.chars().count() <= MAX_CHARS {
+        rendered
+    } else {
+        format!(
+            "{}...",
+            rendered.chars().take(MAX_CHARS).collect::<String>()
+        )
+    }
 }
 
 /// Encodes a raw ed25519 public key into DER.

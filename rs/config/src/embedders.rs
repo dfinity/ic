@@ -122,15 +122,12 @@ pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
     pub rate_limiting_of_debug_prints: FlagStatus,
-    /// Use deterministic memory tracker.
-    pub deterministic_memory_tracker: FlagStatus,
 }
 
 impl FeatureFlags {
     const fn const_default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            deterministic_memory_tracker: FlagStatus::Enabled,
         }
     }
 }
@@ -225,11 +222,12 @@ pub struct Config {
     /// overridden at runtime by the registry's `maximum_state_delta`.
     pub default_subnet_heap_delta_capacity: NumBytes,
 
-    /// Dirty page overhead. The number of instructions to charge for each dirty
-    /// page created by a write to stable memory. The default value should be
+    /// The number of instructions to charge for every OS page of heap or stable
+    /// memory that a message touches: once when the page is first accessed and
+    /// once more when it is first written to. The default value should be
     /// replaced with the correct value at runtime when the hypervisor is
     /// created.
-    pub dirty_page_overhead: NumInstructions,
+    pub page_overhead: NumInstructions,
 
     /// If this flag is enabled, then execution of a slice will produce a log
     /// entry with the number of executed instructions and the duration.
@@ -284,7 +282,7 @@ impl Config {
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
             default_subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            dirty_page_overhead: NumInstructions::new(0),
+            page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,
             max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,
             dirty_page_copy_overhead: DIRTY_PAGE_COPY_OVERHEAD,

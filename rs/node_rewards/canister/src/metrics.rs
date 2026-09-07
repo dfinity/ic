@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{NodeId, SubnetId};
 use ic_cdk::call::CallResult;
-use ic_cdk::management_canister::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
+use ic_cdk_management_canister::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
 use rewards_calculation::types::{NodeMetricsDailyRaw, UnixTsNanos};
@@ -39,7 +39,7 @@ impl ManagementCanisterClient for ICCanisterClient {
         &self,
         args: &NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
-        ic_cdk::management_canister::node_metrics_history(args).await
+        ic_cdk_management_canister::node_metrics_history(args).await
     }
 }
 
@@ -280,7 +280,7 @@ pub mod management_canister_client_test {
     use chrono::DateTime;
     use ic_base_types::SubnetId;
     use ic_cdk::call::CallResult;
-    use ic_cdk::management_canister::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
+    use ic_cdk_management_canister::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
     use ic_nervous_system_canisters::registry::RegistryCanister;
     use ic_registry_canister_client::StableCanisterRegistryClient;
     use std::sync::Arc;
@@ -305,7 +305,7 @@ pub mod management_canister_client_test {
             use crate::canister::current_time;
             use crate::registry_querier::RegistryQuerier;
             use ic_base_types::PrincipalId;
-            use ic_cdk::management_canister::NodeMetrics;
+            use ic_cdk_management_canister::NodeMetrics;
             use ic_protobuf::registry::subnet::v1::SubnetRecord;
             use ic_registry_canister_client::CanisterRegistryClient;
             use ic_registry_keys::make_subnet_record_key;

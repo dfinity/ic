@@ -1,7 +1,8 @@
 //! Tests for scheduler metrics.
 
 use super::super::test_utilities::{
-    SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response, other_side,
+    SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response,
+    other_side,
 };
 use super::super::*;
 use super::{
@@ -10,7 +11,7 @@ use super::{
 };
 use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_error_types::RejectCode;
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_logger::no_op_logger;
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord, DerivationPath,
@@ -21,24 +22,42 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
-use ic_replicated_state::testing::SystemStateTesting;
+use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
 use ic_test_utilities_metrics::{
-    HistogramStats, fetch_counter_vec, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats,
-    fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
+    HistogramStats, MetricVec, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
+    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec,
+    metric_vec, nonzero_values,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
+use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
+use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Instructions, NominalCycles, NominalCyclesTesting,
+    CanisterCyclesCostSchedule, CompoundCycles, CyclesUseCase, Instructions, NominalCycles,
+    NominalCyclesTesting,
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
 use std::time::Duration;
+
+/// Observes the state metrics at `height`, having first refreshed the derived
+/// consumed-cycles total that the `replicated_state_consumed_cycles_since_replica_started`
+/// gauge reads. Production refreshes it on every `commit_and_certify`, which this
+/// harness never does.
+fn observe_state_metrics(test: &mut SchedulerTest, height: u64) {
+    test.state_mut().refresh_consumed_cycles();
+    test.state_metrics().observe(
+        test.state().metadata.own_subnet_id,
+        test.state(),
+        height.into(),
+        &no_op_logger(),
+    );
+}
 
 #[test]
 fn validate_consumed_instructions_metric() {
@@ -582,6 +601,261 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     );
 }
 
+/// Observes the replicated state metrics of `state` into a fresh registry.
+fn observe(state: &ReplicatedState) -> MetricsRegistry {
+    let registry = MetricsRegistry::new();
+    ReplicatedStateMetrics::new(&registry).observe(
+        state.metadata.own_subnet_id,
+        state,
+        0.into(),
+        &no_op_logger(),
+    );
+    registry
+}
+
+const INGRESS_HISTORY_LENGTH_BY_STATE: &str = "replicated_state_ingress_history_length_by_state";
+
+#[test]
+fn replicated_state_metrics_ingress_history_length_by_state() {
+    let known_status = |state: IngressState| IngressStatus::Known {
+        receiver: canister_test_id(1).get(),
+        user_id: user_test_id(1),
+        time: UNIX_EPOCH,
+        state,
+    };
+
+    // A state with an empty ingress history exports a zero for every ingress state.
+    // Note that `IngressStatus::Unknown` must never be recorded at all
+    // (`IngressHistoryState::insert()` `debug_assert`s against it), so zero is the
+    // only value it is ever expected to have.
+    let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    assert_eq!(
+        metric_vec(&[
+            (&[("state", "received")], 0),
+            (&[("state", "processing")], 0),
+            (&[("state", "completed")], 0),
+            (&[("state", "failed")], 0),
+            (&[("state", "done")], 0),
+            (&[("state", "unknown")], 0),
+        ]),
+        fetch_int_gauge_vec(&observe(&state), INGRESS_HISTORY_LENGTH_BY_STATE)
+    );
+
+    // Note that `IngressState::Done` is not covered by the loop below: it cannot be
+    // recorded directly, only reached by forgetting a terminal status (see below).
+    for (label_value, ingress_state) in [
+        ("received", IngressState::Received),
+        ("processing", IngressState::Processing),
+        (
+            "completed",
+            IngressState::Completed(WasmResult::Reply(vec![1, 2, 3])),
+        ),
+        (
+            "failed",
+            IngressState::Failed(UserError::new(ErrorCode::CanisterTrapped, "Oops")),
+        ),
+    ] {
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        assert_eq!(
+            MetricVec::new(),
+            nonzero_values(fetch_int_gauge_vec(
+                &observe(&state),
+                INGRESS_HISTORY_LENGTH_BY_STATE
+            ))
+        );
+
+        // Recording an ingress message in the given state bumps its count to 1.
+        let is_terminal = ingress_state.is_terminal();
+        state.set_ingress_status(
+            message_test_id(1),
+            known_status(ingress_state),
+            NumBytes::new(u64::MAX),
+            |_| {},
+        );
+        assert_eq!(
+            metric_vec(&[(&[("state", label_value)], 1)]),
+            nonzero_values(fetch_int_gauge_vec(
+                &observe(&state),
+                INGRESS_HISTORY_LENGTH_BY_STATE
+            ))
+        );
+
+        // Making it terminal and pruning it drops the count back to 0. Only a
+        // non-terminal status is transitioned to `Completed`: `Completed` and
+        // `Failed` are already terminal and overwriting them would be an invalid
+        // state transition.
+        if !is_terminal {
+            state.set_ingress_status(
+                message_test_id(1),
+                known_status(IngressState::Completed(WasmResult::Reply(vec![]))),
+                NumBytes::new(u64::MAX),
+                |_| {},
+            );
+        }
+        state
+            .metadata
+            .ingress_history
+            .prune(Time::from_nanos_since_unix_epoch(u64::MAX));
+        assert_eq!(
+            MetricVec::new(),
+            nonzero_values(fetch_int_gauge_vec(
+                &observe(&state),
+                INGRESS_HISTORY_LENGTH_BY_STATE
+            ))
+        );
+    }
+
+    // `IngressState::Done` is reached by forgetting the payload of a terminal
+    // status, which happens as soon as the ingress history exceeds its memory
+    // capacity.
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    state.set_ingress_status(
+        message_test_id(1),
+        known_status(IngressState::Completed(WasmResult::Reply(vec![1, 2, 3]))),
+        NumBytes::new(0),
+        |_| {},
+    );
+    assert_eq!(
+        metric_vec(&[(&[("state", "done")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(
+            &observe(&state),
+            INGRESS_HISTORY_LENGTH_BY_STATE
+        ))
+    );
+
+    state
+        .metadata
+        .ingress_history
+        .prune(Time::from_nanos_since_unix_epoch(u64::MAX));
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(
+            &observe(&state),
+            INGRESS_HISTORY_LENGTH_BY_STATE
+        ))
+    );
+}
+
+#[test]
+fn replicated_state_metrics_subnet_queue_messages() {
+    const INPUT: &str = "execution_subnet_input_queue_messages";
+    const OUTPUT: &str = "execution_subnet_output_queue_messages";
+    let own_subnet = subnet_test_id(1);
+    let subnet_canister = CanisterId::from(own_subnet);
+    let remote_canister = canister_test_id(10);
+
+    //
+    // An ingress message to the subnet.
+    //
+    let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
+    assert_eq!(
+        metric_vec(&[(&[("kind", "ingress")], 0), (&[("kind", "canister")], 0)]),
+        fetch_int_gauge_vec(&observe(&state), INPUT)
+    );
+
+    state.subnet_queues_mut().push_ingress(
+        IngressBuilder::new()
+            .receiver(subnet_canister)
+            .method_name("method")
+            .build(),
+    );
+    assert_eq!(
+        metric_vec(&[(&[("kind", "ingress")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), INPUT))
+    );
+
+    assert_eq!(
+        1,
+        state.subnet_queues_retain_ingress_messages(|_| false).len()
+    );
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), INPUT))
+    );
+
+    //
+    // A request to the subnet, and the response to it.
+    //
+    let mut state = ReplicatedState::new(own_subnet, SubnetType::Application);
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), INPUT))
+    );
+    assert_eq!(Some(0), fetch_int_gauge(&observe(&state), OUTPUT));
+
+    let mut subnet_available_guaranteed_response_memory = i64::MAX / 2;
+    state
+        .push_input(
+            RequestBuilder::new()
+                .sender(remote_canister)
+                .receiver(subnet_canister)
+                .sender_reply_callback(CallbackId::from(1))
+                .build()
+                .into(),
+            &mut subnet_available_guaranteed_response_memory,
+        )
+        .unwrap();
+    assert_eq!(
+        metric_vec(&[(&[("kind", "canister")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), INPUT))
+    );
+    assert_eq!(Some(0), fetch_int_gauge(&observe(&state), OUTPUT));
+
+    // Popping the request drops the input count back to 0; responding to it bumps
+    // the output count to 1.
+    assert!(state.pop_subnet_input().is_some());
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), INPUT))
+    );
+
+    state.subnet_queues_mut().push_output_response(Arc::new(
+        ResponseBuilder::new()
+            .originator(remote_canister)
+            .respondent(subnet_canister)
+            .originator_reply_callback(CallbackId::from(1))
+            .build(),
+    ));
+    assert_eq!(Some(1), fetch_int_gauge(&observe(&state), OUTPUT));
+
+    // And popping the response drops it back to 0.
+    assert_eq!(1, state.output_into_iter().count());
+    assert_eq!(Some(0), fetch_int_gauge(&observe(&state), OUTPUT));
+}
+
+#[test]
+fn replicated_state_metrics_pending_refunds() {
+    const NAME: &str = "replicated_state_pending_refunds";
+    const CYCLES_NAME: &str = "replicated_state_pending_refunds_cycles";
+
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    let registry = observe(&state);
+    assert_eq!(Some(0), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(0.), fetch_gauge(&registry, CYCLES_NAME));
+
+    state.add_refund(canister_test_id(1), Cycles::new(13));
+    let registry = observe(&state);
+    assert_eq!(Some(1), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(13.), fetch_gauge(&registry, CYCLES_NAME));
+
+    // A second refund, to a different canister.
+    state.add_refund(canister_test_id(2), Cycles::new(29));
+    let registry = observe(&state);
+    assert_eq!(Some(2), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(42.), fetch_gauge(&registry, CYCLES_NAME));
+
+    // Taking the larger refund only leaves the smaller one behind.
+    state.take_refunds(|refund| refund.recipient() == canister_test_id(2));
+    let registry = observe(&state);
+    assert_eq!(Some(1), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(13.), fetch_gauge(&registry, CYCLES_NAME));
+
+    state.take_refunds(|_| true);
+    let registry = observe(&state);
+    assert_eq!(Some(0), fetch_int_gauge(&registry, NAME));
+    assert_eq!(Some(0.), fetch_gauge(&registry, CYCLES_NAME));
+}
+
 #[test]
 fn long_open_call_context_is_recorded() {
     let mut test = SchedulerTestBuilder::new().build();
@@ -627,19 +901,13 @@ fn threshold_signature_agreements_metric_is_updated() {
     let schnorr_key_id = make_schnorr_key_id(0);
     let master_schnorr_key_id = MasterPublicKeyId::Schnorr(schnorr_key_id.clone());
     let mut test = SchedulerTestBuilder::new()
-        .with_replica_version(ReplicaVersion::default())
         .with_chain_keys(vec![
             master_ecdsa_key_id.clone(),
             master_schnorr_key_id.clone(),
         ])
         .build();
 
-    test.state_metrics().observe(
-        test.state().metadata.own_subnet_id,
-        test.state(),
-        1.into(),
-        &no_op_logger(),
-    );
+    observe_state_metrics(&mut test, 1);
 
     let canister_id = test.create_canister();
 
@@ -798,12 +1066,7 @@ fn threshold_signature_agreements_metric_is_updated() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    test.state_metrics().observe(
-        test.state().metadata.own_subnet_id,
-        test.state(),
-        2.into(),
-        &no_op_logger(),
-    );
+    observe_state_metrics(&mut test, 2);
 
     let threshold_signature_agreements_after = &test
         .state()
@@ -858,12 +1121,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
 
         let canister_id = test.create_canister();
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         let consumed_cycles_before = NominalCycles::new(
             fetch_gauge(
@@ -895,12 +1153,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
             .sign_with_ecdsa_contexts();
         assert_eq!(sign_with_ecdsa_contexts.len(), 1);
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
         let consumed_cycles_after = NominalCycles::new(
             fetch_gauge(
                 test.metrics_registry(),
@@ -939,12 +1192,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             .subnet_features
             .http_requests = true;
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         let consumed_cycles_before = NominalCycles::new(
             fetch_gauge(
@@ -1005,12 +1253,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             Some(NumBytes::from(response_size_limit)),
         );
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
         let consumed_cycles_after = NominalCycles::new(
             fetch_gauge(
                 test.metrics_registry(),
@@ -1040,6 +1283,47 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             metric_vec(&[(&[("use_case", "HTTPOutcalls")], fee.nominal().get() as f64),]),
         );
     }
+}
+
+#[test]
+fn outcalls_cycles_are_migrated_into_use_cases_on_an_idle_subnet() {
+    let mut test = SchedulerTestBuilder::new().build();
+
+    // Simulate a subnet that consumed HTTP and ECDSA outcall cycles before
+    // use-case tracking existed: only the legacy scalar fields carry the history,
+    // the by-use-case map has no corresponding entries.
+    let subnet_metrics = &mut test.state_mut().metadata.subnet_metrics;
+    subnet_metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(100));
+    subnet_metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(200));
+    assert!(subnet_metrics.get_consumed_cycles_by_use_case().is_empty());
+
+    // A round in which the subnet observes no use case whatsoever: no outcall, no
+    // canister deletion, no dropped message.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // The entries were nevertheless backfilled from the scalar fields.
+    let by_use_case = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .get_consumed_cycles_by_use_case();
+    assert_eq!(
+        by_use_case[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(100)
+    );
+    assert_eq!(
+        by_use_case[&CyclesUseCase::ECDSAOutcalls],
+        NominalCycles::new(200)
+    );
+
+    // The monotonic counters map is left untouched, so no spurious counter jump.
+    assert!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_by_use_case_as_counters()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1135,12 +1419,7 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
             .system_state
             .consume_cycles(removed_cycles);
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         assert_eq!(
             fetch_gauge_vec(
@@ -1181,12 +1460,7 @@ fn consumed_cycles_for_resource_allocations_are_updated_from_valid_canisters() {
         test.advance_time(duration);
         test.charge_for_resource_allocations();
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         let expected_memory_cycles = (test.memory_cost(memory_allocation, duration)
             + test.canister_base_cost(memory_allocation, duration))
@@ -1259,12 +1533,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         );
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        test.state_metrics().observe(
-            test.state().metadata.own_subnet_id,
-            test.state(),
-            0.into(),
-            &no_op_logger(),
-        );
+        observe_state_metrics(&mut test, 0);
 
         assert_eq!(
             fetch_gauge_vec(

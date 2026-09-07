@@ -6,7 +6,9 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::PageMap;
 use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCanisterLogsFilter};
-use ic_types::canister_log::MAX_FETCH_CANISTER_LOGS_RESULT_BYTES;
+use ic_types::canister_log::{
+    MAX_FETCH_CANISTER_LOGS_RESULT_BYTES, MIN_AGGREGATE_LOG_MEMORY_LIMIT,
+};
 use more_asserts::assert_le;
 
 // PageMap file layout.
@@ -48,8 +50,13 @@ const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
 /// Log memory limit can be zero to disable logging,
 /// but when it is non-zero it must be at least this value
 /// to properly account for the size of at least one OS page.
+/// Non-zero limits below this value are rejected when canister settings are
+/// validated.
 pub(super) const DATA_CAPACITY_MIN: usize = VIRTUAL_PAGE_SIZE;
 const _: () = assert!(VIRTUAL_PAGE_SIZE <= DATA_CAPACITY_MIN); // data capacity must be at least one page.
+// The user-facing minimum log memory limit matches the ring buffer's minimum
+// data capacity, so that an accepted non-zero limit is applied as is.
+const _: () = assert!(MIN_AGGREGATE_LOG_MEMORY_LIMIT == DATA_CAPACITY_MIN);
 
 pub(super) struct RingBuffer {
     io: StructIO,

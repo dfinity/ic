@@ -9,19 +9,28 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added `maximum_query_instructions` and `maximum_query_walltime_seconds` fields to the
-  subnet record's `ResourceLimits`, allowing the query instruction limit and the maximum query
-  wall-clock time to be configured per subnet via `create_subnet` and `update_subnet`.
-  `maximum_query_instructions` applies both to a single (non-composite) query method execution
-  and to the total across a composite query call graph; `maximum_query_walltime_seconds`
-  bounds the wall-clock time a query (including a composite query call graph) may run. For each,
-  a value of `0` (or unset) means the replica's default is used.
+* A subnet-split request will now fail if a concurrent call modified the `StandardEngineReplicaVersionRecord`
+  while the fresh key material was being generated for the splitting subnet.
+
+* A subnet-split request whose source subnet is a cloud engine that derives its replica version from the
+  `StandardEngineReplicaVersionRecord` will now be rejected while a deployment of a new replica version is
+  in progress. This guarantees that both subnets run the same replica version after the split.
+
+* Invariant requiring that every elected GuestOS and HostOS version ID is well-formed, i.e. that it consists
+  only of alphanumeric characters, dots, dashes and underscores.  Such IDs are what `ReplicaVersion` and
+  `HostosVersion` accept, so until now, it was possible to elect a version that consumers could not read
+  back out of the Registry.
+
+* `merge_subnets` endpoint, callable through a `MergeSubnets` proposal. It merges a subnet into
+  another subnet: in the routing table, reassigns all canister ranges hosted by the source subnet
+  to the destination subnet. Only the routing table is updated: neither subnet record is modified
+  and the source subnet is not deleted.
 
 ## Changed
 
-* Cloud Engines are now allowed to have blank `replica_version_id` (in their
-  `SubnetRecord`). In this case, `StandardEngineReplicaVersionRecord` is used to
-  determine the Cloud Engine's replica version.
+* `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
+  fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward
+  (`deployment_progress == 1.0`).
 
 ## Deprecated
 

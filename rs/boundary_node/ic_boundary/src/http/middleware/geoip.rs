@@ -30,10 +30,14 @@ impl GeoIp {
     }
 
     pub fn lookup(&self, ip: IpAddr) -> String {
-        let country: Option<geoip2::Country> = self.db.lookup(ip).ok();
+        let country: Option<geoip2::Country> = self
+            .db
+            .lookup(ip)
+            .ok()
+            .and_then(|x| x.decode().ok().flatten());
 
         country
-            .and_then(|x| x.country.and_then(|x| x.iso_code))
+            .and_then(|x| x.country.iso_code)
             .unwrap_or("N/A")
             .into()
     }

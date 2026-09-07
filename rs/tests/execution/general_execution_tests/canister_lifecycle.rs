@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 /* tag::catalog[]
 
 Title:: Canisters can be created, (un)installed and deleted.
@@ -27,7 +28,6 @@ AKA:: Testcase 2.4
 
 
 end::catalog[] */
-#![allow(deprecated)]
 
 use candid::{Decode, Encode};
 use ic_agent::{agent::RejectCode, export::Principal, identity::Identity};
@@ -102,7 +102,7 @@ pub fn create_canister_via_canister_succeeds(env: TestEnv) {
 
 pub fn update_settings_of_frozen_canister(env: TestEnv) {
     use ic_base_types::NumBytes;
-    use ic_cdk::management_canister::{CanisterSettings, UpdateSettingsArgs};
+    use ic_cdk_management_canister::{CanisterSettings, UpdateSettingsArgs};
     use ic_config::subnet_config::{
         CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig,
     };

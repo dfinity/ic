@@ -37,6 +37,7 @@ rust_library(
         "@crate_index//:hex",
         "@crate_index//:prometheus",
         "@crate_index//:rand",
+        "@crate_index//:rayon",
         "@crate_index//:slog",
     ],
 )
@@ -74,6 +75,7 @@ rust_test(
         "//rs/test_utilities",
         "//rs/test_utilities/consensus",
         "//rs/test_utilities/logger",
+        "//rs/test_utilities/metrics",
         "//rs/test_utilities/registry",
         "//rs/test_utilities/state",
         "//rs/test_utilities/time",
@@ -98,7 +100,6 @@ rust_bench(
     name = "payload_validation_bench",
     testonly = True,
     srcs = ["benches/payload_validation.rs"],
-    pin_cpu = True,
     # The benchmark asserts that the payload it builds actually validates, so
     # running it once (criterion's test mode) guards against the payload drifting
     # out of sync with the validation rules.
@@ -108,6 +109,7 @@ rust_bench(
         ":consensus",
         "//rs/config",
         "//rs/consensus/mocks",
+        "//rs/consensus/utils",
         "//rs/crypto/temp_crypto",
         "//rs/https_outcalls/pricing",
         "//rs/interfaces",

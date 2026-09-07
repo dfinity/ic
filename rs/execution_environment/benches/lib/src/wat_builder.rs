@@ -17,7 +17,7 @@ pub const CONFIRMATION_LOOP_ITERATIONS: usize = 1_000_000;
 /// Note, the maximum compilation complexity is 15K.
 pub const CONFIRMATION_REPEAT_TIMES: usize = 14_000;
 
-use crate::common::Wasm64;
+use crate::common::{MAX_WASM64_HEAP_NUM_PAGES, Wasm64};
 
 ////////////////////////////////////////////////////////////////////////
 /// WAT Block Builder
@@ -169,13 +169,13 @@ impl Func {
     /// Transform the function into a test module WAT representation.
     pub fn into_test_module_wat(self, wasm64_enabled: Wasm64) -> String {
         let memory = if wasm64_enabled == Wasm64::Enabled {
-            "(memory $mem i64 131072)"
+            format!("(memory $mem i64 {MAX_WASM64_HEAP_NUM_PAGES})")
         } else {
-            "(memory $mem 1)"
+            "(memory $mem 1)".to_string()
         };
         wrap_lines(
             "(module",
-            [self.imports, vec![memory.into()], self.lines].concat(),
+            [self.imports, vec![memory], self.lines].concat(),
             ")",
         )
         .join("\n")

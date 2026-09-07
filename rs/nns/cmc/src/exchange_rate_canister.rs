@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::{
     ONE_MINUTE_SECONDS, State, do_set_icp_xdr_conversion_rate, environment::Environment,
     mutate_state, read_state,

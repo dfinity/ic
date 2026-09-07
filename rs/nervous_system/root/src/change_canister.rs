@@ -10,12 +10,12 @@
 //! Of course, after calling the Management canister's `install_code` method,
 //! this start the canister back up again, and unlocks it.
 
-#![allow(deprecated)]
 use crate::{LOG_PREFIX, private::perform_offline_canister_maintenance};
 use candid::{CandidType, Deserialize, Encode, Principal};
 use dfn_core::api::CanisterId;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use ic_cdk::call::{Call, CallFailed};
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{
     CanisterInstallModeV2, ChunkHash, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
@@ -265,16 +265,15 @@ pub async fn change_canister(request: ChangeCanisterRequest) -> Result<(), Strin
     // This handles errors coming from install_code (which is more or less a
     // thin wrapper around the Management canister method), such as the
     // DESTINATION_INVALID (3) reject code.
-    result.map_err(|(rejection_code, message)| {
-        format!(
-            "Attempt to call install_code with request {request_str} failed with code \
-             {rejection_code:?}: {message}"
-        )
+    // `CallFailed`'s `Display` already spells out the failure (for a reject, it
+    // includes the reject code and the callee's message).
+    result.map_err(|err| {
+        format!("Attempt to call install_code with request {request_str} failed: {err}")
     })
 }
 
 /// Calls a function of the management canister to install the requested code.
-async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::CallResult<()> {
+async fn install_code(request: ChangeCanisterRequest) -> Result<(), CallFailed> {
     let ChangeCanisterRequest {
         mode,
         canister_id,
@@ -308,12 +307,13 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
             arg,
             sender_canister_version,
         };
-        ic_cdk::api::call::call(
+        Call::unbounded_wait(
             Principal::try_from(IC_00.get().as_slice()).unwrap(),
             "install_chunked_code",
-            (&argument,),
         )
+        .with_arg(&argument)
         .await
+        .map(|_reply| ())
     } else {
         let argument = InstallCodeArgsV2 {
             mode,
@@ -322,12 +322,13 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
             arg,
             sender_canister_version,
         };
-        ic_cdk::api::call::call(
+        Call::unbounded_wait(
             Principal::try_from(IC_00.get().as_slice()).unwrap(),
             "install_code",
-            (&argument,),
         )
+        .with_arg(&argument)
         .await
+        .map(|_reply| ())
     }
 }
 

@@ -36,6 +36,7 @@ pub(crate) struct DashboardService {
     config: Config,
     subnet_type: SubnetType,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    replica_version: ReplicaVersion,
 }
 
 impl DashboardService {
@@ -47,11 +48,13 @@ impl DashboardService {
         config: Config,
         subnet_type: SubnetType,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        replica_version: ReplicaVersion,
     ) -> Router {
         let state = DashboardService {
             config,
             subnet_type,
             state_reader,
+            replica_version,
         };
         Router::new().route(
             DashboardService::route(),
@@ -65,6 +68,7 @@ async fn dashboard(
         config,
         subnet_type,
         state_reader,
+        replica_version,
     }): State<DashboardService>,
 ) -> impl IntoResponse {
     let labeled_state =
@@ -95,7 +99,7 @@ async fn dashboard(
         height: labeled_state.height(),
         replicated_state: labeled_state.get_ref(),
         canisters: &canisters,
-        replica_version: ReplicaVersion::default(),
+        replica_version,
     };
 
     match dashboard.render() {

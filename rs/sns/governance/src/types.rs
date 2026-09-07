@@ -1864,6 +1864,7 @@ impl UpgradeSnsControlledCanister {
                 .map(|blob| summarize_blob_field(blob)),
             mode: self.mode,
             chunked_canister_wasm: self.chunked_canister_wasm.clone(),
+            canister_upgrade_options: self.canister_upgrade_options,
         }
     }
 
@@ -1875,6 +1876,7 @@ impl UpgradeSnsControlledCanister {
             mode: self.mode,
             new_canister_wasm: Vec::new(),
             chunked_canister_wasm: self.chunked_canister_wasm.clone(),
+            canister_upgrade_options: self.canister_upgrade_options,
         }
     }
 }

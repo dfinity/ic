@@ -11,6 +11,7 @@ bech32 = { workspace = true }
 candid = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-cdk = { workspace = true }
+ic-cdk-bitcoin-canister = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

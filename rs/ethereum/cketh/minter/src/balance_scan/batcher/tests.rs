@@ -1,9 +1,9 @@
 use super::*;
 
 const TOKEN0: Address = Address::new([0x22; 20]);
-const HOLDER0: Address = Address::new([0x11; 20]);
+const HOLDER0: DepositAddress = DepositAddress::new(Address::new([0x11; 20]));
 const TOKEN1: Address = Address::new([0x44; 20]);
-const HOLDER1: Address = Address::new([0x33; 20]);
+const HOLDER1: DepositAddress = DepositAddress::new(Address::new([0x33; 20]));
 
 fn word(value: u64) -> [u8; WORD] {
     word_from_usize(value as usize)
@@ -84,7 +84,7 @@ fn encode_single_call_golden_vector() {
     let args = &encoded[BATCHER_INITCODE.len()..];
     assert_eq!(&args[0..32], &word(1)); // n
     assert_eq!(&args[32..64], &left_padded_address(&TOKEN0));
-    assert_eq!(&args[64..96], &left_padded_address(&HOLDER0));
+    assert_eq!(&args[64..96], &left_padded_address(HOLDER0.as_address()));
 }
 
 #[test]
@@ -104,9 +104,9 @@ fn encode_two_calls_layout() {
     let args = &encoded[BATCHER_INITCODE.len()..];
     assert_eq!(&args[0..32], &word(2));
     assert_eq!(&args[32..64], &left_padded_address(&TOKEN0));
-    assert_eq!(&args[64..96], &left_padded_address(&HOLDER0));
+    assert_eq!(&args[64..96], &left_padded_address(HOLDER0.as_address()));
     assert_eq!(&args[96..128], &left_padded_address(&TOKEN1));
-    assert_eq!(&args[128..160], &left_padded_address(&HOLDER1));
+    assert_eq!(&args[128..160], &left_padded_address(HOLDER1.as_address()));
 }
 
 #[test]

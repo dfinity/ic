@@ -2,19 +2,57 @@
 This module defines Bazel targets for the mainnet versions of ICOS images
 """
 
+load(
+    "//bazel:mainnet-artifact-refs.bzl",
+    "check",
+    "checked_commit_id",
+    "checked_url",
+    "checked_variant",
+    "icos_record_error",
+)
+
+_CDN_PREFIX = "https://download.dfinity.systems/ic/"
+
 def icos_image_download_url(git_commit_id, variant, update):
-    return "https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}/{component}.tar.zst".format(
-        git_commit_id = git_commit_id,
-        variant = variant,
+    """URL of the `variant` disk or update image published for `git_commit_id`.
+
+    `git_commit_id` comes from the auto-merged mainnet-icos-revisions.json (directly,
+    or through @mainnet_icos_versions for the system-test `*_IMG_URL` env vars), so it
+    is validated here -- for every caller -- against escaping the pinned CDN prefix
+    (see //bazel:mainnet-artifact-refs.bzl).
+
+    Args:
+      git_commit_id: the revision the image was published for.
+      variant: the ICOS variant, e.g. "guest-os".
+      update: whether to return the update image instead of the disk image.
+
+    Returns:
+      The download URL.
+    """
+    return checked_url("https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}/{component}.tar.zst".format(
+        git_commit_id = checked_commit_id(git_commit_id, "the mainnet ICOS version"),
+        variant = checked_variant(variant, "the ICOS image variant"),
         component = "update-img" if update else "disk-img",
-    )
+    ), _CDN_PREFIX)
 
 def icos_dev_image_download_url(git_commit_id, variant, update):
-    return "https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}-dev/{component}.tar.zst".format(
-        git_commit_id = git_commit_id,
-        variant = variant,
+    """URL of the `variant` dev disk or update image published for `git_commit_id`.
+
+    Like `icos_image_download_url`, but for the dev channel of the same revision.
+
+    Args:
+      git_commit_id: the revision the image was published for.
+      variant: the ICOS variant, e.g. "guest-os".
+      update: whether to return the update image instead of the disk image.
+
+    Returns:
+      The download URL.
+    """
+    return checked_url("https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}-dev/{component}.tar.zst".format(
+        git_commit_id = checked_commit_id(git_commit_id, "the mainnet ICOS version"),
+        variant = checked_variant(variant, "the ICOS image variant"),
         component = "update-img" if update else "disk-img",
-    )
+    ), _CDN_PREFIX)
 
 def _mainnet_icos_images_impl(repository_ctx):
     """Repository rule for ic-os images.
@@ -39,6 +77,11 @@ def _mainnet_icos_images_impl(repository_ctx):
     info = json.decode(repository_ctx.read(json_path))
     for part in parts:
         info = info[part]
+
+    # The JSON is not reviewed by a human before it is merged, so validate the
+    # version and the image hashes before they are used to locate and to verify
+    # these multi-GB downloads.
+    check(icos_record_error(info), "%s: %s" % (json_path, "/".join(parts)))
 
     git_commit_id = info["version"]
 

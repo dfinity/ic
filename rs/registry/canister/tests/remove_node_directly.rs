@@ -25,7 +25,8 @@ use ic_registry_keys::{
 use ic_registry_transport::pb::v1::{
     RegistryAtomicMutateRequest, RegistryMutation, registry_mutation,
 };
-use ic_types::{NodeId, ReplicaVersion};
+use ic_test_utilities_types::ids::test_replica_version;
+use ic_types::NodeId;
 use maplit::btreemap;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -155,7 +156,7 @@ fn node_cannot_be_removed_if_in_subnet() {
         let test_subnet_id = SubnetId::from(*TEST_NEURON_1_OWNER_PRINCIPAL);
         let test_subnet_record = SubnetRecord {
             membership: vec![node_id.get().to_vec()],
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             unit_delay_millis: 600,
             ..Default::default()
         };

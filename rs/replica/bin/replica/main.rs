@@ -182,8 +182,12 @@ fn main() -> io::Result<()> {
         .as_ref()
         .map(|proto| CatchUpPackage::try_from(proto).expect("deserializing CUP failed"));
 
-    // Set the replica version and report as metric
-    setup::set_replica_version(&replica_args, &logger);
+    const UNKNOWN_REPLICA_VERSION: &str = "unknown_replica_version";
+    let replica_version = replica_args.as_ref().map_or_else(
+        |_| ReplicaVersion::try_from(UNKNOWN_REPLICA_VERSION).unwrap(),
+        |args| args.replica_version.clone(),
+    );
+    // Report replica version metric
     {
         let g = metrics_registry.int_gauge_vec(
             "ic_replica_info",
@@ -191,7 +195,7 @@ fn main() -> io::Result<()> {
             &["ic_active_version", "ic_replica_binary_hash"],
         );
         g.with_label_values(&[
-            ReplicaVersion::default().as_ref(),
+            replica_version.as_ref(),
             &get_replica_binary_hash()
                 .map(|x| x.1)
                 .unwrap_or_else(|_| "na".to_string()),
@@ -284,6 +288,7 @@ fn main() -> io::Result<()> {
             config.clone(),
             node_id,
             subnet_id,
+            replica_version,
             registry,
             crypto,
             cup_proto,

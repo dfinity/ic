@@ -657,9 +657,8 @@ fn reject_if_invalid(
 mod tests {
     use assert_matches::assert_matches;
     use core::{convert::From, iter::Iterator, time::Duration};
-    use ic_consensus_mocks::{
-        Dependencies, dependencies_with_subnet_records_with_raw_state_manager,
-    };
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+    use ic_consensus_utils::build_thread_pool;
     use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationFailure};
     use ic_interfaces::idkg::IDkgChangeAction;
@@ -678,7 +677,6 @@ mod tests {
     use ic_types::time::UNIX_EPOCH;
     use ic_types::time::current_time;
     use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
-    use rayon::ThreadPoolBuilder;
     use std::str::FromStr;
 
     use super::*;
@@ -804,11 +802,13 @@ mod tests {
                 registry,
                 registry_data_provider,
                 ..
-            } = dependencies_with_subnet_records_with_raw_state_manager(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(1, subnet_record_builder.build())],
-            );
+            )
+            .without_state_manager_expectations()
+            .build();
 
             // Enable the configured keys
             if let Some(config) = config
@@ -873,12 +873,7 @@ mod tests {
                 pool.get_cache(),
                 crypto,
                 state_manager,
-                Arc::new(
-                    ThreadPoolBuilder::new()
-                        .num_threads(num_threads)
-                        .build()
-                        .unwrap(),
-                ),
+                build_thread_pool(num_threads),
                 subnet_id,
                 registry,
                 &MetricsRegistry::new(),

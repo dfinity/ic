@@ -26,7 +26,7 @@ use ic_agent::{
     identity::BasicIdentity,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
-use ic_cdk::management_canister::{
+use ic_cdk_management_canister::{
     SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
 use ic_config::{ConfigOptional, ConfigSource};
@@ -1574,6 +1574,8 @@ pub fn get_config() -> ConfigOptional {
         domain_name: "".to_string(),
         node_reward_type: "".to_string(),
         malicious_behavior: "null".to_string(),
+        extra_api_boundary_node_trust_anchors_pem: "null".to_string(),
+        peer_guest_vm_address: None,
     };
 
     let ic_json =

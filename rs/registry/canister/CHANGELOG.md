@@ -11,6 +11,75 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-08-28: Proposal 143737
+
+http://dashboard.internetcomputer.org/proposal/143737
+
+## Added
+
+* `cooling_down` field in `SubnetRecord`, settable via `UpdateSubnetRecord` proposals. See
+  `ic_replicated_state::SubnetTopology::cooling_down` for the exact semantics. The field must not
+  be set on mainnet before the replica version rejecting ingress messages to cooling down subnets
+  has been rolled out to all subnets.
+
+
+# 2026-08-21: Proposal 143659
+
+http://dashboard.internetcomputer.org/proposal/143659
+
+## Added
+
+* Invariant requiring that SEV-enabled subnets may only run a GuestOS version that has
+  `guest_launch_measurements`.
+
+## Changed
+
+* `deploy_guestos_to_all_subnet_nodes` now accepts a blank `replica_version_id`
+  for Cloud Engines, provided a `StandardEngineReplicaVersionRecord` exists.
+  This is how a Cloud Engine that pins a version goes back to following the
+  standard engine version. Previously, only engine *creation* could leave
+  `replica_version_id` blank, because this endpoint required the version to be
+  elected, and a blank version never is.
+
+
+# 2026-08-14: Proposal 143579
+
+http://dashboard.internetcomputer.org/proposal/143579
+
+## Added
+
+Add a `replica_version_id` to `ReplicaVersionRecord`s, and backfill with a data migration.
+
+## Changed
+
+* Guest launch measurements are now required (when electing a new GuestOS version).
+
+## Removed
+
+The `blessed_replica_versions` record has been removed.
+
+
+# 2026-08-07: Proposal 143409
+
+http://dashboard.internetcomputer.org/proposal/143409
+
+## Added
+
+* Added `maximum_query_instructions` and `maximum_query_walltime_seconds` fields to the
+  subnet record's `ResourceLimits`, allowing the query instruction limit and the maximum query
+  wall-clock time to be configured per subnet via `create_subnet` and `update_subnet`.
+  `maximum_query_instructions` applies both to a single (non-composite) query method execution
+  and to the total across a composite query call graph; `maximum_query_walltime_seconds`
+  bounds the wall-clock time a query (including a composite query call graph) may run. For each,
+  a value of `0` (or unset) means the replica's default is used.
+
+## Changed
+
+* Cloud Engines are now allowed to have blank `replica_version_id` (in their
+  `SubnetRecord`). In this case, `StandardEngineReplicaVersionRecord` is used to
+  determine the Cloud Engine's replica version.
+
+
 # 2026-07-31: Proposal 143259
 
 http://dashboard.internetcomputer.org/proposal/143259
@@ -120,7 +189,7 @@ http://dashboard.internetcomputer.org/proposal/142453
 
 # 2026-06-12 : Proposal 142265
 
-https://dashboard.internetcomputer.org/proposal/142265
+http://dashboard.internetcomputer.org/proposal/142265
 
 ## Changed
 
@@ -135,7 +204,7 @@ https://dashboard.internetcomputer.org/proposal/142265
 
 # 2026-06-05: Proposal 142129
 
-https://dashboard.internetcomputer.org/proposal/142129
+http://dashboard.internetcomputer.org/proposal/142129
 
 ## Added
 
@@ -432,7 +501,7 @@ http://dashboard.internetcomputer.org/proposal/139085
 
 # 2025-10-17: Proposal 138992
 
-https://dashboard.internetcomputer.org/proposal/138992
+http://dashboard.internetcomputer.org/proposal/138992
 
 ## Changed
 
@@ -500,7 +569,7 @@ http://dashboard.internetcomputer.org/proposal/137917
 
 # 2025-07-18: Proposal 137500
 
-https://dashboard.internetcomputer.org/proposal/137500
+http://dashboard.internetcomputer.org/proposal/137500
 
 Back fill some node records with reward type.
 
@@ -526,7 +595,7 @@ http://dashboard.internetcomputer.org/proposal/137254
 
 # 2025-06-20: Proposal 137081
 
-https://dashboard.internetcomputer.org/proposal/137081
+http://dashboard.internetcomputer.org/proposal/137081
 
 ### Changed
 
@@ -598,7 +667,7 @@ http://dashboard.internetcomputer.org/proposal/136581
 
 # 2025-05-02: Proposal 136428
 
-https://dashboard.internetcomputer.org/proposal/136428
+http://dashboard.internetcomputer.org/proposal/136428
 
 No behavior changes. When there are large registry records, then, the new code
 here will behave differently (per [this forum post]), but there is currently no
@@ -617,13 +686,13 @@ http://dashboard.internetcomputer.org/proposal/136371
 
 # 2025-03-28: Proposal 136007
 
-https://dashboard.internetcomputer.org/proposal/136007
+http://dashboard.internetcomputer.org/proposal/136007
 
 This is a maintenance upgrade.
 
 # 2025-03-21: Proposal 135934
 
-https://dashboard.internetcomputer.org/proposal/135934
+http://dashboard.internetcomputer.org/proposal/135934
 
 No "real" behavior changes. This is just a maintenance upgrade.
 
@@ -631,7 +700,7 @@ Technically, there is a new get_chunk method, but it does not actually do anythi
 
 # 2025-02-13: Proposal 135300
 
-https://dashboard.internetcomputer.org/proposal/135300
+http://dashboard.internetcomputer.org/proposal/135300
 
 ## Fixed
 

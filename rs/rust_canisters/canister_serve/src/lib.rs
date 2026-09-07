@@ -1,6 +1,6 @@
 use by_address::ByAddress;
 use ic_canister_log::{GlobalBuffer, LogBuffer, LogEntry};
-use ic_cdk::management_canister::{HttpHeader, HttpRequestArgs, HttpRequestResult};
+use ic_cdk_management_canister::{HttpHeader, HttpRequestArgs, HttpRequestResult};
 use ic_metrics_encoder::MetricsEncoder;
 use maplit::hashmap;
 use priority_queue::PriorityQueue;
@@ -21,7 +21,7 @@ const MAX_LOGS_RESPONSE_SIZE: usize = 1 << 20;
 ///
 /// ```
 /// use ic_canister_serve::serve_metrics;
-/// use ic_cdk::management_canister::{HttpRequestArgs, HttpRequestResult};
+/// use ic_cdk_management_canister::{HttpRequestArgs, HttpRequestResult};
 /// use ic_metrics_encoder::MetricsEncoder;
 ///
 /// fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
@@ -89,7 +89,7 @@ pub fn serve_metrics(
 /// ```
 /// use ic_canister_log::{declare_log_buffer, export, log};
 /// use ic_canister_serve::serve_logs;
-/// use ic_cdk::management_canister::{HttpRequestArgs, HttpRequestResult};
+/// use ic_cdk_management_canister::{HttpRequestArgs, HttpRequestResult};
 ///
 /// declare_log_buffer!(name = INFO, capacity = 100);
 /// declare_log_buffer!(name = ERROR, capacity = 100);

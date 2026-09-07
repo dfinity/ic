@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::{
     canister_api::CanisterApi,
     pb::v1::{
@@ -1628,14 +1627,19 @@ where
         Ok(canister_status_result.settings.controllers)
     }
 
-    /// Get an available subnet to create canisters on
+    /// Get an available subnet to create canisters on.
+    ///
+    /// Distributes deployments across all configured SNS subnets by rotating on
+    /// the number of SNSs already deployed, instead of always using the first
+    /// subnet.
     fn get_available_sns_subnet(&self) -> Result<SubnetId, String> {
-        // TODO We need a way to find "available" subnets based on SNS deployments (limiting numbers per Subnet)
-        if !self.sns_subnet_ids.is_empty() {
-            Ok(self.sns_subnet_ids[0])
-        } else {
-            Err("No SNS Subnet is available".to_string())
+        if self.sns_subnet_ids.is_empty() {
+            return Err("No SNS Subnet is available".to_string());
         }
+
+        let index = self.deployed_sns_list.len() % self.sns_subnet_ids.len();
+
+        Ok(self.sns_subnet_ids[index])
     }
 
     /// Given the SnsVersion of an SNS instance, returns the SnsVersion that this SNS instance
@@ -1936,7 +1940,7 @@ impl UpgradePath {
             .or_default()
             .entry(from)
         {
-            Entry::Occupied(occupied) => {
+            Entry::Occupied(mut occupied) => {
                 println!(
                     "Special Entry for {}  from {:?} to {:?} is being overwritten with new value {:?}",
                     sns_governance_canister_id,
@@ -1944,6 +1948,7 @@ impl UpgradePath {
                     occupied.get(),
                     to
                 );
+                occupied.insert(to);
             }
             Entry::Vacant(vacant) => {
                 vacant.insert(to);
@@ -2457,6 +2462,66 @@ mod test {
 
         let response3 = canister.get_sns_subnet_ids();
         assert_eq!(response3.sns_subnet_ids, vec![principal2]);
+    }
+
+    // Appends `count` placeholder deployments so that `deployed_sns_list.len()`
+    // reflects the number of SNSs already deployed.
+    fn push_dummy_deployments(
+        canister: &mut SnsWasmCanister<TestCanisterStableMemory>,
+        count: u64,
+    ) {
+        for i in 0..count {
+            let base = 1_000 + i * 10;
+            canister.deployed_sns_list.push(DeployedSns {
+                root_canister_id: Some(CanisterId::from_u64(base).into()),
+                governance_canister_id: Some(CanisterId::from_u64(base + 1).into()),
+                ledger_canister_id: Some(CanisterId::from_u64(base + 2).into()),
+                swap_canister_id: Some(CanisterId::from_u64(base + 3).into()),
+                index_canister_id: Some(CanisterId::from_u64(base + 4).into()),
+            });
+        }
+    }
+
+    #[test]
+    fn test_get_available_sns_subnet_errors_when_no_subnets_configured() {
+        // Step 1: Prepare the world.
+        let canister = new_wasm_canister();
+
+        // Step 2: Run the code under test.
+        let result = canister.get_available_sns_subnet();
+
+        // Step 3: Verify result.
+        assert!(result.is_err(), "expected an error, got {result:?}");
+    }
+
+    #[test]
+    fn test_get_available_sns_subnet_returns_only_subnet() {
+        // Step 1: Prepare the world.
+        let mut canister = new_wasm_canister();
+        let only_subnet = subnet_test_id(1);
+        canister.set_sns_subnets(vec![only_subnet]);
+
+        // Step 2 & 3: With a single subnet, every deployment count maps to it.
+        for _ in 0..5 {
+            push_dummy_deployments(&mut canister, 1);
+            assert_eq!(canister.get_available_sns_subnet(), Ok(only_subnet));
+        }
+    }
+
+    #[test]
+    fn test_get_available_sns_subnet_rotates_across_subnets() {
+        // Step 1: Prepare the world.
+        let mut canister = new_wasm_canister();
+        let subnets = vec![subnet_test_id(1), subnet_test_id(2), subnet_test_id(3)];
+        canister.set_sns_subnets(subnets.clone());
+
+        // Step 2 & 3: Selection rotates by the number of deployments so far.
+        // deployed_sns_list lengths 0,1,2,3,4 -> subnets 0,1,2,0,1.
+        let expected_order = vec![subnets[0], subnets[1], subnets[2], subnets[0], subnets[1]];
+        for expected_subnet in expected_order {
+            assert_eq!(canister.get_available_sns_subnet(), Ok(expected_subnet));
+            push_dummy_deployments(&mut canister, 1);
+        }
     }
 
     #[test]
@@ -5581,5 +5646,46 @@ mod test {
                 }
             );
         }
+    }
+
+    #[test]
+    fn test_insert_sns_specific_upgrade_path_entry_overwrites_existing_entry() {
+        let sns_governance_canister_id = CanisterId::from_u64(1000);
+        let from_version = SnsVersion {
+            governance_wasm_hash: vec![1],
+            ..Default::default()
+        };
+        let first_to_version = SnsVersion {
+            governance_wasm_hash: vec![2],
+            ..Default::default()
+        };
+        let second_to_version = SnsVersion {
+            governance_wasm_hash: vec![3],
+            ..Default::default()
+        };
+
+        let mut upgrade_path = UpgradePath::default();
+        upgrade_path.insert_sns_specific_upgrade_path_entry(
+            from_version.clone(),
+            first_to_version.clone(),
+            sns_governance_canister_id,
+        );
+        assert_eq!(
+            upgrade_path.get_next_version(from_version.clone(), sns_governance_canister_id.get()),
+            Some(first_to_version)
+        );
+
+        // Run code under test: reconfigure the same `from_version` entry with a new target.
+        upgrade_path.insert_sns_specific_upgrade_path_entry(
+            from_version.clone(),
+            second_to_version.clone(),
+            sns_governance_canister_id,
+        );
+
+        // The entry must reflect the new target, not the stale first one.
+        assert_eq!(
+            upgrade_path.get_next_version(from_version, sns_governance_canister_id.get()),
+            Some(second_to_version)
+        );
     }
 }

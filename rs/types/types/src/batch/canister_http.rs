@@ -1,5 +1,5 @@
 use crate::{
-    CanisterId, CountBytes, ReplicaVersion,
+    CountBytes, ReplicaVersion,
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpRequestId,
         CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent,
@@ -32,8 +32,41 @@ pub struct CanisterHttpPayload {
     pub responses: Vec<CanisterHttpResponseWithConsensus>,
     pub timeouts: Vec<CallbackId>,
     pub divergence_responses: Vec<CanisterHttpResponseDivergence>,
+    pub out_of_cycles: Vec<CanisterHttpOutOfCycles>,
     pub flexible_responses: Vec<FlexibleCanisterHttpResponses>,
     pub flexible_errors: Vec<FlexibleCanisterHttpError>,
+    pub async_receipts: Vec<CanisterHttpResponseShare>,
+}
+
+/// A fully- or non-replicated HTTP outcall whose committee can no longer cover the
+/// consensus cost of delivering a response, proved by the receipts it has signed so
+/// far.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpOutOfCycles {
+    pub callback_id: CallbackId,
+    /// The signed receipts seen so far, at most one per replica.
+    pub shares: Vec<CanisterHttpResponseShare>,
+    /// The least it can cost to deliver a response.
+    pub min_cost: Cycles,
+    /// What is left of the committee's collective allowance, counting a full allowance
+    /// for every replica not among `shares`.
+    pub unspent_allowance: Cycles,
+}
+
+impl CountBytes for CanisterHttpOutOfCycles {
+    fn count_bytes(&self) -> usize {
+        let Self {
+            callback_id,
+            shares,
+            min_cost,
+            unspent_allowance,
+        } = self;
+        callback_id.count_bytes()
+            + shares.iter().map(|s| s.count_bytes()).sum::<usize>()
+            + std::mem::size_of_val(min_cost)
+            + std::mem::size_of_val(unspent_allowance)
+    }
 }
 
 /// An error detected during flexible HTTP outcall processing.
@@ -62,6 +95,15 @@ pub enum FlexibleCanisterHttpError {
         /// The total amount of cycles spent by the subnet to produce this response.
         initial_spent: Cycles,
     },
+    OutOfCycles {
+        callback_id: CallbackId,
+        all_seen_shares: Vec<CanisterHttpResponseShare>,
+        /// The least it can cost to deliver a response.
+        min_cost: Cycles,
+        /// What is left of the committee's collective allowance, counting a full
+        /// allowance for every member not among `all_seen_shares`.
+        unspent_allowance: Cycles,
+    },
 }
 
 impl FlexibleCanisterHttpError {
@@ -69,15 +111,28 @@ impl FlexibleCanisterHttpError {
         match self {
             Self::Timeout { callback_id }
             | Self::ResponsesTooLarge { callback_id, .. }
-            | Self::TooManyRejects { callback_id, .. } => *callback_id,
+            | Self::TooManyRejects { callback_id, .. }
+            | Self::OutOfCycles { callback_id, .. } => *callback_id,
+        }
+    }
+
+    /// The kind of error this is, as a short stable name. Used as a metric
+    /// label, so the returned set of values must stay small and fixed.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Timeout { .. } => "timeout",
+            Self::ResponsesTooLarge { .. } => "responses_too_large",
+            Self::TooManyRejects { .. } => "too_many_rejects",
+            Self::OutOfCycles { .. } => "out_of_cycles",
         }
     }
 
     /// The signed receipts this error carries whose response body is *not* part of
-    /// the payload: all of the evidence behind [`Self::ResponsesTooLarge`], and the
-    /// extra shares funding a [`Self::TooManyRejects`] (whose reject bodies *are*
-    /// delivered, so their proofs are not included here). Empty for
-    /// [`Self::Timeout`], which carries no shares at all.
+    /// the payload: all of the evidence behind [`Self::ResponsesTooLarge`] and
+    /// [`Self::OutOfCycles`], and the extra shares funding a
+    /// [`Self::TooManyRejects`] (whose reject bodies *are* delivered, so their
+    /// proofs are not included here). Empty for [`Self::Timeout`], which carries no
+    /// shares at all.
     pub fn shares_without_delivered_response(&self) -> &[CanisterHttpResponseShare] {
         match self {
             Self::Timeout { .. } => &[],
@@ -85,6 +140,9 @@ impl FlexibleCanisterHttpError {
                 all_seen_shares, ..
             } => all_seen_shares,
             Self::TooManyRejects { extra_shares, .. } => extra_shares,
+            Self::OutOfCycles {
+                all_seen_shares, ..
+            } => all_seen_shares,
         }
     }
 }
@@ -145,17 +203,12 @@ impl FlexibleCanisterHttpResponseWithProof {
         response: &CanisterHttpResponse,
         proof: &CanisterHttpResponseShare,
     ) -> usize {
-        Self::count_bytes_from_parts(&response.canister_id, response.content.count_bytes(), proof)
+        Self::count_bytes_from_parts(response.content.count_bytes(), proof)
     }
 
     /// Same calculation as [`Self::count_bytes`] but from decomposed parts.
-    pub fn count_bytes_from_parts(
-        canister_id: &CanisterId,
-        content_size: usize,
-        proof: &CanisterHttpResponseShare,
-    ) -> usize {
-        let response_size = CanisterHttpResponse::count_bytes_from_parts(canister_id, content_size);
-        response_size + proof.count_bytes()
+    pub fn count_bytes_from_parts(content_size: usize, proof: &CanisterHttpResponseShare) -> usize {
+        CanisterHttpResponse::count_bytes_from_parts(content_size) + proof.count_bytes()
     }
 }
 
@@ -198,6 +251,20 @@ impl CountBytes for FlexibleCanisterHttpError {
                     + extra_shares.iter().map(|s| s.count_bytes()).sum::<usize>()
                     + std::mem::size_of_val(initial_spent)
             }
+            Self::OutOfCycles {
+                callback_id,
+                all_seen_shares,
+                min_cost,
+                unspent_allowance,
+            } => {
+                callback_id.count_bytes()
+                    + all_seen_shares
+                        .iter()
+                        .map(|s| s.count_bytes())
+                        .sum::<usize>()
+                    + std::mem::size_of_val(min_cost)
+                    + std::mem::size_of_val(unspent_allowance)
+            }
         }
     }
 }
@@ -209,14 +276,18 @@ impl CanisterHttpPayload {
             responses,
             timeouts,
             divergence_responses,
+            out_of_cycles,
             flexible_responses,
             flexible_errors,
+            async_receipts,
         } = self;
         responses.len()
             + timeouts.len()
             + divergence_responses.len()
+            + out_of_cycles.len()
             + flexible_responses.len()
             + flexible_errors.len()
+            + async_receipts.len()
     }
 
     /// Returns the number of non_timeout responses
@@ -225,16 +296,20 @@ impl CanisterHttpPayload {
             responses,
             timeouts: _,
             divergence_responses,
+            out_of_cycles,
             flexible_responses,
             flexible_errors,
+            async_receipts,
         } = self;
         responses.len()
             + divergence_responses.len()
+            + out_of_cycles.len()
             + flexible_responses.len()
             + flexible_errors
                 .iter()
                 .filter(|error| !matches!(error, FlexibleCanisterHttpError::Timeout { .. }))
                 .count()
+            + async_receipts.len()
     }
 
     /// Returns true, if this is an empty payload
@@ -272,7 +347,6 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                 content: Some(pb::CanisterHttpResponseContent::from(
                     payload.content.content,
                 )),
-                canister_id: Some(pb::CanisterId::from(payload.content.canister_id)),
             }),
             hash: metadata.content_hash.get().0,
             replica_version: metadata.replica_version.into(),
@@ -307,10 +381,6 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
             .response
             .ok_or(ProxyDecodeError::MissingField("response"))?;
         let id = CanisterHttpRequestId::new(response.id);
-        let canister_id = try_from_option_field(
-            response.canister_id,
-            "CanisterHttpResponseWithConsensus::canister_id",
-        )?;
 
         let mut signatures = BTreeMap::new();
         for signature in payload.signatures {
@@ -331,7 +401,6 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
         Ok(CanisterHttpResponseWithConsensus {
             content: CanisterHttpResponse {
                 id,
-                canister_id,
                 content: try_from_option_field(
                     response.content,
                     "CanisterHttpResponseWithConsensus::content",
@@ -508,6 +577,44 @@ impl TryFrom<pb::FlexibleCanisterHttpResponseWithProof> for FlexibleCanisterHttp
     }
 }
 
+impl From<CanisterHttpOutOfCycles> for pb::CanisterHttpOutOfCycles {
+    fn from(out_of_cycles: CanisterHttpOutOfCycles) -> Self {
+        pb::CanisterHttpOutOfCycles {
+            callback_id: out_of_cycles.callback_id.get(),
+            shares: out_of_cycles
+                .shares
+                .into_iter()
+                .map(pb::CanisterHttpShare::from)
+                .collect(),
+            min_cost: Some(out_of_cycles.min_cost.into()),
+            unspent_allowance: Some(out_of_cycles.unspent_allowance.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::CanisterHttpOutOfCycles> for CanisterHttpOutOfCycles {
+    type Error = ProxyDecodeError;
+
+    fn try_from(out_of_cycles: pb::CanisterHttpOutOfCycles) -> Result<Self, Self::Error> {
+        Ok(CanisterHttpOutOfCycles {
+            callback_id: CallbackId::new(out_of_cycles.callback_id),
+            shares: out_of_cycles
+                .shares
+                .into_iter()
+                .map(CanisterHttpResponseShare::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+            min_cost: try_from_option_field(
+                out_of_cycles.min_cost,
+                "CanisterHttpOutOfCycles::min_cost",
+            )?,
+            unspent_allowance: try_from_option_field(
+                out_of_cycles.unspent_allowance,
+                "CanisterHttpOutOfCycles::unspent_allowance",
+            )?,
+        })
+    }
+}
+
 impl From<FlexibleCanisterHttpResponses> for pb::FlexibleCanisterHttpResponses {
     fn from(responses: FlexibleCanisterHttpResponses) -> Self {
         pb::FlexibleCanisterHttpResponses {
@@ -584,6 +691,19 @@ impl From<FlexibleCanisterHttpError> for pb::FlexibleCanisterHttpError {
                     .collect(),
                 initial_spent: Some(initial_spent.into()),
             }),
+            FlexibleCanisterHttpError::OutOfCycles {
+                all_seen_shares,
+                min_cost,
+                unspent_allowance,
+                ..
+            } => ErrorDetails::OutOfCycles(pb::FlexibleCanisterHttpOutOfCycles {
+                all_seen_shares: all_seen_shares
+                    .into_iter()
+                    .map(pb::CanisterHttpShare::from)
+                    .collect(),
+                min_cost: Some(min_cost.into()),
+                unspent_allowance: Some(unspent_allowance.into()),
+            }),
         };
         pb::FlexibleCanisterHttpError {
             callback_id,
@@ -636,6 +756,25 @@ impl TryFrom<pb::FlexibleCanisterHttpError> for FlexibleCanisterHttpError {
                     )?,
                 })
             }
+            Some(ErrorDetails::OutOfCycles(details)) => {
+                let all_seen_shares = details
+                    .all_seen_shares
+                    .into_iter()
+                    .map(CanisterHttpResponseShare::try_from)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(FlexibleCanisterHttpError::OutOfCycles {
+                    callback_id,
+                    all_seen_shares,
+                    min_cost: try_from_option_field(
+                        details.min_cost,
+                        "FlexibleCanisterHttpOutOfCycles::min_cost",
+                    )?,
+                    unspent_allowance: try_from_option_field(
+                        details.unspent_allowance,
+                        "FlexibleCanisterHttpOutOfCycles::unspent_allowance",
+                    )?,
+                })
+            }
             None => Err(ProxyDecodeError::MissingField(
                 "FlexibleCanisterHttpError::error_details",
             )),
@@ -648,14 +787,8 @@ impl TryFrom<pb::CanisterHttpResponse> for CanisterHttpResponse {
 
     fn try_from(response: pb::CanisterHttpResponse) -> Result<Self, Self::Error> {
         let id = CanisterHttpRequestId::new(response.id);
-        let canister_id =
-            try_from_option_field(response.canister_id, "CanisterHttpResponse::canister_id")?;
         let content = try_from_option_field(response.content, "CanisterHttpResponse::content")?;
-        Ok(CanisterHttpResponse {
-            id,
-            canister_id,
-            content,
-        })
+        Ok(CanisterHttpResponse { id, content })
     }
 }
 
@@ -664,7 +797,6 @@ impl From<CanisterHttpResponse> for pb::CanisterHttpResponse {
         pb::CanisterHttpResponse {
             id: response.id.get(),
             content: Some(pb::CanisterHttpResponseContent::from(response.content)),
-            canister_id: Some(pb::CanisterId::from(response.canister_id)),
         }
     }
 }
@@ -709,7 +841,6 @@ mod tests {
     fn canister_http_response_conversion() {
         let response = CanisterHttpResponse {
             id: CanisterHttpRequestId::new(1),
-            canister_id: crate::CanisterId::from(42),
             content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
                 reject_code: RejectCode::SysTransient,
                 message: "test reject".to_string(),
@@ -735,7 +866,7 @@ mod tests {
                     ])),
                     content_size: 42,
                     is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: ReplicaVersion::try_from("test_replica_version").unwrap(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt {
                     spent: Cycles::new(42),
@@ -749,7 +880,6 @@ mod tests {
 
         let response = CanisterHttpResponse {
             id: CanisterHttpRequestId::new(2),
-            canister_id: crate::CanisterId::from(100),
             content: CanisterHttpResponseContent::Success(vec![1, 2, 3]),
         };
 
@@ -786,8 +916,10 @@ mod tests {
             let CanisterHttpPayload {
                 responses,
                 divergence_responses,
+                out_of_cycles,
                 flexible_responses,
                 flexible_errors,
+                async_receipts,
                 timeouts: _, // skipped because there is no dedicated protobuf conversion for this
             } = payload;
 
@@ -816,6 +948,16 @@ mod tests {
                 let pb = pb::FlexibleCanisterHttpError::from(error.clone());
                 let roundtripped = FlexibleCanisterHttpError::try_from(pb).unwrap();
                 assert_eq!(error, roundtripped);
+            }
+            for error in out_of_cycles {
+                let pb = pb::CanisterHttpOutOfCycles::from(error.clone());
+                let roundtripped = CanisterHttpOutOfCycles::try_from(pb).unwrap();
+                assert_eq!(error, roundtripped);
+            }
+            for share in async_receipts {
+                let pb = pb::CanisterHttpShare::from(share.clone());
+                let roundtripped = CanisterHttpResponseShare::try_from(pb).unwrap();
+                assert_eq!(share, roundtripped);
             }
         }
     }

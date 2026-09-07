@@ -1,10 +1,6 @@
 use candid::Nat;
 use futures::{StreamExt, stream};
 use ic_cdk::futures::spawn;
-use ic_cdk::management_canister::{
-    CanisterSettings, ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
-    provisional_create_canister_with_cycles, update_settings,
-};
 use ic_cdk::stable::{
     WASM_PAGE_SIZE_IN_BYTES as PAGE_SIZE, stable_grow, stable_size, stable_write,
 };
@@ -12,6 +8,10 @@ use ic_cdk::stable::{
 /// variable length, and the number of times the canister update method has
 /// been called.
 use ic_cdk::{query, update};
+use ic_cdk_management_canister::{
+    CanisterSettings, ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
+    provisional_create_canister_with_cycles, update_settings,
+};
 use lazy_static::lazy_static;
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 use statesync_test::CanisterCreationStatus;

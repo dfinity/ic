@@ -1,9 +1,8 @@
-#![allow(deprecated)]
 use anyhow::Result;
 use candid::{Decode, Encode, Principal};
 use ic_agent::AgentError;
 use ic_agent::agent::RejectCode;
-use ic_cdk::management_canister::{CanisterIdRecord, CanisterStatusResult};
+use ic_cdk_management_canister::{CanisterIdRecord, CanisterStatusResult};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};

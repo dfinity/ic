@@ -28,6 +28,7 @@ pub mod v1 {
                 ErrorCodePublic::CanisterHeapDeltaRateLimited => {
                     ErrorCode::CanisterHeapDeltaRateLimited
                 }
+                ErrorCodePublic::SubnetCoolingDown => ErrorCode::SubnetCoolingDown,
                 ErrorCodePublic::CanisterNotFound => ErrorCode::CanisterNotFound,
                 ErrorCodePublic::CanisterSnapshotNotFound => ErrorCode::CanisterSnapshotNotFound,
                 ErrorCodePublic::CanisterSnapshotImmutable => ErrorCode::CanisterSnapshotImmutable,
@@ -147,6 +148,7 @@ pub mod v1 {
                 ErrorCode::CanisterHeapDeltaRateLimited => {
                     Ok(ErrorCodePublic::CanisterHeapDeltaRateLimited)
                 }
+                ErrorCode::SubnetCoolingDown => Ok(ErrorCodePublic::SubnetCoolingDown),
                 ErrorCode::CanisterNotFound => Ok(ErrorCodePublic::CanisterNotFound),
                 ErrorCode::CanisterSnapshotNotFound => {
                     Ok(ErrorCodePublic::CanisterSnapshotNotFound)

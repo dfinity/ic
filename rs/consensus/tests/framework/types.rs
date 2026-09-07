@@ -4,10 +4,9 @@ use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, dkg_pool, idkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::consensus::{
-    ConsensusBouncer, ConsensusImpl, MAX_CONSENSUS_THREADS, build_thread_pool,
-};
+use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
 use ic_consensus_idkg::IDkgImpl;
+use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -34,7 +33,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_consensus::{IDkgStatsNoOp, batch::MockBatchPayloadBuilder};
 use ic_types::{
-    NodeId, SubnetId,
+    NodeId, ReplicaVersion, SubnetId,
     artifact::IdentifiableArtifact,
     consensus::{
         CatchUpPackage, ConsensusMessage, HasHeight, certification::CertificationMessage,
@@ -45,6 +44,7 @@ use ic_types::{
 };
 use rand_chacha::ChaChaRng;
 use rayon::ThreadPool;
+use std::str::FromStr;
 use std::{
     cell::{RefCell, RefMut},
     cmp::Ordering,
@@ -206,6 +206,7 @@ impl ConsensusDependencies {
         let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
             replica_config.node_id,
             replica_config.subnet_id,
+            &replica_config.replica_version,
             cup.into(),
             pool_config.clone(),
             metrics_registry.clone(),

@@ -140,6 +140,8 @@ impl<'a> ConsensusRunner<'a> {
             consensus_crypto.clone(),
             replica_logger.clone(),
             pool_reader,
+            deps.registry_client.clone(),
+            deps.replica_config.clone(),
         )));
         let malicious_flags = MaliciousFlags::default();
         let consensus = ic_consensus::consensus::ConsensusImpl::new(
@@ -170,8 +172,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.message_routing.clone(),
         );
         let dkg = ic_consensus_dkg::DkgImpl::new(
-            deps.replica_config.node_id,
-            deps.replica_config.subnet_id,
+            deps.replica_config.clone(),
             Arc::clone(&deps.registry_client),
             deps.state_manager.clone(),
             Arc::clone(&consensus_crypto),

@@ -21,6 +21,7 @@ LIB_DEPENDENCIES = [
     "//rs/http_endpoints/public",
     "//rs/https_outcalls/adapter:adapter_with_http",
     "//rs/https_outcalls/client",
+    "//rs/https_outcalls/pricing",
     "//rs/https_outcalls/service",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
@@ -52,6 +53,7 @@ LIB_DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_machine_tests",
     "//rs/state_manager",
+    "//rs/sys",
     "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
@@ -79,6 +81,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-management-canister",
     "@crate_index//:ic-doge-interface",
     "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
@@ -101,7 +104,6 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:wat",
-    "@crate_index//:wsl",
 ]
 
 TEST_DEPENDENCIES = [
@@ -125,6 +127,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-management-canister",
     "@crate_index//:ic-doge-interface",
     "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
@@ -272,7 +275,7 @@ MAINNET_NNS_CANISTER_ENV = {
             "@crate_index//:async-trait",
         ],
         rustc_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
-        version = "15.0.0",
+        version = "16.0.0",
         deps = LIB_DEPENDENCIES + [":build_script"],
     )
     for (name_suffix, nns_canister_data, nns_canister_env) in [

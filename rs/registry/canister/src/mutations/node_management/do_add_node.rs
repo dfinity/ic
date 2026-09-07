@@ -318,13 +318,16 @@ impl Registry {
         let version = self.latest_version();
         get_elected_replica_version_ids(self)
             .iter()
-            .filter_map(|version_id| {
-                self.get(make_replica_version_key(version_id).as_bytes(), version)
-                    .and_then(|reg_value| {
-                        ReplicaVersionRecord::decode(reg_value.value.as_slice())
-                            .ok()?
-                            .guest_launch_measurements
-                    })
+            .filter_map(|replica_version_id| {
+                self.get(
+                    make_replica_version_key(replica_version_id).as_bytes(),
+                    version,
+                )
+                .and_then(|reg_value| {
+                    ReplicaVersionRecord::decode(reg_value.value.as_slice())
+                        .ok()?
+                        .guest_launch_measurements
+                })
             })
             .flat_map(|glm| {
                 glm.guest_launch_measurements
@@ -470,7 +473,7 @@ mod tests {
         make_replica_version_key,
     };
     use ic_registry_transport::{delete, insert, update};
-    use ic_types::ReplicaVersion;
+    use ic_test_utilities_types::ids::test_replica_version;
     use itertools::Itertools;
     use lazy_static::lazy_static;
     use maplit::btreemap;
@@ -1063,7 +1066,7 @@ mod tests {
 
         // Turn that node into an API boundary node
         let api_bn = ApiBoundaryNodeRecord {
-            version: ReplicaVersion::default().to_string(),
+            version: test_replica_version().to_string(),
         };
         registry.maybe_apply_mutation_internal(vec![insert(
             make_api_boundary_node_record_key(old_node_id),
@@ -1501,8 +1504,9 @@ mod tests {
     }
 
     fn add_elected_measurement_to_registry(registry: &mut Registry, measurement: &[u8]) {
-        let replica_version_id = ReplicaVersion::default().to_string();
+        let replica_version_id = test_replica_version().to_string();
         let replica_version = ReplicaVersionRecord {
+            replica_version_id: Some(replica_version_id.clone()),
             release_package_sha256_hex: "".to_string(),
             release_package_urls: vec![],
             guest_launch_measurements: Some(GuestLaunchMeasurements {

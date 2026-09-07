@@ -15,7 +15,6 @@ Success::
 1. HTTP requests succeed in an environment where nodes fail.
 
 end::catalog[] */
-#![allow(deprecated)]
 
 use anyhow::Result;
 use anyhow::bail;

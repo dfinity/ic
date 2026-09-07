@@ -1059,6 +1059,91 @@ fn delete_canister_snapshot_succeeds() {
     );
 }
 
+/// Tests that every way of deleting a snapshot records an
+/// `UnflushedCheckpointOp::DeleteSnapshot`, so that the snapshot's directory is deleted
+/// from the tip.
+#[test]
+fn snapshot_deletions_record_unflushed_checkpoint_ops() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Installing a canister does not require any checkpoint ops.
+    assert!(test.state().metadata.unflushed_checkpoint_ops.is_empty());
+
+    // Taking a snapshot requires copying the canister's files to the snapshot's
+    // directory in the tip.
+    let (snapshot_id, _) = helper_take_snapshot(&mut test, canister_id);
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![UnflushedCheckpointOp::TakeSnapshot(
+            canister_id,
+            snapshot_id
+        )]
+    );
+
+    // Replacing the snapshot requires deleting the replaced snapshot's directory before
+    // creating the new one.
+    let args = TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id), None, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let new_snapshot_id = response.snapshot_id();
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![
+            UnflushedCheckpointOp::DeleteSnapshot(snapshot_id),
+            UnflushedCheckpointOp::TakeSnapshot(canister_id, new_snapshot_id),
+        ]
+    );
+
+    // And so does explicitly deleting a snapshot.
+    let args = DeleteCanisterSnapshotArgs::new(canister_id, new_snapshot_id);
+    test.subnet_message("delete_canister_snapshot", args.encode())
+        .unwrap();
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![UnflushedCheckpointOp::DeleteSnapshot(new_snapshot_id)]
+    );
+}
+
+/// Tests that deleting a canister also records an
+/// `UnflushedCheckpointOp::DeleteSnapshot` for each of its snapshots, so that their
+/// directories are deleted from the tip along with the canister's.
+#[test]
+fn delete_canister_records_unflushed_checkpoint_ops_for_its_snapshots() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    let (snapshot_id, _) = helper_take_snapshot(&mut test, canister_id);
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![UnflushedCheckpointOp::TakeSnapshot(
+            canister_id,
+            snapshot_id
+        )]
+    );
+
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    test.delete_canister(canister_id).unwrap();
+
+    // Both the snapshot's and the canister's directories must be deleted from the tip.
+    assert_eq!(
+        test.state_mut().metadata.unflushed_checkpoint_ops.take(),
+        vec![
+            UnflushedCheckpointOp::DeleteSnapshot(snapshot_id),
+            UnflushedCheckpointOp::DeleteCanister(canister_id),
+        ]
+    );
+}
+
 #[test]
 fn list_canister_snapshot_fails_canister_not_found() {
     let own_subnet = subnet_test_id(1);
@@ -1988,6 +2073,144 @@ fn load_canister_snapshot_charges_canister_cycles() {
     assert_lt!(
         test.canister_state(canister_id).system_state.balance(),
         initial_balance - expected_charge
+    );
+}
+
+/// A tiny canister (and thus cheap to compile) that grows its stable memory
+/// by 1000 Wasm pages (~65MB) when its `grow` method is called.
+const GROW_STABLE_MEMORY_CANISTER_WAT: &str = r#"
+(module
+  (import "ic0" "msg_reply" (func $msg_reply))
+  (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+
+  (func $grow
+    (drop (call $stable64_grow (i64.const 1000)))
+    (call $msg_reply)
+  )
+
+  (memory $memory 1)
+  (export "canister_update grow" (func $grow))
+)"#;
+
+#[test]
+fn load_canister_snapshot_accounts_install_code_debit() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let subnet_type = SubnetType::Application;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_rate_limiting_of_instructions()
+        .build();
+
+    // Create a canister whose Wasm module is cheap to compile, ...
+    let wasm = wat::parse_str(GROW_STABLE_MEMORY_CANISTER_WAT).unwrap();
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, wasm.clone())
+        .unwrap();
+    // ... but whose memory (and thus snapshot size) is large.
+    test.ingress(canister_id, "grow", vec![]).unwrap();
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    let instructions_for_snapshot_size = scheduler_config.canister_snapshot_baseline_instructions
+        + NumInstructions::new(test.canister_state(canister_id).snapshot_size_bytes().get());
+
+    // Reset the `install_code` debit accumulated when installing the canister.
+    test.canister_state_mut(canister_id)
+        .scheduler_state
+        .install_code_debit = NumInstructions::new(0);
+
+    // Loading the snapshot compiles the snapshot's Wasm module and thus
+    // increases the `install_code` debit of the canister.
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    test.subnet_message("load_canister_snapshot", args.encode())
+        .unwrap();
+    let install_code_debit = test
+        .canister_state(canister_id)
+        .scheduler_state
+        .install_code_debit;
+    assert_gt!(install_code_debit, NumInstructions::new(0));
+    // Only the instructions used to compile the Wasm module are accounted for,
+    // i.e., the instructions charged for the snapshot size are not.
+    assert_lt!(install_code_debit, instructions_for_snapshot_size);
+
+    // Due to the `install_code` debit, a subsequent `install_code` is rate limited.
+    let error = test.upgrade_canister(canister_id, wasm).unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterInstallCodeRateLimited);
+}
+
+#[test]
+fn load_canister_snapshot_accounts_install_code_debit_on_failure() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_rate_limiting_of_instructions()
+        .build();
+
+    // Create canister.
+    let counter_canister_wasm = wat::parse_str(COUNTER_CANISTER_WAT).unwrap();
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, counter_canister_wasm)
+        .unwrap();
+
+    // Create a snapshot from metadata containing an invalid Wasm module.
+    let wasm_module = vec![42; 1234];
+    let md_upload_args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,
+        wasm_module.len() as u64,
+        vec![],
+        1 << 16,
+        1 << 16,
+        vec![],
+        None,
+        None,
+    );
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("upload_canister_snapshot_metadata", md_upload_args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+    let snapshot_id = Decode!(&bytes, UploadCanisterSnapshotMetadataResponse)
+        .unwrap()
+        .get_snapshot_id();
+    let args = UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataOffset::WasmModule { offset: 0 },
+        wasm_module,
+    );
+    test.subnet_message("upload_canister_snapshot_data", Encode!(&args).unwrap())
+        .unwrap();
+
+    // Reset the `install_code` debit accumulated when installing the canister.
+    test.canister_state_mut(canister_id)
+        .scheduler_state
+        .install_code_debit = NumInstructions::new(0);
+
+    // Loading the snapshot fails because its Wasm module cannot be compiled, ...
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let error = test
+        .subnet_message("load_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterInvalidWasm);
+
+    // ... but the instructions used for the compilation are still accounted for.
+    assert_gt!(
+        test.canister_state(canister_id)
+            .scheduler_state
+            .install_code_debit,
+        NumInstructions::new(0)
     );
 }
 

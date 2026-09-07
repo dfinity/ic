@@ -244,6 +244,22 @@ pub enum EventSourceError {
     InvalidEvent(String),
 }
 
+/// Encode a principal the way the deposit helper contract carries one: the number of principal
+/// bytes, then those bytes, then zero padding to 32 bytes. The inverse of
+/// [`parse_principal_from_slice`], which is what the minter reads back out of a helper event.
+pub fn encode_principal(principal: &Principal) -> [u8; 32] {
+    let bytes = principal.as_slice();
+    assert!(
+        bytes.len() <= 29,
+        "BUG: a principal is at most 29 bytes, got {}",
+        bytes.len()
+    );
+    let mut encoded = [0_u8; 32];
+    encoded[0] = bytes.len() as u8;
+    encoded[1..=bytes.len()].copy_from_slice(bytes);
+    encoded
+}
+
 /// Decode a candid::Principal from a slice of at most 32 bytes
 /// encoded as follows
 /// - the first byte is the number of bytes in the principal

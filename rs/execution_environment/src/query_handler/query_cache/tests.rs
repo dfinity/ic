@@ -1794,6 +1794,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::PerformanceCounter
         | SystemApiCallId::SubnetSelfSize
         | SystemApiCallId::SubnetSelfCopy
+        | SystemApiCallId::SubnetSelfNodeCount
         | SystemApiCallId::Stable64Grow
         | SystemApiCallId::Stable64Read
         | SystemApiCallId::Stable64Size

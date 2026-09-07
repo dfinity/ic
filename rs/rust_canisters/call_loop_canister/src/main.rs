@@ -1,6 +1,7 @@
-#![allow(deprecated)]
-use ic_cdk::{api::call, update};
+use ic_cdk::call::Call;
+use ic_cdk::update;
 use ic_principal::Principal;
+use std::future::IntoFuture;
 
 const MB: usize = 1024 * 1024;
 
@@ -12,7 +13,9 @@ async fn send_calls(megabytes_to_send: u32) {
             let mut slice = [0; 29];
             slice[..4].copy_from_slice(&i.to_le_bytes());
             let canister = Principal::from_slice(&slice);
-            call::call_raw(canister, "", &[5; MB], 0)
+            Call::unbounded_wait(canister, "")
+                .take_raw_args(vec![5_u8; MB])
+                .into_future()
         })
         .collect::<Vec<_>>();
     let _ = futures::future::join_all(calls).await;

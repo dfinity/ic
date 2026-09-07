@@ -1,3 +1,4 @@
+use crate::deposit_address::DepositAddress;
 use crate::numeric::Erc20Value;
 use ic_ethereum_types::Address;
 
@@ -49,7 +50,7 @@ const BALANCE_OF_SELECTOR: [u8; 4] = [0x70, 0xa0, 0x82, 0x31];
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct BalanceOfCall {
     pub token: Address,
-    pub holder: Address,
+    pub holder: DepositAddress,
 }
 
 /// Error encountered while decoding a balance-batch return blob.
@@ -67,7 +68,7 @@ pub fn encode_balance_batch(calls: &[BalanceOfCall]) -> Vec<u8> {
     out.extend_from_slice(&word_from_usize(calls.len()));
     for call in calls {
         out.extend_from_slice(&left_padded_address(&call.token));
-        out.extend_from_slice(&left_padded_address(&call.holder));
+        out.extend_from_slice(&left_padded_address(call.holder.as_address()));
     }
     out
 }

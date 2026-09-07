@@ -46,7 +46,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
 };
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
 use ic_types::{
     CanisterId, CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
@@ -253,7 +253,6 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
         Arc::new(CanisterMigrations::default()),
         subnet_test_id(1),
         Default::default(),
-        None,
         None,
         None,
         None,
@@ -543,6 +542,7 @@ impl HttpEndpointBuilder {
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
         let node_id = node_test_id(1);
+        let replica_version = test_replica_version();
 
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
@@ -564,6 +564,7 @@ impl HttpEndpointBuilder {
             sig_verifier,
             node_id,
             subnet_id,
+            replica_version,
             nns_subnet_id,
             log,
             self.consensus_cache,

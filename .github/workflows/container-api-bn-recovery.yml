@@ -25,10 +25,15 @@ defaults:
 jobs:
   build-and-push:
     name: Build and Push API BN Recovery Image
+    # for dfinity/ic: run on all events except on PRs from forks
+    # for dfinity/ic-private: only run on PRs
+    if: |
+      (github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) ||
+      (github.repository == 'dfinity/ic-private' && github.event_name == 'pull_request')
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:6002fe4444d6761b59522d453734bd337736c0a21fdaff57fac6bc98530e05af
+      image: ghcr.io/dfinity/ic-build@sha256:caacdcf7c2346ff8b6d8b86ecfa89b1365fa111f744e0e777ac5bf9a5ca97c61
       options: >-
         -e NODE_NAME --privileged --cgroupns host
         --mount type=tmpfs,target="/home/buildifier/.local/share/containers"

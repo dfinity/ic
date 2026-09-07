@@ -7,8 +7,8 @@ use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
 use canlog::log;
-use ic_cdk::bitcoin_canister;
-use ic_cdk::management_canister::SignWithEcdsaArgs;
+use ic_cdk_bitcoin_canister as bitcoin_canister;
+use ic_cdk_management_canister::SignWithEcdsaArgs;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::Memo;
 use scopeguard::{ScopeGuard, guard};
@@ -26,7 +26,7 @@ use crate::updates::get_btc_address;
 use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_checker::{CheckAddressArgs, CheckAddressResponse};
-pub use ic_btc_interface::{OutPoint, Page, Satoshi, Txid, Utxo};
+pub use ic_btc_interface::{Address, OutPoint, Page, Satoshi, Txid, Utxo};
 
 pub mod address;
 pub mod dashboard;
@@ -96,7 +96,34 @@ pub struct ECDSAPublicKey {
     pub chain_code: Vec<u8>,
 }
 
-pub type GetUtxosRequest = bitcoin_canister::GetUtxosRequest;
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct GetUtxosRequest {
+    pub address: Address,
+    pub network: Network,
+    pub filter: Option<UtxosFilter>,
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub enum UtxosFilter {
+    MinConfirmations(u32),
+    Page(Page),
+}
+
+impl From<&GetUtxosRequest> for bitcoin_canister::GetUtxosRequest {
+    fn from(request: &GetUtxosRequest) -> Self {
+        Self {
+            address: request.address.clone(),
+            network: request.network.into(),
+            filter: request.filter.clone().map(|filter| match filter {
+                UtxosFilter::MinConfirmations(min_confirmations) => {
+                    bitcoin_canister::UtxosFilterInRequest::MinConfirmations(min_confirmations)
+                }
+                UtxosFilter::Page(page) => bitcoin_canister::UtxosFilterInRequest::Page(page),
+            }),
+        }
+    }
+}
+
 pub type GetCurrentFeePercentilesRequest = bitcoin_canister::GetCurrentFeePercentilesRequest;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -109,35 +136,33 @@ pub struct GetUtxosResponse {
 impl From<bitcoin_canister::GetUtxosResponse> for GetUtxosResponse {
     fn from(response: bitcoin_canister::GetUtxosResponse) -> Self {
         Self {
-            utxos: response
-                .utxos
-                .into_iter()
-                .map(|utxo| Utxo {
-                    outpoint: OutPoint {
-                        txid: Txid::try_from(utxo.outpoint.txid.as_slice())
-                            .unwrap_or_else(|_| panic!("Unable to parse TXID")),
-                        vout: utxo.outpoint.vout,
-                    },
-                    value: utxo.value,
-                    height: utxo.height,
-                })
-                .collect(),
-
+            utxos: response.utxos,
             tip_height: response.tip_height,
-            next_page: response.next_page.map(Page::from),
+            next_page: response.next_page,
         }
     }
 }
 
-// Note that both [ic_btc_interface::Network] and
-// [ic_cdk::bitcoin_canister::Network] from ic_cdk
+// Note that [ic_btc_interface::Network]
 // would serialize to lowercase names, but here we keep uppercase names for
 // backward compatibility with the state of already deployed minter canister.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
+)]
 pub enum Network {
     Mainnet,
     Testnet,
     Regtest,
+}
+
+impl From<Network> for bitcoin_canister::NetworkInRequest {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Mainnet => bitcoin_canister::NetworkInRequest::Mainnet,
+            Network::Testnet => bitcoin_canister::NetworkInRequest::Testnet,
+            Network::Regtest => bitcoin_canister::NetworkInRequest::Regtest,
+        }
+    }
 }
 
 impl From<Network> for bitcoin_canister::Network {
@@ -1739,11 +1764,11 @@ impl CanisterRuntime for IcCanisterRuntime {
         derivation_path: Vec<Vec<u8>>,
         message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError> {
-        ic_cdk::management_canister::sign_with_ecdsa(&SignWithEcdsaArgs {
+        ic_cdk_management_canister::sign_with_ecdsa(&SignWithEcdsaArgs {
             message_hash: message_hash.to_vec(),
             derivation_path,
-            key_id: ic_cdk::management_canister::EcdsaKeyId {
-                curve: ic_cdk::management_canister::EcdsaCurve::Secp256k1,
+            key_id: ic_cdk_management_canister::EcdsaKeyId {
+                curve: ic_cdk_management_canister::EcdsaCurve::Secp256k1,
                 name: key_name.clone(),
             },
         })
@@ -2001,4 +2026,4 @@ impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
     }
 }
 
-pub type GetUtxosCache = CacheWithExpiration<bitcoin_canister::GetUtxosRequest, GetUtxosResponse>;
+pub type GetUtxosCache = CacheWithExpiration<GetUtxosRequest, GetUtxosResponse>;

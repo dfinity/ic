@@ -51,7 +51,6 @@ rust_bench(
         "//rs/sys",
         "//rs/types/types",
         "@crate_index//:criterion",
-        "@crate_index//:lazy_static",
         "@crate_index//:libc",
         "@crate_index//:nix",
     ],

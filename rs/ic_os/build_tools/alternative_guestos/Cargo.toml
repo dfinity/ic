@@ -1,0 +1,19 @@
+[package]
+name = "alternative_guestos_tool"
+edition.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+clap = { workspace = true }
+ic-agent = { workspace = true }
+ic-certification = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+alternative_guestos = { path = "../../alternative_guestos" }
+ic-nns-constants = { path = "../../../nns/constants" }
+ic-nns-governance-api = { path = "../../../nns/governance/api" }
+ic-nns-governance-conversions = { path = "../../../nns/governance/conversions" }
+ic-protobuf = { path = "../../../protobuf" }

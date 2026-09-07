@@ -10,8 +10,9 @@ mod xnet;
 
 pub use self::{
     canister_http::{
-        CanisterHttpPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
-        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+        CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
+        FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
     chain_key::{
         ChainKeyAgreement, ChainKeyErrorCode, ChainKeyPayload, bytes_to_chain_key_payload,

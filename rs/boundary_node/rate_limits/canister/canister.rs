@@ -1,5 +1,4 @@
 #![allow(unused_imports)]
-#![allow(deprecated)]
 
 use crate::access_control::{AccessLevelResolver, WithAuthorization};
 use crate::add_config::{AddsConfig, ConfigAdder};
@@ -15,7 +14,7 @@ use crate::metrics::{
 use crate::state::{CanisterApi, init_version_and_config, with_canister_state};
 use candid::Principal;
 use ic_canister_log::{export as export_logs, log};
-use ic_cdk::api::call::call;
+use ic_cdk::call::Call;
 use ic_cdk::{
     api::{accept_message, msg_caller, msg_method_name},
     init, inspect_message, post_upgrade, query, update,
@@ -260,17 +259,18 @@ fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn Can
         async move {
             let canister_id = Principal::from(REGISTRY_CANISTER_ID);
 
-            let (call_status, message) = match call::<
-                _,
-                (Result<Vec<ApiBoundaryNodeIdRecord>, String>,),
-            >(
-                canister_id,
-                REGISTRY_CANISTER_METHOD,
-                (&GetApiBoundaryNodeIdsRequest {},),
-            )
-            .await
-            {
-                Ok((Ok(api_bn_records),)) => {
+            let response = Call::unbounded_wait(canister_id, REGISTRY_CANISTER_METHOD)
+                .with_arg(GetApiBoundaryNodeIdsRequest {})
+                .await
+                .map_err(|err| err.to_string())
+                .and_then(|response| {
+                    response
+                        .candid::<Result<Vec<ApiBoundaryNodeIdRecord>, String>>()
+                        .map_err(|err| err.to_string())
+                });
+
+            let (call_status, message) = match response {
+                Ok(Ok(api_bn_records)) => {
                     // Set authorized readers of the rate-limit config.
                     canister_api.set_api_boundary_nodes_principals(
                         api_bn_records.into_iter().filter_map(|n| n.id).collect(),
@@ -285,7 +285,7 @@ fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn Can
                     });
                     ("success", "")
                 }
-                Ok((Err(err),)) => {
+                Ok(Err(err)) => {
                     log!(
                         P0,
                         "[poll_api_boundary_nodes]: failed to fetch nodes from registry {err:?}",

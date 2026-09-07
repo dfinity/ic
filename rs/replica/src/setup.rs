@@ -10,9 +10,7 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{
-    NodeId, RegistryVersion, ReplicaVersion, SubnetId, consensus::catchup::CatchUpPackage,
-};
+use ic_types::{NodeId, RegistryVersion, SubnetId, consensus::catchup::CatchUpPackage};
 use std::{env, path::PathBuf, sync::Arc};
 
 /// Parse command-line args into `ReplicaArgs`
@@ -25,24 +23,6 @@ pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {
             std::process::exit(0);
         }
     })
-}
-
-/// Set the Replica version passed in via command-line
-pub fn set_replica_version(args: &Result<ReplicaArgs, clap::Error>, logger: &ReplicaLogger) {
-    if let Ok(args) = args {
-        info!(
-            logger,
-            "Setting replica version to: {}",
-            args.replica_version.as_ref()
-        );
-        if ReplicaVersion::set_default_version(args.replica_version.clone()).is_err() {
-            warn!(
-                logger,
-                "Failed to set replica version, defaulting to: {}",
-                ReplicaVersion::default().as_ref()
-            );
-        }
-    }
 }
 
 /// Parse the catch-up package given via command-line args (if one was given)

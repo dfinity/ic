@@ -10,8 +10,9 @@ pub use bounded_vec::*;
 use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode, Reserved};
 pub use data_size::*;
 pub use http::{
-    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, BoundedHttpHeaders, CanisterHttpRequestArgs,
-    CanisterHttpResponsePayload, DEFAULT_HTTP_OUTCALLS_PRICING_VERSION,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO, BoundedHttpHeaders,
+    CanisterHttpRequestArgs, CanisterHttpResponsePayload, DEFAULT_HTTP_OUTCALLS_PRICING_VERSION,
     FlexibleCanisterHttpRequestArgs, FlexibleHttpGlobalError, FlexibleHttpNodeDetail,
     FlexibleHttpNodeError, FlexibleHttpRequestErr, FlexibleHttpRequestResult, HttpHeader,
     HttpMethod, HttpRequestResourceReport, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO,
@@ -53,11 +54,16 @@ pub const HASH_LENGTH: usize = 32;
 ///
 /// The extended public key format uses a byte to represent the derivation
 /// level of a key, thus BIP32 derivations with more than 255 path elements
-/// are not interoperable with other software.
+/// are not interoperable with other software. This cap applies to the *full*
+/// path seen by threshold crypto, which the replica derives from the path
+/// supplied here by prepending exactly one element: the caller's principal
+/// for `sign_with_ecdsa`/`sign_with_schnorr`, and the target canister id for
+/// `ecdsa_public_key`/`schnorr_public_key`. One slot is therefore reserved
+/// for that prefix, leaving 254 for the caller.
 ///
 /// See https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format
 /// for details
-const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 255;
+pub const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 254;
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
@@ -117,6 +123,7 @@ pub enum Method {
 
     // Subnet information
     NodeMetricsHistory,
+    SubnetMetrics,
     SubnetInfo,
 
     FetchCanisterLogs,
@@ -3758,6 +3765,7 @@ impl Payload<'_> for ListCanistersResponse {}
 pub enum QueryMethod {
     FetchCanisterLogs,
     CanisterStatus,
+    CanisterInfo,
     ListCanisters,
     CanisterMetrics,
 }
@@ -3789,6 +3797,49 @@ pub struct SubnetInfoResponse {
 }
 
 impl Payload<'_> for SubnetInfoResponse {}
+
+/// `CandidType` for `SubnetMetricsArgs`
+/// ```text
+/// record {
+///   subnet_id : principal;
+/// }
+/// ```
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct SubnetMetricsArgs {
+    pub subnet_id: PrincipalId,
+}
+
+impl Payload<'_> for SubnetMetricsArgs {}
+
+/// `CandidType` for `SubnetMetricsResponse`
+/// ```text
+/// record {
+///     block_height : nat;
+///     num_canisters : nat;
+///     canister_state_bytes : nat;
+///     consumed_cycles_total : nat;
+///     update_transactions_total : nat;
+/// }
+/// ```
+///
+/// Freshness: only `block_height` is current as of the block in which the call is
+/// executed. The other four are read from `SystemMetadata::subnet_metrics`, which is
+/// written at the *end* of a round, so they are as of the end of the previous round
+/// — except `canister_state_bytes`, which message routing recomputes only every 10
+/// rounds (summing it over every canister is expensive and it need not be exact),
+/// so it can be up to ten rounds stale and reads as `0` for the first rounds after
+/// the subnet is created. These are the same values, with the same staleness, that
+/// `read_state` serves at `/subnet/<subnet_id>/metrics`.
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+pub struct SubnetMetricsResponse {
+    pub block_height: candid::Nat,
+    pub num_canisters: candid::Nat,
+    pub canister_state_bytes: candid::Nat,
+    pub consumed_cycles_total: candid::Nat,
+    pub update_transactions_total: candid::Nat,
+}
+
+impl Payload<'_> for SubnetMetricsResponse {}
 
 /// `CandidType` for `NodeMetricsHistoryArgs`
 /// ```text

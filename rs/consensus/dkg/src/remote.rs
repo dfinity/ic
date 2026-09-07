@@ -298,6 +298,7 @@ mod tests {
             Height::from(10),
             height,
             remote_dkg_attempts,
+            Default::default(),
         )
     }
 

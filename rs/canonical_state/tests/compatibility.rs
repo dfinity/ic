@@ -20,7 +20,6 @@ use ic_types::{
     messages::StreamMessage,
     xnet::{RejectReason, StreamHeader},
 };
-use ic_types_cycles::NominalCycles;
 use lazy_static::lazy_static;
 use proptest::prelude::*;
 use std::ops::RangeInclusive;
@@ -478,9 +477,7 @@ lazy_static! {
         VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "SubnetMetricsV15",
-            |(metrics, version)| {
-                SubnetMetricsV21::proxy_encode((metrics, NominalCycles::zero(), version))
-            },
+            |(metrics, version)| SubnetMetricsV21::proxy_encode((metrics, version)),
             |_v| unimplemented!(),
         ),
     ];

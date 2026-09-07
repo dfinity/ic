@@ -95,7 +95,8 @@ impl CatchUpContent {
         let random_beacon = self.random_beacon.as_ref();
         let payload_hash = block.payload.get_hash();
         let block_payload = block.payload.as_ref();
-        block.payload.is_summary() == block_payload.is_summary()
+        block.payload.is_summary()
+            && block_payload.is_summary()
             && &crypto_hash(random_beacon) == random_beacon_hash
             && &crypto_hash(block) == block_hash
             && &crypto_hash(block_payload) == payload_hash
@@ -420,6 +421,17 @@ impl TryFrom<subnet_pb::SubnetSplittingArgs> for SubnetSplittingArgs {
             destination_subnet_id,
         })
     }
+}
+
+/// Types of [`CatchUpPackage`] created by the CUP maker
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum CatchUpPackageType {
+    Normal,
+    /// After delivering a splitting block to the DSM, we immediately create a CUP at the start of
+    /// the next dkg interval and we create a new summary block and a dummy random beacon on the fly.
+    PostSplit {
+        new_subnet_id: SubnetId,
+    },
 }
 
 #[cfg(test)]
