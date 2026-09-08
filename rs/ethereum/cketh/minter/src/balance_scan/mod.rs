@@ -198,9 +198,6 @@ pub fn min_deposit(token: &Address) -> Erc20Value {
 /// These are a hard-coded rate snapshot (ETH ≈ $1_877 on 2026-07-28), rounded to a round token
 /// amount close to $10 (shown in the trailing comment). TODO(DEFI-2961): recompute daily from the
 /// exchange-rate canister so the thresholds track live prices.
-///
-/// Exception: the ckBAT entry is *not* part of the 2026-07-28 snapshot above — BAT is not yet
-/// deployed, so it was priced separately from a 2026-09-08 BAT/USD rate. See its trailing comment.
 const MIN_DEPOSITS: &[(Address, Erc20Value)] = &[
     // --- mainnet ---
     (
@@ -286,9 +283,7 @@ const MIN_DEPOSITS: &[(Address, Erc20Value)] = &[
             0xb6, 0x25, 0x0d, 0x28, 0x87, 0xef,
         ]),
         Erc20Value::new(135_000_000_000_000_000_000),
-    ), // ckBAT = 135 (priced from BAT ≈ $0.074 on 2026-09-08, *not* the 2026-07-28 snapshot above:
-    // BAT is not yet deployed, so this entry was added and priced separately; re-derive it from
-    // the same 2026-07-28 rates when BAT is deployed and the rest of the table is refreshed)
+    ), // ckBAT = 135 (priced from BAT ≈ $0.074 on 2026-09-08.
     // --- sepolia (testnet analogs, priced as their mainnet counterpart) ---
     (
         Address::new([
