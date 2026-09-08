@@ -2968,6 +2968,7 @@ mod sweep_lane {
     use ethnum::u256;
     use ic_ethereum_types::Address;
     use icrc_ledger_types::icrc1::account::Account;
+    use std::slice::from_ref;
 
     const EIP1559_TX_ID: u8 = 2;
     const SET_CODE_TX_ID: u8 = 4;
@@ -3068,10 +3069,14 @@ mod sweep_lane {
         assert_eq!(sweep_gas_limit(&items_for(10)), GasAmount::new(1_710_000));
         assert!(sweep_gas_limit(&items_for(10)) > GasAmount::new(MEASURED_TEN_DEPOSIT_SWEEP_GAS));
 
-        let one_address_ten_times: Vec<_> = (0..10).map(|_| sweep_item(1, None)).collect();
+        let one_address_ten_times: Vec<_> = (0..10)
+            .map(|_| sweep_item(1, Some(authorization(1))))
+            .collect();
         assert_eq!(
             sweep_gas_limit(&one_address_ten_times),
-            sweep_gas_limit(&[sweep_item(1, None)])
+            GasAmount::new(585_000),
+            "the balance check and the transfer collapse onto the one address walked, while every \
+             tuple in the list is charged"
         );
     }
 
@@ -3082,7 +3087,7 @@ mod sweep_lane {
         let also_to_delegate = sweep_item(3, Some(authorization(3)));
 
         assert_eq!(
-            sweep_gas_limit(std::slice::from_ref(&delegated)),
+            sweep_gas_limit(from_ref(&delegated)),
             GasAmount::new(185_000),
             "an address swept without a tuple costs its balance check and its transfer only"
         );
