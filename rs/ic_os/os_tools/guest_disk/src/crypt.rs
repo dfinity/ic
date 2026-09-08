@@ -273,7 +273,8 @@ pub fn open_luks2_device(
 
     crypt_device
         .context_handle()
-        .load::<CryptParamsLuks2Ref>(Some(ENCRYPTION_FORMAT), None)?;
+        .load::<CryptParamsLuks2Ref>(Some(ENCRYPTION_FORMAT), None)
+        .context("Failed to load the LUKS2 header")?;
     apply_default_settings(&mut crypt_device)?;
 
     let luks_parameters = extract_luks_parameters(&mut crypt_device);

@@ -19,7 +19,9 @@ pub struct GeneratedKeyDiskEncryption<'a> {
 
 impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
     fn open(&mut self, device_path: &Path, partition: Partition, crypt_name: &str) -> Result<()> {
-        let disk_encryption_key = self.generate_or_read_key()?;
+        let disk_encryption_key = self
+            .generate_or_read_key()
+            .context("Failed to generate or read the disk encryption key")?;
         activate_luks2_device(
             device_path,
             // Detached LUKS headers is an additional security measure against tampering by the host
@@ -40,12 +42,11 @@ impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
     }
 
     fn format(&mut self, device_path: &Path, _partition: Partition) -> Result<()> {
-        format_luks2_device(
-            device_path,
-            &LuksHeaderLocation::Attached,
-            &self.generate_or_read_key()?,
-        )
-        .context("Failed to format crypt device")?;
+        let key = self
+            .generate_or_read_key()
+            .context("Failed to generate or read the disk encryption key")?;
+        format_luks2_device(device_path, &LuksHeaderLocation::Attached, &key)
+            .context("Failed to format crypt device")?;
 
         Ok(())
     }

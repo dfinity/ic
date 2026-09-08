@@ -242,7 +242,8 @@ impl DiskEncryptionKeyExchangeClientAgent {
             &custom_data,
             elected_measurements,
             self.sev_root_certificate_verification,
-        )?;
+        )
+        .context("Failed to verify the server's attestation package")?;
 
         let disk_encryption_key = disk_encryption_data
             .key
@@ -276,12 +277,14 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .write_all(&luks_header)
             .context("Failed to write staged Store LUKS header")?;
 
-        self.crypto_ops.rekey(
-            &self.store_device_path,
-            staged_header.path(),
-            &old_key,
-            self.sev_firmware.as_mut(),
-        )?;
+        self.crypto_ops
+            .rekey(
+                &self.store_device_path,
+                staged_header.path(),
+                &old_key,
+                self.sev_firmware.as_mut(),
+            )
+            .context("Failed to re-key the staged Store LUKS header")?;
 
         staged_header
             .persist(&self.store_luks_header_path)

@@ -69,9 +69,11 @@ impl DiskEncryption for SevDiskEncryption {
             device_path,
             &self.header_location(partition),
             self.sev_firmware.as_mut(),
-        )?;
+        )
+        .context("Failed to open the keyslot")?;
 
-        let sev_metadata = get_sev_metadata_for_luks(self.sev_firmware.as_mut())?;
+        let sev_metadata = get_sev_metadata_for_luks(self.sev_firmware.as_mut())
+            .context("Failed to get the current SEV metadata")?;
         // If the TCB versions differ (e.g. after firmware upgrade), replace the keyslot with one
         // derived at the current TCB (but only if this is the Default VM).
         if token.sev_metadata.tcb_version != sev_metadata.tcb_version {
@@ -80,7 +82,8 @@ impl DiskEncryption for SevDiskEncryption {
                     &mut crypt_device,
                     passphrase.as_bytes(),
                     self.sev_firmware.as_mut(),
-                )?;
+                )
+                .context("Failed to rotate the keyslot to the current TCB")?;
             } else {
                 info!("Skipping TCB rotation for {:?} VM", self.guest_vm_type);
             }
@@ -96,7 +99,8 @@ impl DiskEncryption for SevDiskEncryption {
     }
 
     fn format(&mut self, device_path: &Path, partition: Partition) -> Result<()> {
-        let sev_metadata = get_sev_metadata_for_luks(self.sev_firmware.as_mut())?;
+        let sev_metadata = get_sev_metadata_for_luks(self.sev_firmware.as_mut())
+            .context("Failed to get the current SEV metadata")?;
         let key = derive_key_from_sev_measurement(
             self.sev_firmware.as_mut(),
             Key::DiskEncryptionKey { device_path },
@@ -209,7 +213,8 @@ fn rekey_crypt_device(
         .context("Failed to get the device path")?
         .to_path_buf();
     info!("Re-keying the LUKS2 header for {}", device_path.display());
-    let sev_metadata = get_sev_metadata_for_luks(sev_firmware)?;
+    let sev_metadata = get_sev_metadata_for_luks(sev_firmware)
+        .context("Failed to get the current SEV metadata")?;
     let new_key = derive_key_from_sev_measurement(
         sev_firmware,
         Key::DiskEncryptionKey {
