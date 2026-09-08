@@ -89,6 +89,14 @@ impl AuthorizationRequest {
         self.account
     }
 
+    pub fn delegate(&self) -> Address {
+        self.delegate
+    }
+
+    pub fn nonce(&self) -> TransactionNonce {
+        self.nonce
+    }
+
     pub fn derivation_path(&self) -> Vec<ByteBuf> {
         AddressSchema::Deposit(self.account).derivation_path()
     }

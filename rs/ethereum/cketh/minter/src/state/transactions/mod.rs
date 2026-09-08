@@ -19,8 +19,8 @@ use crate::numeric::{
 };
 use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch, encode_sweep_eth_batch};
 use crate::tx::{
-    Eip1559TransactionRequest, Finalized, FinalizedEip1559Transaction, GasFeeEstimate,
-    Resubmittable, SignableTransaction, Signed, SignedAuthorization,
+    AuthorizationRequest, Eip1559TransactionRequest, Finalized, FinalizedEip1559Transaction,
+    GasFeeEstimate, Resubmittable, SignableTransaction, Signed, SignedAuthorization,
     SignedEip1559TransactionRequest, TransactionPrice,
 };
 use candid::Principal;
@@ -298,9 +298,9 @@ const SWEEP_GAS_PER_TRANSFER: GasAmount = GasAmount::new(110_000);
 ///
 /// Budgeted for every address the sweep touches, since every one of them carries a tuple. A tuple
 /// the EVM skips — the address is already delegated, so the nonce it was signed for no longer
-/// matches — is charged the same 25'000 and refunded 12'500 for an authority the state trie
-/// already holds. That refund lands after execution and so cannot shrink the limit the transaction
-/// had to declare, leaving 25'000 the figure to budget either way. Rounded up as its siblings are.
+/// matches — costs the full 25'000: the 12'500 refund for an authority the state trie already
+/// holds is granted only past the nonce check, and a tuple failing that check ends there. Rounded
+/// up as its siblings are.
 const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
 
 pub fn sweep_gas_limit(items: &[AuthorizedSweepItem]) -> GasAmount {
@@ -352,6 +352,23 @@ impl SweepRequest {
         self.items
             .iter()
             .filter_map(|item| item.authorization.clone())
+            .collect()
+    }
+
+    /// The delegations this sweep carries, each named as what its signature was signed over, which
+    /// is the key the minter stores it under.
+    pub fn authorization_requests(&self) -> Vec<AuthorizationRequest> {
+        self.items
+            .iter()
+            .filter_map(|item| {
+                let authorization = item.authorization.as_ref()?;
+                Some(AuthorizationRequest::new(
+                    item.item.account,
+                    authorization.chain_id,
+                    authorization.delegate,
+                    authorization.nonce,
+                ))
+            })
             .collect()
     }
 }

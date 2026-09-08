@@ -76,15 +76,15 @@ pub struct AutomaticDeposits {
     /// entries naming a retired helper stay behind forever. [`Self::attestations_len`] is exported
     /// as a metric so that growth is visible before it needs bounding.
     attestations: BTreeMap<AttestationRequest, TransactionSignature>,
-    /// Delegation authorizations the minter has signed, keyed by exactly what each one signed. A
-    /// signature only delegates the chain, the sweeper contract and the nonce its request names, so
-    /// re-pointing the minter at another sweeper contract misses this map rather than reusing a
-    /// tuple that delegates the old one.
+    /// Delegation authorizations the minter has signed, keyed by exactly what each one signed, each
+    /// recording whether a sweep has applied it on chain. A signature only delegates the chain, the
+    /// sweeper contract and the nonce its request names, so re-pointing the minter at another
+    /// sweeper contract misses this map rather than reusing a tuple that delegates the old one.
     ///
     /// Nothing prunes this map: it grows with the number of accounts that have ever been swept, and
     /// entries naming a retired helper stay behind forever. [`Self::authorizations_len`] is exported
     /// as a metric so that growth is visible before it needs bounding.
-    authorizations: BTreeMap<AuthorizationRequest, TransactionSignature>,
+    authorizations: BTreeMap<AuthorizationRequest, StoredAuthorization>,
     /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
     /// its own nonce sequence, independent of the main-address withdrawal pipeline.
     sweeper_transactions: SweeperTransactionPipeline,
@@ -189,6 +189,9 @@ impl AutomaticDeposits {
     /// leave the queue on success because the funds moved, and on failure because the minter does
     /// not retry them.
     ///
+    /// The authorizations the sweep carried are settled either way too: an EIP-7702 tuple applies
+    /// before the call it travels with runs, and stays applied when that call reverts.
+    ///
     /// # Panics
     ///
     /// If the sweep has no processed request, or a deposit it named is not queued or is held by
@@ -207,6 +210,11 @@ impl AutomaticDeposits {
             .expect("BUG: missing sweep request");
         let asset = request.asset;
         let accounts: Vec<_> = request.items.iter().map(|item| item.item.account).collect();
+        let authorizations = request.authorization_requests();
+
+        for authorization in authorizations {
+            self.record_applied_authorization(authorization, id);
+        }
 
         for account in accounts {
             let request = DepositRequest::new(account, asset);
@@ -268,7 +276,9 @@ impl AutomaticDeposits {
     /// The authorization already stored for `account`, if any: signing another would cost a
     /// threshold-ECDSA signature for the same tuple.
     pub fn authorization(&self, request: &AuthorizationRequest) -> Option<&TransactionSignature> {
-        self.authorizations.get(request)
+        self.authorizations
+            .get(request)
+            .map(|stored| &stored.signature)
     }
 
     pub fn record_authorization(
@@ -276,7 +286,54 @@ impl AutomaticDeposits {
         request: AuthorizationRequest,
         signature: TransactionSignature,
     ) {
-        self.authorizations.insert(request, signature);
+        self.authorizations.insert(
+            request,
+            StoredAuthorization {
+                signature,
+                applied_by: None,
+            },
+        );
+    }
+
+    /// The delegation `account`'s deposit address carries on chain, as the authorizations applied
+    /// to it say: the delegate the highest applied nonce names, and the nonce the address has
+    /// reached. `None` while none of the minter's authorizations for the address has been applied,
+    /// which for a deposit address means it holds no delegation at all: only the minter ever
+    /// authorizes one.
+    pub fn delegation(&self, account: &Account) -> Option<Delegation> {
+        self.authorizations
+            .iter()
+            .filter(|(request, stored)| {
+                request.account() == *account && stored.applied_by.is_some()
+            })
+            .map(|(request, _stored)| request)
+            .max_by_key(|request| request.nonce())
+            .map(|request| Delegation {
+                delegate: request.delegate(),
+                nonce: request
+                    .nonce()
+                    .checked_increment()
+                    .expect("BUG: authorization nonce space exhausted"),
+            })
+    }
+
+    /// The nonce `account`'s deposit address is at, and therefore the only nonce a further
+    /// authorization of it can be signed for.
+    fn next_authorization_nonce(&self, account: &Account) -> TransactionNonce {
+        self.delegation(account)
+            .map_or(TransactionNonce::ZERO, |delegation| delegation.nonce)
+    }
+
+    /// Record that `sweep_id` applied `request`'s authorization on chain, unless the protocol
+    /// skipped it: a tuple applies only at the authority's current nonce, and applying one spends
+    /// that nonce, so a tuple signed for any other leaves the address as it was.
+    fn record_applied_authorization(&mut self, request: AuthorizationRequest, sweep_id: SweepId) {
+        if request.nonce() != self.next_authorization_nonce(&request.account()) {
+            return;
+        }
+        if let Some(stored) = self.authorizations.get_mut(&request) {
+            stored.applied_by.get_or_insert(sweep_id);
+        }
     }
 
     /// Arm the `(account, asset)` pair, whose deposit `address` is derived for `account`.
@@ -526,6 +583,13 @@ impl AutomaticDeposits {
         self.authorizations.len()
     }
 
+    pub fn applied_authorizations_len(&self) -> usize {
+        self.authorizations
+            .values()
+            .filter(|stored| stored.applied_by.is_some())
+            .count()
+    }
+
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
     /// funds queued for sweeping (so it must be registered). Reports
     /// [`DepositStage::AwaitingSweep`] once funds have been detected and queued, otherwise
@@ -721,6 +785,25 @@ impl ScanTarget<Erc20Asset> {
     pub fn token(&self) -> Address {
         self.asset.contract_address()
     }
+}
+
+/// An EIP-7702 authorization the minter has signed, and the sweep that applied it on chain if one
+/// has. Signing a tuple only makes it available to a sweep: the delegation it authorizes exists on
+/// chain only once a sweep carrying the tuple has finalized with the authority at its nonce.
+#[derive(Clone, PartialEq, Debug)]
+struct StoredAuthorization {
+    signature: TransactionSignature,
+    applied_by: Option<SweepId>,
+}
+
+/// The delegation a deposit address carries on chain.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub struct Delegation {
+    /// The contract the address' code points at.
+    pub delegate: Address,
+    /// The nonce the address has reached, one past the nonce of the authorization that installed
+    /// the delegation.
+    pub nonce: TransactionNonce,
 }
 
 /// A funded token awaiting sweeping at a [`DepositRequest`]'s deposit address.
