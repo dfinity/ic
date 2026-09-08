@@ -1648,7 +1648,7 @@ impl PocketIc {
     /// to be retrievable here.
     /// Note that, unless a PocketIC instance is in auto progress mode,
     /// a response to the pending canister HTTP outcalls
-    /// must be produced by the test driver and passed on to the PocketIC instace
+    /// must be produced by the test driver and passed on to the PocketIC instance
     /// using `PocketIc::mock_canister_http_response`, or, for a *flexible* outcall
     /// (`CanisterHttpReplication::Flexible`), using
     /// `PocketIc::mock_flexible_canister_http_response`.
@@ -2311,7 +2311,7 @@ pub struct StartServerParams {
     /// The server stops gracefully if no request has been received for the duration of its TTL
     /// after the last request finished and if there are no more pending requests.
     /// A default value of TTL is used if no `ttl` is specified here.
-    /// Note: The TTL might not be overriden if the same test process sets `reuse` to `true`
+    /// Note: The TTL might not be overridden if the same test process sets `reuse` to `true`
     /// and passes different values of `ttl`.
     pub ttl: Option<Duration>,
     /// Hard TTL for the PocketIC server.
@@ -2319,7 +2319,7 @@ pub struct StartServerParams {
     /// since its launch.
     /// If no `hard_ttl` is specified here, then the PocketIC server
     /// does not use any default hard TTL.
-    /// Note: The hard TTL might not be overriden if the same test process sets `reuse` to `true`
+    /// Note: The hard TTL might not be overridden if the same test process sets `reuse` to `true`
     /// and passes different values of `hard_ttl`.
     pub hard_ttl: Option<Duration>,
 }
