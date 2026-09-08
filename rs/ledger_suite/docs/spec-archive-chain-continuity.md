@@ -53,6 +53,26 @@ bug lives in the gap between them.
 At the instant the ledger is executing the callback, then: **the archive has
 committed the blocks, and the ledger has committed nothing about them.**
 
+### Why the two halves commit at different times
+
+Not a decision — a module boundary. `send_blocks_to_archive` is generic over
+`Rt: Runtime, Wasm: ArchiveCanisterWasm` and receives only
+`Arc<RwLock<Option<Archive>>>`, so it has no ledger access at all and physically
+cannot call `remove_archived_blocks`, which lives on `Blockchain` behind
+`LA::with_ledger_mut`. Only the caller, `archive_blocks<LA: LedgerAccess>`, can —
+and it runs once per round.
+
+| | who can reach it | so it happens |
+|---|---|---|
+| `nodes_block_ranges` | archive state, which `send_blocks_to_archive` holds | **per chunk** |
+| block removal | ledger state, which only `archive_blocks` holds | **once, at the end** |
+
+There is no comment justifying the timing, and nothing in the history suggests it
+was deliberate. So the divergence is a direct consequence of where the line was
+drawn, which also says what has to change: either `send_blocks_to_archive` gains
+`LA: LedgerAccess`, or the per-chunk bookkeeping is hoisted into `archive_blocks`
+where the ledger is reachable.
+
 ### What a trap in that callback destroys
 
 The future is dropped, so `num_sent_blocks` is gone; `nodes_block_ranges` is not

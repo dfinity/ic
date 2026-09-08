@@ -5,7 +5,7 @@ use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_ledger_suite_state_machine_tests::{
     check_icrc3_supported_block_types, test_http_request_decoding_quota,
 };
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_state_machine_tests::{StateMachine, UserError, WasmResult};
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::blocks::{
@@ -79,6 +79,27 @@ impl Setup {
             .unwrap()
     }
 
+    /// Calls `append_blocks` with the extra `opt nat64` start index that the
+    /// addressed-append design proposes, against an archive that knows nothing
+    /// about it.
+    fn append_blocks_with_start_index(
+        &self,
+        blocks: Vec<EncodedBlock>,
+        start_index: Option<u64>,
+    ) -> Result<WasmResult, UserError> {
+        let payload = Encode!(&blocks, &start_index).unwrap();
+        self.state_machine
+            .execute_ingress(self.archive_id, "append_blocks", payload)
+    }
+
+    fn remaining_capacity(&self) -> u64 {
+        let res = self
+            .state_machine
+            .query(self.archive_id, "remaining_capacity", Encode!().unwrap())
+            .unwrap();
+        Decode!(&res.bytes(), u64).unwrap()
+    }
+
     fn icrc3_get_blocks(&self, arg: Vec<GetBlocksRequest>) -> GetBlocksResult {
         let payload = Encode!(&arg).unwrap();
         let res = self
@@ -93,6 +114,159 @@ impl Default for Setup {
     fn default() -> Self {
         Self::new(&Principal::anonymous(), &0_u64, &None, &None)
     }
+}
+
+/// An empty `append_blocks` must be accepted and store nothing, so that it can
+/// serve as a side-effect-free probe for whether the archive understands the
+/// indexed protocol.
+#[test]
+fn test_empty_append_blocks_is_accepted_and_stores_nothing() {
+    let setup = Setup::default();
+
+    let log_length = |setup: &Setup| -> u64 {
+        setup
+            .icrc3_get_blocks(vec![GetBlocksRequest {
+                start: Nat::from(0_u64),
+                length: Nat::from(0_u64),
+            }])
+            .log_length
+            .0
+            .try_into()
+            .unwrap()
+    };
+
+    let capacity_before = setup.remaining_capacity();
+
+    // With no extra argument, as an old ledger would call it.
+    setup
+        .append_blocks_with_start_index(vec![], None)
+        .expect("an empty append should be accepted");
+    assert_eq!(log_length(&setup), 0, "an empty append must store nothing");
+
+    // And with the proposed index, as a new ledger would.
+    setup
+        .append_blocks_with_start_index(vec![], Some(0))
+        .expect("an empty append carrying an index should be accepted");
+    assert_eq!(log_length(&setup), 0, "still nothing stored");
+    assert_eq!(
+        setup.remaining_capacity(),
+        capacity_before,
+        "an empty append must not consume capacity"
+    );
+}
+
+/// An archive that declares `append_blocks : (vec blob) -> ()` must ignore an
+/// extra trailing `opt nat64`, so that a newer ledger can start sending the
+/// start index before every archive has been upgraded to read it.
+#[test]
+fn test_append_blocks_ignores_an_extra_optional_start_index() {
+    let setup = Setup::default();
+
+    let block0 = Block {
+        parent_hash: None,
+        effective_fee: None,
+        timestamp: setup.nanos_since_epoch(),
+        fee_collector: None,
+        fee_collector_block_index: None,
+        transaction: Transaction {
+            operation: Operation::Mint {
+                to: Account::from(Principal::anonymous()),
+                amount: Tokens::from(1_000_000_000_u64),
+                fee: None,
+            },
+            created_at_time: None,
+            memo: None,
+        },
+        btype: None,
+    };
+    let block1 = Block {
+        parent_hash: Some(Block::block_hash(&block0.clone().encode())),
+        effective_fee: None,
+        timestamp: setup.nanos_since_epoch(),
+        fee_collector: None,
+        fee_collector_block_index: None,
+        transaction: Transaction {
+            operation: Operation::Transfer {
+                from: Account::from(Principal::anonymous()),
+                to: Account {
+                    owner: Principal::anonymous(),
+                    subaccount: Some([1; 32]),
+                },
+                amount: Tokens::from(1_u64),
+                fee: None,
+                spender: None,
+            },
+            created_at_time: None,
+            memo: None,
+        },
+        btype: None,
+    };
+
+    let encoded0 = block0.encode();
+    let encoded1 = block1.encode();
+
+    let log_length = |setup: &Setup| -> u64 {
+        setup
+            .icrc3_get_blocks(vec![GetBlocksRequest {
+                start: Nat::from(0_u64),
+                length: Nat::from(0_u64),
+            }])
+            .log_length
+            .0
+            .try_into()
+            .unwrap()
+    };
+
+    assert_eq!(log_length(&setup), 0);
+
+    // `opt nat64` present.
+    setup
+        .append_blocks_with_start_index(vec![encoded0.clone()], Some(0))
+        .expect("an archive that does not know the argument should still accept the call");
+    assert_eq!(
+        log_length(&setup),
+        1,
+        "the block should have been stored even though the extra argument was ignored"
+    );
+
+    // `opt nat64` absent, i.e. the `null` case.
+    setup
+        .append_blocks_with_start_index(vec![encoded1.clone()], None)
+        .expect("a null start index should be accepted too");
+    assert_eq!(log_length(&setup), 2);
+
+    // Negative control: the harness does surface a decode failure, so the two
+    // assertions above are not passing vacuously.
+    let wrong_type = setup.state_machine.execute_ingress(
+        setup.archive_id,
+        "append_blocks",
+        Encode!(&42_u64).unwrap(),
+    );
+    assert!(
+        wrong_type.is_err(),
+        "a payload of the wrong type should have been rejected, but was accepted"
+    );
+    assert_eq!(
+        log_length(&setup),
+        2,
+        "the rejected call must not have stored anything"
+    );
+
+    // The blocks are intact and in order, so the extra argument was not
+    // mistaken for payload.
+    let blocks = setup.icrc3_get_blocks(vec![GetBlocksRequest {
+        start: Nat::from(0_u64),
+        length: Nat::from(2_u64),
+    }]);
+    assert_eq!(blocks.blocks.len(), 2);
+    assert_eq!(
+        blocks.blocks[0].block,
+        ICRC3Value::from(encoded_block_to_generic_block(&encoded0))
+    );
+    assert_eq!(
+        blocks.blocks[1].block,
+        ICRC3Value::from(encoded_block_to_generic_block(&encoded1))
+    );
 }
 
 #[test]
