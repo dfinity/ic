@@ -314,6 +314,21 @@ impl AutomaticDeposits {
             })
     }
 
+    /// The tuple already signed for `account` at `nonce` that no sweep has applied yet, whatever
+    /// delegate it names. It is the one the chain will apply at that nonce, so a sweep re-carries
+    /// it rather than signing another: the minter holds at most one signed tuple per
+    /// `(deposit address, nonce)`, and two would leave which delegate the address ends up on to
+    /// the order the sweeps carrying them happen to mine in.
+    pub fn unapplied_authorization_at(
+        &self,
+        account: &Account,
+        nonce: TransactionNonce,
+    ) -> Option<&AuthorizationRequest> {
+        self.authorizations_of(account)
+            .find(|(request, stored)| request.nonce() == nonce && stored.applied_by.is_none())
+            .map(|(request, _stored)| request)
+    }
+
     /// The authorizations signed for `account`, in key order. An [`AuthorizationRequest`] orders by
     /// its account first, so one account's authorizations are a contiguous range: reaching them
     /// costs the account's own entries rather than a scan of every account ever swept, which

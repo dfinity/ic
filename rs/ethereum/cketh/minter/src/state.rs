@@ -139,7 +139,8 @@ pub struct State {
 /// What a sweep of one deposit address has to carry for the sweeper contract's code to run at it.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SweepAuthorization {
-    /// The tuple the address has yet to authorize, which the sweep signs once and carries.
+    /// The tuple the address has yet to have applied, which the sweep signs unless the minter
+    /// already has, and carries.
     Required(AuthorizationRequest),
     /// Nothing: the address already delegates the configured sweeper contract. A sweep every
     /// address of which is delegated carries no authorization and is a plain EIP-1559 transaction.
@@ -336,24 +337,37 @@ impl State {
 
     /// What a sweep of `account`'s deposit address has to carry for `delegate`'s code to run at it.
     ///
-    /// An address that has never been delegated is at nonce zero, and authorizes there. So does one
-    /// delegated to another contract, whose nonce zero is spent: that tuple is skipped on chain,
-    /// which is what leaves the address on its current delegate until re-delegating it is supported.
+    /// An address that has never been delegated is at nonce zero and authorizes there. One
+    /// delegated to another contract authorizes `delegate` at the nonce it has reached — the
+    /// rotation — since a tuple applies only at the authority's current nonce and one signed for
+    /// any other is skipped.
+    ///
+    /// Either way, a tuple already signed for that nonce is re-carried rather than replaced,
+    /// whatever delegate it names: it is the one the chain will apply, and a second tuple for the
+    /// same nonce would leave the delegate the address ends up on to the order the sweeps carrying
+    /// them happen to mine in. The rotation is then signed at the next nonce, once the record shows
+    /// that tuple applied.
     fn sweep_authorization(&self, account: Account, delegate: Address) -> SweepAuthorization {
         let nonce = match self.automatic_deposits.delegation(&account) {
             Some(delegation) if delegation.delegate == delegate => {
                 return SweepAuthorization::AlreadyDelegated;
             }
-            //TODO DEFI-2997: track and increment nonce of deposit address
-            Some(_delegated_elsewhere) => TransactionNonce::ZERO,
+            Some(delegated_elsewhere) => delegated_elsewhere.nonce,
             None => TransactionNonce::ZERO,
         };
-        SweepAuthorization::Required(AuthorizationRequest::new(
-            account,
-            self.ethereum_network.chain_id(),
-            delegate,
-            nonce,
-        ))
+        SweepAuthorization::Required(
+            self.automatic_deposits
+                .unapplied_authorization_at(&account, nonce)
+                .cloned()
+                .unwrap_or_else(|| {
+                    AuthorizationRequest::new(
+                        account,
+                        self.ethereum_network.chain_id(),
+                        delegate,
+                        nonce,
+                    )
+                }),
+        )
     }
 
     /// The attestation `account`'s ckERC20 deposit address has already signed for the configuration
