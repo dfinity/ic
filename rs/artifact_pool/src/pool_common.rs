@@ -1,5 +1,5 @@
 use ic_metrics::MetricsRegistry;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, ops::RangeBounds};
 
 use crate::metrics::PoolMetrics;
 
@@ -67,5 +67,20 @@ impl<K: Ord, V: HasLabel> PoolSection<K, V> {
 
     pub(crate) fn values(&self) -> std::collections::btree_map::Values<'_, K, V> {
         self.messages.values()
+    }
+
+    /// Removes all entries inside `range` and returns their keys.
+    pub(crate) fn extract_keys_in<R>(&mut self, range: R) -> Vec<K>
+    where
+        R: RangeBounds<K>,
+    {
+        self.messages
+            .extract_if(range, |_, _| true)
+            .map(|(key, value)| {
+                self.metrics
+                    .observe_remove(MESSAGE_SIZE_BYTES, value.label());
+                key
+            })
+            .collect()
     }
 }

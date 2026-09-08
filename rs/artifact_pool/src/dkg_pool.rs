@@ -58,27 +58,11 @@ impl DkgPoolImpl {
     /// purged
     fn purge(&mut self, height: Height) -> Vec<DkgMessageId> {
         self.current_start_height = height;
-        // TODO: use drain_filter once it's stable.
-        let unvalidated_keys: Vec<_> = self
-            .unvalidated
-            .keys()
-            .filter(|id| id.height < height)
-            .cloned()
-            .collect();
-        for id in unvalidated_keys {
-            self.unvalidated.remove(&id);
-        }
+        self.unvalidated
+            .extract_keys_in(DkgMessageId::less_than_height(height));
 
-        let validated_keys: Vec<_> = self
-            .validated
-            .keys()
-            .filter(|id| id.height < height)
-            .cloned()
-            .collect();
-        for hash in &validated_keys {
-            self.validated.remove(hash);
-        }
-        validated_keys
+        self.validated
+            .extract_keys_in(DkgMessageId::less_than_height(height))
     }
 }
 
