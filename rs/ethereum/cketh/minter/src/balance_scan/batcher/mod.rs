@@ -41,6 +41,30 @@ pub const BATCHER_INITCODE: [u8; 165] = [
     0x60, 0x00, 0x60, 0x00, 0xfd,
 ];
 
+/// Maximum size of the initcode of a create-style call, per EIP-3860 (Shanghai).
+const MAX_INITCODE_SIZE: usize = 49_152;
+
+/// Maximum number of `balanceOf` sub-calls in a single deployless-batcher `eth_call`.
+///
+/// The binding constraint is EIP-3860 (Shanghai): a create-style `eth_call` carries its whole
+/// program as initcode, which nodes reject beyond 49_152 bytes. [`encode_balance_batch`] appends
+/// one length word plus two words per call to [`BATCHER_INITCODE`], which is what this value is
+/// derived from, so it follows the encoding instead of drifting from it.
+///
+/// Gas is the looser bound. A `debug_traceCall` of an 8-call batch against proxied stablecoins
+/// (ckUSDC + ckUSDT, the priciest shape: `STATICCALL` → proxy `SLOAD` → `DELEGATECALL` → balance
+/// `SLOAD`) used 153_452 gas, i.e. ~19k gas/call, so a full batch is ~14.5M gas — well under the
+/// 50M `eth_call` cap providers commonly apply (geth's `--rpc.gascap` default). Payloads stay
+/// small as well: 64 bytes of calldata and 32 bytes of return per call, far below the 2 MiB
+/// HTTPS-outcall limit.
+///
+/// The cap must not be set above what every provider accepts: `scan_balances` splits the
+/// registered pairs into chunks of this size and advances each chunk all-or-nothing, so a
+/// whole-call failure re-does that chunk on the next tick — and a chunk that always exceeds a
+/// provider limit fails *every* time, permanently stalling its pairs.
+pub const MAX_CALLS_PER_BATCH: usize =
+    (MAX_INITCODE_SIZE - BATCHER_INITCODE.len() - WORD) / (2 * WORD);
+
 /// Function selector for `balanceOf(address)`, i.e. `keccak256("balanceOf(address)")[..4]`.
 /// Embedded in [`BATCHER_INITCODE`] right after its leading `PUSH32` opcode; asserted by tests.
 #[cfg(test)]
