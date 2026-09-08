@@ -13,7 +13,8 @@ The replica must parse its configuration, set up crypto components, determine it
 - **WHEN** the replica binary starts
 - **THEN** command-line arguments are parsed via `clap` into `ReplicaArgs`
 - **AND** the `--print-sample-config` flag causes the sample config to be printed and the process to exit
-- **AND** the replica version from the arguments is set as the default via `ReplicaVersion::set_default_version`
+- **AND** `--replica-version` and `--guestos-version` are combined into a `PlatformVersion` (the running replica binary's version and the GuestOS version the node booted from, which differ during a fast GuestOS upgrade until the node reboots into the target GuestOS)
+- **AND** the `PlatformVersion` is reported via the `ic_replica_info` gauge metric (labels `ic_active_version`, `ic_guestos_version`, `ic_replica_binary_hash`)
 
 #### Scenario: Configuration source resolution
 - **WHEN** the replica determines its configuration source
