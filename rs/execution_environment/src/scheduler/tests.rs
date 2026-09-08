@@ -1,4 +1,6 @@
-use super::test_utilities::{SchedulerTestBuilder, ingress, on_response, other_side};
+use super::test_utilities::{
+    SchedulerTest, SchedulerTestBuilder, ingress, instructions, on_response, other_side,
+};
 use super::*;
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -19,6 +21,7 @@ use ic_test_utilities_metrics::{fetch_counter, fetch_histogram_vec_buckets};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::messages::{CallbackId, Payload, RejectContext};
+use ic_types::methods::SystemMethod;
 use ic_types::time::{UNIX_EPOCH, expiry_time_from_now};
 use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
@@ -797,6 +800,58 @@ fn finalization_prunes_expired_ingress_history_entries() {
     assert_eq!(test.ingress_status(&msg_b), IngressStatus::Unknown);
     // The ingress history should be empty.
     assert_eq!(test.state().metadata.ingress_history.len(), 0);
+}
+
+/// Tests that while the subnet is cooling down it only drains its subnet queues:
+/// it executes no canister messages and no `Heartbeat` tasks, but the calls it
+/// has already accepted are still responded to.
+#[test]
+fn cooling_down_subnet_only_drains_subnet_queues() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::default(),
+        Some(SystemMethod::CanisterHeartbeat),
+        None,
+        None,
+    );
+
+    let rounds_with_skipped_canister_execution = |test: &SchedulerTest| {
+        test.scheduler()
+            .metrics
+            .round_skipped_canister_execution_due_to_cooling_down
+            .get()
+    };
+
+    // An ingress message and a heartbeat for the canister; plus a subnet message.
+    test.send_ingress(canister, ingress(10));
+    test.expect_heartbeat(canister, instructions(10));
+    test.inject_call_to_ic00(
+        Method::CanisterStatus,
+        Encode!(&CanisterIdRecord::from(canister)).unwrap(),
+        Cycles::zero(),
+        test.xnet_canister_id(),
+        InputQueueType::RemoteSubnet,
+    );
+
+    test.set_cooling_down(true);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // The subnet message was executed and responded to.
+    assert_eq!(1, test.get_responses_to_injected_calls().len());
+    // But neither the ingress message nor the heartbeat were executed.
+    assert_eq!(1, test.ingress_queue_size(canister));
+    assert_eq!(1, test.system_task_count(&canister));
+    assert_eq!(1, rounds_with_skipped_canister_execution(&test));
+
+    // Once the subnet stops cooling down, the canister messages are executed.
+    test.set_cooling_down(false);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert_eq!(0, test.ingress_queue_size(canister));
+    assert_eq!(0, test.system_task_count(&canister));
+    assert_eq!(1, rounds_with_skipped_canister_execution(&test));
 }
 
 fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {

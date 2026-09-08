@@ -471,6 +471,19 @@ impl SchedulerImpl {
                 scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
             }
 
+            // A cooling down subnet only drains its subnet queues: it executes no
+            // canister messages (and no `Heartbeat` or `GlobalTimer` tasks either) and
+            // it inducts no messages on the same subnet (which is equivalent to routing
+            // them through the loopback stream, something a cooling down subnet does not
+            // do). This way its canisters' input and output queues are frozen, except
+            // for the responses produced by draining the subnet queues.
+            if state.metadata.is_cooling_down() {
+                self.metrics
+                    .round_skipped_canister_execution_due_to_cooling_down
+                    .inc();
+                break state;
+            }
+
             let mut round_limits = scheduler_round_limits.canister_round_limits();
             if round_limits.instructions_reached() {
                 self.metrics

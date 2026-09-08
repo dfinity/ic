@@ -166,6 +166,20 @@ impl SchedulerTest {
         self.state().canister_state(&canister_id).unwrap()
     }
 
+    /// Sets whether this subnet is cooling down.
+    pub fn set_cooling_down(&mut self, cooling_down: bool) {
+        let own_subnet_id = self.state().metadata.own_subnet_id;
+        self.state_mut()
+            .metadata
+            .modify_network_topology(|network_topology| {
+                network_topology
+                    .subnets_mut()
+                    .get_mut(&own_subnet_id)
+                    .unwrap()
+                    .cooling_down = cooling_down;
+            });
+    }
+
     pub fn metrics_registry(&self) -> &MetricsRegistry {
         &self.metrics_registry
     }

@@ -648,6 +648,54 @@ fn queries_to_frozen_canisters_are_rejected() {
     assert!(result.is_ok());
 }
 
+/// Tests that the query handler rejects all query calls with
+/// `ErrorCode::SubnetCoolingDown` while the subnet is cooling down, but still
+/// executes system queries (i.e. the `transform` functions of HTTP outcalls).
+#[test]
+fn query_calls_to_cooling_down_subnet_are_rejected() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let fetch_canister_logs = FetchCanisterLogsRequest::new(canister).encode();
+
+    // Sanity check: query calls are executed while the subnet is not cooling down.
+    test.non_replicated_query(canister, "query", wasm().reply().build())
+        .unwrap();
+    test.non_replicated_query(
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        fetch_canister_logs.clone(),
+    )
+    .unwrap();
+    test.system_query(canister, "query", wasm().reply().build())
+        .unwrap();
+
+    test.set_cooling_down(true);
+
+    // Both canister-addressed and subnet-addressed query calls are now rejected.
+    let expected_err = UserError::new(
+        ErrorCode::SubnetCoolingDown,
+        format!("Subnet {own_subnet_id} is cooling down and does not accept query calls"),
+    );
+    assert_eq!(
+        Err(expected_err.clone()),
+        test.non_replicated_query(canister, "query", wasm().reply().build())
+    );
+    assert_eq!(
+        Err(expected_err),
+        test.non_replicated_query(
+            CanisterId::ic_00(),
+            "fetch_canister_logs",
+            fetch_canister_logs
+        )
+    );
+
+    // But system queries are still executed, so that the HTTP outcalls the subnet
+    // has already made can be responded to while it drains its subnet queues.
+    test.system_query(canister, "query", wasm().reply().build())
+        .unwrap();
+}
+
 const COMPOSITE_QUERY_WAT: &str = r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
