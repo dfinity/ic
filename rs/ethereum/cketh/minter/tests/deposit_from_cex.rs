@@ -672,9 +672,14 @@ fn should_sweep_a_second_eth_deposit_of_a_delegated_address_without_an_authoriza
         .credit_eth_deposits_from_cex(&first_deposits)
         .expect_deposit_balances_on_anvil()
         .expect_each_awaiting_sweep();
-    let (setup, _first_sweeps) = setup
+    let (setup, first_sweeps) = setup
         .await_sweeps(&sweeper, 1)
         .expect_all_delegating_sweeps();
+    assert_eq!(
+        setup.anvil().authorization_nonces(&first_sweeps[0].hash),
+        vec![0],
+        "the first sweep of an address must carry the tuple delegating it, signed for nonce 0"
+    );
     let setup = setup
         .expect_sweeps_finalized(1)
         .expect_cketh_mints(&first_deposits);
@@ -718,7 +723,8 @@ fn should_sweep_a_second_eth_deposit_of_a_delegated_address_without_an_authoriza
     assert_eq!(
         setup.anvil().authorization_nonces(&second_sweep.hash),
         Vec::<u64>::new(),
-        "an address already delegated is swept without any authorization to install"
+        "the type-2 transaction above is what proves no tuple was sent: an address already \
+         delegated is swept carrying none"
     );
     assert_eq!(
         setup.anvil().transaction_count(&address),
@@ -774,9 +780,14 @@ fn should_sweep_a_second_erc20_deposit_of_a_delegated_address_without_an_authori
         .credit_deposits_from_cex(&first_deposits)
         .expect_deposit_balances_on_anvil()
         .expect_each_awaiting_sweep();
-    let (setup, _first_sweeps) = setup
+    let (setup, first_sweeps) = setup
         .await_sweeps(&sweeper, 1)
         .expect_all_delegating_sweeps();
+    assert_eq!(
+        setup.anvil().authorization_nonces(&first_sweeps[0].hash),
+        vec![0],
+        "the first sweep of an address must carry the tuple delegating it, signed for nonce 0"
+    );
     let setup = setup
         .expect_sweeps_finalized(1)
         .expect_mints(&first_deposits);
@@ -820,7 +831,8 @@ fn should_sweep_a_second_erc20_deposit_of_a_delegated_address_without_an_authori
     assert_eq!(
         setup.anvil().authorization_nonces(&second_sweep.hash),
         Vec::<u64>::new(),
-        "an address already delegated is swept without any authorization to install"
+        "the type-2 transaction above is what proves no tuple was sent: an address already \
+         delegated is swept carrying none"
     );
     assert_eq!(
         setup.anvil().transaction_count(&address),
