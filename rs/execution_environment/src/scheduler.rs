@@ -475,8 +475,7 @@ impl SchedulerImpl {
             // canister messages (and no `Heartbeat` or `GlobalTimer` tasks either) and
             // it inducts no messages on the same subnet (which is equivalent to routing
             // them through the loopback stream, something a cooling down subnet does not
-            // do). This way its canisters' input and output queues are frozen, except
-            // for the responses produced by draining the subnet queues.
+            // do).
             if state.metadata.is_cooling_down() {
                 self.metrics
                     .round_skipped_canister_execution_due_to_cooling_down

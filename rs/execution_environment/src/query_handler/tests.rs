@@ -698,8 +698,8 @@ fn query_calls_to_cooling_down_subnet_are_rejected() {
         )
     );
 
-    // But system queries are still executed, so that the HTTP outcalls the subnet
-    // has already made can be responded to while it drains its subnet queues.
+    // But system queries, i.e. the `transform` functions of HTTP outcalls, are
+    // still executed.
     test.system_query(canister, "query", wasm().reply().build())
         .unwrap();
 

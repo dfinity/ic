@@ -1,12 +1,13 @@
 use super::test_utilities::{
-    SchedulerTest, SchedulerTestBuilder, ingress, instructions, on_response, other_side,
+    SchedulerTest, SchedulerTestBuilder, ingress, on_response, other_side,
 };
 use super::*;
+use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::STOP_CANISTER_TIMEOUT_DURATION;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_error_types::RejectCode;
+use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
     CanisterStatusType, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
@@ -16,21 +17,19 @@ use ic_replicated_state::{
     CanisterStatus,
     metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
 };
-use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
+use ic_state_machine_tests::{PayloadBuilder, StateMachine, StateMachineBuilder};
 use ic_test_utilities_metrics::{fetch_counter, fetch_histogram_vec_buckets};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::messages::{CallbackId, Payload, RejectContext};
-use ic_types::methods::SystemMethod;
 use ic_types::time::{UNIX_EPOCH, expiry_time_from_now};
 use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use ic00::{CanisterHttpRequestArgs, HttpMethod};
+use more_asserts::assert_gt;
 use proptest::prelude::*;
 use std::collections::BTreeMap;
 use std::time::Duration;
-
-const PAGE_SIZE: NumBytes = NumBytes::new(ic_sys::PAGE_SIZE as u64);
 
 mod charging;
 mod dts;
@@ -804,68 +803,177 @@ fn finalization_prunes_expired_ingress_history_entries() {
     assert_eq!(test.state().metadata.ingress_history.len(), 0);
 }
 
-/// Tests that while the subnet is cooling down it only drains its subnet queues:
-/// it executes no canister messages and no `Heartbeat` tasks, but the calls it
-/// has already accepted are still responded to.
+/// Tests that while the subnet is cooling down it executes no canister messages
+/// and no `Heartbeat` tasks, and rejects query calls; subnet messages are still
+/// executed.
 #[test]
-fn cooling_down_subnet_only_drains_subnet_queues() {
-    let mut test = SchedulerTestBuilder::new().build();
-    let canister = test.create_canister_with(
-        Cycles::new(1_000_000_000_000),
-        ComputeAllocation::zero(),
-        MemoryAllocation::default(),
-        Some(SystemMethod::CanisterHeartbeat),
-        None,
-        None,
-    );
+fn cooling_down_subnet_only_executes_subnet_messages() {
+    use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 
-    let rounds_with_skipped_canister_execution = |test: &SchedulerTest| {
-        test.scheduler()
-            .metrics
-            .round_skipped_canister_execution_due_to_cooling_down
-            .get()
+    let test = StateMachineBuilder::new().build();
+    let canister_id = test
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .unwrap();
+
+    // Have the canister increment its global counter on every heartbeat.
+    test.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_heartbeat(wasm().inc_global_counter().build())
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    let global_counter = |test: &StateMachine| {
+        let result = test
+            .query(
+                canister_id,
+                "query",
+                wasm().get_global_counter().reply_int64().build(),
+            )
+            .unwrap();
+        u64::from_le_bytes(result.bytes().try_into().unwrap())
+    };
+    let tasks = |test: &StateMachine| {
+        test.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .len()
+    };
+    let input_messages = |test: &StateMachine| {
+        test.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .queues()
+            .input_queues_message_count()
+    };
+    let http_request_contexts = |test: &StateMachine| {
+        test.get_latest_state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .len()
     };
 
-    // An ingress message and a heartbeat for the canister; plus a subnet message.
-    test.send_ingress(canister, ingress(10));
-    test.expect_heartbeat(canister, instructions(10));
-    test.inject_call_to_ic00(
-        Method::CanisterStatus,
-        Encode!(&CanisterIdRecord::from(canister)).unwrap(),
-        Cycles::zero(),
-        test.xnet_canister_id(),
-        InputQueueType::RemoteSubnet,
+    // Sanity check: heartbeats are executed while the subnet is not cooling down.
+    test.tick();
+    let counter_before = global_counter(&test);
+    assert_gt!(counter_before, 0);
+
+    // Make an HTTP outcall, so that the subnet has a subnet message to execute
+    // (and a response to deliver to the canister) while it is cooling down.
+    let payload = Encode!(&CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        headers: BoundedHttpHeaders::new(vec![]),
+        method: HttpMethod::GET,
+        body: None,
+        transform: None,
+        max_response_bytes: None,
+        is_replicated: None,
+        pricing_version: None,
+    })
+    .unwrap();
+    let msg_id = test.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        wasm()
+            .call_simple(
+                ic00::IC_00,
+                "http_request",
+                call_args()
+                    .other_side(payload)
+                    .on_reject(wasm().reject_message().reject()),
+            )
+            .build(),
     );
+    test.tick();
+    assert_matches!(
+        test.ingress_status(&msg_id),
+        IngressStatus::Known {
+            state: IngressState::Processing,
+            ..
+        }
+    );
+    assert_eq!(1, http_request_contexts(&test));
 
     test.set_cooling_down(true);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // The subnet message was executed and responded to.
-    assert_eq!(1, test.get_responses_to_injected_calls().len());
-    // But neither the ingress message nor the heartbeat were executed.
-    assert_eq!(1, test.ingress_queue_size(canister));
-    assert_eq!(1, test.system_task_count(&canister));
-    assert_eq!(1, rounds_with_skipped_canister_execution(&test));
+    // Deliver the HTTP response. The subnet message is executed, i.e. the outcall
+    // context is consumed and the response is routed to the canister (via the
+    // loopback stream, whence it is inducted in the next round).
+    let response = CanisterHttpResponsePayload {
+        status: 200,
+        headers: vec![],
+        body: vec![],
+    };
+    test.execute_payload(PayloadBuilder::new().http_response(CallbackId::from(0), &response));
+    assert_eq!(0, http_request_contexts(&test));
 
-    // Once the subnet stops cooling down, the canister messages are executed.
+    // But the canister does not execute the response: further rounds only ever
+    // induct it into the canister's input queue, where it stays. And they leave no
+    // task behind in the canister's task queue: a `Heartbeat` task is only ever
+    // enqueued right before the canister execution that a cooling down round skips
+    // altogether, so there is none to pop or to clean up.
+    for _ in 0..3 {
+        test.tick();
+        assert_eq!(1, input_messages(&test));
+        assert_eq!(0, tasks(&test));
+        assert_matches!(
+            test.ingress_status(&msg_id),
+            IngressStatus::Known {
+                state: IngressState::Processing,
+                ..
+            }
+        );
+    }
+
+    // And query calls are rejected while the subnet is cooling down.
+    let err = test
+        .query(
+            canister_id,
+            "query",
+            wasm().get_global_counter().reply_int64().build(),
+        )
+        .unwrap_err();
+    assert_eq!(ErrorCode::SubnetCoolingDown, err.code());
+    assert_eq!(RejectCode::SysTransient, err.reject_code());
+
+    // Once the subnet stops cooling down, a single round executes the response and
+    // exactly one heartbeat: none of the 4 cooling down rounds above executed any.
     test.set_cooling_down(false);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.tick();
 
-    assert_eq!(0, test.ingress_queue_size(canister));
-    assert_eq!(0, test.system_task_count(&canister));
-    assert_eq!(1, rounds_with_skipped_canister_execution(&test));
+    assert_eq!(0, input_messages(&test));
+    assert_matches!(
+        test.ingress_status(&msg_id),
+        IngressStatus::Known {
+            state: IngressState::Completed(_),
+            ..
+        }
+    );
+    assert_eq!(counter_before + 1, global_counter(&test));
 }
 
 /// Tests that while the subnet is cooling down it inducts no messages on the same
 /// subnet, which is equivalent to routing them through the loopback stream,
 /// something a cooling down subnet does not do.
+///
+/// This is a `SchedulerTest` rather than a `StateMachine` test because it requires
+/// a round that ends between executing a message and inducting the messages it
+/// produced, which only `max_heap_delta_per_iteration` can bring about.
 #[test]
 fn cooling_down_subnet_does_not_induct_messages_on_same_subnet() {
     // One dirty page per message is enough to end an iteration, i.e. to stop the
     // first round just before it would induct messages on the same subnet.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            max_heap_delta_per_iteration: PAGE_SIZE,
+            max_heap_delta_per_iteration: NumBytes::new(ic_sys::PAGE_SIZE as u64),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -905,6 +1013,13 @@ fn cooling_down_subnet_does_not_induct_messages_on_same_subnet() {
 
     assert_eq!(1, output_requests(&test, sender));
     assert_eq!(0, input_messages(&test, receiver));
+    assert_eq!(
+        1,
+        test.scheduler()
+            .metrics
+            .round_skipped_canister_execution_due_to_cooling_down
+            .get()
+    );
 
     // Once the subnet stops cooling down, the request is inducted (and executed).
     test.set_cooling_down(false);

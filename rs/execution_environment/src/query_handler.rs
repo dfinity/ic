@@ -180,14 +180,9 @@ impl InternalHttpQueryHandler {
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
-        // While the subnet is cooling down its canisters execute no messages, so the
-        // state that a query would be evaluated against is frozen; and the subnet may
-        // be about to hand over its canisters altogether. It therefore rejects all
-        // query calls, the ones addressed to the management canister included.
-        //
-        // System queries (i.e. the `transform` functions of in-flight HTTP outcalls)
-        // are still executed, so that the outcalls the subnet has already made can be
-        // responded to while it is draining its subnet queues.
+        // While the subnet is cooling down it rejects all query calls, the ones
+        // addressed to the management canister included. System queries, i.e. the
+        // `transform` functions of HTTP outcalls, are still executed.
         if matches!(query.source, QuerySource::User { .. })
             && state.get_ref().metadata.is_cooling_down()
         {
