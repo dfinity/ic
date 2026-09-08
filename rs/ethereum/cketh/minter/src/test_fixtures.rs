@@ -5,6 +5,7 @@ use crate::deposit_address::DepositAddress;
 use crate::eth_logs::LedgerSubaccount;
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::lifecycle::EthereumNetwork;
 use crate::lifecycle::init::InitArg;
 use crate::numeric::{
     BlockNumber, Erc20Value, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
@@ -13,12 +14,12 @@ use crate::state::audit::{EventType, process_event};
 use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::event::AutomaticDeposit;
-use crate::state::transactions::{EthWithdrawalRequest, SweepRequest};
-use crate::state::{State, read_state};
+use crate::state::transactions::{EthWithdrawalRequest, PipelineRequest, SweepRequest};
+use crate::state::{State, mutate_state, read_state};
 use crate::sweep::create_pending_sweeper_requests;
 use crate::tx::{
     AccessList, AuthorizationRequest, Eip1559TransactionRequest, FinalizedEip1559Transaction,
-    GasFeeEstimate, Signed, TransactionSignature,
+    GasFeeEstimate, SignableTransaction, Signed, SweepTransaction, TransactionSignature,
 };
 use candid::{Nat, Principal};
 use ethnum::u256;
@@ -202,14 +203,15 @@ pub fn prepay_sweep_gas(state: &mut State) {
         ));
 }
 
+/// When every sweep fixture decides its sweep, and the age its gas fee estimate is fresh at.
+const SWEEP_DECIDED_AT: u64 = 1_620_328_630_000_000_000;
+
 /// A [`State`] whose sweep queue holds exactly these funded pairs, all taken by the one sweep
 /// [`create_pending_sweeper_requests`] enqueued for them, returned along with that request. The
 /// deposits, attestations and authorizations the enqueue pairs up arrive through the event log, so
 /// the sweep is assembled by the production path without the runtime signing anything, and the log
 /// alone reconstructs the state the fixture hands back.
 pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, SweepRequest) {
-    const SWEEP_DECIDED_AT: u64 = 1_620_328_630_000_000_000;
-
     let mut runtime = mock::MockCanisterRuntime::new();
     runtime.expect_time().return_const(SWEEP_DECIDED_AT);
     let mut state = state_with_deposit_helper(deposit_helper());
@@ -267,6 +269,91 @@ pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, 
                 .expect("BUG: expected the pairs to become exactly one sweep");
         (s.clone(), request)
     })
+}
+
+/// [`state_with_enqueued_sweep`]'s state once the sweeper pipeline has taken that sweep all the way
+/// to a successful receipt, so every address it swept holds the delegation the tuple it carried
+/// installed.
+pub async fn state_with_finalized_sweep(pairs: &[(Account, Address)]) -> (State, SweepRequest) {
+    let (state, request) = state_with_enqueued_sweep(pairs).await;
+    let mut time_provider = mock::MockTimeProvider::new();
+    time_provider.expect_time().return_const(SWEEP_DECIDED_AT);
+    for event in sweep_pipeline_events(
+        state.automatic_deposits.next_sweeper_transaction_nonce(),
+        &request,
+        TransactionStatus::Success,
+    ) {
+        mutate_state(|s| process_event(s, event, &time_provider));
+    }
+    (read_state(State::clone), request)
+}
+
+/// The events the sweeper pipeline records taking the already-accepted `request` from its
+/// transaction to a receipt of `status`.
+pub fn sweep_pipeline_events(
+    nonce: TransactionNonce,
+    request: &SweepRequest,
+    status: TransactionStatus,
+) -> Vec<EventType> {
+    let sweep = sweep_pipeline_outcome(nonce, request, status);
+    vec![
+        EventType::CreatedSweeperTransaction {
+            sweep_id: request.id,
+            transaction: sweep.transaction,
+        },
+        EventType::SignedSweeperTransaction {
+            sweep_id: request.id,
+            transaction: sweep.signed,
+        },
+        EventType::FinalizedSweeperTransaction {
+            sweep_id: request.id,
+            transaction_receipt: sweep.receipt,
+        },
+    ]
+}
+
+/// What the sweeper pipeline makes of a sweep: the transaction it creates, that transaction signed,
+/// and the receipt finalizing it.
+pub struct SweepPipelineOutcome {
+    pub transaction: SweepTransaction,
+    pub signed: Signed<SweepTransaction>,
+    pub receipt: TransactionReceipt,
+}
+
+pub fn sweep_pipeline_outcome(
+    nonce: TransactionNonce,
+    request: &SweepRequest,
+    status: TransactionStatus,
+) -> SweepPipelineOutcome {
+    let transaction = request
+        .create_transaction(
+            nonce,
+            gas_fee_estimate(),
+            request.gas_limit(),
+            EthereumNetwork::Sepolia,
+        )
+        .expect("BUG: the fixture prices the request with the estimate it creates with");
+    let signed = Signed::from((
+        transaction.clone(),
+        TransactionSignature {
+            signature_y_parity: false,
+            r: Default::default(),
+            s: Default::default(),
+        },
+    ));
+    let receipt = TransactionReceipt {
+        block_hash: Hash([0x11; 32]),
+        block_number: BlockNumber::new(4_190_269),
+        effective_gas_price: signed.transaction().max_fee_per_gas(),
+        gas_used: signed.transaction().gas_limit(),
+        status,
+        transaction_hash: signed.hash(),
+    };
+    SweepPipelineOutcome {
+        transaction,
+        signed,
+        receipt,
+    }
 }
 
 pub fn sweeper_contract() -> Address {
