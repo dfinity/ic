@@ -458,6 +458,16 @@ which is correct because it has not removed any, and `index()` already tolerates
 `nodes.len() > nodes_block_ranges.len()` because `nodes.push` and the first range
 push are already in different messages today.
 
+**Open: should the other refusal causes be returned rather than trapped?**
+`append_result` currently types only the index comparison. A capacity refusal and
+A1's chain mismatch still trap. Folding them in would be a modest improvement on
+the same grounds as `Gap`: the archive decides before appending either way, so
+atomicity is preserved, the reason becomes precise, and no work is wasted on a
+message that traps. It would change A1 from trapping to returning, so acceptance
+criterion 1 would need rewording — "refuses" rather than "traps". The ledger still
+would not branch on them, so the gain is diagnostics and instructions rather than
+control flow. Not decided.
+
 **Scope, and why both.** Against an upgraded archive E already makes the ledger's
 bookkeeping self-correcting, so F adds nothing there. F earns its keep on the
 **fallback path** — an un-upgraded archive returns `null`, the ledger increments
@@ -478,12 +488,14 @@ ledger-side atomicity, is *not* in this list — it is a component, not a reject
 alternative.
 
 
-* **Typed `opt` error return.** `append_blocks : (vec blob) -> (opt append_error)`
-  should be compatible both ways (old ledger ignores the extra value; new ledger
-  reading an old archive's empty reply gets `null`), and `archive.did` plus CI's
-  Candid compatibility job make that checkable. But it is only needed if the
-  ledger must branch on the cause, and with (B) cause-agnostic and (C) recording
-  the cause, it does not. Defer.
+* **A typed error return on its own**, `append_blocks : (vec blob) -> (opt
+  append_error)`, so the ledger could branch on the failure cause without adding
+  an index argument. Subsumed by E rather than rejected: E's `opt append_result`
+  is that return value, and its `Gap` variant is a typed cause. What E does *not*
+  do is type every cause — a capacity refusal and a chain mismatch still trap, so
+  they remain diagnosed through C's counter, and the ledger still does not branch
+  on them. See the open question below about folding those into `append_result`
+  too.
 * **String-matching the reject message.** Works today, depends on replica
   message formatting and CDK version, and cannot be tested against future
   changes. Rejected.
