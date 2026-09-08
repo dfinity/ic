@@ -49,6 +49,7 @@ const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
 const MAX_DEPOSITS_PER_SWEEP: usize = 10;
+const MAX_NONCE_READS_PER_TICK: usize = 10;
 
 /// Turns the deposits the balance scan queued into the sweep requests that
 /// [`process_sweeper_transactions`] prices, signs, sends and finalizes.
@@ -123,6 +124,11 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
 /// the marks it just rewrote. That is also why the read demands every provider agree
 /// ([`finalized_transaction_count`]) rather than taking the lowest count offered.
 ///
+/// The reads are taken a batch at a time, as the sweeps themselves are: a delegate that reverts
+/// every batch leaves every address those sweeps touched waiting on a read, and a tick reading all
+/// of them at once would fan a single timer out into a chain read per queued address. The addresses
+/// a tick leaves out are read by the next one.
+///
 /// A count is only recorded while the address is still awaiting one: a sweep of it may have
 /// finalized during the read, taking the nonce with it, and a count read before that would undo the
 /// marks that sweep left. An address whose read fails keeps its unverified nonce and so stays out
@@ -130,7 +136,7 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
 async fn verify_deposit_address_nonces<R: CanisterRuntime>(runtime: &R) {
     let unverified = read_state(|s| {
         s.automatic_deposits
-            .deposit_addresses_awaiting_a_nonce_read()
+            .deposit_addresses_awaiting_a_nonce_read(MAX_NONCE_READS_PER_TICK)
     });
     if unverified.is_empty() {
         return;

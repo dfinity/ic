@@ -1363,9 +1363,73 @@ async fn should_offer_no_sweep_of_an_address_whose_nonce_is_not_trusted() {
     assert_unresolved(&deposits, account(1));
     assert!(
         deposits
-            .deposit_addresses_awaiting_a_nonce_read()
+            .deposit_addresses_awaiting_a_nonce_read(10)
             .is_empty(),
         "neither address is read again: one is placed, the other no read can place"
+    );
+}
+
+/// A tick pays for the nonce reads it takes, a batch at a time, as it does for the sweeps it
+/// sends: a delegate that reverts every batch leaves every address those sweeps touched waiting on
+/// a read, and reading all of them at once would fan one timer out into a chain read per queued
+/// address.
+#[tokio::test]
+async fn should_offer_at_most_a_batch_of_deposit_addresses_to_read_the_nonce_of() {
+    let pairs = [
+        (account(0), usdc()),
+        (account(1), usdc()),
+        (account(2), usdc()),
+    ];
+    let (mut deposits, request) = deposits_with_enqueued_sweep(&pairs).await;
+    finalize_sweep(&mut deposits, &request, TransactionStatus::Failure);
+    rearm(&mut deposits, &pairs);
+
+    assert_eq!(
+        deposits
+            .deposit_addresses_awaiting_a_nonce_read(0)
+            .into_keys()
+            .collect::<Vec<_>>(),
+        vec![]
+    );
+    assert_eq!(
+        deposits
+            .deposit_addresses_awaiting_a_nonce_read(2)
+            .into_keys()
+            .collect::<Vec<_>>(),
+        vec![account(0), account(1)]
+    );
+    assert_eq!(
+        deposits
+            .deposit_addresses_awaiting_a_nonce_read(pairs.len())
+            .into_keys()
+            .collect::<Vec<_>>(),
+        vec![account(0), account(1), account(2)],
+        "a batch wide enough for them offers every address still waiting on a read"
+    );
+}
+
+/// One read places an account's deposit address whatever that account has queued, so a second
+/// funded token of the same account may not cost the batch a slot.
+#[tokio::test]
+async fn should_offer_a_deposit_address_once_however_many_of_its_tokens_are_queued() {
+    let (mut deposits, request) =
+        deposits_with_enqueued_sweep(&[(account(0), usdc()), (account(1), usdc())]).await;
+    finalize_sweep(&mut deposits, &request, TransactionStatus::Failure);
+    rearm(
+        &mut deposits,
+        &[
+            (account(0), usdc()),
+            (account(0), usdt()),
+            (account(1), usdc()),
+        ],
+    );
+
+    assert_eq!(
+        deposits
+            .deposit_addresses_awaiting_a_nonce_read(2)
+            .into_keys()
+            .collect::<Vec<_>>(),
+        vec![account(0), account(1)]
     );
 }
 

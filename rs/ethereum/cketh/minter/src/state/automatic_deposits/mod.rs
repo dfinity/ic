@@ -404,13 +404,29 @@ impl AutomaticDeposits {
     }
 
     /// The deposit addresses of the accounts whose nonce is waiting to be read back *and* have
-    /// funds queued for sweeping, so a tick pays for the reads it could act on and no others.
-    pub fn deposit_addresses_awaiting_a_nonce_read(&self) -> BTreeMap<Account, DepositAddress> {
-        self.sweep
+    /// funds queued for sweeping, so a tick pays for the reads it could act on and no others, at
+    /// most `batch_size` of them.
+    ///
+    /// The cap is what keeps the repair the size of a sweep: a sweeper contract that reverts every
+    /// batch leaves every address it touched waiting on a read, and a tick reading all of them at
+    /// once would turn one timer into a chain read per queued address. What a tick leaves out it
+    /// reads next tick, since a read that places an address takes it out of this set.
+    pub fn deposit_addresses_awaiting_a_nonce_read(
+        &self,
+        batch_size: usize,
+    ) -> BTreeMap<Account, DepositAddress> {
+        let mut batch = BTreeMap::new();
+        for (request, entry) in self
+            .sweep
             .iter()
             .filter(|(request, _entry)| self.unverified_nonces.contains(&request.account))
-            .map(|(request, entry)| (request.account, entry.address))
-            .collect()
+        {
+            if batch.len() == batch_size && !batch.contains_key(&request.account) {
+                break;
+            }
+            batch.insert(request.account, entry.address);
+        }
+        batch
     }
 
     pub fn unverified_nonces_len(&self) -> usize {
