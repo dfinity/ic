@@ -620,6 +620,19 @@ pub struct SweepContracts {
     pub delegate: Address,
 }
 
+/// Compiles and deploys the superseded delegate (`CkSweeperAttestedLegacy.sol`, the version before
+/// `receive()`, `sweepEth` and `sweepEthBatch` were added) against the same helper, so a test can
+/// start the minter on it and rotate the addresses it delegated onto the current one.
+pub fn deploy_legacy_delegate(anvil: &Anvil, helper: &Address) -> Address {
+    anvil.deploy(
+        &address_from_hex(DEV_ACCOUNT),
+        &deploy_code(
+            &compile("CKSWEEPER_ATTESTED_LEGACY_SOL", "CkSweeperAttestedLegacy"),
+            &alloy_address(helper).abi_encode(),
+        ),
+    )
+}
+
 /// Compiles and deploys the real deposit helper and the attested sweeper delegate, wiring the
 /// delegate to that helper exactly as production does.
 pub fn deploy_sweep_contracts(anvil: &Anvil, minter: &Address) -> SweepContracts {

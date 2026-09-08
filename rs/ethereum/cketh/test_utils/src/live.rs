@@ -71,8 +71,8 @@ use std::time::{Duration, Instant};
 
 use crate::anvil::{
     Anvil, DEV_ACCOUNT, SentTransaction, SweepContracts, address_from_hex, delegation_designator,
-    deploy_deposit_helper, deploy_mock_erc20, deploy_sweep_contracts, deposit_eth,
-    erc20_balance_slot, u256_be,
+    deploy_deposit_helper, deploy_legacy_delegate, deploy_mock_erc20, deploy_sweep_contracts,
+    deposit_eth, erc20_balance_slot, u256_be,
 };
 use crate::ckerc20::{CkErc20Setup, Erc20Token};
 use crate::{CkEthSetup, EthereumBackend, MINTER_ADDRESS, minter_wasm, switch_to_live};
@@ -215,6 +215,13 @@ impl LiveSetup<CkErc20Setup> {
         // installed. It is only ever read back out of the helper event, never by the helper
         // itself, so the deployment can name the address the test asserts against.
         let contracts = deploy_sweep_contracts(&anvil, &address_from_hex(MINTER_ADDRESS));
+        Self::with_sweep_contracts(anvil, contracts)
+    }
+
+    /// Builds the full [`CkErc20Setup`] fixture against `anvil` — minter, EVM RPC canister,
+    /// orchestrator, and the ckUSDC/ckUSDT ledger and index canisters it spawns — with the minter
+    /// installed knowing `contracts`. Then switches the instance to live outcalls.
+    fn with_sweep_contracts(anvil: Arc<Anvil>, contracts: SweepContracts) -> Self {
         let cketh = CkEthSetup::new(EthereumBackend::Anvil {
             anvil: Arc::clone(&anvil),
             sweep_contracts: Some(contracts),
@@ -232,6 +239,30 @@ impl LiveSetup<CkErc20Setup> {
         setup.sweep_contracts = Some(contracts);
         setup.deposit_helper = Some(contracts.helper);
         setup
+    }
+
+    /// As [`Self::new`], but with the minter installed on the superseded delegate
+    /// (`CkSweeperAttestedLegacy.sol`), so a test can sweep addresses onto it and then rotate them.
+    /// Returns the harness along with the current delegate to rotate to; the legacy one the minter
+    /// runs against is [`Self::sweep_contracts`]' `delegate`.
+    pub fn on_legacy_delegate() -> (Self, Address) {
+        let anvil = Arc::new(Anvil::start_mainnet_like());
+        let current = deploy_sweep_contracts(&anvil, &address_from_hex(MINTER_ADDRESS));
+        let legacy = SweepContracts {
+            delegate: deploy_legacy_delegate(&anvil, &current.helper),
+            ..current
+        };
+        (Self::with_sweep_contracts(anvil, legacy), current.delegate)
+    }
+
+    /// Points the minter at `delegate`, as an operator replacing the sweeper contract does. The
+    /// addresses already delegated to the old one are re-delegated lazily, by the sweeps that
+    /// happen anyway.
+    pub fn rotate_delegate_to(&self, delegate: &Address) {
+        self.upgrade_minter_with(UpgradeArg {
+            ethereum_sweeper_contract_address: Some(delegate.to_string()),
+            ..Default::default()
+        });
     }
 
     /// The ckERC20 token the orchestrator spawned for `symbol`, whose ledger the mint lands on.

@@ -310,9 +310,11 @@ rust_test(
         "//:anvil",
         "//:solc",
         # Contract sources compiled at test time by the vendored solc: the mock ERC-20, the real
-        # deposit helper the sweep transfers through, and the delegate it sweeps with.
+        # deposit helper the sweep transfers through, the delegate it sweeps with, and the
+        # superseded delegate a rotation test starts the minter on.
         "DepositHelperWithSubaccount.sol",
         "CkSweeperAttested.sol",
+        "tests/deposit_from_cex_demo/CkSweeperAttestedLegacy.sol",
         "tests/deposit_from_cex_demo/MockUSDT.sol",
         # End-to-end balance scan and sweeper funding on a live PocketIC + local anvil node.
         ":cketh_minter_debug.wasm.gz",
@@ -331,6 +333,7 @@ rust_test(
         # stamped with an expiry the auto-progressing clock then moves past, never to be answered.
         "RUST_TEST_THREADS": "1",
         "CKSWEEPER_ATTESTED_SOL": "$(rootpath CkSweeperAttested.sol)",
+        "CKSWEEPER_ATTESTED_LEGACY_SOL": "$(rootpath tests/deposit_from_cex_demo/CkSweeperAttestedLegacy.sol)",
         "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
         "SOLC_BIN": "$(rootpath //:solc)",
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",

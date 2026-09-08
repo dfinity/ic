@@ -851,6 +851,138 @@ fn should_sweep_a_second_erc20_deposit_of_a_delegated_address_without_an_authori
     assert_eq!(mints, 2, "each deposit flow must be credited exactly once");
 }
 
+/// Replacing the sweeper delegate re-delegates lazily the addresses already carrying the old one:
+/// the rotation tuple rides the sweep that would happen anyway, signed for the nonce the address
+/// has reached rather than for zero — which the protocol would skip — and once it has applied the
+/// address is on the new delegate and needs no further tuple.
+#[test]
+fn should_rotate_a_delegated_address_onto_a_newly_configured_delegate() {
+    const DEPOSIT_SUBACCOUNT: [u8; 32] = [9; 32];
+
+    let (setup, current_delegate) = LiveSetup::<CkErc20Setup>::on_legacy_delegate();
+    let legacy_delegate = setup.sweep_contracts().delegate;
+    assert_ne!(
+        legacy_delegate, current_delegate,
+        "the two delegate versions must be distinct deployments for the rotation to mean anything"
+    );
+    let setup = setup
+        .fund_fee_account()
+        .expect_fee_account_credited()
+        .upgrade_minter()
+        .expect_sweeper_address_derived()
+        .expect_eth_received()
+        .expect_funding_finalized();
+
+    let sweeper = setup.await_sweeper_address();
+    let [usdc, _usdt]: [Erc20Token; 2] = setup
+        .supported_erc20_tokens_owned()
+        .try_into()
+        .expect("expected exactly 2 supported tokens");
+    let usdc_minimum = setup.minimum_deposit_amount(&usdc);
+    let owner = setup.depositor(1);
+
+    let (setup, first_deposits) = setup
+        .call_minter_deposit_erc20([DepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            token: usdc.clone(),
+            amount: 4 * usdc_minimum,
+        }])
+        .expect_deposit_responses();
+    let setup = setup
+        .credit_deposits_from_cex(&first_deposits)
+        .expect_deposit_balances_on_anvil()
+        .expect_each_awaiting_sweep();
+    let (setup, first_sweeps) = setup
+        .await_sweeps(&sweeper, 1)
+        .expect_all_delegating_sweeps();
+    assert_eq!(
+        setup.anvil().authorization_nonces(&first_sweeps[0].hash),
+        vec![0],
+        "the first sweep of an address delegates it at nonce 0"
+    );
+    let address = first_deposits[0].address;
+    let setup = setup
+        .expect_sweeps_finalized(1)
+        .assert_delegations_installed(&first_deposits, &legacy_delegate)
+        .expect_mints(&first_deposits);
+    assert_eq!(setup.anvil().transaction_count(&address), 1);
+
+    setup.rotate_delegate_to(&current_delegate);
+
+    let second_deposits = [CexDeposit {
+        amount: 3 * usdc_minimum,
+        ..first_deposits[0].clone()
+    }];
+    let setup = setup
+        .credit_deposits_from_cex(&second_deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+    let (setup, second_registrations) = setup
+        .call_minter_deposit_erc20([DepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            token: usdc.clone(),
+            amount: second_deposits[0].amount,
+        }])
+        .expect_deposit_responses();
+    assert_eq!(second_registrations[0].address, address);
+    let (setup, sweeps) = setup.await_sweeps(&sweeper, 2).expect_sweeps_of_types(&[
+        DELEGATING_SWEEP_TRANSACTION_TYPE,
+        DELEGATING_SWEEP_TRANSACTION_TYPE,
+    ]);
+    assert_eq!(
+        setup.anvil().authorization_nonces(&sweeps[1].hash),
+        vec![1],
+        "the rotation must be signed for the nonce the first sweep left the address at, since the \
+         protocol applies a tuple only at the authority's current nonce"
+    );
+    let both_deposits = [first_deposits[0].clone(), second_deposits[0].clone()];
+    let setup = setup
+        .expect_sweeps_finalized(2)
+        .assert_delegations_installed(&second_deposits, &current_delegate)
+        .assert_addresses_swept_empty(&second_deposits)
+        .assert_minter_holds_swept_totals(&both_deposits)
+        .expect_mints(&both_deposits);
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        2,
+        "applying the rotation tuple spends the address' nonce 1"
+    );
+
+    let third_deposits = [CexDeposit {
+        amount: 2 * usdc_minimum,
+        ..first_deposits[0].clone()
+    }];
+    let setup = setup
+        .credit_deposits_from_cex(&third_deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+    let (setup, _third_registrations) = setup
+        .call_minter_deposit_erc20([DepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            token: usdc.clone(),
+            amount: third_deposits[0].amount,
+        }])
+        .expect_deposit_responses();
+    let (setup, sweeps) = setup.await_sweeps(&sweeper, 3).expect_sweeps_of_types(&[
+        DELEGATING_SWEEP_TRANSACTION_TYPE,
+        DELEGATING_SWEEP_TRANSACTION_TYPE,
+        PLAIN_SWEEP_TRANSACTION_TYPE,
+    ]);
+    assert_eq!(
+        setup.anvil().authorization_nonces(&sweeps[2].hash),
+        Vec::<u64>::new(),
+        "a rotated address is delegated to the configured contract and needs no further tuple"
+    );
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        2,
+        "sweeping without a tuple leaves the address at the nonce the rotation spent"
+    );
+}
+
 fn assert_eth_sweep_gas_near_demo(sweeps: &[SentTransaction], deposits_per_sweep: u64) {
     const ETH_SCENARIOS_DEMO_TEN_DEPOSITS_EIP7702_GAS: u64 = 413_076;
     const GAS_BAND_PERCENT: u64 = 10;
