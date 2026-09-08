@@ -11,7 +11,7 @@ use crate::erc20::CkErc20Token;
 use crate::eth_logs::{LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent};
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
-use crate::numeric::Wei;
+use crate::numeric::{TransactionNonce, Wei};
 use crate::state::audit::{Event, replay_events_internal};
 use crate::state::transactions::{
     AuthorizedSweepItem, Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex,
@@ -560,6 +560,19 @@ impl GetEventsFile {
                         },
                     }
                 }
+                EventPayload::ObservedDepositAddressNonce {
+                    owner,
+                    subaccount,
+                    nonce,
+                } => ET::ObservedDepositAddressNonce {
+                    account: Account {
+                        owner,
+                        subaccount: subaccount.map(|subaccount| {
+                            <[u8; 32]>::try_from(subaccount.into_vec().as_slice()).unwrap()
+                        }),
+                    },
+                    nonce: TransactionNonce::try_from(nonce).unwrap(),
+                },
                 EventPayload::AcceptedSweepRequest {
                     sweep_id,
                     destination,

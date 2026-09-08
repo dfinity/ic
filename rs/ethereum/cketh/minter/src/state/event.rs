@@ -5,7 +5,7 @@ use crate::erc20::CkErc20Token;
 use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
-use crate::numeric::{BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex};
+use crate::numeric::{BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest, SweepId, SweepRequest,
@@ -17,6 +17,7 @@ use crate::tx::{
 };
 use candid::Principal;
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
 use minicbor::{Decode, Encode};
 
 /// The event describing the ckETH minter state transition.
@@ -249,6 +250,17 @@ pub enum EventType {
         request: AuthorizationRequest,
         #[n(1)]
         signature: TransactionSignature,
+    },
+    /// The nonce a deposit address was read to stand at, after a reverted sweep left the minter
+    /// unable to say which of the tuples it had signed for that address the chain applied. The
+    /// minter signs at most one tuple per `(deposit address, nonce)`, so the nonce alone says which
+    /// of them applied, which is what re-anchors the record on the chain.
+    #[n(35)]
+    ObservedDepositAddressNonce {
+        #[n(0)]
+        account: Account,
+        #[n(1)]
+        nonce: TransactionNonce,
     },
 }
 

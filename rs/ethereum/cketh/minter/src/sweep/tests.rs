@@ -3,7 +3,7 @@ use crate::attestation::AttestationRequest;
 use crate::deposit_address::AddressSchema;
 use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::management::{CallError, Reason};
-use crate::numeric::{BlockNumber, TransactionNonce, Wei, WeiPerGas};
+use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::audit::{EventType, apply_state_transition};
 use crate::state::automatic_deposits::SweepTarget;
 use crate::state::eth_logs_scraping::LogScrapings;
@@ -18,9 +18,7 @@ use crate::test_fixtures::{
     initial_state, prepay_sweep_gas, state_with_deposit_helper, state_with_finalized_sweep,
     sweep_pipeline_events, sweep_pipeline_outcome, usdc, usdt,
 };
-use crate::tx::{
-    Authorization, AuthorizationRequest, GasFeeEstimate, SignableTransaction, TransactionSignature,
-};
+use crate::tx::{Authorization, AuthorizationRequest, SignableTransaction, TransactionSignature};
 use ethnum::u256;
 use evm_rpc_types::{
     Hex20, Hex32, Hex256, HexByte, Nat256, TransactionReceipt as EvmTransactionReceipt,
@@ -153,50 +151,6 @@ async fn should_reuse_the_recorded_authorization_on_a_later_sweep() {
             .filter(|event| matches!(event, EventType::AuthorizedDepositAddress { .. }))
             .count(),
         1
-    );
-}
-
-#[tokio::test]
-async fn should_sign_a_fresh_authorization_when_the_sweeper_contract_changes() {
-    init_state(state_ready_to_sign(&[(account(), usdc())]));
-    let mut runtime = mock();
-    runtime.expect_time().return_const(NOW);
-    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, TransactionNonce::ZERO);
-    expect_authorization_signing(
-        &mut runtime,
-        ANOTHER_SWEEPER_CONTRACT,
-        TransactionNonce::ZERO,
-    );
-    expect_signing(&mut runtime);
-
-    create_pending_sweeper_requests(&runtime).await;
-    let first = stored_authorization(&authorization_request(
-        account(),
-        SWEEPER_CONTRACT,
-        TransactionNonce::ZERO,
-    ));
-    assert!(first.is_some());
-
-    mutate_state(|s| s.sweeper_contract_address = Some(ANOTHER_SWEEPER_CONTRACT));
-    // The first sweep took the account's USDC, so give the second pass its USDT to batch. Same
-    // account, hence the same authorization but for the delegate, which is what must miss.
-    queue_deposit(&account(), &usdt());
-
-    create_pending_sweeper_requests(&runtime).await;
-    let second = stored_authorization(&authorization_request(
-        account(),
-        ANOTHER_SWEEPER_CONTRACT,
-        TransactionNonce::ZERO,
-    ));
-    assert!(second.is_some());
-    assert_ne!(first, second);
-    assert_eq!(
-        stored_authorization(&authorization_request(
-            account(),
-            SWEEPER_CONTRACT,
-            TransactionNonce::ZERO
-        )),
-        first
     );
 }
 
@@ -711,13 +665,8 @@ fn state_ready_to_sign(deposits: &[(Account, Address)]) -> State {
 fn state_ready_to_sign_with_unfunded_sweeper(deposits: &[(Account, Address)]) -> State {
     let mut state = state_with_deposit_helper(DEPOSIT_HELPER);
     state.sweeper_contract_address = Some(SWEEPER_CONTRACT);
-    state.last_transaction_price_estimate = Some((
-        NOW - GAS_FEE_ESTIMATE_AGE_NANOS,
-        GasFeeEstimate {
-            base_fee_per_gas: WeiPerGas::ONE,
-            max_priority_fee_per_gas: WeiPerGas::ONE,
-        },
-    ));
+    state.last_transaction_price_estimate =
+        Some((NOW - GAS_FEE_ESTIMATE_AGE_NANOS, gas_fee_estimate()));
     for (account, token) in deposits {
         apply_state_transition(&mut state, &deposit_received(account, token));
     }

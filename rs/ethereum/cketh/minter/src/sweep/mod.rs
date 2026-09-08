@@ -14,6 +14,7 @@ mod tests;
 
 use crate::asset::Asset;
 use crate::attestation::{AttestationRequest, sign_attestation};
+use crate::deposit_address::DepositAddress;
 use crate::sweeper_contract::SweepItem;
 use crate::{
     deposit_address::AddressSchema,
@@ -43,6 +44,7 @@ use evm_rpc_types::TransactionReceipt as EvmTransactionReceipt;
 use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
 use std::collections::{BTreeMap, BTreeSet};
 
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
@@ -86,6 +88,8 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         return;
     };
 
+    verify_deposit_address_nonces(&batch_per_asset, runtime).await;
+
     for (asset, targets) in batch_per_asset {
         let Some(attestation_requests) = read_state(|s| s.attestation_requests(&targets)) else {
             log!(
@@ -108,13 +112,65 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
     }
 }
 
+/// Re-anchors on the chain the record of every deposit address in `batches` whose nonce a reverted
+/// sweep left unverified: its transaction count is what the minter's own tuples advanced, so
+/// reading it back says which of them the chain applied.
+///
+/// An address whose read fails, or whose record the nonce read back cannot resolve, keeps its
+/// unverified nonce and so stays out of this tick's sweeps. It is not dropped: the next tick tries
+/// it again.
+async fn verify_deposit_address_nonces<R: CanisterRuntime>(
+    batches: &BTreeMap<Asset, Vec<SweepTarget>>,
+    runtime: &R,
+) {
+    let unverified: BTreeMap<Account, DepositAddress> = read_state(|s| {
+        batches
+            .values()
+            .flatten()
+            .filter(|target| s.automatic_deposits.has_unverified_nonce(&target.account()))
+            .map(|target| (target.account(), target.address()))
+            .collect()
+    });
+    if unverified.is_empty() {
+        return;
+    }
+
+    let observed = join_all(unverified.into_iter().map(|(account, address)| async move {
+        (
+            account,
+            latest_transaction_count(*address.as_address()).await,
+        )
+    }))
+    .await;
+
+    for (account, transaction_count) in observed {
+        match transaction_count {
+            Some(transaction_count) => mutate_state(|s| {
+                process_event(
+                    s,
+                    EventType::ObservedDepositAddressNonce {
+                        account,
+                        nonce: transaction_count.change_units(),
+                    },
+                    runtime,
+                )
+            }),
+            None => log!(
+                INFO,
+                "[create_pending_sweeper_requests]: leaving out {account:?}: its deposit address' nonce could not be read back, so which tuples the sweep that reverted on it applied is still unknown"
+            ),
+        }
+    }
+}
+
 /// Enqueues one sweep of `asset` from the targets both signing passes covered, so the pipeline can
 /// price, sign and send it.
 ///
 /// A target whose attestation or authorization is missing is left out rather than swept: its
 /// signing failed, so the sweep has nothing to prove the address credits the account, or nothing to
 /// delegate it with. It stays queued, and the next tick tries it again. A target already delegated
-/// to the sweeper contract asks for no authorization, and is swept carrying none.
+/// to the sweeper contract asks for no authorization, and is swept carrying none; one whose nonce a
+/// reverted sweep left unverified is left out, since any tuple for it would name a guessed nonce.
 fn enqueue_sweep<R: CanisterRuntime>(
     asset: Asset,
     targets: &[SweepTarget],
@@ -145,6 +201,7 @@ fn enqueue_sweep<R: CanisterRuntime>(
                         Some(request.signed_with(signature))
                     }
                     SweepAuthorization::AlreadyDelegated => None,
+                    SweepAuthorization::NonceUnverified => return None,
                 };
                 Some(AuthorizedSweepItem {
                     item: SweepItem {
@@ -231,11 +288,12 @@ async fn sign_attestations_batch<R: CanisterRuntime>(
 }
 
 /// Signs the authorizations `authorizations` requires and the minter has not signed before,
-/// recording each so a later sweep of the same address reuses it. An address already delegated
-/// requires none, and so costs no threshold signature.
+/// recording each so a later sweep of the same address reuses it. An address already delegated to
+/// the configured sweeper contract, and one whose nonce is unverified, require none and so cost no
+/// threshold signature.
 ///
 /// A request names the chain, the delegate and the nonce it authorizes, so re-pointing the minter
-/// at another sweeper contract misses the recorded ones and signs afresh.
+/// at another sweeper contract misses the recorded ones and signs the rotation afresh.
 async fn sign_authorizations_batch<R: CanisterRuntime>(
     authorizations: Vec<SweepAuthorization>,
     runtime: &R,
@@ -245,7 +303,7 @@ async fn sign_authorizations_batch<R: CanisterRuntime>(
             .into_iter()
             .filter_map(|authorization| match authorization {
                 SweepAuthorization::Required(request) => Some(request),
-                SweepAuthorization::AlreadyDelegated => None,
+                SweepAuthorization::AlreadyDelegated | SweepAuthorization::NonceUnverified => None,
             })
             .filter(|request| s.automatic_deposits.authorization(request).is_none())
             .collect()

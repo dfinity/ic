@@ -771,6 +771,12 @@ pub mod events {
             subaccount: Option<ByteBuf>,
             authorization: SignedAuthorization,
         },
+        ObservedDepositAddressNonce {
+            owner: Principal,
+            subaccount: Option<ByteBuf>,
+            /// The nonce the deposit address was read to stand at.
+            nonce: Nat,
+        },
         AcceptedSweepRequest {
             sweep_id: Nat,
             destination: String,

@@ -871,9 +871,22 @@ type Event = record {
             owner : principal;
             subaccount : opt blob;
             // The tuple the deposit address signed, delegating its code to the
-            // sweeper contract. Its nonce is always zero: the delegation is
-            // installed the first time the tuple is applied.
+            // sweeper contract. Its nonce is the one the address stands at,
+            // which is the only nonce the protocol applies a tuple at: zero the
+            // first time, and the address' current nonce when re-delegating it
+            // to a newly configured sweeper contract.
             authorization : SignedAuthorization;
+        };
+        // The nonce a ckERC20 deposit address was read to stand at, after a
+        // reverted sweep left the minter unable to say which of the tuples it
+        // had signed for that address the chain applied. The minter signs at
+        // most one tuple per (deposit address, nonce), so the nonce alone says
+        // which of them applied.
+        ObservedDepositAddressNonce : record {
+            owner : principal;
+            subaccount : opt blob;
+            // The nonce the deposit address was read to stand at.
+            nonce : nat;
         };
     };
 };

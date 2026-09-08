@@ -19,7 +19,7 @@ use crate::tx::{
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
@@ -85,6 +85,12 @@ pub struct AutomaticDeposits {
     /// entries naming a retired helper stay behind forever. [`Self::authorizations_len`] is exported
     /// as a metric so that growth is visible before it needs bounding.
     authorizations: BTreeMap<AuthorizationRequest, StoredAuthorization>,
+    /// The accounts whose deposit address' nonce the record can no longer vouch for, because a
+    /// sweep of that address reverted. A reverted sweep is the one sign that the record has
+    /// drifted from the chain, and until the address' nonce is read back and the record re-anchored
+    /// on it ([`Self::record_observed_deposit_address_nonce`]) any further tuple would be signed
+    /// for a guessed nonce, so the address is left out of every sweep.
+    unverified_nonces: BTreeSet<Account>,
     /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
     /// its own nonce sequence, independent of the main-address withdrawal pipeline.
     sweeper_transactions: SweeperTransactionPipeline,
@@ -224,6 +230,7 @@ impl AutomaticDeposits {
                 "BUG: {request:?} is not held by sweep {id:?}"
             );
             if receipt.status == TransactionStatus::Failure {
+                self.unverified_nonces.insert(account);
                 log!(
                     INFO,
                     "[record_finalized_sweep_transaction]: DROPPING {request:?} from the sweep queue: {id:?} failed and the minter does not retry. Its {:?} stays at {}, and reaching it again needs the pair armed afresh.",
@@ -249,6 +256,7 @@ impl AutomaticDeposits {
             sweep,
             attestations,
             authorizations,
+            unverified_nonces,
             sweeper_transactions,
         } = self;
 
@@ -256,6 +264,7 @@ impl AutomaticDeposits {
         ensure_eq!(sweep, &other.sweep);
         ensure_eq!(attestations, &other.attestations);
         ensure_eq!(authorizations, &other.authorizations);
+        ensure_eq!(unverified_nonces, &other.unverified_nonces);
         sweeper_transactions.is_equivalent_to(&other.sweeper_transactions)
     }
 
@@ -361,7 +370,65 @@ impl AutomaticDeposits {
         self.authorizations
             .get_mut(&request)
             .expect("BUG: a sweep carried an authorization the minter never signed")
-            .applied_by = Some(sweep_id);
+            .applied_by = Some(AppliedBy::Sweep(sweep_id));
+    }
+
+    /// Whether a reverted sweep has left the minter unable to say which of the tuples it signed
+    /// for `account`'s deposit address the chain applied, and so what nonce that address stands at.
+    pub fn has_unverified_nonce(&self, account: &Account) -> bool {
+        self.unverified_nonces.contains(account)
+    }
+
+    /// Re-anchor the record of `account`'s deposit address on `observed`, the nonce the chain says
+    /// it stands at, and mark that nonce verified again.
+    ///
+    /// The minter signs at most one tuple per `(deposit address, nonce)` and holds the address'
+    /// only key, so `observed` alone says which of them the chain applied: those signed for a nonce
+    /// below it, and no other. Where the address nonetheless holds two tuples at one nonce — state
+    /// from before that rule — the one already marked applied stays the answer; if neither is, the
+    /// observed nonce cannot tell them apart, so nothing is re-anchored and the address stays
+    /// unverified, out of every sweep, until an operator sorts it out.
+    pub fn record_observed_deposit_address_nonce(
+        &mut self,
+        account: Account,
+        observed: TransactionNonce,
+    ) {
+        let mut signed_at: BTreeMap<TransactionNonce, Vec<AuthorizationRequest>> = BTreeMap::new();
+        let mut already_applied: BTreeSet<AuthorizationRequest> = BTreeSet::new();
+        for (request, stored) in self.authorizations_of(&account) {
+            signed_at
+                .entry(request.nonce())
+                .or_default()
+                .push(request.clone());
+            if stored.applied_by.is_some() {
+                already_applied.insert(request.clone());
+            }
+        }
+
+        let mut applied = BTreeSet::new();
+        for (nonce, tuples) in signed_at.range(..observed) {
+            let Some(request) = tuple_the_chain_applied(tuples, &already_applied) else {
+                log!(
+                    INFO,
+                    "[record_observed_deposit_address_nonce]: LEAVING {account:?} out of every sweep: its deposit address stands at nonce {observed}, but the tuples signed for its nonce {nonce} are several and none is marked applied, so the observed nonce cannot say which of them the chain applied."
+                );
+                return;
+            };
+            applied.insert(request.clone());
+        }
+
+        for request in signed_at.into_values().flatten() {
+            let stored = self
+                .authorizations
+                .get_mut(&request)
+                .expect("BUG: an authorization left the store while it was being re-anchored");
+            stored.applied_by = if applied.contains(&request) {
+                stored.applied_by.or(Some(AppliedBy::ObservedNonce))
+            } else {
+                None
+            };
+        }
+        self.unverified_nonces.remove(&account);
     }
 
     /// Arm the `(account, asset)` pair, whose deposit `address` is derived for `account`.
@@ -699,6 +766,7 @@ impl Default for AutomaticDeposits {
             sweep: BTreeMap::new(),
             attestations: BTreeMap::new(),
             authorizations: BTreeMap::new(),
+            unverified_nonces: BTreeSet::new(),
             sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
         }
     }
@@ -821,7 +889,34 @@ impl ScanTarget<Erc20Asset> {
 #[derive(Clone, PartialEq, Debug)]
 struct StoredAuthorization {
     signature: TransactionSignature,
-    applied_by: Option<SweepId>,
+    applied_by: Option<AppliedBy>,
+}
+
+/// What tells the minter that one of the tuples it signed is installed on chain.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+enum AppliedBy {
+    /// The finalized sweep that carried the tuple while its deposit address stood at the tuple's
+    /// nonce.
+    Sweep(SweepId),
+    /// The deposit address' own nonce, read back off the chain after a reverted sweep: it stands
+    /// above the tuple's nonce, and the minter signs at most one tuple per nonce.
+    ObservedNonce,
+}
+
+/// The one of `tuples` — all signed for a single deposit address at a single nonce — that the chain
+/// must have applied to move that address past the nonce: the only tuple, or, where the address
+/// holds several, the one already marked applied. `None` when several are unapplied, which the
+/// nonce alone cannot tell apart.
+fn tuple_the_chain_applied<'a>(
+    tuples: &'a [AuthorizationRequest],
+    already_applied: &BTreeSet<AuthorizationRequest>,
+) -> Option<&'a AuthorizationRequest> {
+    match tuples {
+        [only] => Some(only),
+        _ => tuples
+            .iter()
+            .find(|request| already_applied.contains(request)),
+    }
 }
 
 /// The delegation a deposit address carries on chain.

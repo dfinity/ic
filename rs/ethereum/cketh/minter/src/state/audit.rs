@@ -119,6 +119,11 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 .automatic_deposits
                 .record_authorization(request.clone(), signature.clone());
         }
+        EventType::ObservedDepositAddressNonce { account, nonce } => {
+            state
+                .automatic_deposits
+                .record_observed_deposit_address_nonce(*account, *nonce);
+        }
         EventType::AcceptedSweepRequest(request) => {
             state.next_sweep_id = request.id.next();
             state.automatic_deposits.record_sweep_scheduled(

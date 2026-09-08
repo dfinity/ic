@@ -145,6 +145,10 @@ pub enum SweepAuthorization {
     /// Nothing: the address already delegates the configured sweeper contract. A sweep every
     /// address of which is delegated carries no authorization and is a plain EIP-1559 transaction.
     AlreadyDelegated,
+    /// Nothing a sweep may use: a reverted sweep left the nonce the address stands at unverified,
+    /// so any tuple would be signed for a guessed nonce. The address is left out of the sweep until
+    /// the minter has read its nonce back off the chain.
+    NonceUnverified,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -348,6 +352,9 @@ impl State {
     /// them happen to mine in. The rotation is then signed at the next nonce, once the record shows
     /// that tuple applied.
     fn sweep_authorization(&self, account: Account, delegate: Address) -> SweepAuthorization {
+        if self.automatic_deposits.has_unverified_nonce(&account) {
+            return SweepAuthorization::NonceUnverified;
+        }
         let nonce = match self.automatic_deposits.delegation(&account) {
             Some(delegation) if delegation.delegate == delegate => {
                 return SweepAuthorization::AlreadyDelegated;

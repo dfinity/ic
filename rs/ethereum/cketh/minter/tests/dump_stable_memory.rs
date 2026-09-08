@@ -20,6 +20,7 @@ use ic_cketh_minter::eth_logs::{
 };
 use ic_cketh_minter::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use ic_cketh_minter::lifecycle::EthereumNetwork;
+use ic_cketh_minter::numeric::TransactionNonce;
 use ic_cketh_minter::state::audit::EventType as ET;
 use ic_cketh_minter::state::event::Event;
 use ic_cketh_minter::state::transactions::{
@@ -495,6 +496,19 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                     },
                 }
             }
+            EventPayload::ObservedDepositAddressNonce {
+                owner,
+                subaccount,
+                nonce,
+            } => ET::ObservedDepositAddressNonce {
+                account: Account {
+                    owner,
+                    subaccount: subaccount.map(|subaccount| {
+                        <[u8; 32]>::try_from(subaccount.into_vec().as_slice()).unwrap()
+                    }),
+                },
+                nonce: TransactionNonce::try_from(nonce).unwrap(),
+            },
             EventPayload::AcceptedSweepRequest {
                 sweep_id,
                 destination,

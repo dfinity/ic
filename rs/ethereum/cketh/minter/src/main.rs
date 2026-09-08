@@ -1076,6 +1076,13 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                             .expect("BUG: one authorization in, one out"),
                     }
                 }
+                EventType::ObservedDepositAddressNonce { account, nonce } => {
+                    EP::ObservedDepositAddressNonce {
+                        owner: account.owner,
+                        subaccount: account.subaccount.map(ByteBuf::from),
+                        nonce: nonce.into(),
+                    }
+                }
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,

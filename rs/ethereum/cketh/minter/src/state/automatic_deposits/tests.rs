@@ -1478,7 +1478,7 @@ fn applied_by(deposits: &AutomaticDeposits, request: &AuthorizationRequest) -> O
     deposits
         .authorizations
         .get(request)
-        .and_then(|stored| stored.applied_by.clone())
+        .and_then(|stored| stored.applied_by)
 }
 
 /// Drives the already-recorded `request` through the sweeper pipeline to a receipt of `status`.
