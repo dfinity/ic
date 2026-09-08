@@ -392,6 +392,24 @@ pub struct UpgradeSnsControlledCanister {
     /// If the entire WASM does not fit into the 2 MiB ingress limit, then `new_canister_wasm` should be
     /// an empty, and this field should be set instead.
     pub chunked_canister_wasm: Option<ChunkedCanisterWasm>,
+    /// Options that only apply when mode is upgrade.
+    pub canister_upgrade_options: Option<upgrade_sns_controlled_canister::CanisterUpgradeOptions>,
+}
+/// Nested message and enum types in `UpgradeSnsControlledCanister`.
+pub mod upgrade_sns_controlled_canister {
+    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+    pub struct CanisterUpgradeOptions {
+        /// Whether to skip the canister's pre_upgrade hook. This would generally be
+        /// used in emergencies. See the corresponding field in the Management
+        /// canister API.
+        pub skip_pre_upgrade: Option<bool>,
+        /// Whether to retain (keep) or drop (replace) the canister's Wasm main
+        /// memory across the upgrade. If the old WASM had a custom section named
+        /// "icp:private enhanced-orthogonal-persistence", then this must be set
+        /// (otherwise, the Management canister will block the upgrade). If keep is
+        /// used here, then the new WASM must also have the same custom section.
+        pub wasm_memory_persistence: Option<i32>,
+    }
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.

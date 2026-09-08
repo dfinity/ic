@@ -1033,7 +1033,7 @@ fn full_refund_resets_consumed_cycles() {
         assert_eq!(
             system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases_as_counters()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&use_case),
             Some(&NominalCycles::zero()),
             "{ctx}"
@@ -1473,6 +1473,154 @@ fn drops_aborted_canister_install_after_split() {
     canister_state.drop_in_progress_management_calls_after_split();
 
     assert_eq!(expected_state, canister_state);
+}
+
+/// `consumed_cycles_monotonic` is only bumped once the refund of a prepayment is
+/// known, by the actually consumed amount; unlike the gauge, which is bumped by the
+/// prepayment and lowered again by the refund.
+#[test]
+fn consumed_cycles_monotonic_accounts_for_refundable_use_cases_at_refund() {
+    fn test<T: CyclesUseCaseRefundableKind>(cost_schedule: CanisterCyclesCostSchedule) {
+        let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+        let ctx = format!(
+            "{:?} with {cost_schedule:?} cost schedule",
+            T::cycles_use_case()
+        );
+        let prepaid = CompoundCycles::<T>::new(Cycles::new(1000), cost_schedule);
+        let refund = CompoundCycles::<T>::new(Cycles::new(100), cost_schedule);
+
+        system_state.consume_cycles(prepaid);
+        assert_eq!(
+            system_state.canister_metrics().consumed_cycles(),
+            prepaid.nominal(),
+            "{ctx}"
+        );
+        // Nothing accounted for yet, the refund is not known.
+        assert_eq!(
+            system_state.canister_metrics().consumed_cycles_monotonic(),
+            NominalCycles::zero(),
+            "{ctx}"
+        );
+
+        system_state.refund_cycles(prepaid, refund);
+        assert_eq!(
+            system_state.canister_metrics().consumed_cycles(),
+            (prepaid - refund).nominal(),
+            "{ctx}"
+        );
+        assert_eq!(
+            system_state.canister_metrics().consumed_cycles_monotonic(),
+            (prepaid - refund).nominal(),
+            "{ctx}"
+        );
+    }
+
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        test::<Instructions>(cost_schedule);
+        test::<RequestAndResponseTransmission>(cost_schedule);
+    }
+}
+
+/// A direct charge, i.e. one made without a prepayment (and thus never refunded),
+/// is accounted for right away.
+#[test]
+fn consumed_cycles_monotonic_accounts_for_direct_charges_right_away() {
+    let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+    let charge =
+        CompoundCycles::<MemoryUseCase>::new(Cycles::new(1000), CanisterCyclesCostSchedule::Normal);
+
+    system_state.consume_cycles(charge);
+
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        charge.nominal()
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles_monotonic(),
+        charge.nominal()
+    );
+}
+
+/// A full refund lowers the gauge back to zero but must not lower
+/// `consumed_cycles_monotonic`, which was never bumped in the first place.
+#[test]
+fn full_refund_does_not_lower_consumed_cycles_monotonic() {
+    let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let direct_charge = CompoundCycles::<MemoryUseCase>::new(Cycles::new(500), cost_schedule);
+    let prepaid = CompoundCycles::<Instructions>::new(Cycles::new(1000), cost_schedule);
+
+    system_state.consume_cycles(direct_charge);
+    system_state.consume_cycles(prepaid);
+    system_state.refund_cycles(prepaid, prepaid);
+
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        direct_charge.nominal()
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles_monotonic(),
+        direct_charge.nominal()
+    );
+}
+
+/// The cycles prepaid for an `install_code` that a subnet split drops are refunded
+/// in full: the execution is never retried (subnet A' rejects the corresponding
+/// call), so the canister has nothing to show for them.
+#[test]
+fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let prepaid = CompoundCycles::<Instructions>::new(Cycles::new(1000), cost_schedule);
+    let mut canister_state = CanisterStateFixture::new().canister_state;
+
+    let system_state = &mut canister_state.system_state;
+    system_state.consume_cycles(prepaid);
+    system_state
+        .task_queue
+        .enqueue(ExecutionTask::AbortedInstallCode {
+            message: CanisterCall::Request(Arc::new(RequestBuilder::new().build())),
+            call_id: InstallCodeCallId::new(0),
+            prepaid_execution_cycles: prepaid,
+        });
+
+    // The prepayment was taken out of the balance and is in the consumed cycles
+    // gauge; nothing has been consumed for good yet, so the monotonic amount is
+    // still zero.
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        prepaid.nominal()
+    );
+    assert_eq!(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::Instructions),
+        Some(&NominalCycles::zero())
+    );
+    let balance_before = system_state.balance();
+    assert_eq!(balance_before, INITIAL_CYCLES - prepaid.real());
+
+    canister_state.drop_in_progress_management_calls_after_split();
+
+    // The prepayment is refunded in full, so the balance is whole again and the gauge
+    // is back to zero. Nothing was consumed, so the monotonic amount stays at zero
+    // too.
+    let system_state = &canister_state.system_state;
+    assert_eq!(system_state.balance(), balance_before + prepaid.real());
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        NominalCycles::zero()
+    );
+    assert_eq!(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::Instructions),
+        Some(&NominalCycles::zero())
+    );
 }
 
 #[test]

@@ -70,7 +70,7 @@ use crate::{
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
-            upgrade_journal_entry, valuation,
+            upgrade_journal_entry, upgrade_sns_controlled_canister, valuation,
         },
     },
     proposal::{
@@ -97,7 +97,7 @@ use ic_canister_profiler::SpanStats;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
-    CanisterInstallModeV2,
+    CanisterInstallModeV2, CanisterUpgradeOptions, WasmMemoryPersistence,
 };
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
@@ -113,7 +113,7 @@ use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
-use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
+use ic_protobuf::types::v1::WasmMemoryPersistence as WasmMemoryPersistenceProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use ic_sns_governance_token_valuation::Valuation;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
@@ -2677,7 +2677,12 @@ impl Governance {
             ));
         }
 
-        let mode = upgrade.mode_or_upgrade() as i32;
+        let mode = upgrade.mode_or_upgrade();
+        let mode = CanisterInstallMode::try_from(mode)?;
+
+        let canister_upgrade_options =
+            valid_canister_upgrade_options(mode, upgrade.canister_upgrade_options)
+                .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
 
         let wasm = Wasm::try_from(&upgrade)
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
@@ -2688,7 +2693,8 @@ impl Governance {
             upgrade
                 .canister_upgrade_arg
                 .unwrap_or_else(|| Encode!().unwrap()),
-            CanisterInstallMode::try_from(CanisterInstallModeProto::try_from(mode)?)?,
+            mode,
+            canister_upgrade_options,
         )
         .await
     }
@@ -2699,6 +2705,7 @@ impl Governance {
         wasm: Wasm,
         arg: Vec<u8>,
         mode: CanisterInstallMode,
+        canister_upgrade_options: Option<CanisterUpgradeOptions>,
     ) -> Result<(), GovernanceError> {
         // Serialize upgrade.
         let payload = {
@@ -2709,7 +2716,7 @@ impl Governance {
             // For more details, please refer to the comments above the (definition of the)
             // stop_before_installing field in ChangeCanisterRequest.
             let stop_before_installing = true;
-            let mode = CanisterInstallModeV2::from(mode);
+            let mode = assemble_mode(mode, canister_upgrade_options);
 
             let mut change_canister_arg =
                 ChangeCanisterRequest::new(stop_before_installing, mode, canister_id)
@@ -2885,6 +2892,11 @@ impl Governance {
                     Wasm::Bytes(target_wasm.clone()),
                     Encode!().unwrap(),
                     CanisterInstallMode::Upgrade,
+                    // upgrade options. skip_pre_upgrade would be dangerous, and
+                    // wasm_memory_persistence is not needed either, because no
+                    // SNS framework canister is written in Motoko (as of
+                    // August, 2026).
+                    None,
                 )
                 .await?;
             }
@@ -2952,6 +2964,11 @@ impl Governance {
                     Wasm::Bytes(target_wasm.clone()),
                     Encode!().unwrap(),
                     CanisterInstallMode::Upgrade,
+                    // upgrade options. skip_pre_upgrade would be dangerous, and
+                    // wasm_memory_persistence is not needed either, because no
+                    // SNS framework canister is written in Motoko (as of
+                    // August, 2026).
+                    None,
                 )
                 .await?;
             }
@@ -3154,6 +3171,7 @@ impl Governance {
             Wasm::Bytes(ledger_wasm),
             ledger_upgrade_arg,
             CanisterInstallMode::Upgrade,
+            None, // upgrade options
         )
         .await?;
 
@@ -6577,6 +6595,75 @@ impl TimeWarp {
             timestamp_s - ((-self.delta_s) as u64)
         }
     }
+}
+
+/// Combines the arguments into the Mode type required by Root (and the
+/// Management canister).
+///
+/// If mode is not Upgrade, then canister_upgrade_options does not affect the
+/// return value (but in non-release builds, this panics via debug_assert).
+fn assemble_mode(
+    mode: CanisterInstallMode,
+    canister_upgrade_options: Option<CanisterUpgradeOptions>,
+) -> CanisterInstallModeV2 {
+    match mode {
+        CanisterInstallMode::Upgrade => CanisterInstallModeV2::Upgrade(canister_upgrade_options),
+        mode => {
+            // This checks that the caller is calling us correctly. This only
+            // happens in non-release builds. In production,
+            // canister_upgrade_options is ignored when it is Some.
+            debug_assert_eq!(canister_upgrade_options, None);
+            CanisterInstallModeV2::from(mode)
+        }
+    }
+}
+
+/// Converts canister_upgrade_options into the type required by SNS Root.
+///
+/// Returns Err in the following cases:
+///
+/// 1. mode is not Upgrade.
+/// 2. wasm_memory_persistence is not one of the allowed values:
+///    a. Keep
+///    b. Replace
+///    c. None
+pub(crate) fn valid_canister_upgrade_options(
+    mode: CanisterInstallMode,
+    canister_upgrade_options: Option<upgrade_sns_controlled_canister::CanisterUpgradeOptions>,
+) -> Result<Option<CanisterUpgradeOptions>, String> {
+    let Some(canister_upgrade_options) = canister_upgrade_options else {
+        return Ok(None);
+    };
+
+    if mode != CanisterInstallMode::Upgrade {
+        return Err("canister_upgrade_options can only be set when mode is upgrade".to_string());
+    }
+
+    let upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        skip_pre_upgrade,
+        wasm_memory_persistence,
+    } = canister_upgrade_options;
+
+    let wasm_memory_persistence = match wasm_memory_persistence {
+        None => None,
+        Some(code) => Some(convert_i32_to_wasm_memory_persistence(code)?),
+    };
+
+    Ok(Some(CanisterUpgradeOptions {
+        skip_pre_upgrade,
+        wasm_memory_persistence,
+    }))
+}
+
+/// Converts from integer code to the enum type required by the Root canister
+/// (and the Management canister).
+///
+/// Ok values are Keep and Replace.
+fn convert_i32_to_wasm_memory_persistence(code: i32) -> Result<WasmMemoryPersistence, String> {
+    let new_error = || format!("Unrecognized wasm_memory_persistence code: {code}");
+
+    let result = WasmMemoryPersistenceProto::try_from(code).map_err(|_| new_error())?;
+    WasmMemoryPersistence::try_from(result).map_err(|_| new_error())
 }
 
 fn get_neuron_id_from_manage_neuron(

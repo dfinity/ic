@@ -3,7 +3,7 @@ use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
-use crate::state::transactions::{SweepId, TransactionPipeline, WithdrawalTransactions};
+use crate::state::transactions::{SweepId, WithdrawalTransactions};
 use crate::state::{InvalidStateError, State};
 use crate::{EVM_RPC_ID_PRODUCTION, EVM_RPC_ID_STAGING};
 use candid::types::number::Nat;
@@ -106,7 +106,6 @@ impl TryFrom<InitArg> for State {
             pending_withdrawal_principals: Default::default(),
             pending_deposit_principals: Default::default(),
             withdrawal_transactions: WithdrawalTransactions::new(initial_nonce),
-            sweeper_transactions: TransactionPipeline::new(initial_sweeper_nonce),
             next_sweep_id: SweepId(0),
             cketh_ledger_id: ledger_id,
             cketh_minimum_withdrawal_amount: minimum_withdrawal_amount,
@@ -128,7 +127,7 @@ impl TryFrom<InitArg> for State {
             ckerc20_tokens: Default::default(),
             erc20_balances: Default::default(),
             log_scrapings,
-            automatic_deposits: AutomaticDeposits::default(),
+            automatic_deposits: AutomaticDeposits::new(initial_sweeper_nonce),
             sweeper_contract_address,
             sweeper_funding: Default::default(),
         };

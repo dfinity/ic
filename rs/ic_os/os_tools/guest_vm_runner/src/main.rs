@@ -25,7 +25,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::pin::pin;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use strum_macros::AsRefStr;
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -35,8 +35,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use virt::connect::Connect;
 use virt::sys::{
-    VIR_DOMAIN_CRASHED, VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING,
-    VIR_DOMAIN_SHUTDOWN,
+    VIR_DOMAIN_BLOCKED, VIR_DOMAIN_CRASHED, VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE,
+    VIR_DOMAIN_RUNNING, VIR_DOMAIN_SHUTDOWN,
 };
 
 mod boot_args;
@@ -68,6 +68,14 @@ const GUESTOS_BOOT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 /// How long to wait for GuestOS to complete its own shutdown after receiving the ACPI power-off
 /// signal before giving up and letting the force-destroy in Drop take over.
 const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2 * 60);
+
+/// How long a VM may remain in a state that does not execute guest code (in particular PAUSED)
+/// before it is treated as stopped and restarted.
+#[cfg(not(test))]
+const STUCK_STATE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+#[cfg(test)]
+const STUCK_STATE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The GuestOS will log one of these marker texts on the serial output.
 const GUESTOS_BOOT_SUCCESS_MARKER: &str = "GUESTOS BOOT SUCCESS";
@@ -333,6 +341,7 @@ impl VirtualMachine {
 
     /// Returns once the VM is no longer running.
     async fn wait_for_shutdown(&self) {
+        let mut stuck_since: Option<Instant> = None;
         loop {
             let domain = match self.get_domain() {
                 Ok(domain) => domain,
@@ -344,17 +353,39 @@ impl VirtualMachine {
             match domain.get_state() {
                 Ok((VIR_DOMAIN_RUNNING, _reason)) => {
                     // all good, VM is running
+                    stuck_since = None;
+                }
+                Ok((VIR_DOMAIN_BLOCKED, _reason)) => {
+                    // Blocked on a resource, but still considered running.
+                    stuck_since = None;
+                }
+                Ok((VIR_DOMAIN_SHUTDOWN, reason)) => {
+                    warn!("VM shutting down, reason: {reason}");
+                    stuck_since = None;
                 }
                 Ok((VIR_DOMAIN_CRASHED, reason)) => {
                     warn!("VM crashed, reason: {reason}");
                     break;
                 }
-                Ok((VIR_DOMAIN_SHUTDOWN, reason)) => {
-                    warn!("VM shutting down, reason: {reason}");
-                }
-                Ok((state, reason)) => {
-                    warn!("VM is in state {state}, reason: {reason}");
-                }
+                // Any other state (PAUSED, SHUTOFF, PMSUSPENDED, NOSTATE) does not execute
+                // guest code. A stuck VM never resumes on its own and must be restarted.
+                Ok((state, reason)) => match stuck_since {
+                    None => {
+                        warn!(
+                            "VM is in state {state}, reason: {reason}; treating it as stopped \
+                             if this persists for more than {STUCK_STATE_TIMEOUT:?}"
+                        );
+                        stuck_since = Some(Instant::now());
+                    }
+                    Some(started_at) if started_at.elapsed() >= STUCK_STATE_TIMEOUT => {
+                        warn!(
+                            "VM is still in state {state}, reason: {reason}, after more than \
+                             {STUCK_STATE_TIMEOUT:?}: treating VM as stopped"
+                        );
+                        break;
+                    }
+                    Some(_) => {}
+                },
                 Err(e) => {
                     warn!("Failed to get domain state: {e}");
                     break;
@@ -833,7 +864,7 @@ mod tests {
     use tempfile::TempDir;
     use tokio::task::JoinHandle;
     use virt::connect::Connect;
-    use virt::sys::VIR_DOMAIN_RUNNING_BOOTED;
+    use virt::sys::{VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_BOOTED};
 
     static GUESTOS_IMAGE: LazyLock<NamedTempFile> = LazyLock::new(|| {
         let icos_image_path =
@@ -876,13 +907,16 @@ mod tests {
 
     async fn assert_with_retry(check: impl Fn() -> Result<(), Error>) {
         const DEFAULT_ACTION_TIMEOUT: Duration = Duration::from_secs(5);
+        assert_with_retry_timeout(check, DEFAULT_ACTION_TIMEOUT).await;
+    }
 
+    async fn assert_with_retry_timeout(check: impl Fn() -> Result<(), Error>, timeout: Duration) {
         let start = Instant::now();
         loop {
             let Err(e) = check() else {
                 return;
             };
-            if start.elapsed() > DEFAULT_ACTION_TIMEOUT {
+            if start.elapsed() > timeout {
                 panic!("{}", e);
             }
             sleep(Duration::from_millis(100)).await;
@@ -1193,7 +1227,7 @@ mod tests {
     async fn test_vm_killed() {
         let fixture = TestFixture::new(valid_hostos_config());
         let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
-        // Wait for the service to start the VM and notify systemd
+        // Wait for systemd to start the VM
         service.wait_for_systemd_ready().await;
 
         // Kill the VM
@@ -1201,6 +1235,45 @@ mod tests {
 
         // Assert that the VM is running again after a short delay
         assert_with_retry(|| service.check_vm_running()).await;
+    }
+
+    #[tokio::test]
+    async fn test_paused_vm_is_restarted() {
+        let fixture = TestFixture::new(valid_hostos_config());
+        let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
+        // Wait for systemd to start the VM
+        service.wait_for_systemd_ready().await;
+
+        // Suspend the VM, as QEMU does on an invalid VMCB
+        service.get_domain().suspend().unwrap();
+
+        // Assert that the VM is restarted after STUCK_STATE_TIMEOUT is hit
+        assert_with_retry_timeout(
+            || service.check_vm_running(),
+            Duration::from_secs(5) + STUCK_STATE_TIMEOUT,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_transient_pause_does_not_restart_vm() {
+        let fixture = TestFixture::new(valid_hostos_config());
+        let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
+        // Wait for systemd to start the VM
+        service.wait_for_systemd_ready().await;
+        let domain_id_before = service.get_domain().get_id().unwrap();
+
+        // Suspend the VM briefly (shorter than STUCK_STATE_TIMEOUT), then resume it
+        let domain = service.get_domain();
+        domain.suspend().unwrap();
+        sleep(Duration::from_millis(1000)).await;
+        domain.resume().unwrap();
+
+        // Assert that the same domain is still running (no restart)
+        let domain = service.get_domain();
+        let (state, _reason) = domain.get_state().unwrap();
+        assert_eq!(state, VIR_DOMAIN_RUNNING);
+        assert_eq!(domain.get_id().unwrap(), domain_id_before);
     }
 
     #[tokio::test]

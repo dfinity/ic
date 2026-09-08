@@ -95,7 +95,6 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_key_rotation_test",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + (4 + 4 + 4) * DEFAULT_VCPUS_PER_VM,  # System + Application subnet + unassigned nodes, 4 IC Node VMs each, 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
@@ -227,7 +226,6 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_life_cycle_test",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + (4 + 4 + 4) * DEFAULT_VCPUS_PER_VM,  # System + Application subnet + unassigned nodes, 4 IC Node VMs each, 6 vCPUs each.
     # Remove when CON-937 is resolved
     tags = [
@@ -275,7 +273,6 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_timeout_test",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + (4 + 4 + 4) * DEFAULT_VCPUS_PER_VM,  # System + Application subnet + unassigned nodes, 4 IC Node VMs each, 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.

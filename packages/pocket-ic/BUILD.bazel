@@ -9,7 +9,7 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    version = "15.0.0",
+    version = "16.0.0",
     deps = [
         # Keep sorted.
         "@crate_index//:backon",
@@ -84,6 +84,7 @@ rust_test(
         "//rs/registry/helpers",
         "//rs/registry/proto_data_provider",
         "//rs/types/base_types",
+        "//rs/types/management_canister_types",
         "@crate_index//:bitcoin-0.28.2",
         "@crate_index//:candid",
         "@crate_index//:ed25519-dalek",
@@ -98,6 +99,7 @@ rust_test(
         "@crate_index//:k256",
         "@crate_index//:reqwest",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
         "@crate_index//:sha2",
         "@crate_index//:tempfile",

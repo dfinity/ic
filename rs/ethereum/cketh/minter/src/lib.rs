@@ -19,11 +19,13 @@ pub mod management;
 pub mod map;
 pub mod memo;
 pub mod numeric;
+pub mod runtime;
 pub mod state;
 pub mod storage;
 pub mod sweep;
 pub mod sweeper;
 pub mod sweeper_contract;
+pub mod time;
 pub mod timed_sized_map;
 pub mod tx;
 pub mod withdraw;
@@ -43,6 +45,10 @@ pub const REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL: Duration = Duration::from_secs(3
 pub const BALANCE_SCAN_INTERVAL: Duration = Duration::from_secs(30);
 pub const SWEEPER_FUNDING_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 pub const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs(6 * 60);
+/// How often the minter turns detected deposits into sweeper requests. Far shorter than the
+/// intervals that send transactions: the mint follows the sweep, so this interval is part of a
+/// user's crediting latency, and creating a request is cheap — it signs, but sends nothing.
+pub const SWEEP_ENQUEUE_INTERVAL: Duration = Duration::from_secs(60);
 pub const PROCESS_REIMBURSEMENT: Duration = Duration::from_secs(3 * 60);
 pub const PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL: Duration = Duration::from_secs(3 * 60);
 pub const PROCESS_SWEEPER_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs(6 * 60);

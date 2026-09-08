@@ -164,7 +164,7 @@ impl RegistryHelper {
         version: RegistryVersion,
         subnet_id: SubnetId,
     ) -> OrchestratorResult<CatchUpPackage> {
-        make_registry_cup(&*self.registry_client, subnet_id, &self.logger)
+        make_registry_cup(&*self.registry_client, subnet_id, version, &self.logger)
             .ok_or(OrchestratorError::MakeRegistryCupError(subnet_id, version))
     }
 

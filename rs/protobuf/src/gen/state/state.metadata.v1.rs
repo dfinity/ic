@@ -487,7 +487,7 @@ pub struct SubnetMetrics {
     #[prost(message, repeated, tag = "11")]
     pub threshold_signature_agreements: ::prost::alloc::vec::Vec<ThresholdSignatureAgreementsEntry>,
     #[prost(message, repeated, tag = "12")]
-    pub consumed_cycles_by_use_case_as_counters:
+    pub consumed_cycles_by_use_case_monotonic:
         ::prost::alloc::vec::Vec<super::super::canister_state_bits::v1::ConsumedCyclesByUseCase>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

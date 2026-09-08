@@ -274,7 +274,7 @@ mod tests {
     use ic_test_utilities_state::get_initial_state;
     use ic_test_utilities_types::ids::{
         NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, node_test_id, subnet_test_id,
-        test_replica_version,
+        test_platform_version, test_replica_version,
     };
     use ic_types::{
         Height, NodeId, RegistryVersion,
@@ -794,6 +794,7 @@ mod tests {
                 registry,
                 state_manager,
                 registry_data_provider,
+                replica_config,
                 ..
             } = DependenciesBuilder::single_subnet(
                 pool_config,
@@ -805,6 +806,11 @@ mod tests {
                         .build(),
                 )],
             )
+            .with_replica_config(ReplicaConfig {
+                node_id,
+                subnet_id,
+                platform_version: test_platform_version(),
+            })
             .build();
             state_manager
                 .get_mut()
@@ -860,14 +866,12 @@ mod tests {
                 crypto.clone(),
                 no_op_logger(),
                 &PoolReader::new(&pool),
+                registry.clone(),
+                replica_config.clone(),
             );
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(
-                ReplicaConfig {
-                    node_id,
-                    subnet_id,
-                    replica_version: test_replica_version(),
-                },
+                replica_config,
                 registry.clone(),
                 state_manager.clone(),
                 crypto.clone(),

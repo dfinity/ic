@@ -151,6 +151,10 @@ impl CanisterManager {
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Ic00Method::NodeMetricsHistory)
+            // Unreachable for `SubnetMetrics`: `extract_effective_canister_id`
+            // rejects it earlier, at the ingress filter. Listed for exhaustiveness
+            // and as defence in depth.
+            | Ok(Ic00Method::SubnetMetrics)
             | Ok(Ic00Method::SubnetInfo)
             // `RenameCanister` can only be called from the NNS subnet.
             | Ok(Ic00Method::RenameCanister) => Err(UserError::new(
@@ -1275,7 +1279,7 @@ impl CanisterManager {
         let consumed_cycles_by_use_case = canister
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters();
+            .consumed_cycles_by_use_cases_monotonic();
         let memory = *consumed_cycles_by_use_case
             .get(&CyclesUseCase::Memory)
             .unwrap_or(&NominalCycles::zero());

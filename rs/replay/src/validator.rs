@@ -10,8 +10,8 @@ use ic_consensus::consensus::validator::Validator;
 use ic_consensus_certification::CertificationCrypto;
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, crypto::ConsensusCrypto, membership::Membership,
-    pool_reader::PoolReader, registry_version_at_height,
+    active_high_threshold_nidkg_id, build_thread_pool, crypto::ConsensusCrypto,
+    membership::Membership, pool_reader::PoolReader, registry_version_at_height,
 };
 use ic_interfaces::{
     certification::Verifier,
@@ -27,7 +27,7 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, PrincipalId, ReplicaVersion, SubnetId,
+    Height, NodeId, PlatformVersion, PrincipalId, SubnetId,
     artifact::ConsensusMessageId,
     consensus::{
         Block, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasBlockHash,
@@ -37,7 +37,6 @@ use ic_types::{
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
 };
-use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
 
 use crate::{mocks::MockPayloadBuilder, player::ReplayError};
@@ -103,7 +102,7 @@ impl ReplayValidator {
     pub fn new(
         cfg: Config,
         subnet_id: SubnetId,
-        replica_version: ReplicaVersion,
+        platform_version: PlatformVersion,
         consensus_crypto: Arc<dyn ConsensusCrypto>,
         certification_crypto: Arc<dyn CertificationCrypto>,
         verifier: Arc<dyn Verifier>,
@@ -129,12 +128,9 @@ impl ReplayValidator {
         let replica_cfg = ReplicaConfig {
             node_id,
             subnet_id,
-            replica_version,
+            platform_version,
         };
-        let thread_pool = ThreadPoolBuilder::new()
-            .num_threads(MAX_VALIDATION_THREADS)
-            .build()
-            .expect("Failed to create thread pool");
+        let thread_pool = build_thread_pool(MAX_VALIDATION_THREADS);
 
         let validator = Validator::new(
             replica_cfg.clone(),
@@ -145,7 +141,7 @@ impl ReplayValidator {
             state_manager,
             message_routing,
             Arc::new(dkg_pool) as Arc<_>,
-            Arc::new(thread_pool),
+            thread_pool,
             log.clone(),
             &metrics_registry,
             time_source.clone(),
@@ -179,6 +175,8 @@ impl ReplayValidator {
             self.consensus_crypto.clone(),
             self.log.clone(),
             pool_reader,
+            self.registry.clone(),
+            self.replica_cfg.clone(),
         )
     }
 
@@ -228,7 +226,7 @@ impl ReplayValidator {
         let mut pool = ConsensusPoolImpl::new(
             self.replica_cfg.node_id,
             self.replica_cfg.subnet_id,
-            &self.replica_cfg.replica_version,
+            self.replica_cfg.replica_version(),
             cup,
             artifact_pool_config,
             MetricsRegistry::new(),
