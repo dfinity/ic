@@ -10,7 +10,7 @@ const SECP256K1_PK_1_DER_HEX: &str = "3056301006072a8648ce3d020106052b8104000a03
 
 // A DER-encoded Ed25519 public key, to test that parsing non-SECP256K1 keys
 // gracefully fails.
-const ED25519_PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE";
+const ED25519_PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=";
 
 /// Create a secp256k1 secret key from raw bytes
 ///

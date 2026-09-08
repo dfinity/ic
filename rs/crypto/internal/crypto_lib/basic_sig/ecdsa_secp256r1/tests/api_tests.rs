@@ -6,7 +6,7 @@ const ECDSA_P256_PK_1_DER_HEX: &str = "3059301306072a8648ce3d020106082a8648ce3d0
 
 // A DER-encoded Ed25519 public key, to test that parsing non-ECDSA keys
 // gracefully fails.
-const ED25519_PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE";
+const ED25519_PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=";
 
 mod test_utils {
     use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types;
@@ -107,7 +107,7 @@ mod keygen {
 
     #[test]
     fn should_fail_parsing_non_ecdsa_key_without_panic() {
-        let pk_der = BASE64_STANDARD_NO_PAD
+        let pk_der = BASE64_STANDARD
             .decode(crate::ED25519_PK_DER_BASE64)
             .unwrap();
         let pk_result = public_key_from_der(&pk_der);
