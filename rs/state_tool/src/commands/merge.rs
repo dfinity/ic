@@ -35,9 +35,12 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
     if output.exists() {
         return Err(format!("{} already exists", output.display()));
     }
-    // Resolved up front, so that an output the sync below cannot open fails
-    // before anything is assembled rather than after.
-    let resolved_output = resolve(&output)?;
+    // Made absolute up front, so that an output the sync below cannot open
+    // fails before anything is assembled rather than after. Only absoluteness
+    // is needed: the parent of a bare relative path is the empty path, which
+    // opens nothing.
+    let absolute_output = std::path::absolute(&output)
+        .map_err(|err| format!("failed to resolve {}: {err}", output.display()))?;
     // The canisters of the two subnets are disjoint, as the source subnet hosts
     // the canister ID ranges that the merge reassigns to the destination subnet.
     for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
@@ -90,11 +93,10 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
 
         // A rename is not durable until the directory it happened in is synced,
         // so the checkpoint could otherwise be back at the staging path after a
-        // crash. Through the resolved path: the parent of a bare relative one is
-        // the empty path, which opens nothing.
-        let parent = resolved_output
+        // crash.
+        let parent = absolute_output
             .parent()
-            .expect("a resolved path is absolute, so it has a parent");
+            .expect("an absolute path has a parent");
         fs::File::open(parent)
             .and_then(|dir| dir.sync_all())
             .map_err(|err| format!("failed to sync {}: {err}", parent.display()))?;
@@ -193,39 +195,6 @@ fn link_tree(from: &Path, to: &Path) -> Result<(), String> {
     }
 
     Ok(())
-}
-
-/// Resolves `path` to an absolute path with links and `..` components taken out.
-///
-/// `canonicalize` needs the path to exist, which the output does not, so the
-/// deepest ancestor that does exist is resolved and the rest is appended. That is
-/// enough to name the directory the output is created in.
-fn resolve(path: &Path) -> Result<PathBuf, String> {
-    // Absolute first: the ancestors of a bare relative path run out before
-    // reaching the directory it is relative to, which is the one that exists.
-    let absolute = std::path::absolute(path)
-        .map_err(|err| format!("failed to resolve {}: {err}", path.display()))?;
-
-    let mut suffix = PathBuf::new();
-    let mut existing = absolute.as_path();
-    loop {
-        if existing.exists() {
-            return Ok(existing
-                .canonicalize()
-                .map_err(|err| format!("failed to resolve {}: {err}", existing.display()))?
-                .join(&suffix));
-        }
-        let name = existing.file_name().ok_or_else(|| {
-            format!(
-                "{} has no ancestor that exists, so it cannot be created",
-                path.display()
-            )
-        })?;
-        suffix = PathBuf::from(name).join(&suffix);
-        existing = existing
-            .parent()
-            .expect("a path with a file name has a parent");
-    }
 }
 
 /// Returns the name of an entry that both directories hold, if any. A directory
@@ -427,25 +396,6 @@ mod tests {
         let err = do_merge(base, source, output).unwrap_err();
 
         assert!(err.contains("already exists"), "unexpected error: {err}");
-    }
-
-    #[test]
-    fn resolve_handles_a_relative_path() {
-        // A bare relative output used to run out of ancestors before reaching the
-        // directory it is relative to, and was rejected as having none.
-        let resolved = resolve(Path::new("merged")).unwrap();
-
-        assert!(
-            resolved.is_absolute(),
-            "{} is not absolute",
-            resolved.display()
-        );
-        assert_eq!(resolved.file_name().unwrap(), "merged");
-        assert_eq!(
-            resolved,
-            std::env::current_dir().unwrap().join("merged"),
-            "a relative path should resolve against the working directory",
-        );
     }
 
     #[test]
