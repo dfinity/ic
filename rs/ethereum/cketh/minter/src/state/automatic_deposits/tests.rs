@@ -1,7 +1,7 @@
 use super::{
-    AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, Delegation, DepositRequest, DepositStage,
-    DepositStatusInfo, MAX_ACTIVE_DEPOSITS, MAX_ASSETS_PER_ACCOUNT, RegisterDepositError,
-    SCAN_GAP_SECS, SECS_PER_BLOCK, ScanProgress, SweepEntry, SweepTarget,
+    AppliedBy, AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, Delegation, DepositRequest,
+    DepositStage, DepositStatusInfo, MAX_ACTIVE_DEPOSITS, MAX_ASSETS_PER_ACCOUNT,
+    RegisterDepositError, SCAN_GAP_SECS, SECS_PER_BLOCK, ScanProgress, SweepEntry, SweepTarget,
 };
 use crate::asset::Asset;
 use crate::deposit_address::DepositAddress;
@@ -9,7 +9,7 @@ use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, Erc20Value, TransactionNonce};
 use crate::state::State;
-use crate::state::audit::{apply_state_transition, process_event};
+use crate::state::audit::{EventType, apply_state_transition, process_event};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
 use crate::state::transactions::{AuthorizedSweepItem, SweepId, SweepRequest, sweep_gas_limit};
 use crate::storage::with_event_iter;
@@ -1061,7 +1061,7 @@ async fn should_not_mark_a_tuple_whose_nonce_the_account_has_already_spent() {
             &deposits,
             &authorization_request(account(0), sweeper_contract(), TransactionNonce::ZERO)
         ),
-        Some(first.id)
+        Some(AppliedBy::Sweep(first.id))
     );
     assert_eq!(
         deposits.delegation(&account(0)),
@@ -1087,7 +1087,10 @@ fn should_apply_only_the_first_of_two_sweeps_carrying_the_same_nonce() {
     finalize_sweep_carrying(&mut deposits, SweepId(0), Some(signed(&incumbent)));
     finalize_sweep_carrying(&mut deposits, SweepId(1), Some(signed(&rotated)));
 
-    assert_eq!(applied_by(&deposits, &incumbent), Some(SweepId(0)));
+    assert_eq!(
+        applied_by(&deposits, &incumbent),
+        Some(AppliedBy::Sweep(SweepId(0)))
+    );
     assert_eq!(applied_by(&deposits, &rotated), None);
     assert_eq!(
         deposits.delegation(&account(0)),
@@ -1171,6 +1174,217 @@ async fn should_rebuild_the_applied_marks_by_replaying_the_event_log() {
     );
 }
 
+#[tokio::test]
+async fn should_leave_nonces_unverified_only_where_a_sweep_reverted() {
+    for (status, unverified) in [
+        (TransactionStatus::Success, false),
+        (TransactionStatus::Failure, true),
+    ] {
+        let (mut deposits, request) =
+            deposits_with_enqueued_sweep(&[(account(0), usdc()), (account(1), usdc())]).await;
+
+        finalize_sweep(&mut deposits, &request, status);
+
+        for account in [account(0), account(1)] {
+            assert_eq!(
+                deposits.has_unverified_nonce(&account),
+                unverified,
+                "a {status:?} sweep must leave its addresses' nonces {}",
+                if unverified {
+                    "unverified"
+                } else {
+                    "as they were"
+                }
+            );
+        }
+        assert!(
+            !deposits.has_unverified_nonce(&account(2)),
+            "an address the sweep never touched keeps its nonce"
+        );
+    }
+}
+
+#[test]
+fn should_reanchor_the_applied_marks_on_the_observed_deposit_address_nonce() {
+    struct Case {
+        name: &'static str,
+        observed: TransactionNonce,
+        expected_delegation: Option<Delegation>,
+        expected_applied: usize,
+    }
+
+    for case in [
+        Case {
+            name: "the record already agreed with the chain",
+            observed: TransactionNonce::ONE,
+            expected_delegation: Some(Delegation {
+                delegate: sweeper_contract(),
+                nonce: TransactionNonce::ONE,
+            }),
+            expected_applied: 1,
+        },
+        Case {
+            name: "the chain is ahead: the tuples below the observed nonce did apply",
+            observed: TransactionNonce::new(3),
+            expected_delegation: Some(Delegation {
+                delegate: ANOTHER_DELEGATE,
+                nonce: TransactionNonce::new(3),
+            }),
+            expected_applied: 3,
+        },
+        Case {
+            name: "the chain is behind: nothing at or above the observed nonce applied",
+            observed: TransactionNonce::ZERO,
+            expected_delegation: None,
+            expected_applied: 0,
+        },
+    ] {
+        let mut deposits = deposits_with_three_rotations_of_which_one_applied();
+        let reverted = sweep_carrying(&mut deposits, SweepId(1), None);
+        finalize_sweep(&mut deposits, &reverted, TransactionStatus::Failure);
+
+        deposits.record_observed_deposit_address_nonce(account(0), case.observed);
+
+        assert_eq!(
+            deposits.delegation(&account(0)),
+            case.expected_delegation,
+            "{}",
+            case.name
+        );
+        assert_eq!(
+            deposits.applied_authorizations_len(),
+            case.expected_applied,
+            "{}",
+            case.name
+        );
+        assert!(
+            !deposits.has_unverified_nonce(&account(0)),
+            "{}: re-anchoring the record verifies the nonce",
+            case.name
+        );
+    }
+}
+
+/// Two tuples at one nonce is state from before the minter signed at most one per nonce. The
+/// observed nonce cannot say which of them applied, so the one already marked applied stays the
+/// answer.
+#[test]
+fn should_keep_the_applied_tuple_when_two_share_a_nonce_below_the_observed_one() {
+    let mut deposits = AutomaticDeposits::default();
+    let incumbent = authorization_request(account(0), sweeper_contract(), TransactionNonce::ZERO);
+    let rival = authorization_request(account(0), ANOTHER_DELEGATE, TransactionNonce::ZERO);
+    for request in [&incumbent, &rival] {
+        deposits.record_authorization(request.clone(), transaction_signature());
+    }
+    finalize_sweep_carrying(&mut deposits, SweepId(0), Some(signed(&incumbent)));
+
+    deposits.record_observed_deposit_address_nonce(account(0), TransactionNonce::ONE);
+
+    assert_eq!(
+        applied_by(&deposits, &incumbent),
+        Some(AppliedBy::Sweep(SweepId(0)))
+    );
+    assert_eq!(applied_by(&deposits, &rival), None);
+    assert_eq!(
+        deposits.delegation(&account(0)),
+        Some(Delegation {
+            delegate: sweeper_contract(),
+            nonce: TransactionNonce::ONE,
+        })
+    );
+}
+
+#[test]
+fn should_leave_the_nonce_unverified_when_two_unapplied_tuples_share_a_nonce_below_it() {
+    let mut deposits = AutomaticDeposits::default();
+    for delegate in [sweeper_contract(), ANOTHER_DELEGATE] {
+        deposits.record_authorization(
+            authorization_request(account(0), delegate, TransactionNonce::ZERO),
+            transaction_signature(),
+        );
+    }
+    let reverted = sweep_carrying(&mut deposits, SweepId(0), None);
+    finalize_sweep(&mut deposits, &reverted, TransactionStatus::Failure);
+
+    deposits.record_observed_deposit_address_nonce(account(0), TransactionNonce::ONE);
+
+    assert!(
+        deposits.has_unverified_nonce(&account(0)),
+        "an address whose record the observed nonce cannot resolve stays out of sweeps"
+    );
+    assert_eq!(deposits.applied_authorizations_len(), 0);
+    assert_eq!(deposits.delegation(&account(0)), None);
+}
+
+#[tokio::test]
+async fn should_rebuild_the_unverified_nonces_and_their_repair_by_replaying_the_event_log() {
+    let (mut live, request) = state_with_enqueued_sweep(&[(account(0), usdc())]).await;
+    let mut time_provider = MockTimeProvider::new();
+    time_provider.expect_time().return_const(0_u64);
+    for event in sweep_pipeline_events(
+        live.automatic_deposits.next_sweeper_transaction_nonce(),
+        &request,
+        TransactionStatus::Failure,
+    ) {
+        process_event(&mut live, event, &time_provider);
+    }
+    assert!(live.automatic_deposits.has_unverified_nonce(&account(0)));
+
+    let flagged = replay_of_the_event_log();
+    assert_eq!(
+        flagged
+            .automatic_deposits
+            .is_equivalent_to(&live.automatic_deposits),
+        Ok(())
+    );
+
+    process_event(
+        &mut live,
+        EventType::ObservedDepositAddressNonce {
+            account: account(0),
+            nonce: TransactionNonce::ONE,
+        },
+        &time_provider,
+    );
+
+    let repaired = replay_of_the_event_log();
+    assert!(
+        !repaired
+            .automatic_deposits
+            .has_unverified_nonce(&account(0))
+    );
+    assert_eq!(
+        repaired
+            .automatic_deposits
+            .is_equivalent_to(&live.automatic_deposits),
+        Ok(())
+    );
+    assert_ne!(
+        flagged
+            .automatic_deposits
+            .is_equivalent_to(&live.automatic_deposits),
+        Ok(()),
+        "equivalence must notice which addresses are still awaiting a nonce read"
+    );
+}
+
+/// [`account(0)`] with a tuple recorded for each of the nonces zero, one and two — the first on
+/// the sweeper contract, the two rotations onto [`ANOTHER_DELEGATE`] — of which only the first is
+/// marked applied, so the record says the address stands at nonce one on the sweeper contract.
+fn deposits_with_three_rotations_of_which_one_applied() -> AutomaticDeposits {
+    let mut deposits = AutomaticDeposits::default();
+    let installed = authorization_request(account(0), sweeper_contract(), TransactionNonce::ZERO);
+    deposits.record_authorization(installed.clone(), transaction_signature());
+    for nonce in [TransactionNonce::ONE, TransactionNonce::new(2)] {
+        deposits.record_authorization(
+            authorization_request(account(0), ANOTHER_DELEGATE, nonce),
+            transaction_signature(),
+        );
+    }
+    finalize_sweep_carrying(&mut deposits, SweepId(0), Some(signed(&installed)));
+    deposits
+}
+
 /// The minter state the event log alone reconstructs. The prepaid sweep gas is not event-sourced,
 /// so it is put back by hand for the accepted sweeps in the log to draw on.
 fn replay_of_the_event_log() -> State {
@@ -1192,6 +1406,16 @@ fn finalize_sweep_carrying(
     id: SweepId,
     authorization: Option<SignedAuthorization>,
 ) {
+    let request = sweep_carrying(deposits, id, authorization);
+    finalize_sweep(deposits, &request, TransactionStatus::Success);
+}
+
+/// [`finalize_sweep_carrying`] up to the receipt, so a test can pick the status itself.
+fn sweep_carrying(
+    deposits: &mut AutomaticDeposits,
+    id: SweepId,
+    authorization: Option<SignedAuthorization>,
+) -> SweepRequest {
     let account = account(0);
     let token = token(id.0 as u8);
     let request = sweep_request(
@@ -1202,7 +1426,7 @@ fn finalize_sweep_carrying(
     queue(deposits, &[(account, token)]);
     deposits.record_sweep_scheduled(id, Asset::Erc20(token), [account]);
     deposits.record_sweep_request(request.clone());
-    finalize_sweep(deposits, &request, TransactionStatus::Success);
+    request
 }
 
 fn signed(request: &AuthorizationRequest) -> SignedAuthorization {
@@ -1250,11 +1474,11 @@ fn authorization_request(
     )
 }
 
-fn applied_by(deposits: &AutomaticDeposits, request: &AuthorizationRequest) -> Option<SweepId> {
+fn applied_by(deposits: &AutomaticDeposits, request: &AuthorizationRequest) -> Option<AppliedBy> {
     deposits
         .authorizations
         .get(request)
-        .and_then(|stored| stored.applied_by)
+        .and_then(|stored| stored.applied_by.clone())
 }
 
 /// Drives the already-recorded `request` through the sweeper pipeline to a receipt of `status`.

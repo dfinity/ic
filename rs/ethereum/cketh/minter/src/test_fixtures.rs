@@ -272,16 +272,20 @@ pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, 
 }
 
 /// [`state_with_enqueued_sweep`]'s state once the sweeper pipeline has taken that sweep all the way
-/// to a successful receipt, so every address it swept holds the delegation the tuple it carried
-/// installed.
-pub async fn state_with_finalized_sweep(pairs: &[(Account, Address)]) -> (State, SweepRequest) {
+/// to a receipt of `status`, so every address it swept holds the delegation the tuple it carried
+/// installed: a tuple applies before the call it travels with runs, and stays applied when that
+/// call reverts.
+pub async fn state_with_finalized_sweep(
+    pairs: &[(Account, Address)],
+    status: TransactionStatus,
+) -> (State, SweepRequest) {
     let (state, request) = state_with_enqueued_sweep(pairs).await;
     let mut time_provider = mock::MockTimeProvider::new();
     time_provider.expect_time().return_const(SWEEP_DECIDED_AT);
     for event in sweep_pipeline_events(
         state.automatic_deposits.next_sweeper_transaction_nonce(),
         &request,
-        TransactionStatus::Success,
+        status,
     ) {
         mutate_state(|s| process_event(s, event, &time_provider));
     }

@@ -5,17 +5,18 @@ use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::management::{CallError, Reason};
 use crate::numeric::{BlockNumber, TransactionNonce, Wei, WeiPerGas};
 use crate::state::audit::{EventType, apply_state_transition};
+use crate::state::automatic_deposits::SweepTarget;
 use crate::state::eth_logs_scraping::LogScrapings;
 use crate::state::event::AutomaticDeposit;
 use crate::state::transactions::{AuthorizedSweepItem, SweepId, SweepRequest};
 use crate::state::{State, mutate_state, read_state};
 use crate::storage::with_event_iter;
-use crate::sweep::{create_pending_sweeper_requests, in_chain_execution_order};
+use crate::sweep::{create_pending_sweeper_requests, enqueue_sweep, in_chain_execution_order};
 use crate::test_fixtures::mock::MockCanisterRuntime;
 use crate::test_fixtures::{
-    account, another_account, automatic_deposit, deposit_address, init_state, initial_state,
-    prepay_sweep_gas, state_with_deposit_helper, state_with_finalized_sweep,
-    sweep_pipeline_outcome, usdc, usdt,
+    account, another_account, automatic_deposit, deposit_address, gas_fee_estimate, init_state,
+    initial_state, prepay_sweep_gas, state_with_deposit_helper, state_with_finalized_sweep,
+    sweep_pipeline_events, sweep_pipeline_outcome, usdc, usdt,
 };
 use crate::tx::{
     Authorization, AuthorizationRequest, GasFeeEstimate, SignableTransaction, TransactionSignature,
@@ -113,7 +114,7 @@ async fn should_sign_and_record_one_authorization_for_every_account() {
     ]));
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
-    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
+    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, TransactionNonce::ZERO);
     expect_signing(&mut runtime);
 
     create_pending_sweeper_requests(&runtime).await;
@@ -125,7 +126,14 @@ async fn should_sign_and_record_one_authorization_for_every_account() {
             .count(),
         1
     );
-    assert!(stored_authorization(account(), SWEEPER_CONTRACT).is_some());
+    assert!(
+        stored_authorization(&authorization_request(
+            account(),
+            SWEEPER_CONTRACT,
+            TransactionNonce::ZERO
+        ))
+        .is_some()
+    );
 }
 
 #[tokio::test]
@@ -133,7 +141,7 @@ async fn should_reuse_the_recorded_authorization_on_a_later_sweep() {
     init_state(state_ready_to_sign(&[(account(), usdc())]));
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
-    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
+    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, TransactionNonce::ZERO);
     expect_signing(&mut runtime);
 
     create_pending_sweeper_requests(&runtime).await;
@@ -153,12 +161,20 @@ async fn should_sign_a_fresh_authorization_when_the_sweeper_contract_changes() {
     init_state(state_ready_to_sign(&[(account(), usdc())]));
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
-    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
-    expect_authorization_signing(&mut runtime, ANOTHER_SWEEPER_CONTRACT, 1);
+    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, TransactionNonce::ZERO);
+    expect_authorization_signing(
+        &mut runtime,
+        ANOTHER_SWEEPER_CONTRACT,
+        TransactionNonce::ZERO,
+    );
     expect_signing(&mut runtime);
 
     create_pending_sweeper_requests(&runtime).await;
-    let first = stored_authorization(account(), SWEEPER_CONTRACT);
+    let first = stored_authorization(&authorization_request(
+        account(),
+        SWEEPER_CONTRACT,
+        TransactionNonce::ZERO,
+    ));
     assert!(first.is_some());
 
     mutate_state(|s| s.sweeper_contract_address = Some(ANOTHER_SWEEPER_CONTRACT));
@@ -167,15 +183,26 @@ async fn should_sign_a_fresh_authorization_when_the_sweeper_contract_changes() {
     queue_deposit(&account(), &usdt());
 
     create_pending_sweeper_requests(&runtime).await;
-    let second = stored_authorization(account(), ANOTHER_SWEEPER_CONTRACT);
+    let second = stored_authorization(&authorization_request(
+        account(),
+        ANOTHER_SWEEPER_CONTRACT,
+        TransactionNonce::ZERO,
+    ));
     assert!(second.is_some());
     assert_ne!(first, second);
-    assert_eq!(stored_authorization(account(), SWEEPER_CONTRACT), first);
+    assert_eq!(
+        stored_authorization(&authorization_request(
+            account(),
+            SWEEPER_CONTRACT,
+            TransactionNonce::ZERO
+        )),
+        first
+    );
 }
 
 #[tokio::test]
 async fn should_sweep_without_a_tuple_an_address_an_earlier_sweep_delegated() {
-    state_with_finalized_sweep(&[(account(), usdc())]).await;
+    state_with_finalized_sweep(&[(account(), usdc())], TransactionStatus::Success).await;
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
     queue_deposit(&account(), &usdt());
@@ -198,32 +225,165 @@ async fn should_sweep_without_a_tuple_an_address_an_earlier_sweep_delegated() {
     );
 }
 
-/// Re-pointing the minter at another sweeper contract makes an address delegated to the old one
-/// authorize afresh, still at nonce zero — a tuple the chain skips, since applying the first one
-/// spent that nonce. Rotating a delegation onto another contract takes more than this.
+/// Re-pointing the minter at another sweeper contract rotates the addresses delegated to the old
+/// one. The rotation tuple is signed for the nonce the address has reached, which is the only
+/// nonce the protocol applies it at: a tuple for nonce zero would be skipped, since applying the
+/// first one spent that nonce.
 #[tokio::test]
-async fn should_authorize_at_nonce_zero_an_address_delegated_to_another_contract() {
-    state_with_finalized_sweep(&[(account(), usdc())]).await;
+async fn should_rotate_a_delegated_address_onto_the_newly_configured_contract() {
+    state_with_finalized_sweep(&[(account(), usdc())], TransactionStatus::Success).await;
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
-    expect_authorization_signing(&mut runtime, ANOTHER_SWEEPER_CONTRACT, 1);
+    expect_authorization_signing(
+        &mut runtime,
+        ANOTHER_SWEEPER_CONTRACT,
+        TransactionNonce::ONE,
+    );
     expect_signing(&mut runtime);
     mutate_state(|s| s.sweeper_contract_address = Some(ANOTHER_SWEEPER_CONTRACT));
     queue_deposit(&account(), &usdt());
 
     create_pending_sweeper_requests(&runtime).await;
 
-    let signature = stored_authorization(account(), ANOTHER_SWEEPER_CONTRACT)
-        .expect("BUG: the sweep must have signed a tuple for the new sweeper contract");
+    let rotation =
+        authorization_request(account(), ANOTHER_SWEEPER_CONTRACT, TransactionNonce::ONE);
+    let signature = stored_authorization(&rotation)
+        .expect("BUG: the sweep must have signed the rotation tuple");
     assert_eq!(
         swept_item(Asset::Erc20(usdt())).authorization,
-        Some(authorization_request(account(), ANOTHER_SWEEPER_CONTRACT).signed_with(signature))
+        Some(rotation.signed_with(signature))
+    );
+    assert_eq!(
+        stored_authorization(&authorization_request(
+            account(),
+            ANOTHER_SWEEPER_CONTRACT,
+            TransactionNonce::ZERO
+        )),
+        None,
+        "a tuple at a nonce the address has already spent is skipped on chain, and pays the full \
+         gas of a tuple for nothing"
+    );
+}
+
+/// The tuple a sweep already in flight carries is the one the chain will apply, whatever the
+/// minter has since been re-pointed at: signing a second tuple for the same nonce would leave the
+/// delegate the address ends up on to the order the two sweeps happen to mine in.
+#[tokio::test]
+async fn should_recarry_an_unapplied_tuple_signed_for_another_delegate() {
+    init_state(state_ready_to_sign(&[(account(), usdc())]));
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, TransactionNonce::ZERO);
+    expect_signing(&mut runtime);
+    create_pending_sweeper_requests(&runtime).await;
+
+    mutate_state(|s| s.sweeper_contract_address = Some(ANOTHER_SWEEPER_CONTRACT));
+    queue_deposit(&account(), &usdt());
+    create_pending_sweeper_requests(&runtime).await;
+
+    let in_flight = authorization_request(account(), SWEEPER_CONTRACT, TransactionNonce::ZERO);
+    let signature =
+        stored_authorization(&in_flight).expect("BUG: the first sweep must have signed a tuple");
+    assert_eq!(
+        swept_item(Asset::Erc20(usdt())).authorization,
+        Some(in_flight.signed_with(signature)),
+        "the second sweep must carry the tuple the first one is still delegating with"
+    );
+    assert_eq!(
+        stored_authorization(&authorization_request(
+            account(),
+            ANOTHER_SWEEPER_CONTRACT,
+            TransactionNonce::ZERO
+        )),
+        None,
+        "at most one tuple may be signed per (address, nonce), whatever delegate it names"
+    );
+}
+
+#[tokio::test]
+async fn should_rotate_at_the_next_nonce_once_the_recarried_tuple_has_applied() {
+    init_state(state_ready_to_sign(&[(account(), usdc())]));
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    expect_signing(&mut runtime);
+    create_pending_sweeper_requests(&runtime).await;
+    mutate_state(|s| s.sweeper_contract_address = Some(ANOTHER_SWEEPER_CONTRACT));
+    queue_deposit(&account(), &usdt());
+    create_pending_sweeper_requests(&runtime).await;
+
+    finalize_pending_sweeps(TransactionStatus::Success);
+    queue_deposit(&account(), &token(0xcc));
+    create_pending_sweeper_requests(&runtime).await;
+
+    let rotation =
+        authorization_request(account(), ANOTHER_SWEEPER_CONTRACT, TransactionNonce::ONE);
+    let signature = stored_authorization(&rotation)
+        .expect("BUG: the rotation must be retried once the carried tuple has applied");
+    assert_eq!(
+        swept_item(Asset::Erc20(token(0xcc))).authorization,
+        Some(rotation.signed_with(signature))
+    );
+}
+
+/// A reverted sweep leaves the minter unable to say which of the tuples it signed for the
+/// addresses that sweep touched the chain applied, so their nonce is no longer known — and a tuple
+/// signed for a guessed nonce is at best wasted gas. They stay out of sweeps until the nonce is
+/// read back off the chain.
+#[tokio::test]
+async fn should_leave_out_an_address_whose_nonce_a_reverted_sweep_left_unverified() {
+    state_with_finalized_sweep(&[(account(), usdc())], TransactionStatus::Failure).await;
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    queue_deposit(&account(), &usdt());
+
+    enqueue_sweep(
+        Asset::Erc20(usdt()),
+        &targets_of(Asset::Erc20(usdt())),
+        &gas_fee_estimate(),
+        &runtime,
+    );
+
+    assert_eq!(
+        pending_sweeps(),
+        vec![],
+        "no sweep may be enqueued while the address' nonce is unverified"
+    );
+}
+
+#[tokio::test]
+async fn should_sweep_again_once_the_deposit_address_nonce_has_been_read_back() {
+    state_with_finalized_sweep(&[(account(), usdc())], TransactionStatus::Failure).await;
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    queue_deposit(&account(), &usdt());
+    mutate_state(|s| {
+        apply_state_transition(
+            s,
+            &EventType::ObservedDepositAddressNonce {
+                account: account(),
+                nonce: TransactionNonce::ONE,
+            },
+        )
+    });
+
+    enqueue_sweep(
+        Asset::Erc20(usdt()),
+        &targets_of(Asset::Erc20(usdt())),
+        &gas_fee_estimate(),
+        &runtime,
+    );
+
+    assert_eq!(
+        swept_item(Asset::Erc20(usdt())).authorization,
+        None,
+        "the nonce read back says the reverted sweep did apply its tuple, so the address is \
+         delegated and needs none"
     );
 }
 
 #[tokio::test]
 async fn should_batch_a_delegated_and_a_fresh_address_into_one_sweep() {
-    state_with_finalized_sweep(&[(account(), usdc())]).await;
+    state_with_finalized_sweep(&[(account(), usdc())], TransactionStatus::Success).await;
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
     expect_signing(&mut runtime);
@@ -242,11 +402,13 @@ async fn should_batch_a_delegated_and_a_fresh_address_into_one_sweep() {
         delegated.authorization, None,
         "the address the earlier sweep delegated must be swept carrying no tuple"
     );
-    let signature = stored_authorization(another_account(), SWEEPER_CONTRACT)
+    let fresh_tuple =
+        authorization_request(another_account(), SWEEPER_CONTRACT, TransactionNonce::ZERO);
+    let signature = stored_authorization(&fresh_tuple)
         .expect("BUG: the sweep must have signed a tuple for the address it still has to delegate");
     assert_eq!(
         fresh.authorization,
-        Some(authorization_request(another_account(), SWEEPER_CONTRACT).signed_with(signature)),
+        Some(fresh_tuple.signed_with(signature)),
         "the tuple must be the one signed for the fresh address, at nonce zero"
     );
     assert_eq!(
@@ -316,14 +478,10 @@ async fn should_carry_the_signed_attestation_and_authorization_of_every_swept_ac
         item.item.attestation,
         expected_signature(&attestation_request(account()))
     );
+    let tuple = authorization_request(account(), SWEEPER_CONTRACT, TransactionNonce::ZERO);
     assert_eq!(
         item.authorization,
-        read_state(|s| s
-            .automatic_deposits
-            .authorization(&authorization_request(account(), SWEEPER_CONTRACT))
-            .map(|signature| {
-                authorization_request(account(), SWEEPER_CONTRACT).signed_with(signature.clone())
-            }))
+        stored_authorization(&tuple).map(|signature| tuple.signed_with(signature))
     );
 }
 
@@ -427,6 +585,31 @@ fn pending_sweeps() -> Vec<SweepRequest> {
     read_state(|s| s.automatic_deposits.sweep_requests_batch(usize::MAX))
 }
 
+/// The queued deposits of `asset` a sweep could take next.
+fn targets_of(asset: Asset) -> Vec<SweepTarget> {
+    read_state(|s| {
+        s.automatic_deposits
+            .requests_batch(usize::MAX)
+            .get(&asset)
+            .cloned()
+            .unwrap_or_default()
+    })
+}
+
+/// Drives every enqueued sweep through the sweeper pipeline to a receipt of `status`.
+fn finalize_pending_sweeps(status: TransactionStatus) {
+    for sweep in pending_sweeps() {
+        let nonce = read_state(|s| s.automatic_deposits.next_sweeper_transaction_nonce());
+        for event in sweep_pipeline_events(nonce, &sweep, status) {
+            mutate_state(|s| apply_state_transition(s, &event));
+        }
+    }
+}
+
+fn token(byte: u8) -> Address {
+    Address::new([byte; 20])
+}
+
 /// The one item of the one pending sweep of `asset`.
 fn swept_item(asset: Asset) -> AuthorizedSweepItem {
     let [sweep] = <[SweepRequest; 1]>::try_from(
@@ -441,22 +624,21 @@ fn swept_item(asset: Asset) -> AuthorizedSweepItem {
     item
 }
 
-/// Expects `times` signatures over the authorization tuple every deposit address delegates with:
-/// the minter's chain, `delegate`, and nonce 0, signed along the deposit address' own derivation
-/// path.
+/// Expects exactly one signature over the authorization tuple `(the minter's chain, `delegate`,
+/// `nonce`)`, signed along the deposit address' own derivation path.
 fn expect_authorization_signing(
     runtime: &mut MockCanisterRuntime,
     delegate: Address,
-    times: usize,
+    nonce: TransactionNonce,
 ) {
-    let digest = authorization_digest(delegate);
+    let digest = authorization_digest(delegate, nonce);
     let path = derivation_path_bytes();
     runtime
         .expect_sign_with_ecdsa()
         .withf(move |_, derivation_path, message_hash| {
             *message_hash == digest && *derivation_path == path
         })
-        .times(times)
+        .times(1)
         .returning(sign_digest_with_derived_key);
 }
 
@@ -482,31 +664,31 @@ fn sign_digest_with_derived_key(
         .sign_digest_with_ecdsa(&message_hash))
 }
 
-/// Spelled out rather than taken from `delegation_authorization`, so that changing the tuple the
-/// minter signs — its delegate, or the nonce 0 that makes a stale authorization skip harmlessly
-/// rather than sink the sweep — fails here.
-fn stored_authorization(account: Account, delegate: Address) -> Option<TransactionSignature> {
-    read_state(|s| {
-        s.automatic_deposits
-            .authorization(&authorization_request(account, delegate))
-            .cloned()
-    })
+fn stored_authorization(request: &AuthorizationRequest) -> Option<TransactionSignature> {
+    read_state(|s| s.automatic_deposits.authorization(request).cloned())
 }
 
-fn authorization_request(account: Account, delegate: Address) -> AuthorizationRequest {
+/// Spelled out rather than taken from the minter's own request builder, so that changing the tuple
+/// the minter signs — its delegate, or the nonce that decides whether the protocol applies it or
+/// skips it — fails here.
+fn authorization_request(
+    account: Account,
+    delegate: Address,
+    nonce: TransactionNonce,
+) -> AuthorizationRequest {
     AuthorizationRequest::new(
         account,
         initial_state().ethereum_network.chain_id(),
         delegate,
-        TransactionNonce::ZERO,
+        nonce,
     )
 }
 
-fn authorization_digest(delegate: Address) -> [u8; 32] {
+fn authorization_digest(delegate: Address, nonce: TransactionNonce) -> [u8; 32] {
     Authorization {
         chain_id: initial_state().ethereum_network.chain_id(),
         delegate,
-        nonce: TransactionNonce::ZERO,
+        nonce,
     }
     .hash()
     .0
