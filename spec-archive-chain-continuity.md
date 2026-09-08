@@ -44,7 +44,8 @@ Archiving is triggered per transaction (`spawn_archiving()` at
 archive is retried on every transaction, each attempt materialising
 `min(num_blocks_to_archive, MAX_BLOCKS_TO_ARCHIVE)` blocks on the heap
 (`ledger.rs:462`), making a `remaining_capacity` call and encoding up to a
-1 MiB chunk. Add a backoff: skip the attempt unless enough time has passed
+one message-size of Candid serialisation — 1 MiB on ICRC, 128 kB on ICP; see
+below. Add a backoff: skip the attempt unless enough time has passed
 since the last failure, with the interval growing on consecutive failures up
 to a cap.
 
@@ -126,10 +127,27 @@ push are already in different messages today.
 The divergence needs a **multi-chunk round**, and the two ledgers are configured
 very differently:
 
-| | archive option | ledger limit | effective chunk | 1000 blocks |
+The chunk size is `min(archive.max_message_size_bytes, max_ledger_msg_size_bytes)`
+(`archive.rs:252-256`), so whichever is smaller governs:
+
+| | archive option | ledger ceiling | effective chunk | 1000 blocks |
 |---|---|---|---|---|
-| **ICP** | 128 kB (`icp/src/lib.rs:628`) | 128 kB (`:634`) | **128 kB** | **two chunks** |
-| **ICRC** (ckBTC, ckDOGE) | `null`, so the 2 MiB default | `MAX_MESSAGE_SIZE` = 1 MiB | **1 MiB** | one chunk |
+| **ICP** | 128 kB (`icp/src/lib.rs:628`), configurable | 128 kB (`:634`), set only in `init` | **128 kB** | **two chunks** |
+| **ICRC** (ckBTC, ckDOGE) | `null`, so the 2 MiB default, configurable | `const MAX_MESSAGE_SIZE` = 1 MiB, **hard-coded** | **1 MiB** | one chunk |
+
+Two things follow that are easy to miss:
+
+* **On an ICRC ledger the configurable option cannot exceed 1 MiB.** The
+  hard-coded const caps it silently, so the 2 MiB default is *already* being
+  clamped on every ICRC ledger. A second instance of the DEFI-1565 finding that
+  the metric has to be labelled as the option rather than the enforced limit.
+* **DEFI-1666's "2 MB messages" is not a configuration change.** On ICRC it needs
+  `MAX_MESSAGE_SIZE` raised, which is a code change and a Wasm release. On ICP the
+  ledger's ceiling is written only in `init` (`icp/ledger/src/main.rs:116`), so an
+  upgrade cannot change it — note the asymmetry at `icp/src/lib.rs:501-502`, where
+  `ChangeArchiveOptions` updates `archive.max_message_size_bytes` but nothing
+  updates the ledger's own ceiling. So raising the archive option post-deployment
+  is a no-op on both ledgers. Worth flagging on DEFI-1666.
 
 `new_with_mainnet_settings()` sets both ICP values to 128 kB, and ckDOGE's
 install record confirms `max_message_size_bytes = null` on the ICRC side.
@@ -388,7 +406,7 @@ Two things deliberately not attempted:
 * **R1 and E1 end-to-end**, by inducing a trap in the append continuation.
   Routine rounds grow ledger memory by zero bytes, which is why DEFI-2967 records
   "I could not make that trap". A multi-chunk configuration with large chunks
-  would make the per-chunk ~1 MiB Candid encode big enough for the reserved-cycles
+  would make the per-chunk Candid encode big enough for the reserved-cycles
   trick to bite, so it is probably reachable — but it depends on allocator
   behaviour and would likely be flaky. Test 4 covers the same arithmetic
   deterministically at the unit level, which is where the bug actually lives.
