@@ -612,9 +612,14 @@ that fails the tick loudly (the affected addresses are retried, not silently
 recorded as empty). **At most 764 pairs fit in one such call**:
 [EIP-3860](https://eips.ethereum.org/EIPS/eip-3860) (Shanghai) caps init code at
 49'152 bytes, and the encoding spends 165 bytes on the program, 32 on the length
-word and 64 on each pair — so the cap is *derived* from the encoding rather than
-hard-coded, and follows the batcher if its program ever changes (measured against
-anvil: 764 pairs execute, 765 are rejected with `max initcode size exceeded`).
+word and 64 on each pair. The returned blob is bounded too:
+[EIP-170](https://eips.ethereum.org/EIPS/eip-170) caps deployed code — which is
+what a create-style call returns — at 24'576 bytes, i.e. 768 pairs at one 32-byte
+balance word each. The cap is *derived* from the encoding as the smaller of the
+two bounds rather than hard-coded, so it follows the batcher if its program or
+encoding ever changes; today the initcode side binds, by four pairs (measured
+against anvil: 764 pairs execute, 765 are rejected with
+`max initcode size exceeded`).
 Gas is the looser bound: at ≈19'000 gas for the priciest `balanceOf` shape (a
 proxied stablecoin) a full 764-pair batch costs ≈14.5M gas, well inside the 50M
 `eth_call` gas cap providers commonly apply. A larger watchlist is therefore split

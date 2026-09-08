@@ -8,9 +8,8 @@
 //!    principal and subaccount.
 
 use assert_matches::assert_matches;
-use ic_cketh_minter::balance_scan::MAX_CALLS_PER_BATCH;
 use ic_cketh_minter::balance_scan::batcher::{
-    BalanceOfCall, decode_balance_batch, encode_balance_batch,
+    BalanceOfCall, MAX_CALLS_PER_BATCH, decode_balance_batch, encode_balance_batch,
 };
 use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
@@ -144,15 +143,21 @@ fn should_scan_a_full_batch_in_a_single_call() {
             .collect()
     };
 
+    const LAST_HOLDER_BALANCE: u128 = 123_456;
+    let last_holder = holder_at((MAX_CALLS_PER_BATCH - 1) as u64);
+    anvil.fund(&token, &dev, &last_holder, LAST_HOLDER_BALANCE);
+
     let full_batch = batch_of(MAX_CALLS_PER_BATCH);
     let out = anvil
         .eth_call_create(&dev, &encode_balance_batch(&full_batch))
         .expect(
             "a batch of MAX_CALLS_PER_BATCH calls must stay within the EIP-3860 initcode limit",
         );
+    let mut expected_balances = vec![Erc20Value::ZERO; MAX_CALLS_PER_BATCH];
+    *expected_balances.last_mut().unwrap() = Erc20Value::from(LAST_HOLDER_BALANCE);
     assert_eq!(
         decode_balance_batch(&out, full_batch.len()).expect("decode failed"),
-        vec![Erc20Value::ZERO; MAX_CALLS_PER_BATCH]
+        expected_balances
     );
 
     let one_call_too_many = batch_of(MAX_CALLS_PER_BATCH + 1);
