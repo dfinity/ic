@@ -70,6 +70,21 @@ fn should_have_a_min_deposit_for_every_deployed_supported_token() {
     }
 }
 
+#[test]
+fn should_have_the_documented_min_deposit_for_ckbat() {
+    // ckBAT is not yet deployed, so `should_have_a_min_deposit_for_every_deployed_supported_token`
+    // above deliberately excludes it, meaning it alone would never catch a typo'd address or
+    // threshold in its `MIN_DEPOSITS` entry. This test exercises that entry directly, the same way
+    // the deployed tokens are exercised above: parse the canonical BAT contract address
+    // independently of `MIN_DEPOSITS`'s byte-array form and check the looked-up minimum.
+    let bat = Address::from_str("0x0D8775F648430679A709E98d2b0Cb6250d2887EF")
+        .expect("invalid test address for BAT");
+    assert_eq!(
+        min_deposit(&bat),
+        Erc20Value::new(135_000_000_000_000_000_000)
+    );
+}
+
 #[tokio::test]
 async fn should_skip_without_scanning() {
     struct Case {
