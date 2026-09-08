@@ -1116,9 +1116,6 @@ fn assert_consumed_cycles_invariant(
         .outstanding_prepayments()
         .expect("Canister has a paused execution");
     let metrics = system_state.canister_metrics();
-    // Asserted separately, ahead of the subtraction below: that one saturates at
-    // zero, so a gauge that has fallen behind the outstanding prepayments would
-    // otherwise slip through whenever the monotonic value is zero too.
     assert!(
         outstanding <= metrics.consumed_cycles(),
         "the {outstanding} outstanding prepayments must not exceed the consumed \
@@ -1201,9 +1198,10 @@ fn checkpoint_round_backfills_consumed_cycles_monotonic() {
 }
 
 /// A consumed cycles gauge below the outstanding prepayments is corrupt accounting:
-/// the gauge covers every prepayment that is still outstanding. It must be reported
-/// rather than backfilled from, which the saturating subtraction would otherwise
-/// turn into a derived zero that compares `Equal` and passes unnoticed.
+/// the gauge covers every prepayment that is still outstanding. The backfill reports
+/// it and leaves the canister alone; backfilling from such a gauge would instead
+/// turn the saturating subtraction into a derived zero that compares `Equal` and
+/// passes unnoticed.
 #[test]
 #[should_panic(expected = "outstanding prepayments exceed the consumed cycles gauge")]
 fn checkpoint_round_reports_outstanding_prepayments_above_the_gauge() {
@@ -1223,9 +1221,9 @@ fn checkpoint_round_reports_outstanding_prepayments_above_the_gauge() {
     test.execute_round(ExecutionRoundType::CheckpointRound);
 }
 
-/// The mirror image: a monotonic value above the gauge net of the outstanding
-/// prepayments is corrupt accounting too. The backfill must report it rather than
-/// lower the monotonic value, which may only ever go up.
+/// A monotonic value above the gauge net of the outstanding prepayments is corrupt
+/// accounting too. The backfill must report it rather than lower the monotonic
+/// value, which may only ever go up.
 ///
 /// Note that this needs the outstanding prepayments to be zero: with a prepayment
 /// still outstanding, dropping the gauge would trip the `outstanding > gauge` check

@@ -2375,15 +2375,14 @@ impl SystemState {
     ///
     /// Does nothing if the canister has a paused execution whose prepayment is not
     /// part of the replicated state (see [`Self::outstanding_prepayments`]); the
-    /// caller is expected to retry once paused executions have been aborted.
+    /// caller is not supposed to call this while an execution is paused.
     pub fn migrate_consumed_cycles_to_monotonic(&mut self) {
         let Some(outstanding) = self.outstanding_prepayments() else {
             return;
         };
         // `max` rather than a plain assignment, as defense in depth: the monotonic
         // amount must never go down, not even if a saturating subtraction somewhere
-        // made the gauge lag behind it. The caller is expected to report such a
-        // gauge rather than to rely on this.
+        // made the gauge lag behind it.
         self.canister_metrics.consumed_cycles_monotonic = self
             .canister_metrics
             .consumed_cycles_monotonic

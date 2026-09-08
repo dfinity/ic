@@ -1170,7 +1170,7 @@ fn outstanding_prepayments_of_paused_and_aborted_executions() {
 
 /// An aborted response execution prepays nothing of its own: it is paid for by the
 /// callback that the task carries, which is no longer registered with the
-/// `CallContextManager` (so it must not be counted twice).
+/// `CallContextManager` (so it is not counted twice).
 #[test]
 fn outstanding_prepayments_of_aborted_response_execution() {
     let mut fixture = CanisterStateFixture::new();
