@@ -248,7 +248,13 @@ impl DiskEncryptionKeyExchangeTestFixture {
             .withf(move |device_path, luks_header_path, _| {
                 device_path == store_device_path && luks_header_path == store_luks_header_path
             })
-            .returning(move |_, _, _| ensure!(can_open, "cannot open"));
+            .returning(move |_, _, _| {
+                if can_open {
+                    Ok(())
+                } else {
+                    anyhow!("cannot open")
+                }
+            });
     }
 
     /// Run the key exchange test and return (server status, client status).
