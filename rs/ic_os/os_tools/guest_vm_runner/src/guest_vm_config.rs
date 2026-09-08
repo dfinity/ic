@@ -13,8 +13,9 @@ use tracing::info;
 const DEFAULT_GUEST_VM_DOMAIN_NAME: &str = "guestos";
 const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
 
-const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
-const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
+const SERIAL_LOG_DIR: &str = "/var/log/libvirt/qemu";
+const DEFAULT_SERIAL_LOG_NAME: &str = "guestos-serial";
+const UPGRADE_SERIAL_LOG_NAME: &str = "upgrade-guestos-serial";
 
 #[cfg(not(feature = "dev"))]
 const DEFAULT_VM_MEMORY_GIB: u32 = 480;
@@ -263,16 +264,16 @@ pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: VmSlot) -> String {
 }
 
 pub fn serial_log_path(guest_vm_type: GuestVMType, slot: VmSlot) -> PathBuf {
-    match guest_vm_type {
-        GuestVMType::Default => PathBuf::from(format!(
-            "{DEFAULT_SERIAL_LOG_PATH}{suffix}",
-            suffix = slot.to_suffix()
-        )),
-        GuestVMType::Upgrade => PathBuf::from(format!(
-            "{UPGRADE_SERIAL_LOG_PATH}{suffix}",
-            suffix = slot.to_suffix()
-        )),
-    }
+    let name = match guest_vm_type {
+        GuestVMType::Default => DEFAULT_SERIAL_LOG_NAME,
+        GuestVMType::Upgrade => UPGRADE_SERIAL_LOG_NAME,
+    };
+    // The slot goes before the extension, so that every VM's log is still a
+    // .log file. export-guestos-serial-logs.sh forwards these by name.
+    PathBuf::from(format!(
+        "{SERIAL_LOG_DIR}/{name}{suffix}.log",
+        suffix = slot.to_suffix()
+    ))
 }
 
 #[cfg(all(test, not(feature = "skip_default_tests")))]
@@ -284,6 +285,7 @@ mod tests {
         Ipv6Config, NetworkSettings,
     };
     use goldenfile::Mint;
+    use std::collections::HashSet;
     use std::env;
     use std::os::unix::prelude::MetadataExt;
     use tempfile::{NamedTempFile, tempdir};
@@ -537,6 +539,44 @@ mod tests {
             media_path.metadata().unwrap().size() > 0,
             "Config media file is empty"
         );
+    }
+
+    // The names export-guestos-serial-logs.sh forwards, which are
+    // "<name><slot>.log" under /var/log/libvirt/qemu.
+    #[test]
+    fn test_serial_log_path() {
+        for (guest_vm_type, name) in [
+            (GuestVMType::Default, "guestos-serial"),
+            (GuestVMType::Upgrade, "upgrade-guestos-serial"),
+        ] {
+            assert_eq!(
+                serial_log_path(guest_vm_type, VmSlot::Plain),
+                PathBuf::from(format!("/var/log/libvirt/qemu/{name}.log"))
+            );
+
+            for slot in [1, 15, 60] {
+                assert_eq!(
+                    serial_log_path(guest_vm_type, VmSlot::new(slot)),
+                    PathBuf::from(format!("/var/log/libvirt/qemu/{name}{slot}.log"))
+                );
+            }
+        }
+    }
+
+    // Each VM must get its own domain, uuid and serial log, or VMs overwrite
+    // each other's.
+    #[test]
+    fn test_per_slot_names_are_unique() {
+        let slots = (0..=60u8).map(VmSlot::new);
+        let mut names = HashSet::new();
+
+        for slot in slots {
+            for guest_vm_type in [GuestVMType::Default, GuestVMType::Upgrade] {
+                assert!(names.insert(vm_domain_name(guest_vm_type, slot)));
+                assert!(names.insert(vm_domain_uuid(guest_vm_type, slot)));
+                assert!(names.insert(serial_log_path(guest_vm_type, slot).display().to_string()));
+            }
+        }
     }
 
     #[test]
