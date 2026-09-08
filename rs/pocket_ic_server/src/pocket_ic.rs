@@ -12,6 +12,7 @@ use axum::{
     extract::State,
     response::{Html, IntoResponse},
 };
+use base64::prelude::*;
 use bitcoin::Network as BitcoinAdapterNetwork;
 use bitcoin::dogecoin::Network as DogecoinAdapterNetwork;
 use bytes::Bytes;
@@ -4590,7 +4591,7 @@ impl Operation for CanisterSnapshotDownload {
             self.sender,
             self.canister_id,
             self.snapshot_id,
-            base64::encode_config(self.snapshot_dir.display().to_string(), base64::URL_SAFE)
+            BASE64_URL_SAFE.encode(self.snapshot_dir.display().to_string())
         ))
     }
 }
@@ -4767,7 +4768,7 @@ impl Operation for CanisterSnapshotUpload {
             "canister_snapshot_upload(sender={},canister_id={},snapshot_dir='{}')",
             self.sender,
             self.canister_id,
-            base64::encode_config(self.snapshot_dir.display().to_string(), base64::URL_SAFE)
+            BASE64_URL_SAFE.encode(self.snapshot_dir.display().to_string())
         ))
     }
 }
