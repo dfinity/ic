@@ -6,14 +6,14 @@ use crate::numeric::{BlockNumber, TransactionNonce, Wei, WeiPerGas};
 use crate::state::audit::{EventType, apply_state_transition};
 use crate::state::eth_logs_scraping::LogScrapings;
 use crate::state::event::AutomaticDeposit;
-use crate::state::transactions::{SweepId, SweepRequest};
+use crate::state::transactions::{AuthorizedSweepItem, SweepId, SweepRequest};
 use crate::state::{State, mutate_state, read_state};
 use crate::storage::with_event_iter;
 use crate::sweep::{create_pending_sweeper_requests, in_chain_execution_order};
 use crate::test_fixtures::mock::MockCanisterRuntime;
 use crate::test_fixtures::{
     account, another_account, automatic_deposit, deposit_address, init_state, initial_state,
-    prepay_sweep_gas, state_with_deposit_helper, usdc, usdt,
+    prepay_sweep_gas, state_with_deposit_helper, state_with_finalized_sweep, usdc, usdt,
 };
 use crate::tx::{Authorization, AuthorizationRequest, GasFeeEstimate, TransactionSignature};
 use ethnum::u256;
@@ -166,6 +166,55 @@ async fn should_sign_a_fresh_authorization_when_the_sweeper_contract_changes() {
     assert!(second.is_some());
     assert_ne!(first, second);
     assert_eq!(stored_authorization(SWEEPER_CONTRACT), first);
+}
+
+#[tokio::test]
+async fn should_sweep_without_a_tuple_an_address_an_earlier_sweep_delegated() {
+    state_with_finalized_sweep(&[(account(), usdc())]).await;
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    queue_deposit(&account(), &usdt());
+
+    create_pending_sweeper_requests(&runtime).await;
+
+    assert_eq!(
+        swept_item(Asset::Erc20(usdt())).authorization,
+        None,
+        "an address the earlier sweep delegated to the sweeper contract needs no further tuple"
+    );
+    assert_eq!(
+        recorded_events()
+            .into_iter()
+            .filter(|event| matches!(event, EventType::AuthorizedDepositAddress { .. }))
+            .count(),
+        1,
+        "signing another tuple for a delegated address would pay for a threshold signature the \
+         sweep cannot use"
+    );
+}
+
+/// Re-pointing the minter at another sweeper contract makes an address delegated to the old one
+/// authorize afresh, still at nonce zero — a tuple the chain skips, since applying the first one
+/// spent that nonce. Rotating a delegation onto another contract takes more than this.
+#[tokio::test]
+async fn should_authorize_at_nonce_zero_an_address_delegated_to_another_contract() {
+    state_with_finalized_sweep(&[(account(), usdc())]).await;
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    expect_authorization_signing(&mut runtime, ANOTHER_SWEEPER_CONTRACT, 1);
+    expect_signing(&mut runtime);
+    mutate_state(|s| s.sweeper_contract_address = Some(ANOTHER_SWEEPER_CONTRACT));
+    queue_deposit(&account(), &usdt());
+
+    create_pending_sweeper_requests(&runtime).await;
+
+    assert_eq!(
+        swept_item(Asset::Erc20(usdt())).authorization,
+        stored_authorization(ANOTHER_SWEEPER_CONTRACT).map(|signature| authorization_request(
+            ANOTHER_SWEEPER_CONTRACT
+        )
+        .signed_with(signature))
+    );
 }
 
 #[tokio::test]
@@ -335,6 +384,20 @@ fn should_order_finalized_sweeps_as_the_chain_executed_them() {
 
 fn pending_sweeps() -> Vec<SweepRequest> {
     read_state(|s| s.automatic_deposits.sweep_requests_batch(usize::MAX))
+}
+
+/// The one item of the one pending sweep of `asset`.
+fn swept_item(asset: Asset) -> AuthorizedSweepItem {
+    let [sweep] = <[SweepRequest; 1]>::try_from(
+        pending_sweeps()
+            .into_iter()
+            .filter(|sweep| sweep.asset == asset)
+            .collect::<Vec<_>>(),
+    )
+    .expect("BUG: expected exactly one pending sweep of the asset");
+    let [item] = <[AuthorizedSweepItem; 1]>::try_from(sweep.items)
+        .expect("BUG: expected the sweep to hold exactly one item");
+    item
 }
 
 /// Expects `times` signatures over the authorization tuple every deposit address delegates with:

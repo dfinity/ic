@@ -5,29 +5,23 @@ use super::{
 };
 use crate::asset::Asset;
 use crate::deposit_address::DepositAddress;
-use crate::eth_rpc::Hash;
-use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, Erc20Value, TransactionNonce};
 use crate::state::State;
-use crate::state::audit::{EventType, apply_state_transition, process_event};
+use crate::state::audit::{apply_state_transition, process_event};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
-use crate::state::transactions::{
-    AuthorizedSweepItem, PipelineRequest, SweepId, SweepRequest, sweep_gas_limit,
-};
+use crate::state::transactions::{AuthorizedSweepItem, SweepId, SweepRequest, sweep_gas_limit};
 use crate::storage::with_event_iter;
 use crate::sweeper_contract::SweepItem;
 use crate::test_fixtures::mock::MockTimeProvider;
 use crate::test_fixtures::{
     deposit_address, deposits_with_enqueued_sweep, gas_fee_estimate, initial_state,
-    prepay_sweep_gas, state_with_enqueued_sweep, sweeper_contract, transaction_signature, usdc,
-    usdt,
+    prepay_sweep_gas, state_with_enqueued_sweep, sweep_pipeline_events, sweep_pipeline_outcome,
+    sweeper_contract, transaction_signature, usdc, usdt,
 };
 use crate::timed_sized_map::{Entry, Timestamp};
-use crate::tx::{
-    AuthorizationRequest, SignableTransaction, Signed, SignedAuthorization, SweepTransaction,
-    TransactionSignature,
-};
+use crate::tx::{AuthorizationRequest, SignedAuthorization};
 use candid::Principal;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -1273,74 +1267,6 @@ fn finalize_sweep(
     deposits.record_created_sweep_transaction(request.id, sweep.transaction);
     deposits.record_signed_sweep_transaction(sweep.signed);
     deposits.record_finalized_sweep_transaction(request.id, &sweep.receipt);
-}
-
-/// The events the sweeper pipeline records taking the already-accepted `request` from its
-/// transaction to a receipt of `status`.
-fn sweep_pipeline_events(
-    nonce: TransactionNonce,
-    request: &SweepRequest,
-    status: TransactionStatus,
-) -> Vec<EventType> {
-    let sweep = sweep_pipeline_outcome(nonce, request, status);
-    vec![
-        EventType::CreatedSweeperTransaction {
-            sweep_id: request.id,
-            transaction: sweep.transaction,
-        },
-        EventType::SignedSweeperTransaction {
-            sweep_id: request.id,
-            transaction: sweep.signed,
-        },
-        EventType::FinalizedSweeperTransaction {
-            sweep_id: request.id,
-            transaction_receipt: sweep.receipt,
-        },
-    ]
-}
-
-/// What the sweeper pipeline makes of a sweep: the transaction it creates, that transaction
-/// signed, and the receipt finalizing it.
-struct SweepPipelineOutcome {
-    transaction: SweepTransaction,
-    signed: Signed<SweepTransaction>,
-    receipt: TransactionReceipt,
-}
-
-fn sweep_pipeline_outcome(
-    nonce: TransactionNonce,
-    request: &SweepRequest,
-    status: TransactionStatus,
-) -> SweepPipelineOutcome {
-    let transaction = request
-        .create_transaction(
-            nonce,
-            gas_fee_estimate(),
-            request.gas_limit(),
-            EthereumNetwork::Sepolia,
-        )
-        .expect("BUG: the fixture prices the request with the estimate it creates with");
-    let signed = Signed::from((
-        transaction.clone(),
-        TransactionSignature {
-            signature_y_parity: false,
-            r: Default::default(),
-            s: Default::default(),
-        },
-    ));
-    let receipt = TransactionReceipt {
-        block_hash: Hash([0x11; 32]),
-        block_number: BlockNumber::new(4_190_269),
-        effective_gas_price: signed.transaction().max_fee_per_gas(),
-        gas_used: signed.transaction().gas_limit(),
-        status,
-        transaction_hash: signed.hash(),
-    };
-    SweepPipelineOutcome {
-        transaction,
-        signed,
-        receipt,
-    }
 }
 
 /// An [`AutomaticDeposits`] whose sweep queue holds exactly these funded pairs.

@@ -21,7 +21,8 @@ use ic_cketh_test_utils::anvil::{
 };
 use ic_cketh_test_utils::ckerc20::{CkErc20Setup, Erc20Token};
 use ic_cketh_test_utils::live::{
-    CexDeposit, DepositPlan, EthCexDeposit, EthDepositPlan, LiveSetup,
+    CexDeposit, DELEGATING_SWEEP_TRANSACTION_TYPE, DepositPlan, EthCexDeposit, EthDepositPlan,
+    LiveSetup, PLAIN_SWEEP_TRANSACTION_TYPE,
 };
 use ic_cketh_test_utils::{CkEthSetup, SWEEPER_ADDRESS};
 
@@ -642,7 +643,7 @@ fn should_credit_twenty_eth_deposits_through_ten_deposit_sweeps() {
 }
 
 #[test]
-fn should_sweep_a_second_eth_deposit_despite_resending_a_stale_authorization() {
+fn should_sweep_a_second_eth_deposit_of_a_delegated_address_without_an_authorization() {
     const DEPOSIT_SUBACCOUNT: [u8; 32] = [7; 32];
 
     let setup = LiveSetup::<CkErc20Setup>::new()
@@ -709,19 +710,20 @@ fn should_sweep_a_second_eth_deposit_despite_resending_a_stale_authorization() {
             if detected.scanned_balance == second_deposits[0].amount
     );
 
-    let (setup, sweeps) = setup
-        .await_sweeps(&sweeper, 2)
-        .expect_all_delegating_sweeps();
+    let (setup, sweeps) = setup.await_sweeps(&sweeper, 2).expect_sweeps_of_types(&[
+        DELEGATING_SWEEP_TRANSACTION_TYPE,
+        PLAIN_SWEEP_TRANSACTION_TYPE,
+    ]);
     let second_sweep = &sweeps[1];
     assert_eq!(
         setup.anvil().authorization_nonces(&second_sweep.hash),
-        vec![0],
-        "the re-sent authorization still names nonce 0, stale now that the address is at nonce 1"
+        Vec::<u64>::new(),
+        "an address already delegated is swept without any authorization to install"
     );
     assert_eq!(
         setup.anvil().transaction_count(&address),
         1,
-        "a skipped stale authorization must not advance the deposit address' nonce"
+        "sweeping without a tuple must leave the deposit address at the nonce the first sweep spent"
     );
 
     let all_deposits = [first_deposits[0].clone(), second_deposits[0].clone()];
@@ -740,7 +742,7 @@ fn should_sweep_a_second_eth_deposit_despite_resending_a_stale_authorization() {
 }
 
 #[test]
-fn should_sweep_a_second_erc20_deposit_despite_resending_a_stale_authorization() {
+fn should_sweep_a_second_erc20_deposit_of_a_delegated_address_without_an_authorization() {
     const DEPOSIT_SUBACCOUNT: [u8; 32] = [7; 32];
 
     let setup = LiveSetup::<CkErc20Setup>::new()
@@ -810,19 +812,20 @@ fn should_sweep_a_second_erc20_deposit_despite_resending_a_stale_authorization()
         DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == second_deposits[0].amount
     );
 
-    let (setup, sweeps) = setup
-        .await_sweeps(&sweeper, 2)
-        .expect_all_delegating_sweeps();
+    let (setup, sweeps) = setup.await_sweeps(&sweeper, 2).expect_sweeps_of_types(&[
+        DELEGATING_SWEEP_TRANSACTION_TYPE,
+        PLAIN_SWEEP_TRANSACTION_TYPE,
+    ]);
     let second_sweep = &sweeps[1];
     assert_eq!(
         setup.anvil().authorization_nonces(&second_sweep.hash),
-        vec![0],
-        "the re-sent authorization still names nonce 0, stale now that the address is at nonce 1"
+        Vec::<u64>::new(),
+        "an address already delegated is swept without any authorization to install"
     );
     assert_eq!(
         setup.anvil().transaction_count(&address),
         1,
-        "a skipped stale authorization must not advance the deposit address' nonce"
+        "sweeping without a tuple must leave the deposit address at the nonce the first sweep spent"
     );
 
     let all_deposits = [first_deposits[0].clone(), second_deposits[0].clone()];

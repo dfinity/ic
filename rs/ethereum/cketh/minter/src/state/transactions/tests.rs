@@ -3059,7 +3059,9 @@ mod sweep_lane {
         const MEASURED_TEN_DEPOSIT_SWEEP_GAS: u128 = 609_431;
 
         let items_for = |addresses: u8| -> Vec<AuthorizedSweepItem> {
-            (1..=addresses).map(|seed| sweep_item(seed, None)).collect()
+            (1..=addresses)
+                .map(|seed| sweep_item(seed, Some(authorization(seed))))
+                .collect()
         };
 
         assert_eq!(sweep_gas_limit(&items_for(1)), GasAmount::new(225_000));
@@ -3069,7 +3071,28 @@ mod sweep_lane {
         let one_address_ten_times: Vec<_> = (0..10).map(|_| sweep_item(1, None)).collect();
         assert_eq!(
             sweep_gas_limit(&one_address_ten_times),
-            sweep_gas_limit(&items_for(1))
+            sweep_gas_limit(&[sweep_item(1, None)])
+        );
+    }
+
+    #[test]
+    fn should_budget_the_authorization_gas_only_for_the_items_carrying_a_tuple() {
+        let delegated = sweep_item(1, None);
+        let to_delegate = sweep_item(2, Some(authorization(2)));
+        let also_to_delegate = sweep_item(3, Some(authorization(3)));
+
+        assert_eq!(
+            sweep_gas_limit(std::slice::from_ref(&delegated)),
+            GasAmount::new(185_000),
+            "an address swept without a tuple costs its balance check and its transfer only"
+        );
+        assert_eq!(
+            sweep_gas_limit(&[delegated, to_delegate.clone()]),
+            GasAmount::new(350_000)
+        );
+        assert_eq!(
+            sweep_gas_limit(&[to_delegate, also_to_delegate]),
+            GasAmount::new(390_000)
         );
     }
 
