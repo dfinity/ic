@@ -411,22 +411,39 @@ impl AutomaticDeposits {
     /// batch leaves every address it touched waiting on a read, and a tick reading all of them at
     /// once would turn one timer into a chain read per queued address. What a tick leaves out it
     /// reads next tick, since a read that places an address takes it out of this set.
+    ///
+    /// An account another of whose tokens a sweep still holds is left out until that sweep
+    /// finalizes: applying its tuple moves the very marks a read re-anchors, and a count read
+    /// before it lands would undo them. Waiting costs nothing — the sweep that reverted dropped
+    /// the funds it named, so a read this tick skips is taken by a later one, off a record that no
+    /// longer moves under it. Nothing else can move that record meanwhile: an account waiting on a
+    /// read is offered no new sweep ([`Self::has_trusted_nonce`]), and the minter alone holds its
+    /// deposit key.
     pub fn deposit_addresses_awaiting_a_nonce_read(
         &self,
         batch_size: usize,
     ) -> BTreeMap<Account, DepositAddress> {
+        let swept = self.accounts_a_sweep_still_holds();
         let mut batch = BTreeMap::new();
-        for (request, entry) in self
-            .sweep
-            .iter()
-            .filter(|(request, _entry)| self.unverified_nonces.contains(&request.account))
-        {
+        for (request, entry) in self.sweep.iter().filter(|(request, _entry)| {
+            self.unverified_nonces.contains(&request.account) && !swept.contains(&request.account)
+        }) {
             if batch.len() == batch_size && !batch.contains_key(&request.account) {
                 break;
             }
             batch.insert(request.account, entry.address);
         }
         batch
+    }
+
+    /// The accounts a sweep in flight still holds queued funds of, whatever the token: finalizing
+    /// it settles which of their tuples the chain applied.
+    fn accounts_a_sweep_still_holds(&self) -> BTreeSet<Account> {
+        self.sweep
+            .iter()
+            .filter(|(_request, entry)| !entry.is_sweepable())
+            .map(|(request, _entry)| request.account)
+            .collect()
     }
 
     pub fn unverified_nonces_len(&self) -> usize {

@@ -1408,6 +1408,43 @@ async fn should_offer_at_most_a_batch_of_deposit_addresses_to_read_the_nonce_of(
     );
 }
 
+/// A sweep in flight applies its tuple when it finalizes, moving the marks a read re-anchors. An
+/// address one still holds is therefore not read while it is in flight: a count read before that
+/// sweep lands would undo what it left behind. It is read once the sweep is done with it.
+#[tokio::test]
+async fn should_read_no_nonce_of_an_address_a_sweep_still_holds() {
+    let (mut deposits, reverted) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+    finalize_sweep(&mut deposits, &reverted, TransactionStatus::Failure);
+    rearm(&mut deposits, &[(account(0), usdc()), (account(0), usdt())]);
+    let in_flight = sweep_request(
+        SweepId(1),
+        Asset::Erc20(usdt()),
+        vec![authorized_item(account(0), None)],
+    );
+    deposits.record_sweep_scheduled(SweepId(1), Asset::Erc20(usdt()), [account(0)]);
+    deposits.record_sweep_request(in_flight.clone());
+
+    assert_eq!(
+        deposits
+            .deposit_addresses_awaiting_a_nonce_read(10)
+            .into_keys()
+            .collect::<Vec<_>>(),
+        vec![],
+        "reading the nonce now would race the tuple that sweep applies when it finalizes"
+    );
+
+    finalize_sweep(&mut deposits, &in_flight, TransactionStatus::Success);
+
+    assert_eq!(
+        deposits
+            .deposit_addresses_awaiting_a_nonce_read(10)
+            .into_keys()
+            .collect::<Vec<_>>(),
+        vec![account(0)],
+        "the sweep has settled what it applied, so the read anchors on a record that stands still"
+    );
+}
+
 /// One read places an account's deposit address whatever that account has queued, so a second
 /// funded token of the same account may not cost the batch a slot.
 #[tokio::test]

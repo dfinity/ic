@@ -129,10 +129,13 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
 /// of them at once would fan a single timer out into a chain read per queued address. The addresses
 /// a tick leaves out are read by the next one.
 ///
-/// A count is only recorded while the address is still awaiting one: a sweep of it may have
-/// finalized during the read, taking the nonce with it, and a count read before that would undo the
-/// marks that sweep left. An address whose read fails keeps its unverified nonce and so stays out
-/// of this tick's sweeps. It is not dropped: the next tick reads it again.
+/// What makes a count worth recording is that the record cannot move while it is read: an address
+/// another of whose tokens a sweep still holds is not offered until that sweep finalizes, and one
+/// waiting on a read is offered no new sweep, so no tuple of it can apply in between. The recording
+/// step re-checks that the address is still awaiting a read, since it runs after an await.
+///
+/// An address whose read fails keeps its unverified nonce and so stays out of this tick's sweeps.
+/// It is not dropped: the next tick reads it again.
 async fn verify_deposit_address_nonces<R: CanisterRuntime>(runtime: &R) {
     let unverified = read_state(|s| {
         s.automatic_deposits
