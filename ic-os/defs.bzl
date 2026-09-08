@@ -15,6 +15,7 @@ load("//bazel:defs.bzl", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
+load("//ic-os/guestos:fast_upgrades.bzl", "OVERLAY_BINARIES")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "upgrade_image")
 
 def icos_build(
@@ -24,6 +25,7 @@ def icos_build(
         malicious = False,
         build_alternative_guestos_image = False,
         upgrades = True,
+        fast_upgrades = False,
         vuln_scan = True,
         visibility = None,
         tags = None,
@@ -39,6 +41,7 @@ def icos_build(
       malicious: if True, bundle the `malicious_replica`
       build_alternative_guestos_image: if True, build the proposal-aware alternative GuestOS image variant, e.g. for a recovery
       upgrades: if True, build upgrade images as well
+      fast_upgrades: if True, also build the fast-upgrade overlay. GuestOS only
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
       tags: See Bazel documentation
@@ -48,6 +51,9 @@ def icos_build(
     Returns:
       A struct containing the labels of the images that were built.
     """
+
+    if fast_upgrades and not upgrades:
+        fail("fast_upgrades requires upgrades to be set")
 
     # we "declare" lots of different image combinations, though most of
     # them are not actually used. Because CI jobs make heavy use of '//...'
@@ -500,15 +506,37 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
     if upgrades:
         for test_suffix in ["", "-test"]:
             update_image_tar = "update-img" + test_suffix + ".tar"
+            overlay_out = "overlay" + test_suffix + ".tzst"
+            overlay_files = {
+                binary_label: image_deps["rootfs"][binary_label]
+                for binary_label in OVERLAY_BINARIES
+            } | {
+                "//ic-os/components/guestos/fast-upgrade:restart.list": "/opt/upgrade_metadata/restart.list:0644",
+                "//ic-os/components/guestos/fast-upgrade:extension-release.ic-upgrade": "/usr/lib/extension-release.d/extension-release.ic-upgrade:0644",
+                ":replica_version" + test_suffix + ".txt": "/opt/ic/share/replica_version.txt:0644",
+            }
 
-            upgrade_image(
-                name = update_image_tar,
-                boot_partition = ":partition-boot-alternative.tzst" if build_alternative_guestos_image else ":partition-boot" + test_suffix + ".tzst",
-                root_partition = ":partition-root" + test_suffix + ".tzst",
-                tags = ["manual", "no-cache"],
+            ext4_image(
+                name = overlay_out,
+                extra_files = overlay_files,
+                file_contexts = ":file_contexts",
+                partition_size = "2G",
                 target_compatible_with = ["@platforms//os:linux"],
-                version_file = ":version" + test_suffix + ".txt",
+                tags = ["manual", "no-cache"],
             )
+
+            upgrade_image_kwargs = {
+                "name": update_image_tar,
+                "boot_partition": ":partition-boot-alternative.tzst" if build_alternative_guestos_image else ":partition-boot" + test_suffix + ".tzst",
+                "root_partition": ":partition-root" + test_suffix + ".tzst",
+                "tags": ["manual", "no-cache"],
+                "target_compatible_with": ["@platforms//os:linux"],
+                "version_file": ":version" + test_suffix + ".txt",
+            } | (
+                {"upgrade_overlay": ":" + overlay_out} if fast_upgrades else {}
+            )
+
+            upgrade_image(**upgrade_image_kwargs)
 
             zstd_compress(
                 name = update_image_tar + ".zst",
