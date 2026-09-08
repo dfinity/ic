@@ -5,26 +5,72 @@ change itself.
 
 ## Problem
 
-The ledger's record of what an archive holds is committed in the message *after*
-the append it describes:
+Two canisters are involved, each committing its own state independently, and the
+bug lives in the gap between them.
 
+### Where each side commits
+
+    // in the LEDGER, inside send_blocks_to_archive
     match Rt::call(node, "append_blocks", 0, (chunk,)).await {
-        Ok(()) => num_sent_blocks += chunk_len as usize,   // local var
-        ...
+    //  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the ledger's message ENDS here
+        Ok(()) => num_sent_blocks += chunk_len as usize,
+        Err(..) => return Err((num_sent_blocks, ...)),
     };
+    // ---- everything below runs in a NEW ledger message (the callback) ----
     let heights = inspect_archive(&archive, |a| { ... a.nodes_block_ranges ... });
+    // ... loop for the next chunk, and eventually:
+    //     remove_archived_blocks(num_sent_blocks)
 
-If the ledger traps in that continuation, the archive keeps the blocks while the
-ledger keeps them too and re-sends them next round. Because `block_index_offset`
-is fixed at install and the archive maps global to local by a constant shift,
-a duplicated append makes the archive return the **wrong block for an index**:
-append 0..999 twice then 1000..1999 and a read for global 1500 resolves to
-local 1500, which is the second copy's block 500. Silent bad data on
-`icrc3_get_blocks`, which the index, Rosetta and any chain-verifying client
-would accept.
+* **The archive** runs `append_blocks` as a message in *its own* canister. If it
+  does not trap, its stable-log write commits when that message ends — which is
+  exactly why a reply comes back at all. A reply is proof the archive committed.
+* **The ledger** ends a message at the `.await` and resumes in a *new* one. So
+  `num_sent_blocks` (a local in the future's state), the `nodes_block_ranges`
+  update, and `remove_archived_blocks` all belong to that new message and are not
+  durable until it ends successfully.
+
+At the instant the ledger is executing the callback, then: **the archive has
+committed the blocks, and the ledger has committed nothing about them.**
+
+### What a trap in that callback destroys
+
+The future is dropped, so `num_sent_blocks` is gone; `nodes_block_ranges` is not
+advanced; `remove_archived_blocks` never runs. The ledger therefore still holds
+blocks the archive already has, and re-sends them on the next round.
+
+### Can the ledger tell whether the archive stored them?
+
+Three answers, and the middle one is the problem:
+
+* **In the moment — yes.** The callback *received* `Ok(())`. The ledger has the
+  answer and loses it, because recording it is part of the message that traps.
+* **Afterwards, from its own state — no.** The persisted state is
+  indistinguishable from "the call was never made". Nothing separates *I asked, it
+  worked, and I forgot* from *I never asked*.
+* **Afterwards, by asking the archive — yes.** Which is why `log_length` matters,
+  and why the addressed-appends alternative below is the clean fix: the
+  acknowledgement carries the state, so there is nothing to forget.
+
+Note the contrast that makes this specific. If the call had **failed**, the
+callback receives `Err` and takes the graceful path — count the failure,
+`remove_archived_blocks(num_sent_blocks)` with the count so far, release the
+guard. A graceful failure is distinguishable and handled. It is the
+**success-then-trap** interleaving, and only that, which destroys information.
+
+### Why the re-send is harmful
+
+`block_index_offset` is fixed at the archive's `init` and it maps global to local
+by a constant shift. So appending the same blocks twice shifts every later index:
+append 0..999 twice and then 1000..1999, and a read for global 1500 resolves to
+local 1500, which is the second copy's block 500. Silent bad data from
+`icrc3_get_blocks`, which the index, Rosetta and any chain-verifying client would
+accept.
 
 Spawning archiving off the reply path (DEFI-2967) does not address this. It
 arguably makes it quieter, because no caller sees the reject.
+
+Note what the archive-side check does and does not do: it does not make the fact
+knowable, it makes *not knowing* safe, by refusing the re-send.
 
 ## Approach
 
