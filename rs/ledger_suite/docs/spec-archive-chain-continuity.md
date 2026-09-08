@@ -3,6 +3,27 @@
 Follow-up to DEFI-2967. Separately shippable from the archive-off-reply-path
 change itself.
 
+## What this proposes
+
+A sequence, not a single choice. Only the last step is an open decision, and
+deferring it costs nothing because the first two are needed either way.
+
+| step | what | why it can go first |
+|---|---|---|
+| **1** | **A1 + C1** — the archive refuses appends that do not continue its chain, and counts why | confined to `ic-icrc1-archive`: no shared code, no ledger change, no interface change. Closes the corruption on its own, and its regression test fails today |
+| **2** | **B + D1** — bounded retries, and detection of an archive creation whose outcome was lost | independent of the append protocol, so they survive either answer to step 3, and both apply to both ledgers |
+| **3** | **E _or_ addressed appends** | the only real decision — see below |
+
+D2-D4 are hygiene and can land whenever.
+
+**Step 3 is the choice.** E stops the ledger's bookkeeping from diverging;
+addressed appends (see *Alternative architecture*) instead make a divergence
+*harmless*, and retire E. The recommendation is **addressed appends**: making
+retries idempotent means the whole family of lost-acknowledgement problems stops
+mattering, rather than each being guarded separately, and two sequential releases
+remove the compatibility risk. E is the fallback if there is no appetite for
+touching a deployed protocol — it is small, just narrower in what it buys.
+
 ## Problem
 
 Two canisters are involved, each committing its own state independently, and the
@@ -143,10 +164,11 @@ warrant a different response are both detected without knowing the cause:
 So the cause is wanted for diagnosis, not control flow, and that is why neither
 reject-string matching nor a typed return value is needed here.
 
-**This holds for plan 1 only.** The addressed-appends alternative deliberately
-gives the ledger a cause worth acting on — a `Gap` halts while a duplicate is
-success — so there the ledger *does* branch on it. Not a contradiction: plan 2
-creates a distinction that plan 1 has no use for.
+**This holds for the component set below, not universally.** The
+addressed-appends alternative deliberately gives the ledger a cause worth acting
+on — a `Gap` halts while a duplicate is success — so there the ledger *does*
+branch on it. Not a contradiction: addressed appends create a distinction that
+this design has no use for.
 
 **D. Allocation and observability work on the ledger side.** Four items that are
 independent of each other and of the above, detailed in Components: an in-flight
@@ -665,15 +687,25 @@ better story for timer liveness.
 
 ### Choosing
 
-The two approaches are not exclusive. A1 is shippable on its own and closes the
-corruption; the addressed-appends work can follow and then retire E. The
-trade-off:
+The two are not exclusive, and the choice is narrower than it looks: A1, C1, B
+and D1 are wanted either way, so what is actually being decided is **E versus
+addressed appends** — one component against one protocol change.
 
-* **Current spec**: no interface change, ships in one release, more moving parts,
-  and each part is a workaround whose justification has to be maintained.
-* **Addressed appends**: touches a deployed protocol and needs the two-release
-  rollout, larger to review, but *smaller in concept* — it eliminates the class
-  rather than the instances, and lets four of the components go away.
+* **E**: no interface change, ships in one release, and is genuinely small. But
+  it prevents one specific divergence rather than removing the reason
+  divergences matter, and it leaves a trapped round needing an operator.
+* **Addressed appends**: touches a deployed protocol and needs two sequential
+  releases, larger to review, but *smaller in concept*. Retries become
+  idempotent, so a lost acknowledgement stops being a problem to guard against;
+  gap-versus-duplicate is decided at the archive; resumability comes free; and E
+  is no longer needed.
+
+**Recommended: addressed appends**, on the grounds that it eliminates the class
+rather than the instances. E is the fallback if the appetite for changing a
+deployed protocol is low — it is a good answer to a smaller question.
+
+Either way, ship A1 and C1 first. They close the corruption, need nothing from
+the ledger, and neither answer to this question invalidates them.
 
 ## Adjacent: make the ledger suite's logs readable
 
