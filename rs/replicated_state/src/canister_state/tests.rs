@@ -1183,6 +1183,15 @@ fn outstanding_prepayments_of_aborted_response_execution() {
         .callback(callback_id)
         .unwrap()
         .clone();
+    // The prepayments that the callback carries, i.e. the ones expected below.
+    assert_eq!(
+        callback.prepayment_for_response_execution.nominal(),
+        NominalCycles::new(42)
+    );
+    assert_eq!(
+        callback.prepayment_for_call_transmission.nominal(),
+        NominalCycles::new(168)
+    );
     let response = default_input_response(callback_id, NO_DEADLINE);
 
     let system_state = &mut fixture.canister_state.system_state;
