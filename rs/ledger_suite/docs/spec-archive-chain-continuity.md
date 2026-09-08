@@ -277,10 +277,39 @@ in `init`, so both need code changes for a 2 MB message to take effect.
 
 ### How a round traps, and whether to make it resumable
 
-**What prevention does not do** is make a trapped round resumable. If a round
-dies after appending to a second node, the next round re-sends from
-`num_archived_blocks`, which is now behind that node's offset, so A1 refuses and
-archiving stalls until an operator intervenes. No corruption, but no self-healing.
+**What prevention does not do** is make a trapped round resumable, and in one
+variant it does not prevent corruption either. Both need a **multi-node** round,
+i.e. node 0 filling mid-round — roughly once per 3 GiB of archive — plus a trap
+in a specific window.
+
+Say a round starts at `num_archived_blocks = N` and selects N..N+1999. Chunk 1
+fills node 0; node 1 is then created with offset `N+1000`, correct because
+`sent_so_far` is 1000. Note `nodes.push` commits at that point, while the ranges
+and `num_archived_blocks` do not.
+
+* **Node 1 received chunk 2, then the round died.** The next round restarts at N
+  and sends to `nodes.last()` = node 1, whose tip is N+1999. Block N's parent
+  hash does not match, so A1 refuses and archiving **stalls** until an operator
+  intervenes. No corruption.
+* **Node 1 received nothing before the round died.** The next round restarts at N
+  and sends N..N+999 to node 1, which is **empty** — so it has no tip, the chain
+  check cannot fire, and without an offset check it accepts. Node 1 then holds
+  N..N+999 while its baked-in `block_index_offset` says N+1000, so a read for
+  global N+1000 returns block N. **Silent corruption, permanently**: the offset
+  is written to a stable cell at `init` and the ICRC archive's `post_upgrade()`
+  takes no arguments, so it can never be corrected.
+
+E alone does not close the second case. It keeps the *ledger's* bookkeeping
+self-consistent; it says nothing about a node whose offset was chosen for blocks
+it never received. Closing it needs the offset recorded when the node is created
+— which is legitimate under E, because that offset is already durable in the node
+itself rather than being inferred state — so that the next round can compare
+`nodes.last()`'s offset against its next index and refuse to use a node that does
+not match. An empty range `(offset, offset - 1)` in `nodes_block_ranges`
+represents this without claiming the node holds anything.
+
+Under addressed appends the case cannot arise at all: the first append carries its
+start index, so the archive either adopts it or rejects the mismatch.
 
 The realistic trap sources in a round, once D2 has removed the wasm copies:
 
@@ -359,8 +388,11 @@ idempotency option in this list work properly.
 
 1. An ICRC archive rejects an `append_blocks` whose first block does not
    continue its stored chain, and its stored log is unchanged afterwards.
-2. An empty ICRC archive accepts its first append unconditionally (it has no
-   tip to compare against, and nothing to duplicate).
+2. An empty ICRC archive accepts its first append when that append starts at the
+   index the archive was created for, and refuses it otherwise. It has no tip to
+   compare against, so the chain check cannot help; the offset is the only thing
+   that can be checked, and it must be, because an empty node that accepts the
+   wrong blocks is mis-indexed permanently.
 3. A re-send after a lost ledger continuation is refused rather than stored, so
    no archive ever holds the same block twice and no index resolves to the
    wrong block.
@@ -393,16 +425,18 @@ idempotency option in this list work properly.
 | D2 | stop copying the archive wasm after a commit point | `ledger_canister_core::spawn::install_code` signature, `archive.rs` | `install_code` takes `Vec<u8>`, forcing `archive_wasm().into_owned()`, and `Rt::call` then serialises it again — two multi-MB copies in the continuation after `create_canister` committed. Take `Cow<'static, [u8]>`, pre-reserve the encode buffer before the first await, and `nodes.reserve(1)` |
 | D3 | correct the stale comment at `archive.rs:468-474` | `ledger_canister_core::archive` | it says a panic there "leads to the rolling back of the transaction that triggered the archiving", which stopped being true when archiving was spawned |
 | D4 | make error construction allocation-free, and trim the interpolating log lines | `ledger_canister_core::archive`, `::spawn` | `FailedToArchiveBlocks(pub String)` allocates on every error construction, so an allocation failure there turns a graceful `Err` into a trap: replace it with an enum carrying `Copy` payloads, rendered to text only where it is logged. `Rt::print` takes `impl AsRef<str>`, so non-interpolating messages become `&'static str` for free. **Keep** the canister id in the `create_canister` callback log — canister logs survive traps — verified, `test_appending_logs_in_trapped_update_call` in `rs/execution_environment/tests/canister_logging.rs` asserts the pre-trap `debug_print` persists *and* that the trap gets its own record — so it is the only possible record of an orphan's identity (D1 says one happened, this says which) — but drop the `{result:?}` debug format, which also stringifies the reject message. `reject_message()` borrows a `String` ic-cdk has already allocated, so only our second copy is avoidable |
-| E1 | accumulate per-node counts locally; derive a new node's offset from `num_archived_blocks + sent_so_far`; apply ranges and `remove_archived_blocks` in one message | `ledger_canister_core::archive::send_blocks_to_archive`, `::create_and_initialize_node_canister`, `ledger::archive_blocks` | shared code, so it fixes both ledgers; no archive endpoint and no trait seam |
+| E1 | accumulate per-node counts locally; derive a new node's offset from `num_archived_blocks + sent_so_far`; record that offset when the node is created, so a later round can refuse a node whose offset does not match its next index; apply ranges and `remove_archived_blocks` in one message | `ledger_canister_core::archive::send_blocks_to_archive`, `::create_and_initialize_node_canister`, `ledger::archive_blocks` | shared code, so it fixes both ledgers; no archive endpoint and no trait seam |
 
 A1 and C1 are confined to `ic-icrc1-archive`. B1-B3, D1-D4 and E1 are in shared
 ledger code and therefore affect both ledgers; see Decisions 3.
 
 ## Edge cases
 
-* **Empty archive.** No tip; must accept. It therefore cannot detect a gap at a
-  node boundary — but E makes a gap impossible in the first place, and an empty
-  archive has nothing to duplicate, so nothing is lost by accepting.
+* **Empty archive.** No tip, so the chain check cannot fire. It has nothing to
+  duplicate, but it *can* be mis-indexed: a node created for index X that is later
+  handed blocks starting at Y < X is wrong forever, because the offset is
+  immutable. So an empty archive must check the offset even though it cannot check
+  the chain — see the multi-node case under E.
 * **Genesis.** Block 0's `parent_hash` is `None`; an empty archive accepting it
   is the normal path.
 * **New node mid-round.** After the first append the node has a tip, so a
