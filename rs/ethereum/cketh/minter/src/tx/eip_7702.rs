@@ -89,6 +89,10 @@ impl AuthorizationRequest {
         self.account
     }
 
+    pub fn chain_id(&self) -> u64 {
+        self.chain_id
+    }
+
     pub fn delegate(&self) -> Address {
         self.delegate
     }

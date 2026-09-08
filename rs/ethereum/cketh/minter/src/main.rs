@@ -1380,6 +1380,18 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Number of stored delegation authorizations a finalized sweep applied on chain.",
                 )?;
 
+                w.encode_gauge(
+                    "cketh_minter_unverified_deposit_address_nonces",
+                    s.automatic_deposits.unverified_nonces_len() as f64,
+                    "Number of deposit addresses whose nonce a reverted sweep left to be read back off the chain.",
+                )?;
+
+                w.encode_gauge(
+                    "cketh_minter_unresolved_deposit_address_nonces",
+                    s.automatic_deposits.unresolved_nonces_len() as f64,
+                    "Number of deposit addresses whose nonce was read back but could not be squared with the record, and which are therefore out of every sweep.",
+                )?;
+
                 w.encode_counter(
                     "cketh_minter_sweeper_funding_cketh_burned_total",
                     s.sweeper_funding.cumulative_burned().as_f64(),

@@ -14,7 +14,6 @@ mod tests;
 
 use crate::asset::Asset;
 use crate::attestation::{AttestationRequest, sign_attestation};
-use crate::deposit_address::DepositAddress;
 use crate::sweeper_contract::SweepItem;
 use crate::{
     deposit_address::AddressSchema,
@@ -44,7 +43,6 @@ use evm_rpc_types::TransactionReceipt as EvmTransactionReceipt;
 use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
-use icrc_ledger_types::icrc1::account::Account;
 use std::collections::{BTreeMap, BTreeSet};
 
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
@@ -74,6 +72,10 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         return;
     }
 
+    // Before the batch is built, not after: an address whose nonce is unverified is left out of
+    // it, so a queue holding nothing else would otherwise never be read back and never recover.
+    verify_deposit_address_nonces(runtime).await;
+
     let batch_per_asset =
         read_state(|s| s.automatic_deposits.requests_batch(MAX_DEPOSITS_PER_SWEEP));
     if batch_per_asset.is_empty() {
@@ -87,8 +89,6 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         );
         return;
     };
-
-    verify_deposit_address_nonces(&batch_per_asset, runtime).await;
 
     for (asset, targets) in batch_per_asset {
         let Some(attestation_requests) = read_state(|s| s.attestation_requests(&targets)) else {
@@ -112,24 +112,21 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
     }
 }
 
-/// Re-anchors on the chain the record of every deposit address in `batches` whose nonce a reverted
-/// sweep left unverified: its transaction count is what the minter's own tuples advanced, so
-/// reading it back says which of them the chain applied.
+/// Re-anchors on the chain the record of every queued deposit address whose nonce a reverted sweep
+/// left unverified: its transaction count is what the minter's own tuples advanced, so reading it
+/// back says which of them the chain applied.
 ///
-/// An address whose read fails, or whose record the nonce read back cannot resolve, keeps its
-/// unverified nonce and so stays out of this tick's sweeps. It is not dropped: the next tick tries
-/// it again.
-async fn verify_deposit_address_nonces<R: CanisterRuntime>(
-    batches: &BTreeMap<Asset, Vec<SweepTarget>>,
-    runtime: &R,
-) {
-    let unverified: BTreeMap<Account, DepositAddress> = read_state(|s| {
-        batches
-            .values()
-            .flatten()
-            .filter(|target| s.automatic_deposits.has_unverified_nonce(&target.account()))
-            .map(|target| (target.account(), target.address()))
-            .collect()
+/// The count is read at `finalized`, not `latest`: every other mark on the record comes from a
+/// finalized receipt, so an anchor read one block deeper than those could be reorged out from under
+/// the marks it just rewrote. That is also why the read demands every provider agree
+/// ([`finalized_transaction_count`]) rather than taking the lowest count offered.
+///
+/// An address whose read fails keeps its unverified nonce and so stays out of this tick's sweeps.
+/// It is not dropped: the next tick reads it again.
+async fn verify_deposit_address_nonces<R: CanisterRuntime>(runtime: &R) {
+    let unverified = read_state(|s| {
+        s.automatic_deposits
+            .deposit_addresses_awaiting_a_nonce_read()
     });
     if unverified.is_empty() {
         return;
@@ -138,14 +135,19 @@ async fn verify_deposit_address_nonces<R: CanisterRuntime>(
     let observed = join_all(unverified.into_iter().map(|(account, address)| async move {
         (
             account,
-            latest_transaction_count(*address.as_address()).await,
+            finalized_transaction_count(*address.as_address()).await,
         )
     }))
     .await;
 
     for (account, transaction_count) in observed {
         match transaction_count {
-            Some(transaction_count) => mutate_state(|s| {
+            Ok(transaction_count) => mutate_state(|s| {
+                // A sweep of this address may have finalized while the read was in flight, taking
+                // the nonce with it; recording a count read before that would undo its marks.
+                if !s.automatic_deposits.has_unverified_nonce(&account) {
+                    return;
+                }
                 process_event(
                     s,
                     EventType::ObservedDepositAddressNonce {
@@ -155,9 +157,9 @@ async fn verify_deposit_address_nonces<R: CanisterRuntime>(
                     runtime,
                 )
             }),
-            None => log!(
+            Err(e) => log!(
                 INFO,
-                "[create_pending_sweeper_requests]: leaving out {account:?}: its deposit address' nonce could not be read back, so which tuples the sweep that reverted on it applied is still unknown"
+                "[create_pending_sweeper_requests]: leaving out {account:?}: its deposit address' nonce could not be read back ({e:?}), so which tuples the sweep that reverted on it applied is still unknown"
             ),
         }
     }
@@ -201,7 +203,7 @@ fn enqueue_sweep<R: CanisterRuntime>(
                         Some(request.signed_with(signature))
                     }
                     SweepAuthorization::AlreadyDelegated => None,
-                    SweepAuthorization::NonceUnverified => return None,
+                    SweepAuthorization::NonceUnknown => return None,
                 };
                 Some(AuthorizedSweepItem {
                     item: SweepItem {
@@ -303,7 +305,7 @@ async fn sign_authorizations_batch<R: CanisterRuntime>(
             .into_iter()
             .filter_map(|authorization| match authorization {
                 SweepAuthorization::Required(request) => Some(request),
-                SweepAuthorization::AlreadyDelegated | SweepAuthorization::NonceUnverified => None,
+                SweepAuthorization::AlreadyDelegated | SweepAuthorization::NonceUnknown => None,
             })
             .filter(|request| s.automatic_deposits.authorization(request).is_none())
             .collect()

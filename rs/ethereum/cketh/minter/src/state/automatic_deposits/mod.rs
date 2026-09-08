@@ -91,6 +91,12 @@ pub struct AutomaticDeposits {
     /// on it ([`Self::record_observed_deposit_address_nonce`]) any further tuple would be signed
     /// for a guessed nonce, so the address is left out of every sweep.
     unverified_nonces: BTreeSet<Account>,
+    /// The accounts whose deposit address' nonce was read back but could not be squared with the
+    /// record. They are held apart from [`Self::unverified_nonces`] so that they are never read
+    /// again: a second read returns the same nonce and explains no more than the first, and paying
+    /// for one every tick, forever, per stuck address, is what that would cost. They stay out of
+    /// every sweep until an operator sorts them out.
+    unresolved_nonces: BTreeSet<Account>,
     /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
     /// its own nonce sequence, independent of the main-address withdrawal pipeline.
     sweeper_transactions: SweeperTransactionPipeline,
@@ -257,6 +263,7 @@ impl AutomaticDeposits {
             attestations,
             authorizations,
             unverified_nonces,
+            unresolved_nonces,
             sweeper_transactions,
         } = self;
 
@@ -265,6 +272,7 @@ impl AutomaticDeposits {
         ensure_eq!(attestations, &other.attestations);
         ensure_eq!(authorizations, &other.authorizations);
         ensure_eq!(unverified_nonces, &other.unverified_nonces);
+        ensure_eq!(unresolved_nonces, &other.unresolved_nonces);
         sweeper_transactions.is_equivalent_to(&other.sweeper_transactions)
     }
 
@@ -323,18 +331,26 @@ impl AutomaticDeposits {
             })
     }
 
-    /// The tuple already signed for `account` at `nonce` that no sweep has applied yet, whatever
-    /// delegate it names. It is the one the chain will apply at that nonce, so a sweep re-carries
-    /// it rather than signing another: the minter holds at most one signed tuple per
-    /// `(deposit address, nonce)`, and two would leave which delegate the address ends up on to
-    /// the order the sweeps carrying them happen to mine in.
+    /// The tuple already signed for `account` on `chain_id` at `nonce` that no sweep has applied
+    /// yet, whatever delegate it names. It is the one that chain will apply at that nonce, so a
+    /// sweep re-carries it rather than signing another: the minter holds at most one signed tuple
+    /// per `(deposit address, chain, nonce)`, and two would leave which delegate the address ends
+    /// up on to the order the sweeps carrying them happen to mine in.
+    ///
+    /// A signature is only usable for the chain its tuple names, so tuples recorded for another
+    /// chain are no answer here however their nonce reads.
     pub fn unapplied_authorization_at(
         &self,
         account: &Account,
+        chain_id: u64,
         nonce: TransactionNonce,
     ) -> Option<&AuthorizationRequest> {
         self.authorizations_of(account)
-            .find(|(request, stored)| request.nonce() == nonce && stored.applied_by.is_none())
+            .find(|(request, stored)| {
+                request.chain_id() == chain_id
+                    && request.nonce() == nonce
+                    && stored.applied_by.is_none()
+            })
             .map(|(request, _stored)| request)
     }
 
@@ -374,20 +390,53 @@ impl AutomaticDeposits {
     }
 
     /// Whether a reverted sweep has left the minter unable to say which of the tuples it signed
-    /// for `account`'s deposit address the chain applied, and so what nonce that address stands at.
+    /// for `account`'s deposit address the chain applied, so that address' nonce is still to be
+    /// read back off the chain.
     pub fn has_unverified_nonce(&self, account: &Account) -> bool {
         self.unverified_nonces.contains(account)
     }
 
+    /// Whether the minter can say what nonce `account`'s deposit address stands at, which is what
+    /// every tuple it signs for that address depends on. False while the nonce is waiting to be
+    /// read back, and once a read has come back that the record cannot be squared with.
+    pub fn has_trusted_nonce(&self, account: &Account) -> bool {
+        !self.unverified_nonces.contains(account) && !self.unresolved_nonces.contains(account)
+    }
+
+    /// The deposit addresses of the accounts whose nonce is waiting to be read back *and* have
+    /// funds queued for sweeping, so a tick pays for the reads it could act on and no others.
+    pub fn deposit_addresses_awaiting_a_nonce_read(&self) -> BTreeMap<Account, DepositAddress> {
+        self.sweep
+            .iter()
+            .filter(|(request, _entry)| self.unverified_nonces.contains(&request.account))
+            .map(|(request, entry)| (request.account, entry.address))
+            .collect()
+    }
+
+    pub fn unverified_nonces_len(&self) -> usize {
+        self.unverified_nonces.len()
+    }
+
+    pub fn unresolved_nonces_len(&self) -> usize {
+        self.unresolved_nonces.len()
+    }
+
     /// Re-anchor the record of `account`'s deposit address on `observed`, the nonce the chain says
-    /// it stands at, and mark that nonce verified again.
+    /// it stands at, and trust that address' nonce again.
     ///
     /// The minter signs at most one tuple per `(deposit address, nonce)` and holds the address'
     /// only key, so `observed` alone says which of them the chain applied: those signed for a nonce
-    /// below it, and no other. Where the address nonetheless holds two tuples at one nonce — state
-    /// from before that rule — the one already marked applied stays the answer; if neither is, the
-    /// observed nonce cannot tell them apart, so nothing is re-anchored and the address stays
-    /// unverified, out of every sweep, until an operator sorts it out.
+    /// below it, and no other.
+    ///
+    /// Two observations say instead that the record is beyond arithmetic, and leave the address
+    /// *unresolved* — out of every sweep, and never read again, since a further read would report
+    /// the same nonce and explain no more:
+    ///
+    /// * a nonce above every tuple the minter signed, which nothing it did could have taken the
+    ///   address to, so the record must be missing tuples;
+    /// * two unapplied tuples at one nonce below `observed` — state from before the
+    ///   one-tuple-per-nonce rule — which the nonce cannot tell apart. Where one of them is already
+    ///   marked applied, that one stays the answer and the record is re-anchored as usual.
     pub fn record_observed_deposit_address_nonce(
         &mut self,
         account: Account,
@@ -405,13 +454,32 @@ impl AutomaticDeposits {
             }
         }
 
+        let highest_explainable =
+            signed_at
+                .keys()
+                .next_back()
+                .map_or(TransactionNonce::ZERO, |highest| {
+                    highest
+                        .checked_increment()
+                        .expect("BUG: authorization nonce space exhausted")
+                });
+        if observed > highest_explainable {
+            log!(
+                INFO,
+                "[record_observed_deposit_address_nonce]: LEAVING {account:?} unresolved: its deposit address stands at nonce {observed}, above the {highest_explainable} the tuples the minter signed for it could have reached, so the record is missing tuples."
+            );
+            self.leave_nonce_unresolved(account);
+            return;
+        }
+
         let mut applied = BTreeSet::new();
         for (nonce, tuples) in signed_at.range(..observed) {
             let Some(request) = tuple_the_chain_applied(tuples, &already_applied) else {
                 log!(
                     INFO,
-                    "[record_observed_deposit_address_nonce]: LEAVING {account:?} out of every sweep: its deposit address stands at nonce {observed}, but the tuples signed for its nonce {nonce} are several and none is marked applied, so the observed nonce cannot say which of them the chain applied."
+                    "[record_observed_deposit_address_nonce]: LEAVING {account:?} unresolved: its deposit address stands at nonce {observed}, but the tuples signed for its nonce {nonce} are several and none is marked applied, so the observed nonce cannot say which of them the chain applied."
                 );
+                self.leave_nonce_unresolved(account);
                 return;
             };
             applied.insert(request.clone());
@@ -429,6 +497,14 @@ impl AutomaticDeposits {
             };
         }
         self.unverified_nonces.remove(&account);
+        self.unresolved_nonces.remove(&account);
+    }
+
+    /// Stop reading `account`'s deposit address' nonce and keep it out of every sweep: the read
+    /// already made explains nothing the record can act on, and another would say the same.
+    fn leave_nonce_unresolved(&mut self, account: Account) {
+        self.unverified_nonces.remove(&account);
+        self.unresolved_nonces.insert(account);
     }
 
     /// Arm the `(account, asset)` pair, whose deposit `address` is derived for `account`.
@@ -715,11 +791,16 @@ impl AutomaticDeposits {
 
     /// The queued deposits a sweep could take next, batched by asset, skipping those a sweep
     /// already holds: taking them twice would move a balance the minter has already accounted for.
+    ///
+    /// Deposits of an address whose nonce the minter cannot vouch for are skipped too, and take no
+    /// slot in their asset's batch: no sweep can carry them until that nonce is settled, and
+    /// leaving them in would let a handful of stuck addresses hold back every healthy one queued
+    /// behind them.
     pub fn requests_batch(&self, requested_batch_size: usize) -> BTreeMap<Asset, Vec<SweepTarget>> {
         let mut batches = BTreeMap::new();
-        for (deposit_request, sweep_entry) in
-            self.sweep.iter().filter(|(_, entry)| entry.is_sweepable())
-        {
+        for (deposit_request, sweep_entry) in self.sweep.iter().filter(|(request, entry)| {
+            entry.is_sweepable() && self.has_trusted_nonce(&request.account)
+        }) {
             let batch: &mut Vec<_> = batches.entry(deposit_request.asset).or_default();
             if batch.len() < requested_batch_size {
                 batch.push(SweepTarget {
@@ -767,6 +848,7 @@ impl Default for AutomaticDeposits {
             attestations: BTreeMap::new(),
             authorizations: BTreeMap::new(),
             unverified_nonces: BTreeSet::new(),
+            unresolved_nonces: BTreeSet::new(),
             sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
         }
     }
