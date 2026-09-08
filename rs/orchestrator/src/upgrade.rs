@@ -3159,6 +3159,7 @@ mod tests {
             node_id,
             subnet_type: SubnetType::Application,
             current_replica_version: current_replica_version.clone(),
+            guestos_version: None,
             has_local_cup: Some(CUPScenario {
                 height: local_cup_height,
                 subnet_id: SOURCE_SUBNET_ID,
@@ -3270,6 +3271,7 @@ mod tests {
             node_id,
             subnet_type: SubnetType::Application,
             current_replica_version: current_replica_version.clone(),
+            guestos_version: None,
             has_local_cup: Some(CUPScenario {
                 height: Height::from(100),
                 subnet_id: SOURCE_SUBNET_ID,
@@ -3429,6 +3431,7 @@ mod tests {
             node_id,
             subnet_type: SubnetType::Application,
             current_replica_version: current_replica_version.clone(),
+            guestos_version: None,
             has_local_cup: Some(CUPScenario {
                 height: local_cup_height,
                 subnet_id: SOURCE_SUBNET_ID,
@@ -3599,6 +3602,7 @@ mod tests {
             node_id,
             subnet_type: SubnetType::Application,
             current_replica_version: current_replica_version.clone(),
+            guestos_version: None,
             has_local_cup: Some(CUPScenario {
                 height: Height::from(100),
                 subnet_id: SOURCE_SUBNET_ID,
