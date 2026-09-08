@@ -1,3 +1,4 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:defs.bzl", "write_stable_status_file_var")
 load("//ic-os/components/conformance_tests:defs.bzl", "check_unused_components_test")
 load("guestos.bzl", guestos_component_files = "component_files")
@@ -58,6 +59,7 @@ ignored_repo_components = [
     "misc/serial-getty@/guestos-prod/override.conf",
     "hostos/misc/grub-upgrader/grub-upgrader.sh",
     "hostos/misc/grub-upgrader/grub-upgrader.service",
+    "monitoring/hostos/test-monitor-guestos.sh",
 ]
 
 check_unused_components_test(
@@ -65,4 +67,20 @@ check_unused_components_test(
     ignored_repo_components = ignored_repo_components,
     repo_components = REPO_COMPONENTS,
     used_components = used_components.keys(),
+)
+
+# Checks that monitor-guestos.sh observes exactly the GuestOS VMs that
+# start-guestos.sh boots, so that a per-reward-type VM count or slot numbering
+# changed in one of them cannot silently diverge from the other.
+sh_test(
+    name = "test_monitor_guestos",
+    srcs = ["monitoring/hostos/test-monitor-guestos.sh"],
+    args = [
+        "$(execpath monitoring/hostos/monitor-guestos.sh)",
+        "$(execpath hostos/guestos/start-guestos.sh)",
+    ],
+    data = [
+        "hostos/guestos/start-guestos.sh",
+        "monitoring/hostos/monitor-guestos.sh",
+    ],
 )
