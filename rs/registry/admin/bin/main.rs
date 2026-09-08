@@ -4962,14 +4962,6 @@ async fn main() {
             println!("{}", serde_json::to_string_pretty(&value).unwrap());
         }
         SubCommand::GetStandardEngineReplicaVersion => {
-            // The proto type does not derive Serialize.
-            #[derive(Debug, Serialize)]
-            struct StandardEngineReplicaVersion {
-                new_replica_version_id: String,
-                old_replica_version_id: String,
-                deployment_progress: f64,
-            }
-
             let key = make_standard_engine_replica_version_record_key();
             match registry_canister
                 .get_value_with_update(key.as_bytes().to_vec(), None)
@@ -4978,11 +4970,6 @@ async fn main() {
                 Ok((bytes, version)) => {
                     let record = StandardEngineReplicaVersionRecord::decode(&bytes[..])
                         .expect("Error decoding value from registry.");
-                    let record = StandardEngineReplicaVersion {
-                        new_replica_version_id: record.new_replica_version_id,
-                        old_replica_version_id: record.old_replica_version_id,
-                        deployment_progress: record.deployment_progress,
-                    };
                     print_value(&key, version, record, opts.json);
                 }
                 Err(Error::KeyNotPresent(_)) if opts.json => {
@@ -4996,9 +4983,7 @@ async fn main() {
                          replica version has been set yet."
                     );
                 }
-                Err(error) => {
-                    panic!("Error getting value from registry: {error:?}");
-                }
+                Err(error) => panic!("Error getting value from registry: {error:?}"),
             }
         }
         SubCommand::GetGuestOSVersion(get_guestos_version_cmd) => {
