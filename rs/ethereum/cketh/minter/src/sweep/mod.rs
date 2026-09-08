@@ -22,7 +22,7 @@ use crate::{
     numeric::TransactionCount,
     runtime::CanisterRuntime,
     state::{
-        State, TaskType,
+        State, SweepAuthorization, TaskType,
         audit::{EventType, process_event},
         automatic_deposits::SweepTarget,
         mutate_state, read_state,
@@ -32,7 +32,7 @@ use crate::{
         },
     },
     time::TimeProvider,
-    tx::{AuthorizationRequest, GasFeeEstimate, lazy_refresh_gas_fee_estimate, sign_digest},
+    tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate, sign_digest},
     withdraw::{
         fetch_finalized_receipts, finalized_transaction_count, latest_transaction_count,
         send_signed_transactions,
@@ -103,11 +103,7 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
             return;
         };
         sign_attestations_batch(attestation_requests, runtime).await;
-        sign_authorizations_batch(
-            authorization_requests.into_iter().flatten().collect(),
-            runtime,
-        )
-        .await;
+        sign_authorizations_batch(authorization_requests, runtime).await;
         enqueue_sweep(asset, &targets, &gas_fee_estimate, runtime);
     }
 }
@@ -141,14 +137,14 @@ fn enqueue_sweep<R: CanisterRuntime>(
             .iter()
             .zip(attestation_requests)
             .zip(authorization_requests)
-            .filter_map(|((target, attestation_request), authorization_request)| {
+            .filter_map(|((target, attestation_request), sweep_authorization)| {
                 let attestation = s.automatic_deposits.attestation(&attestation_request)?;
-                let authorization = match authorization_request {
-                    Some(request) => {
+                let authorization = match sweep_authorization {
+                    SweepAuthorization::Required(request) => {
                         let signature = s.automatic_deposits.authorization(&request)?.clone();
                         Some(request.signed_with(signature))
                     }
-                    None => None,
+                    SweepAuthorization::AlreadyDelegated => None,
                 };
                 Some(AuthorizedSweepItem {
                     item: SweepItem {
@@ -234,18 +230,23 @@ async fn sign_attestations_batch<R: CanisterRuntime>(
     }
 }
 
-/// Signs the authorizations in `requests` that the minter has not signed before, recording each so
-/// a later sweep of the same address reuses it.
+/// Signs the authorizations `authorizations` requires and the minter has not signed before,
+/// recording each so a later sweep of the same address reuses it. An address already delegated
+/// requires none, and so costs no threshold signature.
 ///
 /// A request names the chain, the delegate and the nonce it authorizes, so re-pointing the minter
 /// at another sweeper contract misses the recorded ones and signs afresh.
 async fn sign_authorizations_batch<R: CanisterRuntime>(
-    requests: Vec<AuthorizationRequest>,
+    authorizations: Vec<SweepAuthorization>,
     runtime: &R,
 ) {
     let requests_to_sign: BTreeSet<_> = read_state(|s| {
-        requests
+        authorizations
             .into_iter()
+            .filter_map(|authorization| match authorization {
+                SweepAuthorization::Required(request) => Some(request),
+                SweepAuthorization::AlreadyDelegated => None,
+            })
             .filter(|request| s.automatic_deposits.authorization(request).is_none())
             .collect()
     });
