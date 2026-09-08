@@ -28,7 +28,7 @@ use phantom_newtype::Id;
 
 /// Constructs a genesis/recovery CUP from the CUP contents associated with the given subnet from
 /// the provided CUP contents.
-/// Registry CUPs intended for subnet splitting are explicitely excluded here as they are used for a
+/// Registry CUPs intended for subnet splitting are explicitly excluded here as they are used for a
 /// different purpose, directly by Consensus
 pub fn make_registry_cup_from_cup_contents(
     registry: &dyn RegistryClient,
