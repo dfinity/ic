@@ -16,8 +16,7 @@ zip
 libtool
 
 # Needed by the AFLplusplus build
-# TODO: remove comment. This is just to check the build really fails!
-# zlib1g-dev
+zlib1g-dev
 
 # RUST
 pkg-config
