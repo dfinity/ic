@@ -23,7 +23,7 @@ use ic_types::{
 };
 use messages::Messages;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
-use std::cmp::Reverse;
+use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom, TryInto};
 use std::sync::Arc;
@@ -1440,7 +1440,7 @@ impl CertifiedSlicePool {
     }
 
     /// Garbage collects the provided slice and pools the rest, iff more useful than
-    /// the already pooled slice (see `usefulness()`).
+    /// the already pooled slice (see `compare_usefulness()`).
     ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
     /// `unpacked` is malformed.
@@ -1462,10 +1462,10 @@ impl CertifiedSlicePool {
             };
         }
 
-        // Retain the more useful slice (`unpacked` vs already pooled), in case e.g.
-        // `unpacked` came from a lagging node.
+        // If there's a pooled slice, only replace it if `unpacked` is more useful (i.e.
+        // has more messages or signals).
         if let Some(pooled) = self.slices.get(&subnet_id)
-            && usefulness(pooled, stream_position) >= usefulness(&unpacked, stream_position)
+            && compare_usefulness(pooled, &unpacked, stream_position).is_ge()
         {
             self.metrics.observe_put(STATUS_LESS_USEFUL);
         } else {
@@ -1597,8 +1597,7 @@ fn witness_count_bytes(
         + pruned_nodes_bytes + known_nodes_bytes + fork_nodes_bytes
 }
 
-/// Returns a measure of how useful a slice is, as a tuple for lexicographic
-/// comparison:
+/// Compares two slices by how useful they are, in decreasing order of weight:
 ///
 ///  * First useful (beyond `stream_position`) message index: a slice beginning
 ///    after it may not have the messages to satisfy the next `take_slice()`.
@@ -1614,31 +1613,35 @@ fn witness_count_bytes(
 ///
 /// Safety never enters into it: the slice has been certified by its source
 /// subnet. The only question is which of two slices is worth holding on to.
-fn usefulness(
-    slice: &UnpackedStreamSlice,
+fn compare_usefulness(
+    lhs: &UnpackedStreamSlice,
+    rhs: &UnpackedStreamSlice,
     stream_position: Option<&ExpectedIndices>,
-) -> (
-    Option<Reverse<StreamIndex>>,
-    Option<StreamIndex>,
-    StreamIndex,
-    StreamIndex,
-) {
-    let messages_begin = match (slice.payload.messages_begin(), stream_position) {
-        (Some(messages_begin), Some(stream_position)) => {
-            // The latest of the slice's begin and the expected message index.
-            Some(messages_begin.max(stream_position.message_index))
-        }
+) -> Ordering {
+    let first_useful_message = |slice: &UnpackedStreamSlice| {
+        match (slice.payload.messages_begin(), stream_position) {
+            (Some(messages_begin), Some(stream_position)) => {
+                Some(messages_begin.max(stream_position.message_index))
+            }
 
-        // No messages or no stream position, go with the slice's begin, if any.
-        _ => slice.payload.messages_begin(),
+            // No messages or no stream position, go with the slice's begin, if any.
+            (messages_begin, _) => messages_begin,
+        }
     };
 
-    (
-        messages_begin.map(Reverse), // Reversed: earlier begin is more useful.
-        slice.payload.messages_end(),
-        slice.payload.header.signals_end(),
-        slice.payload.header.begin(),
-    )
+    // `Reverse` goes inside the `Option`: an earlier begin is more useful, but a
+    // slice with no messages at all is the least useful.
+    first_useful_message(lhs)
+        .map(Reverse)
+        .cmp(&first_useful_message(rhs).map(Reverse))
+        .then_with(|| lhs.payload.messages_end().cmp(&rhs.payload.messages_end()))
+        .then_with(|| {
+            lhs.payload
+                .header
+                .signals_end()
+                .cmp(&rhs.payload.header.signals_end())
+        })
+        .then_with(|| lhs.payload.header.begin().cmp(&rhs.payload.header.begin()))
 }
 
 /// Decodes the certified stream slice coming from `subnet_id` and validates
