@@ -1349,8 +1349,7 @@ async fn should_offer_no_sweep_of_an_address_whose_nonce_is_not_trusted() {
     let (mut deposits, request) =
         deposits_with_enqueued_sweep(&[(account(0), usdc()), (account(1), usdc())]).await;
     finalize_sweep(&mut deposits, &request, TransactionStatus::Failure);
-    // A reverted sweep drops the deposits it held, so queue them as a re-armed pair would be.
-    queue(&mut deposits, &[(account(0), usdc()), (account(1), usdc())]);
+    rearm(&mut deposits, &[(account(0), usdc()), (account(1), usdc())]);
     assert_eq!(accounts_in(&deposits.requests_batch(10), usdc()), vec![]);
 
     deposits.record_observed_deposit_address_nonce(account(0), TransactionNonce::ONE);
@@ -1620,6 +1619,12 @@ fn queued(pairs: &[(Account, Address)]) -> AutomaticDeposits {
     queue(&mut deposits, pairs);
     assert_eq!(deposits.sweep_len(), pairs.len());
     deposits
+}
+
+/// Queue these pairs again, as arming them afresh does. What a reverted sweep's deposits need
+/// before any test can offer them for sweeping again: failing dropped them from the queue.
+fn rearm(deposits: &mut AutomaticDeposits, pairs: &[(Account, Address)]) {
+    queue(deposits, pairs);
 }
 
 fn queue(deposits: &mut AutomaticDeposits, pairs: &[(Account, Address)]) {

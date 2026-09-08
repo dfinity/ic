@@ -72,8 +72,6 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         return;
     }
 
-    // Before the batch is built, not after: an address whose nonce is unverified is left out of
-    // it, so a queue holding nothing else would otherwise never be read back and never recover.
     verify_deposit_address_nonces(runtime).await;
 
     let batch_per_asset =
@@ -116,13 +114,19 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
 /// left unverified: its transaction count is what the minter's own tuples advanced, so reading it
 /// back says which of them the chain applied.
 ///
+/// Runs before the sweep batch is built rather than over it: such an address is left out of that
+/// batch, so a queue holding nothing else would produce an empty one, and a tick that gave up on
+/// an empty batch would never read the nonce back and never recover.
+///
 /// The count is read at `finalized`, not `latest`: every other mark on the record comes from a
 /// finalized receipt, so an anchor read one block deeper than those could be reorged out from under
 /// the marks it just rewrote. That is also why the read demands every provider agree
 /// ([`finalized_transaction_count`]) rather than taking the lowest count offered.
 ///
-/// An address whose read fails keeps its unverified nonce and so stays out of this tick's sweeps.
-/// It is not dropped: the next tick reads it again.
+/// A count is only recorded while the address is still awaiting one: a sweep of it may have
+/// finalized during the read, taking the nonce with it, and a count read before that would undo the
+/// marks that sweep left. An address whose read fails keeps its unverified nonce and so stays out
+/// of this tick's sweeps. It is not dropped: the next tick reads it again.
 async fn verify_deposit_address_nonces<R: CanisterRuntime>(runtime: &R) {
     let unverified = read_state(|s| {
         s.automatic_deposits
@@ -143,8 +147,6 @@ async fn verify_deposit_address_nonces<R: CanisterRuntime>(runtime: &R) {
     for (account, transaction_count) in observed {
         match transaction_count {
             Ok(transaction_count) => mutate_state(|s| {
-                // A sweep of this address may have finalized while the read was in flight, taking
-                // the nonce with it; recording a count read before that would undo its marks.
                 if !s.automatic_deposits.has_unverified_nonce(&account) {
                     return;
                 }

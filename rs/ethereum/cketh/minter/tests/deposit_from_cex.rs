@@ -989,6 +989,9 @@ fn should_rotate_a_delegated_address_onto_a_newly_configured_delegate() {
 /// finalized a failure, so it can no longer say which of the tuples it signed the chain installed.
 /// Before either address is swept again the minter must read the deposit address' nonce back off
 /// the chain, record it, and rotate from there.
+///
+/// The reverted sweep moved nothing, so the balance is still sitting at the deposit address:
+/// re-registering the pair is all it takes for the minter to see it again.
 #[test]
 fn should_repair_a_reverted_sweep_by_reading_the_deposit_address_nonce_back() {
     const DEPOSIT_SUBACCOUNT: [u8; 32] = [11; 32];
@@ -1040,13 +1043,10 @@ fn should_repair_a_reverted_sweep_by_reading_the_deposit_address_nonce_back() {
 
     setup.rotate_delegate_to(&current_delegate);
 
-    // The reverted sweep moved nothing, so the balance is still at the address: re-arming the pair
-    // is all it takes for the minter to see it again.
     let (setup, re_registrations) = setup
         .call_minter_deposit_erc20([plan])
         .expect_deposit_responses();
     assert_eq!(re_registrations[0].address, address);
-    // Only the second sweep is asserted on here: the first is the one that reverted.
     let (setup, sweeps) = setup.await_sweeps(&sweeper, 2).into_sweeps();
     let repair = &sweeps[1];
     assert_eq!(repair.transaction_type, DELEGATING_SWEEP_TRANSACTION_TYPE);
