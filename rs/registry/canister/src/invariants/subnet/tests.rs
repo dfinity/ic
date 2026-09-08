@@ -217,7 +217,7 @@ fn elect_replica_version(
     snapshot.insert(
         make_replica_version_key(replica_version_id).into_bytes(),
         ReplicaVersionRecord {
-            replica_version_id: Some(replica_version_id.to_string()),
+            replica_version_id: replica_version_id.to_string(),
             release_package_sha256_hex:
                 "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D".to_string(),
             release_package_urls: vec!["https://example.com/release_package.tar.zst".to_string()],
