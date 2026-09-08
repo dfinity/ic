@@ -237,9 +237,12 @@ and `num_archived_blocks` do not.
   and sends N..N+999 to node 1, which is **empty** — so it has no tip, the chain
   check cannot fire, and without an offset check it accepts. Node 1 then holds
   N..N+999 while its baked-in `block_index_offset` says N+1000, so a read for
-  global N+1000 returns block N. **Silent corruption, permanently**: the offset
-  is written to a stable cell at `init` and the ICRC archive's `post_upgrade()`
-  takes no arguments, so it can never be corrected.
+  global N+1000 returns block N. **Silent corruption, and nothing deployed can
+  correct it**: the offset lives in a stable cell written at `init`
+  (`icrc1/archive/src/main.rs:84, 173`) and `post_upgrade()` takes no arguments
+  (`:212`). That is a property of the current code rather than a law — see
+  *Repairing a mis-indexed archive*, which is possible but needs new code on both
+  sides and a hand-computed value.
 
 Keeping the ledger's own bookkeeping consistent is not enough to close the second
 case: it says nothing about a node whose offset was chosen for blocks it never
@@ -631,7 +634,8 @@ option in this list the mechanism rather than a dead end.
   its position on every append rather than the ledger polling for it — no extra
   round trip, and nothing to forget. Repair would also have needed a new
   block-count endpoint on the ICP archive, which E does not. Repair remains the only
-  way to fix a ledger that has *already* diverged. Judged not to apply — not
+  way to fix a ledger that has *already* diverged — see *Repairing a mis-indexed
+  archive* for what that would take. Judged not to apply — not
   because the divergence is impossible (ICP rounds are multi-chunk today, and node
   roll-over opens the window on both ledgers), but because it has never been observed and DEFI-2967 could not
   induce the trap even deliberately.
@@ -656,7 +660,7 @@ better story for timer liveness.
    index the archive was created for, and refuses it otherwise. It has no tip to
    compare against, so the chain check cannot help; the offset is the only thing
    that can be checked, and it must be, because an empty node that accepts the
-   wrong blocks is mis-indexed permanently.
+   wrong blocks is mis-indexed for the life of that node, absent the repair path.
 3. A re-send after a lost ledger continuation is refused rather than stored, so
    no archive ever holds the same block twice and no index resolves to the
    wrong block.
@@ -718,8 +722,8 @@ shared ledger code and therefore affect both ledgers; see Decision 3.
 
 * **Empty archive.** No tip, so the chain check cannot fire. It has nothing to
   duplicate, but it *can* be mis-indexed: a node created for index X that is later
-  handed blocks starting at Y < X is wrong forever, because the offset is
-  immutable. So an empty archive must check the offset even though it cannot check
+  handed blocks starting at Y < X stays wrong for as long as the offset does, and
+  nothing deployed can change it. So an empty archive must check the offset even though it cannot check
   the chain — which under E it can, since the append carries the index it is
   expected to start at. See the multi-node case under *How a round dies*.
 * **Genesis.** Block 0's `parent_hash` is `None`; an empty archive accepting it
@@ -1017,8 +1021,8 @@ Two things deliberately not attempted:
 
 **Do this first, before building anything here.** Nothing in this spec repairs a
 suite that has *already* diverged — E prevents further damage, but a mis-indexed
-node cannot be corrected, since the offset is a stable cell and `post_upgrade()`
-takes no arguments. So whether it has already happened is not an open question to
+node cannot be corrected by anything deployed today, and the repair path below
+needs new code on both sides plus a hand-computed value. So whether it has already happened is not an open question to
 carry alongside the work: the answer reorders the work. It is also cheap.
 
 Whether a divergence has already happened is answerable today, with no new tooling.
@@ -1038,6 +1042,44 @@ Because the ledger routes reads through to its archives, a full sync walks the
 whole chain across every node and would surface a duplicated or mis-indexed range
 as a hash or index mismatch. So a clean Rosetta sync from genesis on ckBTC, ckDOGE
 and ICP *is* the verification.
+
+## Repairing a mis-indexed archive
+
+Worth writing down, because the plan's value changes if a divergence is found and
+"unrecoverable" would be the wrong conclusion.
+
+**The property that makes the corruption total also makes it repairable.** The
+offset maps global to local by a single subtraction — `start -
+opts.block_index_offset` (`icrc1/archive/src/main.rs:280`) — so a node storing the
+right blocks under the wrong label is off by one constant everywhere. Setting that
+constant correctly fixes the whole node at once.
+
+Work through the worked case. Node 1 has offset `N+1000` but its local 0 holds
+block `N`, so local `k` holds block `N+k`. Rewrite the offset to `N` and every
+index in the node resolves correctly — not just the first thousand. The cost is
+that node 0's tail also holds `N..N+999`, so the two nodes overlap by a thousand
+blocks; that space is wasted, but reads resolve as long as the ledger's ranges are
+corrected to hand `N..` to node 1.
+
+So a repair is **two coordinated changes**, and neither exists:
+
+| | change | why it is needed |
+|---|---|---|
+| archive | `post_upgrade` takes an optional `block_index_offset` and writes the stable cell | the offset is the corrupted value |
+| ledger | a migration or admin path that rewrites `nodes_block_ranges` | otherwise reads still route by the stale ranges |
+
+**Treat it as a break-glass tool, not a feature.** Writing an offset on a healthy
+archive corrupts it in exactly the way this spec exists to prevent, and the archive
+cannot validate the new value — it has no access to the previous node's tip, so
+there is nothing to check it against. The safety rests entirely on the operator
+computing it correctly, which argues for building it only if the precondition
+actually finds a divergence, and for gating it behind an NNS proposal with the
+computed value in the summary.
+
+Note the asymmetry it exposes in the current code: the **read** path already
+enforces this boundary, rejecting a `start` below the offset
+(`icrc1/archive/src/main.rs:274-277`). Only the **write** path lacks the check, so
+E1 is restoring a symmetry rather than introducing a concept.
 
 ## Remaining open items
 
