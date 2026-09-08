@@ -19,10 +19,9 @@ D2-D4 are hygiene and can land whenever.
 **E is the substantive one.** It makes retries idempotent, so the whole family of
 lost-acknowledgement problems stops mattering rather than each being guarded
 separately. It is the only part that touches the ledger-to-archive interface,
-which the two-release split makes safe. It carries one discipline worth stating
-separately: the ledger records the archive's reported position and its own
-`num_archived_blocks` **together, in the message that learns them**, so the two
-can never disagree and progress survives a round that dies part-way.
+which the two-release split makes safe. Note that it needs no restructuring of the
+ledger: the ranges it has to reconcile are already reachable where the chunks are
+sent, and block removal can stay exactly where it is.
 
 ## Problem
 
@@ -69,9 +68,26 @@ and it runs once per round.
 
 There is no comment justifying the timing, and nothing in the history suggests it
 was deliberate. So the divergence is a direct consequence of where the line was
-drawn, which also says what has to change: either `send_blocks_to_archive` gains
-`LA: LedgerAccess`, or the per-chunk bookkeeping is hoisted into `archive_blocks`
-where the ledger is reachable.
+drawn.
+
+**It does not need to be redrawn.** The dangerous half is already on the reachable
+side: `nodes_block_ranges` is archive state, so `send_blocks_to_archive` can
+reconcile it from the archive's report per chunk, which is what keeps a new node's
+offset correct — the part that caused permanent damage. Only
+`num_archived_blocks` lags, and while it lags the divergence is benign:
+
+* **Reads stay correct.** `block_locations` derives the local range from
+  `num_archived_blocks`, so the ledger still claims blocks it has not removed; the
+  archive's overlapping suffix is stripped by the existing resolution and reads go
+  to the ledger, which genuinely still holds them.
+* **It self-corrects.** Any round that completes calls
+  `remove_archived_blocks(num_sent_blocks)`, and a re-sent chunk still counts as
+  sent, so the total comes out right.
+
+The cost is re-sending chunks in proportion to how far a trapped round had got,
+for the archive to discard them. On a path we do not expect to take, that is a
+better trade than widening `send_blocks_to_archive`'s access in shared code used
+by both ledgers.
 
 ### What a trap in that callback destroys
 
@@ -342,15 +358,21 @@ into a trap under memory pressure (D4).
 
     append_blocks : (vec blob, opt nat64) -> (opt append_result);
 
-The second argument is the expected start index. The archive compares it against
-the next global index it expects — `block_index_offset + log_length`, both of
-which it knows — and decides with certainty:
+The second argument is the expected start index. The archive knows both its
+`block_index_offset` and its `log_length`, so it can place that index exactly:
 
-| | meaning | action |
+| incoming index | meaning | action |
 |---|---|---|
-| equal | correct continuation | append, and report the new next index |
-| less | already holds them | **no-op success** — this is the idempotency, not an error |
-| greater | a gap | return `Gap`, having appended nothing |
+| `< offset` | not this node's range at all — the blocks belong to an earlier node | report this node's start; the ledger is behind and can skip forward |
+| `offset <= i < offset + log_length` | already holds them | **no-op success** — this is the idempotency, not an error |
+| `== offset + log_length` | correct continuation | append, and report the new next index |
+| `> offset + log_length` | a gap | refuse, having appended nothing |
+
+The first case matters more than it looks. Collapsing it into "less, so I already
+have those" is exactly how a freshly created node gets mis-indexed: a node with
+offset `N+1000` and nothing stored, handed index `N`, would otherwise answer "I
+have those" when it has nothing at all. Keeping it distinct is also what lets the
+ledger learn that its `num_archived_blocks` is behind.
 
 Note it reports a **global** index rather than its local `log_length`. The local
 count would still need the node's offset to be useful, and that offset is exactly
@@ -383,8 +405,8 @@ What the change does, in total:
   diverge in the first place.
 * **Gap versus duplicate is decided at the archive**, with a typed answer the
   ledger can act on: a duplicate is success, a gap halts.
-* **The ledger's bookkeeping cannot diverge**, because both values are written
-  together from the reported position rather than maintained separately.
+* **A new node's offset can no longer be poisoned**, because the ranges it derives
+  from are reconciled against the archive rather than inferred.
 * **Resumability is free.** No advance-on-refusal rule, no persisted intent.
 * **A1 is demoted** to a belt-and-braces check. Indexes verify *position*; the
   hash chain still verifies *content*, which catches a ledger that sends the
@@ -496,10 +518,11 @@ better story for timer liveness.
    archive's position, and the ledger reconciles from it rather than incrementing
    — so a lost acknowledgement costs a round trip and nothing else. An append
    whose start index is beyond the archive's position is refused as a gap.
-9. The ledger's range bookkeeping and `num_archived_blocks` can never disagree,
-   because both are written from the archive's reported position in the same
-   message. A round that dies loses at most the last unacknowledged chunk, and the
-   next report corrects even that.
+9. A new node's `block_index_offset` is always derived from ranges that were
+   reconciled against the archive, so it is never taken from stale state. If
+   `num_archived_blocks` lags after a round dies, reads remain correct and the
+   next completed round corrects it; the only cost is re-sending chunks the
+   archive then discards.
 10. The ICP archive is unchanged. The ICP *ledger* does change: B1-B3, D1-D4 and
    E1 are in shared code, so the backoff, the creation counter, the allocation
    work and the atomic bookkeeping apply to both ledgers (Decision 3).
@@ -518,7 +541,7 @@ better story for timer liveness.
 | D3 | correct the stale comment at `archive.rs:468-474` | `ledger_canister_core::archive` | it says a panic there "leads to the rolling back of the transaction that triggered the archiving", which stopped being true when archiving was spawned |
 | D4 | make error construction allocation-free, and trim the interpolating log lines | `ledger_canister_core::archive`, `::spawn` | `FailedToArchiveBlocks(pub String)` allocates on every error construction, so an allocation failure there turns a graceful `Err` into a trap: replace it with an enum carrying `Copy` payloads, rendered to text only where it is logged. `Rt::print` takes `impl AsRef<str>`, so non-interpolating messages become `&'static str` for free. **Keep** the canister id in the `create_canister` callback log — canister logs survive traps — verified, `test_appending_logs_in_trapped_update_call` in `rs/execution_environment/tests/canister_logging.rs` asserts the pre-trap `debug_print` persists *and* that the trap gets its own record — so it is the only possible record of an orphan's identity (D1 says one happened, this says which) — but drop the `{result:?}` debug format, which also stringifies the reject message. `reject_message()` borrows a `String` ic-cdk has already allocated, so only our second copy is avoidable |
 | E1 | `append_blocks` takes an optional expected start index and returns an optional result carrying the archive's next expected global index, or a gap | `icrc1/archive/src/main.rs`, `archive.did`, `ledger_canister_core::archive::send_blocks_to_archive` | the only interface change; both `opt`, so tolerant in either direction. Verify with `didc` and the CI Candid check |
-| E2 | the ledger reconciles its ranges from the reported index instead of incrementing, and treats a covered index as success. **Both the node's range and `num_archived_blocks` are written from that report, in the message that receives it**, along with the matching `remove_archived_blocks` — so the two can never disagree, progress is durable per chunk, and a new node's offset is derived from state that is always current | `ledger_canister_core::archive`, `ledger::archive_blocks` | shared code, so it applies to both ledgers once their archives are upgraded; the incremental path stays as the fallback for archives that return nothing |
+| E2 | the ledger reconciles `nodes_block_ranges` from the reported index instead of incrementing, and treats a covered index as success. Block removal stays where it is, once per round — the module boundary is not redrawn | `ledger_canister_core::archive::send_blocks_to_archive` | shared code, so it applies to both ledgers once their archives are upgraded; the incremental path stays as the fallback for archives that return nothing |
 | E3 | count every use of the incremental fallback | `ledger_canister_core::archive` + per-ledger metric | the path's problem is an unknowable lifetime; a counter makes it deletable once it reads zero everywhere |
 
 A1, C1 and E1 are in `ic-icrc1-archive`. B1-B3, D1-D4, E2 and E3 are in shared
