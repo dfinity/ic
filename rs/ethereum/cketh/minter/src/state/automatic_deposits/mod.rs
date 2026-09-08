@@ -212,10 +212,6 @@ impl AutomaticDeposits {
         let accounts: Vec<_> = request.items.iter().map(|item| item.item.account).collect();
         let authorizations = request.authorization_requests();
 
-        for authorization in authorizations {
-            self.record_applied_authorization(authorization, id);
-        }
-
         for account in accounts {
             let request = DepositRequest::new(account, asset);
             let entry = self
@@ -235,6 +231,10 @@ impl AutomaticDeposits {
                     entry.address
                 );
             }
+        }
+
+        for authorization in authorizations {
+            self.record_applied_authorization(authorization, id);
         }
         finalized
     }
@@ -301,11 +301,8 @@ impl AutomaticDeposits {
     /// which for a deposit address means it holds no delegation at all: only the minter ever
     /// authorizes one.
     pub fn delegation(&self, account: &Account) -> Option<Delegation> {
-        self.authorizations
-            .iter()
-            .filter(|(request, stored)| {
-                request.account() == *account && stored.applied_by.is_some()
-            })
+        self.authorizations_of(account)
+            .filter(|(_request, stored)| stored.applied_by.is_some())
             .map(|(request, _stored)| request)
             .max_by_key(|request| request.nonce())
             .map(|request| Delegation {
@@ -315,6 +312,21 @@ impl AutomaticDeposits {
                     .checked_increment()
                     .expect("BUG: authorization nonce space exhausted"),
             })
+    }
+
+    /// The authorizations signed for `account`, in key order. An [`AuthorizationRequest`] orders by
+    /// its account first, so one account's authorizations are a contiguous range: reaching them
+    /// costs the account's own entries rather than a scan of every account ever swept, which
+    /// matters on replay, where every finalized sweep consults them.
+    fn authorizations_of(
+        &self,
+        account: &Account,
+    ) -> impl Iterator<Item = (&AuthorizationRequest, &StoredAuthorization)> {
+        let first =
+            AuthorizationRequest::new(*account, u64::MIN, Address::ZERO, TransactionNonce::ZERO);
+        self.authorizations
+            .range(first..)
+            .take_while(move |(request, _stored)| request.account() == *account)
     }
 
     /// The nonce `account`'s deposit address is at, and therefore the only nonce a further
@@ -331,9 +343,10 @@ impl AutomaticDeposits {
         if request.nonce() != self.next_authorization_nonce(&request.account()) {
             return;
         }
-        if let Some(stored) = self.authorizations.get_mut(&request) {
-            stored.applied_by.get_or_insert(sweep_id);
-        }
+        self.authorizations
+            .get_mut(&request)
+            .expect("BUG: a sweep carried an authorization the minter never signed")
+            .applied_by = Some(sweep_id);
     }
 
     /// Arm the `(account, asset)` pair, whose deposit `address` is derived for `account`.
