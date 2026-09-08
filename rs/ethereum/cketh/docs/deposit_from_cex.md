@@ -1186,8 +1186,10 @@ against 98'075 for a batch of one. Batching pays once for the 21'000 base, the c
 while each extra address adds only its 25'000 authorization, a warm inner call
 and a transfer that earns the slot-clearing refund. Operational notes: a
 tuple skipped by the protocol (e.g. stale nonce) makes the corresponding inner
-call hit a code-less address, which reverts the *whole* batch (atomic, funds
-safe, gas wasted — retry); mixed batches are fine (tuples only for
+call hit a code-less address, which reverts the *whole* batch — atomic, funds
+safe, gas wasted; the minter does not retry a reverted sweep but drops its
+deposits from the queue, and they are picked up again once their pair is
+re-armed (step 5); mixed batches are fine (tuples only for
 not-yet-delegated addresses, already-delegated ones ride along without tuples);
 batch size is bounded by gas, and the sweeping policy caps it at `N = 10`
 (`MAX_DEPOSITS_PER_SWEEP`, step 5), comfortably under that bound.
