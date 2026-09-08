@@ -121,9 +121,32 @@ no re-arm hazard; a one-shot timer chain that failed to re-arm is exactly
 DEFI-2983.
 
 **C. The archive records why it refused, in its own metrics.**
-The archive knows the cause and already serves `/metrics`. A counter there —
-distinguishing a chain mismatch from a capacity refusal — means the ledger never
-has to know the cause, so no reject-string matching and no typed return value.
+The archive knows the cause and already serves `/metrics`, so a counter there —
+a chain mismatch counted separately from a capacity refusal — puts the cause where
+an operator can read it without it having to travel over the wire.
+
+Why the ledger does not need it: **its correct response is the same for every
+cause it can actually encounter** — keep the blocks it has no acknowledgement
+for, count the failure, release the lock, back off. The two cases that would
+warrant a different response are both detected without knowing the cause:
+
+* a **lost archive creation** needs a halt rather than a backoff, and D1 detects
+  that from the ledger's own in-flight counter;
+* a **full archive** needs a new node, and `node_and_capacity` discovers that
+  *before* appending, from the `remaining_capacity` pre-check, so in normal
+  operation it never reaches the refusal path. The ledger asks for the remaining
+  capacity and `take_prefix` takes only as many blocks as fit it, which is the
+  same arithmetic the archive applies (`max_memory_size_bytes < log_size_bytes +
+  bytes`). A capacity *refusal* therefore means the two disagreed, which should
+  not happen — so distinguishing it has diagnostic value, not behavioural value.
+
+So the cause is wanted for diagnosis, not control flow, and that is why neither
+reject-string matching nor a typed return value is needed here.
+
+**This holds for plan 1 only.** The addressed-appends alternative deliberately
+gives the ledger a cause worth acting on — a `Gap` halts while a duplicate is
+success — so there the ledger *does* branch on it. Not a contradiction: plan 2
+creates a distinction that plan 1 has no use for.
 
 **D. Allocation and observability work on the ledger side.** Four items that are
 independent of each other and of the above, detailed in Components: an in-flight
