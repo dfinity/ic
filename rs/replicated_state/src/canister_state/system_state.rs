@@ -2314,28 +2314,22 @@ impl SystemState {
         let mut outstanding = NominalCycles::zero();
 
         match self.task_queue.paused_or_aborted_task() {
-            Some(ExecutionTask::PausedExecution { input, .. }) => match input {
-                // A response execution prepays nothing of its own: it is paid for by
-                // the callback, which the task carries.
-                CanisterMessageOrTask::Message(CanisterMessage::Response { callback, .. }) => {
-                    outstanding += callback_prepayments(callback)
-                }
-                // Any other paused execution holds its prepayment in memory only.
-                _ => return None,
-            },
-            Some(ExecutionTask::PausedInstallCode(_)) => return None,
+            // A paused execution is ephemeral, so its prepayment is only held in
+            // memory, not in the replicated state.
+            Some(ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_)) => {
+                return None;
+            }
             Some(ExecutionTask::AbortedExecution {
                 input,
                 prepaid_execution_cycles,
             }) => {
                 // Zero for an aborted response execution, which prepays nothing of
-                // its own.
+                // its own: it is paid for by the callback that the task carries.
                 outstanding += prepaid_execution_cycles.nominal();
-                // As for a paused response execution above. The callback was
-                // unregistered from the `CallContextManager` when the response was
-                // popped, so it is not also counted below; and nothing was refunded
-                // yet, because aborting discards the changes that the initial steps
-                // of the response execution made.
+                // That callback was unregistered from the `CallContextManager` when
+                // the response was popped, so it is not also counted below; and
+                // nothing was refunded yet, because aborting discards the changes
+                // that the initial steps of the response execution made.
                 if let CanisterMessageOrTask::Message(CanisterMessage::Response {
                     callback, ..
                 }) = input
@@ -2348,7 +2342,8 @@ impl SystemState {
                 ..
             }) => outstanding += prepaid_execution_cycles.nominal(),
             // Not a paused or aborted task, so it cannot be in this slot. Bail out
-            // rather than silently returning a bogus amount; the caller flags it.
+            // rather than silently returning a bogus amount; the caller reports the
+            // `None` as a critical error.
             Some(
                 ExecutionTask::Heartbeat
                 | ExecutionTask::GlobalTimer
