@@ -7,10 +7,6 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// A `CheckpointLayout` has to be given a height, but the merge only asks it for
-/// the paths of files inside the checkpoint, and those do not depend on one.
-const HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED: Height = Height::new(0);
-
 /// Assembles the checkpoint at `output` from the checkpoints at `base` and
 /// `source`: it holds everything of `base`, with the canisters and canister
 /// snapshots of `source` added to those of `base`, and is marked as the product
@@ -24,13 +20,11 @@ const HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED: Height = Height::new(0);
 /// how large the two states are. That makes `output` share the storage of
 /// `base` and `source`, which is sound because checkpoints are immutable.
 ///
-/// `output` is expected to be outside both inputs, which is not checked, and
-/// what an output inside one of them does depends on where: under `base`, or
-/// under `source`'s canister or snapshot directory, the linking creates it
-/// before listing the input it reads, so it finds the output and links it into
-/// itself until the merge fails; anywhere else under `source` the linking never
-/// reaches it and the merge succeeds, leaving the merged checkpoint inside the
-/// source checkpoint. The caller picks all three paths, so this is left to it.
+/// `output` has to be outside both inputs, which is left to the caller rather
+/// than checked. Under `base`, or under `source`'s canister or snapshot
+/// directory, the linking finds the output and links it into itself until the
+/// merge fails; anywhere else under `source` it is never reached and the merge
+/// succeeds, leaving the merged checkpoint inside the source checkpoint.
 pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), String> {
     for (path, name) in [(&base, "base"), (&source, "source")] {
         if !path.is_dir() {
@@ -40,19 +34,15 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
             ));
         }
     }
-    // Made absolute up front, so that an output whose parent the sync below
-    // cannot open fails before anything is created rather than after. Only
-    // absoluteness is needed: the parent of a bare relative path is the empty
-    // path, which opens nothing.
+    // Absolute, so that the parent below is a directory rather than the empty
+    // path a bare relative output would give.
     let absolute_output = std::path::absolute(&output)
         .map_err(|err| format!("failed to resolve {}: {err}", output.display()))?;
-    // The directory the checkpoint is created in, and so the one that has to be
-    // synced for its creation to be durable.
     let parent = absolute_output
         .parent()
         .expect("an absolute path has a parent");
-    // The canisters of the two subnets are disjoint, as the source subnet hosts
-    // the canister ID ranges that the merge reassigns to the destination subnet.
+    // The canisters of the two subnets are disjoint, so a collision means these
+    // two checkpoints are not from the same merge.
     for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
         if let Some(name) = common_entry(&base.join(dir), &source.join(dir))? {
             return Err(format!(
@@ -65,11 +55,6 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
 
     fs::create_dir_all(parent)
         .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
-    // Creating the output is what claims it, rather than a check that it is
-    // free: the check would let two merges of the same output both proceed into
-    // it, and the one that failed first would clean up while the other was
-    // still assembling. Creating it is a single step that only one of them can
-    // win, and the cleanup below is then this merge's to do.
     fs::create_dir(&output).map_err(|err| {
         if err.kind() == std::io::ErrorKind::AlreadyExists {
             format!("{} already exists", output.display())
@@ -80,17 +65,13 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
 
     let result = assemble(&base, &source, &output).and_then(|()| {
         // Creating a directory is not durable until the directory it was
-        // created in is synced, so the checkpoint could otherwise be gone
-        // after a crash.
+        // created in is synced.
         fs::File::open(parent)
             .and_then(|dir| dir.sync_all())
             .map_err(|err| format!("failed to sync {}: {err}", parent.display()))
     });
     if result.is_err() {
-        // A merge that reports a failure must not leave a checkpoint behind,
-        // not even a complete one whose durability is all that could not be
-        // established. The original error is what the caller needs to see, so a
-        // failure to clean up must not replace it.
+        // A merge that reports a failure must not leave a checkpoint behind.
         let _ = fs::remove_dir_all(&output);
     }
 
@@ -108,21 +89,17 @@ fn assemble(base: &Path, source: &Path, output: &Path) -> Result<(), String> {
         }
     }
 
-    let layout = CheckpointLayout::<WriteOnly>::new_untracked(
-        output.to_path_buf(),
-        HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED,
-    )
-    .map_err(|err| format!("failed to create the checkpoint layout: {err:?}"))?;
+    // Any height will do: the layout is only asked for the paths of files inside
+    // the checkpoint, which do not depend on one.
+    let layout = CheckpointLayout::<WriteOnly>::new_untracked(output.to_path_buf(), Height::new(0))
+        .map_err(|err| format!("failed to create the checkpoint layout: {err:?}"))?;
     layout
         .subnet_merged_marker()
         .serialize(pb_metadata::SubnetMerged { merged: true })
         .map_err(|err| format!("failed to write the subnet merged marker: {err:?}"))?;
 
-    // The files of a checkpoint are read-only, and the ones linked in already
-    // are, being the very files of `base` and `source`; the marker written above
-    // is not. Mark and sync as the state manager does before a directory it
-    // assembled becomes a checkpoint. Directories stay writable, as they are in a
-    // checkpoint the state manager wrote: only its files are marked.
+    // The linked-in files are read-only already, being the files of `base` and
+    // `source`; the marker written above is not.
     layout
         .mark_files_readonly_and_sync(/* thread_pool= */ None, /* perform_sync= */ true)
         .map_err(|err| format!("failed to mark the merged checkpoint read-only: {err:?}"))?;
@@ -131,11 +108,8 @@ fn assemble(base: &Path, source: &Path, output: &Path) -> Result<(), String> {
 }
 
 /// Replicates the directory tree rooted at `from` under `to`, hard linking every
-/// file. Directories that already exist under `to` are reused, so a tree can be
-/// overlaid onto another one.
-///
-/// The directories are created writable, so that a subsequent call can overlay
-/// onto them.
+/// file. Directories that already exist under `to` are reused and are created
+/// writable, so that trees can be overlaid onto one another.
 fn link_tree(from: &Path, to: &Path) -> Result<(), String> {
     fs::create_dir_all(to).map_err(|err| format!("failed to create {}: {err}", to.display()))?;
 
@@ -294,11 +268,7 @@ mod tests {
 
         do_merge(base, source, output.clone()).unwrap();
 
-        let layout = CompleteCheckpointLayout::new_untracked(
-            output,
-            HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED,
-        )
-        .unwrap();
+        let layout = CompleteCheckpointLayout::new_untracked(output, Height::new(0)).unwrap();
         assert!(layout.subnet_merged_marker().deserialize().unwrap().merged);
     }
 
