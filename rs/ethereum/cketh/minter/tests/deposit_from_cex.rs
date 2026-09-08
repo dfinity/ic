@@ -8,6 +8,7 @@
 //!    principal and subaccount.
 
 use assert_matches::assert_matches;
+use ic_cketh_minter::balance_scan::MAX_CALLS_PER_BATCH;
 use ic_cketh_minter::balance_scan::batcher::{
     BalanceOfCall, decode_balance_batch, encode_balance_batch,
 };
@@ -126,6 +127,42 @@ fn should_read_many_balances_in_a_single_call() {
         .map(|i| Erc20Value::from((i as u128 + 1) * 1_000))
         .collect();
     assert_eq!(balances, expected);
+}
+
+#[test]
+fn should_scan_a_full_batch_in_a_single_call() {
+    let anvil = Anvil::start();
+    let dev = address_from_hex(DEV_ACCOUNT);
+    let token = deploy_mock_erc20(&anvil, &dev);
+
+    let batch_of = |num_calls: usize| -> Vec<BalanceOfCall> {
+        (0..num_calls as u64)
+            .map(|index| BalanceOfCall {
+                token,
+                holder: DepositAddress::new(holder_at(index)),
+            })
+            .collect()
+    };
+
+    let full_batch = batch_of(MAX_CALLS_PER_BATCH);
+    let out = anvil
+        .eth_call_create(&dev, &encode_balance_batch(&full_batch))
+        .expect(
+            "a batch of MAX_CALLS_PER_BATCH calls must stay within the EIP-3860 initcode limit",
+        );
+    assert_eq!(
+        decode_balance_batch(&out, full_batch.len()).expect("decode failed"),
+        vec![Erc20Value::ZERO; MAX_CALLS_PER_BATCH]
+    );
+
+    let one_call_too_many = batch_of(MAX_CALLS_PER_BATCH + 1);
+    let error = anvil
+        .eth_call_create(&dev, &encode_balance_batch(&one_call_too_many))
+        .expect_err("a batch above MAX_CALLS_PER_BATCH must exceed the EIP-3860 initcode limit");
+    assert!(
+        error.to_lowercase().contains("initcode"),
+        "expected an EIP-3860 initcode limit error, got: {error}"
+    );
 }
 
 #[test]
