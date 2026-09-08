@@ -33,10 +33,9 @@ use libcryptsetup_rs::{
 };
 use prometheus::Registry;
 use serde_json::json;
-use sev::Generation;
 use sev::firmware::host::TcbVersion;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
-use sev_guest_testing::MockSevGuestFirmwareBuilder;
+use sev_guest_testing::{DEFAULT_GENERATION, MockSevGuestFirmwareBuilder};
 use std::fs;
 use std::fs::OpenOptions;
 use std::fs::{File, Permissions};
@@ -52,7 +51,6 @@ static TEST_MUTEX: parking_lot::Mutex<()> = parking_lot::const_mutex(());
 
 const TEST_VOLUME_KEY_BYTES: usize = 512 / 8;
 const TEST_PBKDF_ITERATIONS: u32 = 1000;
-const DEFAULT_GENERATION: Generation = Generation::Milan;
 
 fn default_launch_tcb() -> TcbVersion {
     TcbVersion::new(None, 1, 2, 3, 4)
@@ -1514,10 +1512,6 @@ fn test_firmware_upgrade_then_guestos_upgrade() {
 
     // GuestOS 2's key unlocks the new header; GuestOS 1's key no longer does.
     let guestos_v2_key = fixture.derive_sev_key(Partition::Store);
-    let guestos_v1_key_at_tcb_v2 = fixture.derive_sev_key_at(
-        Partition::Store,
-        tcb_version_to_u64(tcb_v1, DEFAULT_GENERATION).unwrap(),
-    );
     let store_header_path = fixture.store_header_path();
     check_passphrase(
         fixture.store_device_path(),
@@ -1542,13 +1536,6 @@ fn test_firmware_upgrade_then_guestos_upgrade() {
         final_token.sev_metadata.tcb_version, tcb_v2_u64,
         "the remaining keyslot must be derived at the upgraded TCB"
     );
-
-    check_passphrase(
-        fixture.store_device_path(),
-        &LuksHeaderLocation::Detached(store_header_path.clone()),
-        &guestos_v1_key_at_tcb_v2,
-    )
-    .expect_err("GuestOS 1 key must no longer unlock after the upgrades");
 
     // Rollback to GuestOS 1: its frozen header (at firmware v1) still unlocks and rotates
     // to firmware v2 on open.

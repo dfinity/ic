@@ -24,12 +24,13 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::add_replica_version_record;
 use ic_types::ReplicaVersion;
 use rand::RngCore;
-use sev::Generation;
 use sev::firmware::host::TcbVersion;
 use sev::parser::ByteParser;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
-use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
+use sev_guest_testing::{
+    DEFAULT_GENERATION, FakeAttestationReportSigner, MockSevGuestFirmwareBuilder,
+};
 use std::future::Future;
 use std::net::Ipv6Addr;
 use std::str::FromStr;
@@ -59,7 +60,7 @@ const DIFFERENT_CHIP_ID: [u8; 64] = [123; 64];
 fn default_launch_tcb_as_u64() -> u64 {
     u64::from_le_bytes(
         TcbVersion::new(None, 1, 0, 0, 0)
-            .to_bytes_with(Generation::Milan)
+            .to_bytes_with(DEFAULT_GENERATION)
             .unwrap(),
     )
 }

@@ -1,12 +1,11 @@
-use sev::Generation;
+use attestation::attestation_report::tcb_version_from_u64;
 use sev::error::UserApiError;
 use sev::firmware::host::TcbVersion;
-use sev::parser::ByteParser;
 use sev::parser::Encoder;
 use sev_guest_firmware::{MockSevGuestFirmware, SevGuestFirmware};
 
 pub use attestation_testing::attestation_report::{
-    AttestationReportBuilder, FakeAttestationReportSigner,
+    AttestationReportBuilder, DEFAULT_GENERATION, FakeAttestationReportSigner,
 };
 
 fn default_derived_key(measurement: [u8; 48], tcb_version: u64) -> [u8; 32] {
@@ -142,20 +141,17 @@ impl MockSevGuestFirmwareBuilder {
         firmware
             .expect_get_derived_key()
             .returning(move |_, derived_key_request| {
-                // Like real firmware, refuse to derive keys at TCB versions above the launch
-                // TCB. (The launch TCB is encoded in the Milan/Genoa layout, like everywhere
-                // else in the tests.)
-                let launch_tcb = u64::from_le_bytes(
-                    this.launch_tcb
-                        .to_bytes_with(Generation::Milan)
-                        .expect("Failed to encode launch TCB"),
-                );
-                if derived_key_request.tcb_version > launch_tcb {
+                // Like real firmware, refuse to derive keys at TCB versions above the
+                // launch TCB.
+                let requested_tcb =
+                    tcb_version_from_u64(derived_key_request.tcb_version, DEFAULT_GENERATION)
+                        .expect("Failed to decode the requested TCB version");
+                if requested_tcb > this.launch_tcb {
                     return Err(UserApiError::IOError(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!(
-                            "Requested TCB version {} exceeds the launch TCB {launch_tcb}",
-                            derived_key_request.tcb_version
+                            "Requested TCB version {requested_tcb:?} exceeds the launch TCB {:?}",
+                            this.launch_tcb
                         ),
                     )));
                 }
