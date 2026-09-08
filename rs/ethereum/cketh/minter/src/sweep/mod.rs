@@ -45,7 +45,7 @@ use std::collections::BTreeSet;
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
-const MAX_DEPOSITS_PER_SWEEP: usize = 10;
+pub(crate) const MAX_DEPOSITS_PER_SWEEP: usize = 10;
 
 /// Turns the deposits the balance scan queued into the sweep requests that
 /// [`process_sweeper_transactions`] prices, signs, sends and finalizes.
