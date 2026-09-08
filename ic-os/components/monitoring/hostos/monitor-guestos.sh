@@ -40,12 +40,21 @@ function monitor_guestos() {
         *) COUNT=1 ;;
     esac
 
-    for i in $(seq 0 "$((COUNT - 1))"); do
-        # A single GuestOS keeps the guestos name
-        if [ "$COUNT" -eq 1 ]; then
+    # Slots match the units start-guestos.sh boots and VmSlot in
+    # guest_vm_config.rs: a single GuestOS runs in slot 0, multiple GuestOS run
+    # in slots 1..COUNT.
+    if [ "$COUNT" -eq 1 ]; then
+        slots=(0)
+    else
+        slots=($(seq 1 "$COUNT"))
+    fi
+
+    for slot in "${slots[@]}"; do
+        # Slot 0, the single GuestOS, keeps the guestos name
+        if [ "$slot" -eq 0 ]; then
             s=""
         else
-            s=$i
+            s=$slot
         fi
 
         vm="guestos$s"

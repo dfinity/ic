@@ -16,25 +16,34 @@ case "${node_reward_type}" in
     *) COUNT=1 ;;
 esac
 
+# Slots match the units start-guestos.sh boots and VmSlot in
+# guest_vm_config.rs: a single GuestOS runs in slot 0, multiple GuestOS run in
+# slots 1..COUNT.
+if [ "$COUNT" -eq 1 ]; then
+    slots=(0)
+else
+    slots=($(seq 1 "$COUNT"))
+fi
+
 # Forward all the GuestOS logs
-for i in $(seq 0 "$((COUNT - 1))"); do
-    # A single GuestOS keeps the guestos-serial.log name
-    if [ "$COUNT" -eq 1 ]; then
+for slot in "${slots[@]}"; do
+    # Slot 0, the single GuestOS, keeps the guestos-serial.log name
+    if [ "$slot" -eq 0 ]; then
         s=""
     else
-        s=$i
+        s=$slot
     fi
 
     tail -F "/var/log/libvirt/qemu/guestos-serial$s.log" | sed --unbuffered 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\[[0-9]\+;[0-9;]*m//g' | systemd-cat -t "guestos-serial$s" -p info &
 done
 
 # And the upgrade VMs
-for i in $(seq 0 "$((COUNT - 1))"); do
-    # A single upgrade VM keeps the upgrade-guestos-serial.log name
-    if [ "$COUNT" -eq 1 ]; then
+for slot in "${slots[@]}"; do
+    # Slot 0, the single upgrade VM, keeps the upgrade-guestos-serial.log name
+    if [ "$slot" -eq 0 ]; then
         s=""
     else
-        s=$i
+        s=$slot
     fi
 
     tail -F "/var/log/libvirt/qemu/upgrade-guestos-serial$s.log" | sed --unbuffered 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\[[0-9]\+;[0-9;]*m//g' | systemd-cat -t "upgrade-guestos-serial$s" -p info &
