@@ -277,6 +277,13 @@ const MIN_DEPOSITS: &[(Address, Erc20Value)] = &[
         ]),
         Erc20Value::new(2_500),
     ), // ckXAUT = 0.0025
+    (
+        Address::new([
+            0x0d, 0x87, 0x75, 0xf6, 0x48, 0x43, 0x06, 0x79, 0xa7, 0x09, 0xe9, 0x8d, 0x2b, 0x0c,
+            0xb6, 0x25, 0x0d, 0x28, 0x87, 0xef,
+        ]),
+        Erc20Value::new(135_000_000_000_000_000_000),
+    ), // ckBAT = 135 (priced from BAT ≈ $0.074 on 2026-09-08.
     // --- sepolia (testnet analogs, priced as their mainnet counterpart) ---
     (
         Address::new([
