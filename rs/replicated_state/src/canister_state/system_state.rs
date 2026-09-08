@@ -2277,24 +2277,14 @@ impl SystemState {
     ///  * in the `prepaid_execution_cycles` of an aborted execution or an aborted
     ///    `install_code`.
     ///
-    /// (A paused execution records no prepayment of its own: a paused response
-    /// execution is paid for by the callback that the task carries, and any other
-    /// paused execution holds its prepayment in memory only, which is why this
-    /// method returns `None` for it. See below.)
-    ///
-    /// The only way such a prepayment leaves the state other than through the refund
-    /// that its execution or response issues is an aborted `install_code` dropped by
-    /// a subnet split; that path refunds it in full, see
-    /// `Self::drop_in_progress_management_calls_after_split`.
-    ///
     /// Together with how the two metrics are updated, this yields the invariant
     ///
     /// ```text
     /// consumed_cycles - outstanding_prepayments() == consumed_cycles_monotonic
     /// ```
     ///
-    /// which holds whenever no execution is in progress, once the canister has been
-    /// backfilled. It is not a precondition of
+    /// which holds whenever no execution is in progress or paused, once the
+    /// canister has been backfilled. It is not a precondition of
     /// [`Self::migrate_consumed_cycles_to_monotonic`] but what that method
     /// establishes: a canister decoded from a checkpoint predating the monotonic
     /// field starts out with a zero in it, so the left-hand side is exactly the
@@ -2302,11 +2292,9 @@ impl SystemState {
     ///
     /// Returns `None` if the outstanding prepayments cannot be derived from the
     /// replicated state, i.e. if the canister has a paused execution whose
-    /// prepayment is not part of it: a paused execution is ephemeral, so (except
-    /// for a paused response execution, whose prepayments live in the callback
-    /// carried by the task) its prepayment is only held in memory. All paused
-    /// executions are aborted before a checkpoint, materializing their prepayments
-    /// into the state, so the caller can retry then.
+    /// prepayment is not part of it. All paused executions are aborted before a
+    /// checkpoint, materializing their prepayments into the state, so the caller can
+    /// retry then.
     pub fn outstanding_prepayments(&self) -> Option<NominalCycles> {
         /// The prepayments made when the request behind `callback` was sent (see
         /// `SandboxSafeSystemState::push_output_request`), to be refunded when its

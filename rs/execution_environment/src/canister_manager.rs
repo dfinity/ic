@@ -1379,19 +1379,6 @@ impl CanisterManager {
         );
 
         // Leftover cycles in the canister are considered `consumed`.
-        //
-        // Note that it is the canister's `consumed_cycles` gauge, not its monotonic
-        // `consumed_cycles_monotonic`, that is moved into the subnet metrics below.
-        // That is deliberate: only the gauge is guaranteed to hold the canister's
-        // full history. A canister decoded from a checkpoint that predates the
-        // monotonic field carries a zero in it until a checkpoint round backfills it
-        // (see `migrate_consumed_cycles_to_monotonic`), and deletion is a management
-        // call, so it can happen in an ordinary round before that.
-        //
-        // Once the canister has been backfilled the two are equal anyway: a canister
-        // can only be deleted while `Stopped` and with empty queues, so it has no
-        // callback and no execution left holding an outstanding prepayment (see
-        // `SystemState::outstanding_prepayments`).
         let leftover_cycles = self
             .cycles_account_manager
             .leftover_cycles_for_canister_to_deleted(

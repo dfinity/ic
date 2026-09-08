@@ -2179,7 +2179,8 @@ pub fn abort_all_paused_executions(
 }
 
 /// Backfills `CanisterMetrics::consumed_cycles_monotonic` of every canister from
-/// its `consumed_cycles` gauge, which predates it and thus holds the full history. See `SystemState::migrate_consumed_cycles_to_monotonic`.
+/// its `consumed_cycles` gauge, which predates it and thus holds the full history.
+/// See `SystemState::migrate_consumed_cycles_to_monotonic`.
 ///
 /// Must only be called with no paused executions left (i.e. on a checkpoint round,
 /// after `abort_all_paused_executions`); a canister that still has one is skipped,
