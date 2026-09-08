@@ -635,24 +635,53 @@ irrelevant; and a newly spawned node runs the Wasm the ledger embeds, so it
 necessarily speaks the protocol. The requirement is therefore "the current tail
 archive is upgraded", which one node rollover satisfies permanently.
 
-That opens two policy options beyond the fallback, if the fallback path's lifetime
-is judged too long to carry:
+### What the fallback actually is
 
-* **Halt and wait.** Refuse to archive against a tail archive that answers `null`,
-  back off, and accumulate blocks locally until it is upgraded. This lets the
-  incremental path be deleted. The cost is stable-memory growth while waiting —
-  the same degraded mode two ck ledgers are running deliberately today — and a
-  hard dependency on operators upgrading their archives, so the halt needs its own
-  metric rather than hiding in the generic failure counter.
-* **Roll over.** Treat a `null`-answering tail as unusable and spawn a fresh node,
-  which speaks the protocol by construction. No waiting and no fallback path, at
-  the cost of abandoning the old tail's unused capacity — up to 3 GiB of
-  paid-for space — and 10 T cycles, which on a cycle-poor third-party ledger
-  could itself fail.
+Worth being precise, because "falls back to the incremental behaviour" is easy to
+read as a lesser mode when it is really the present one.
 
-Whichever is chosen, **count every use of the fallback in a metric**. The
-objection to keeping it is not that it exists but that its lifetime is unknowable;
-a counter makes it observable, so it can be deleted once it reads zero everywhere.
+**Mechanically** it is today's code, unchanged: no position was reported, so the
+ledger cannot reconcile, and it advances `heights.1 += chunk_len` and calls
+`remove_archived_blocks(num_sent_blocks)` exactly as it does now.
+
+**In terms of guarantees it offers none of the new ones.** A pre-release-1 archive
+has neither the index check nor the chain check, so against it a duplicate append
+can still be stored and a new node's offset can still be poisoned.
+
+**But it is not a regression.** A ledger talking to an un-upgraded archive is left
+exactly where it is today — no worse, simply not yet better. The improvement
+arrives when the archive is upgraded, and until then nothing has been taken away.
+
+Two consequences:
+
+* **Count every use of it.** The objection to keeping the path is not that it
+  exists but that its lifetime is unknowable; a counter makes it observable, so
+  the path can be deleted once it reads zero everywhere. This is worth doing
+  regardless of anything else here.
+* **The ledger-side atomic bookkeeping is not purely an alternative to E.** It is
+  cheap and ledger-only, and it would close the *offset-poisoning* half of the
+  fallback's exposure — see *Alternative to E*, which could be taken as well as E
+  rather than instead of it. The duplicate-storage half is irreducible on that
+  path, since an un-upgraded archive cannot refuse anything.
+
+### If the fallback's lifetime is judged too long to carry
+
+**Halt and wait.** Refuse to archive against a tail archive that answers `null`,
+back off, and accumulate blocks locally until it is upgraded. This is what lets
+the incremental path be deleted outright. The cost is stable-memory growth while
+waiting — the same degraded mode two ck ledgers are running deliberately today,
+and cheaper than it looks, since resident blocks do not drive upgrade instruction
+cost — plus a hard dependency on operators upgrading their archives, so the halt
+needs its own metric rather than hiding in the generic failure counter.
+
+**Not recommended: rolling over to a fresh node.** A `null`-answering tail could
+be treated as unusable and a new node spawned, which speaks the protocol by
+construction — no waiting and no fallback path. Rejected because the costs are
+not one-off: spawning charges canister creation and needs cycles provisioned for
+it, and every extra archive is then another canister to keep topped up and to
+upgrade forever. It also abandons the old tail's unused capacity, up to 3 GiB of
+already-paid-for space. Doing this automatically, in response to a version
+mismatch, is a poor trade for what it buys.
 
 ## Testing strategy
 
