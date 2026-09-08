@@ -144,6 +144,7 @@ pub const DELEGATING_SWEEP_TRANSACTION_TYPE: u64 = 4;
 /// and so is a plain EIP-1559 transaction.
 pub const PLAIN_SWEEP_TRANSACTION_TYPE: u64 = 2;
 
+#[derive(Clone)]
 pub struct DepositPlan {
     pub owner: Principal,
     pub subaccount: [u8; 32],
@@ -246,13 +247,40 @@ impl LiveSetup<CkErc20Setup> {
     /// Returns the harness along with the current delegate to rotate to; the legacy one the minter
     /// runs against is [`Self::sweep_contracts`]' `delegate`.
     pub fn on_legacy_delegate() -> (Self, Address) {
+        Self::on_delegate(|anvil, current| deploy_legacy_delegate(anvil, &current.helper))
+    }
+
+    /// As [`Self::new`], but with the minter pointed at a contract that is no sweeper delegate: a
+    /// second deployment of the deposit helper, which has neither `sweepErc20Batch` nor a fallback
+    /// (a second deployment because the minter refuses to run with its helper and its sweeper
+    /// contract at one address). The batch call reverts on the unknown selector while the EIP-7702
+    /// tuples riding with it still apply — a mined sweep the minter finalizes as a failure whose
+    /// addresses are nonetheless delegated, which is the drift the repair path exists for.
+    ///
+    /// Returns the harness along with the real delegate to rotate to once the sweep has reverted.
+    pub fn on_delegate_without_sweep_entry_points() -> (Self, Address) {
+        Self::on_delegate(|anvil, _current| {
+            deploy_deposit_helper(
+                anvil,
+                &address_from_hex(DEV_ACCOUNT),
+                &address_from_hex(MINTER_ADDRESS),
+            )
+        })
+    }
+
+    /// The harness of [`Self::new`] with the minter installed on the delegate `choose` deploys or
+    /// picks, alongside the current sweeper contract, which is returned to rotate to.
+    fn on_delegate(choose: impl FnOnce(&Anvil, &SweepContracts) -> Address) -> (Self, Address) {
         let anvil = Arc::new(Anvil::start_mainnet_like());
         let current = deploy_sweep_contracts(&anvil, &address_from_hex(MINTER_ADDRESS));
-        let legacy = SweepContracts {
-            delegate: deploy_legacy_delegate(&anvil, &current.helper),
+        let installed = SweepContracts {
+            delegate: choose(&anvil, &current),
             ..current
         };
-        (Self::with_sweep_contracts(anvil, legacy), current.delegate)
+        (
+            Self::with_sweep_contracts(anvil, installed),
+            current.delegate,
+        )
     }
 
     /// Points the minter at `delegate`, as an operator replacing the sweeper contract does. The
@@ -864,6 +892,37 @@ impl LiveSetup<CkErc20Setup> {
             self.await_credited(ledger_id, Account { owner, subaccount }, amount);
         }
         self
+    }
+
+    /// Waits until the minter has finalized `expected` sweeps, whichever way each went. What
+    /// [`Self::expect_sweeps_finalized`] is for a test whose sweep is expected to revert: a
+    /// reverted sweep releases the deposits it held just the same, and only then can the pair be
+    /// armed afresh.
+    pub fn expect_sweeps_settled(self, expected: usize) -> Self {
+        self.drive_until(
+            SWEEP_TICKS,
+            |setup| {
+                format!(
+                    "the minter finalized {} of {expected} sweeps (stages: {})",
+                    setup.settled_sweeps(),
+                    setup.sweep_stages(),
+                )
+            },
+            |setup| setup.settled_sweeps() == expected,
+        );
+        self
+    }
+
+    fn settled_sweeps(&self) -> usize {
+        self.minter_events()
+            .iter()
+            .filter(|event| {
+                matches!(
+                    &event.payload,
+                    EventPayload::FinalizedSweeperTransaction { .. }
+                )
+            })
+            .count()
     }
 
     /// Waits until the minter has finalized `expected` sweeps successfully. A swept pair only leaves
@@ -1591,6 +1650,30 @@ impl SweepsSent {
         self,
         expected: &[u64],
     ) -> (LiveSetup<CkErc20Setup>, Vec<SentTransaction>) {
+        self.expect_sweeps(expected, true)
+    }
+
+    /// The sweeps sent, with nothing asserted about them beyond the count
+    /// [`LiveSetup::await_sweeps`] already waited for: for a test whose sweeps did not all end the
+    /// same way, and which therefore asserts on each of them itself.
+    pub fn into_sweeps(self) -> (LiveSetup<CkErc20Setup>, Vec<SentTransaction>) {
+        (self.setup, self.sweeps)
+    }
+
+    /// As [`Self::expect_sweeps_of_types`], for sweeps expected to revert: the transaction is mined
+    /// and its tuples apply, but the call it carries fails.
+    pub fn expect_reverted_sweeps_of_types(
+        self,
+        expected: &[u64],
+    ) -> (LiveSetup<CkErc20Setup>, Vec<SentTransaction>) {
+        self.expect_sweeps(expected, false)
+    }
+
+    fn expect_sweeps(
+        self,
+        expected: &[u64],
+        succeeded: bool,
+    ) -> (LiveSetup<CkErc20Setup>, Vec<SentTransaction>) {
         assert_eq!(
             self.sweeps.len(),
             expected.len(),
@@ -1603,7 +1686,10 @@ impl SweepsSent {
                 sweep.transaction_type, *expected_type,
                 "the sweep did not ride the expected transaction type: {sweep:?}"
             );
-            assert!(sweep.succeeded, "the sweep reverted: {sweep:?}");
+            assert_eq!(
+                sweep.succeeded, succeeded,
+                "the sweep did not end as expected: {sweep:?}"
+            );
         }
         (self.setup, self.sweeps)
     }

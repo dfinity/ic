@@ -1295,7 +1295,7 @@ fn should_keep_the_applied_tuple_when_two_share_a_nonce_below_the_observed_one()
 }
 
 #[test]
-fn should_leave_the_nonce_unverified_when_two_unapplied_tuples_share_a_nonce_below_it() {
+fn should_leave_the_nonce_unresolved_when_two_unapplied_tuples_share_a_nonce_below_it() {
     let mut deposits = AutomaticDeposits::default();
     for delegate in [sweeper_contract(), ANOTHER_DELEGATE] {
         deposits.record_authorization(
@@ -1308,12 +1308,102 @@ fn should_leave_the_nonce_unverified_when_two_unapplied_tuples_share_a_nonce_bel
 
     deposits.record_observed_deposit_address_nonce(account(0), TransactionNonce::ONE);
 
-    assert!(
-        deposits.has_unverified_nonce(&account(0)),
-        "an address whose record the observed nonce cannot resolve stays out of sweeps"
-    );
+    assert_unresolved(&deposits, account(0));
     assert_eq!(deposits.applied_authorizations_len(), 0);
     assert_eq!(deposits.delegation(&account(0)), None);
+}
+
+/// The minter holds the deposit address' only key, so no nonce above the tuples it signed is
+/// explainable: reading one back means the record is missing tuples, which no arithmetic recovers.
+#[test]
+fn should_leave_the_nonce_unresolved_when_the_observed_one_is_beyond_every_signed_tuple() {
+    for (observed, explainable) in [
+        (TransactionNonce::ONE, true),
+        (TransactionNonce::new(2), false),
+    ] {
+        let mut deposits = AutomaticDeposits::default();
+        deposits.record_authorization(
+            authorization_request(account(0), sweeper_contract(), TransactionNonce::ZERO),
+            transaction_signature(),
+        );
+        let reverted = sweep_carrying(&mut deposits, SweepId(0), None);
+        finalize_sweep(&mut deposits, &reverted, TransactionStatus::Failure);
+
+        deposits.record_observed_deposit_address_nonce(account(0), observed);
+
+        if explainable {
+            assert!(
+                deposits.has_trusted_nonce(&account(0)),
+                "{observed} is the nonce the one tuple the minter signed takes the address to"
+            );
+        } else {
+            assert_unresolved(&deposits, account(0));
+        }
+    }
+}
+
+/// An address the minter cannot place takes no slot in a token's sweep batch: leaving it in would
+/// let a handful of stuck addresses hold back every healthy one queued behind them.
+#[tokio::test]
+async fn should_offer_no_sweep_of_an_address_whose_nonce_is_not_trusted() {
+    let (mut deposits, request) =
+        deposits_with_enqueued_sweep(&[(account(0), usdc()), (account(1), usdc())]).await;
+    finalize_sweep(&mut deposits, &request, TransactionStatus::Failure);
+    // A reverted sweep drops the deposits it held, so queue them as a re-armed pair would be.
+    queue(&mut deposits, &[(account(0), usdc()), (account(1), usdc())]);
+    assert_eq!(accounts_in(&deposits.requests_batch(10), usdc()), vec![]);
+
+    deposits.record_observed_deposit_address_nonce(account(0), TransactionNonce::ONE);
+    deposits.record_observed_deposit_address_nonce(account(1), TransactionNonce::new(9));
+
+    assert_eq!(
+        accounts_in(&deposits.requests_batch(10), usdc()),
+        vec![account(0)],
+        "only the address the nonce read back placed is offered for sweeping again"
+    );
+    assert_unresolved(&deposits, account(1));
+    assert!(
+        deposits
+            .deposit_addresses_awaiting_a_nonce_read()
+            .is_empty(),
+        "neither address is read again: one is placed, the other no read can place"
+    );
+}
+
+/// A signature is only usable on the chain its tuple names, so a tuple recorded for another chain
+/// is not the one this chain will apply at that nonce.
+#[test]
+fn should_not_recarry_a_tuple_signed_for_another_chain() {
+    let mut deposits = AutomaticDeposits::default();
+    deposits.record_authorization(
+        AuthorizationRequest::new(
+            account(0),
+            EthereumNetwork::default().chain_id() + 1,
+            sweeper_contract(),
+            TransactionNonce::ZERO,
+        ),
+        transaction_signature(),
+    );
+
+    assert_eq!(
+        deposits.unapplied_authorization_at(
+            &account(0),
+            EthereumNetwork::default().chain_id(),
+            TransactionNonce::ZERO
+        ),
+        None
+    );
+}
+
+fn assert_unresolved(deposits: &AutomaticDeposits, account: Account) {
+    assert!(
+        !deposits.has_trusted_nonce(&account),
+        "an address the observed nonce cannot place stays out of every sweep"
+    );
+    assert!(
+        !deposits.has_unverified_nonce(&account),
+        "re-reading a nonce that explains nothing would burn cycles every tick to no end"
+    );
 }
 
 #[tokio::test]
@@ -1348,11 +1438,7 @@ async fn should_rebuild_the_unverified_nonces_and_their_repair_by_replaying_the_
     );
 
     let repaired = replay_of_the_event_log();
-    assert!(
-        !repaired
-            .automatic_deposits
-            .has_unverified_nonce(&account(0))
-    );
+    assert!(repaired.automatic_deposits.has_trusted_nonce(&account(0)));
     assert_eq!(
         repaired
             .automatic_deposits
@@ -1365,6 +1451,41 @@ async fn should_rebuild_the_unverified_nonces_and_their_repair_by_replaying_the_
             .is_equivalent_to(&live.automatic_deposits),
         Ok(()),
         "equivalence must notice which addresses are still awaiting a nonce read"
+    );
+}
+
+/// The event that leaves an address unresolved rebuilds that on replay too, so an upgrade does not
+/// quietly put a stuck address back into sweeps.
+#[tokio::test]
+async fn should_rebuild_the_unresolved_nonces_by_replaying_the_event_log() {
+    let (mut live, request) = state_with_enqueued_sweep(&[(account(0), usdc())]).await;
+    let mut time_provider = MockTimeProvider::new();
+    time_provider.expect_time().return_const(0_u64);
+    for event in sweep_pipeline_events(
+        live.automatic_deposits.next_sweeper_transaction_nonce(),
+        &request,
+        TransactionStatus::Failure,
+    ) {
+        process_event(&mut live, event, &time_provider);
+    }
+    process_event(
+        &mut live,
+        EventType::ObservedDepositAddressNonce {
+            account: account(0),
+            nonce: TransactionNonce::new(9),
+        },
+        &time_provider,
+    );
+    assert_unresolved(&live.automatic_deposits, account(0));
+
+    let replayed = replay_of_the_event_log();
+
+    assert_unresolved(&replayed.automatic_deposits, account(0));
+    assert_eq!(
+        replayed
+            .automatic_deposits
+            .is_equivalent_to(&live.automatic_deposits),
+        Ok(())
     );
 }
 

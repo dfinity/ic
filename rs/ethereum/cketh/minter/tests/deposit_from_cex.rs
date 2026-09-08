@@ -17,7 +17,7 @@ use ic_cketh_minter::endpoints::events::EventPayload;
 use ic_cketh_minter::endpoints::{DepositEthStatus, DepositStatus};
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{
-    Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
+    Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, delegation_designator, deploy_mock_erc20,
 };
 use ic_cketh_test_utils::ckerc20::{CkErc20Setup, Erc20Token};
 use ic_cketh_test_utils::live::{
@@ -980,6 +980,108 @@ fn should_rotate_a_delegated_address_onto_a_newly_configured_delegate() {
         setup.anvil().transaction_count(&address),
         2,
         "sweeping without a tuple leaves the address at the nonce the rotation spent"
+    );
+}
+
+/// The repair path, end to end: a sweep whose configured delegate has no `sweepErc20Batch` reverts
+/// *after* its
+/// EIP-7702 tuples have applied, which is exactly the drift the record cannot see — the minter
+/// finalized a failure, so it can no longer say which of the tuples it signed the chain installed.
+/// Before either address is swept again the minter must read the deposit address' nonce back off
+/// the chain, record it, and rotate from there.
+#[test]
+fn should_repair_a_reverted_sweep_by_reading_the_deposit_address_nonce_back() {
+    const DEPOSIT_SUBACCOUNT: [u8; 32] = [11; 32];
+
+    let (setup, current_delegate) =
+        LiveSetup::<CkErc20Setup>::on_delegate_without_sweep_entry_points();
+    let broken_delegate = setup.sweep_contracts().delegate;
+    let setup = setup
+        .fund_fee_account()
+        .expect_fee_account_credited()
+        .upgrade_minter()
+        .expect_sweeper_address_derived()
+        .expect_eth_received()
+        .expect_funding_finalized();
+
+    let sweeper = setup.await_sweeper_address();
+    let [usdc, _usdt]: [Erc20Token; 2] = setup
+        .supported_erc20_tokens_owned()
+        .try_into()
+        .expect("expected exactly 2 supported tokens");
+    let usdc_minimum = setup.minimum_deposit_amount(&usdc);
+    let owner = setup.depositor(1);
+    let plan = DepositPlan {
+        owner,
+        subaccount: DEPOSIT_SUBACCOUNT,
+        token: usdc.clone(),
+        amount: 4 * usdc_minimum,
+    };
+
+    let (setup, deposits) = setup
+        .call_minter_deposit_erc20([plan.clone()])
+        .expect_deposit_responses();
+    let setup = setup
+        .credit_deposits_from_cex(&deposits)
+        .expect_deposit_balances_on_anvil()
+        .expect_each_awaiting_sweep();
+    let (setup, _reverted) = setup
+        .await_sweeps(&sweeper, 1)
+        .expect_reverted_sweeps_of_types(&[DELEGATING_SWEEP_TRANSACTION_TYPE]);
+    let address = deposits[0].address;
+    assert_eq!(
+        setup.anvil().code(&address),
+        delegation_designator(&broken_delegate),
+        "an EIP-7702 tuple applies before the call it travels with runs, and stays applied when \
+         that call reverts"
+    );
+    assert_eq!(setup.anvil().transaction_count(&address), 1);
+    let setup = setup.expect_sweeps_settled(1);
+
+    setup.rotate_delegate_to(&current_delegate);
+
+    // The reverted sweep moved nothing, so the balance is still at the address: re-arming the pair
+    // is all it takes for the minter to see it again.
+    let (setup, re_registrations) = setup
+        .call_minter_deposit_erc20([plan])
+        .expect_deposit_responses();
+    assert_eq!(re_registrations[0].address, address);
+    // Only the second sweep is asserted on here: the first is the one that reverted.
+    let (setup, sweeps) = setup.await_sweeps(&sweeper, 2).into_sweeps();
+    let repair = &sweeps[1];
+    assert_eq!(repair.transaction_type, DELEGATING_SWEEP_TRANSACTION_TYPE);
+    assert!(
+        repair.succeeded,
+        "the sweep after the repair must go through: {repair:?}"
+    );
+    assert_eq!(
+        setup.anvil().authorization_nonces(&repair.hash),
+        vec![1],
+        "the sweep after the repair must rotate from the nonce the chain reported"
+    );
+    let observed: Vec<String> = setup
+        .minter_events()
+        .into_iter()
+        .filter_map(|event| match event.payload {
+            EventPayload::ObservedDepositAddressNonce { nonce, .. } => Some(nonce.to_string()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        observed,
+        vec!["1".to_string()],
+        "the minter must read the reverted sweep's deposit address' nonce back exactly once"
+    );
+
+    let setup = setup
+        .assert_delegations_installed(&deposits, &current_delegate)
+        .assert_addresses_swept_empty(&deposits)
+        .assert_minter_holds_swept_totals(&deposits)
+        .expect_mints(&deposits);
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        2,
+        "applying the rotation tuple spends the nonce the reverted sweep left the address at"
     );
 }
 

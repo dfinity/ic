@@ -4,7 +4,7 @@ use crate::deposit_address::AddressSchema;
 use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::management::{CallError, Reason};
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
-use crate::state::audit::{EventType, apply_state_transition};
+use crate::state::audit::{EventType, apply_state_transition, process_event};
 use crate::state::automatic_deposits::SweepTarget;
 use crate::state::eth_logs_scraping::LogScrapings;
 use crate::state::event::AutomaticDeposit;
@@ -15,8 +15,8 @@ use crate::sweep::{create_pending_sweeper_requests, enqueue_sweep, in_chain_exec
 use crate::test_fixtures::mock::MockCanisterRuntime;
 use crate::test_fixtures::{
     account, another_account, automatic_deposit, deposit_address, gas_fee_estimate, init_state,
-    initial_state, prepay_sweep_gas, state_with_deposit_helper, state_with_finalized_sweep,
-    sweep_pipeline_events, sweep_pipeline_outcome, usdc, usdt,
+    initial_state, prepay_sweep_gas, state_with_deposit_helper, state_with_enqueued_sweep,
+    state_with_finalized_sweep, sweep_pipeline_events, sweep_pipeline_outcome, usdc, usdt,
 };
 use crate::tx::{Authorization, AuthorizationRequest, SignableTransaction, TransactionSignature};
 use ethnum::u256;
@@ -282,21 +282,34 @@ async fn should_rotate_at_the_next_nonce_once_the_recarried_tuple_has_applied() 
 /// A reverted sweep leaves the minter unable to say which of the tuples it signed for the
 /// addresses that sweep touched the chain applied, so their nonce is no longer known — and a tuple
 /// signed for a guessed nonce is at best wasted gas. They stay out of sweeps until the nonce is
-/// read back off the chain.
+/// read back off the chain, and they are dropped at both the batching and the enqueueing step: the
+/// batch is taken a signing round before the sweep is built, and a sweep can revert in between.
 #[tokio::test]
 async fn should_leave_out_an_address_whose_nonce_a_reverted_sweep_left_unverified() {
-    state_with_finalized_sweep(&[(account(), usdc())], TransactionStatus::Failure).await;
+    state_with_enqueued_sweep(&[(account(), usdc())]).await;
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
     queue_deposit(&account(), &usdt());
+    let taken_before_the_revert = targets_of(Asset::Erc20(usdt()));
+    assert_eq!(
+        taken_before_the_revert.len(),
+        1,
+        "the address is offered while its nonce is still trusted"
+    );
 
+    finalize_pending_sweeps(TransactionStatus::Failure);
+
+    assert!(
+        targets_of(Asset::Erc20(usdt())).is_empty(),
+        "a batch offering an address whose nonce is unverified would let it take a slot no sweep \
+         can use"
+    );
     enqueue_sweep(
         Asset::Erc20(usdt()),
-        &targets_of(Asset::Erc20(usdt())),
+        &taken_before_the_revert,
         &gas_fee_estimate(),
         &runtime,
     );
-
     assert_eq!(
         pending_sweeps(),
         vec![],
@@ -311,12 +324,13 @@ async fn should_sweep_again_once_the_deposit_address_nonce_has_been_read_back() 
     runtime.expect_time().return_const(NOW);
     queue_deposit(&account(), &usdt());
     mutate_state(|s| {
-        apply_state_transition(
+        process_event(
             s,
-            &EventType::ObservedDepositAddressNonce {
+            EventType::ObservedDepositAddressNonce {
                 account: account(),
                 nonce: TransactionNonce::ONE,
             },
+            &runtime,
         )
     });
 
