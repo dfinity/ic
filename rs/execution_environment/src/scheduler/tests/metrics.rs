@@ -1206,10 +1206,11 @@ fn checkpoint_round_backfills_consumed_cycles_monotonic() {
 /// turn into a derived zero that compares `Equal` and passes unnoticed.
 ///
 /// The backfill reports it through `debug_assert_or_critical_error!`, so under
-/// debug assertions it panics; the round below is the only thing in this test that
-/// can panic, so the test fails if the check is ever dropped.
+/// debug assertions it panics. The expected message is the one that macro's
+/// `debug_assert!(false)` produces, so that a panic from the assertions setting the
+/// test up fails the test rather than passing for the wrong reason.
 #[test]
-#[should_panic]
+#[should_panic(expected = "assertion failed: false")]
 fn checkpoint_round_reports_outstanding_prepayments_above_the_gauge() {
     let mut test = SchedulerTestBuilder::new().build();
     let canister = test.create_canister();
@@ -1233,9 +1234,9 @@ fn checkpoint_round_reports_outstanding_prepayments_above_the_gauge() {
 ///
 /// Note that this needs the outstanding prepayments to be zero: with a prepayment
 /// still outstanding, dropping the gauge would trip the `outstanding > gauge` check
-/// first and never reach this arm.
+/// first and never reach this arm; the assertions below pin that down.
 #[test]
-#[should_panic]
+#[should_panic(expected = "assertion failed: false")]
 fn checkpoint_round_reports_monotonic_above_the_gauge() {
     let mut test = SchedulerTestBuilder::new().build();
     let canister = test.create_canister();
