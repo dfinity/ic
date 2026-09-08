@@ -2207,6 +2207,26 @@ fn migrate_consumed_cycles_to_monotonic(
             );
             return;
         };
+        // Every outstanding prepayment was added to the gauge when it was made, so
+        // the gauge can never be below their sum. Checked before subtracting: the
+        // subtraction saturates at zero, which would mask the violation as a
+        // `derived` of zero -- and, for a canister whose monotonic value is zero
+        // too, hide it in the `Equal` arm below. Unreachable when the invariant on
+        // `SystemState::outstanding_prepayments` holds.
+        if outstanding > canister_metrics.consumed_cycles() {
+            debug_assert_or_critical_error!(
+                false,
+                metrics.consumed_cycles_invariant_broken,
+                log,
+                "{}: Canister {}: the {} outstanding prepayments exceed the consumed \
+                 cycles gauge {}",
+                CONSUMED_CYCLES_INVARIANT_BROKEN,
+                canister.canister_id(),
+                outstanding,
+                canister_metrics.consumed_cycles(),
+            );
+            return;
+        }
         let derived = canister_metrics.consumed_cycles() - outstanding;
         match derived.cmp(&canister_metrics.consumed_cycles_monotonic()) {
             // Not backfilled yet, or a downgrade dropped it. Only take a

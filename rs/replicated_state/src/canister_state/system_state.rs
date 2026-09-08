@@ -2742,6 +2742,10 @@ pub mod testing {
         /// simulate a canister loaded from a checkpoint predating the field.
         fn reset_consumed_cycles_monotonic(&mut self);
 
+        /// Testing only: Resets the `CanisterMetrics::consumed_cycles` gauge, e.g. to
+        /// break the invariant on `SystemState::outstanding_prepayments`.
+        fn reset_consumed_cycles(&mut self);
+
         /// Testing only: sets the canister status.
         fn set_status(&mut self, status: CanisterStatus);
 
@@ -2786,6 +2790,10 @@ pub mod testing {
 
         fn reset_consumed_cycles_monotonic(&mut self) {
             self.canister_metrics.consumed_cycles_monotonic = NominalCycles::zero();
+        }
+
+        fn reset_consumed_cycles(&mut self) {
+            self.canister_metrics.consumed_cycles = NominalCycles::zero();
         }
 
         fn set_status(&mut self, status: CanisterStatus) {
