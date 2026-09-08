@@ -1501,9 +1501,16 @@ rotated, costs nothing (`R13`) and is harmless on the old delegate.
    any other was skipped. An address' delegation then follows without a
    second structure: its applied tuple with the highest nonce names the
    current delegate, and its nonce is one above it; an address with no applied
-   tuple is not delegated. Sweeps are finalized in sweeper-nonce order, so the
-   replay is deterministic and reconstructs the marks on upgrade (`R8`); the
-   dashboard shows the resulting delegation per address (`R9`).
+   tuple is not delegated. Replaying those events rebuilds the marks on upgrade
+   (`R8`). The replay follows the event log, i.e. the order in which the minter
+   processed the receipts (by `SweepId`), which is not necessarily the
+   sweeper-nonce order in which the sweeps mined: a sweep whose prepaid gas no
+   longer covers the fee is moved back in the queue, so a lower `SweepId` can
+   carry a higher nonce. The classification does not depend on that order —
+   every tuple in flight for a given address at any one time is the *same*
+   tuple (see 5) — so whichever receipt comes first marks it applied and the
+   others skipped, for the same resulting delegation. The dashboard shows that
+   delegation per address (`R9`).
 2. **Which tuple a sweep carries** is decided per item at enqueue time from the
    record and the configured delegate:
 
@@ -1555,10 +1562,11 @@ rotated, costs nothing (`R13`) and is harmless on the old delegate.
    tuple is idempotent — whichever sweep mines first applies it, the other
    skips it), while an ETH item **waits** in the queue until that tuple's
    sweep is finalized; the rotation is then signed at `n + 1`. Two in-flight
-   sweeps carrying the same tuple are always safe: the record processes them
-   in order, first applied (`n → n + 1`), second skipped (`n ≠ n + 1`). No
-   ordering can therefore point an address anywhere the minter did not sign
-   for, and no rotation-dependent call ever runs on the old code.
+   sweeps carrying the same tuple are always safe, in whichever order their
+   receipts are processed: the first marks the tuple applied (`n → n + 1`),
+   the second finds `n ≠ n + 1` and marks it skipped. No ordering can
+   therefore point an address anywhere the minter did not sign for, and no
+   rotation-dependent call ever runs on the old code.
 
 **Rules for the next delegate version**, so that a mixed population keeps
 working while rotation is lazy:
