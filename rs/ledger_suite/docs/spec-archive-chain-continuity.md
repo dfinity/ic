@@ -602,11 +602,57 @@ option matters here:
   third-party ICRC ledgers is indefinitely. Verify the Candid compatibility with
   `didc` and the CI check rather than relying on this paragraph.
 
-So this ships as one release in the standard order. Note the consequence of that
-order: archives are upgraded last, so the corruption is only closed at the end
-of the sequence. Since A needs no cooperation from the ledger, the archives
-could be upgraded first for this change if closing it earlier is worth
-reordering for.
+### Two releases, both in the standard order
+
+Do not reorder the suite. Split instead, so that each release is safe in the
+normal index-ledger-archives sequence:
+
+* **Release 1 — archive only.** A, C and the archive half of E: the chain check,
+  the refusal metric, and `append_blocks` accepting the optional index and
+  returning the optional result. The ledger is unchanged, so it neither sends the
+  index nor reads the result. After this release every archive in our suites
+  speaks the protocol, and the corruption is closed.
+* **Release 2 — ledger.** B, D and the ledger half of E: sending the index,
+  reconciling from the reported position, the backoff and the creation counter.
+  By now the archives it talks to already answer, so the fallback path is never
+  exercised in our deployments.
+
+The `opt` tolerance is still worth having, but for third parties rather than for
+us: an operator who upgrades only the ledger gets the incremental fallback rather
+than a failure.
+
+**Detecting an old archive.** The ledger can tell, from the reply: an archive that
+returns nothing decodes as `null`. That is after the append rather than before,
+which is harmless, since an old archive still stores the blocks — it just cannot
+say where it is. Detecting it beforehand is not practical: `remaining_capacity`
+and `icrc3_get_blocks` both exist on old archives so neither discriminates, and
+`canister_status` would give the module hash but needs controller rights the
+ledger does not have, since `update_settings` hands the archive to NNS Root.
+
+Only the **last** archive matters. `node_and_capacity` appends only to
+`nodes.last()`, so a full archive is never written to again and its version is
+irrelevant; and a newly spawned node runs the Wasm the ledger embeds, so it
+necessarily speaks the protocol. The requirement is therefore "the current tail
+archive is upgraded", which one node rollover satisfies permanently.
+
+That opens two policy options beyond the fallback, if the fallback path's lifetime
+is judged too long to carry:
+
+* **Halt and wait.** Refuse to archive against a tail archive that answers `null`,
+  back off, and accumulate blocks locally until it is upgraded. This lets the
+  incremental path be deleted. The cost is stable-memory growth while waiting —
+  the same degraded mode two ck ledgers are running deliberately today — and a
+  hard dependency on operators upgrading their archives, so the halt needs its own
+  metric rather than hiding in the generic failure counter.
+* **Roll over.** Treat a `null`-answering tail as unusable and spawn a fresh node,
+  which speaks the protocol by construction. No waiting and no fallback path, at
+  the cost of abandoning the old tail's unused capacity — up to 3 GiB of
+  paid-for space — and 10 T cycles, which on a cycle-poor third-party ledger
+  could itself fail.
+
+Whichever is chosen, **count every use of the fallback in a metric**. The
+objection to keeping it is not that it exists but that its lifetime is unknowable;
+a counter makes it observable, so it can be deleted once it reads zero everywhere.
 
 ## Testing strategy
 
