@@ -9,7 +9,7 @@ use crate::lifecycle::init::InitArg;
 use crate::numeric::{
     BlockNumber, Erc20Value, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
 };
-use crate::state::audit::{EventType, apply_state_transition};
+use crate::state::audit::{EventType, process_event};
 use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::event::AutomaticDeposit;
@@ -205,25 +205,29 @@ pub fn prepay_sweep_gas(state: &mut State) {
 /// A [`State`] whose sweep queue holds exactly these funded pairs, all taken by the one sweep
 /// [`create_pending_sweeper_requests`] enqueued for them, returned along with that request. The
 /// deposits, attestations and authorizations the enqueue pairs up arrive through the event log, so
-/// the sweep is assembled by the production path without the runtime signing anything.
+/// the sweep is assembled by the production path without the runtime signing anything, and the log
+/// alone reconstructs the state the fixture hands back.
 pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, SweepRequest) {
     const SWEEP_DECIDED_AT: u64 = 1_620_328_630_000_000_000;
 
+    let mut runtime = mock::MockCanisterRuntime::new();
+    runtime.expect_time().return_const(SWEEP_DECIDED_AT);
     let mut state = state_with_deposit_helper(deposit_helper());
     prepay_sweep_gas(&mut state);
     state.sweeper_contract_address = Some(sweeper_contract());
     state.last_transaction_price_estimate = Some((SWEEP_DECIDED_AT, gas_fee_estimate()));
     let chain_id = state.ethereum_network.chain_id();
     for (account, token) in pairs {
-        apply_state_transition(
+        process_event(
             &mut state,
-            &EventType::AutomaticDepositReceived(AutomaticDeposit {
+            EventType::AutomaticDepositReceived(AutomaticDeposit {
                 owner: account.owner,
                 subaccount: account.subaccount,
                 address: deposit_address(account),
                 asset: Asset::Erc20(*token),
                 ..automatic_deposit()
             }),
+            &runtime,
         );
     }
     for account in pairs
@@ -231,16 +235,17 @@ pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, 
         .map(|(account, _token)| *account)
         .collect::<BTreeSet<_>>()
     {
-        apply_state_transition(
+        process_event(
             &mut state,
-            &EventType::AttestedDepositAddress {
+            EventType::AttestedDepositAddress {
                 request: AttestationRequest::new(chain_id, deposit_helper(), account),
                 signature: transaction_signature(),
             },
+            &runtime,
         );
-        apply_state_transition(
+        process_event(
             &mut state,
-            &EventType::AuthorizedDepositAddress {
+            EventType::AuthorizedDepositAddress {
                 request: AuthorizationRequest::new(
                     account,
                     chain_id,
@@ -249,11 +254,10 @@ pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, 
                 ),
                 signature: transaction_signature(),
             },
+            &runtime,
         );
     }
     init_state(state);
-    let mut runtime = mock::MockCanisterRuntime::new();
-    runtime.expect_time().return_const(SWEEP_DECIDED_AT);
 
     create_pending_sweeper_requests(&runtime).await;
 
