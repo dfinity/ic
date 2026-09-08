@@ -46,13 +46,13 @@ type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
 /// block devices which requires root.
 #[mockall::automock]
 pub trait DiskCryptoOps: Send + Sync {
-    /// Returns whether the device can already be unlocked.
+    /// Returns `Ok(())` if the device can already be unlocked.
     fn can_open(
         &self,
         device_path: &Path,
         luks_header_path: &Path,
         sev_firmware: &mut dyn SevGuestFirmware,
-    ) -> Result<bool>;
+    ) -> Result<()>;
 
     /// Re-keys the detached LUKS header to the SEV-derived key of the new GuestOS.
     fn rekey(
@@ -72,7 +72,7 @@ impl DiskCryptoOps for DefaultDiskCryptoOps {
         device_path: &Path,
         luks_header_path: &Path,
         sev_firmware: &mut dyn SevGuestFirmware,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         guest_disk::sev::can_open(
             device_path,
             &LuksHeaderLocation::Detached(luks_header_path.to_path_buf()),
@@ -160,26 +160,28 @@ impl DiskEncryptionKeyExchangeClientAgent {
         // If we can already open the store, we don't need to run the key exchange.
         // (We still have to call signal_status, since the server is expecting us to signal
         // success)
-        let can_open_store = self.crypto_ops.can_open(
+        let retrieve_status = match self.crypto_ops.can_open(
             &self.store_device_path,
             &self.store_luks_header_path,
             self.sev_firmware.as_mut(),
-        )?;
-
-        let retrieve_status = if can_open_store {
-            println!(
-                "{} can be opened with our derived key, no need to run exchange",
-                self.store_device_path.display()
-            );
-            Ok(())
-        } else {
-            self.retrieve_disk_encryption_data(
-                &mut upgrade_service_client,
-                &my_public_key_der,
-                &server_public_key_der,
-            )
-            .await
-            .context("Failed to retrieve disk encryption data")
+        ) {
+            Ok(()) => {
+                println!(
+                    "{} can be opened with our derived key, no need to run exchange",
+                    self.store_device_path.display()
+                );
+                Ok(())
+            }
+            Err(err) => {
+                println!("Running the key exchange because the disk cannot be opened: {err:#}");
+                self.retrieve_disk_encryption_data(
+                    &mut upgrade_service_client,
+                    &my_public_key_der,
+                    &server_public_key_der,
+                )
+                .await
+                .context("Failed to retrieve disk encryption data")
+            }
         };
 
         let _ignored = upgrade_service_client

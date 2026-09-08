@@ -26,7 +26,7 @@
 //! current TCB (TCB rotation).
 
 use crate::crypt::{
-    KeyslotToken, LuksHeaderLocation, SINGLE_KEYSLOT_INDEX, SevMetadata, activate,
+    KeyslotToken, LuksHeaderLocation, SINGLE_KEYSLOT_INDEX, SevMetadata, activate_crypt_device,
     destroy_keyslots_except_first, format_luks2_device, open_luks2_device,
     read_single_keyslot_token, write_keyslot_token,
 };
@@ -42,7 +42,7 @@ use sev::parser::ByteParser;
 use sev_guest::firmware::SevGuestFirmware;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use std::path::{Path, PathBuf};
-use tracing::{info, warn};
+use tracing::info;
 
 /// Disk encryption for SEV guests: the key is derived from the SEV firmware, bound to
 /// the GuestOS's launch measurement. The Var partition uses an attached LUKS header; the
@@ -160,23 +160,17 @@ fn open_keyslot(
     Ok((crypt_device, token, passphrase))
 }
 
-/// Check whether the device can be opened with the SEV-derived key.
+/// Checks whether the device can be opened with the SEV-derived key.
 pub fn can_open(
     device_path: &Path,
     header_location: &LuksHeaderLocation,
     sev_firmware: &mut dyn SevGuestFirmware,
-) -> Result<bool> {
+) -> Result<()> {
     let (mut crypt_device, _, passphrase) =
-        match open_keyslot(device_path, header_location, sev_firmware) {
-            Ok(result) => result,
-            Err(err) => {
-                warn!("Failed to open the keyslot: {err:#}");
-                return Ok(false);
-            }
-        };
+        open_keyslot(device_path, header_location, sev_firmware)?;
 
-    // Check that the passphrase unlocks the keyslot.
-    Ok(crypt_device
+    // Check that the passphrase unlocks the keyslot, without creating a mapper device.
+    crypt_device
         .activate_handle()
         .activate_by_passphrase(
             None,
@@ -184,7 +178,8 @@ pub fn can_open(
             passphrase.as_bytes(),
             CryptActivate::empty(),
         )
-        .is_ok())
+        .map(|_| ())
+        .context("The keyslot cannot be unlocked with the SEV-derived key")
 }
 
 /// Re-keys a LUKS2 device's header in place: the key unlocking the device (`old_key`) is

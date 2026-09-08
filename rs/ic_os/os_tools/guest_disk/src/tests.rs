@@ -451,7 +451,7 @@ impl TestFixture {
 
     /// SEV: whether the store partition can be unlocked locally with the SEV-derived key
     /// (used to decide whether key exchange can be skipped).
-    fn can_open_store(&self) -> Result<bool> {
+    fn can_open_store(&self) -> Result<()> {
         let store_luks_header_path = self.store_header_path();
         let mut firmware = self.sev_firmware_builder();
         can_open(
@@ -459,12 +459,6 @@ impl TestFixture {
             &LuksHeaderLocation::Detached(store_luks_header_path.clone()),
             &mut firmware,
         )
-    }
-
-    fn assert_no_detached_store_header(&self) {
-        let store_header_path = self.store_header_path();
-        assert!(!store_header_path.exists());
-        assert!(!self.store_partition().has_detached_luks2_header());
     }
 
     fn set_guest_vm_type(&mut self, vm_type: GuestVMType) {
@@ -1090,29 +1084,23 @@ fn test_can_open_store_with_detached_header_after_attached_header_is_corrupted()
     // where an attached header would be must not affect the result.
     fixture.store_partition().corrupt_attached_header();
 
-    let result = fixture
+    fixture
         .can_open_store()
         .expect("can_open_store returned error");
-
-    assert!(
-        result,
-        "Expected can_open_store to return true when the detached header works"
-    );
 }
 
 #[test]
 fn test_cannot_open_store_when_no_key_works() {
-    let fixture = TestFixture::new_sev();
+    let mut fixture = TestFixture::new_sev();
 
-    // Device is unformatted (no LUKS header), so no key can open it
-    let result = fixture
+    fixture.store_partition().format().unwrap();
+    // Simulate a different GuestOS booting from the same slot: its derived key does not
+    // unlock the keyslot.
+    fixture.set_launch_measurement([0xAA; 48]);
+
+    fixture
         .can_open_store()
-        .expect("can_open_store returned error");
-    assert!(
-        !result,
-        "Expected can_open_store to return false when no key can open the device"
-    );
-    fixture.assert_no_detached_store_header();
+        .expect_err("no key should open the device");
 }
 
 #[test]
@@ -1614,9 +1602,9 @@ fn test_guestos_upgrade_then_firmware_upgrade_then_rollback() {
     fixture.store_partition().deactivate();
 }
 
-/// SEV: can_open_store returns false when the keyslot's metadata token is malformed.
+/// SEV: can_open_store errors when the keyslot's metadata token is malformed.
 #[test]
-fn test_can_open_store_returns_false_when_the_token_is_malformed() {
+fn test_can_open_store_fails_when_the_token_is_malformed() {
     let fixture = TestFixture::new_sev();
     fixture.store_partition().format().unwrap();
 
@@ -1625,23 +1613,23 @@ fn test_can_open_store_returns_false_when_the_token_is_malformed() {
         .token_handle()
         .json_set(TokenInput::RemoveToken(SINGLE_TOKEN_INDEX))
         .unwrap();
+    // A token that does not parse as a keyslot token (the SEV metadata is missing).
     add_raw_metadata_token(
         &mut crypt_device,
         json!({
             "type": "ic-key-metadata",
             "keyslots": [],
-            "sev_metadata": {
-                "launch_measurement_hex": hex::encode([7_u8; 48]),
-                "tcb_version": 123_u64,
-            }
         }),
     );
 
-    let result = fixture
+    let err = fixture
         .can_open_store()
-        .expect("can_open_store should not error on a malformed token");
+        .expect_err("a malformed token must be an error");
 
-    assert!(!result, "a malformed token must not open the store");
+    assert!(
+        format!("{err:#}").contains("IC key metadata token"),
+        "unexpected error: {err:#}"
+    );
 }
 
 #[test]
