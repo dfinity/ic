@@ -1,35 +1,11 @@
-use std::io;
-
-use crate::protocol::{Command, MAX_MESSAGE_SIZE, Request, Response};
+use crate::error::*;
+use crate::protocol::{Command, MAX_MESSAGE_SIZE, Response};
 
 use mockall::automock;
-use thiserror::Error;
 
 #[automock]
 pub trait VsockClient {
     fn send_command(&self, command: Command) -> Result<Response, VsockClientError>;
-}
-
-#[derive(Error, Debug)]
-pub enum VsockClientError {
-    #[error("io failure: {context}")]
-    Io { context: String, source: io::Error },
-    #[error("unable to serialize request: {request:#?}")]
-    InvalidRequest {
-        request: Request,
-        source: serde_json::Error,
-    },
-    #[error("unable to parse server response: {response:?}")]
-    InvalidResponse {
-        response: String,
-        source: serde_json::Error,
-    },
-}
-
-impl VsockClientError {
-    pub fn io(context: String) -> impl FnOnce(io::Error) -> Self {
-        move |source| Self::Io { context, source }
-    }
 }
 
 #[cfg(target_os = "linux")]
