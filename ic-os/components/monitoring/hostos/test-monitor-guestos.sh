@@ -4,6 +4,7 @@ set -euo pipefail
 
 MONITOR_GUESTOS_SCRIPT="${1:-./monitor-guestos.sh}"
 START_GUESTOS_SCRIPT="${2:-../../hostos/guestos/start-guestos.sh}"
+GUESTOS_VM_COUNT_SCRIPT="${3:-../../misc/guestos-vm-count.sh}"
 
 # Reward types to check. Deliberately no VM counts here: the counts are read
 # out of start-guestos.sh so that this test cannot drift away from it.
@@ -14,9 +15,12 @@ REWARD_TYPES=(type1.1 type3.1 type4 type4.1 type4.2 type4.3 type4.4 type4.5)
 # and libvirt through systemctl and virsh, none of which exist here.
 # ------------------------------------------------------------------------------
 function source() {
-    if [[ "$1" != /opt/ic/bin/* ]]; then
-        builtin source "$@"
-    fi
+    case "$1" in
+        # Defines the counts and slots under test, so load the real one.
+        /opt/ic/bin/guestos-vm-count.sh) builtin source "$GUESTOS_VM_COUNT_SCRIPT" ;;
+        /opt/ic/bin/*) ;;
+        *) builtin source "$@" ;;
+    esac
 }
 
 # ------------------------------------------------------------------------------

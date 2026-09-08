@@ -74,13 +74,16 @@ check_unused_components_test(
 # changed in one of them cannot silently diverge from the other.
 sh_test(
     name = "test_monitor_guestos",
+    size = "small",
     srcs = ["monitoring/hostos/test-monitor-guestos.sh"],
     args = [
         "$(execpath monitoring/hostos/monitor-guestos.sh)",
         "$(execpath hostos/guestos/start-guestos.sh)",
+        "$(execpath misc/guestos-vm-count.sh)",
     ],
     data = [
         "hostos/guestos/start-guestos.sh",
+        "misc/guestos-vm-count.sh",
         "monitoring/hostos/monitor-guestos.sh",
     ],
 )
