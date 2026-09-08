@@ -70,8 +70,8 @@ impl<K: Ord, V: HasLabel> PoolSection<K, V> {
     }
 
     /// Removes all entries for which `predicate` returns `true` and returns
-    /// their keys, instrumenting each removal the same way as [`Self::remove`].
-    pub(crate) fn extract_if_keys<F>(&mut self, mut predicate: F) -> Vec<K>
+    /// their keys.
+    pub(crate) fn extract_matching_keys<F>(&mut self, mut predicate: F) -> Vec<K>
     where
         F: FnMut(&K, &V) -> bool,
     {
