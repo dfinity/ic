@@ -308,34 +308,46 @@ impl State {
         )
     }
 
-    /// What every deposit address in `accounts` authorizes to let the configured sweeper contract
-    /// sweep it: the tuple naming this minter's chain, that contract, and nonce zero. `None` while
-    /// no sweeper contract is configured.
-    ///
-    /// The nonce is always zero, whatever the address actually holds. A deposit address is at
-    /// nonce zero exactly while it has never been delegated — applying an authorization spends it
-    /// — so the tuple either installs the delegation or is skipped, and both are correct in any
-    /// order the sweeps carrying them land. That is what lets a sweep authorize every address it
-    /// touches without tracking which ones are already delegated, at the price of the intrinsic
-    /// gas a skipped tuple still costs.
+    /// What each deposit address in `accounts` still has to authorize to let the configured sweeper
+    /// contract sweep it, one entry per account and in the same order. The outer `None` says no
+    /// sweeper contract is configured; an inner `None` says that address needs no tuple, being
+    /// delegated to that very contract already. A sweep every address of which is delegated carries
+    /// no authorization at all and is sent as a plain EIP-1559 transaction.
     pub fn authorization_requests<T: AsRef<Account>>(
         &self,
         accounts: &[T],
-    ) -> Option<Vec<AuthorizationRequest>> {
+    ) -> Option<Vec<Option<AuthorizationRequest>>> {
         let delegate = self.sweeper_contract_address?;
         Some(
             accounts
                 .iter()
-                .map(|account| {
-                    AuthorizationRequest::new(
-                        *account.as_ref(),
-                        self.ethereum_network.chain_id(),
-                        delegate,
-                        TransactionNonce::ZERO,
-                    )
-                })
+                .map(|account| self.authorization_request(*account.as_ref(), delegate))
                 .collect(),
         )
+    }
+
+    /// The tuple `account`'s deposit address has to authorize for `delegate`'s code to run at it,
+    /// or `None` if it already delegates `delegate`.
+    ///
+    /// An address that has never been delegated is at nonce zero, and authorizes there. So does one
+    /// delegated to another contract, whose nonce zero is spent: that tuple is skipped on chain,
+    /// which is what leaves the address on its current delegate until re-delegating it is supported.
+    fn authorization_request(
+        &self,
+        account: Account,
+        delegate: Address,
+    ) -> Option<AuthorizationRequest> {
+        let nonce = match self.automatic_deposits.delegation(&account) {
+            Some(delegation) if delegation.delegate == delegate => return None,
+            Some(_delegated_elsewhere) => TransactionNonce::ZERO,
+            None => TransactionNonce::ZERO,
+        };
+        Some(AuthorizationRequest::new(
+            account,
+            self.ethereum_network.chain_id(),
+            delegate,
+            nonce,
+        ))
     }
 
     /// The attestation `account`'s ckERC20 deposit address has already signed for the configuration
