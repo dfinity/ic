@@ -3,6 +3,7 @@
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_state_layout::{CANISTER_STATES_DIR, CheckpointLayout, SNAPSHOTS_DIR, WriteOnly};
 use ic_types::Height;
+use nix::fcntl::{AT_FDCWD, RenameFlags, renameat2};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -87,7 +88,18 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
     let result = (|| -> Result<(), String> {
         assemble(&base, &source, &staging)?;
 
-        fs::rename(&staging, &output).map_err(|err| {
+        // `rename` replaces an empty destination directory, and the check that
+        // the output does not exist is not atomic with this, so an output that
+        // appeared in between would be deleted despite having been checked for.
+        // `RENAME_NOREPLACE` refuses to replace anything at all instead.
+        renameat2(
+            AT_FDCWD,
+            &staging,
+            AT_FDCWD,
+            &output,
+            RenameFlags::RENAME_NOREPLACE,
+        )
+        .map_err(|err| {
             format!(
                 "failed to move {} to {}: {err}",
                 staging.display(),

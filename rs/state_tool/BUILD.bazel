@@ -24,6 +24,7 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:clap",
         "@crate_index//:hex",
+        "@crate_index//:nix",
         "@crate_index//:prost",
         "@crate_index//:slog",
         "@crate_index//:slog-term",

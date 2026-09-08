@@ -15026,6 +15026,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-state-manager",
  "ic-types",
+ "nix 0.31.3",
  "prost",
  "slog",
  "slog-term",
