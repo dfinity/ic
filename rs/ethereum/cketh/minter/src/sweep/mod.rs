@@ -27,8 +27,8 @@ use crate::{
         automatic_deposits::SweepTarget,
         mutate_state, read_state,
         transactions::{
-            AuthorizedSweepItem, CreateSweepTransactionError, PipelineRequest, SweepRequest,
-            sweep_gas_limit,
+            AuthorizedSweepItem, CreateSweepTransactionError, PipelineRequest, SweepId,
+            SweepRequest, sweep_gas_limit,
         },
     },
     time::TimeProvider,
@@ -38,10 +38,12 @@ use crate::{
         send_signed_transactions,
     },
 };
+use candid::Nat;
+use evm_rpc_types::TransactionReceipt as EvmTransactionReceipt;
 use futures::future::join_all;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
@@ -470,6 +472,26 @@ async fn send_transactions_batch(
     send_signed_transactions(sender, &transactions_to_send).await;
 }
 
+/// The finalized sweeps of `receipts`, in the order the chain executed them: by block, then by
+/// position within it. The sweeper queue reschedules a sweep it cannot yet pay for, which lets a
+/// lower [`SweepId`] hold a higher transaction nonce, so id order is not chain order; the
+/// authorizations a sweep applied follow from the nonce its deposit addresses had reached when it
+/// ran, which only chain order tells.
+fn in_chain_execution_order(
+    receipts: BTreeMap<SweepId, EvmTransactionReceipt>,
+) -> Vec<(SweepId, EvmTransactionReceipt)> {
+    let mut ordered: Vec<_> = receipts.into_iter().collect();
+    ordered.sort_by(|(_, left), (_, right)| chain_position(left).cmp(&chain_position(right)));
+    ordered
+}
+
+fn chain_position(receipt: &EvmTransactionReceipt) -> (&Nat, &Nat) {
+    (
+        receipt.block_number.as_ref(),
+        receipt.transaction_index.as_ref(),
+    )
+}
+
 async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_provider: &T) {
     if read_state(|s| s.automatic_deposits.is_sent_sweep_tx_empty()) {
         return;
@@ -481,7 +503,7 @@ async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_prov
                     .sent_sweep_transactions_to_finalize(&finalized_tx_count)
             });
             if let Some(receipts) = fetch_finalized_receipts(txs_to_finalize).await {
-                for (sweep_id, transaction_receipt) in receipts {
+                for (sweep_id, transaction_receipt) in in_chain_execution_order(receipts) {
                     mutate_state(|s| {
                         process_event(
                             s,
