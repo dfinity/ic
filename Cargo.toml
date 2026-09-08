@@ -1006,7 +1006,6 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.26.4"
-warp = { version = "0.3.7", features = ["tls"] }
 wasm-encoder = { version = "0.252.0", features = ["wasmparser"] }
 wasm-smith = { version = "0.252.0", default-features = false, features = [
     "wasmparser",

@@ -557,3 +557,26 @@ mod encode_principal {
         );
     }
 }
+
+mod event_source {
+    use crate::eth_logs::EventSource;
+    use crate::eth_rpc::Hash;
+    use crate::numeric::LogIndex;
+    use std::str::FromStr;
+
+    #[test]
+    fn should_display_event_source_with_single_hex_prefix() {
+        let event_source = EventSource {
+            transaction_hash: Hash::from_str(
+                "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
+            )
+            .unwrap(),
+            log_index: LogIndex::from(29_u8),
+        };
+
+        assert_eq!(
+            event_source.to_string(),
+            "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3:29"
+        );
+    }
+}
