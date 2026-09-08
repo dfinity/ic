@@ -110,6 +110,21 @@ fn encode_two_calls_layout() {
 }
 
 #[test]
+fn full_batch_fits_the_initcode_limit_and_one_more_call_does_not() {
+    let batch_of = |num_calls: usize| -> Vec<BalanceOfCall> {
+        (0..num_calls)
+            .map(|index| BalanceOfCall {
+                token: TOKEN0,
+                holder: DepositAddress::new(Address::new([index as u8; 20])),
+            })
+            .collect()
+    };
+
+    assert!(encode_balance_batch(&batch_of(MAX_CALLS_PER_BATCH)).len() <= MAX_INITCODE_SIZE);
+    assert!(encode_balance_batch(&batch_of(MAX_CALLS_PER_BATCH + 1)).len() > MAX_INITCODE_SIZE);
+}
+
+#[test]
 fn decode_round_trip() {
     let mut ret = Vec::new();
     for v in [1_000_000_u64, 0, u64::MAX] {
