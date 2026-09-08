@@ -409,6 +409,23 @@ type WithdrawalError = variant {
     TemporarilyUnavailable : text;
 };
 
+// Argument for the deposit_eth endpoint.
+type DepositEthArg = record {
+    mode : DepositMode;
+};
+
+// Response of the deposit_eth endpoint.
+type DepositEthResponse = record {
+    // The Ethereum deposit address derived for the caller. It is the same address as the one
+    // derived by the deposit_erc20 endpoint for the same account, whatever the ERC-20 token.
+    address : text;
+};
+
+type DepositEthError = variant {
+    // The minter is temporarily unavailable, retry the request.
+    TemporarilyUnavailable : text;
+};
+
 // Argument for the deposit_erc20 endpoint.
 type DepositErc20Arg = record {
     // The Ethereum ERC-20 contract address of the token to deposit (e.g. USDC).
@@ -949,6 +966,12 @@ service : (MinterArg) -> {
     // (nanoseconds since the Unix epoch) until which a deposit to it is guaranteed to be noticed,
     // and the minimum balance of the requested token the address must hold to be noticed.
     deposit_erc20 : (DepositErc20Arg) -> (variant { Ok : DepositErc20Response; Err : DepositErc20Error });
+
+    // Derive the ETH deposit address for the caller.
+    // The account is derived from the caller's principal and the subaccount in the argument.
+    // Returns the EIP-55 checksummed deposit address, which is the same address as the one
+    // derived by deposit_erc20 for the same account, whatever the ERC-20 token.
+    deposit_eth : (DepositEthArg) -> (variant { Ok : DepositEthResponse; Err : DepositEthError });
 
     // Retrieve the status of a Eth withdrawal request.
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);

@@ -14,10 +14,10 @@ use ic_cketh_minter::endpoints::events::{
 };
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Arg,
-    DepositErc20Error, DepositErc20Response, DepositMode, Eip1559TransactionPrice,
-    Eip1559TransactionPriceArg, Erc20Balance, Erc20MinimumDeposit, GasFeeEstimate, MinterInfo,
-    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
-    WithdrawalSearchParameter,
+    DepositErc20Error, DepositErc20Response, DepositEthArg, DepositEthError, DepositEthResponse,
+    DepositMode, Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance,
+    Erc20MinimumDeposit, GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus,
+    WithdrawalArg, WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
@@ -200,6 +200,25 @@ async fn minter_address() -> String {
     state::minter_address(&IC_CANISTER_RUNTIME)
         .await
         .to_string()
+}
+
+#[update]
+async fn deposit_eth(arg: DepositEthArg) -> Result<DepositEthResponse, DepositEthError> {
+    let caller = validate_caller_not_anonymous();
+    let DepositMode::Unsponsored { subaccount } = arg.mode;
+    let account = Account {
+        owner: caller,
+        subaccount,
+    };
+    state::lazy_call_ecdsa_public_key_with_chain_code(&IC_CANISTER_RUNTIME).await;
+    let address = read_state(|s| s.deposit_address(&account)).ok_or_else(|| {
+        DepositEthError::TemporarilyUnavailable(
+            "Minter's ECDSA public key not yet initialized".to_string(),
+        )
+    })?;
+    Ok(DepositEthResponse {
+        address: address.to_string(),
+    })
 }
 
 #[update]
