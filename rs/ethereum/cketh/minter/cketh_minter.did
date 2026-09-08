@@ -414,19 +414,6 @@ type DepositEthArg = record {
     mode : DepositMode;
 };
 
-// Response of the deposit_eth endpoint.
-type DepositEthResponse = record {
-    // The Ethereum deposit address derived for the caller. It is the same address as the one
-    // derived by the deposit_erc20 endpoint for the same account, whatever the ERC-20 token.
-    address : text;
-    // Minimum balance, in wei, that the deposit address must hold for the balance scan to
-    // detect it. The scan reads the address' whole ETH balance, so several smaller transfers
-    // count together; the funds stay undetected only while their total is below this.
-    minimum_deposit_amount : nat;
-    // Where the deposit stands in the detect-and-sweep pipeline.
-    status : DepositStatus;
-};
-
 type DepositEthError = variant {
     // The account already has the maximum number of assets armed.
     TooManyTokensForAccount;
@@ -456,14 +443,14 @@ type DepositMode = variant {
     // Sponsored : record { from_subaccount : opt blob; max_fee : nat };
 };
 
-// Response of the deposit_erc20 endpoint.
-type DepositErc20Response = record {
-    // The Ethereum deposit address derived for the caller.
+// Response of the deposit_erc20 and deposit_eth endpoints.
+type DepositResponse = record {
+    // The Ethereum deposit address derived for the caller, the same one whatever the asset.
     address : text;
-    // Minimum balance, in the token's own units, that the deposit address must hold for the
-    // balance scan to detect it. The scan reads the address' whole balance for the token, so
-    // several smaller transfers count together; the funds stay undetected only while their
-    // total is below this.
+    // Minimum balance, in the asset's own units (wei for ETH), that the deposit address must
+    // hold for the balance scan to detect it. The scan reads the address' whole balance for
+    // the asset, so several smaller transfers count together; the funds stay undetected only
+    // while their total is below this.
     //
     // A supported token with no configured minimum reports 2^256 - 1, which no real balance can
     // reach: a deposit of that token would never be detected. Frontends should treat such a value
@@ -976,7 +963,7 @@ service : (MinterArg) -> {
     // Returns the EIP-55 checksummed deposit address together with `valid_until`, the timestamp
     // (nanoseconds since the Unix epoch) until which a deposit to it is guaranteed to be noticed,
     // and the minimum balance of the requested token the address must hold to be noticed.
-    deposit_erc20 : (DepositErc20Arg) -> (variant { Ok : DepositErc20Response; Err : DepositErc20Error });
+    deposit_erc20 : (DepositErc20Arg) -> (variant { Ok : DepositResponse; Err : DepositErc20Error });
 
     // Derive and register the ETH deposit address for the caller.
     // The account is derived from the caller's principal and the subaccount in the argument.
@@ -985,7 +972,7 @@ service : (MinterArg) -> {
     // `valid_until`, the timestamp (nanoseconds since the Unix epoch) until which a deposit to
     // it is guaranteed to be noticed, and the minimum balance in wei the address must hold to
     // be noticed.
-    deposit_eth : (DepositEthArg) -> (variant { Ok : DepositEthResponse; Err : DepositEthError });
+    deposit_eth : (DepositEthArg) -> (variant { Ok : DepositResponse; Err : DepositEthError });
 
     // Retrieve the status of a Eth withdrawal request.
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);

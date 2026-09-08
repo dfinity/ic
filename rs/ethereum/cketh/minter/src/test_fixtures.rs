@@ -353,6 +353,7 @@ pub mod mock {
 }
 
 pub mod arb {
+    use crate::asset::Asset;
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_logs::LedgerSubaccount;
     use crate::eth_rpc::Hash;
@@ -363,6 +364,8 @@ pub mod arb {
         array::{uniform20, uniform32},
         collection::vec,
         prelude::{Strategy, any},
+        prop_oneof,
+        strategy::Just,
     };
 
     pub fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
@@ -386,6 +389,10 @@ pub mod arb {
 
     pub fn arb_address() -> impl Strategy<Value = Address> {
         uniform20(any::<u8>()).prop_map(Address::new)
+    }
+
+    pub fn arb_asset() -> impl Strategy<Value = Asset> {
+        prop_oneof![Just(Asset::Eth), arb_address().prop_map(Asset::Erc20),]
     }
 
     pub fn arb_hash() -> impl Strategy<Value = Hash> {

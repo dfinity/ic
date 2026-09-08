@@ -24,8 +24,8 @@ use ic_cketh_minter::endpoints::ckerc20::{
 };
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{
-    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositEthArg,
-    DepositEthError, DepositEthResponse, DepositMode, MinterInfo,
+    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositEthArg, DepositEthError, DepositMode,
+    DepositResponse, MinterInfo,
 };
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
 use ic_cketh_minter::{
@@ -1095,10 +1095,10 @@ impl DepositEthFlow {
         self.setup
     }
 
-    pub fn expect_deposit_response(self) -> (CkErc20Setup, DepositEthResponse) {
+    pub fn expect_deposit_response(self) -> (CkErc20Setup, DepositResponse) {
         let response = Decode!(
             &assert_reply(self.setup.env.await_call(self.message_id.clone())),
-            Result<DepositEthResponse, DepositEthError>
+            Result<DepositResponse, DepositEthError>
         )
         .unwrap()
         .expect("BUG: unexpected error from minter during deposit_eth");
@@ -1127,17 +1127,17 @@ impl DepositErc20Flow {
         self.setup
     }
 
-    pub fn expect_deposit_response(self) -> (CkErc20Setup, DepositErc20Response) {
+    pub fn expect_deposit_response(self) -> (CkErc20Setup, DepositResponse) {
         let response = self
             .minter_response()
             .expect("BUG: unexpected error from minter during deposit_erc20");
         (self.setup, response)
     }
 
-    fn minter_response(&self) -> Result<DepositErc20Response, DepositErc20Error> {
+    fn minter_response(&self) -> Result<DepositResponse, DepositErc20Error> {
         Decode!(
             &assert_reply(self.setup.env.await_call(self.message_id.clone())),
-            Result<DepositErc20Response, DepositErc20Error>
+            Result<DepositResponse, DepositErc20Error>
         )
         .unwrap()
     }

@@ -4,7 +4,7 @@ mod tests;
 use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
-use crate::endpoints::{DepositErc20Response, DepositStatus, DetectedDeposit};
+use crate::endpoints::{DepositResponse, DepositStatus, DetectedDeposit};
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::logs::INFO;
@@ -536,9 +536,9 @@ impl AutomaticDeposits {
         now: Timestamp,
         request: &DepositRequest,
         minimum_deposit_amount: Erc20Value,
-    ) -> Option<DepositErc20Response> {
+    ) -> Option<DepositResponse> {
         if let Some(entry) = self.sweep.get(request) {
-            return Some(DepositErc20Response {
+            return Some(DepositResponse {
                 address: entry.address.to_string(),
                 minimum_deposit_amount: minimum_deposit_amount.into(),
                 status: DepositStatus::AwaitingSweep(DetectedDeposit {
@@ -548,16 +548,15 @@ impl AutomaticDeposits {
                 }),
             });
         }
-        self.get_entry(now, request)
-            .map(|entry| DepositErc20Response {
-                address: entry.value.address.to_string(),
-                minimum_deposit_amount: minimum_deposit_amount.into(),
-                status: DepositStatus::Scanning {
-                    valid_until: entry.expires_at.as_nanos(),
-                    last_scanned_block: entry.value.last_scanned_block.map(Into::into),
-                    scan_count: entry.value.scan_count as u64,
-                },
-            })
+        self.get_entry(now, request).map(|entry| DepositResponse {
+            address: entry.value.address.to_string(),
+            minimum_deposit_amount: minimum_deposit_amount.into(),
+            status: DepositStatus::Scanning {
+                valid_until: entry.expires_at.as_nanos(),
+                last_scanned_block: entry.value.last_scanned_block.map(Into::into),
+                scan_count: entry.value.scan_count as u64,
+            },
+        })
     }
 
     /// The queued deposits a sweep could take next, batched by token, skipping those a sweep
@@ -572,7 +571,7 @@ impl AutomaticDeposits {
         {
             let token = match deposit_request.asset {
                 Asset::Erc20(token) => token,
-                Asset::Eth => continue,
+                Asset::Eth => todo!("DEFI-2931: sweep ETH deposits via sweepEthBatch"),
             };
             let batch: &mut Vec<_> = batches.entry(token).or_default();
             if batch.len() < requested_batch_size {

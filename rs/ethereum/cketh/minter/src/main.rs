@@ -15,10 +15,10 @@ use ic_cketh_minter::endpoints::events::{
 };
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Arg,
-    DepositErc20Error, DepositErc20Response, DepositEthArg, DepositEthError, DepositEthResponse,
-    DepositMode, Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance,
-    Erc20MinimumDeposit, GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus,
-    WithdrawalArg, WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
+    DepositErc20Error, DepositEthArg, DepositEthError, DepositMode, DepositResponse,
+    Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance, Erc20MinimumDeposit,
+    GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg,
+    WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
@@ -204,7 +204,7 @@ async fn minter_address() -> String {
 }
 
 #[update]
-async fn deposit_eth(arg: DepositEthArg) -> Result<DepositEthResponse, DepositEthError> {
+async fn deposit_eth(arg: DepositEthArg) -> Result<DepositResponse, DepositEthError> {
     let caller = validate_caller_not_anonymous();
     // Held for the whole call, including across the ECDSA public key fetch in `arm_deposit`, so
     // that the status check and the registration that follows it cannot be interleaved with
@@ -214,18 +214,18 @@ async fn deposit_eth(arg: DepositEthArg) -> Result<DepositEthResponse, DepositEt
             "Failed retrieving guard for principal {caller}: {e:?}"
         ))
     });
-    let DepositMode::Unsponsored { subaccount } = arg.mode;
+    let subaccount = match arg.mode {
+        DepositMode::Unsponsored { subaccount } => subaccount,
+    };
     let account = Account {
         owner: caller,
         subaccount,
     };
-    Ok(arm_deposit(account, Asset::Eth)
-        .await
-        .map(DepositEthResponse::from)?)
+    Ok(arm_deposit(account, Asset::Eth).await?)
 }
 
 #[update]
-async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, DepositErc20Error> {
+async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositResponse, DepositErc20Error> {
     validate_ckerc20_active();
     let caller = validate_caller_not_anonymous();
     // Held for the whole call, including across the ECDSA public key fetch in `arm_deposit`, so
@@ -258,12 +258,10 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     Ok(arm_deposit(account, Asset::Erc20(token)).await?)
 }
 
-/// Report the `(account, asset)` pair's deposit status, arming the pair first if it is not armed
-/// yet. Callers hold a [`deposit_registration_guard`] across the call.
 async fn arm_deposit(
     account: Account,
     asset: Asset,
-) -> Result<DepositErc20Response, RegisterDepositError> {
+) -> Result<DepositResponse, RegisterDepositError> {
     let request = DepositRequest::new(account, asset);
     let minimum_deposit_amount = min_deposit(&asset);
     let now = Timestamp::from_nanos(ic_cdk::api::time());

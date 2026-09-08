@@ -244,15 +244,15 @@ pub enum DepositMode {
     // },
 }
 
-/// Response of the `deposit_erc20` endpoint.
+/// Response of the `deposit_erc20` and `deposit_eth` endpoints.
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
-pub struct DepositErc20Response {
-    /// The Ethereum deposit address derived for the caller.
+pub struct DepositResponse {
+    /// The Ethereum deposit address derived for the caller, the same one whatever the asset.
     pub address: String,
-    /// Minimum balance, in the token's own units, that the deposit address must hold for the
-    /// balance scan to detect it. The scan reads the address' whole balance for the token, so
-    /// several smaller transfers count together; the funds stay undetected only while their
-    /// total is below this.
+    /// Minimum balance, in the asset's own units (wei for ETH), that the deposit address must
+    /// hold for the balance scan to detect it. The scan reads the address' whole balance for
+    /// the asset, so several smaller transfers count together; the funds stay undetected only
+    /// while their total is below this.
     ///
     /// A supported token with no configured minimum reports `2^256 - 1`, which no real balance
     /// can reach: a deposit of that token would never be detected. Treat such a value as
@@ -296,30 +296,6 @@ pub struct DetectedDeposit {
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct DepositEthArg {
     pub mode: DepositMode,
-}
-
-/// Response of the `deposit_eth` endpoint.
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
-pub struct DepositEthResponse {
-    /// The Ethereum deposit address derived for the caller. It is the same address as the one
-    /// derived by the `deposit_erc20` endpoint for the same account, whatever the ERC-20 token.
-    pub address: String,
-    /// Minimum balance, in wei, that the deposit address must hold for the balance scan to
-    /// detect it. The scan reads the address' whole ETH balance, so several smaller transfers
-    /// count together; the funds stay undetected only while their total is below this.
-    pub minimum_deposit_amount: Nat,
-    /// Where the deposit stands in the detect-and-sweep pipeline.
-    pub status: DepositStatus,
-}
-
-impl From<DepositErc20Response> for DepositEthResponse {
-    fn from(response: DepositErc20Response) -> Self {
-        Self {
-            address: response.address,
-            minimum_deposit_amount: response.minimum_deposit_amount,
-            status: response.status,
-        }
-    }
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]

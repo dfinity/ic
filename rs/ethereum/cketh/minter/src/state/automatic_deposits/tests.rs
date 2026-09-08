@@ -5,7 +5,7 @@ use super::{
 };
 use crate::asset::Asset;
 use crate::deposit_address::DepositAddress;
-use crate::endpoints::{DepositErc20Response, DepositStatus, DetectedDeposit};
+use crate::endpoints::{DepositResponse, DepositStatus, DetectedDeposit};
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
@@ -772,7 +772,7 @@ fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
         .unwrap();
     assert_eq!(
         deposits.deposit_status(ts(0), &request(account(0), usdc()), minimum),
-        Some(DepositErc20Response {
+        Some(DepositResponse {
             address: deposit_address(&account(0)).to_string(),
             minimum_deposit_amount: Nat::from(MINIMUM_DEPOSIT_AMOUNT),
             status: DepositStatus::Scanning {
@@ -803,7 +803,7 @@ fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
     // and finding block for that one token.
     assert_eq!(
         deposits.deposit_status(ts(0), &request(account(0), usdc()), minimum),
-        Some(DepositErc20Response {
+        Some(DepositResponse {
             address: deposit_address(&account(0)).to_string(),
             minimum_deposit_amount: Nat::from(MINIMUM_DEPOSIT_AMOUNT),
             status: DepositStatus::AwaitingSweep(DetectedDeposit {
