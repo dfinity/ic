@@ -1,7 +1,8 @@
 use crate::address::ecdsa_public_key_to_address;
+use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::{DepositAddress, deposit_address, sweeper_address};
-use crate::endpoints::{CandidBlockTag, DepositErc20Error};
+use crate::endpoints::CandidBlockTag;
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -13,7 +14,7 @@ use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
 use crate::runtime::CanisterRuntime;
-use crate::state::automatic_deposits::{AutomaticDeposits, ScanProgress};
+use crate::state::automatic_deposits::{AutomaticDeposits, RegisterDepositError, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
 use crate::state::transactions::{
@@ -841,26 +842,24 @@ impl State {
         })
     }
 
-    /// Derive the ckERC20 deposit address for `account` from the minter's master
-    /// threshold-ECDSA public key and add it to the watchlist of automatic deposits.
+    /// Derive the deposit address for `account` from the minter's master threshold-ECDSA
+    /// public key and add the `(account, asset)` pair to the watchlist of automatic deposits.
     ///
     /// Returns the deposit address together with the timestamp until which a
     /// deposit to it is guaranteed to be noticed. Fails with
-    /// [`DepositErc20Error::TemporarilyUnavailable`] if the minter's public key
+    /// [`RegisterDepositError::KeyNotInitialized`] if the minter's public key
     /// has not been fetched yet.
     pub fn register_deposit_address(
         &mut self,
         now: Timestamp,
         account: Account,
-        token: Address,
-    ) -> Result<Entry<ScanProgress>, DepositErc20Error> {
-        let address =
-            self.deposit_address(&account)
-                .ok_or(DepositErc20Error::TemporarilyUnavailable(
-                    "Minter's ECDSA public key not yet initialized".to_string(),
-                ))?;
+        asset: Asset,
+    ) -> Result<Entry<ScanProgress>, RegisterDepositError> {
+        let address = self
+            .deposit_address(&account)
+            .ok_or(RegisterDepositError::KeyNotInitialized)?;
         self.automatic_deposits
-            .watch_deposit(now, account, token, address)
+            .watch_deposit(now, account, asset, address)
     }
 }
 

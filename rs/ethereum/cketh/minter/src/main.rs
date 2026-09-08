@@ -4,6 +4,7 @@ use dashboard::DashboardTemplate;
 use ic_canister_log::log;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{AddressValidationError, validate_address_as_destination};
+use ic_cketh_minter::asset::Asset;
 use ic_cketh_minter::balance_scan::{balance_scan, min_deposit};
 use ic_cketh_minter::deposit::{refresh_latest_block_height, scrape_logs};
 use ic_cketh_minter::endpoints::ckerc20::{
@@ -252,8 +253,8 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
         owner: caller,
         subaccount,
     };
-    let request = DepositRequest::new(account, token);
-    let minimum_deposit_amount = min_deposit(&token);
+    let request = DepositRequest::new(account, Asset::Erc20(token));
+    let minimum_deposit_amount = min_deposit(&Asset::Erc20(token));
     let now = Timestamp::from_nanos(ic_cdk::api::time());
 
     if let Some(status) = read_state(|s| {
@@ -278,7 +279,7 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     }) {
         return Ok(status);
     }
-    mutate_state(|s| s.register_deposit_address(now, account, token))?;
+    mutate_state(|s| s.register_deposit_address(now, account, Asset::Erc20(token)))?;
     Ok(read_state(|s| {
         s.automatic_deposits
             .deposit_status(now, &request, minimum_deposit_amount)
@@ -358,7 +359,10 @@ async fn get_minter_info() -> MinterInfo {
                     .supported_ck_erc20_tokens()
                     .map(|token| Erc20MinimumDeposit {
                         erc20_contract_address: token.erc20_contract_address.to_string(),
-                        minimum_deposit_amount: min_deposit(&token.erc20_contract_address).into(),
+                        minimum_deposit_amount: min_deposit(&Asset::Erc20(
+                            token.erc20_contract_address,
+                        ))
+                        .into(),
                     })
                     .collect();
                 (Some(balances), Some(tokens), Some(minimum_deposit_amounts))
@@ -904,7 +908,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                         .map(|r| CandidDepositAddressRegistration {
                             owner: r.owner,
                             subaccount: r.subaccount,
-                            erc20_contract_address: r.erc20_contract_address.to_string(),
+                            erc20_contract_address: r.asset.to_string(),
                             address: r.address.to_string(),
                             expires_at_nanos: r.expires_at_nanos.as_nanos(),
                             last_scanned_block: r.last_scanned_block.map(Into::into),
@@ -916,7 +920,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     owner: deposit.owner,
                     subaccount: deposit.subaccount,
                     address: deposit.address.to_string(),
-                    erc20_contract_address: deposit.erc20_contract_address.to_string(),
+                    erc20_contract_address: deposit.asset.to_string(),
                     last_scanned_block: deposit.last_scanned_block.into(),
                     scan_count: deposit.scan_count.into(),
                     scanned_balance: deposit.scanned_balance.into(),

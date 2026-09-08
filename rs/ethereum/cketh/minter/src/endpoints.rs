@@ -311,6 +311,19 @@ pub enum DepositEthError {
     TemporarilyUnavailable(String),
 }
 
+impl From<crate::state::automatic_deposits::RegisterDepositError> for DepositErc20Error {
+    fn from(error: crate::state::automatic_deposits::RegisterDepositError) -> Self {
+        use crate::state::automatic_deposits::RegisterDepositError;
+        match error {
+            RegisterDepositError::TooManyAssetsForAccount => Self::TooManyTokensForAccount,
+            RegisterDepositError::TooManyActiveDeposits => Self::TooManyActiveDeposits,
+            RegisterDepositError::KeyNotInitialized => Self::TemporarilyUnavailable(
+                "Minter's ECDSA public key not yet initialized".to_string(),
+            ),
+        }
+    }
+}
+
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum DepositErc20Error {
     /// The `erc20_contract_address` is not a ckERC20 token supported by the minter.

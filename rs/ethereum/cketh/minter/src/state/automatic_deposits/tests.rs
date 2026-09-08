@@ -1,9 +1,11 @@
 use super::{
     AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, MAX_ACTIVE_DEPOSITS,
-    MAX_TOKENS_PER_ACCOUNT, SCAN_GAP_SECS, SECS_PER_BLOCK, ScanProgress, SweepEntry, SweepTarget,
+    MAX_ASSETS_PER_ACCOUNT, RegisterDepositError, SCAN_GAP_SECS, SECS_PER_BLOCK, ScanProgress,
+    SweepEntry, SweepTarget,
 };
+use crate::asset::Asset;
 use crate::deposit_address::DepositAddress;
-use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
+use crate::endpoints::{DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
@@ -25,7 +27,7 @@ fn should_watch_a_pair_for_the_scan_window() {
     struct Case {
         name: &'static str,
         arms: Vec<(Timestamp, Account, Address)>,
-        expected: Result<Entry<ScanProgress>, DepositErc20Error>,
+        expected: Result<Entry<ScanProgress>, RegisterDepositError>,
         live_lookups: Vec<(Account, Address)>,
         expected_len: usize,
     }
@@ -63,7 +65,12 @@ fn should_watch_a_pair_for_the_scan_window() {
     for case in cases {
         let mut deposits = AutomaticDeposits::default();
         for (now, account, token) in &case.arms {
-            let outcome = deposits.watch_deposit(*now, *account, *token, deposit_address(account));
+            let outcome = deposits.watch_deposit(
+                *now,
+                *account,
+                Asset::Erc20(*token),
+                deposit_address(account),
+            );
             assert_eq!(outcome, case.expected, "case: {}", case.name);
         }
 
@@ -89,10 +96,10 @@ fn should_treat_the_same_account_with_different_tokens_as_distinct_pairs() {
     let mut deposits = AutomaticDeposits::default();
     let a = account(0);
     deposits
-        .watch_deposit(ts(0), a, usdc(), deposit_address(&a))
+        .watch_deposit(ts(0), a, Asset::Erc20(usdc()), deposit_address(&a))
         .unwrap();
     deposits
-        .watch_deposit(ts(0), a, usdt(), deposit_address(&a))
+        .watch_deposit(ts(0), a, Asset::Erc20(usdt()), deposit_address(&a))
         .unwrap();
 
     assert_eq!(deposits.watchlist_len(), 2);
@@ -117,9 +124,9 @@ fn should_treat_the_same_account_with_different_tokens_as_distinct_pairs() {
 fn should_reject_more_than_the_per_account_token_cap() {
     let mut deposits = AutomaticDeposits::default();
     let a = account(0);
-    for i in 0..MAX_TOKENS_PER_ACCOUNT {
+    for i in 0..MAX_ASSETS_PER_ACCOUNT {
         deposits
-            .watch_deposit(ts(0), a, token(i as u8), deposit_address(&a))
+            .watch_deposit(ts(0), a, Asset::Erc20(token(i as u8)), deposit_address(&a))
             .unwrap();
     }
 
@@ -127,24 +134,24 @@ fn should_reject_more_than_the_per_account_token_cap() {
     let rejected = deposits.watch_deposit(
         ts(0),
         a,
-        token(MAX_TOKENS_PER_ACCOUNT as u8),
+        Asset::Erc20(token(MAX_ASSETS_PER_ACCOUNT as u8)),
         deposit_address(&a),
     );
-    assert_eq!(rejected, Err(DepositErc20Error::TooManyTokensForAccount));
+    assert_eq!(rejected, Err(RegisterDepositError::TooManyAssetsForAccount));
 
     // ...but re-arming one of its already-armed tokens is idempotent, not a cap hit...
     assert!(
         deposits
-            .watch_deposit(ts(0), a, token(0), deposit_address(&a))
+            .watch_deposit(ts(0), a, Asset::Erc20(token(0)), deposit_address(&a))
             .is_ok()
     );
 
     // ...and the cap is per account: a different account can still arm a token.
     let b = account(1);
     deposits
-        .watch_deposit(ts(0), b, token(0), deposit_address(&b))
+        .watch_deposit(ts(0), b, Asset::Erc20(token(0)), deposit_address(&b))
         .unwrap();
-    assert_eq!(deposits.watchlist_len(), MAX_TOKENS_PER_ACCOUNT + 1);
+    assert_eq!(deposits.watchlist_len(), MAX_ASSETS_PER_ACCOUNT + 1);
 }
 
 #[test]
@@ -154,14 +161,24 @@ fn should_reject_new_pair_when_watchlist_is_full() {
     for i in 0..capacity {
         let account = account(i as u64);
         deposits
-            .watch_deposit(ts(0), account, usdc(), deposit_address(&account))
+            .watch_deposit(
+                ts(0),
+                account,
+                Asset::Erc20(usdc()),
+                deposit_address(&account),
+            )
             .unwrap();
     }
 
     let account = account(capacity as u64);
-    let rejected = deposits.watch_deposit(ts(0), account, usdc(), deposit_address(&account));
+    let rejected = deposits.watch_deposit(
+        ts(0),
+        account,
+        Asset::Erc20(usdc()),
+        deposit_address(&account),
+    );
 
-    assert_eq!(rejected, Err(DepositErc20Error::TooManyActiveDeposits));
+    assert_eq!(rejected, Err(RegisterDepositError::TooManyActiveDeposits));
     assert_eq!(deposits.watchlist_snapshot().registrations.len(), capacity);
 }
 
@@ -171,19 +188,39 @@ fn should_rebuild_watchlist_exactly_from_snapshot() {
     // account(0) and account(1) are armed in the same round, so they share an
     // expiry bucket; a faithful rebuild must preserve their order too.
     source
-        .watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)))
+        .watch_deposit(
+            ts(0),
+            account(0),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(0)),
+        )
         .unwrap();
     source
-        .watch_deposit(ts(0), account(1), usdc(), deposit_address(&account(1)))
+        .watch_deposit(
+            ts(0),
+            account(1),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(1)),
+        )
         .unwrap();
     source
-        .watch_deposit(ts(10), account(2), usdc(), deposit_address(&account(2)))
+        .watch_deposit(
+            ts(10),
+            account(2),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(2)),
+        )
         .unwrap();
     let registry = source.watchlist_snapshot();
 
     let mut restored = AutomaticDeposits::default();
     restored
-        .watch_deposit(ts(5), account(9), usdc(), deposit_address(&account(9)))
+        .watch_deposit(
+            ts(5),
+            account(9),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(9)),
+        )
         .unwrap();
     restored.rebuild_watchlist(&registry);
 
@@ -214,13 +251,28 @@ fn should_snapshot_entries_in_time_index_order() {
     // account(0) and account(2) share an expiry; within a bucket the snapshot
     // keeps insertion order, and buckets come in ascending-expiry order.
     deposits
-        .watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)))
+        .watch_deposit(
+            ts(0),
+            account(0),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(0)),
+        )
         .unwrap();
     deposits
-        .watch_deposit(ts(10), account(1), usdc(), deposit_address(&account(1)))
+        .watch_deposit(
+            ts(10),
+            account(1),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(1)),
+        )
         .unwrap();
     deposits
-        .watch_deposit(ts(0), account(2), usdc(), deposit_address(&account(2)))
+        .watch_deposit(
+            ts(0),
+            account(2),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(2)),
+        )
         .unwrap();
 
     let snapshot = deposits.watchlist_snapshot();
@@ -360,13 +412,28 @@ fn scan_gap_secs_invariants_hold() {
 fn should_reproduce_equal_watchlist_across_snapshot_round_trip() {
     let mut deposits = AutomaticDeposits::default();
     deposits
-        .watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)))
+        .watch_deposit(
+            ts(0),
+            account(0),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(0)),
+        )
         .unwrap();
     deposits
-        .watch_deposit(ts(10), account(1), usdc(), deposit_address(&account(1)))
+        .watch_deposit(
+            ts(10),
+            account(1),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(1)),
+        )
         .unwrap();
     deposits
-        .watch_deposit(ts(20), account(2), usdc(), deposit_address(&account(2)))
+        .watch_deposit(
+            ts(20),
+            account(2),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(2)),
+        )
         .unwrap();
     deposits.record_scan(ts(30), &request(account(1), usdc()), BlockNumber::new(500));
 
@@ -422,7 +489,7 @@ fn scan_state(
     DepositAddressRegistration {
         owner: account.owner,
         subaccount: account.subaccount,
-        erc20_contract_address: token,
+        asset: Asset::Erc20(token),
         address: deposit_address(&account),
         expires_at_nanos: expires_at,
         last_scanned_block,
@@ -434,7 +501,12 @@ fn scan_state(
 fn record_scan_advances_the_schedule() {
     let mut deposits = AutomaticDeposits::default();
     deposits
-        .watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)))
+        .watch_deposit(
+            ts(0),
+            account(0),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(0)),
+        )
         .unwrap();
     // Never scanned -> due immediately.
     assert_eq!(
@@ -473,7 +545,12 @@ fn record_scan_advances_the_schedule() {
 fn record_scan_is_a_noop_for_an_expired_pair() {
     let mut deposits = AutomaticDeposits::default();
     deposits
-        .watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)))
+        .watch_deposit(
+            ts(0),
+            account(0),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(0)),
+        )
         .unwrap();
 
     // Past the scan window the entry is no longer live; record_scan must not touch it.
@@ -492,7 +569,12 @@ fn record_scan_is_a_noop_for_an_expired_pair() {
 fn record_automatic_deposit_received_removes_the_pair_and_queues_it() {
     let mut deposits = AutomaticDeposits::default();
     deposits
-        .watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)))
+        .watch_deposit(
+            ts(0),
+            account(0),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(0)),
+        )
         .unwrap();
 
     deposits.record_automatic_deposit_received(&automatic_deposit(
@@ -529,10 +611,10 @@ fn funding_one_token_leaves_the_account_other_tokens_armed() {
     let mut deposits = AutomaticDeposits::default();
     let a = account(0);
     deposits
-        .watch_deposit(ts(0), a, usdc(), deposit_address(&a))
+        .watch_deposit(ts(0), a, Asset::Erc20(usdc()), deposit_address(&a))
         .unwrap();
     deposits
-        .watch_deposit(ts(0), a, usdt(), deposit_address(&a))
+        .watch_deposit(ts(0), a, Asset::Erc20(usdt()), deposit_address(&a))
         .unwrap();
 
     deposits.record_automatic_deposit_received(&automatic_deposit(
@@ -555,7 +637,12 @@ fn funding_one_token_leaves_the_account_other_tokens_armed() {
 fn watch_deposit_traps_on_a_pair_awaiting_sweep() {
     let mut deposits = AutomaticDeposits::default();
     deposits
-        .watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)))
+        .watch_deposit(
+            ts(0),
+            account(0),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(0)),
+        )
         .unwrap();
     deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
@@ -567,7 +654,12 @@ fn watch_deposit_traps_on_a_pair_awaiting_sweep() {
     assert_eq!(deposits.watchlist_len(), 0);
     assert_eq!(deposits.sweep_len(), 1);
 
-    let _ = deposits.watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)));
+    let _ = deposits.watch_deposit(
+        ts(0),
+        account(0),
+        Asset::Erc20(usdc()),
+        deposit_address(&account(0)),
+    );
 }
 
 #[test]
@@ -623,7 +715,12 @@ fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
     // Armed but not yet funded: Scanning until the window closes, with the token's minimum
     // reported alongside it.
     deposits
-        .watch_deposit(ts(0), account(0), usdc(), deposit_address(&account(0)))
+        .watch_deposit(
+            ts(0),
+            account(0),
+            Asset::Erc20(usdc()),
+            deposit_address(&account(0)),
+        )
         .unwrap();
     assert_eq!(
         deposits.deposit_status(ts(0), &request(account(0), usdc()), minimum),
@@ -688,7 +785,7 @@ fn token(byte: u8) -> Address {
 }
 
 fn request(account: Account, token: Address) -> DepositRequest {
-    DepositRequest::new(account, token)
+    DepositRequest::new(account, Asset::Erc20(token))
 }
 
 fn automatic_deposit(
@@ -702,7 +799,7 @@ fn automatic_deposit(
         owner: account.owner,
         subaccount: account.subaccount,
         address: deposit_address(&account),
-        erc20_contract_address: token,
+        asset: Asset::Erc20(token),
         last_scanned_block,
         scan_count,
         scanned_balance: Erc20Value::new(scanned_balance),
@@ -873,7 +970,12 @@ fn queued(pairs: &[(Account, Address)]) -> AutomaticDeposits {
 fn queue(deposits: &mut AutomaticDeposits, pairs: &[(Account, Address)]) {
     for (account, token) in pairs {
         deposits
-            .watch_deposit(ts(0), *account, *token, deposit_address(account))
+            .watch_deposit(
+                ts(0),
+                *account,
+                Asset::Erc20(*token),
+                deposit_address(account),
+            )
             .unwrap();
         deposits.record_automatic_deposit_received(&automatic_deposit(
             *account,
@@ -946,7 +1048,7 @@ fn registration(
     DepositAddressRegistration {
         owner: account.owner,
         subaccount: account.subaccount,
-        erc20_contract_address: token,
+        asset: Asset::Erc20(token),
         address: deposit_address(&account),
         expires_at_nanos: expires_at,
         last_scanned_block: None,

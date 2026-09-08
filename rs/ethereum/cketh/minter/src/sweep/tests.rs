@@ -1,3 +1,4 @@
+use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::AddressSchema;
 use crate::management::{CallError, Reason};
@@ -421,7 +422,7 @@ fn deposit_received(account: &Account, token: &Address) -> EventType {
         owner: account.owner,
         subaccount: account.subaccount,
         address: deposit_address(account),
-        erc20_contract_address: *token,
+        asset: Asset::Erc20(*token),
         ..automatic_deposit()
     })
 }

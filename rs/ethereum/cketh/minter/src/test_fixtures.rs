@@ -1,4 +1,5 @@
 use crate::EVM_RPC_ID_STAGING;
+use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::eth_logs::LedgerSubaccount;
@@ -136,7 +137,7 @@ pub fn automatic_deposit() -> AutomaticDeposit {
         owner: account().owner,
         subaccount: account().subaccount,
         address: DepositAddress::new(Address::new([0xa1; 20])),
-        erc20_contract_address: Address::new([0x22; 20]),
+        asset: Asset::Erc20(Address::new([0x22; 20])),
         last_scanned_block: BlockNumber::new(1_000),
         scan_count: 1,
         scanned_balance: Erc20Value::from(1_000_000_u64),
@@ -220,7 +221,7 @@ pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, 
                 owner: account.owner,
                 subaccount: account.subaccount,
                 address: deposit_address(account),
-                erc20_contract_address: *token,
+                asset: Asset::Erc20(*token),
                 ..automatic_deposit()
             }),
         );

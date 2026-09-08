@@ -3,6 +3,7 @@ pub mod batcher;
 #[cfg(test)]
 mod tests;
 
+use crate::asset::Asset;
 use crate::eth_rpc_client::{AnyOf, MIN_ATTACHED_CYCLES, ToReducedWithStrategy, rpc_client};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
@@ -167,29 +168,37 @@ fn scan_outcome(
     balance: Erc20Value,
     latest_block: BlockNumber,
 ) -> ScanOutcome {
-    if balance < min_deposit(&target.token()) {
+    if balance < min_deposit(&Asset::Erc20(target.token())) {
         return ScanOutcome::NothingFound(target.request());
     }
     ScanOutcome::Detected(AutomaticDeposit {
         owner: target.account().owner,
         subaccount: target.account().subaccount,
         address: target.address(),
-        erc20_contract_address: target.token(),
+        asset: Asset::Erc20(target.token()),
         last_scanned_block: latest_block,
         scan_count: target.scan_count().saturating_add(1),
         scanned_balance: balance,
     })
 }
 
-/// Minimum balance for `token` to count as a scan candidate; a token absent from
+/// Minimum balance for `asset` to count as a scan candidate; an ERC-20 token absent from
 /// `MIN_DEPOSITS` never counts.
-pub fn min_deposit(token: &Address) -> Erc20Value {
+pub fn min_deposit(asset: &Asset) -> Erc20Value {
+    let token = match asset {
+        Asset::Eth => return MIN_ETH_DEPOSIT,
+        Asset::Erc20(token) => token,
+    };
     MIN_DEPOSITS
         .iter()
         .find(|(contract, _)| contract == token)
         .map(|(_, min)| *min)
         .unwrap_or(Erc20Value::MAX)
 }
+
+/// Minimum ETH balance, in wei, to count as a scan candidate: 0.005 ETH, the same
+/// ≈ $10 bar as the ERC-20 minimums below.
+const MIN_ETH_DEPOSIT: Erc20Value = Erc20Value::new(5_000_000_000_000_000);
 
 /// Per-token minimum deposit that counts as a balance-scan candidate: the amount of each token
 /// worth about 0.005 ETH (5_000_000_000_000_000 wei) or roughly $10, covering every ckERC20 token the mainnet
