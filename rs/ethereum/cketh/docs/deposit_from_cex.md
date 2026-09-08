@@ -109,8 +109,11 @@ _Requirements are grouped by phase, not numbered sequentially: `R11` and `R12` a
   unsupported ERC-20 tokens, are not credited. No funds are ever burned or destroyed:
   they remain at a tECDSA-controlled address and remain recoverable by the minter.
 * `R5`: Every credited deposit is eventually swept to the minter's main address. A
-  sweep failure or delay never affects already-minted balances; sweeps are retried
-  until confirmed.
+  sweep failure or delay never affects already-minted balances; a sweep that does
+  not mine is resubmitted with a fee bump until it does. A sweep that mines and
+  *reverts* is the exception: its deposits leave the queue instead of being
+  retried, and are swept when their pair is next armed (`R15`); the funds stay at
+  the deposit address throughout (`R12`).
 * `R6`: A sweep transaction moves funds only to the minter's main address, regardless
   of who triggers it. No other destination is reachable through the sweeper delegate.
 * `R7`: The per-token `deposit_fee` and minimum deposit amount are configurable
