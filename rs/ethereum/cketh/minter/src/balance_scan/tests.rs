@@ -27,45 +27,100 @@ fn unsupported_token_has_an_unreachable_minimum_deposit() {
 
 #[test]
 fn should_have_a_min_deposit_for_every_deployed_supported_token() {
-    // Independently transcribed list of the ckERC20 contract addresses the mainnet
-    // (sv3dd-oaaaa-aaaar-qacoa-cai) and Sepolia (jzenf-aiaaa-aaaar-qaa7q-cai) minters currently
-    // support (hex form, so it does not share the byte-array representation of `MIN_DEPOSITS`). A
-    // supported token missing from `MIN_DEPOSITS` would be scanned but never flagged, so its
-    // deposits would go undetected; this test catches a dropped or typo'd entry.
-    let deployed: &[(&str, &str)] = &[
+    // Independently transcribed table of the ckERC20 contract addresses (hex form, so it does not
+    // share the byte-array representation of `MIN_DEPOSITS`) and expected minimum deposits the
+    // mainnet (sv3dd-oaaaa-aaaar-qacoa-cai) and Sepolia (jzenf-aiaaa-aaaar-qaa7q-cai) minters
+    // currently support, plus ckBAT — not yet deployed, but its `MIN_DEPOSITS` entry is checked
+    // here too since this is the only place a typo'd address or threshold gets caught. A supported
+    // token missing from `MIN_DEPOSITS`, or one with a wrong threshold, would be scanned but never
+    // (or wrongly) flagged, so its deposits would go undetected.
+    let expected: &[(&str, &str, u128)] = &[
         // --- mainnet ---
-        ("ckUSDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"),
-        ("ckLINK", "0x514910771AF9Ca656af840dff83E8264EcF986CA"),
-        ("ckPEPE", "0x6982508145454Ce325dDbE47a25d4ec3d2311933"),
-        ("ckOCT", "0xF5cFBC74057C610c8EF151A439252680AC68c6dc"),
-        ("ckSHIB", "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE"),
-        ("ckWBTC", "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"),
-        ("ckUSDT", "0xdAC17F958D2ee523a2206206994597C13D831ec7"),
-        ("ckWSTETH", "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
-        ("ckUNI", "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"),
-        ("ckEURC", "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c"),
-        ("ckXAUT", "0x68749665FF8D2d112Fa859AA293F07A622782F38"),
+        (
+            "ckUSDC",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            10_000_000,
+        ),
+        (
+            "ckLINK",
+            "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+            1_000_000_000_000_000_000,
+        ),
+        (
+            "ckPEPE",
+            "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+            3_500_000_000_000_000_000_000_000,
+        ),
+        (
+            "ckOCT",
+            "0xF5cFBC74057C610c8EF151A439252680AC68c6dc",
+            5_000_000_000_000_000_000_000,
+        ),
+        (
+            "ckSHIB",
+            "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+            2_000_000_000_000_000_000_000_000,
+        ),
+        (
+            "ckWBTC",
+            "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            15_000,
+        ),
+        (
+            "ckUSDT",
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            10_000_000,
+        ),
+        (
+            "ckWSTETH",
+            "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+            4_000_000_000_000_000,
+        ),
+        (
+            "ckUNI",
+            "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+            2_500_000_000_000_000_000,
+        ),
+        (
+            "ckEURC",
+            "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c",
+            8_000_000,
+        ),
+        (
+            "ckXAUT",
+            "0x68749665FF8D2d112Fa859AA293F07A622782F38",
+            2_500,
+        ),
+        (
+            "ckBAT",
+            "0x0D8775F648430679A709E98d2b0Cb6250d2887EF",
+            135_000_000_000_000_000_000,
+        ),
         // --- sepolia ---
         (
             "ckSepoliaUSDC",
             "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+            10_000_000,
         ),
         (
             "ckSepoliaLINK",
             "0x779877A7B0D9E8603169DdbD7836e478b4624789",
+            1_000_000_000_000_000_000,
         ),
         (
             "ckSepoliaPEPE",
             "0x560ef9f39e4b08f9693987cad307f6fbfd97b2f6",
+            3_500_000_000_000_000_000_000_000,
         ),
     ];
 
-    for (symbol, address) in deployed {
+    for (symbol, address, min) in expected {
         let contract = Address::from_str(address)
             .unwrap_or_else(|e| panic!("{symbol}: invalid test address {address}: {e}"));
-        assert!(
-            MIN_DEPOSITS.iter().any(|(c, _)| *c == contract),
-            "{symbol} ({address}) has no MIN_DEPOSITS entry"
+        assert_eq!(
+            min_deposit(&contract),
+            Erc20Value::new(*min),
+            "{symbol} ({address}) has a missing or wrong MIN_DEPOSITS threshold"
         );
     }
 }
