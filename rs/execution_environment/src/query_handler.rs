@@ -182,7 +182,8 @@ impl InternalHttpQueryHandler {
 
         // While the subnet is cooling down it rejects all query calls, the ones
         // addressed to the management canister included. System queries, i.e. the
-        // `transform` functions of HTTP outcalls, are still executed.
+        // `transform` functions of HTTP outcalls, are still executed, because subnet
+        // messages are still executed by a cooling down subnet.
         if matches!(query.source, QuerySource::User { .. })
             && state.get_ref().metadata.is_cooling_down()
         {

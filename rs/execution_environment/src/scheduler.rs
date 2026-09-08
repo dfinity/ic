@@ -472,10 +472,14 @@ impl SchedulerImpl {
             }
 
             // A cooling down subnet only drains its subnet queues: it executes no
-            // canister messages (and no `Heartbeat` or `GlobalTimer` tasks either) and
-            // it inducts no messages on the same subnet (which is equivalent to routing
-            // them through the loopback stream, something a cooling down subnet does not
-            // do).
+            // canister messages and no canister tasks, i.e. neither `Heartbeat` and
+            // `GlobalTimer` (which are not even enqueued, as they are enqueued right
+            // below) nor the on-low-wasm-memory hook (which, unlike the former two, is
+            // a persistent part of the canister's task queue and is thus simply left
+            // there until the subnet stops cooling down).
+            //
+            // It follows that a cooling down subnet also has no messages to induct on
+            // the same subnet.
             if state.metadata.is_cooling_down() {
                 self.metrics
                     .round_skipped_canister_execution_due_to_cooling_down

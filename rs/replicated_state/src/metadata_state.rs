@@ -386,8 +386,9 @@ pub struct SubnetTopology {
     ///  * it inducts no ingress messages, so the ingress history becomes free of
     ///    expiring message statuses;
     ///  * it rejects all query calls;
-    ///  * it executes no canister messages (and no `Heartbeat` or `GlobalTimer`
-    ///    tasks either), only draining its subnet queues;
+    ///  * it executes no canister messages and no canister tasks (`Heartbeat`,
+    ///    `GlobalTimer` or the on-low-wasm-memory hook), only draining its subnet
+    ///    queues;
     ///  * (on all subnets) no messages are routed to a cooling down subnet --
     ///    including into the cooling down subnet's own loopback stream -- but
     ///    retained in their respective output queues, so that streams to the

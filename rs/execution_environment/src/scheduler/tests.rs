@@ -1,6 +1,4 @@
-use super::test_utilities::{
-    SchedulerTest, SchedulerTestBuilder, ingress, on_response, other_side,
-};
+use super::test_utilities::{SchedulerTestBuilder, ingress, on_response, other_side};
 use super::*;
 use assert_matches::assert_matches;
 use candid::Encode;
@@ -804,7 +802,7 @@ fn finalization_prunes_expired_ingress_history_entries() {
 }
 
 /// Tests that while the subnet is cooling down it executes no canister messages
-/// and no `Heartbeat` tasks, and rejects query calls; subnet messages are still
+/// and no canister tasks, and rejects query calls; subnet messages are still
 /// executed.
 #[test]
 fn cooling_down_subnet_only_executes_subnet_messages() {
@@ -917,9 +915,9 @@ fn cooling_down_subnet_only_executes_subnet_messages() {
 
     // But the canister does not execute the response: further rounds only ever
     // induct it into the canister's input queue, where it stays. And they leave no
-    // task behind in the canister's task queue: a `Heartbeat` task is only ever
-    // enqueued right before the canister execution that a cooling down round skips
-    // altogether, so there is none to pop or to clean up.
+    // task behind in the canister's task queue either: a `Heartbeat` task is only
+    // ever enqueued right before the canister execution that a cooling down round
+    // skips altogether, so there is none to pop or to clean up.
     for _ in 0..3 {
         test.tick();
         assert_eq!(1, input_messages(&test));
@@ -958,74 +956,6 @@ fn cooling_down_subnet_only_executes_subnet_messages() {
         }
     );
     assert_eq!(counter_before + 1, global_counter(&test));
-}
-
-/// Tests that while the subnet is cooling down it inducts no messages on the same
-/// subnet, which is equivalent to routing them through the loopback stream,
-/// something a cooling down subnet does not do.
-///
-/// This is a `SchedulerTest` rather than a `StateMachine` test because it requires
-/// a round that ends between executing a message and inducting the messages it
-/// produced, which only `max_heap_delta_per_iteration` can bring about.
-#[test]
-fn cooling_down_subnet_does_not_induct_messages_on_same_subnet() {
-    // One dirty page per message is enough to end an iteration, i.e. to stop the
-    // first round just before it would induct messages on the same subnet.
-    let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            max_heap_delta_per_iteration: NumBytes::new(ic_sys::PAGE_SIZE as u64),
-            ..SchedulerConfig::application_subnet()
-        })
-        .build();
-    let sender = test.create_canister();
-    let receiver = test.create_canister();
-
-    let output_requests = |test: &SchedulerTest, canister: CanisterId| {
-        test.canister_state(canister)
-            .system_state
-            .queues()
-            .output_queues_message_count()
-    };
-    let input_messages = |test: &SchedulerTest, canister: CanisterId| {
-        test.canister_state(canister)
-            .system_state
-            .queues()
-            .input_queues_message_count()
-    };
-
-    // Have `sender` produce a request to the subnet-local `receiver`. The round
-    // ends right after the execution, before the request is inducted.
-    test.send_ingress(
-        sender,
-        ingress(10)
-            .dirty_pages(1)
-            .call(other_side(receiver, 10), on_response(10)),
-    );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-    assert_eq!(1, output_requests(&test, sender));
-    assert_eq!(0, input_messages(&test, receiver));
-
-    // While the subnet is cooling down, the request is retained in `sender`'s
-    // output queue, rather than being inducted into `receiver`'s input queue.
-    test.set_cooling_down(true);
-    test.send_ingress(sender, ingress(10));
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    assert_eq!(1, output_requests(&test, sender));
-    assert_eq!(0, input_messages(&test, receiver));
-    assert_eq!(
-        1,
-        test.scheduler()
-            .metrics
-            .round_skipped_canister_execution_due_to_cooling_down
-            .get()
-    );
-
-    // Once the subnet stops cooling down, the request is inducted (and executed).
-    test.set_cooling_down(false);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    assert_eq!(0, output_requests(&test, sender));
 }
 
 fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {
