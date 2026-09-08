@@ -102,7 +102,7 @@ pub enum LuksHeaderLocation {
 /// detached header file while `device_path` remains the data device.
 fn obtain_crypt_device_handle(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
+    header_location: &LuksHeaderLocation,
 ) -> Result<CryptDevice> {
     if !device_path.exists() {
         bail!("Device does not exist: {}", device_path.display());
@@ -110,7 +110,7 @@ fn obtain_crypt_device_handle(
 
     match header_location {
         LuksHeaderLocation::Detached(header_path) => {
-            obtain_crypt_device_handle_with_detached_header(device_path, &header_path)
+            obtain_crypt_device_handle_with_detached_header(device_path, header_path)
                 .with_context(|| format!("Detached header {} failed", header_path.display()))
         }
         LuksHeaderLocation::Attached => {
@@ -137,7 +137,7 @@ fn obtain_crypt_device_handle_with_detached_header(
 /// using the provided encryption key.
 pub fn activate_crypt_device(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
+    header_location: &LuksHeaderLocation,
     name: &str,
     passphrase: &[u8],
     flags: CryptActivate,
@@ -145,22 +145,37 @@ pub fn activate_crypt_device(
     metrics_registry: &Registry,
 ) -> Result<()> {
     let mut crypt_device = open_luks2_device(device_path, header_location, verify_luks_params)?;
+    activate(&mut crypt_device, name, passphrase, flags, metrics_registry)
+}
 
+/// Same as [`activate_crypt_device`], but on an already-open crypt device.
+pub(crate) fn activate(
+    crypt_device: &mut CryptDevice,
+    name: &str,
+    passphrase: &[u8],
+    flags: CryptActivate,
+    metrics_registry: &Registry,
+) -> Result<()> {
     let active_keyslot = crypt_device
         .activate_handle()
         .activate_by_passphrase(Some(name), None, passphrase, flags)
         .context("Failed to activate cryptographic device")?;
 
-    // Export the LUKS parameters as metrics; a failure is not fatal.
-    let result = extract_luks_parameters(&mut crypt_device).and_then(|luks_parameters| {
+    let device_path = crypt_device
+        .status_handle()
+        .get_device_path()
+        .context("Failed to get the device path")?
+        .to_path_buf();
+
+    let log_result = extract_luks_parameters(crypt_device).and_then(|luks_parameters| {
         export_luks_parameters(
             metrics_registry,
             &luks_parameters,
-            device_path,
+            &device_path,
             active_keyslot,
         )
     });
-    if let Err(e) = result {
+    if let Err(e) = log_result {
         warn!("Failed to export LUKS parameters: {e:#}");
     }
 
@@ -204,10 +219,10 @@ fn apply_default_settings(crypt_device: &mut CryptDevice) -> Result<()> {
 /// WARNING: Leads to data loss on the device!
 pub fn format_crypt_device(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
+    header_location: &LuksHeaderLocation,
     passphrase: &[u8],
 ) -> Result<CryptDevice> {
-    if let LuksHeaderLocation::Detached(ref header_path) = header_location {
+    if let LuksHeaderLocation::Detached(header_path) = header_location {
         File::create(header_path)
             .context("Failed to create detached LUKS header file")?
             .set_len(16 * 1024 * 1024)
@@ -251,7 +266,7 @@ pub fn format_crypt_device(
 /// defaults for follow-on operations such as adding keyslots. Does not activate the device.
 pub fn open_luks2_device(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
+    header_location: &LuksHeaderLocation,
     verify_luks_params: bool,
 ) -> Result<CryptDevice> {
     let mut crypt_device = obtain_crypt_device_handle(device_path, header_location)?;
@@ -271,7 +286,7 @@ pub fn open_luks2_device(
 /// Does not activate the device.
 pub fn check_passphrase(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
+    header_location: &LuksHeaderLocation,
     passphrase: &[u8],
 ) -> Result<()> {
     // This method simply checks if the key works, we don't care about LUKS parameters
@@ -491,7 +506,7 @@ fn remove_all_tokens(crypt_device: &mut CryptDevice) -> Result<()> {
     Ok(())
 }
 
-/// Reads the device's single `ic-key-metadata` token.
+/// Reads the device's single token.
 pub fn read_single_keyslot_token(crypt_device: &mut CryptDevice) -> Result<KeyslotToken> {
     let json = crypt_device
         .token_handle()

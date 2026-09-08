@@ -26,7 +26,7 @@
 //! current TCB (TCB rotation).
 
 use crate::crypt::{
-    KeyslotToken, LuksHeaderLocation, SINGLE_KEYSLOT_INDEX, SevMetadata, activate_crypt_device,
+    KeyslotToken, LuksHeaderLocation, SINGLE_KEYSLOT_INDEX, SevMetadata, activate,
     destroy_keyslots_except_first, format_crypt_device, open_luks2_device,
     read_single_keyslot_token, write_keyslot_token,
 };
@@ -67,7 +67,7 @@ impl DiskEncryption for SevDiskEncryption {
     fn open(&mut self, device_path: &Path, partition: Partition, crypt_name: &str) -> Result<()> {
         let (mut crypt_device, token, mut passphrase) = open_keyslot(
             device_path,
-            self.header_location(partition),
+            &self.header_location(partition),
             self.sev_firmware.as_mut(),
         )?;
 
@@ -78,7 +78,6 @@ impl DiskEncryption for SevDiskEncryption {
             if self.guest_vm_type == GuestVMType::Default {
                 passphrase = rekey_crypt_device(
                     &mut crypt_device,
-                    device_path,
                     passphrase.as_bytes(),
                     self.sev_firmware.as_mut(),
                 )?;
@@ -86,15 +85,12 @@ impl DiskEncryption for SevDiskEncryption {
                 info!("Skipping TCB rotation for {:?} VM", self.guest_vm_type);
             }
         }
-        drop(crypt_device);
 
-        activate_crypt_device(
-            device_path,
-            self.header_location(partition),
+        activate(
+            &mut crypt_device,
             crypt_name,
             passphrase.as_bytes(),
             activate_flags(partition),
-            /*verify_luks_params=*/ true,
             &self.metrics_registry,
         )
     }
@@ -116,9 +112,12 @@ impl DiskEncryption for SevDiskEncryption {
             );
         }
 
-        let mut crypt_device =
-            format_crypt_device(device_path, self.header_location(partition), key.as_bytes())
-                .context("Failed to format partition")?;
+        let mut crypt_device = format_crypt_device(
+            device_path,
+            &self.header_location(partition),
+            key.as_bytes(),
+        )
+        .context("Failed to format partition")?;
         write_keyslot_token(&mut crypt_device, sev_metadata)
             .context("Failed to write SEV keyslot metadata")?;
 
@@ -145,7 +144,7 @@ fn get_sev_metadata_for_luks(sev_firmware: &mut dyn SevGuestFirmware) -> Result<
 
 fn open_keyslot(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
+    header_location: &LuksHeaderLocation,
     sev_firmware: &mut dyn SevGuestFirmware,
 ) -> Result<(CryptDevice, KeyslotToken, String)> {
     let mut crypt_device =
@@ -164,7 +163,7 @@ fn open_keyslot(
 /// Check whether the device can be opened with the SEV-derived key.
 pub fn can_open(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
+    header_location: &LuksHeaderLocation,
     sev_firmware: &mut dyn SevGuestFirmware,
 ) -> Result<bool> {
     let (mut crypt_device, _, passphrase) =
@@ -192,27 +191,33 @@ pub fn can_open(
 /// replaced with a key derived from the current launch measurement and TCB.
 pub fn rekey(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
+    header_location: &LuksHeaderLocation,
     old_key: &[u8],
     sev_firmware: &mut dyn SevGuestFirmware,
 ) -> Result<()> {
-    let mut crypt_device = open_luks2_device(device_path, header_location, false)
+    let mut crypt_device = open_luks2_device(device_path, header_location, true)
         .context("Failed to open the LUKS2 device")?;
-    rekey_crypt_device(&mut crypt_device, device_path, old_key, sev_firmware).map(|_| ())
+    rekey_crypt_device(&mut crypt_device, old_key, sev_firmware).map(|_| ())
 }
 
 /// Same as [`rekey`], but on an already-open crypt device. Returns the new key.
 fn rekey_crypt_device(
     crypt_device: &mut CryptDevice,
-    device_path: &Path,
     old_key: &[u8],
     sev_firmware: &mut dyn SevGuestFirmware,
 ) -> Result<String> {
+    let device_path = crypt_device
+        .status_handle()
+        .get_device_path()
+        .context("Failed to get the device path")?
+        .to_path_buf();
     info!("Re-keying the LUKS2 header for {}", device_path.display());
     let sev_metadata = get_sev_metadata_for_luks(sev_firmware)?;
     let new_key = derive_key_from_sev_measurement(
         sev_firmware,
-        Key::DiskEncryptionKey { device_path },
+        Key::DiskEncryptionKey {
+            device_path: &device_path,
+        },
         sev_metadata.tcb_version,
     )
     .context("Failed to derive the new SEV key for the device")?;

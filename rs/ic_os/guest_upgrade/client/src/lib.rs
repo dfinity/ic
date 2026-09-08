@@ -75,7 +75,7 @@ impl DiskCryptoOps for DefaultDiskCryptoOps {
     ) -> Result<bool> {
         guest_disk::sev::can_open(
             device_path,
-            LuksHeaderLocation::Detached(luks_header_path.to_path_buf()),
+            &LuksHeaderLocation::Detached(luks_header_path.to_path_buf()),
             sev_firmware,
         )
     }
@@ -89,7 +89,7 @@ impl DiskCryptoOps for DefaultDiskCryptoOps {
     ) -> Result<()> {
         guest_disk::sev::rekey(
             device_path,
-            LuksHeaderLocation::Detached(luks_header_path.to_path_buf()),
+            &LuksHeaderLocation::Detached(luks_header_path.to_path_buf()),
             old_key,
             sev_firmware,
         )

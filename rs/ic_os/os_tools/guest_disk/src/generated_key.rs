@@ -24,7 +24,7 @@ impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
             device_path,
             // Detached LUKS headers is an additional security measure against tampering by the host
             // which is only beneficial on SEV nodes.
-            LuksHeaderLocation::Attached,
+            &LuksHeaderLocation::Attached,
             crypt_name,
             &disk_encryption_key,
             activate_flags(partition),
@@ -42,7 +42,7 @@ impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
     fn format(&mut self, device_path: &Path, _partition: Partition) -> Result<()> {
         format_crypt_device(
             device_path,
-            LuksHeaderLocation::Attached,
+            &LuksHeaderLocation::Attached,
             &self.generate_or_read_key()?,
         )
         .context("Failed to format crypt device")?;

@@ -149,18 +149,18 @@ impl<'a> PartitionView<'a> {
     }
 
     fn open_crypt_device(&self) -> CryptDevice {
-        open_luks2_device(&self.device_path, self.header_location(), true).unwrap()
+        open_luks2_device(&self.device_path, &self.header_location(), true).unwrap()
     }
 
     fn has_attached_luks2_header(&self) -> bool {
-        open_luks2_device(&self.device_path, LuksHeaderLocation::Attached, true).is_ok()
+        open_luks2_device(&self.device_path, &LuksHeaderLocation::Attached, true).is_ok()
     }
 
     fn has_detached_luks2_header(&self) -> bool {
         match &self.detached_header_path {
             Some(header_path) => open_luks2_device(
                 &self.device_path,
-                LuksHeaderLocation::Detached(header_path.clone()),
+                &LuksHeaderLocation::Detached(header_path.clone()),
                 /*verify_luks_params=*/ true,
             )
             .is_ok(),
@@ -458,7 +458,7 @@ impl TestFixture {
         let mut firmware = self.sev_firmware_builder();
         can_open(
             self.store_device_path(),
-            LuksHeaderLocation::Detached(store_luks_header_path.clone()),
+            &LuksHeaderLocation::Detached(store_luks_header_path.clone()),
             &mut firmware,
         )
     }
@@ -513,7 +513,7 @@ impl TestFixture {
             .with_measurement(new_launch_measurement);
         rekey(
             self.store_device_path(),
-            LuksHeaderLocation::Detached(dst_header.clone()),
+            &LuksHeaderLocation::Detached(dst_header.clone()),
             &served_key,
             &mut upgrade_vm_firmware,
         )
@@ -985,7 +985,7 @@ fn test_upgrade_removes_stale_keyslots() {
     let served_key = fixture.derive_sev_key(Partition::Store);
     let mut crypt_device = format_crypt_device(
         fixture.store_device_path(),
-        LuksHeaderLocation::Detached(fixture.store_header_path()),
+        &LuksHeaderLocation::Detached(fixture.store_header_path()),
         STALE_KEY,
     )
     .unwrap();
@@ -1022,7 +1022,7 @@ fn test_rekey_migrates_legacy_keyslot_and_token_positions() {
     let served_key = fixture.derive_sev_key(Partition::Store);
     let mut crypt_device = format_crypt_device(
         fixture.store_device_path(),
-        LuksHeaderLocation::Detached(fixture.store_header_path()),
+        &LuksHeaderLocation::Detached(fixture.store_header_path()),
         STALE_KEY,
     )
     .unwrap();
@@ -1374,7 +1374,7 @@ fn test_sev_firmware_upgrade_rotates_keyslot_metadata() {
         // The old-TCB passphrase was replaced and must no longer unlock the device.
         check_passphrase(
             partition.device_path(),
-            partition.header_location(),
+            &partition.header_location(),
             &old_tcb_key,
         )
         .expect_err("the old-TCB passphrase must no longer unlock after rotation");
@@ -1420,7 +1420,7 @@ fn test_upgrade_vm_can_use_keyslot_with_old_tcb() {
     let store_header_path = fixture.store_header_path();
     check_passphrase(
         fixture.store_device_path(),
-        LuksHeaderLocation::Detached(store_header_path.clone()),
+        &LuksHeaderLocation::Detached(store_header_path.clone()),
         &old_tcb_key,
     )
     .expect("a key derived at the old TCB should unlock the store");
@@ -1521,7 +1521,7 @@ fn test_firmware_upgrade_then_guestos_upgrade() {
     let store_header_path = fixture.store_header_path();
     check_passphrase(
         fixture.store_device_path(),
-        LuksHeaderLocation::Detached(store_header_path.clone()),
+        &LuksHeaderLocation::Detached(store_header_path.clone()),
         &guestos_v2_key,
     )
     .expect("GuestOS 2 key should unlock after firmware + GuestOS upgrade");
@@ -1545,7 +1545,7 @@ fn test_firmware_upgrade_then_guestos_upgrade() {
 
     check_passphrase(
         fixture.store_device_path(),
-        LuksHeaderLocation::Detached(store_header_path.clone()),
+        &LuksHeaderLocation::Detached(store_header_path.clone()),
         &guestos_v1_key_at_tcb_v2,
     )
     .expect_err("GuestOS 1 key must no longer unlock after the upgrades");
