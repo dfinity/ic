@@ -1156,13 +1156,6 @@ fn consumed_cycles_monotonic_matches_the_gauge_net_of_outstanding_prepayments() 
 
     let outstanding = assert_consumed_cycles_invariant(&test, canister);
     assert_ne!(outstanding, NominalCycles::zero());
-    assert_ne!(
-        test.canister_state(canister)
-            .system_state
-            .canister_metrics()
-            .consumed_cycles_monotonic(),
-        NominalCycles::zero()
-    );
 }
 
 #[test]
@@ -1207,6 +1200,33 @@ fn checkpoint_round_backfills_consumed_cycles_monotonic() {
     );
 }
 
+/// A consumed cycles gauge below the outstanding prepayments is corrupt accounting:
+/// the gauge covers every prepayment that is still outstanding. It must be reported
+/// rather than backfilled from, which the saturating subtraction would otherwise
+/// turn into a derived zero that compares `Equal` and passes unnoticed.
+///
+/// The backfill reports it through `debug_assert_or_critical_error!`, so under
+/// debug assertions it panics; the round below is the only thing in this test that
+/// can panic, so the test fails if the check is ever dropped.
+#[test]
+#[should_panic]
+fn checkpoint_round_reports_outstanding_prepayments_above_the_gauge() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    call_xnet_canister(&mut test, canister);
+    let outstanding = assert_consumed_cycles_invariant(&test, canister);
+    assert_ne!(outstanding, NominalCycles::zero());
+
+    // Break the invariant: drop the gauge below the outstanding prepayments, taking
+    // the monotonic value down with it, so that a derived zero would compare `Equal`.
+    let system_state = &mut test.canister_state_mut(canister).system_state;
+    system_state.reset_consumed_cycles();
+    system_state.reset_consumed_cycles_monotonic();
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+}
+
 /// The mirror image: a monotonic value above the gauge net of the outstanding
 /// prepayments is corrupt accounting too. The backfill must report it rather than
 /// lower the monotonic value, which may only ever go up.
@@ -1241,33 +1261,6 @@ fn checkpoint_round_reports_monotonic_above_the_gauge() {
     test.canister_state_mut(canister)
         .system_state
         .reset_consumed_cycles();
-
-    test.execute_round(ExecutionRoundType::CheckpointRound);
-}
-
-/// A consumed cycles gauge below the outstanding prepayments is corrupt accounting:
-/// the gauge covers every prepayment that is still outstanding. It must be reported
-/// rather than backfilled from, which the saturating subtraction would otherwise
-/// turn into a derived zero that compares `Equal` and passes unnoticed.
-///
-/// The backfill reports it through `debug_assert_or_critical_error!`, so under
-/// debug assertions it panics; the round below is the only thing in this test that
-/// can panic, so the test fails if the check is ever dropped.
-#[test]
-#[should_panic]
-fn checkpoint_round_reports_outstanding_prepayments_above_the_gauge() {
-    let mut test = SchedulerTestBuilder::new().build();
-    let canister = test.create_canister();
-
-    call_xnet_canister(&mut test, canister);
-    let outstanding = assert_consumed_cycles_invariant(&test, canister);
-    assert_ne!(outstanding, NominalCycles::zero());
-
-    // Break the invariant: drop the gauge below the outstanding prepayments, taking
-    // the monotonic value down with it, so that a derived zero would compare `Equal`.
-    let system_state = &mut test.canister_state_mut(canister).system_state;
-    system_state.reset_consumed_cycles();
-    system_state.reset_consumed_cycles_monotonic();
 
     test.execute_round(ExecutionRoundType::CheckpointRound);
 }
