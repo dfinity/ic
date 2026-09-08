@@ -273,38 +273,37 @@ The realistic trap sources in a round, once D2 has removed the wasm copies:
 
 1. **The per-chunk `Encode!`** — up to one message-size of Candid serialisation,
    in the continuation after the previous append committed. The largest
-   post-commit allocation in a multi-chunk round.
+   post-commit allocation in a multi-chunk round, and the reason F's single-message
+   round removes the window rather than only shrinking it.
 2. **Block removal's instruction cost.** `remove_archived_blocks` loops
    `pop_first()` once per block, so a large `num_blocks_to_archive` means
-   thousands of stable-structure removals in one message — and E makes that
-   message larger by adding the range application. A non-allocation trap source,
-   and one worth *measuring* rather than assuming.
+   thousands of stable-structure removals in one message. E leaves this alone —
+   the range reconciliation stays per chunk in `send_blocks_to_archive`, not in
+   the removal message — and F shrinks each round's removal. A non-allocation trap
+   source, and one worth *measuring* rather than assuming.
 3. **Reply buffers** — tiny, and only fail once the heap is at the wall.
 
 Not trap sources: the archive trapping arrives as a *reject*, so A1 refusals and
 "no space left" take the graceful path; and an upgrade cannot abandon a round
 mid-flight, because stopping drains outstanding calls first.
 
-If resumability is wanted later, the cheapest route needs no new state, no
-endpoint and no interface change: **treat an A1 refusal as "already archived" and
-advance.** Given E, a gap is impossible, so the only cause of a refusal is that
-the archive already holds those blocks; and an append is atomic per chunk, so it
-is all-or-nothing — if the archive had none of them the tip would match and A1
-would not refuse. The ledger can therefore advance by exactly the chunk it tried
-to send, and a trapped multi-chunk round converges in one subsequent round, one
-wasted call per already-landed chunk.
+**A trapped round is not resumable with A1 alone**, which is worth stating because
+it is the sharpest argument for E. With only the chain check, the ledger sees a
+refusal and cannot tell whether it means "you already sent me these" or "you have
+skipped some" — so its only safe response is to stop, and archiving stalls until an
+operator intervenes.
 
-The caveat is real, though: it converts a loud stall into silent self-healing, and
-its soundness rests entirely on "gaps are impossible", which is true *given* E but
-is a premise a future change could break. If it ever were violated, advancing on
-refusal would silently skip blocks. So it should be metric-visible and probably
-bounded per round, and written down as depending on that invariant.
+The tempting shortcut is to *infer*: treat a refusal as "already archived" and
+advance by the chunk just attempted. It needs no new state and no interface change,
+but its soundness rests entirely on gaps being impossible, and if that premise were
+ever violated the ledger would silently skip blocks — trading a loud stall for
+quiet data loss.
 
-**Recommendation: not now.** The stall is loudly detectable — C1's counter,
-`ledger_archiving_failures` and block accumulation all fire — and the remedy is a
-proposal the team makes routinely. F removes most of the motive anyway: with one
-message per round there is at most one already-landed chunk to re-send, so the
-waste this would recover is a single call.
+E removes the choice rather than settling it. A covered index is not a refusal at
+all: the archive returns success along with its position, so the ledger is *told*
+where it stands instead of inferring it from a rejection. That is resumability with
+no premise to break, which is why it is part of the Approach rather than a
+follow-up.
 
 ## Approach
 
