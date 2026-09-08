@@ -40,7 +40,7 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 32 * DEFAULT_VCPUS_PER_VM,  # 4 NNS + 4 App + 24 unassigned IC Node VMs * 6 vCPUs.
     tags = [
-        "long_test",
+        "system_test_large",
     ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | NNS_CANISTER_RUNTIME_DEPS,
     deps = [

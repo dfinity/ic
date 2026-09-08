@@ -117,7 +117,7 @@ system_test_nns(
     guestos_update = "test",
     tags = [
         "colocate",
-        "long_test",  # since it takes longer than 5 minutes.
+        "system_test_large",
         "subnet_recovery",
     ],
     test_timeout = "eternal",
@@ -136,7 +136,7 @@ system_test_nns(
     guestos_update = "test",
     tags = [
         "colocate",
-        "long_test",
+        "system_test_large",
         "subnet_recovery",
     ],
     test_timeout = "eternal",
@@ -155,7 +155,7 @@ system_test_nns(
     guestos_update = "test",
     tags = [
         "colocate",
-        "long_test",
+        "system_test_large",
         "subnet_recovery",
     ],
     test_timeout = "eternal",
