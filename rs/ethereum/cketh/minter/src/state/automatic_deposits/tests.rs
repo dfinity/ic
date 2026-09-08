@@ -34,8 +34,9 @@ use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
 
 /// A delegate other than the sweeper contract every fixture sweep names, for the tests that rotate
-/// an account onto a second one.
-const ANOTHER_DELEGATE: Address = Address::new([0x9e; 20]);
+/// an account onto a second one. Sorts before the incumbent, so a test reading the delegation off
+/// the last key rather than off the highest nonce fails.
+const ANOTHER_DELEGATE: Address = Address::new([0x1e; 20]);
 
 #[test]
 fn should_watch_a_pair_for_the_scan_window() {
@@ -1043,7 +1044,7 @@ fn should_mark_nothing_for_a_sweep_carrying_no_authorization() {
         transaction_signature(),
     );
 
-    finalize_sweep_carrying(&mut deposits, account(0), None);
+    finalize_sweep_carrying(&mut deposits, SweepId(0), None);
 
     // Signing a tuple is not applying it: an address only a sweep that left it out has swept
     // holds no delegation.
@@ -1053,17 +1054,16 @@ fn should_mark_nothing_for_a_sweep_carrying_no_authorization() {
 }
 
 #[tokio::test]
-async fn should_keep_an_applied_authorization_marked_by_the_sweep_that_applied_it() {
+async fn should_not_mark_a_tuple_whose_nonce_the_account_has_already_spent() {
     let (mut deposits, first) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
     finalize_sweep(&mut deposits, &first, TransactionStatus::Success);
     let authorization = first.items[0].authorization.clone();
     assert!(authorization.is_some(), "the fixture must carry a tuple");
 
-    // The protocol skips a tuple whose nonce the account has already spent, so re-carrying it
-    // changes nothing on chain.
-    let second = finalize_sweep_carrying(&mut deposits, account(0), authorization);
+    // Applying the tuple spent nonce zero, so the protocol skips the very same tuple when a later
+    // sweep carries it again: the mark stays on the sweep that did apply it.
+    finalize_sweep_carrying(&mut deposits, SweepId(1), authorization);
 
-    assert_ne!(second, first.id);
     assert_eq!(
         applied_by(
             &deposits,
@@ -1081,6 +1081,45 @@ async fn should_keep_an_applied_authorization_marked_by_the_sweep_that_applied_i
     assert_eq!(deposits.applied_authorizations_len(), 1);
 }
 
+/// Two sweeps of the same account can be in flight at once — one per token it has queued — and
+/// both carry a tuple for nonce zero, since the minter always signs for nonce zero. Whichever
+/// lands first spends the nonce; the other is skipped, even when it names a different delegate.
+#[test]
+fn should_apply_only_the_first_of_two_sweeps_carrying_the_same_nonce() {
+    let mut deposits = AutomaticDeposits::default();
+    let incumbent = authorization_request(account(0), sweeper_contract(), TransactionNonce::ZERO);
+    let rotated = authorization_request(account(0), ANOTHER_DELEGATE, TransactionNonce::ZERO);
+    deposits.record_authorization(incumbent.clone(), transaction_signature());
+    deposits.record_authorization(rotated.clone(), transaction_signature());
+
+    finalize_sweep_carrying(&mut deposits, SweepId(0), Some(signed(&incumbent)));
+    finalize_sweep_carrying(&mut deposits, SweepId(1), Some(signed(&rotated)));
+
+    assert_eq!(applied_by(&deposits, &incumbent), Some(SweepId(0)));
+    assert_eq!(applied_by(&deposits, &rotated), None);
+    assert_eq!(
+        deposits.delegation(&account(0)),
+        Some(Delegation {
+            delegate: sweeper_contract(),
+            nonce: TransactionNonce::ONE,
+        })
+    );
+    assert_eq!(deposits.applied_authorizations_len(), 1);
+}
+
+#[test]
+fn should_not_mark_a_tuple_signed_for_a_nonce_the_account_has_not_reached() {
+    let mut deposits = AutomaticDeposits::default();
+    let ahead = authorization_request(account(0), sweeper_contract(), TransactionNonce::ONE);
+    deposits.record_authorization(ahead.clone(), transaction_signature());
+
+    finalize_sweep_carrying(&mut deposits, SweepId(0), Some(signed(&ahead)));
+
+    assert_eq!(applied_by(&deposits, &ahead), None);
+    assert_eq!(deposits.delegation(&account(0)), None);
+    assert_eq!(deposits.applied_authorizations_len(), 0);
+}
+
 #[tokio::test]
 async fn should_report_the_delegate_of_the_highest_applied_authorization() {
     let (mut deposits, first) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
@@ -1088,11 +1127,7 @@ async fn should_report_the_delegate_of_the_highest_applied_authorization() {
 
     let rotated = authorization_request(account(0), ANOTHER_DELEGATE, TransactionNonce::ONE);
     deposits.record_authorization(rotated.clone(), transaction_signature());
-    finalize_sweep_carrying(
-        &mut deposits,
-        account(0),
-        Some(rotated.signed_with(transaction_signature())),
-    );
+    finalize_sweep_carrying(&mut deposits, SweepId(1), Some(signed(&rotated)));
 
     assert_eq!(
         deposits.delegation(&account(0)),
@@ -1157,24 +1192,29 @@ fn replay_of_the_event_log() -> State {
     state
 }
 
-/// Queue `account`'s USDT, hand it to a sweep of its own carrying `authorization`, and finalize
-/// that sweep. Numbered after the sweep a fixture enqueues, so it can follow one.
+/// Queue [`account(0)`]'s deposit of the token sweep `id` alone moves, hand it to that sweep
+/// carrying `authorization`, and finalize the sweep. One token per id, so several sweeps of the
+/// same account can follow one another.
 fn finalize_sweep_carrying(
     deposits: &mut AutomaticDeposits,
-    account: Account,
+    id: SweepId,
     authorization: Option<SignedAuthorization>,
-) -> SweepId {
-    let id = SweepId(1);
+) {
+    let account = account(0);
+    let token = token(id.0 as u8);
     let request = sweep_request(
         id,
-        Asset::Erc20(usdt()),
+        Asset::Erc20(token),
         vec![authorized_item(account, authorization)],
     );
-    queue(deposits, &[(account, usdt())]);
-    deposits.record_sweep_scheduled(id, Asset::Erc20(usdt()), [account]);
+    queue(deposits, &[(account, token)]);
+    deposits.record_sweep_scheduled(id, Asset::Erc20(token), [account]);
     deposits.record_sweep_request(request.clone());
     finalize_sweep(deposits, &request, TransactionStatus::Success);
-    id
+}
+
+fn signed(request: &AuthorizationRequest) -> SignedAuthorization {
+    request.signed_with(transaction_signature())
 }
 
 fn sweep_request(id: SweepId, asset: Asset, items: Vec<AuthorizedSweepItem>) -> SweepRequest {
