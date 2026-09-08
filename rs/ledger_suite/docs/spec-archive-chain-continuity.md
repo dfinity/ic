@@ -164,11 +164,12 @@ warrant a different response are both detected without knowing the cause:
 So the cause is wanted for diagnosis, not control flow, and that is why neither
 reject-string matching nor a typed return value is needed here.
 
-**This holds for the component set below, not universally.** The
-addressed-appends alternative deliberately gives the ledger a cause worth acting
-on — a `Gap` halts while a duplicate is success — so there the ledger *does*
-branch on it. Not a contradiction: addressed appends create a distinction that
-this design has no use for.
+**The claim above is a property of this design, not a general one.** "The ledger
+does not need the cause" is true given A-E, because every cause it can encounter
+calls for the same response. Under *Alternative architecture: addressed appends*
+it is false: the archive there returns a typed result and the ledger acts on it —
+a `Gap` halts, a duplicate counts as success. The two are not in conflict;
+addressed appends create a distinction that A-E has no use for.
 
 **D. Allocation and observability work on the ledger side.** Four items that are
 independent of each other and of the above, detailed in Components: an in-flight
