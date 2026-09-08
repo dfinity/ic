@@ -13,29 +13,11 @@ use crate::state::event::{AutomaticDeposit, EventType};
 use crate::state::{TaskType, mutate_state, read_state};
 use crate::time::TimeProvider;
 use crate::timed_sized_map::Timestamp;
-use batcher::BalanceOfCall;
+use batcher::{BalanceOfCall, MAX_CALLS_PER_BATCH};
 use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
 use ic_canister_log::log;
 use ic_canister_runtime::Runtime;
 use ic_ethereum_types::Address;
-
-/// Maximum number of `balanceOf` sub-calls in a single deployless-batcher `eth_call`.
-///
-/// The batch runs as one create-style `eth_call`, so the ceiling is the provider's `eth_call` gas
-/// cap (commonly 50M — geth's `--rpc.gascap` default). A `debug_traceCall` of an 8-call batch
-/// against proxied stablecoins (ckUSDC + ckUSDT, the priciest shape: `STATICCALL` → proxy `SLOAD`
-/// → `DELEGATECALL` → balance `SLOAD`) used 153_452 gas, i.e. ~19k gas/call. The create/init-code
-/// overhead is negligible and no code-deposit gas is charged for the returned data, so essentially
-/// all of it is the `balanceOf`s. At that worst-case rate 1_000 calls ≈ 19M gas, ~2.6x under a 50M
-/// cap. Payloads stay small — 64 bytes of calldata and 32 bytes of return per call, so 1_000 calls
-/// is ~64 KiB in / ~32 KiB out, far below the 2 MiB HTTPS-outcall limit.
-///
-/// Not set arbitrarily high: [`scan_balances`] splits the registered pairs into chunks of this size
-/// and advances each chunk all-or-nothing, so a whole-call failure re-does that chunk on the next
-/// tick — and a chunk that ever exceeds a provider's gas cap fails *every* time, permanently
-/// stalling its pairs. 1_000 keeps a comfortable margin against that for the current token set;
-/// re-measure (and lower if needed) if the supported tokens grow or skew more gas-heavy.
-const MAX_CALLS_PER_BATCH: usize = 1_000;
 
 pub async fn balance_scan<T: TimeProvider>(time_provider: &T) {
     let now = Timestamp::from_nanos(time_provider.time());
