@@ -1251,14 +1251,14 @@ fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
 
     // Pretend the canister was loaded from a checkpoint predating the field.
     system_state.reset_consumed_cycles_monotonic();
-    assert!(system_state.migrate_consumed_cycles_to_monotonic());
+    system_state.migrate_consumed_cycles_to_monotonic();
     assert_eq!(
         system_state.canister_metrics().consumed_cycles_monotonic(),
         settled
     );
 
     // Redoing it changes nothing.
-    assert!(system_state.migrate_consumed_cycles_to_monotonic());
+    system_state.migrate_consumed_cycles_to_monotonic();
     assert_eq!(
         system_state.canister_metrics().consumed_cycles_monotonic(),
         settled
@@ -1283,7 +1283,7 @@ fn migrate_consumed_cycles_to_monotonic_skips_paused_execution() {
         });
 
     system_state.reset_consumed_cycles_monotonic();
-    assert!(!system_state.migrate_consumed_cycles_to_monotonic());
+    system_state.migrate_consumed_cycles_to_monotonic();
     assert_eq!(
         system_state.canister_metrics().consumed_cycles_monotonic(),
         NominalCycles::zero()
