@@ -268,14 +268,12 @@ change rather than a later one — and note the ICP ledger is precisely the one 
 *repair*-based fix could not have reached, since the ICP archive exposes no block
 count.
 
-**Correction to an earlier version of this analysis, and to the DEFI-2967
-description.** Both claimed that DEFI-1666's proposed `num_blocks_to_archive =
-5000` with 2 MB messages "would make rounds multi-chunk, putting those
-allocations back". That is backwards. Raising the ICP cap from 128 kB to 2 MB
-makes 5000 blocks at ~150 bytes about 750 kB — comfortably a single message. So
-DEFI-1666 would take ICP from two chunks to one and *close* this window rather
-than open it. The ticket description still carries the wrong claim and should be
-corrected.
+**DEFI-1666 would narrow this window, not widen it.** Its proposed
+`num_blocks_to_archive = 5000` with 2 MB messages puts 5000 blocks at ~150 bytes
+at about 750 kB — comfortably a single message — so it would take the ICP ledger
+from two chunks to one. Note that it cannot be delivered as a configuration
+change: the ICRC ceiling is a hard-coded const and the ICP ceiling is written only
+in `init`, so both need code changes for a 2 MB message to take effect.
 
 ### How a round traps, and whether to make it resumable
 
@@ -317,9 +315,9 @@ bounded per round, and written down as depending on that invariant.
 
 **Recommendation: not now.** The stall is loudly detectable — C1's counter,
 `ledger_archiving_failures` and block accumulation all fire — and the remedy is a
-proposal the team makes routinely. Revisit if rounds stay multi-chunk; note the
-trigger is the *opposite* of what an earlier version of this spec said, since
-DEFI-1666 would reduce chunking rather than increase it.
+proposal the team makes routinely. Revisit if rounds stay multi-chunk — noting
+that DEFI-1666 would reduce chunking, so landing it makes this *less* pressing
+rather than more.
 
 ## Why not the alternatives
 
@@ -727,53 +725,43 @@ account principals and amounts.
 Pairs naturally with the drafted memory-allocation proposals, which are the same
 NNS action.
 
-## Resolved questions
+## Design notes
 
-Kept for the reasoning, not because anything is outstanding.
+Reasoning worth keeping, on points that are settled but easy to re-litigate.
 
-* **Corrected: DEFI-1666 reduces chunking, it does not increase it.** Earlier
-  versions of this spec, and the DEFI-2967 description, argued that
-  `num_blocks_to_archive = 5000` with 2 MB messages "would make rounds
-  multi-chunk". Backwards: raising the ICP cap from 128 kB to 2 MB makes 5000
-  blocks at ~150 bytes about 750 kB, a single message. So DEFI-1666 would take ICP
-  from two chunks to one. Two consequences — the multi-chunk window is open
-  **today** on the ICP ledger rather than being a future risk, and the trigger for
-  revisiting resumability is the opposite of what was written. The ticket
-  description still carries the wrong claim.
-
-
-* **Resolved: `spawn` is correct, and better than `spawn_migratory` here.** The
-  concern was that `ic_cdk::futures::spawn` is the *protected* variant, documented
-  as "canceled if the method returns before they complete", while archiving is
-  meant to outlive the method. Cancellation is refcounted, not tied to the Rust
-  future resolving: `enter_current_method` cancels attached tasks only when the
+* **`spawn` is the correct CDK primitive here, and better than `spawn_migratory`.**
+  `ic_cdk::futures::spawn` is the *protected* variant, documented as "canceled if
+  the method returns before they complete", which looks wrong for a task designed
+  to outlive its method. It is not: cancellation is refcounted, not tied to the
+  Rust future resolving. `enter_current_method`
+  (`ic-cdk-executor/src/machinery.rs`) cancels attached tasks only when the
   method's `MethodHandle` count reaches zero, and a handle is taken before every
   inter-canister call and threaded through its callback. A task blocked on a call
   therefore keeps its method context alive, and the chain of calls keeps the count
   above zero until archiving finishes. "Returns" means "the body finished *and*
   every outstanding call completed".
 
-  Protected is also the better choice: if the context ever did die with the task
-  pending, `ProtectedTask`'s `PinnedDrop` panics, so it surfaces. `spawn_weak`
-  drops silently and `spawn_migratory` is unattached, which sounds more robust but
-  removes both the attachment and the alarm — and the archiving chain has no need
-  to migrate, because every await is its own call.
+  Protected is also preferable: if the context ever did die with the task pending,
+  `ProtectedTask`'s `PinnedDrop` panics, so it surfaces. `spawn_weak` drops
+  silently, and `spawn_migratory` is unattached — which sounds more robust but
+  removes both the attachment and the alarm, and the archiving chain has no need
+  to migrate because every await is its own call.
 
   **Invariant this creates:** every await in the archiving chain must be an
   inter-canister call. Awaiting anything a call does not wake — a timer, a channel
-  — drops the refcount to zero, cancels the task and trips the panic. This is a
-  second, independent reason for the decision not to make archiving timer-driven,
-  and worth a comment at `spawn_archiving` so nobody later adds a delay inside the
-  task.
+  — drops the refcount to zero, cancels the task and trips the panic. A second,
+  independent reason not to make archiving timer-driven, and worth a comment at
+  `spawn_archiving` so nobody later adds a delay inside the task.
 
-* **Moot: gap versus duplicate.** The two cases had opposite severity — a
-  *duplicate* meant the ledger's bookkeeping had fallen behind what the archive
-  holds, a *gap* meant blocks between the archive's tip and the ledger's next send
-  were stored nowhere. Distinguishing them would have needed the archive's
-  `log_length`, because `append_blocks` carries no index and the archive cannot
-  tell which side of its tip the sender believes it is on.
+* **Gap versus duplicate needs no distinguishing.** A refusal could in principle
+  mean either of two things with opposite severity: a *duplicate*, where the
+  ledger's bookkeeping has fallen behind what the archive holds and nothing is
+  lost; or a *gap*, where blocks between the archive's tip and the ledger's next
+  send are stored nowhere. Telling them apart at the archive is impossible,
+  because `append_blocks` carries no index and the archive cannot know which side
+  of its tip the sender believes it is on.
 
-  E removes the question. With `num_archived_blocks` and the ranges advancing
-  together, and only by acknowledged chunk counts, neither can ever exceed what
-  the archives hold, so a gap cannot arise. Every refusal A1 reports is a
-  duplicate, and C1's single mismatch counter says all there is to say.
+  E makes the question moot. With `num_archived_blocks` and the ranges advancing
+  together and only by acknowledged chunk counts, neither can exceed what the
+  archives hold, so a gap cannot arise. Every refusal is therefore a duplicate,
+  and C1's single mismatch counter says all there is to say.
