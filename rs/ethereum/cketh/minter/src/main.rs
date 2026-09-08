@@ -1367,6 +1367,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Number of delegation authorizations the minter has signed and stored.",
                 )?;
 
+                w.encode_gauge(
+                    "cketh_minter_applied_authorizations",
+                    s.automatic_deposits.applied_authorizations_len() as f64,
+                    "Number of stored delegation authorizations a finalized sweep applied on chain.",
+                )?;
+
                 w.encode_counter(
                     "cketh_minter_sweeper_funding_cketh_burned_total",
                     s.sweeper_funding.cumulative_burned().as_f64(),
