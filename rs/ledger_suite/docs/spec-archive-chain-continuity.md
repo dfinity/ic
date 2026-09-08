@@ -24,6 +24,11 @@ which the two-release split makes safe. Note that it needs no restructuring of t
 ledger: the ranges it has to reconcile are already reachable where the chunks are
 sent, and block removal can stay exactly where it is.
 
+**Before any of it, run the precondition**: a Rosetta sync from genesis on ckBTC,
+ckDOGE and ICP, which verifies the live chains and answers whether a divergence
+has already happened. Nothing here repairs one, so that answer reorders the work.
+See *Precondition: verify the live suites with Rosetta*.
+
 **F is the one that removes code rather than adding it.** It deletes both loops in
 `send_blocks_to_archive`, so a round is one node and one append, and the "did it
 land?" question is asked once per round instead of once per chunk. It does not
@@ -194,7 +199,12 @@ install record confirms `max_message_size_bytes = null` on the ICRC side.
 
 So the **chunking** window is open today on the ICP ledger, whose rounds are
 already two-chunk, and closed on ICRC. The **node roll-over** window is open on
-both. Neither is a future risk. That is the main reason E belongs in this change
+both. Neither is a future risk.
+
+To be clear about what the Approach does to them: **neither window closes** — a
+round can still die after a roll-over, and F only narrows it. What changes is the
+consequence, from silent permanent corruption to a refusal the ledger either
+recovers from or halts on. See E1's offset check and E2's coverage guard. That is the main reason E belongs in this change
 rather than a later one — and note the ICP ledger is precisely the one a
 *repair*-based fix could not have reached, since the ICP archive exposes no block
 count.
@@ -478,16 +488,31 @@ Learning that the tail node starts above the index it was about to send tells th
 ledger its `num_archived_blocks` is behind, but not that skipping is safe. It may
 advance only if an **earlier node's range already covers the span it would skip**.
 In the worked example the ranges are `[(0,1999)]` and the node reports it starts at
-2000, so `1000..1999` is covered and the ledger advances to 2000 and continues.
+2000, so `1000..1999` is covered and the count advances to 2000.
 
-If nothing covers the span, those blocks are stored in no archive and advancing
-would drop them permanently. That case must **halt**, with its own metric — it is
-not a condition any retry can improve, and it is the one shape of this bug that
-loses data rather than mis-serving it.
+**Detection and remedy sit on opposite sides of the module boundary.** The check is
+in `send_blocks_to_archive`, which holds the ranges; advancing the count is
+`remove_archived_blocks`, which Decision 6 deliberately left out of reach there. So
+the guard does not act — it *reports*: the round returns "sent nothing, but N
+blocks are already archived", and `archive_blocks` performs the removal. That is
+the same shape as today's `Ok(num_sent_blocks)`, with a count that includes blocks
+an archive already held, so it needs a wider return value rather than wider access.
 
-The same signature arises from a ledger restored from a snapshot while its archives
-kept their own state. Disaster recovery rather than normal operation, but the check
-covers it unchanged.
+**The halt branch is a safety net, not a live path.** If nothing covers the span,
+advancing would skip blocks that no archive holds — so it must halt, with its own
+metric. But it cannot arise in normal operation: a new node's offset is *derived
+from* `nodes_block_ranges.last()`, so the span below it is covered by construction.
+Reaching it requires ranges that are inconsistent with themselves — a ledger
+restored from a snapshot while its archives kept their own state, or a rolled-back
+upgrade. Worth stating, because the branch has no operator remedy: no endpoint
+sets `num_archived_blocks`, so escaping it would need an upgrade carrying a
+migration. That is an acceptable cost for a state we can only reach by losing
+ledger state, and an unacceptable one if it were reachable by a trap — which is
+why the derivation above matters.
+
+Note also that the blocks are never *lost* in either branch. `num_archived_blocks`
+lagging means the ledger has removed nothing, so it still holds them; what a hole
+in the archive address space costs is the ability to archive them, not the data.
 
 #### No separate range endpoint is needed
 
@@ -503,8 +528,16 @@ query, and no extra endpoint is required.
 `send_blocks_to_archive` nests two loops: an outer one per **node**
 (`archive.rs:240`), each iteration able to create one, and an inner one per
 **message** within that node's remaining capacity (`archive.rs:269`). Cap the
-round's *selection* at `min(num_blocks_to_archive, tail capacity, one message)`
-and **both** loops go: pick a node, take what fits, one call, reconcile, done.
+round's *selection* at `min(num_blocks_to_archive, one message)` and **both**
+loops go: pick a node, take what fits, one call, reconcile, done.
+
+Both terms of that cap are known locally, which is what makes it cheap. Tail
+capacity deliberately is **not** in it: selection happens before any await —
+`get_blocks_for_archiving` materialises blocks (`ledger.rs:462`) and only then does
+`node_and_capacity` ask — so folding capacity in would move selection after a call.
+Today's `take_prefix(remaining_capacity)` trims the selection instead. A round is
+therefore always *at most* one message, and a roll-over round is simply a short
+one.
 
 Note what this is not. "Remove chunking" deletes only the inner loop, and the
 outer one supplies multi-message rounds by itself — a round that outgrows the tail
@@ -649,7 +682,8 @@ better story for timer liveness.
    retries the same node under B. Neither traps, and no stored block is discarded.
 11. An append whose index is below the tail node's offset is refused, and the
    ledger advances only if an earlier node's range covers the skipped span —
-   otherwise it halts with a distinct metric rather than dropping the blocks.
+   otherwise it halts with a distinct metric rather than dropping the blocks. The
+   advance is applied by `archive_blocks`, from a count the round returns.
 12. A round issues exactly one `append_blocks`, and creates at most one node,
    at its start.
 13. The ICP archive is unchanged. The ICP *ledger* does change: B1-B3, D1-D4, E2,
@@ -672,9 +706,9 @@ better story for timer liveness.
 | D3 | correct the stale comment at `archive.rs:468-474` | `ledger_canister_core::archive` | it says a panic there "leads to the rolling back of the transaction that triggered the archiving", which stopped being true when archiving was spawned |
 | D4 | make error construction allocation-free, and trim the interpolating log lines | `ledger_canister_core::archive`, `::spawn` | `FailedToArchiveBlocks(pub String)` allocates on every error construction, so an allocation failure there turns a graceful `Err` into a trap: replace it with an enum carrying `Copy` payloads, rendered to text only where it is logged. `Rt::print` takes `impl AsRef<str>`, so non-interpolating messages become `&'static str` for free. **Keep** the canister id in the `create_canister` callback log — canister logs survive traps — verified, `test_appending_logs_in_trapped_update_call` in `rs/execution_environment/tests/canister_logging.rs` asserts the pre-trap `debug_print` persists *and* that the trap gets its own record — so it is the only possible record of an orphan's identity (D1 says one happened, this says which) — but drop the `{result:?}` debug format, which also stringifies the reject message. `reject_message()` borrows a `String` ic-cdk has already allocated, so only our second copy is avoidable |
 | E1 | `append_blocks` takes an optional expected start index and returns an optional result carrying the archive's next expected global index plus `at_capacity`, or a gap. Four-way placement of the index against `offset`/`offset + log_length`; capacity reported rather than trapped; chain mismatch still traps | `icrc1/archive/src/main.rs`, `archive.did`, `ledger_canister_core::archive::send_blocks_to_archive` | the only interface change; both `opt`, so tolerant in either direction. Verify with `didc` and the CI Candid check |
-| E2 | the ledger reconciles `nodes_block_ranges` from the reported index instead of incrementing, and treats a covered index as success. Block removal stays where it is, once per round — the module boundary is not redrawn | `ledger_canister_core::archive::send_blocks_to_archive` | shared code, so it applies to both ledgers once their archives are upgraded; the incremental path stays as the fallback for archives that return nothing |
+| E2 | the ledger reconciles `nodes_block_ranges` from the reported index instead of incrementing, and treats a covered index as success. The coverage guard *detects* here and reports upward — the round returns a count that includes blocks an archive already held, and `archive_blocks` performs the removal, so the module boundary is not redrawn (Decision 6) | `ledger_canister_core::archive::send_blocks_to_archive`, return type consumed by `ledger::archive_blocks` | shared code, so it applies to both ledgers once their archives are upgraded; the incremental path stays as the fallback for archives that return nothing |
 | E3 | count every use of the incremental fallback | `ledger_canister_core::archive` + per-ledger metric | the path's problem is an unknowable lifetime; a counter makes it deletable once it reads zero everywhere |
-| F1 | cap the round's selection at `min(num_blocks_to_archive, tail capacity, one message)` in bytes, and delete both loops in `send_blocks_to_archive` | `ledger_canister_core::ledger::get_blocks_for_archiving`, `::archive::send_blocks_to_archive` | removes code; the byte-based cap is what makes it correct for variable-size blocks. Expose the effective per-round count as a metric |
+| F1 | cap the round's selection at `min(num_blocks_to_archive, one message)` in bytes, and delete both loops in `send_blocks_to_archive` | `ledger_canister_core::ledger::get_blocks_for_archiving`, `::archive::send_blocks_to_archive` | removes code; the byte-based cap is what makes it correct for variable-size blocks. Both terms are known locally, so selection stays before the first await; `take_prefix(remaining_capacity)` still trims, so a roll-over round is short. Expose the effective per-round count as a metric |
 | F2 | skip the `remaining_capacity` pre-call when the last append reported `at_capacity = false` | `ledger_canister_core::archive::node_and_capacity` | depends on E1; this is what makes F cheaper than today rather than dearer |
 
 A1, C1 and E1 are in `ic-icrc1-archive`. B1-B3, D1-D4, E2, E3, F1 and F2 are in
@@ -962,31 +996,30 @@ Two things deliberately not attempted:
    `send_blocks_to_archive` ledger access, the divergence it leaves is benign (see
    *Why the two halves commit at different times*), and F bounds the waste to a
    single message.
+7. **The ICP archive is deferred, and this is the plan's main gap — not a
+   limitation of it.** E1 lives in `ic-icrc1-archive`, so the ICP ledger never
+   receives a reported position, E2's reconciliation never engages, and it stays
+   permanently on the incremental path. R-1 and R-2 therefore remain open on the
+   ledger that has *both* windows open today.
 
-## Open items
+   There is no cheap partial. Porting A1 alone catches the variant where the new
+   node already has a tip, but the silent-corruption variant is the **empty** node,
+   which has no tip to compare against — closing that needs the offset check, which
+   needs the index, which is the interface change. So ICP needs the whole of E1
+   against `ic-icp-archive`, plus its Candid and a second archive release.
 
-Named rather than resolved, so the plan's edges are visible.
+   Deferring is defensible — ICRC carries the two ck suites that prompted this, and
+   the work is mechanically the same in a second crate — but it must be a tracked
+   follow-up with its own ticket, not a line in an open-items list. Whoever
+   approves this spec is approving that ICP stays exposed until that lands.
 
-1. **The ICP archive gets none of the archive-side work.** A1, C1 and E1 live in
-   `ic-icrc1-archive`; `ic-icp-archive` is a separate crate. So the ledger with
-   the chunking window open *today* keeps the positional protocol. It gains B, D,
-   E2, E3 and F, but R-1 and R-2 stay open on ICP until its archive grows an
-   indexed append. That is Decision 3 working as intended, and it is the largest
-   remaining gap.
-2. **Nothing repairs a suite that has already diverged.** E prevents further
-   damage; it cannot fix a mis-indexed node, since the offset is a stable cell and
-   `post_upgrade()` takes no arguments. Verification is cheap, though — see below.
-3. **Block removal's instruction cost is unmeasured.** `remove_archived_blocks`
-   loops `pop_first()` once per block, and it is listed as a trap source on
-   assumption. F makes each round's removal smaller, which helps, but the number
-   is still worth having.
-4. **Genuine subnet exhaustion is not recoverable by anything here.** The archive
-   cannot grow, and the ledger cannot grow to hold the backlog either. What E
-   delivers is that the failure becomes a clean, loud stall on the same node
-   instead of a corrupting one, and that each attempt banks the blocks that did
-   fit. It does not make archiving proceed.
+## Precondition: verify the live suites with Rosetta
 
-### Verifying the live suites: use Rosetta
+**Do this first, before building anything here.** Nothing in this spec repairs a
+suite that has *already* diverged — E prevents further damage, but a mis-indexed
+node cannot be corrected, since the offset is a stable cell and `post_upgrade()`
+takes no arguments. So whether it has already happened is not an open question to
+carry alongside the work: the answer reorders the work. It is also cheap.
 
 Whether a divergence has already happened is answerable today, with no new tooling.
 The ICRC Rosetta synchroniser performs exactly this audit while syncing from
@@ -1004,7 +1037,26 @@ genesis, and checks both halves independently
 Because the ledger routes reads through to its archives, a full sync walks the
 whole chain across every node and would surface a duplicated or mis-indexed range
 as a hash or index mismatch. So a clean Rosetta sync from genesis on ckBTC, ckDOGE
-and ICP is the verification, and it is worth running before shipping any of this.
+and ICP *is* the verification.
+
+## Remaining open items
+
+Two, both narrow. The ICP archive is Decision 7 rather than an open item, and the
+already-diverged question is the precondition above.
+
+1. **Block removal's instruction cost is unmeasured.** `remove_archived_blocks`
+   loops `pop_first()` once per block, and it is listed as a trap source on
+   assumption rather than measurement. F makes each round's removal smaller, which
+   helps, but the number is still worth having, and canbench already measures this
+   class of thing.
+2. **Genuine subnet exhaustion is not recoverable by anything here.** The archive
+   cannot grow, and the ledger cannot grow to hold the backlog either. What E
+   delivers is that the failure becomes a clean, loud stall on the same node
+   instead of a corrupting one, and that each attempt banks the blocks that did
+   fit. It does not make archiving proceed — and since this is what actually
+   caused the 2026-09-01 incident, note where the answer does live: capacity and
+   reservation headroom, i.e. the drafted `memory_allocation` proposals for the ck
+   suites, not this spec.
 
 ## Adjacent: make the ledger suite's logs readable
 
