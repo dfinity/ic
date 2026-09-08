@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from itertools import batched
 
 
 def limit_file_contexts(file_contexts, base_path):
@@ -95,13 +96,10 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
         else:
             flattened_paths.append(target_path)
 
-    # TODO: replace this with itertools.batched when we have Python 3.12
     BATCH_SIZE = 100
-    for batch_start in range(0, len(flattened_paths), BATCH_SIZE):
-        batch_end = min(batch_start + BATCH_SIZE, len(flattened_paths))
+    for batch in batched(flattened_paths, BATCH_SIZE):
         subprocess.run(
-            ["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf"]
-            + flattened_paths[batch_start:batch_end],
+            ["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf"] + list(batch),
             check=True,
         )
 
