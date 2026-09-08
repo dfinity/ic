@@ -74,7 +74,10 @@ knowable, it makes *not knowing* safe, by refusing the re-send.
 
 ## Approach
 
-Two independent parts. Neither changes any Candid interface.
+Five parts, none of which changes a Candid interface. A and C are confined to the
+ICRC archive; B, D and E are in shared ledger code and so apply to both ledgers.
+A is shippable on its own and closes the corruption; the rest are independent of
+each other.
 
 **A. The archive refuses appends that do not continue its chain.**
 `append_blocks` computes the hash of its own tip and compares it to the
@@ -116,6 +119,21 @@ causes.
 Deliberately **not** a timer. Transaction-triggered plus a timestamp check has
 no re-arm hazard; a one-shot timer chain that failed to re-arm is exactly
 DEFI-2983.
+
+**C. The archive records why it refused, in its own metrics.**
+The archive knows the cause and already serves `/metrics`. A counter there —
+distinguishing a chain mismatch from a capacity refusal — means the ledger never
+has to know the cause, so no reject-string matching and no typed return value.
+
+**D. Allocation and observability work on the ledger side.** Four items that are
+independent of each other and of the above, detailed in Components: an in-flight
+counter that detects an archive creation whose outcome was never recorded and
+halts archiving until an operator looks (D1); removing the two multi-megabyte
+copies of the archive Wasm that happen *after* `create_canister` has committed
+(D2); correcting a comment that still claims a panic there rolls the triggering
+transaction back, which stopped being true when archiving was spawned (D3); and
+making error construction allocation-free, so a graceful failure cannot decay
+into a trap under memory pressure (D4).
 
 **E. The ledger's round bookkeeping commits atomically.** The divergence that
 poisons a new node's offset exists only because two pieces of bookkeeping commit
@@ -256,11 +274,6 @@ bounded per round, and written down as depending on that invariant.
 proposal the team makes routinely. Revisit if rounds stay multi-chunk; note the
 trigger is the *opposite* of what an earlier version of this spec said, since
 DEFI-1666 would reduce chunking rather than increase it.
-
-**C. The archive records why it refused, in its own metrics.**
-The archive knows the cause and already serves `/metrics`. A counter there —
-distinguishing a chain mismatch from a capacity refusal — means the ledger never
-has to know the cause, so no reject-string matching and no typed return value.
 
 ## Why not the alternatives
 
