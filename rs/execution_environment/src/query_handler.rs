@@ -178,6 +178,8 @@ impl InternalHttpQueryHandler {
         instruction_observation: Option<Arc<AtomicU64>>,
         max_instructions: Option<NumInstructions>,
     ) -> Result<WasmResult, UserError> {
+        let measurement_scope = MeasurementScope::root(&self.metrics.query);
+
         // While the subnet is cooling down its canisters execute no messages, so the
         // state that a query would be evaluated against is frozen; and the subnet may
         // be about to hand over its canisters altogether. It therefore rejects all
@@ -197,8 +199,6 @@ impl InternalHttpQueryHandler {
                 ),
             ));
         }
-
-        let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
         // Serve the query locally if it is addressed to the management canister.
         if query.receiver == CanisterId::ic_00() {

@@ -12,6 +12,7 @@ use ic_management_canister_types_private::{
 use ic_registry_resource_limits::ResourceLimits;
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
+use ic_test_utilities_metrics::fetch_histogram_stats;
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
@@ -672,6 +673,13 @@ fn query_calls_to_cooling_down_subnet_are_rejected() {
 
     test.set_cooling_down(true);
 
+    let queries_handled = |test: &ExecutionTest| {
+        fetch_histogram_stats(test.metrics_registry(), "execution_query_duration_seconds")
+            .unwrap()
+            .count
+    };
+    let queries_handled_before = queries_handled(&test);
+
     // Both canister-addressed and subnet-addressed query calls are now rejected.
     let expected_err = UserError::new(
         ErrorCode::SubnetCoolingDown,
@@ -694,6 +702,9 @@ fn query_calls_to_cooling_down_subnet_are_rejected() {
     // has already made can be responded to while it drains its subnet queues.
     test.system_query(canister, "query", wasm().reply().build())
         .unwrap();
+
+    // All 3 queries above were observed by the query handler metrics.
+    assert_eq!(queries_handled_before + 3, queries_handled(&test));
 }
 
 const COMPOSITE_QUERY_WAT: &str = r#"
