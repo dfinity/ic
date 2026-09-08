@@ -103,7 +103,11 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
             return;
         };
         sign_attestations_batch(attestation_requests, runtime).await;
-        sign_authorizations_batch(authorization_requests, runtime).await;
+        sign_authorizations_batch(
+            authorization_requests.into_iter().flatten().collect(),
+            runtime,
+        )
+        .await;
         enqueue_sweep(asset, &targets, &gas_fee_estimate, runtime);
     }
 }
@@ -113,7 +117,8 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
 ///
 /// A target whose attestation or authorization is missing is left out rather than swept: its
 /// signing failed, so the sweep has nothing to prove the address credits the account, or nothing to
-/// delegate it with. It stays queued, and the next tick tries it again.
+/// delegate it with. It stays queued, and the next tick tries it again. A target already delegated
+/// to the sweeper contract asks for no authorization, and is swept carrying none.
 fn enqueue_sweep<R: CanisterRuntime>(
     asset: Asset,
     targets: &[SweepTarget],
@@ -138,14 +143,20 @@ fn enqueue_sweep<R: CanisterRuntime>(
             .zip(authorization_requests)
             .filter_map(|((target, attestation_request), authorization_request)| {
                 let attestation = s.automatic_deposits.attestation(&attestation_request)?;
-                let authorization = s.automatic_deposits.authorization(&authorization_request)?;
+                let authorization = match authorization_request {
+                    Some(request) => {
+                        let signature = s.automatic_deposits.authorization(&request)?.clone();
+                        Some(request.signed_with(signature))
+                    }
+                    None => None,
+                };
                 Some(AuthorizedSweepItem {
                     item: SweepItem {
                         deposit: target.address(),
                         account: target.account(),
                         attestation: attestation.clone(),
                     },
-                    authorization: Some(authorization_request.signed_with(authorization.clone())),
+                    authorization,
                 })
             })
             .collect();
