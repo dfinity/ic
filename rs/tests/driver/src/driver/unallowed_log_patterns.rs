@@ -17,11 +17,13 @@
 //!   per IC node. Only that directory is scanned, mirroring the `ic` filter
 //!   above (Vector does not ship universal VM or colocate container logs
 //!   either). The teardown runs while the streamer is still appending (it is a
-//!   child of the `logs_stream` supervisor in the plan), so a final line
-//!   without a trailing newline is skipped, unparseable lines are skipped and
-//!   counted, and matches are de-duplicated by `__CURSOR` (a reconnecting
-//!   stream re-emits the record at its cursor). IC nodes excluded from
-//!   streaming via `--exclude-logs` are not scanned.
+//!   child of the `logs_stream` supervisor in the plan), so each file is read
+//!   only up to its length at open time (a node logging faster than we parse
+//!   must not keep the scan alive), a final line without a trailing newline is
+//!   skipped, unparseable lines are skipped and counted, and matches are
+//!   de-duplicated by `__CURSOR` (a reconnecting stream re-emits the record at
+//!   its cursor). IC nodes excluded from streaming via `--exclude-logs` are not
+//!   scanned.
 //!
 //! Both sources are matched on the Vector-normalized `MESSAGE`
 //! ([`normalize_message`] reproduces the `to_json` transform of
@@ -47,7 +49,7 @@ use slog::{Logger, info, warn};
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashSet},
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -346,7 +348,11 @@ fn attribute_lines(lines: &[LogLine], patterns: &CompiledPatterns) -> MatchesByP
 ///   lines): `log_entry.message`, or the empty (unmatchable) string when that
 ///   is not a string, just like Vector's `null`;
 /// * any other JSON object (API boundary node logs): its top-level `message`
-///   string, or the raw text when there is none.
+///   string; Vector's [`VECTOR_NO_MESSAGE_FIELD_SENTINEL`] when it is missing
+///   or null; the empty (unmatchable) string when it is not a string.
+///
+/// The surrounding JSON of a parsed object is never matched, so pattern text in
+/// metadata (crate names, error fields, ...) cannot cause local-only failures.
 fn normalize_message(raw: &str) -> Cow<'_, str> {
     if !raw.trim_start().starts_with('{') {
         return Cow::Borrowed(raw);
@@ -365,10 +371,15 @@ fn normalize_message(raw: &str) -> Cow<'_, str> {
         ),
         _ => match object.get("message") {
             Some(serde_json::Value::String(message)) => Cow::Owned(message.clone()),
-            _ => Cow::Borrowed(raw),
+            None | Some(serde_json::Value::Null) => Cow::Borrowed(VECTOR_NO_MESSAGE_FIELD_SENTINEL),
+            Some(_) => Cow::Owned(String::new()),
         },
     }
 }
+
+/// What Vector stores as `MESSAGE` for a JSON log line without a (non-null)
+/// top-level `message` field (`assets/vector.toml`).
+const VECTOR_NO_MESSAGE_FIELD_SENTINEL: &str = "Log contained no message field";
 
 /// Renders a journald `__REALTIME_TIMESTAMP` (decimal microseconds since the
 /// Unix epoch) as RFC 3339 UTC with microseconds, e.g. `"1700000000123456"`
@@ -597,15 +608,30 @@ fn scan_journald_log_files(
 }
 
 /// Scans one persisted journald log file (see `logs_stream_task::JournalFileSink`)
-/// line by line, in bounded memory. The writer may still be appending: a final
-/// line without a trailing newline is its in-flight write and is skipped.
+/// line by line, in bounded memory. The writer may still be appending, so only
+/// the bytes present when the file is opened are read: otherwise a node logging
+/// at least as fast as we parse would keep moving EOF away and the scan would
+/// never finish. A line cut at that boundary (or a genuinely in-flight write)
+/// is a final line without a trailing newline and is skipped.
 fn scan_journald_log_file(
     path: &Path,
     node: &str,
     patterns: &CompiledPatterns,
     out: &mut ScanOutcome,
 ) -> std::io::Result<()> {
-    let mut reader = BufReader::with_capacity(64 * 1024, std::fs::File::open(path)?);
+    let file = std::fs::File::open(path)?;
+    let len = file.metadata()?.len();
+    let reader = BufReader::with_capacity(64 * 1024, file.take(len));
+    scan_journald_log_reader(reader, node, patterns, out)
+}
+
+/// The scanning loop behind [`scan_journald_log_file`], over any line source.
+fn scan_journald_log_reader(
+    mut reader: impl BufRead,
+    node: &str,
+    patterns: &CompiledPatterns,
+    out: &mut ScanOutcome,
+) -> std::io::Result<()> {
     let mut line: Vec<u8> = Vec::new();
     let mut seen_cursors: HashSet<String> = HashSet::new();
     loop {
@@ -790,15 +816,61 @@ mod tests {
     }
 
     #[test]
-    fn normalize_message_keeps_flat_json_without_string_message_as_is() {
+    fn normalize_message_flat_json_without_string_message_is_never_the_raw_json() {
+        // Missing or null `message`: Vector's sentinel, which no default pattern matches.
         for raw in [
-            r#"{"level":"error"}"#,
-            r#"{"message":null}"#,
-            r#"{"message":42}"#,
-            r#"{"message":{"nested":true}}"#,
+            r#"{"level":"error","error":"handler panicked. This is a bug"}"#,
+            r#"{"message":null,"error":"panicked"}"#,
         ] {
-            assert_eq!(normalize_message(raw), raw);
+            assert_eq!(normalize_message(raw), VECTOR_NO_MESSAGE_FIELD_SENTINEL);
+            assert_eq!(
+                compiled().matching(&normalize_message(raw)),
+                Vec::<&str>::new()
+            );
         }
+        // Non-string `message`: unmatchable.
+        for raw in [
+            r#"{"message":42,"error":"panicked"}"#,
+            r#"{"message":{"nested":"panicked"}}"#,
+        ] {
+            assert_eq!(normalize_message(raw), "");
+        }
+    }
+
+    #[test]
+    fn scan_reader_treats_a_line_cut_at_the_byte_limit_as_truncated() {
+        let lines = [
+            record_line("c1", PANIC_HEADER),
+            record_line("c2", "all good"),
+            record_line("c3", PANIC_HEADER),
+        ];
+        let bytes = format!("{}\n", lines.join("\n")).into_bytes();
+        // Cut into the middle of the third line, as a length snapshot taken during
+        // an append would.
+        let limit = (lines[0].len() + 1 + lines[1].len() + 1 + lines[2].len() / 2) as u64;
+        let mut out = ScanOutcome::default();
+        scan_journald_log_reader(
+            bytes.as_slice().take(limit),
+            "node-a",
+            &compiled(),
+            &mut out,
+        )
+        .unwrap();
+        assert_eq!(out.records, 2);
+        assert_eq!(out.truncated_lines, 1);
+        assert_eq!(out.matches["panicked"].count, 1);
+        // A limit exactly at a line boundary loses nothing.
+        let limit = (lines[0].len() + 1 + lines[1].len() + 1) as u64;
+        let mut out = ScanOutcome::default();
+        scan_journald_log_reader(
+            bytes.as_slice().take(limit),
+            "node-a",
+            &compiled(),
+            &mut out,
+        )
+        .unwrap();
+        assert_eq!(out.records, 2);
+        assert_eq!(out.truncated_lines, 0);
     }
 
     #[test]
