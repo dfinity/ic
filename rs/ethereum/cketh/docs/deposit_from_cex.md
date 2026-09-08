@@ -1539,8 +1539,15 @@ rotated, costs nothing (`R13`) and is harmless on the old delegate.
    rides reverts. That revert is the **repair trigger**: a reverted sweep
    invalidates the record of every address it touched, and before any of them
    is swept again the minter re-reads `eth_getTransactionCount(address,
-   latest)` with the usual consensus (the `latest_transaction_count` helper
-   already used for the sweeper's own nonce) and re-anchors the record on it.
+   finalized)` with the usual consensus (the `finalized_transaction_count`
+   helper already used for the sweeper's own nonce) and re-anchors the record
+   on it — at `finalized`, not `latest`, so the observation agrees with the
+   finalized receipts every other mark comes from and cannot be reorged out.
+   An observation the record cannot explain (a nonce beyond every tuple the
+   minter signed, or two unapplied tuples at one nonce, possible only in
+   state that predates the one-tuple-per-nonce invariant) is not applied: the
+   address stays excluded from sweeps, is not re-read, and is surfaced by a
+   metric for manual repair.
    The chain nonce identifies the current delegate without `eth_getCode`: the
    recorded tuple at `nonce − 1` is the one that installed it. Sweeping,
    rotation included, makes no per-address chain read on the happy path.
