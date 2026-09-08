@@ -1522,7 +1522,7 @@ rotated, costs nothing (`R13`) and is harmless on the old delegate.
    | `{ current delegate, n }` | none: the designator persists | `0x02` if no item needs a tuple |
    | `{ other delegate, n }` | `(current delegate, n)` — the rotation, signed once and recorded like any other authorization — unless a tuple for `(address, n)` is already signed for another delegate, see 5 | `0x04` |
 
-   The second row is new behaviour too: an already-delegated address no longer
+   The second row is new behavior too: an already-delegated address no longer
    pays the full 25'000 gas of a skipped tuple on every sweep (the
    existing-account refund is only granted to tuples that pass the nonce
    check), which is the type-`0x02` "Transaction 3" of the
