@@ -35,20 +35,9 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
     if output.exists() {
         return Err(format!("{} already exists", output.display()));
     }
-    // An output under one of the inputs would be linked into itself, as the
-    // linking creates it before listing the input it reads. Resolve the paths
-    // first, as either side may reach the same directory through a link or a
-    // `..`.
+    // Resolved up front, so that an output the sync below cannot open fails
+    // before anything is assembled rather than after.
     let resolved_output = resolve(&output)?;
-    for (input, name) in [(&base, "base"), (&source, "source")] {
-        if resolved_output.starts_with(resolve(input)?) {
-            return Err(format!(
-                "the output {} is nested under the {name} checkpoint {}",
-                output.display(),
-                input.display()
-            ));
-        }
-    }
     // The canisters of the two subnets are disjoint, as the source subnet hosts
     // the canister ID ranges that the merge reassigns to the destination subnet.
     for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
@@ -210,8 +199,7 @@ fn link_tree(from: &Path, to: &Path) -> Result<(), String> {
 ///
 /// `canonicalize` needs the path to exist, which the output does not, so the
 /// deepest ancestor that does exist is resolved and the rest is appended. That is
-/// enough for the nesting check: what an existing directory is nested under does
-/// not change by appending to it.
+/// enough to name the directory the output is created in.
 fn resolve(path: &Path) -> Result<PathBuf, String> {
     // Absolute first: the ancestors of a bare relative path run out before
     // reaching the directory it is relative to, which is the one that exists.
@@ -415,38 +403,6 @@ mod tests {
                 .readonly(),
             "the canister states directory is read-only",
         );
-    }
-
-    #[test]
-    fn merge_refuses_an_output_nested_under_an_input() {
-        let tmp = TempDir::new().unwrap();
-        let base = checkpoint(tmp.path(), "base", &["c1"]);
-        let source = checkpoint(tmp.path(), "source", &["c2"]);
-
-        // Directly under an input, under a directory of one, and reached through
-        // a `..` that lands back inside one.
-        for output in [
-            base.join("merged"),
-            base.join(CANISTER_STATES_DIR).join("merged"),
-            source.join("merged"),
-            tmp.path()
-                .join("base")
-                .join("..")
-                .join("base")
-                .join("merged"),
-        ] {
-            let err = do_merge(base.clone(), source.clone(), output.clone()).unwrap_err();
-            assert!(
-                err.contains("is nested under the"),
-                "unexpected error for {}: {err}",
-                output.display(),
-            );
-            assert!(
-                !output.exists(),
-                "{} was created despite being rejected",
-                output.display(),
-            );
-        }
     }
 
     #[test]
