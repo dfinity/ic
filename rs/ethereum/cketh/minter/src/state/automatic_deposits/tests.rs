@@ -1046,8 +1046,8 @@ fn should_mark_nothing_for_a_sweep_carrying_no_authorization() {
 
     finalize_sweep_carrying(&mut deposits, SweepId(0), None);
 
-    // Signing a tuple is not applying it: an address only a sweep that left it out has swept
-    // holds no delegation.
+    // Signing a tuple is not applying it: a sweep that leaves the tuple out leaves the address
+    // without a delegation.
     assert_eq!(deposits.authorizations_len(), 1);
     assert_eq!(deposits.applied_authorizations_len(), 0);
     assert_eq!(deposits.delegation(&account(0)), None);
