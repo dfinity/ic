@@ -273,7 +273,6 @@ mod messages {
                 Ok((Some(prefix), None))
             } else {
                 // Both prefix and postfix are non-empty. Retain the postfix.
-                self.count_bytes = byte_size(&postfix)?;
                 Ok((Some(prefix), Some(Self::new(postfix)?)))
             }
         }
@@ -1345,6 +1344,7 @@ impl CertifiedSlicePool {
         let unpacked = slice.try_into()?;
 
         let result = pool.lock().unwrap().put_impl(subnet_id, unpacked);
+        // `put_impl` returned any displaced slice. Drop it outside the pool lock.
         result.map(|_| ())
     }
 
@@ -1406,6 +1406,7 @@ impl CertifiedSlicePool {
         )?;
 
         let result = pool.lock().unwrap().put_impl(subnet_id, slice);
+        // `put_impl` returned any displaced slice. Drop it outside the pool lock.
         result.map(|_| ())
     }
 
