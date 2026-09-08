@@ -6007,7 +6007,7 @@ fn consumed_instruction_cycles(
     };
     (
         instructions(canister_metrics.consumed_cycles_by_use_cases()),
-        instructions(canister_metrics.consumed_cycles_by_use_cases_as_counters()),
+        instructions(canister_metrics.consumed_cycles_by_use_cases_monotonic()),
     )
 }
 

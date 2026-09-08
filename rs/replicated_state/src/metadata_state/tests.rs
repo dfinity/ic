@@ -2869,7 +2869,7 @@ fn migrate_outcalls_scalar_fields_into_use_cases() {
             (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
             (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
         ]),
-        consumed_cycles_by_use_case_as_counters: BTreeMap::from([
+        consumed_cycles_by_use_case_monotonic: BTreeMap::from([
             (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
             (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
         ]),
@@ -2904,7 +2904,7 @@ fn migrate_outcalls_scalar_fields_into_use_cases() {
     // The migration must NOT touch the monotonic counters map: its HTTP/ECDSA
     // entries stay at their original values (only the just-observed use case
     // grew).
-    let counters = subnet_metrics.get_consumed_cycles_by_use_case_as_counters();
+    let counters = subnet_metrics.get_consumed_cycles_by_use_case_monotonic();
     assert_eq!(
         counters[&CyclesUseCase::HTTPOutcalls],
         NominalCycles::new(60)
@@ -2940,7 +2940,7 @@ fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
             CyclesUseCase::HTTPOutcalls,
             NominalCycles::new(60),
         )]),
-        consumed_cycles_by_use_case_as_counters: BTreeMap::from([(
+        consumed_cycles_by_use_case_monotonic: BTreeMap::from([(
             CyclesUseCase::HTTPOutcalls,
             NominalCycles::new(60),
         )]),
@@ -2972,7 +2972,7 @@ fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
     // The counters map is not migrated: it only reflects its own increment (5),
     // not the backfilled history.
     assert_eq!(
-        subnet_metrics.get_consumed_cycles_by_use_case_as_counters()[&CyclesUseCase::HTTPOutcalls],
+        subnet_metrics.get_consumed_cycles_by_use_case_monotonic()[&CyclesUseCase::HTTPOutcalls],
         NominalCycles::new(65)
     );
 }
@@ -3008,7 +3008,7 @@ fn migrate_outcalls_scalar_fields_without_any_observation() {
     // The counters map is left untouched, i.e. still empty.
     assert!(
         subnet_metrics
-            .get_consumed_cycles_by_use_case_as_counters()
+            .get_consumed_cycles_by_use_case_monotonic()
             .is_empty()
     );
 
