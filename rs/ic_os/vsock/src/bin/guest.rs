@@ -9,7 +9,7 @@ use clap::{Parser, Subcommand};
 
 /// A CLI for sending vsock commands
 #[derive(Debug, Parser)]
-#[command(version = "1.0.0")]
+#[command(version = "2.0.0")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
