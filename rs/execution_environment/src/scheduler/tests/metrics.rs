@@ -1207,6 +1207,44 @@ fn checkpoint_round_backfills_consumed_cycles_monotonic() {
     );
 }
 
+/// The mirror image: a monotonic value above the gauge net of the outstanding
+/// prepayments is corrupt accounting too. The backfill must report it rather than
+/// lower the monotonic value, which may only ever go up.
+///
+/// Note that this needs the outstanding prepayments to be zero: with a prepayment
+/// still outstanding, dropping the gauge would trip the `outstanding > gauge` check
+/// first and never reach this arm.
+#[test]
+#[should_panic]
+fn checkpoint_round_reports_monotonic_above_the_gauge() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    // An ingress execution that runs to completion refunds its prepayment, so the
+    // canister is left with consumed cycles and nothing outstanding.
+    test.send_ingress(canister, ingress(100));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        assert_consumed_cycles_invariant(&test, canister),
+        NominalCycles::zero()
+    );
+    assert_ne!(
+        test.canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_monotonic(),
+        NominalCycles::zero()
+    );
+
+    // Break the invariant the other way: drop the gauge but keep the monotonic
+    // value, which now exceeds it net of the zero outstanding prepayments.
+    test.canister_state_mut(canister)
+        .system_state
+        .reset_consumed_cycles();
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+}
+
 /// A consumed cycles gauge below the outstanding prepayments is corrupt accounting:
 /// the gauge covers every prepayment that is still outstanding. It must be reported
 /// rather than backfilled from, which the saturating subtraction would otherwise
