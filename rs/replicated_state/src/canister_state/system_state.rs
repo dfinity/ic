@@ -2293,8 +2293,12 @@ impl SystemState {
     /// consumed_cycles - outstanding_prepayments() == consumed_cycles_monotonic
     /// ```
     ///
-    /// which holds whenever no execution is in progress and is what
-    /// [`Self::migrate_consumed_cycles_to_monotonic`] relies on.
+    /// which holds whenever no execution is in progress, once the canister has been
+    /// backfilled. It is not a precondition of
+    /// [`Self::migrate_consumed_cycles_to_monotonic`] but what that method
+    /// establishes: a canister decoded from a checkpoint predating the monotonic
+    /// field starts out with a zero in it, so the left-hand side is exactly the
+    /// value the backfill has to write.
     ///
     /// Returns `None` if the outstanding prepayments cannot be derived from the
     /// replicated state, i.e. if the canister has a paused execution whose
