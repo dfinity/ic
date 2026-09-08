@@ -1,4 +1,4 @@
-use crate::crypt::{LuksHeaderLocation, activate_crypt_device, format_crypt_device};
+use crate::crypt::{LuksHeaderLocation, activate_luks2_device, format_luks2_device};
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result};
 use ic_sys::fs::{Clobber, write_atomically_using_tmp_file};
@@ -20,7 +20,7 @@ pub struct GeneratedKeyDiskEncryption<'a> {
 impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
     fn open(&mut self, device_path: &Path, partition: Partition, crypt_name: &str) -> Result<()> {
         let disk_encryption_key = self.generate_or_read_key()?;
-        activate_crypt_device(
+        activate_luks2_device(
             device_path,
             // Detached LUKS headers is an additional security measure against tampering by the host
             // which is only beneficial on SEV nodes.
@@ -40,7 +40,7 @@ impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
     }
 
     fn format(&mut self, device_path: &Path, _partition: Partition) -> Result<()> {
-        format_crypt_device(
+        format_luks2_device(
             device_path,
             &LuksHeaderLocation::Attached,
             &self.generate_or_read_key()?,

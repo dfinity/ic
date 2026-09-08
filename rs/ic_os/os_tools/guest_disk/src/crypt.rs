@@ -133,9 +133,9 @@ fn obtain_crypt_device_handle_with_detached_header(
         .context("Failed to initialize cryptographic device with detached header")
 }
 
-/// Activates the cryptographic device at the specified path under the given name,
+/// Activates the LUKS2 device at the specified path under the given name,
 /// using the provided encryption key.
-pub fn activate_crypt_device(
+pub fn activate_luks2_device(
     device_path: &Path,
     header_location: &LuksHeaderLocation,
     name: &str,
@@ -145,11 +145,11 @@ pub fn activate_crypt_device(
     metrics_registry: &Registry,
 ) -> Result<()> {
     let mut crypt_device = open_luks2_device(device_path, header_location, verify_luks_params)?;
-    activate(&mut crypt_device, name, passphrase, flags, metrics_registry)
+    activate_crypt_device(&mut crypt_device, name, passphrase, flags, metrics_registry)
 }
 
-/// Same as [`activate_crypt_device`], but on an already-open crypt device.
-pub(crate) fn activate(
+/// Same as [`activate_luks2_device`], but on an already-open crypt device.
+pub(crate) fn activate_crypt_device(
     crypt_device: &mut CryptDevice,
     name: &str,
     passphrase: &[u8],
@@ -217,7 +217,7 @@ fn apply_default_settings(crypt_device: &mut CryptDevice) -> Result<()> {
 /// Formats the given cryptographic device with LUKS2 and initializes it with the provided
 /// encryption key in the first keyslot.
 /// WARNING: Leads to data loss on the device!
-pub fn format_crypt_device(
+pub fn format_luks2_device(
     device_path: &Path,
     header_location: &LuksHeaderLocation,
     passphrase: &[u8],
@@ -301,7 +301,7 @@ pub fn check_passphrase(
     Ok(())
 }
 
-/// Checks if the LUKS parameters match the expected values set in format_crypt_device.
+/// Checks if the LUKS parameters match the expected values set in format_luks2_device.
 /// If verify_luks_params is false, it will only log a warning if the verification fails.
 fn maybe_verify_luks_parameters(
     luks_parameters: &Result<LuksParameters>,
@@ -405,7 +405,7 @@ pub(crate) fn extract_luks_parameters(crypt_device: &mut CryptDevice) -> Result<
     })
 }
 
-/// Verifies that the LUKS parameters match the expected values set in format_crypt_device
+/// Verifies that the LUKS parameters match the expected values set in format_luks2_device
 pub(crate) fn verify_luks_parameters(luks_parameters: &LuksParameters) -> Result<()> {
     ensure!(
         luks_parameters.format == ENCRYPTION_FORMAT,

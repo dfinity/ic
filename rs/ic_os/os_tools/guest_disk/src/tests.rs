@@ -21,7 +21,7 @@ use guest_disk::DiskEncryption;
 use guest_disk::crypt::{
     IC_KEY_TOKEN_TYPE, KeyslotToken, LUKS2_N_KEYSLOTS, LUKS2_N_TOKENS, LuksHeaderLocation,
     SINGLE_KEYSLOT_INDEX, SINGLE_TOKEN_INDEX, SevMetadata, check_passphrase,
-    deactivate_crypt_device, format_crypt_device, open_luks2_device, read_single_keyslot_token,
+    deactivate_crypt_device, format_luks2_device, open_luks2_device, read_single_keyslot_token,
 };
 use guest_disk::sev::{SevDiskEncryption, can_open, rekey};
 use ic_device::device_mapping::{Bytes, TempDevice};
@@ -887,7 +887,7 @@ fn test_open_store_fails_with_wrong_launch_measurement() {
 }
 
 #[test]
-fn test_open_store_after_format_crypt_device_with_detached_header() {
+fn test_open_store_after_format_luks2_device_with_detached_header() {
     let fixture = TestFixture::new_sev();
 
     // Format the store device.
@@ -981,7 +981,7 @@ fn test_upgrade_removes_stale_keyslots() {
     // Build the legacy layout: the previous GuestOS's key in the first keyslot, the
     // current GuestOS's (served) key in a later one.
     let served_key = fixture.derive_sev_key(Partition::Store);
-    let mut crypt_device = format_crypt_device(
+    let mut crypt_device = format_luks2_device(
         fixture.store_device_path(),
         &LuksHeaderLocation::Detached(fixture.store_header_path()),
         STALE_KEY,
@@ -1018,7 +1018,7 @@ fn test_rekey_migrates_legacy_keyslot_and_token_positions() {
     // Build the legacy layout: the current GuestOS's (served) key in keyslot 2, keyslot
     // 0 unused, and the IC key metadata token in token position 3.
     let served_key = fixture.derive_sev_key(Partition::Store);
-    let mut crypt_device = format_crypt_device(
+    let mut crypt_device = format_luks2_device(
         fixture.store_device_path(),
         &LuksHeaderLocation::Detached(fixture.store_header_path()),
         STALE_KEY,

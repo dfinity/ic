@@ -27,7 +27,7 @@
 
 use crate::crypt::{
     KeyslotToken, LuksHeaderLocation, SINGLE_KEYSLOT_INDEX, SevMetadata, activate,
-    destroy_keyslots_except_first, format_crypt_device, open_luks2_device,
+    destroy_keyslots_except_first, format_luks2_device, open_luks2_device,
     read_single_keyslot_token, write_keyslot_token,
 };
 use crate::{DiskEncryption, Partition, activate_flags};
@@ -86,7 +86,7 @@ impl DiskEncryption for SevDiskEncryption {
             }
         }
 
-        activate(
+        activate_crypt_device(
             &mut crypt_device,
             crypt_name,
             passphrase.as_bytes(),
@@ -112,7 +112,7 @@ impl DiskEncryption for SevDiskEncryption {
             );
         }
 
-        let mut crypt_device = format_crypt_device(
+        let mut crypt_device = format_luks2_device(
             device_path,
             &self.header_location(partition),
             key.as_bytes(),
@@ -189,6 +189,8 @@ pub fn can_open(
 
 /// Re-keys a LUKS2 device's header in place: the key unlocking the device (`old_key`) is
 /// replaced with a key derived from the current launch measurement and TCB.
+/// Note that the rekey process writes the LUKS header multiple times and is therefore not atomic.
+/// An error in the process may leave the header in an inconsitent/unreadable state.
 pub fn rekey(
     device_path: &Path,
     header_location: &LuksHeaderLocation,
