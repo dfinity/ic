@@ -2,7 +2,7 @@ use super::{
     AccessList, SignableTransaction, Signed, TransactionPrice, TransactionSignature, encode_u256,
 };
 use crate::{
-    deposit_address::{DepositAddressSchema, deposit_derivation_path},
+    deposit_address::AddressSchema,
     eth_rpc::Hash,
     numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas},
 };
@@ -90,7 +90,7 @@ impl AuthorizationRequest {
     }
 
     pub fn derivation_path(&self) -> Vec<ByteBuf> {
-        deposit_derivation_path(DepositAddressSchema::CkErc20, &self.account)
+        AddressSchema::Deposit(self.account).derivation_path()
     }
 
     pub fn authorization(&self) -> Authorization {

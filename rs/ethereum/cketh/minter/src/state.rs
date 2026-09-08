@@ -1,8 +1,6 @@
 use crate::address::ecdsa_public_key_to_address;
 use crate::attestation::AttestationRequest;
-use crate::deposit_address::{
-    DepositAddress, DepositAddressSchema, deposit_address, sweeper_address,
-};
+use crate::deposit_address::{DepositAddress, deposit_address, sweeper_address};
 use crate::endpoints::{CandidBlockTag, DepositErc20Error};
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
@@ -268,12 +266,7 @@ impl State {
     /// while the master public key is still unknown.
     pub fn deposit_address(&self, account: &Account) -> Option<DepositAddress> {
         let (master_public_key, chain_code) = self.public_key_and_chain_code()?;
-        Some(deposit_address(
-            &master_public_key,
-            &chain_code,
-            DepositAddressSchema::CkErc20,
-            account,
-        ))
+        Some(deposit_address(&master_public_key, &chain_code, account))
     }
 
     /// What a ckERC20 deposit address must attest to in order to be swept: the account it credits,
