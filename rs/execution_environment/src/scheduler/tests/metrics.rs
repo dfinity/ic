@@ -1116,6 +1116,15 @@ fn assert_consumed_cycles_invariant(
         .outstanding_prepayments()
         .expect("Canister has a paused execution");
     let metrics = system_state.canister_metrics();
+    // Asserted separately, ahead of the subtraction below: that one saturates at
+    // zero, so a gauge that has fallen behind the outstanding prepayments would
+    // otherwise slip through whenever the monotonic value is zero too.
+    assert!(
+        outstanding <= metrics.consumed_cycles(),
+        "the {outstanding} outstanding prepayments must not exceed the consumed \
+         cycles gauge {}",
+        metrics.consumed_cycles(),
+    );
     assert_eq!(
         metrics.consumed_cycles() - outstanding,
         metrics.consumed_cycles_monotonic(),
