@@ -134,7 +134,7 @@ fn execute_response_refunds_cycles() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
         let instructions_before = test.canister_executed_instructions(a_id);
@@ -154,7 +154,7 @@ fn execute_response_refunds_cycles() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
 
