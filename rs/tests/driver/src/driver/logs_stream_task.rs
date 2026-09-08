@@ -1,19 +1,25 @@
 //! Streams journald logs from a system test's deployed machines into the test
-//! log. A background task (`logs_stream_task`) periodically discovers the
-//! group's universal VMs (and, when `--stream-ic-node-logs` is set, its IC
-//! nodes) and, for every newly discovered target, opens a long-lived
-//! `follow` connection to that machine's systemd-journal-gatewayd over IPv6.
-//! Each journald record received is parsed and printed to stdout so it appears
-//! inline in the test output. Targets matching an `--exclude-logs` pattern are
-//! skipped, streams resume from the last cursor after transient failures, and
-//! on the Local backend IC node streams bind to a dedicated per-group source
-//! address to avoid exhausting the GuestOS per-source firewall connection
-//! budget.
+//! log and persists them to disk. A background task (`logs_stream_task`)
+//! periodically discovers the group's universal VMs (and, when
+//! `--stream-ic-node-logs` is set, its IC nodes) and, for every newly
+//! discovered target, opens a long-lived `follow` connection to that machine's
+//! systemd-journal-gatewayd over IPv6. Each journald record received is parsed,
+//! printed to stdout so it appears inline in the test output, and appended as
+//! one JSON object per line to
+//! `<group_dir>/journald_logs/{nodes,uvms}/<target>.jsonl` (see
+//! [`JournalFileSink`]). On the Local backend, which has no Vector VM to ship
+//! logs to ElasticSearch, the `nodes/` files are what the
+//! `assert_no_unallowed_log_patterns` teardown scans
+//! (`crate::driver::unallowed_log_patterns`). Targets matching an
+//! `--exclude-logs` pattern are skipped, streams resume from the last cursor
+//! after transient failures, and on the Local backend IC node streams bind to a
+//! dedicated per-group source address to avoid exhausting the GuestOS
+//! per-source firewall connection budget.
 
 use crate::driver::{
     constants::{COLOCATE_CONTAINER_NAME, GROUP_SETUP_DIR},
     context::GroupContext,
-    local_backend::LocalBackend,
+    local_backend::{LocalBackend, sanitize_name},
     resource::AllocatedVm,
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
@@ -23,12 +29,13 @@ use crate::driver::{
 use anyhow::{Context, Result};
 use regex::Regex;
 use serde::de::{self, Visitor};
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use slog::{Logger, debug, error, info, warn};
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::io::Write;
 use std::net::{IpAddr, Ipv6Addr};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -41,6 +48,44 @@ pub(crate) const LOGS_STREAM_TASK_NAME: &str = "logs_stream";
 
 const RETRY_DELAY_JOURNALD_STREAM: Duration = Duration::from_secs(5);
 const RETRY_DELAY_DISCOVER_TARGETS: Duration = Duration::from_secs(5);
+
+/// `<group_dir>/journald_logs`: the persisted journald records, one JSON Lines
+/// file per streamed target (see [`JournalFileSink`]). A sibling of
+/// `root_env/`, `setup/` and `tests/` because those env directories are
+/// `cp -R`'d into every per-test directory (`TestEnv::fork_from`), and
+/// deliberately not under `local_backend/` because this task is
+/// backend-agnostic and runs on Farm too.
+pub(crate) const JOURNALD_LOGS_DIR: &str = "journald_logs";
+/// IC nodes: `journald_logs/nodes/<node_id>.jsonl`. The only sub-directory the
+/// `assert_no_unallowed_log_patterns` teardown scans, mirroring the data Vector
+/// ships to ElasticSearch on Farm (IC nodes only).
+pub(crate) const JOURNALD_LOGS_NODES_SUBDIR: &str = "nodes";
+/// Universal VMs: `journald_logs/uvms/<sanitized_vm_name>.jsonl`. Never
+/// scanned (Vector does not ship universal VM logs either).
+pub(crate) const JOURNALD_LOGS_UVMS_SUBDIR: &str = "uvms";
+pub(crate) const JOURNALD_LOG_FILE_EXTENSION: &str = "jsonl";
+
+pub(crate) fn journald_logs_dir(group_dir: &Path) -> PathBuf {
+    group_dir.join(JOURNALD_LOGS_DIR)
+}
+
+pub(crate) fn journald_node_logs_dir(group_dir: &Path) -> PathBuf {
+    journald_logs_dir(group_dir).join(JOURNALD_LOGS_NODES_SUBDIR)
+}
+
+pub(crate) fn journald_uvm_logs_dir(group_dir: &Path) -> PathBuf {
+    journald_logs_dir(group_dir).join(JOURNALD_LOGS_UVMS_SUBDIR)
+}
+
+/// `<logs_dir>/<sanitize_name(target)>.jsonl`. Sanitization is the identity on
+/// node ids (principal text is `[a-z0-9-]`), so the file stem of a node log
+/// file *is* the node id; universal VM names are user-provided and may need it.
+pub(crate) fn journald_log_path(logs_dir: &Path, target: &str) -> PathBuf {
+    logs_dir.join(format!(
+        "{}.{JOURNALD_LOG_FILE_EXTENSION}",
+        sanitize_name(target)
+    ))
+}
 
 pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
     let logger = group_ctx.logger().clone();
@@ -57,6 +102,9 @@ pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
     // (non-blocking) flock, which fails with EAGAIN when another long-lived
     // process spawned by the Local backend holds that lock. We only need the path.
     let root_search_dir = group_ctx.group_dir.clone();
+    // Where the records of each streamed target are persisted, by target kind.
+    let uvm_logs_dir = journald_uvm_logs_dir(&group_ctx.group_dir);
+    let node_logs_dir = journald_node_logs_dir(&group_ctx.group_dir);
     // The IPv6 addresses of the IC nodes are not stored on disk next to the
     // UVMs; they live in the registry local store which is surfaced through the
     // topology snapshot of the setup environment. We build a `TestEnv` for the
@@ -94,6 +142,7 @@ pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
             Ok(discovered_uvms) => process_discovered(
                 discovered_uvms,
                 "uvm",
+                &uvm_logs_dir,
                 &mut streamed_uvms,
                 &mut skipped_uvms,
                 &group_ctx.exclude_logs,
@@ -110,6 +159,8 @@ pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
         // only the Local backend sets it: it runs in a sandbox without external
         // network access and so has no Vector VM to ship logs to ElasticSearch,
         // and instead streams each IC node's journald directly to the test log.
+        // The records persisted under `journald_logs/nodes/` are additionally
+        // what the `assert_no_unallowed_log_patterns` teardown scans there.
         // The block below nonetheless handles both backends, so enabling the
         // flag on Farm later streams node logs there too (with a kernel-chosen
         // source). When the flag is unset this whole block is skipped.
@@ -155,6 +206,7 @@ pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
                     Ok(discovered_nodes) => process_discovered(
                         discovered_nodes,
                         "node",
+                        &node_logs_dir,
                         &mut streamed_nodes,
                         &mut skipped_nodes,
                         &group_ctx.exclude_logs,
@@ -182,7 +234,8 @@ pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
 /// Spawns a journald streaming task for every newly discovered target,
 /// deduplicating against `streamed` and honoring the `--exclude-logs` patterns
 /// (recorded in `skipped`). `kind` is used both as the log-line prefix
-/// (e.g. `uvm=<name>` or `node=<id>`) and in informational messages.
+/// (e.g. `uvm=<name>` or `node=<id>`) and in informational messages; the
+/// records of each target are persisted to `journald_log_path(logs_dir, key)`.
 ///
 /// When `bind_addr` is `Some`, each streaming socket is bound to that local
 /// source address before connecting (used for IC nodes on the Local backend, so
@@ -191,6 +244,7 @@ pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
 fn process_discovered(
     discovered: HashMap<String, Ipv6Addr>,
     kind: &str,
+    logs_dir: &Path,
     streamed: &mut HashMap<String, Ipv6Addr>,
     skipped: &mut BTreeSet<String>,
     exclude_logs: &[Regex],
@@ -216,22 +270,25 @@ fn process_discovered(
         streamed.entry(key.clone()).or_insert_with(|| {
             let logger = logger.clone();
             let label = format!("{kind}={key}");
+            let log_path = journald_log_path(logs_dir, &key);
             info!(
                 logger,
-                "Streaming Journald for newly discovered [{label}] with ipv6={value}"
+                "Streaming Journald for newly discovered [{label}] with ipv6={value}, persisting records to {}",
+                log_path.display()
             );
             // The task starts, but the handle is never joined.
             rt.spawn(stream_journald_with_retries(
-                logger, label, value, bind_addr,
+                logger, label, value, bind_addr, log_path,
             ));
             value
         });
     }
 }
 
-/// Discovers all IC nodes (assigned and unassigned) of the no-name Internet
-/// Computer by reading the topology snapshot from the setup environment's
-/// registry local store. Returns a map from node id to its IPv6 address.
+/// Discovers all IC nodes (assigned, unassigned and API boundary nodes) of the
+/// no-name Internet Computer by reading the topology snapshot from the setup
+/// environment's registry local store. Returns a map from node id to its IPv6
+/// address.
 fn discover_ic_nodes(env: &TestEnv) -> Result<HashMap<String, Ipv6Addr>> {
     let topology = env.safe_topology_snapshot()?;
     let mut nodes: HashMap<String, Ipv6Addr> = HashMap::new();
@@ -239,6 +296,7 @@ fn discover_ic_nodes(env: &TestEnv) -> Result<HashMap<String, Ipv6Addr>> {
         .subnets()
         .flat_map(|subnet| subnet.nodes())
         .chain(topology.unassigned_nodes())
+        .chain(topology.api_boundary_nodes())
     {
         // IC nodes in the system-test infra are addressed via IPv6; an
         // IPv4-only node would not be reachable on the journald gateway port,
@@ -250,10 +308,52 @@ fn discover_ic_nodes(env: &TestEnv) -> Result<HashMap<String, Ipv6Addr>> {
     Ok(nodes)
 }
 
-#[derive(Debug, Deserialize)]
-struct JournalRecord {
+fn discover_uvms(root_path: PathBuf) -> Result<HashMap<String, Ipv6Addr>> {
+    let mut uvms: HashMap<String, Ipv6Addr> = HashMap::new();
+    for entry in WalkDir::new(root_path)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| {
+            e.path()
+                .to_str()
+                .map(|p| p.contains(UNIVERSAL_VMS_DIR))
+                .unwrap_or(false)
+        })
+        .filter(|e| {
+            let file_name = String::from(e.file_name().to_string_lossy());
+            e.file_type().is_file() && file_name == "vm.json"
+        })
+        .map(|e| e.path().to_owned())
+    {
+        let file =
+            std::fs::File::open(&entry).with_context(|| format!("Could not open: {:?}", entry))?;
+        let vm: AllocatedVm = serde_json::from_reader(file)
+            .with_context(|| format!("{:?}: Could not read json.", entry))?;
+        uvms.insert(vm.name.to_string(), vm.ipv6);
+    }
+    Ok(uvms)
+}
+
+/// A projection of a systemd-journal-gatewayd JSON record.
+///
+/// This is also the on-disk JSON Lines schema under [`JOURNALD_LOGS_DIR`] (see
+/// [`JournalFileSink`]), hence the journald field names via `serde(rename)`.
+/// Deserialization accepts both a live gatewayd record (dozens of extra fields,
+/// which are ignored, and a possibly non-string `MESSAGE`, see
+/// `deserialize_journal_message`) and this struct's own serialized form
+/// (plain-string `MESSAGE`, `None` fields omitted).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct JournalRecord {
     #[serde(rename = "__CURSOR")]
-    cursor: String,
+    pub(crate) cursor: String,
+    /// The journald receive time as a decimal string of microseconds since the
+    /// Unix epoch, as gatewayd emits it. This is what Vector turns into the
+    /// ElasticSearch `timestamp` field (`assets/vector.toml`).
+    #[serde(
+        rename = "__REALTIME_TIMESTAMP",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(crate) realtime_timestamp: Option<String>,
     // `MESSAGE` is deserialized leniently: systemd-journal-gatewayd encodes
     // fields that are not valid UTF-8 as an array of byte values, and replaces
     // fields exceeding its size limit with `null`. Without this, large or binary
@@ -261,13 +361,13 @@ struct JournalRecord {
     // (which is historically why IC node logs had to be streamed as plaintext).
     // See `deserialize_journal_message`.
     #[serde(rename = "MESSAGE", deserialize_with = "deserialize_journal_message")]
-    message: String,
-    #[serde(rename = "_SYSTEMD_UNIT")]
-    system_unit: Option<String>,
-    #[serde(rename = "CONTAINER_NAME")]
-    container_name: Option<String>,
-    #[serde(rename = "_COMM")]
-    comm: Option<String>,
+    pub(crate) message: String,
+    #[serde(rename = "_SYSTEMD_UNIT", skip_serializing_if = "Option::is_none")]
+    pub(crate) system_unit: Option<String>,
+    #[serde(rename = "CONTAINER_NAME", skip_serializing_if = "Option::is_none")]
+    pub(crate) container_name: Option<String>,
+    #[serde(rename = "_COMM", skip_serializing_if = "Option::is_none")]
+    pub(crate) comm: Option<String>,
 }
 
 /// Deserializes a journald `MESSAGE` field, which systemd-journal-gatewayd may
@@ -352,30 +452,38 @@ impl std::fmt::Display for JournalRecord {
     }
 }
 
-fn discover_uvms(root_path: PathBuf) -> Result<HashMap<String, Ipv6Addr>> {
-    let mut uvms: HashMap<String, Ipv6Addr> = HashMap::new();
-    for entry in WalkDir::new(root_path)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| {
-            e.path()
-                .to_str()
-                .map(|p| p.contains(UNIVERSAL_VMS_DIR))
-                .unwrap_or(false)
-        })
-        .filter(|e| {
-            let file_name = String::from(e.file_name().to_string_lossy());
-            e.file_type().is_file() && file_name == "vm.json"
-        })
-        .map(|e| e.path().to_owned())
-    {
-        let file =
-            std::fs::File::open(&entry).with_context(|| format!("Could not open: {:?}", entry))?;
-        let vm: AllocatedVm = serde_json::from_reader(file)
-            .with_context(|| format!("{:?}: Could not read json.", entry))?;
-        uvms.insert(vm.name.to_string(), vm.ipv6);
+/// Append-only JSON Lines sink for the records of one streamed target.
+///
+/// Each record is one `write_all(b"<json>\n")` on an `O_APPEND` `std::fs::File`
+/// with no userspace buffer: the `logs_stream` subprocess is SIGKILLed with no
+/// flush window once the subtree it supervises finishes (`process.rs`), and the
+/// `assert_no_unallowed_log_patterns` teardown scans the file while we are
+/// still appending (it runs inside that subtree). `std::fs` rather than
+/// `tokio::fs` on purpose: this task's runtime has `max_blocking_threads(1)`,
+/// so every `tokio::fs` operation would be a `spawn_blocking` hop serialized
+/// through one thread for all streams, whereas a page-cache append takes
+/// microseconds — the same trade-off the blocking `println!` already makes.
+struct JournalFileSink {
+    file: std::fs::File,
+}
+
+impl JournalFileSink {
+    fn open(path: &Path) -> std::io::Result<Self> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        Ok(Self { file })
     }
-    Ok(uvms)
+
+    fn append(&mut self, record: &JournalRecord) -> std::io::Result<()> {
+        let mut line = serde_json::to_string(record)?;
+        line.push('\n');
+        self.file.write_all(line.as_bytes())
+    }
 }
 
 async fn stream_journald_with_retries(
@@ -383,6 +491,7 @@ async fn stream_journald_with_retries(
     label: String,
     ipv6: Ipv6Addr,
     bind_addr: Option<Ipv6Addr>,
+    log_path: PathBuf,
 ) {
     // Start streaming Journald from the very beginning, which corresponds to the cursor="".
     let mut cursor = Cursor::Start;
@@ -390,7 +499,7 @@ async fn stream_journald_with_retries(
         // In normal scenarios, i.e. without errors/interrupts, the function below should never return.
         // In case it returns unexpectedly, we restart reading logs from the checkpoint cursor.
         let (cursor_next, result) =
-            stream_journald_from_cursor(label.clone(), ipv6, cursor, bind_addr).await;
+            stream_journald_from_cursor(&logger, &label, ipv6, cursor, bind_addr, &log_path).await;
         cursor = cursor_next;
         if let Err(err) = result {
             error!(
@@ -432,11 +541,27 @@ macro_rules! unwrap_or_return {
 }
 
 async fn stream_journald_from_cursor(
-    label: String,
+    logger: &Logger,
+    label: &str,
     ipv6: Ipv6Addr,
     mut cursor: Cursor,
     bind_addr: Option<Ipv6Addr>,
+    log_path: &Path,
 ) -> (Cursor, anyhow::Result<()>) {
+    // Persist the records of this connection to disk. Persistence must never
+    // break the pre-existing streaming to stdout, so an open failure only
+    // disables it until the next reconnect re-opens the file.
+    let mut sink = match JournalFileSink::open(log_path) {
+        Ok(sink) => Some(sink),
+        Err(err) => {
+            warn!(
+                logger,
+                "Not persisting journald records of [{label}] to {}: {err}",
+                log_path.display()
+            );
+            None
+        }
+    };
     let socket_addr = std::net::SocketAddr::new(ipv6.into(), 19531);
     let socket = unwrap_or_return!(cursor, TcpSocket::new_v6());
     // Bind the stream to its dedicated source address (when set) so it does not
@@ -464,6 +589,9 @@ async fn stream_journald_from_cursor(
             .write_all(format!("Host: {ipv6}:19531\n").as_bytes())
             .await
     );
+    // Note that `entries=<cursor>` is inclusive, so a reconnect re-emits the
+    // record at the checkpoint cursor (to stdout and to the file); consumers of
+    // the persisted files de-duplicate by `__CURSOR`.
     unwrap_or_return!(
         cursor,
         stream
@@ -473,12 +601,157 @@ async fn stream_journald_from_cursor(
     let buf_reader = BufReader::new(stream);
     let mut lines = buf_reader.lines();
     while let Some(line) = unwrap_or_return!(cursor, lines.next_line().await) {
-        let record_result: Result<JournalRecord, serde_json::Error> = serde_json::from_str(&line);
-        if let Ok(record) = record_result {
-            println!("[{label}] {record}");
-            // We update the cursor value, so that in case function errors, journald entries can be streamed from this checkpoint.
-            cursor = Cursor::Position(record.cursor);
+        let Ok(record) = serde_json::from_str::<JournalRecord>(&line) else {
+            continue;
+        };
+        if let Some(s) = sink.as_mut()
+            && let Err(err) = s.append(&record)
+        {
+            // Warn once per connection (e.g. disk full); the next reconnect
+            // re-opens the file and tries again.
+            warn!(
+                logger,
+                "Stopped persisting journald records of [{label}] to {}: {err}",
+                log_path.display()
+            );
+            sink = None;
         }
+        println!("[{label}] {record}");
+        // We update the cursor value, so that in case function errors, journald entries can be streamed from this checkpoint.
+        cursor = Cursor::Position(record.cursor);
     }
     (cursor, Ok(()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const GATEWAYD_RECORD: &str = r#"{"__CURSOR":"s=abc;i=1","__REALTIME_TIMESTAMP":"1700000000123456","__MONOTONIC_TIMESTAMP":"12345","_BOOT_ID":"b","_HOSTNAME":"guestos","PRIORITY":"6","_SYSTEMD_UNIT":"ic-replica.service","_COMM":"replica","SYSLOG_IDENTIFIER":"orchestrator","MESSAGE":"hello"}"#;
+
+    fn record(cursor: &str, message: &str) -> JournalRecord {
+        JournalRecord {
+            cursor: cursor.to_string(),
+            realtime_timestamp: None,
+            message: message.to_string(),
+            system_unit: None,
+            container_name: None,
+            comm: None,
+        }
+    }
+
+    #[test]
+    fn journal_record_deserializes_gatewayd_record_and_ignores_unknown_fields() {
+        let record: JournalRecord = serde_json::from_str(GATEWAYD_RECORD).unwrap();
+        assert_eq!(
+            record,
+            JournalRecord {
+                cursor: "s=abc;i=1".to_string(),
+                realtime_timestamp: Some("1700000000123456".to_string()),
+                message: "hello".to_string(),
+                system_unit: Some("ic-replica.service".to_string()),
+                container_name: None,
+                comm: Some("replica".to_string()),
+            }
+        );
+    }
+
+    #[test]
+    fn journal_record_deserializes_byte_array_message_lossily() {
+        let record: JournalRecord =
+            serde_json::from_str(r#"{"__CURSOR":"c","MESSAGE":[104,105,255]}"#).unwrap();
+        assert_eq!(record.message, "hi\u{FFFD}");
+        assert_eq!(record.realtime_timestamp, None);
+    }
+
+    #[test]
+    fn journal_record_deserializes_null_message_as_sentinel() {
+        let record: JournalRecord =
+            serde_json::from_str(r#"{"__CURSOR":"c","MESSAGE":null}"#).unwrap();
+        assert_eq!(record.message, "<MESSAGE omitted: too large to serialize>");
+    }
+
+    #[test]
+    fn journal_record_serializes_with_journald_field_names_on_one_line() {
+        let mut record = record("c", "two\nlines");
+        record.realtime_timestamp = Some("1".to_string());
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(!json.contains('\n'));
+        assert_eq!(
+            json,
+            r#"{"__CURSOR":"c","__REALTIME_TIMESTAMP":"1","MESSAGE":"two\nlines"}"#
+        );
+    }
+
+    #[test]
+    fn journal_record_round_trips_through_json() {
+        let all_some = JournalRecord {
+            cursor: "c".to_string(),
+            realtime_timestamp: Some("1".to_string()),
+            message: "m".to_string(),
+            system_unit: Some("u".to_string()),
+            container_name: Some("n".to_string()),
+            comm: Some("x".to_string()),
+        };
+        for record in [all_some, record("c", "")] {
+            let json = serde_json::to_string(&record).unwrap();
+            assert_eq!(
+                serde_json::from_str::<JournalRecord>(&json).unwrap(),
+                record
+            );
+        }
+    }
+
+    #[test]
+    fn journal_file_sink_appends_one_line_per_record_across_reopens() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nodes").join("node-1.jsonl");
+        JournalFileSink::open(&path)
+            .unwrap()
+            .append(&record("c1", "m1"))
+            .unwrap();
+        JournalFileSink::open(&path)
+            .unwrap()
+            .append(&record("c2", "m2"))
+            .unwrap();
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert!(contents.ends_with('\n'));
+        let records: Vec<JournalRecord> = contents
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(records, vec![record("c1", "m1"), record("c2", "m2")]);
+    }
+
+    #[test]
+    fn journal_file_sink_append_fails_on_read_only_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ro.jsonl");
+        std::fs::write(&path, b"").unwrap();
+        let mut sink = JournalFileSink {
+            file: std::fs::File::open(&path).unwrap(),
+        };
+        assert!(sink.append(&record("c", "m")).is_err());
+    }
+
+    #[test]
+    fn journald_log_path_layout_and_sanitization() {
+        let group_dir = Path::new("/g");
+        assert_eq!(
+            journald_node_logs_dir(group_dir),
+            PathBuf::from("/g/journald_logs/nodes")
+        );
+        assert_eq!(
+            journald_uvm_logs_dir(group_dir),
+            PathBuf::from("/g/journald_logs/uvms")
+        );
+        assert_eq!(
+            journald_log_path(&journald_node_logs_dir(group_dir), "2vxsx-fae"),
+            PathBuf::from("/g/journald_logs/nodes/2vxsx-fae.jsonl")
+        );
+        assert_eq!(
+            journald_log_path(&journald_uvm_logs_dir(group_dir), "my vm/1"),
+            PathBuf::from("/g/journald_logs/uvms/my-vm-1.jsonl")
+        );
+    }
 }
