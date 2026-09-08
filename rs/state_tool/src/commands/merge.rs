@@ -24,10 +24,13 @@ const HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED: Height = Height::new(0);
 /// how large the two states are. That makes `output` share the storage of
 /// `base` and `source`, which is sound because checkpoints are immutable.
 ///
-/// `output` is expected to be outside both inputs, which is not checked: one
-/// nested under an input would be linked into itself, as the linking creates it
-/// before listing the input it reads. The caller picks all three paths, so this
-/// is left to it.
+/// `output` is expected to be outside both inputs, which is not checked, and
+/// what an output inside one of them does depends on where: under `base`, or
+/// under `source`'s canister or snapshot directory, the linking creates it
+/// before listing the input it reads, so it finds the output and links it into
+/// itself until the merge fails; anywhere else under `source` the linking never
+/// reaches it and the merge succeeds, leaving the merged checkpoint inside the
+/// source checkpoint. The caller picks all three paths, so this is left to it.
 pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), String> {
     for (path, name) in [(&base, "base"), (&source, "source")] {
         if !path.is_dir() {
