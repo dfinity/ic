@@ -1,5 +1,5 @@
 use super::{
-    AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, DepositStage,
+    AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, Delegation, DepositRequest, DepositStage,
     DepositStatusInfo, MAX_ACTIVE_DEPOSITS, MAX_ASSETS_PER_ACCOUNT, RegisterDepositError,
     SCAN_GAP_SECS, SECS_PER_BLOCK, ScanProgress, SweepEntry, SweepTarget,
 };
@@ -8,18 +8,34 @@ use crate::deposit_address::DepositAddress;
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
-use crate::numeric::{BlockNumber, Erc20Value};
+use crate::numeric::{BlockNumber, Erc20Value, TransactionNonce};
+use crate::state::State;
+use crate::state::audit::{EventType, apply_state_transition, process_event};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
-use crate::state::transactions::{PipelineRequest, SweepId, SweepRequest};
+use crate::state::transactions::{
+    AuthorizedSweepItem, PipelineRequest, SweepId, SweepRequest, sweep_gas_limit,
+};
+use crate::storage::with_event_iter;
+use crate::sweeper_contract::SweepItem;
+use crate::test_fixtures::mock::MockTimeProvider;
 use crate::test_fixtures::{
-    deposit_address, deposits_with_enqueued_sweep, gas_fee_estimate, usdc, usdt,
+    deposit_address, deposits_with_enqueued_sweep, gas_fee_estimate, initial_state,
+    prepay_sweep_gas, state_with_enqueued_sweep, sweeper_contract, transaction_signature, usdc,
+    usdt,
 };
 use crate::timed_sized_map::{Entry, Timestamp};
-use crate::tx::{SignableTransaction, Signed, TransactionSignature};
+use crate::tx::{
+    AuthorizationRequest, SignableTransaction, Signed, SignedAuthorization, SweepTransaction,
+    TransactionSignature,
+};
 use candid::Principal;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
+
+/// A delegate other than the sweeper contract every fixture sweep names, for the tests that rotate
+/// an account onto a second one.
+const ANOTHER_DELEGATE: Address = Address::new([0x9e; 20]);
 
 #[test]
 fn should_watch_a_pair_for_the_scan_window() {
@@ -947,7 +963,7 @@ async fn should_release_a_deposit_once_its_sweep_succeeds() {
     let (mut deposits, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
     queue(&mut deposits, &[(account(1), usdc())]);
 
-    finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+    finalize_sweep(&mut deposits, &request, TransactionStatus::Success);
 
     // The swept pair is gone from the queue; the pair queued after the sweep was decided is still
     // offered.
@@ -962,7 +978,7 @@ async fn should_release_a_deposit_once_its_sweep_succeeds() {
 async fn should_drop_a_deposit_once_its_sweep_fails() {
     let (mut deposits, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
 
-    finalize_sweep(&mut deposits, request, TransactionStatus::Failure);
+    finalize_sweep(&mut deposits, &request, TransactionStatus::Failure);
 
     // A reverted sweep moved nothing, but the minter does not retry: the pair leaves the queue and
     // has to be armed afresh.
@@ -975,7 +991,7 @@ async fn should_release_every_account_a_sweep_held() {
     let (mut deposits, request) =
         deposits_with_enqueued_sweep(&[(account(0), usdc()), (account(1), usdc())]).await;
 
-    finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+    finalize_sweep(&mut deposits, &request, TransactionStatus::Success);
 
     assert_eq!(deposits.sweep_len(), 0);
 }
@@ -992,27 +1008,282 @@ async fn should_refuse_to_finalize_a_sweep_whose_deposit_left_the_queue() {
     deposits.record_sweep_scheduled(SweepId(0), Asset::Erc20(usdc()), [account(0)]);
     deposits.record_sweep_request(request.clone());
 
-    finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+    finalize_sweep(&mut deposits, &request, TransactionStatus::Success);
+}
+
+#[tokio::test]
+async fn should_mark_the_authorizations_a_finalized_sweep_carried_as_applied() {
+    // A tuple applies before the call runs and stays applied when the call reverts, so both
+    // outcomes leave the delegation installed.
+    for status in [TransactionStatus::Success, TransactionStatus::Failure] {
+        let (mut deposits, request) =
+            deposits_with_enqueued_sweep(&[(account(0), usdc()), (account(1), usdc())]).await;
+
+        finalize_sweep(&mut deposits, &request, status);
+
+        for account in [account(0), account(1)] {
+            assert_eq!(
+                deposits.delegation(&account),
+                Some(Delegation {
+                    delegate: sweeper_contract(),
+                    nonce: TransactionNonce::ONE,
+                }),
+                "a {status:?} sweep installs the delegations it carried"
+            );
+        }
+        assert_eq!(deposits.applied_authorizations_len(), 2);
+    }
+}
+
+#[test]
+fn should_mark_nothing_for_a_sweep_carrying_no_authorization() {
+    let mut deposits = AutomaticDeposits::default();
+    deposits.record_authorization(
+        authorization_request(account(0), sweeper_contract(), TransactionNonce::ZERO),
+        transaction_signature(),
+    );
+
+    finalize_sweep_carrying(&mut deposits, account(0), None);
+
+    // Signing a tuple is not applying it: an address only a sweep that left it out has swept
+    // holds no delegation.
+    assert_eq!(deposits.authorizations_len(), 1);
+    assert_eq!(deposits.applied_authorizations_len(), 0);
+    assert_eq!(deposits.delegation(&account(0)), None);
+}
+
+#[tokio::test]
+async fn should_keep_an_applied_authorization_marked_by_the_sweep_that_applied_it() {
+    let (mut deposits, first) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+    finalize_sweep(&mut deposits, &first, TransactionStatus::Success);
+    let authorization = first.items[0].authorization.clone();
+    assert!(authorization.is_some(), "the fixture must carry a tuple");
+
+    // The protocol skips a tuple whose nonce the account has already spent, so re-carrying it
+    // changes nothing on chain.
+    let second = finalize_sweep_carrying(&mut deposits, account(0), authorization);
+
+    assert_ne!(second, first.id);
+    assert_eq!(
+        applied_by(
+            &deposits,
+            &authorization_request(account(0), sweeper_contract(), TransactionNonce::ZERO)
+        ),
+        Some(first.id)
+    );
+    assert_eq!(
+        deposits.delegation(&account(0)),
+        Some(Delegation {
+            delegate: sweeper_contract(),
+            nonce: TransactionNonce::ONE,
+        })
+    );
+    assert_eq!(deposits.applied_authorizations_len(), 1);
+}
+
+#[tokio::test]
+async fn should_report_the_delegate_of_the_highest_applied_authorization() {
+    let (mut deposits, first) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+    finalize_sweep(&mut deposits, &first, TransactionStatus::Success);
+
+    let rotated = authorization_request(account(0), ANOTHER_DELEGATE, TransactionNonce::ONE);
+    deposits.record_authorization(rotated.clone(), transaction_signature());
+    finalize_sweep_carrying(
+        &mut deposits,
+        account(0),
+        Some(rotated.signed_with(transaction_signature())),
+    );
+
+    assert_eq!(
+        deposits.delegation(&account(0)),
+        Some(Delegation {
+            delegate: ANOTHER_DELEGATE,
+            nonce: TransactionNonce::new(2),
+        })
+    );
+    assert_eq!(deposits.applied_authorizations_len(), 2);
+}
+
+#[tokio::test]
+async fn should_rebuild_the_applied_marks_by_replaying_the_event_log() {
+    let (mut live, request) = state_with_enqueued_sweep(&[(account(0), usdc())]).await;
+    let mut time_provider = MockTimeProvider::new();
+    time_provider.expect_time().return_const(0_u64);
+    for event in sweep_pipeline_events(
+        live.automatic_deposits.next_sweeper_transaction_nonce(),
+        &request,
+        TransactionStatus::Success,
+    ) {
+        process_event(&mut live, event, &time_provider);
+    }
+
+    let replayed = replay_of_the_event_log();
+
+    assert_eq!(
+        replayed.automatic_deposits.delegation(&account(0)),
+        Some(Delegation {
+            delegate: sweeper_contract(),
+            nonce: TransactionNonce::ONE,
+        })
+    );
+    assert_eq!(
+        replayed
+            .automatic_deposits
+            .is_equivalent_to(&live.automatic_deposits),
+        Ok(())
+    );
+
+    let mut unmarked = replayed.automatic_deposits.clone();
+    for stored in unmarked.authorizations.values_mut() {
+        stored.applied_by = None;
+    }
+    assert_ne!(
+        unmarked.is_equivalent_to(&live.automatic_deposits),
+        Ok(()),
+        "equivalence must notice which authorizations were applied"
+    );
+}
+
+/// The minter state the event log alone reconstructs. The prepaid sweep gas is not event-sourced,
+/// so it is put back by hand for the accepted sweeps in the log to draw on.
+fn replay_of_the_event_log() -> State {
+    let mut state = initial_state();
+    prepay_sweep_gas(&mut state);
+    with_event_iter(|events| {
+        for event in events {
+            apply_state_transition(&mut state, &event.payload);
+        }
+    });
+    state
+}
+
+/// Queue `account`'s USDT, hand it to a sweep of its own carrying `authorization`, and finalize
+/// that sweep. Numbered after the sweep a fixture enqueues, so it can follow one.
+fn finalize_sweep_carrying(
+    deposits: &mut AutomaticDeposits,
+    account: Account,
+    authorization: Option<SignedAuthorization>,
+) -> SweepId {
+    let id = SweepId(1);
+    let request = sweep_request(
+        id,
+        Asset::Erc20(usdt()),
+        vec![authorized_item(account, authorization)],
+    );
+    queue(deposits, &[(account, usdt())]);
+    deposits.record_sweep_scheduled(id, Asset::Erc20(usdt()), [account]);
+    deposits.record_sweep_request(request.clone());
+    finalize_sweep(deposits, &request, TransactionStatus::Success);
+    id
+}
+
+fn sweep_request(id: SweepId, asset: Asset, items: Vec<AuthorizedSweepItem>) -> SweepRequest {
+    let max_transaction_fee = gas_fee_estimate()
+        .to_price(sweep_gas_limit(&items))
+        .max_transaction_fee();
+    SweepRequest {
+        id,
+        destination: sweeper_contract(),
+        asset,
+        items,
+        max_transaction_fee,
+        created_at: 0,
+    }
+}
+
+fn authorized_item(
+    account: Account,
+    authorization: Option<SignedAuthorization>,
+) -> AuthorizedSweepItem {
+    AuthorizedSweepItem {
+        item: SweepItem {
+            deposit: deposit_address(&account),
+            account,
+            attestation: transaction_signature(),
+        },
+        authorization,
+    }
+}
+
+fn authorization_request(
+    account: Account,
+    delegate: Address,
+    nonce: TransactionNonce,
+) -> AuthorizationRequest {
+    AuthorizationRequest::new(
+        account,
+        EthereumNetwork::default().chain_id(),
+        delegate,
+        nonce,
+    )
+}
+
+fn applied_by(deposits: &AutomaticDeposits, request: &AuthorizationRequest) -> Option<SweepId> {
+    deposits
+        .authorizations
+        .get(request)
+        .and_then(|stored| stored.applied_by)
 }
 
 /// Drives the already-recorded `request` through the sweeper pipeline to a receipt of `status`.
 fn finalize_sweep(
     deposits: &mut AutomaticDeposits,
-    request: SweepRequest,
+    request: &SweepRequest,
     status: TransactionStatus,
 ) {
-    let id = request.id;
+    let sweep = sweep_pipeline_outcome(deposits.next_sweeper_transaction_nonce(), request, status);
+    deposits.record_created_sweep_transaction(request.id, sweep.transaction);
+    deposits.record_signed_sweep_transaction(sweep.signed);
+    deposits.record_finalized_sweep_transaction(request.id, &sweep.receipt);
+}
+
+/// The events the sweeper pipeline records taking the already-accepted `request` from its
+/// transaction to a receipt of `status`.
+fn sweep_pipeline_events(
+    nonce: TransactionNonce,
+    request: &SweepRequest,
+    status: TransactionStatus,
+) -> Vec<EventType> {
+    let sweep = sweep_pipeline_outcome(nonce, request, status);
+    vec![
+        EventType::CreatedSweeperTransaction {
+            sweep_id: request.id,
+            transaction: sweep.transaction,
+        },
+        EventType::SignedSweeperTransaction {
+            sweep_id: request.id,
+            transaction: sweep.signed,
+        },
+        EventType::FinalizedSweeperTransaction {
+            sweep_id: request.id,
+            transaction_receipt: sweep.receipt,
+        },
+    ]
+}
+
+/// What the sweeper pipeline makes of a sweep: the transaction it creates, that transaction
+/// signed, and the receipt finalizing it.
+struct SweepPipelineOutcome {
+    transaction: SweepTransaction,
+    signed: Signed<SweepTransaction>,
+    receipt: TransactionReceipt,
+}
+
+fn sweep_pipeline_outcome(
+    nonce: TransactionNonce,
+    request: &SweepRequest,
+    status: TransactionStatus,
+) -> SweepPipelineOutcome {
     let transaction = request
         .create_transaction(
-            deposits.next_sweeper_transaction_nonce(),
+            nonce,
             gas_fee_estimate(),
             request.gas_limit(),
             EthereumNetwork::Sepolia,
         )
         .expect("BUG: the fixture prices the request with the estimate it creates with");
-    deposits.record_created_sweep_transaction(id, transaction.clone());
     let signed = Signed::from((
-        transaction,
+        transaction.clone(),
         TransactionSignature {
             signature_y_parity: false,
             r: Default::default(),
@@ -1027,8 +1298,11 @@ fn finalize_sweep(
         status,
         transaction_hash: signed.hash(),
     };
-    deposits.record_signed_sweep_transaction(signed);
-    deposits.record_finalized_sweep_transaction(id, &receipt);
+    SweepPipelineOutcome {
+        transaction,
+        signed,
+        receipt,
+    }
 }
 
 /// An [`AutomaticDeposits`] whose sweep queue holds exactly these funded pairs.
