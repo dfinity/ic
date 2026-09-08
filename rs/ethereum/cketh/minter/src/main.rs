@@ -24,7 +24,7 @@ use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
     EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent,
 };
-use ic_cketh_minter::guard::{deposit_erc20_guard, retrieve_withdraw_guard};
+use ic_cketh_minter::guard::{deposit_registration_guard, retrieve_withdraw_guard};
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
@@ -32,7 +32,7 @@ use ic_cketh_minter::memo::{self, BurnMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::runtime::IC_CANISTER_RUNTIME;
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
-use ic_cketh_minter::state::automatic_deposits::DepositRequest;
+use ic_cketh_minter::state::automatic_deposits::{DepositRequest, RegisterDepositError};
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     AuthorizedSweepItem, Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed,
@@ -206,30 +206,32 @@ async fn minter_address() -> String {
 #[update]
 async fn deposit_eth(arg: DepositEthArg) -> Result<DepositEthResponse, DepositEthError> {
     let caller = validate_caller_not_anonymous();
+    // Held for the whole call, including across the ECDSA public key fetch in `arm_deposit`, so
+    // that the status check and the registration that follows it cannot be interleaved with
+    // another deposit registration from the same principal.
+    let _guard = deposit_registration_guard(caller).unwrap_or_else(|e| {
+        ic_cdk::trap(format!(
+            "Failed retrieving guard for principal {caller}: {e:?}"
+        ))
+    });
     let DepositMode::Unsponsored { subaccount } = arg.mode;
     let account = Account {
         owner: caller,
         subaccount,
     };
-    state::lazy_call_ecdsa_public_key_with_chain_code(&IC_CANISTER_RUNTIME).await;
-    let address = read_state(|s| s.deposit_address(&account)).ok_or_else(|| {
-        DepositEthError::TemporarilyUnavailable(
-            "Minter's ECDSA public key not yet initialized".to_string(),
-        )
-    })?;
-    Ok(DepositEthResponse {
-        address: address.to_string(),
-    })
+    Ok(arm_deposit(account, Asset::Eth)
+        .await
+        .map(DepositEthResponse::from)?)
 }
 
 #[update]
 async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, DepositErc20Error> {
     validate_ckerc20_active();
     let caller = validate_caller_not_anonymous();
-    // Held for the whole call, including across the ECDSA public key fetch below, so that the
-    // status check and the registration that follows it cannot be interleaved with another
-    // `deposit_erc20` from the same principal.
-    let _guard = deposit_erc20_guard(caller).unwrap_or_else(|e| {
+    // Held for the whole call, including across the ECDSA public key fetch in `arm_deposit`, so
+    // that the status check and the registration that follows it cannot be interleaved with
+    // another deposit registration from the same principal.
+    let _guard = deposit_registration_guard(caller).unwrap_or_else(|e| {
         ic_cdk::trap(format!(
             "Failed retrieving guard for principal {caller}: {e:?}"
         ))
@@ -253,8 +255,17 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
         owner: caller,
         subaccount,
     };
-    let request = DepositRequest::new(account, Asset::Erc20(token));
-    let minimum_deposit_amount = min_deposit(&Asset::Erc20(token));
+    Ok(arm_deposit(account, Asset::Erc20(token)).await?)
+}
+
+/// Report the `(account, asset)` pair's deposit status, arming the pair first if it is not armed
+/// yet. Callers hold a [`deposit_registration_guard`] across the call.
+async fn arm_deposit(
+    account: Account,
+    asset: Asset,
+) -> Result<DepositErc20Response, RegisterDepositError> {
+    let request = DepositRequest::new(account, asset);
+    let minimum_deposit_amount = min_deposit(&asset);
     let now = Timestamp::from_nanos(ic_cdk::api::time());
 
     if let Some(status) = read_state(|s| {
@@ -279,7 +290,7 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     }) {
         return Ok(status);
     }
-    mutate_state(|s| s.register_deposit_address(now, account, Asset::Erc20(token)))?;
+    mutate_state(|s| s.register_deposit_address(now, account, asset))?;
     Ok(read_state(|s| {
         s.automatic_deposits
             .deposit_status(now, &request, minimum_deposit_amount)

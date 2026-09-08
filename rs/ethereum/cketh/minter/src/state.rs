@@ -98,7 +98,7 @@ pub struct State {
     /// Per-principal lock for pending withdrawals
     pub pending_withdrawal_principals: BTreeSet<Principal>,
 
-    /// Per-principal lock for in-flight `deposit_erc20` calls
+    /// Per-principal lock for in-flight deposit registrations (`deposit_erc20`, `deposit_eth`)
     pub pending_deposit_principals: BTreeSet<Principal>,
 
     /// Locks preventing concurrent execution timer tasks

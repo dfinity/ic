@@ -18,6 +18,14 @@ fn account(owner: u64) -> Account {
 }
 
 #[test]
+fn eth_has_its_own_minimum_deposit() {
+    assert_eq!(
+        min_deposit(&Asset::Eth),
+        Erc20Value::new(5_000_000_000_000_000)
+    );
+}
+
+#[test]
 fn unsupported_token_has_an_unreachable_minimum_deposit() {
     // A token absent from MIN_DEPOSITS gets Erc20Value::MAX as its threshold, so no real balance
     // (below the u256 max) ever clears it and it is never a candidate.

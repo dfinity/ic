@@ -230,7 +230,7 @@ pub struct DepositErc20Arg {
     pub mode: DepositMode,
 }
 
-/// How the fee for a ckERC20 deposit address registration is settled.
+/// How the fee for a deposit address registration is settled.
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum DepositMode {
     /// The registration fee is deducted from the deposited amount. The deposit
@@ -301,14 +301,49 @@ pub struct DepositEthArg {
 /// Response of the `deposit_eth` endpoint.
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct DepositEthResponse {
-    /// The Ethereum deposit address derived for the caller.
+    /// The Ethereum deposit address derived for the caller. It is the same address as the one
+    /// derived by the `deposit_erc20` endpoint for the same account, whatever the ERC-20 token.
     pub address: String,
+    /// Minimum balance, in wei, that the deposit address must hold for the balance scan to
+    /// detect it. The scan reads the address' whole ETH balance, so several smaller transfers
+    /// count together; the funds stay undetected only while their total is below this.
+    pub minimum_deposit_amount: Nat,
+    /// Where the deposit stands in the detect-and-sweep pipeline.
+    pub status: DepositStatus,
+}
+
+impl From<DepositErc20Response> for DepositEthResponse {
+    fn from(response: DepositErc20Response) -> Self {
+        Self {
+            address: response.address,
+            minimum_deposit_amount: response.minimum_deposit_amount,
+            status: response.status,
+        }
+    }
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum DepositEthError {
+    /// The account already has the maximum number of assets armed.
+    TooManyTokensForAccount,
+    /// The maximum number of concurrently armed deposits (`(account, asset)` pairs) has been
+    /// reached.
+    TooManyActiveDeposits,
     /// The minter is temporarily unavailable, retry the request.
     TemporarilyUnavailable(String),
+}
+
+impl From<crate::state::automatic_deposits::RegisterDepositError> for DepositEthError {
+    fn from(error: crate::state::automatic_deposits::RegisterDepositError) -> Self {
+        use crate::state::automatic_deposits::RegisterDepositError;
+        match error {
+            RegisterDepositError::TooManyAssetsForAccount => Self::TooManyTokensForAccount,
+            RegisterDepositError::TooManyActiveDeposits => Self::TooManyActiveDeposits,
+            RegisterDepositError::KeyNotInitialized => Self::TemporarilyUnavailable(
+                "Minter's ECDSA public key not yet initialized".to_string(),
+            ),
+        }
+    }
 }
 
 impl From<crate::state::automatic_deposits::RegisterDepositError> for DepositErc20Error {

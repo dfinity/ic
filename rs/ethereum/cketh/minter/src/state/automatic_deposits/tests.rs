@@ -121,6 +121,35 @@ fn should_treat_the_same_account_with_different_tokens_as_distinct_pairs() {
 }
 
 #[test]
+fn should_count_eth_against_the_per_account_asset_cap() {
+    let mut deposits = AutomaticDeposits::default();
+    let a = account(0);
+    deposits
+        .watch_deposit(ts(0), a, Asset::Eth, deposit_address(&a))
+        .unwrap();
+    for i in 1..MAX_ASSETS_PER_ACCOUNT {
+        deposits
+            .watch_deposit(ts(0), a, Asset::Erc20(token(i as u8)), deposit_address(&a))
+            .unwrap();
+    }
+
+    let rejected = deposits.watch_deposit(
+        ts(0),
+        a,
+        Asset::Erc20(token(MAX_ASSETS_PER_ACCOUNT as u8)),
+        deposit_address(&a),
+    );
+    assert_eq!(rejected, Err(RegisterDepositError::TooManyAssetsForAccount));
+
+    assert!(
+        deposits
+            .watch_deposit(ts(0), a, Asset::Eth, deposit_address(&a))
+            .is_ok(),
+        "BUG: re-arming the already-armed ETH pair is idempotent, not a cap hit"
+    );
+}
+
+#[test]
 fn should_reject_more_than_the_per_account_token_cap() {
     let mut deposits = AutomaticDeposits::default();
     let a = account(0);
@@ -289,9 +318,28 @@ fn should_snapshot_entries_in_time_index_order() {
 
 mod scan_targets_iter {
     use super::{
-        BlockNumber, SCAN_GAP_SECS, SECS_PER_BLOCK, account, deposit_address, deposits_from,
+        Asset, BlockNumber, SCAN_GAP_SECS, SECS_PER_BLOCK, account, deposit_address, deposits_from,
         scan_state, ts, usdc, window_nanos,
     };
+
+    #[test]
+    fn should_not_yield_a_target_for_an_eth_pair() {
+        let deposits = deposits_from(vec![
+            scan_state(account(0), Asset::Eth, ts(window_nanos()), None, 0),
+            scan_state(account(0), usdc(), ts(window_nanos()), None, 0),
+        ]);
+
+        let due: Vec<_> = deposits
+            .scan_targets_iter(ts(0), BlockNumber::new(1_000))
+            .map(|t| (t.account(), t.token(), t.address()))
+            .collect();
+
+        assert_eq!(
+            due,
+            vec![(account(0), usdc(), deposit_address(&account(0)))],
+            "BUG: the ETH pair is not scannable until the batcher can read ETH balances"
+        );
+    }
 
     #[test]
     fn should_mark_never_scanned_pair_as_due() {
@@ -481,7 +529,7 @@ fn deposits_from(states: Vec<DepositAddressRegistration>) -> AutomaticDeposits {
 
 fn scan_state(
     account: Account,
-    token: Address,
+    asset: impl Into<Asset>,
     expires_at: Timestamp,
     last_scanned_block: Option<BlockNumber>,
     scan_count: u32,
@@ -489,7 +537,7 @@ fn scan_state(
     DepositAddressRegistration {
         owner: account.owner,
         subaccount: account.subaccount,
-        asset: Asset::Erc20(token),
+        asset: asset.into(),
         address: deposit_address(&account),
         expires_at_nanos: expires_at,
         last_scanned_block,
