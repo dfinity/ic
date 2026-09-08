@@ -26,6 +26,7 @@ use ic_types::ReplicaVersion;
 use rand::RngCore;
 use sev::Generation;
 use sev::firmware::host::TcbVersion;
+use sev::parser::ByteParser;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};

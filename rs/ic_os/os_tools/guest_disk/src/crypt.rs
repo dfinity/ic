@@ -151,29 +151,20 @@ pub fn activate_crypt_device(
         .activate_by_passphrase(Some(name), None, passphrase, flags)
         .context("Failed to activate cryptographic device")?;
 
-    export_luks_metrics(
-        &mut crypt_device,
-        device_path,
-        active_keyslot,
-        metrics_registry,
-    );
-
-    Ok(())
-}
-
-/// Extracts the LUKS parameters from the device and exports them as metrics.
-pub(crate) fn export_luks_metrics(
-    crypt_device: &mut CryptDevice,
-    device_path: &Path,
-    active_keyslot: u32,
-    registry: &Registry,
-) {
-    let result = extract_luks_parameters(crypt_device).and_then(|luks_parameters| {
-        export_luks_parameters(registry, &luks_parameters, device_path, active_keyslot)
+    // Export the LUKS parameters as metrics; a failure is not fatal.
+    let result = extract_luks_parameters(&mut crypt_device).and_then(|luks_parameters| {
+        export_luks_parameters(
+            metrics_registry,
+            &luks_parameters,
+            device_path,
+            active_keyslot,
+        )
     });
     if let Err(e) = result {
         warn!("Failed to export LUKS parameters: {e:#}");
     }
+
+    Ok(())
 }
 
 /// Deactivates the cryptographic device with the given name.
