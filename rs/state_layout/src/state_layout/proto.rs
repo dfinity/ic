@@ -103,6 +103,9 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         let consumed_cycles =
             try_from_option_field(value.consumed_cycles, "CanisterStateBits::consumed_cycles")
                 .unwrap_or_default();
+        // Absent in checkpoints written before the field was introduced; the
+        // scheduler backfills it from `consumed_cycles` (see
+        // `SystemState::migrate_consumed_cycles_to_monotonic`).
         let consumed_cycles_monotonic = try_from_option_field(
             value.consumed_cycles_monotonic,
             "CanisterStateBits::consumed_cycles_monotonic",
