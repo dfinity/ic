@@ -644,7 +644,9 @@ mod tests {
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
+    use ic_test_utilities_types::ids::{
+        subnet_test_id, test_platform_version, test_replica_version,
+    };
     use ic_types::{
         PrincipalId, RegistryVersion, SubnetId,
         batch::{BatchPayload, ValidationContext},
@@ -901,7 +903,7 @@ mod tests {
             .with_replica_config(ReplicaConfig {
                 node_id,
                 subnet_id: SOURCE_SUBNET_ID,
-                replica_version: test_replica_version(),
+                platform_version: test_platform_version(),
             })
             .build();
 

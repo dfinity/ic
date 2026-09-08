@@ -665,7 +665,7 @@ mod tests {
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_platform_version};
     use ic_types::{
         NodeId, RegistryVersion, SubnetId,
         consensus::{
@@ -856,7 +856,7 @@ mod tests {
                     node_id: local_node_id,
                     // The local node always starts in the source subnet.
                     subnet_id: source_subnet_id,
-                    replica_version: test_replica_version(),
+                    platform_version: test_platform_version(),
                 })
                 .build();
 

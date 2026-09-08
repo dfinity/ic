@@ -281,7 +281,7 @@ impl ConsensusImpl {
         let content = FinalizationContent::new(
             block.height,
             ic_types::crypto::crypto_hash(block),
-            self.replica_config.replica_version.clone(),
+            self.replica_config.replica_version().clone(),
         );
         let signature = self
             .finalizer

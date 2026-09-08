@@ -14,7 +14,7 @@ use ic_config::http_handler::Config;
 use ic_interfaces_state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{Height, ReplicaVersion};
+use ic_types::{Height, PlatformVersion};
 
 #[derive(Template)]
 #[template(path = "dashboard.html", escape = "html")]
@@ -28,7 +28,7 @@ struct Dashboard<'a> {
         &'a ic_replicated_state::CanisterState,
         &'a ic_replicated_state::CanisterPriority,
     )>,
-    replica_version: ic_types::ReplicaVersion,
+    platform_version: PlatformVersion,
 }
 
 #[derive(Clone)]
@@ -36,7 +36,7 @@ pub(crate) struct DashboardService {
     config: Config,
     subnet_type: SubnetType,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    replica_version: ReplicaVersion,
+    platform_version: PlatformVersion,
 }
 
 impl DashboardService {
@@ -48,13 +48,13 @@ impl DashboardService {
         config: Config,
         subnet_type: SubnetType,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        replica_version: ReplicaVersion,
+        platform_version: PlatformVersion,
     ) -> Router {
         let state = DashboardService {
             config,
             subnet_type,
             state_reader,
-            replica_version,
+            platform_version,
         };
         Router::new().route(
             DashboardService::route(),
@@ -68,7 +68,7 @@ async fn dashboard(
         config,
         subnet_type,
         state_reader,
-        replica_version,
+        platform_version,
     }): State<DashboardService>,
 ) -> impl IntoResponse {
     let labeled_state =
@@ -99,7 +99,7 @@ async fn dashboard(
         height: labeled_state.height(),
         replicated_state: labeled_state.get_ref(),
         canisters: &canisters,
-        replica_version,
+        platform_version,
     };
 
     match dashboard.render() {

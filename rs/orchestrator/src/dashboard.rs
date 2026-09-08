@@ -6,7 +6,7 @@ use crate::{
 pub use ic_dashboard::Dashboard;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::{
-    NodeId, RegistryVersion, ReplicaVersion, Time, consensus::HasHeight,
+    NodeId, PlatformVersion, RegistryVersion, Time, consensus::HasHeight,
     hostos_version::HostosVersion,
 };
 use std::{
@@ -26,7 +26,7 @@ pub(crate) struct OrchestratorDashboard {
     last_poll_certified_time: Arc<RwLock<Time>>,
     processes_manager: Arc<RwLock<MultipleProcessesManager>>,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
-    replica_version: ReplicaVersion,
+    platform_version: PlatformVersion,
     hostos_version: Option<HostosVersion>,
     local_cup_reader: LocalCUPReader,
     logger: ReplicaLogger,
@@ -47,6 +47,7 @@ impl Dashboard for OrchestratorDashboard {
              replica process id: {}\n\
              ic-gateway process id: {}\n\
              replica version: {}\n\
+             guest os version: {}\n\
              host os version: {}\n\
              scheduled upgrade: {}\n\
              {}\n\
@@ -63,7 +64,8 @@ impl Dashboard for OrchestratorDashboard {
             self.get_subnet_id(),
             self.get_replica_pid(),
             self.get_ic_gateway_pid(),
-            self.replica_version,
+            self.platform_version.replica_version,
+            self.platform_version.guestos_version,
             self.hostos_version
                 .as_ref()
                 .map(|v| v.to_string())
@@ -94,7 +96,7 @@ impl OrchestratorDashboard {
         last_poll_certified_time: Arc<RwLock<Time>>,
         processes_manager: Arc<RwLock<MultipleProcessesManager>>,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
-        replica_version: ReplicaVersion,
+        platform_version: PlatformVersion,
         hostos_version: Option<HostosVersion>,
         local_cup_reader: LocalCUPReader,
         logger: ReplicaLogger,
@@ -108,7 +110,7 @@ impl OrchestratorDashboard {
             last_poll_certified_time,
             processes_manager,
             subnet_assignment,
-            replica_version,
+            platform_version,
             hostos_version,
             local_cup_reader,
             logger,
@@ -170,11 +172,14 @@ impl OrchestratorDashboard {
             Err(e) => return e.to_string(),
         };
 
-        if expected_replica_version == self.replica_version {
+        if expected_replica_version == self.platform_version.replica_version {
             return "None".to_string();
         }
 
-        format!("{} -> {}", self.replica_version, expected_replica_version)
+        format!(
+            "{} -> {}",
+            self.platform_version.replica_version, expected_replica_version
+        )
     }
 
     fn get_local_cup_info(&self) -> String {

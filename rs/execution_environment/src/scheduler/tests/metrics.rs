@@ -1321,7 +1321,7 @@ fn outcalls_cycles_are_migrated_into_use_cases_on_an_idle_subnet() {
         test.state()
             .metadata
             .subnet_metrics
-            .get_consumed_cycles_by_use_case_as_counters()
+            .get_consumed_cycles_by_use_case_monotonic()
             .is_empty()
     );
 }

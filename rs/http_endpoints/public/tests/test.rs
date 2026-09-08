@@ -88,6 +88,7 @@ use ic_types::{
     signature::ThresholdSignature,
     time::current_time,
 };
+use ic_types::{PlatformVersion, ReplicaVersion};
 use prost::Message;
 use reqwest::header::CONTENT_TYPE;
 use rstest::rstest;
@@ -125,6 +126,9 @@ fn test_healthy_behind() {
         ..Default::default()
     };
 
+    let guestos_version = ReplicaVersion::try_from("guestos-version-under-test").unwrap();
+    let replica_version = ReplicaVersion::try_from("replica-version-under-test").unwrap();
+
     // We use this atomic to make sure that the health transition is from healthy -> certified_state_behind
     let healthy = Arc::new(AtomicBool::new(false));
     let healthy_c = healthy.clone();
@@ -159,6 +163,10 @@ fn test_healthy_behind() {
     HttpEndpointBuilder::new(rt.handle().clone(), config)
         .with_registry_client(mock_registry_client)
         .with_consensus_cache(mock_consensus_cache)
+        .with_platform_version(PlatformVersion {
+            guestos_version: guestos_version.clone(),
+            replica_version: replica_version.clone(),
+        })
         .run();
 
     rt.block_on(async {
@@ -192,6 +200,15 @@ fn test_healthy_behind() {
         assert_eq!(
             replica_health_status,
             &CBOR::Text("certified_state_behind".to_string())
+        );
+
+        assert_eq!(
+            replica_status.get(&CBOR::Text("impl_version".to_string())),
+            Some(&CBOR::Text(replica_version.to_string()))
+        );
+        assert_eq!(
+            replica_status.get(&CBOR::Text("guestos_version".to_string())),
+            Some(&CBOR::Text(guestos_version.to_string()))
         );
     })
 }

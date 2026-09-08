@@ -628,7 +628,7 @@ mod tests {
             .unwrap()
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::HTTPOutcalls)
             .map(|n| n.get())
             .unwrap_or(0)
@@ -660,7 +660,7 @@ mod tests {
         let gauge = get(subnet_metrics.get_consumed_cycles_by_use_case());
         assert_eq!(
             gauge,
-            get(subnet_metrics.get_consumed_cycles_by_use_case_as_counters())
+            get(subnet_metrics.get_consumed_cycles_by_use_case_monotonic())
         );
         match use_case {
             CyclesUseCase::HTTPOutcalls => {

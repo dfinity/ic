@@ -1279,7 +1279,7 @@ impl CanisterManager {
         let consumed_cycles_by_use_case = canister
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters();
+            .consumed_cycles_by_use_cases_monotonic();
         let memory = *consumed_cycles_by_use_case
             .get(&CyclesUseCase::Memory)
             .unwrap_or(&NominalCycles::zero());

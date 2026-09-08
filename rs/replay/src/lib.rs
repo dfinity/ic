@@ -22,7 +22,7 @@ use crate::{
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::{registry::subnet::v1::InitialNiDkgTranscriptRecord, types::v1 as pb};
-use ic_types::ReplicaVersion;
+use ic_types::{PlatformVersion, ReplicaVersion};
 use prost::Message;
 use std::{cell::RefCell, convert::TryFrom, rc::Rc};
 
@@ -62,6 +62,7 @@ mod validator;
 ///     })),
 ///     skip_prompts: true,
 ///     replica_version: None,
+///     guestos_version: None,
 /// };
 /// // Once the arguments are set well, the local store and spool directories are populated;
 /// // replay function could be called as follows:
@@ -112,10 +113,17 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
         if let Some(SubCommand::RestoreFromBackup(cmd)) = subcmd {
             let _enter_guard = rt.enter();
 
+            let replica_version = ReplicaVersion::try_from(cmd.replica_version.as_str())
+                .expect("Couldn't parse the replica version");
+            let platform_version = PlatformVersion {
+                guestos_version: args
+                    .guestos_version
+                    .unwrap_or_else(|| replica_version.clone()),
+                replica_version,
+            };
             let mut player = Player::new_for_backup(
                 cfg,
-                ReplicaVersion::try_from(cmd.replica_version.as_str())
-                    .expect("Couldn't parse the replica version"),
+                platform_version,
                 &cmd.backup_spool_path,
                 &cmd.registry_local_store_path,
                 subnet_id,
@@ -128,7 +136,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
 
         {
             let _enter_guard = rt.enter();
-            let player = Player::new(cfg, subnet_id, args.replica_version)
+            let player = Player::new(cfg, subnet_id, args.replica_version, args.guestos_version)
                 .with_replay_target_height(target_height);
 
             if let Some(SubCommand::GetRecoveryCup(cmd)) = subcmd {
