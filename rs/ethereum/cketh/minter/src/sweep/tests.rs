@@ -9,7 +9,7 @@ use crate::state::event::AutomaticDeposit;
 use crate::state::transactions::{SweepId, SweepRequest};
 use crate::state::{State, mutate_state, read_state};
 use crate::storage::with_event_iter;
-use crate::sweep::create_pending_sweeper_requests;
+use crate::sweep::{create_pending_sweeper_requests, in_chain_execution_order};
 use crate::test_fixtures::mock::MockCanisterRuntime;
 use crate::test_fixtures::{
     account, another_account, automatic_deposit, deposit_address, init_state, initial_state,
@@ -17,10 +17,14 @@ use crate::test_fixtures::{
 };
 use crate::tx::{Authorization, AuthorizationRequest, GasFeeEstimate, TransactionSignature};
 use ethnum::u256;
+use evm_rpc_types::{
+    Hex20, Hex32, Hex256, HexByte, Nat256, TransactionReceipt as EvmTransactionReceipt,
+};
 use ic_cdk_management_canister::EcdsaPublicKeyResult;
 use ic_ethereum_types::Address;
 use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 use icrc_ledger_types::icrc1::account::Account;
+use std::collections::BTreeMap;
 
 const NOW: u64 = 1_620_328_630_000_000_000;
 const GAS_FEE_ESTIMATE_AGE_NANOS: u64 = 1_000_000_000;
@@ -307,6 +311,28 @@ async fn should_leave_out_a_deposit_whose_attestation_could_not_be_signed() {
     assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 2);
 }
 
+#[test]
+fn should_order_finalized_sweeps_as_the_chain_executed_them() {
+    let earliest = receipt_mined_at(7, 3);
+    let second = receipt_mined_at(8, 0);
+    let latest = receipt_mined_at(8, 1);
+    let receipts = BTreeMap::from([
+        (SweepId(0), latest.clone()),
+        (SweepId(1), earliest.clone()),
+        (SweepId(2), second.clone()),
+    ]);
+
+    assert_eq!(
+        in_chain_execution_order(receipts),
+        vec![
+            (SweepId(1), earliest),
+            (SweepId(2), second),
+            (SweepId(0), latest),
+        ],
+        "a sweep mined earlier must be finalized first, whatever its id"
+    );
+}
+
 fn pending_sweeps() -> Vec<SweepRequest> {
     read_state(|s| s.automatic_deposits.sweep_requests_batch(usize::MAX))
 }
@@ -481,6 +507,26 @@ fn expected_signature(request: &AttestationRequest) -> TransactionSignature {
 
 fn recorded_events() -> Vec<EventType> {
     with_event_iter(|events| events.map(|event| event.payload).collect())
+}
+
+fn receipt_mined_at(block_number: u64, transaction_index: u64) -> EvmTransactionReceipt {
+    EvmTransactionReceipt {
+        block_hash: Hex32::from([0_u8; 32]),
+        block_number: Nat256::from(block_number),
+        effective_gas_price: Nat256::ZERO,
+        gas_used: Nat256::ZERO,
+        cumulative_gas_used: Nat256::ZERO,
+        status: Some(Nat256::from(1_u8)),
+        root: None,
+        transaction_hash: Hex32::from([0_u8; 32]),
+        contract_address: None,
+        from: Hex20::from([0_u8; 20]),
+        logs: vec![],
+        logs_bloom: Hex256::from([0_u8; 256]),
+        to: None,
+        transaction_index: Nat256::from(transaction_index),
+        tx_type: HexByte::from(2_u8),
+    }
 }
 
 fn mock() -> MockCanisterRuntime {
