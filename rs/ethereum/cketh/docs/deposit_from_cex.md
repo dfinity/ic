@@ -312,7 +312,7 @@ sequenceDiagram
     CEX->>T: USDT.transfer(deposit address, 250)
     Note over D,T: the "250 USDT at the deposit address" is a storage slot inside the<br/>token contract — the EOA itself stays untouched (no ETH, no nonce, no code)
     loop while the (deposit address, USDT) pair is armed
-        Minter->>T: balance scan of all registered pairs<br/>(deployless batcher eth_call, latest block)
+        Minter->>T: balance scan of all registered pairs<br/>(deployless batcher eth_call, latest block,<br/>at most 764 pairs per call, EIP-3860)
     end
     Note over Minter: balance detected: queue (deposit address, USDT) for sweeping.<br/>Scheduling hint only, no finality needed —<br/>a reorged deposit just wastes the sweep's gas
     Note over Minter,D: first sweep of this address only — sign with the deposit address' key (tECDSA):<br/>the one-time attestation of the account (principal, subaccount) and an EIP-7702<br/>authorization (delegate = SweeperContract), both recorded and reused by later sweeps
@@ -609,7 +609,18 @@ each). The token list is a trusted whitelist, so a sub-call that reverts or does
 not return exactly 32 bytes (e.g. a non-contract address) is treated as an anomaly
 rather than "no balance": the whole call reverts, surfacing as an `eth_call` error
 that fails the tick loudly (the affected addresses are retried, not silently
-recorded as empty). One HTTPS outcall per provider; later a plain
+recorded as empty). **At most 764 pairs fit in one such call**:
+[EIP-3860](https://eips.ethereum.org/EIPS/eip-3860) (Shanghai) caps init code at
+49'152 bytes, and the encoding spends 165 bytes on the program, 32 on the length
+word and 64 on each pair — so the cap is *derived* from the encoding rather than
+hard-coded, and follows the batcher if its program ever changes (measured against
+anvil: 764 pairs execute, 765 are rejected with `max initcode size exceeded`).
+Gas is the looser bound: at ≈19'000 gas for the priciest `balanceOf` shape (a
+proxied stablecoin) a full 764-pair batch costs ≈14.5M gas, well inside the 50M
+`eth_call` gas cap providers commonly apply. A larger watchlist is therefore split
+into several such calls per tick — each chunk advances all-or-nothing, and a chunk
+whose call fails is retried whole on the next tick, so a chunk is never partially
+observed. One HTTPS outcall per provider per chunk; later a plain
 JSON-RPC batch once the EVM-RPC canister supports `eth_batch`,
 [dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561).
 This deployless batcher was chosen over a
@@ -946,7 +957,7 @@ sequenceDiagram
     User->>CEX: withdraw ETH to the deposit address
     CEX->>D: plain ETH send — 21'000 gas while code-less, 21'095 into the<br/>delegate's minimal receive() once delegated (R12)
     loop while the (address, ETH) pair is armed
-        Minter->>D: latest-block ETH balance, read in the same<br/>deployless-batcher call as the ERC-20 scans
+        Minter->>D: latest-block ETH balance, read by the same<br/>deployless-batcher scan as the ERC-20 pairs
     end
     Note over Minter: balance delta detected (R11): queue the ETH sweep.<br/>No Transfer log exists, so sender screening is weaker (step 3)
     Sw->>S: sweep tx on the sweeper's own nonce lane (R17), R14-prepaid gas:<br/>type 0x04 if the address is not yet delegated, else 0x02:<br/>sweepEthBatch([(deposit address, principal, subaccount, attestation)])
@@ -975,8 +986,8 @@ sequenceDiagram
   deposit address, `eth_getBalance`, `eth_getTransactionCount` for deposit EOAs) must
   use the same reduction strategies.
 * Each EVM-RPC call today is one HTTPS outcall *per provider* and each outcall burns
-  cycles. The bulk balance scans of step 3 collapse to a single create-style
-  `eth_call` via the deployless balance batcher, and the log scan is a single OR-list
+  cycles. The bulk balance scans of step 3 collapse to one create-style
+  `eth_call` per 764-pair chunk via the deployless balance batcher, and the log scan is a single OR-list
   `eth_getLogs`, so no JSON-RPC batching is required for correctness. **JSON-RPC batch
   support in the EVM-RPC canister** (`eth_batch`,
   [dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561),
@@ -1521,9 +1532,10 @@ each address' due time to that cadence:
 | **Total** | | **34** |
 
 The initial scan runs immediately; the remaining 33 are gated by the 33 `SCAN_GAP_SECS` gaps
-(all of them used — the first backoff gap is `SCAN_GAP_SECS[0]` = 30 s). Each scan is one
+(all of them used — the first backoff gap is `SCAN_GAP_SECS[0]` = 30 s). Each scan is a
 **shared** deployless-batcher `eth_call` over all registered `(address, token)` pairs
-(filter 1), so its cost divides across the batch; a deposit landing in the first 10 min is
+(filter 1, at most 764 per call, so a bigger watchlist means several calls), so its
+cost divides across the batch; a deposit landing in the first 10 min is
 seen within 30s–4 min, and after 30 min within the hour.
 
 **Scenarios** (`B` = number of `(address, token)` pairs sharing this pair's balance
