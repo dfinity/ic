@@ -99,8 +99,11 @@ function resize_partition() {
 
     local node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
 
-    # Configure multiple GuestOS if type4.X
-    if [[ $node_reward_type =~ ^type4(\.[0-9]+)?$ ]]; then
+    # Configure multiple GuestOS for the type4 reward types that run more than
+    # one. Every other type, type4 and type4.5 included, keeps its single
+    # volume: taking this branch without a matching case below removes the
+    # GuestOS volume and creates nothing in its place.
+    if [[ $node_reward_type =~ ^type4\.[1-4]$ ]]; then
         # Cleanup the initial GuestOS
         lvremove -f hostlvm/guestos >/dev/null 2>&1
         log_and_halt_installation_on_error "${?}" "Unable to cleanup initial GuestOS volume"
