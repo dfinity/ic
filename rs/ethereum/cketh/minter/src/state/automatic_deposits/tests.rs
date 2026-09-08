@@ -1037,7 +1037,7 @@ async fn should_mark_the_authorizations_a_finalized_sweep_carried_as_applied() {
 }
 
 #[test]
-fn should_mark_nothing_for_a_sweep_carrying_no_authorization() {
+fn should_leave_a_tuple_unapplied_and_its_address_undelegated_when_a_sweep_leaves_it_out() {
     let mut deposits = AutomaticDeposits::default();
     deposits.record_authorization(
         authorization_request(account(0), sweeper_contract(), TransactionNonce::ZERO),
@@ -1046,8 +1046,6 @@ fn should_mark_nothing_for_a_sweep_carrying_no_authorization() {
 
     finalize_sweep_carrying(&mut deposits, SweepId(0), None);
 
-    // Signing a tuple is not applying it: a sweep that leaves the tuple out leaves the address
-    // without a delegation.
     assert_eq!(deposits.authorizations_len(), 1);
     assert_eq!(deposits.applied_authorizations_len(), 0);
     assert_eq!(deposits.delegation(&account(0)), None);
