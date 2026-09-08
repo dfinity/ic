@@ -1502,15 +1502,17 @@ rotated, costs nothing (`R13`) and is harmless on the old delegate.
    second structure: its applied tuple with the highest nonce names the
    current delegate, and its nonce is one above it; an address with no applied
    tuple is not delegated. Replaying those events rebuilds the marks on upgrade
-   (`R8`). The replay follows the event log, i.e. the order in which the minter
-   processed the receipts (by `SweepId`), which is not necessarily the
-   sweeper-nonce order in which the sweeps mined: a sweep whose prepaid gas no
+   (`R8`). Sweep ids do not follow chain order — a sweep whose prepaid gas no
    longer covers the fee is moved back in the queue, so a lower `SweepId` can
-   carry a higher nonce. The classification does not depend on that order —
-   every tuple in flight for a given address at any one time is the *same*
-   tuple (see 5) — so whichever receipt comes first marks it applied and the
-   others skipped, for the same resulting delegation. The dashboard shows that
-   delegation per address (`R9`).
+   carry a higher sweeper nonce — which is why the minter finalizes the
+   receipts of a batch in the order the chain executed them (block number,
+   then transaction index) and emits the events in that order: the log, and
+   so the replay, walk the tuples as the chain applied them. The marks would
+   in fact come out the same in any order, since every tuple in flight for a
+   given address at any one time is the *same* tuple (see 5), but keeping the
+   log in chain order is what makes the nonce arithmetic plainly right rather
+   than right by that argument. The dashboard shows the resulting delegation
+   per address (`R9`).
 2. **Which tuple a sweep carries** is decided per item at enqueue time from the
    record and the configured delegate:
 
