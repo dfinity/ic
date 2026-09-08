@@ -47,8 +47,8 @@ impl FromStr for DepositAddress {
 
 /// Family of Ethereum addresses the minter derives from its master threshold-ECDSA public key,
 /// each owning the derivation path its addresses are derived under. The leading tag byte keeps
-/// the families collision-free and must never change or be reused: tag `2`, once planned for a
-/// separate ckETH deposit family, is retired since ETH and ckERC20 deposits share one address.
+/// the families collision-free and must never change once used; tag `2`, initially planned for a
+/// separate ckETH deposit family, was never used since ETH and ckERC20 deposits share one address.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum AddressSchema {
     /// The deposit address of an IC account, shared by ETH and ckERC20 deposits.
