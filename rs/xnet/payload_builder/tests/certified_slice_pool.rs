@@ -206,70 +206,6 @@ fn slice_garbage_collect_reject_signals(
     });
 }
 
-/// Tests that taking a slice advances the cached `min_useful_header_begin` past the
-/// taken slice's `header.begin()`, but never regresses it.
-#[test_strategy::proptest(ProptestConfig::with_cases(20))]
-fn pool_take_slice_advances_min_useful_header_begin(
-    #[strategy(arb_stream_slice(
-        1, // min_size
-        10, // max_size
-        0, // min_signal_count
-        10, // max_signal_count
-        CURRENT_CERTIFICATION_VERSION,
-    ))]
-    test_slice: (Stream, StreamIndex, usize),
-) {
-    let (stream, from, msg_count) = test_slice;
-
-    with_test_replica_logger(|log| {
-        let stream_begin = stream.messages_begin();
-        let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
-        let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
-
-        let mut certified_stream_store = MockCertifiedStreamStore::new();
-        certified_stream_store
-            .expect_decode_certified_stream_slice()
-            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
-        let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-
-        // Takes one message from a freshly populated pool, with the given
-        // `min_useful_header_begin`; and returns the updated value.
-        let take_one = |min_useful_header_begin| {
-            let mut pool = CertifiedSlicePool::new(
-                Arc::clone(&certified_stream_store),
-                &MetricsRegistry::new(),
-            );
-            pool.put(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log.clone())
-                .unwrap();
-            let stream_position = ExpectedIndices {
-                message_index: from,
-                signal_index: StreamIndex::from(0),
-                min_useful_header_begin,
-            };
-            assert!(
-                pool.take_slice(SRC_SUBNET, Some(&stream_position), Some(1), None)
-                    .unwrap()
-                    .is_some()
-            );
-            pool.slice_stats(SRC_SUBNET)
-                .0
-                .unwrap()
-                .min_useful_header_begin
-        };
-
-        // Taking a slice with a `header.begin() == min_useful_header_begin` advances
-        // the latter just past the former.
-        assert_eq!(Some(stream_begin.increment()), take_one(Some(stream_begin)));
-
-        // A later `min_useful_header_begin` is preserved.
-        let later = stream_begin + StreamIndex::from(2);
-        assert_eq!(Some(later), take_one(Some(later)));
-
-        // `None` (nothing left to garbage collect) stays `None`.
-        assert_eq!(None, take_one(None));
-    });
-}
-
 #[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn slice_take_prefix(
     #[strategy(arb_stream_slice(
@@ -1504,6 +1440,61 @@ fn pool_take_slice_respects_signal_limit(
             messages_end,
             max_message_index(stream_begin),
         );
+    });
+}
+
+/// Tests that taking a slice advances the cached `min_useful_header_begin` past the
+/// taken slice's `header.begin()`, but never regresses it.
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+fn pool_take_slice_advances_min_useful_header_begin(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+) {
+    let (stream, from, msg_count) = test_slice;
+
+    with_test_replica_logger(|log| {
+        let stream_begin = stream.messages_begin();
+        let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
+        let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
+
+        let mut store = MockCertifiedStreamStore::new();
+        store
+            .expect_decode_certified_stream_slice()
+            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
+
+        // Takes one message from a freshly populated pool, with the given
+        // `min_useful_header_begin`; and returns the updated value.
+        let take_one = |min_useful_header_begin| {
+            let pool = Mutex::new(CertifiedSlicePool::new(&MetricsRegistry::new()));
+            put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap();
+            let stream_position = ExpectedIndices {
+                message_index: from,
+                signal_index: StreamIndex::from(0),
+                min_useful_header_begin,
+            };
+            assert!(take_slice(&pool, SRC_SUBNET, Some(&stream_position), Some(1), None).is_some());
+            slice_stats(&pool, SRC_SUBNET)
+                .0
+                .unwrap()
+                .min_useful_header_begin
+        };
+
+        // Taking a slice with a `header.begin() == min_useful_header_begin` advances
+        // the latter just past the former.
+        assert_eq!(Some(stream_begin.increment()), take_one(Some(stream_begin)));
+
+        // A later `min_useful_header_begin` is preserved.
+        let later = stream_begin + StreamIndex::from(2);
+        assert_eq!(Some(later), take_one(Some(later)));
+
+        // `None` (nothing left to garbage collect) stays `None`.
+        assert_eq!(None, take_one(None));
     });
 }
 
