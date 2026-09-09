@@ -26,18 +26,20 @@ component here.
 | 0 | **Rosetta verification** | whether the chains have already diverged reorders everything after it, and nothing here repairs a divergence |
 | 1 | **Release 1** — archive only: A1, C1, archive half of E1 | closes the corruption. Safe on `master` as-is: an A1 refusal arrives as a graceful `Err` on the ledger's existing path and never rejects a transaction |
 | 2 | **DEFI-2967** — spawn instead of await | removes the committed-but-rejected reply, and with it the double-mint hazard |
-| 3 | **Lower `trigger_threshold` back**, by NNS proposal | archiving resumes, on a suite where a bad append is refused and a failure cannot contradict a reply |
-| 4 | **Release 2** — ledger: B, D, E2, E3, F | bounded retries, creation detection, reconciliation, single-message rounds |
+| 3 | **Release 2** — ledger: B, D, E2-E4, F | bounded retries, creation detection, reconciliation, the tail-archive probe, single-message rounds |
+| 4 | **Lower `trigger_threshold` back**, by NNS proposal | archiving resumes, on a suite where a bad append is refused, a failure cannot contradict a reply, and a stall heals itself |
 
 Two things about that order are deliberate:
 
 * **1 before 2.** DEFI-2967 makes an archiving trap silent. Landing it first would
   leave the corruption path open *and* remove the symptom that would reveal it.
   The two are independent, so closing the hole before removing the alarm is free.
-* **4 is not a precondition for 3.** Without Release 2 the ledger does not
-  reconcile, but the archive still refuses a bad append — so the outcome is a
-  stall, not corruption. Release 2 buys **operability**: a stall that heals itself
-  instead of waiting for an operator.
+* **Re-enabling comes last.** Release 2 is not needed for *safety* — after steps 1
+  and 2 a bad append is refused and a failure cannot misinform a caller, so the
+  worst case is a stall. It is needed for *operability*: without it a stall waits
+  for an operator instead of healing itself, and a failing archive is retried on
+  every transaction. Nothing forces re-enablement to a date, so there is no reason
+  to turn archiving back on and then have to watch it by hand.
 
 D2-D4 are hygiene and can land whenever. **DEFI-2967 is reviewed as a PR, not
 specced here**: it is already implemented, and its rationale lives as the doc
@@ -100,8 +102,7 @@ LedgerAccess>` can, and it runs once per round.
 | `nodes_block_ranges` | archive state, which `send_blocks_to_archive` holds | **per chunk** |
 | block removal | ledger state, which only `archive_blocks` holds | **once, at the end** |
 
-**The line does not need redrawing** (Decision 6). The dangerous half is already
-reachable: the ranges are archive state, so they can be reconciled from the
+**The line does not need redrawing.** The dangerous half is already reachable: the ranges are archive state, so they can be reconciled from the
 archive's report per chunk — and they are what a new node's offset derives from.
 Only `num_archived_blocks` lags, benignly: `block_locations` derives the local
 range from it, so the ledger still claims blocks it has not removed and reads go
@@ -114,12 +115,25 @@ sent. The cost is re-sending chunks the archive discards.
 `block_index_offset` is fixed at the archive's `init` and maps global to local by
 a constant shift, so appending the same blocks twice shifts every later index:
 append 0..999 twice and then 1000..1999, and a read for global 1500 resolves to
-local 1500 — the second copy's block 500. Silent bad data from
-`icrc3_get_blocks`, which the index, Rosetta and any chain-verifying client would
-accept.
+local 1500 — the second copy's block 500. Bad data from `icrc3_get_blocks`, and
+the two clients that read it react differently — neither of them well:
 
-The archive-side check does not make the fact knowable; it makes *not knowing*
-safe, by refusing the re-send.
+* **Rosetta detects it and stops.** Its synchroniser checks that returned indices
+  match those requested and that the parent hash of the lowest block fetched
+  matches the highest already stored
+  (`rosetta-api/icrc1/src/ledger_blocks_synchronization/blocks_synchronizer.rs`),
+  so it bails rather than storing the bad range. That makes Rosetta the *detector*
+  — the basis of the Rosetta precondition below — but it also means it stops
+  syncing and goes stale, serving nothing new until someone intervenes.
+* **The index accepts it silently.** `index-ng` has no parent-hash check at all: it
+  fetches blocks and indexes them, trapping only if one fails to decode. A validly
+  decoded block served at the wrong index is indexed against whichever accounts it
+  names, so the corruption propagates into account histories as plausible-looking
+  wrong answers. This is the worse of the two outcomes.
+
+Neither can *repair* anything — one stalls, the other spreads it. So the
+archive-side check does not make the fact knowable; it makes *not knowing* safe,
+by refusing the re-send.
 
 ### What awaiting costs, and why this spec does not fix it
 
@@ -140,11 +154,21 @@ that double-mints. **Spawned**, the
 reply is produced in the message that commits the transaction, so a later
 archiving failure cannot contradict it.
 
-So off the reply path trades a **correctness** hazard for an **observability**
-one, and this spec addresses neither directly: E protects the *archive* from a
-lost acknowledgement; nothing here stops a caller being misinformed. The one
-component that helps is **D2**, which removes the largest post-commit allocation
-and so lowers the trap's *probability*; DEFI-2967 removes its *consequence*.
+The two changes therefore do different jobs, and neither substitutes for the
+other. A trap in an archiving continuation has four separable consequences:
+
+| consequence | fixed by |
+|---|---|
+| the caller is told a committed transfer failed | **DEFI-2967** — the reply is produced before archiving starts, so nothing can contradict it |
+| the archive's and the ledger's views diverge | **this spec** — E1 refuses a bad append, E2 reconciles from what the archive reports |
+| the trap happens at all | **D2** — removes the largest post-commit allocation, lowering the probability |
+| nobody notices the now-silent failure | **this spec** — C1's counters, `ledger_archiving_failures`, D1's counter, and the `log_visibility` proposal below |
+
+So DEFI-2967 removes the trap's *consequence for the caller*, D2 lowers its
+*probability*, and this spec removes its *damage* and makes what remains
+*visible*. The last row is the one to notice: spawning is what makes the failure
+silent, so the observability work here is not incidental to DEFI-2967 — it is what
+keeps spawning from being a downgrade.
 
 ### Root causes
 
@@ -338,7 +362,7 @@ place the incoming index exactly:
 
 | incoming index | meaning | action |
 |---|---|---|
-| `< offset` | not this node's range at all — the blocks belong to an earlier node | append nothing; the ledger is behind and runs the coverage guard |
+| `< offset` | not this node's range at all — the blocks belong to an earlier node | append nothing; the ledger is behind and runs the *coverage guard* (defined below) |
 | `offset <= i <= offset + log_length` | starts at or inside what it holds | **drop the covered prefix, append the rest** |
 | `> offset + log_length` | a gap | refuse, having appended nothing |
 
@@ -365,11 +389,18 @@ rest on the next round.
 
 #### One rule for covered, straddling and fresh chunks
 
-The middle row is one rule, not the two it looks like, because a chunk can
+The middle row is one rule, not the two it looks like, because a batch can
 *straddle* the boundary: the archive holds `N..N+499` and the ledger re-sends
-`N..N+999`. That is reachable after a partial append followed by a trap, and it
-becomes routine once F2 stops pre-checking capacity, since every node fill then
-produces a partial append.
+`N..N+999`. That is reachable after a partial append followed by a trap.
+
+**F does not remove this case**, which is worth saying since F removes so much
+else. A straddle needs the archive to hold only *part* of what is being re-sent,
+so it needs a partial append — and partial appends come from capacity or a
+platform growth refusal, not from chunking. One message per round changes nothing
+about that, and under F2 partial appends become *routine*, one per node fill. What
+F removes is the multi-*chunk* round: the batch that gets re-sent is then the
+round's single message rather than one chunk of several, and the arithmetic below
+is the same either way.
 
     k = offset + log_length - incoming_index   // covered prefix length
     append blocks[k..]
@@ -485,9 +516,10 @@ space costs the ability to archive them, not the data.
 * **A1 is demoted** to belt-and-braces. Indexes verify *position*; the hash chain
   still verifies *content*, catching a ledger that sends right indexes with wrong
   blocks. Cheap, so worth keeping.
-* **No separate range endpoint is needed.** An earlier design added
-  `archive_range() -> (start, end)`; E answers that on every append, and an
-  **empty** `append_blocks` gives the same answer when there is no round to run.
+* **No separate range endpoint is needed.** A dedicated `archive_range() ->
+  (start, end)` would answer the same question, but E already answers it on every
+  append — and an **empty** `append_blocks` answers it when there is no round to
+  run, which is how the tail archive is probed in Rollout.
 
 **F. One message per round, sized by bytes.**
 
@@ -628,8 +660,15 @@ a much better story for timer liveness.
    the round returns, and reaches `next_index` in one round rather than two.
 12. A round issues exactly one *block-carrying* `append_blocks` and creates at most
    one node, at its start. Empty position probes do not count.
-13. The ICP archive is unchanged; the ICP *ledger* gains B1-B3, D1-D4, E2, E3 and
-   F, but not the indexed protocol (Decisions 3 and 7).
+13. A ledger whose `Wasm::INDEXED_APPENDS` is true and whose tail archive does not
+   answer an empty indexed `append_blocks` archives nothing, increments a distinct
+   metric, and resumes without operator action once the archive is upgraded. The
+   probe stores no blocks and consumes no capacity.
+14. A ledger whose `Wasm::INDEXED_APPENDS` is false uses the incremental path
+   instead of halting, so the ICP ledger keeps archiving; E3's counter
+   distinguishes the two cases.
+15. The ICP archive is unchanged; the ICP *ledger* gains B1-B3, D1-D4, E2, E3, E4
+   and F, but not the indexed protocol (Decisions 3 and 7).
 
 ## Components
 
@@ -645,12 +684,13 @@ a much better story for timer liveness.
 | D3 | correct the comment above `create_canister` (`archive.rs:452-454`) | `ledger_canister_core::archive` | it says a panic there rolls the triggering transaction back. That holds only when no await preceded it, i.e. the **first** node a ledger creates: on a roll-over, `node_and_capacity` awaits `remaining_capacity` first (`archive.rs:547-549`), committing the transaction, so a panic rejects the reply instead. The comment should state the condition, not the conclusion |
 | D4 | make error construction allocation-free, trim interpolating log lines | `ledger_canister_core::archive`, `::spawn` | `FailedToArchiveBlocks(pub String)` allocates on every error, so an allocation failure turns a graceful `Err` into a trap: use an enum with `Copy` payloads, rendered only where logged. `Rt::print` takes `impl AsRef<str>`, so static messages are free. **Keep** the canister id in the `create_canister` callback log — canister logs survive traps (`test_appending_logs_in_trapped_update_call`, `rs/execution_environment/tests/canister_logging.rs`), so it is the only record of an orphan's identity — but drop the `{result:?}` debug format |
 | E1 | `append_blocks` takes an optional expected start index and returns an optional result carrying the node's `start_index`, its `next_index` after the append, and `at_capacity`, or a gap. Placement checked before the chain; covered prefix dropped; capacity reported rather than trapped; mismatch still traps; `null` index keeps today's behaviour exactly | `icrc1/archive/src/main.rs`, `archive.did`, `ledger_canister_core::archive::send_blocks_to_archive` | the only interface change; both `opt`, so tolerant in either direction. Verify with `didc` and the CI Candid check |
-| E2 | the ledger reconciles `nodes_block_ranges` from the reported index instead of incrementing, and treats a covered index as success. The coverage guard detects here and reports upward — the round returns a count including blocks an archive already held, and `archive_blocks` performs the removal (Decision 6) | `send_blocks_to_archive`, return type consumed by `ledger::archive_blocks` | shared, so it applies to both ledgers once their archives are upgraded; the incremental path stays as the fallback |
-| E3 | count every use of the incremental fallback | `ledger_canister_core::archive` + per-ledger metric | the path's problem is an unknowable lifetime; a counter makes it deletable once it reads zero everywhere |
+| E2 | the ledger reconciles `nodes_block_ranges` from the reported index instead of incrementing, and treats a covered index as success. The coverage guard detects here and reports upward — the round returns a count including blocks an archive already held, and `archive_blocks` performs the removal (Decision 6) | `send_blocks_to_archive`, return type consumed by `ledger::archive_blocks` | shared, so it applies to both ledgers once their archives answer |
+| E3 | count every use of the incremental path | `ledger_canister_core::archive` + per-ledger metric | should read zero forever on an ICRC ledger, since E4 halts instead; reads every round on ICP, and is the signal for when Decision 7's port lets the path be deleted |
+| E4 | probe the tail archive with an empty indexed `append_blocks`, cache the answer in `#[serde(skip)]` state, and halt archiving with a distinct metric if it does not answer — unless `Wasm::INDEXED_APPENDS` is false | `ArchiveCanisterWasm` gains `const INDEXED_APPENDS: bool`; probe and cache in `ledger_canister_core::archive` | the flag is a property of the wasm the ledger embeds, which is what the trait already abstracts. `true` for `ic-icrc1-archive`, `false` for `ic-icp-archive` |
 | F1 | cap the round's selection at `min(num_blocks_to_archive, one message)` in bytes; delete both loops in `send_blocks_to_archive` | `Blockchain::get_blocks_for_archiving` (`blockchain.rs:125`) from `ledger::blocks_to_archive` (`ledger.rs:460`); `archive::send_blocks_to_archive` | removes code; byte-based so it is correct for variable-size blocks, and both terms are local so selection stays before the first await. Expose the effective per-round count as a metric |
 | F2 | replace the `remaining_capacity` pre-call with the last append's `at_capacity`, keeping the call for a cold start or a freshly spawned node | `archive::node_and_capacity` (roll-over test at `archive.rs:552`) | depends on E1; makes F cheaper than today rather than dearer, and makes partial appends routine |
 
-A1, C1 and E1 are in `ic-icrc1-archive`. B1-B3, D1-D4, E2, E3, F1 and F2 are
+A1, C1 and E1 are in `ic-icrc1-archive`. B1-B3, D1-D4, E2-E4, F1 and F2 are
 shared and therefore affect both ledgers; see Decision 3.
 
 ## Edge cases
@@ -727,8 +767,9 @@ change no wire format, and neither does F; **E does**.
 * **B**, **D** and **F** are ledger-internal. An old archive neither knows nor
   cares — F1 stands alone, F2 is inert until the archive answers.
 * **E** adds an optional argument and result. Both are `opt`, so an old archive
-  ignores the argument and returns nothing, which a new ledger reads as `null` and
-  falls back to today's incremental behaviour. Not taken on trust:
+  ignores the argument and returns nothing, which a new ledger reads as `null` —
+  and then either halts or falls back, per *The tail archive must answer* below.
+  Not taken on trust:
   `test_append_blocks_ignores_an_extra_optional_start_index` proves an unmodified
   ICRC archive stores the blocks and ignores the argument, and that its empty reply
   decodes as `null`; `should_ignore_an_extra_optional_start_index` proves the same
@@ -755,50 +796,82 @@ transaction while halted. Blocks accumulate locally, so it is survivable, and a
 stall beats silent corruption — but it is a reason to keep the window between the
 releases short rather than to treat Release 1 as unconditionally safe.
 
-**Release 2 — ledger.** B, D, F and the ledger half of E. By now the archives it
-talks to already answer, so the fallback is never exercised in our deployments; the
-`opt` tolerance remains worth having for third parties, who may upgrade only the
-ledger.
+**Release 2 — ledger.** B, D, F and the ledger half of E (E2-E4). Because Release 1 went
+first, every ICRC archive in our suites already answers, so the probe below never
+halts us. The `opt` tolerance matters for third parties, who may upgrade only the
+ledger — and for the ICP ledger, whose archive does not answer at all.
 
-**Detecting an old archive.** From the reply: one that returns nothing decodes as
-`null`. That is after the append rather than before, which is harmless — an old
-archive still stores the blocks, it just cannot say where it is. Detecting it
-beforehand is impractical: `remaining_capacity` and `icrc3_get_blocks` both exist
-on old archives, and `canister_status` needs controller rights the ledger does not
-have, since `update_settings` hands the archive to NNS Root. Only the **last**
-archive matters, since `node_and_capacity` appends only to `nodes.last()` and a
-newly spawned node runs the Wasm the ledger embeds — so "the current tail archive
-is upgraded" is satisfied permanently by one rollover.
+### The tail archive must answer: probe it, and halt if it cannot
 
-### What the fallback is, and the option of not carrying it
+**Detect it with an empty `append_blocks`.** Nothing else discriminates:
+`remaining_capacity` and `icrc3_get_blocks` exist on old archives too, and
+`canister_status` would give the module hash but needs controller rights the ledger
+does not have, since `update_settings` hands the archive to NNS Root. An empty
+indexed append does discriminate — a new archive answers with its position, an old
+one returns nothing — and it is side-effect-free: it stores nothing and consumes no
+capacity, verified by
+`test_empty_append_blocks_is_accepted_and_stores_nothing`.
 
-Mechanically the fallback is today's code: no position was reported, so the ledger
-advances `heights.1 += chunk_len` and calls `remove_archived_blocks(num_sent_blocks)`
-as it does now. It offers none of the new guarantees — against a pre-Release-1
-archive a duplicate can still be stored and an offset still poisoned — but it is
-not a regression either: a ledger talking to an un-upgraded archive is left exactly
-where it is today. Hence E3: the objection is not that the path exists but that its
-lifetime is unknowable, and a counter makes it deletable once it reads zero.
+Detecting from a *real* append instead would be post-hoc: an old archive has
+already stored the blocks by the time it answers `null`, which is the very risk the
+check exists to avoid.
 
-**If that lifetime is judged too long to carry: halt and wait.** Probe the tail
-with an **empty** `append_blocks` before committing to a round; one that returns
-nothing is un-upgraded, and the ledger accumulates locally until it is upgraded.
-The probe is what makes this coherent — detection from a *real* append is post-hoc,
-since an old archive has already stored the blocks by the time it answers `null`.
-An empty append stores nothing and consumes no capacity, verified by
-`test_empty_append_blocks_is_accepted_and_stores_nothing`. Cache the answer in
-`#[serde(skip)]` state, which also removes any need for a manually flipped flag:
-the cache clears on every ledger upgrade, precisely when the archives were upgraded
-too, so the ledger re-probes at the only moment the answer could have changed. The
-cost is stable-memory growth while waiting — the same degraded mode two ck ledgers
-run deliberately today — plus a dependency on operators upgrading, so the halt
-needs its own metric.
+Only the **last** archive matters, since `node_and_capacity` appends only to
+`nodes.last()` and a newly spawned node runs the Wasm the ledger embeds. So the
+requirement is "the current tail archive answers", satisfied permanently by one
+rollover.
+
+**Cache the answer in `#[serde(skip)]` state.** It then clears on every ledger
+upgrade — precisely the moment the archives were upgraded too — so the ledger
+re-probes exactly when the answer could have changed, and resumes on its own with
+no operator flag to flip.
+
+**What to do with a `null` answer depends on whether this ledger's own archives
+should have answered**, and that is a property the ledger knows: it embeds the
+archive Wasm it installs. Give `ArchiveCanisterWasm` an associated
+`const INDEXED_APPENDS: bool` — true for `ic-icrc1-archive`, false for
+`ic-icp-archive` — and the two cases separate cleanly:
+
+| `INDEXED_APPENDS` | tail answered `null` means | behaviour |
+|---|---|---|
+| `true` (ICRC) | the operator upgraded the ledger but not the archives | **halt archiving**, increment a distinct metric, and resume on the next probe |
+| `false` (ICP) | expected; its archive has no indexed protocol yet | incremental path, counted by E3 |
+
+**Halting is the recommendation for ICRC**, because the incremental path preserves
+exactly the bug this spec exists to close: with no reported position the ledger is
+back to inferring, so a duplicate can still be stored and a new node's offset can
+still be poisoned. A third-party operator who upgrades only the ledger is better
+told than silently left unfixed, and the cost of telling them is stable-memory
+growth while they finish the upgrade — the same degraded mode two ck ledgers run
+deliberately today. It needs its own metric rather than hiding in the generic
+failure counter, since it depends on an operator acting.
+
+Note that this **revises Decision 3's "no trait seam"** rather than contradicting
+it. Decision 3 rejected a seam introduced *only* to keep the ICP ledger on the old
+behaviour, on the grounds that it would have no beneficiary. This seam has one:
+the two ledgers genuinely differ in whether a silent `null` is a misconfiguration
+or the expected state, and without the distinction a halt rule would stop ICP
+archiving permanently.
+
+### The incremental path, and why it survives only for ICP
+
+Mechanically it is today's code: no position was reported, so the ledger advances
+`heights.1 += chunk_len` and calls `remove_archived_blocks(num_sent_blocks)` as it
+does now. It offers none of the new guarantees, which is exactly why ICRC ledgers
+halt rather than use it. It stays reachable for one reason: the ICP archive never
+answers, so ICP would otherwise stop archiving permanently (Decision 7).
+
+Hence E3 counts its every use. On an ICRC ledger the counter should read zero
+forever — a non-zero value means the `INDEXED_APPENDS` flag is wrong. On ICP it
+reads every round, and it is the signal that says when Decision 7's port has landed
+and the path can be deleted outright.
 
 **Not recommended: rolling over to a fresh node.** A `null`-answering tail could be
 treated as unusable and a new node spawned, which speaks the protocol by
-construction. Rejected because the costs are not one-off: spawning charges canister
-creation and needs cycles provisioned, every extra archive is another canister to
-top up and upgrade forever, and it abandons up to 3 GiB of already-paid-for space.
+construction — no waiting and no incremental path. Rejected because the costs are
+not one-off: spawning charges canister creation and needs cycles provisioned, every
+extra archive is another canister to top up and upgrade forever, and it abandons up
+to 3 GiB of already-paid-for space.
 
 ## Testing strategy
 
@@ -825,7 +898,8 @@ archive-level test is baseline-independent.
 | 8 | E1 — an index-less append keeps today's behaviour and returns no value an old caller could misread | **already written**: `test_append_blocks_ignores_an_extra_optional_start_index` asserts the blocks are stored, the argument ignored, and the empty reply decodes as `null`; a wrong-typed payload is rejected as a negative control | **yes** — passing today, so it locks the premise |
 | 9 | Decision 3 — the ICP archive's hand-rolled `Decode!` tolerates the extra argument | **already written**: `should_ignore_an_extra_optional_start_index` (`icp/archive/tests/tests.rs`) appends with a trailing `opt nat64`, asserts capacity dropped by the block size so it really stored it, and that the empty reply decodes as `None` | **yes** — a release gate |
 | 10 | E1 — a straddling chunk appends only its uncovered suffix | archive-level: append `N..N+499`, then `N..N+999`, and assert `log_length` becomes 1000 rather than 1500, that every index resolves correctly, and that the chain check did not trap on the covered prefix | **yes** |
-| 11 | both token variants for (1), (4), (6), (8) and (10) | (9) is ICP-only by nature, so it has no u256 variant | yes |
+| 11 | E4 — a ledger halts against an un-upgraded tail, and resumes on upgrade | install an old archive wasm as the tail, generate transactions, assert nothing is archived and the halt metric rises; upgrade the archive, assert archiving resumes with no other intervention. Then assert an `INDEXED_APPENDS = false` ledger archives normally against the same archive | **yes** — both wasms are build artefacts |
+| 12 | both token variants for (1), (4), (6), (8) and (10) | (9) is ICP-only by nature, so it has no u256 variant | yes |
 
 Deliberately not attempted: **the duplicate-append and offset-divergence paths
 end-to-end**, by inducing a trap in the append continuation. Routine rounds grow
@@ -846,7 +920,7 @@ same reason.
    matches `archiving_in_progress` and makes an upgrade the operator's "resume now"
    lever, which is the right shape when the upgrade is usually the fix.
 3. **The shared components apply to both ledgers, with no trait seam.** B1-B3,
-   D1-D4, E2, E3 and F stay shared: the per-transaction retry, the lost-creation
+   D1-D4, E2-E4 and F stay shared: the per-transaction retry, the lost-creation
    window and the inferred bookkeeping exist on both ledgers, so fixing them fixes
    both, and a seam added only to keep ICP on the old behaviour would have no
    beneficiary.
@@ -857,13 +931,21 @@ same reason.
    decodes by hand, `Decode!(&msg_arg_data(), Vec<EncodedBlock>)`
    (`icp/archive/src/main.rs:291`), and candid's `done()` absorbs the extra trailing
    value as `Reserved`; its empty reply then decodes as `None`, putting ICP on the
-   E2 fallback path. That tolerance is on a different code path from the ICRC
+   incremental path. That tolerance is on a different code path from the ICRC
    archive's macro decode, so it has its own test and is a **release gate**: if it
    failed, shipping E2 would break ICP archiving outright rather than degrade it.
+
+   **One seam is warranted after all**: `Wasm::INDEXED_APPENDS` (E4). It is not a
+   layer added to keep ICP on the old behaviour — it records whether the archive
+   Wasm *this ledger embeds* answers indexed appends, which is a fact the trait
+   already exists to abstract. Without it, E4's halt rule would stop ICP archiving
+   permanently. The general principle stands: a seam needs a beneficiary, and this
+   one has two, since it is also what lets an ICRC ledger halt loudly.
 4. **The typed result is part of E, not deferred.** It is what lets the ledger
    distinguish a duplicate from a gap without inspecting reject strings, and how the
    archive reports its position. An un-upgraded archive returns none of it, which is
-   the whole of what the fallback gives up.
+   the whole of what the incremental path gives up — and the reason E4 refuses to
+   use that path on a ledger whose archives should have answered.
 5. **Capacity is reported; a chain mismatch still traps.** Not symmetric. A capacity
    stop has real progress to preserve and two causes needing opposite responses, so
    it belongs in the reply as a short `next_index` plus `at_capacity`. A mismatch has
@@ -890,6 +972,16 @@ same reason.
    suites that prompted this, but it must be a tracked follow-up with its own ticket.
    **Whoever approves this spec is approving that ICP stays exposed until that
    lands.**
+
+8. **An ICRC ledger halts rather than falling back.** The incremental path
+   preserves exactly the bug this spec closes: with no reported position the ledger
+   infers again, so a duplicate can still be stored and a new node's offset
+   poisoned. Silently leaving a third-party operator in that state because they
+   upgraded the ledger and not the archives is worse than stopping and telling
+   them, and the cost of stopping is stable-memory growth they can end by
+   finishing the upgrade. The probe makes the check cheap and side-effect-free, and
+   the `#[serde(skip)]` cache makes recovery automatic. ICP is exempt by
+   `INDEXED_APPENDS`, not by accident.
 
 ## Precondition: verify the live suites with Rosetta
 
