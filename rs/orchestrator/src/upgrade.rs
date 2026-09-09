@@ -3541,16 +3541,24 @@ mod tests {
     /// node's own post-split subnet is healthy and moves past the split, while the other half
     /// stays stuck (its peers keep serving the source chain's *pre-split* CUP).
     ///
-    /// The node must adopt its own subnet's post-split CUP (restarting the replica if and only if
-    /// it ended up in the destination subnet) and then keep tracking its subnet's regular
+    /// The node must adopt its own subnet's first served CUP (restarting the replica if and only
+    /// if it ended up in the destination subnet) and then keep tracking its subnet's regular
     /// `NotScheduled` CUPs, completely undisturbed by the stuck half: its peers are never
     /// contacted, since the node selects peers from its own post-split subnet only.
+    ///
+    /// A node that is a bit late may never see the post-split CUP: by the time it catches up, its
+    /// (healthy) subnet only serves later, regular `NotScheduled` CUPs. Adopting one of those must
+    /// restart the replica all the same, since the subnet ID changed — this is the
+    /// `misses_post_split_cup` variant, where the first served CUP is already `NotScheduled`.
     #[rstest]
-    #[case::node_stays_in_healthy_source(SOURCE_SUBNET_ID)]
-    #[case::node_moves_to_healthy_destination(DESTINATION_SUBNET_ID)]
+    #[case::stays_via_post_split_cup(SOURCE_SUBNET_ID, true)]
+    #[case::stays_late_and_misses_post_split_cup(SOURCE_SUBNET_ID, false)]
+    #[case::moves_via_post_split_cup(DESTINATION_SUBNET_ID, true)]
+    #[case::moves_late_and_misses_post_split_cup(DESTINATION_SUBNET_ID, false)]
     #[tokio::test]
     async fn test_node_of_healthy_subnet_moves_on_while_other_half_is_stuck(
         #[case] healthy_subnet_id: SubnetId,
+        #[case] via_post_split_cup: bool,
     ) {
         let node_id = NODE_1;
         let other_node_id = NODE_2;
@@ -3559,11 +3567,25 @@ mod tests {
         let post_split_cup_height = Height::from(200);
         let post_summary_cup_height = Height::from(300);
 
-        // Our own (healthy) peer serves our subnet's post-split CUP.
-        let (healthy_server_addr, healthy_served_cup) = start_cup_server(pb::CatchUpPackage::from(
-            make_post_split_cup(vec![node_id], post_split_cup_height, healthy_subnet_id),
-        ))
-        .await;
+        let first_cup_status = if via_post_split_cup {
+            SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                new_subnet_id: healthy_subnet_id,
+            })
+        } else {
+            // The node is late: its subnet already moved past the split and only serves regular
+            // CUPs.
+            SubnetSplittingStatus::NotScheduled
+        };
+        // Our own (healthy) peer serves our subnet's first CUP after the split.
+        let (healthy_server_addr, healthy_served_cup) =
+            start_cup_server(pb::CatchUpPackage::from(make_splitting_cup_for_test(
+                vec![node_id],
+                post_split_cup_height,
+                SPLIT_REGISTRY_VERSION,
+                first_cup_status,
+                /*signer_subnet_id=*/ healthy_subnet_id,
+            )))
+            .await;
         // The stuck half's peers keep serving the source chain's latest pre-split CUP.
         let (stuck_server_addr, _stuck_served_cup) = start_cup_server(pb::CatchUpPackage::from(
             make_pre_split_source_cup(vec![node_id, other_node_id], Height::from(150)),
@@ -3608,7 +3630,7 @@ mod tests {
 
         let local_cup = || read_local_cup(tmp_path);
 
-        // The first iteration adopts our own subnet's post-split CUP.
+        // The first iteration adopts our own subnet's first CUP after the split.
         assert_eq!(
             upgrade_loop.check().await.unwrap(),
             OrchestratorControlFlow::Assigned(healthy_subnet_id)
@@ -3618,12 +3640,7 @@ mod tests {
             SubnetAssignment::Assigned(healthy_subnet_id)
         );
         assert_eq!(local_cup().height(), post_split_cup_height);
-        assert_eq!(
-            local_cup().subnet_splitting_status(),
-            SubnetSplittingStatus::PostSplit(PostSplitArgs {
-                new_subnet_id: healthy_subnet_id
-            })
-        );
+        assert_eq!(local_cup().subnet_splitting_status(), first_cup_status);
         assert!(upgrade_loop.is_replica_running());
 
         // Our subnet moves on: the next summary produces a regular `NotScheduled` CUP.
@@ -3661,8 +3678,8 @@ mod tests {
         assert!(upgrade_loop.is_replica_running());
 
         // The stuck half's peers were never contacted (no CUP ever failed verification), and the
-        // replica was restarted at most once: by the adoption of the post-split CUP, if and only
-        // if we ended up in the destination subnet.
+        // replica was restarted at most once: by the adoption of the first CUP of our post-split
+        // subnet, if and only if we ended up in the destination subnet.
         let expected_restarts = usize::from(moves_to_destination);
         assert_n_post_split_restarts(logger.drain_logs(), expected_restarts, healthy_subnet_id)
             .has_exactly_n_messages_containing(
