@@ -134,7 +134,8 @@ enum Opt {
         /// canister snapshots are added to those of the destination subnet.
         #[clap(long, required = true)]
         source: PathBuf,
-        /// Path the merged checkpoint is written to. Must not exist yet.
+        /// Path the merged checkpoint is written to. Must not exist yet, and
+        /// must be outside the base and source checkpoints.
         #[clap(long, required = true)]
         output: PathBuf,
     },
