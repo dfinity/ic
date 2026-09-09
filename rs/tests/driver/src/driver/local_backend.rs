@@ -1,7 +1,7 @@
 //! Local (QEMU) system-test backend.
 //!
 //! Counterpart to [`crate::driver::farm::Farm`] for tests run on a developer or
-//! CI host instead of the Farm cluster. Selected via `SYSTEM_TEST_INFRA=local`.
+//! CI host instead of the Farm cluster. Selected via `SYSTEM_TEST_BACKEND=local`.
 //!
 //! Boots each VM as a per-VM daemonized `qemu-system-x86_64` process, controlled
 //! afterwards through its pid-file (destroy) and a per-VM QMP unix socket
@@ -1661,7 +1661,7 @@ fn vm_uuid(group_name: &str, vm_name: &str) -> String {
 
 /// Sanitize a name for use in filesystem paths and the QEMU `-name`
 /// (alphanumeric, `-` and `_`; every other character maps to `-`).
-fn sanitize_name(s: &str) -> String {
+pub(crate) fn sanitize_name(s: &str) -> String {
     s.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
