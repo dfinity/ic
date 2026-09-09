@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use askama::Template;
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_tool::hostos::guestos_config::generate_guestos_config;
-use config_types::{GuestOSConfig, HostOSConfig, VmSlot};
+use config_types::{GuestOSConfig, HostOSConfig, VmSlot, guestos_vm_count};
 use deterministic_ips::calculate_deterministic_mac;
 use deterministic_ips::node_type::NodeType;
 use std::path::{Path, PathBuf};
@@ -215,16 +215,21 @@ fn split_resources_for_type_4(
     /* vcpus */ u32,
     /* topology */ Topology,
 ) {
-    let (memory, vcpus) = match &config.icos_settings.node_reward_type {
-        Some(val) if val == "type4.1" => (memory / 60, 2 /* Overcommit vCPUs */),
-        Some(val) if val == "type4.2" => (memory / 15, 8 /* Overcommit vCPUs */),
-        Some(val) if val == "type4.3" => (memory / 4, vcpus / 4),
-        Some(val) if val == "type4.4" => (memory / 2, vcpus / 2),
-        _ => (memory, vcpus),
+    let node_reward_type = config.icos_settings.node_reward_type.as_deref();
+
+    // Memory is split evenly over the VMs; vCPUs are overcommitted for the
+    // types that run many of them.
+    let memory = memory / guestos_vm_count(node_reward_type) as u32;
+    let vcpus = match node_reward_type {
+        Some("type4.1") => 2,
+        Some("type4.2") => 8,
+        Some("type4.3") => vcpus / 4,
+        Some("type4.4") => vcpus / 2,
+        _ => vcpus,
     };
 
-    let topology = match &config.icos_settings.node_reward_type {
-        Some(val) if val == "type4.1" => Topology {
+    let topology = match node_reward_type {
+        Some("type4.1") => Topology {
             nr_of_sockets: 1,
             nr_of_cores: vcpus,
             nr_of_threads: 1,
