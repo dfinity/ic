@@ -567,7 +567,6 @@ impl CatchUpPackageProvider {
         let registry_cup = self
             .registry
             .get_registry_cup(latest_registry_version, subnet_id)
-            .inspect_err(|err| warn!(self.logger, "Failed to create a registry cup: {err}"))
             .map(pb::CatchUpPackage::from)
             .ok();
 
