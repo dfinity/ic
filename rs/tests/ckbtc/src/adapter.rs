@@ -265,12 +265,20 @@ fn is_transient_adapter_reject(err: &AgentError) -> bool {
 /// decide whether to retry.
 ///
 /// The `message` canister rejects with ic-cdk's `CallRejected` `Display`, so the message
-/// arrives as `"call rejected: <code> - <original message>"` (before the canister migrated to
-/// the new ic-cdk call API it was the original message verbatim). Match the original message
-/// wherever it appears rather than as a prefix, so that a change of the wrapper text cannot
-/// silently disable the retry again.
+/// arrives wrapped as `"call rejected: <code> - <adapter error>"` (before the canister migrated
+/// to the new ic-cdk call API it was the adapter error verbatim). Unwrap that envelope, if
+/// present, and classify by the top-level `RpcError` variant only, so that a fatal
+/// `Unknown(...)` whose inner text happens to mention a transient variant is not retried. The
+/// unit tests derive the envelope from ic-cdk itself, so a change of the wrapper text fails
+/// loudly instead of silently disabling the retry again.
 fn is_transient_adapter_reject_message(reject_message: &str) -> bool {
-    reject_message.contains("Unavailable(") || reject_message.contains("Cancelled(")
+    let adapter_error = reject_message
+        .strip_prefix("call rejected: ")
+        .and_then(|rest| rest.split_once(" - "))
+        .map_or(reject_message, |(_reject_code, adapter_error)| {
+            adapter_error
+        });
+    adapter_error.starts_with("Unavailable(") || adapter_error.starts_with("Cancelled(")
 }
 
 pub fn fund_with_tokens<T: RpcClientType>(
@@ -330,6 +338,29 @@ fn calculate_regtest_reward<T: RpcClientType>(height: u64) -> Amount {
 #[cfg(test)]
 mod tests {
     use super::is_transient_adapter_reject_message;
+    use ic_agent::agent::RejectCode;
+    use ic_cdk::call::{CallFailed, CallRejected};
+
+    /// Wraps an adapter error the way the `message` canister does: it rejects with
+    /// `CallFailed::to_string()` of the reject it received from the management canister, whose
+    /// reject code is `SysTransient` for every adapter error (see the bitcoin payload builder).
+    fn proxied(adapter_error: &str) -> String {
+        CallFailed::CallRejected(CallRejected::with_rejection(
+            RejectCode::SysTransient as u32,
+            adapter_error.to_string(),
+        ))
+        .to_string()
+    }
+
+    #[test]
+    fn proxied_envelope_matches_ic_cdk() {
+        // The envelope unwrapped by `is_transient_adapter_reject_message` must be the one ic-cdk
+        // actually produces.
+        assert_eq!(
+            proxied("Cancelled(Timeout expired)"),
+            "call rejected: 2 - Cancelled(Timeout expired)"
+        );
+    }
 
     #[test]
     fn raw_transient_adapter_errors_are_retried() {
@@ -347,27 +378,41 @@ mod tests {
 
     #[test]
     fn proxied_transient_adapter_errors_are_retried() {
-        // Reject messages as re-rejected by the `message` canister using ic-cdk's `CallRejected`
-        // `Display` (`call rejected: <code> - <message>`); `2` is `SysTransient`.
-        assert!(is_transient_adapter_reject_message(
-            "call rejected: 2 - Cancelled(Timeout expired)"
-        ));
-        assert!(is_transient_adapter_reject_message(
-            "call rejected: 2 - Unavailable(Connection refused (os error 111))"
-        ));
+        // Reject messages as re-rejected by the `message` canister.
+        assert!(is_transient_adapter_reject_message(&proxied(
+            "Cancelled(Timeout expired)"
+        )));
+        assert!(is_transient_adapter_reject_message(&proxied(
+            "Unavailable(Connection refused (os error 111))"
+        )));
     }
 
     #[test]
     fn other_errors_are_fatal() {
-        assert!(!is_transient_adapter_reject_message(
-            "call rejected: 2 - Unknown(unexpected error)"
-        ));
-        assert!(!is_transient_adapter_reject_message(
-            "call rejected: 2 - ConnectionBroken"
-        ));
+        assert!(!is_transient_adapter_reject_message(&proxied(
+            "Unknown(unexpected error)"
+        )));
+        assert!(!is_transient_adapter_reject_message(&proxied(
+            "ConnectionBroken"
+        )));
         assert!(!is_transient_adapter_reject_message(
             "call rejected: 5 - Canister trapped explicitly: Unavailable"
         ));
         assert!(!is_transient_adapter_reject_message(""));
+    }
+
+    #[test]
+    fn fatal_errors_mentioning_transient_variants_are_not_retried() {
+        // Only the top-level `RpcError` variant decides; a fatal `Unknown(..)` whose inner text
+        // happens to contain a transient variant must not be retried, whether wrapped or not.
+        assert!(!is_transient_adapter_reject_message(&proxied(
+            "Unknown(Cancelled(upstream))"
+        )));
+        assert!(!is_transient_adapter_reject_message(
+            "Unknown(Unavailable(Connection refused (os error 111)))"
+        ));
+        assert!(!is_transient_adapter_reject_message(
+            "call rejected: 2 - something else - Cancelled(Timeout expired)"
+        ));
     }
 }

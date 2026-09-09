@@ -59,6 +59,9 @@ rust_library(
 rust_test(
     name = "unit_tests",
     crate = ":ckbtc",
+    deps = [
+        "@crate_index//:ic-cdk",
+    ],
 )
 
 system_test_nns(

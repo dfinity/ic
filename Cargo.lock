@@ -15551,6 +15551,7 @@ dependencies = [
  "ic-btc-adapter-test-utils",
  "ic-btc-checker",
  "ic-btc-interface",
+ "ic-cdk",
  "ic-ckbtc-agent",
  "ic-ckbtc-minter",
  "ic-ckdoge-agent",
