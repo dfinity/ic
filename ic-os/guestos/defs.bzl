@@ -2,7 +2,11 @@
 Hold manifest common to all GuestOS variants.
 """
 
-load("//ic-os/components:guestos.bzl", "component_files")
+load(
+    "//ic-os/components:guestos.bzl",
+    "upgrade_overlay_component_files",
+    "component_files",
+)
 
 # Declare the dependencies that we will have for the built filesystem images.
 # This needs to be done separately from the build rules because we want to
@@ -66,6 +70,7 @@ def image_deps(mode, malicious = False):
         "container_context_files": Label("//ic-os/guestos/context:context-files"),
         "component_files": component_files(mode),
         "upgrade_overlay_binaries": UPGRADE_OVERLAY_BINARIES,
+        "upgrade_overlay_files": upgrade_overlay_component_files,
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",

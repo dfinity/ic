@@ -517,9 +517,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                     extra_files = {
                         binary_label: image_deps["rootfs"][binary_label]
                         for binary_label in upgrade_overlay_binaries
-                    } | {
-                        "//ic-os/components/guestos/fast-upgrade:restart.list": "/opt/upgrade_metadata/restart.list:0644",
-                        "//ic-os/components/guestos/fast-upgrade:extension-release.ic-upgrade": "/usr/lib/extension-release.d/extension-release.ic-upgrade:0644",
+                    } | image_deps.get("upgrade_overlay_files", {}) | {
                         ":replica_version" + test_suffix + ".txt": "/opt/ic/share/replica_version.txt:0644",
                     },
                     file_contexts = ":file_contexts",
