@@ -38,7 +38,7 @@ use ic_registry_transport::pb::v1::{
     RegistryMutation, high_capacity_registry_value, registry_mutation::Type,
 };
 use prost::Message;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 impl Registry {
     pub fn check_changelog_version_invariants(&self) {
@@ -119,11 +119,13 @@ impl Registry {
                 .key
                 .starts_with(SUBNET_RECORD_KEY_PREFIX.as_bytes())
         });
+        // A set: the same shard can be mutated more than once by a single batch, and
+        // decoding one of them twice would produce duplicate routing table entries.
         let mutated_canister_ranges_shards = mutations
             .iter()
             .filter(|mutation| mutation.key.starts_with(CANISTER_RANGES_PREFIX.as_bytes()))
             .map(|mutation| mutation.key.clone())
-            .collect::<Vec<Vec<u8>>>();
+            .collect::<BTreeSet<Vec<u8>>>();
         if mutates_subnet_record || !mutated_canister_ranges_shards.is_empty() {
             let previous_subnet_cost_schedules = self.latest_subnet_cost_schedules();
             if mutates_subnet_record {
@@ -195,7 +197,10 @@ impl Registry {
     /// Returns the routing table restricted to the given canister ranges shards, as of
     /// the latest version, i.e. before the mutations under check are applied. A shard
     /// that those mutations create is simply absent.
-    fn latest_canister_ranges(&self, shard_keys: &[Vec<u8>]) -> RoutingTable {
+    ///
+    /// The shards are given as a set: decoding one of them twice would produce duplicate
+    /// entries, which `RoutingTable` rejects.
+    fn latest_canister_ranges(&self, shard_keys: &BTreeSet<Vec<u8>>) -> RoutingTable {
         let version = self.latest_version();
         let shards = shard_keys
             .iter()
@@ -271,6 +276,7 @@ mod tests {
 
     use super::*;
     use ic_base_types::CanisterId;
+    use ic_base_types::{PrincipalId, SubnetId};
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_protobuf::registry::{
         node_operator::v1::NodeOperatorRecord,
@@ -489,6 +495,35 @@ mod tests {
             subnet_record.encode_to_vec(),
         )]);
     }
+    /// A single batch may mutate the same canister ranges shard more than once. The
+    /// cost schedule check decodes only the shards a batch mutates, so it must not
+    /// mistake a shard mutated twice for duplicate routing table entries.
+    #[test]
+    fn repeatedly_mutated_canister_ranges_shard_passes_invariants_check() {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = SubnetId::from(
+            PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
+                .unwrap(),
+        );
+
+        let mut routing_table = registry.get_routing_table_or_panic(registry.latest_version());
+        routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(0x1000),
+                    end: CanisterId::from_u64(0x10ff),
+                },
+                subnet_id,
+            )
+            .unwrap();
+        let mut mutations = routing_table_into_registry_mutation(&registry, routing_table);
+        assert!(!mutations.is_empty());
+        let repeated_mutations = mutations.clone();
+        mutations.extend(repeated_mutations);
+
+        registry.maybe_apply_mutation_internal(mutations);
+    }
+
     /// The cycles cost schedule a canister is charged under must not change by moving
     /// its canister ID range to a subnet on a different cost schedule; see
     /// `check_canister_cost_schedule_invariants`. This also covers that a mutation of

@@ -6,7 +6,10 @@ use crate::{
     mutations::common::normalized_canister_cycles_cost_schedule,
 };
 
-use std::{collections::BTreeMap, convert::TryFrom};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::TryFrom,
+};
 
 use ic_base_types::{CanisterId, SubnetId};
 use ic_protobuf::registry::{
@@ -170,8 +173,11 @@ pub(crate) fn check_canister_cost_schedule_invariants(
 
 /// Returns the routing table restricted to the given canister ranges shards, as held
 /// by `snapshot`. A shard that the mutations under check deleted is simply absent.
+///
+/// The shards are given as a set: decoding one of them twice would produce duplicate
+/// entries, which `RoutingTable` rejects.
 pub(crate) fn canister_ranges_from_snapshot(
-    shard_keys: &[Vec<u8>],
+    shard_keys: &BTreeSet<Vec<u8>>,
     snapshot: &RegistrySnapshot,
 ) -> RoutingTable {
     let shards = shard_keys
