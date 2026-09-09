@@ -83,9 +83,11 @@ Runbook::
    `US` sits on `M`, which answers no query, so `M`'s count of the rounds it
    skipped canister execution in stands in for it.
 12. Submit (and adopt) `UpdateConfigOfSubnet` NNS proposals setting the
-   `halt_at_cup_height` flag of both `M` and `R`, and wait until each of their
-   nodes reports in its journal that it is halted. Record the heights of the
-   checkpoints they halted at.
+   `halt_at_cup_height` flag of both `M` and `R`, and wait until the node of each
+   that the state is taken from reports `consensus_status{status="halted"}`, i.e.
+   it produces no block and delivers no batch anymore. Record the heights of the
+   checkpoints they halted at, which are the heights of the manifests they
+   computed last.
 13. Stop the replicas of both subnets and download the states they halted at.
    Assemble the merged state locally, as a checkpoint at the next multiple of the
    DKG interval after the height `R` halted at: the canisters and canister
@@ -163,8 +165,8 @@ use ic_system_test_driver::nns::{
 use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    JournalStreamer, MetricsFetcher, UniversalCanister, assert_create_agent, block_on,
-    create_canister, runtime_from_url, set_controller,
+    MetricsFetcher, UniversalCanister, assert_create_agent, block_on, create_canister,
+    runtime_from_url, set_controller,
 };
 use ic_types::{Height, SubnetId};
 use ic_universal_canister::management::InstallMode;
@@ -195,15 +197,17 @@ const METRIC_SUBNET_CALL_CONTEXTS: &str = "replicated_state_subnet_call_contexts
 const METRIC_PENDING_REFUNDS_CYCLES: &str = "replicated_state_pending_refunds_cycles";
 const METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION: &str =
     "round_skipped_canister_execution_due_to_cooling_down";
+const METRIC_CONSENSUS_STATUS: &str = "consensus_status";
+const METRIC_LAST_COMPUTED_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
+
+/// The series of `METRIC_CONSENSUS_STATUS` that is 1 while consensus is halted,
+/// i.e. produces no block and delivers no batch.
+const LABEL_STATUS_HALTED: &str = "status=\"halted\"";
 /// Timeout for a subnet to halt at its next CUP, which is up to a full DKG
 /// interval away.
 const HALT_TIMEOUT: Duration = Duration::from_secs(900);
-/// Backoff between two searches of a node's journal for the halt message.
+/// Backoff between two checks of whether a subnet has halted.
 const HALT_BACKOFF: Duration = Duration::from_secs(10);
-
-/// What a halted replica logs, once every few seconds, instead of delivering the
-/// batches it would otherwise deliver (see `rs/consensus/src/consensus/batch_delivery.rs`).
-const HALTED_LOG_PATTERN: &str = "is not delivered because replica is halted";
 
 /// The label selecting the `install_code` call contexts of
 /// `METRIC_SUBNET_CALL_CONTEXTS`.
@@ -1887,6 +1891,24 @@ async fn fetch_metrics(
     })
 }
 
+/// Fetches `metrics` from a single node, rather than from all the nodes of a
+/// subnet: the values of a subnet-wide property still differ per replica while
+/// they observe it in different rounds, and some questions are about one node,
+/// such as whether the very node a state is about to be downloaded from has
+/// stopped moving.
+async fn fetch_node_metrics(
+    node: &IcNodeSnapshot,
+    metrics: &[&str],
+) -> Result<BTreeMap<String, Vec<f64>>> {
+    MetricsFetcher::new(
+        std::iter::once(node.clone()),
+        metrics.iter().map(|metric| metric.to_string()).collect(),
+    )
+    .fetch::<f64>()
+    .await
+    .map_err(|e| anyhow!("failed to fetch the metrics of node {}: {e}", node.node_id))
+}
+
 /// The per-node values of every series of `metric` whose labels (`{...}`, or the
 /// empty string for an unlabeled series) match `labels_match`.
 ///
@@ -1970,9 +1992,6 @@ fn median_across_replicas(
 // Merging subnet M into subnet R.
 // ---------------------------------------------------------------------------
 
-/// The name of the directory the replica keeps its states in, on a node.
-const NODE_IC_STATE_DIR: &str = "/var/lib/ic/data/ic_state";
-
 /// Waits until `node`'s subnet is halted, and returns the height of the
 /// checkpoint it halted at, i.e. of the state it stopped in.
 ///
@@ -1994,46 +2013,37 @@ const NODE_IC_STATE_DIR: &str = "/var/lib/ic/data/ic_state";
 /// subnet holds precisely the state it stopped in.
 async fn await_halted_at_checkpoint(node: &IcNodeSnapshot, name: &str, logger: &Logger) -> u64 {
     info!(logger, "Waiting until subnet {name} is halted");
-    // Polling the journal rather than following it: `follow()` blocks in
-    // `journalctl --follow | grep -m 1` until the line shows up, with no timeout
-    // of its own, so a line that never comes (because it was reworded, say)
-    // would hang the test until the whole test times out. The cursor of
-    // `from_now()` makes every poll search all entries since this point, so the
-    // condition, once true, stays true.
-    let journal = JournalStreamer::new(
-        node.block_on_ssh_session_async()
-            .await
-            .unwrap_or_else(|e| panic!("failed to open an SSH session to subnet {name}: {e}")),
-    )
-    .from_now()
-    .unwrap_or_else(|e| panic!("failed to create a journal streamer for subnet {name}: {e}"));
+    // `node`'s own metrics, not the subnet's: the state that is downloaded below
+    // is this node's, so this node is the one that has to have stopped, and the
+    // replicas of a subnet observe the halt in different rounds.
+    //
+    // Halted and not merely halting: a halting subnet still produces (empty)
+    // blocks, so its consensus pool keeps moving, while a halted one produces
+    // none and its latest checkpoint is final.
     retry_with_msg_async!(
         format!("waiting until subnet {name} reports that it is halted"),
         logger,
         HALT_TIMEOUT,
         HALT_BACKOFF,
         || async {
-            // `contains` runs `journalctl | grep`, and `grep` exits non-zero when
-            // it matches nothing, which the SSH helper in turn reports as an
-            // error: an error here is indistinguishable from the line not being
-            // there yet, so both mean "keep waiting". A journal that cannot be
-            // searched at all therefore surfaces as the timeout below.
-            match journal.contains(HALTED_LOG_PATTERN) {
-                Ok(true) => Ok(()),
-                Ok(false) => bail!("subnet {name} has not reported that it is halted yet"),
-                Err(e) => bail!(
-                    "subnet {name} has not reported that it is halted yet (or its journal could \
-                     not be searched: {e})"
-                ),
+            let metrics = fetch_node_metrics(node, &[METRIC_CONSENSUS_STATUS]).await?;
+            match median_across_replicas(&metrics, METRIC_CONSENSUS_STATUS, |labels| {
+                labels.contains(LABEL_STATUS_HALTED)
+            }) {
+                Some(1.0) => Ok(()),
+                Some(_) => bail!("subnet {name} is not halted yet"),
+                // Only the batch delivery path reports the status, and only once
+                // it has looked at a block, so the series is missing until then.
+                None => bail!("subnet {name} has not reported a consensus status yet"),
             }
         }
     )
     .await
     .unwrap_or_else(|e| panic!("subnet {name} did not report that it is halted: {e}"));
 
-    let height = latest_checkpoint_height(node)
+    let height = halted_checkpoint_height(node)
         .await
-        .unwrap_or_else(|e| panic!("failed to read the checkpoint of subnet {name}: {e}"));
+        .unwrap_or_else(|e| panic!("failed to read the checkpoint height of subnet {name}: {e}"));
     assert_eq!(
         height % CHECKPOINT_INTERVAL,
         0,
@@ -2042,23 +2052,19 @@ async fn await_halted_at_checkpoint(node: &IcNodeSnapshot, name: &str, logger: &
     height
 }
 
-/// The height of the highest checkpoint `node` holds. Checkpoint directories are
-/// named after their height, in hexadecimal.
-async fn latest_checkpoint_height(node: &IcNodeSnapshot) -> Result<u64> {
-    let output = node
-        .block_on_bash_script_async(&format!("sudo ls -1 {NODE_IC_STATE_DIR}/checkpoints"))
-        .await
-        .map_err(|e| anyhow!("failed to list the checkpoints: {e}"))?;
-    output
-        .split_whitespace()
-        .map(|name| {
-            u64::from_str_radix(name, 16)
-                .map_err(|e| anyhow!("checkpoint name {name} is not a hex height: {e}"))
-        })
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
-        .max()
-        .ok_or_else(|| anyhow!("no checkpoint yet"))
+/// The height of the checkpoint `node` came to rest at, taken from the manifest
+/// it computed last.
+///
+/// The manifest, rather than the checkpoint directory: the state is downloaded
+/// and its manifest recomputed to compare against the one a recovery proposal
+/// carries, and a checkpoint whose manifest this node has not finished computing
+/// is one whose CUP does not exist yet. Nothing is delivered after the halt, so
+/// no later checkpoint follows the one this names.
+async fn halted_checkpoint_height(node: &IcNodeSnapshot) -> Result<u64> {
+    let metrics = fetch_node_metrics(node, &[METRIC_LAST_COMPUTED_MANIFEST_HEIGHT]).await?;
+    let height = median_across_replicas(&metrics, METRIC_LAST_COMPUTED_MANIFEST_HEIGHT, |_| true)
+        .ok_or_else(|| anyhow!("no manifest has been computed yet"))?;
+    Ok(height as u64)
 }
 
 /// Submits (and adopts) an `UpdateConfigOfSubnet` proposal setting the

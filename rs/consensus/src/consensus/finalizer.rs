@@ -106,6 +106,7 @@ impl Finalizer {
             |result, block_stats, batch_stats| {
                 self.process_batch_delivery_result(result, block_stats, batch_stats)
             },
+            |status| self.metrics.observe_status(status),
         );
 
         // Try to finalize rounds from finalized_height + 1 up to (and including)

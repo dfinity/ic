@@ -67,6 +67,7 @@ pub fn deliver_batches_for_ic_replay(
         subnet_id,
         max_batch_height_to_deliver,
         /*result_processor=*/ |_, _, _| {},
+        /*status_observer=*/ |_| {},
     )
 }
 
@@ -84,6 +85,7 @@ pub(crate) fn deliver_batches_for_finalizer(
     node_id: NodeId,
     subnet_id: SubnetId,
     result_processor: impl FnMut(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
+    status_observer: impl Fn(Status),
 ) -> Result<Height, MessageRoutingError> {
     deliver_batches(
         message_routing,
@@ -95,6 +97,7 @@ pub(crate) fn deliver_batches_for_finalizer(
         subnet_id,
         /*max_batch_height_to_deliver=*/ None,
         result_processor,
+        status_observer,
     )
 }
 
@@ -111,6 +114,7 @@ fn deliver_batches(
     subnet_id: SubnetId,
     max_batch_height_to_deliver: Option<Height>,
     mut result_processor: impl FnMut(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
+    status_observer: impl Fn(Status),
 ) -> Result<Height, MessageRoutingError> {
     let finalized_height = pool.get_finalized_height();
     // If `max_batch_height_to_deliver` is specified and smaller than
@@ -191,7 +195,8 @@ fn deliver_batches(
                 replica_version,
                 log,
             ) {
-                Some(Status::Halting | Status::Halted) => {
+                Some(status @ (Status::Halting | Status::Halted)) => {
+                    status_observer(status);
                     info!(
                         every_n_seconds => 5,
                         log,
@@ -200,7 +205,7 @@ fn deliver_batches(
                     );
                     return Ok(last_delivered_batch_height);
                 }
-                Some(Status::Running) => {}
+                Some(Status::Running) => status_observer(Status::Running),
                 None => {
                     warn!(
                         log,
@@ -939,6 +944,7 @@ mod tests {
                 replica_config.node_id,
                 replica_config.subnet_id,
                 |_, _, _| {},
+                |_| {},
             );
 
             assert_eq!(result, Ok(summary_height));
