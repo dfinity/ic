@@ -59,6 +59,26 @@ pub(crate) fn check_routing_table_invariants(
 /// schedule that subnet had before the mutations under check were applied. A canister
 /// ID whose cost schedule is unknown on either side is skipped: a subnet without a
 /// record in the corresponding state hosts no canister.
+///
+/// # Limitation: canister IDs that pass through an unrouted state
+///
+/// An unrouted canister ID has no cost schedule, so this only covers the canister IDs
+/// that are routed both before and after the mutations under check. A canister ID is
+/// unrouted by `do_migrate_canisters` when the target subnet is absent from the
+/// routing table, and by `remove_subnet_from_routing_table` when its subnet is
+/// deleted; `do_migrate_canisters` then supports routing it to a subnet again, which
+/// is how a canister whose subnet was deleted is migrated
+/// (`test_migrate_canisters_succeeds_if_source_subnet_deleted`). Two such mutations in
+/// a row move a canister ID between subnets on different cost schedules without either
+/// this invariant or `Registry::validate_cost_schedules` ever seeing two schedules to
+/// compare, and unrouting a canister ID does not destroy the canister state, callbacks
+/// included.
+///
+/// Closing that gap would take either persistent knowledge of the cost schedule each
+/// unrouted canister ID last had, or making unrouting terminal, which would break the
+/// migration of a canister off a deleted subnet. It is left open: reaching it takes a
+/// canister migration orchestrator that unroutes a canister and then routes it to a
+/// subnet on a different cost schedule.
 pub(crate) fn check_canister_cost_schedule_invariants(
     previous_routing_table: &RoutingTable,
     previous_cost_schedules: &BTreeMap<Vec<u8>, CanisterCyclesCostSchedule>,

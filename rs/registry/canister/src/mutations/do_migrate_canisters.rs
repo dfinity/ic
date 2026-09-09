@@ -96,7 +96,11 @@ impl Registry {
             normalized_canister_cycles_cost_schedule(&self.get_subnet(target_subnet_id, version)?);
 
         for canister_id in canister_ids {
-            // A canister that no subnet hosts has no cost schedule to preserve either.
+            // An unrouted canister ID has no cost schedule to compare the target's
+            // with. Note that this is what leaves the gap documented on
+            // `check_canister_cost_schedule_invariants`: unrouting a canister ID and
+            // routing it to a subnet on a different cost schedule afterwards is not
+            // caught, here or there.
             let Some((_range, source_subnet_id)) = routing_table.lookup_entry(*canister_id) else {
                 continue;
             };
