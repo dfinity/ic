@@ -1582,16 +1582,7 @@ impl ReplicatedState {
 
         // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which
         // canisters are present in `canister_states`.
-        let local_canister_ids = canister_states.all_keys().cloned().collect::<Vec<_>>();
-        for canister_id in local_canister_ids.iter() {
-            let mut canister_state = canister_states.remove(canister_id).unwrap();
-            if canister_state.has_input() {
-                Arc::make_mut(&mut canister_state)
-                    .system_state
-                    .split_input_schedules(canister_id, canister_states);
-            }
-            canister_states.insert(canister_state);
-        }
+        repartition_input_schedules(canister_states);
 
         // Drop in-progress management calls being executed by canisters on subnet B
         // (`own_subnet_id != split_from`). The corresponding calls will be rejected on
@@ -1667,16 +1658,7 @@ impl ReplicatedState {
 
         // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which
         // canisters are present in `canister_states`.
-        let local_canister_ids = canister_states.all_keys().cloned().collect::<Vec<_>>();
-        for canister_id in local_canister_ids.iter() {
-            let mut canister_state = canister_states.remove(canister_id).unwrap();
-            if canister_state.has_input() {
-                Arc::make_mut(&mut canister_state)
-                    .system_state
-                    .split_input_schedules(canister_id, canister_states);
-            }
-            canister_states.insert(canister_state);
-        }
+        repartition_input_schedules(canister_states);
 
         // Record all not yet responded ingress-induced call contexts as `Processing`
         // in the ingress history.
@@ -1829,16 +1811,7 @@ impl ReplicatedState {
 
         // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which
         // canisters are present in `canister_states`.
-        let local_canister_ids = canister_states.all_keys().cloned().collect::<Vec<_>>();
-        for canister_id in local_canister_ids.iter() {
-            let mut canister_state = canister_states.remove(canister_id).unwrap();
-            if canister_state.has_input() {
-                Arc::make_mut(&mut canister_state)
-                    .system_state
-                    .split_input_schedules(canister_id, &canister_states);
-            }
-            canister_states.insert(canister_state);
-        }
+        repartition_input_schedules(&mut canister_states);
 
         // On *subnet B*:
         if subnet_id != metadata.own_subnet_id {
@@ -1945,6 +1918,25 @@ impl ReplicatedState {
             balance_before, balance_after,
             "Cycles lost or duplicated: before = {balance_before}, after = {balance_after}",
         );
+    }
+}
+
+/// Re-partitions the local and remote sender schedules of all canisters in
+/// `canister_states`, based on which canisters are present in `canister_states`.
+///
+/// For use whenever the set of canisters hosted by the subnet changes, i.e. after
+/// a subnet split or a subnet merge. See
+/// [`CanisterQueues::split_input_schedules`] for why this must be done eagerly.
+fn repartition_input_schedules(canister_states: &mut CanisterStates) {
+    let local_canister_ids = canister_states.all_keys().cloned().collect::<Vec<_>>();
+    for canister_id in local_canister_ids.iter() {
+        let mut canister_state = canister_states.remove(canister_id).unwrap();
+        if canister_state.has_input() {
+            Arc::make_mut(&mut canister_state)
+                .system_state
+                .split_input_schedules(canister_id, canister_states);
+        }
+        canister_states.insert(canister_state);
     }
 }
 
