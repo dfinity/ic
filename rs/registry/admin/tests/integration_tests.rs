@@ -32,6 +32,18 @@ async fn setup() -> (PocketIc, Url) {
     (pocket_ic, endpoint)
 }
 
+/// Runs `ic-admin --nns-url <nns_url> <args...>`, and returns its stdout.
+fn call_ic_admin(nns_url: &Url, args: &[&str]) -> String {
+    let ic_admin_path = env::var("IC_ADMIN_PATH").expect("IC_ADMIN_PATH not set");
+    let output = Command::new(ic_admin_path)
+        .args(["--nns-url", nns_url.as_ref()])
+        .args(args)
+        .output()
+        .expect("Failed to run ic-admin");
+    assert!(output.status.success(), "{output:#?}");
+    String::from_utf8(output.stdout).unwrap()
+}
+
 fn create_neuron_1_pem_file() -> NamedTempFile {
     let contents: String = TEST_NEURON_1_OWNER_KEYPAIR.to_pem();
     let mut pem_file = NamedTempFile::new().expect("Unable to create a temporary file");
@@ -317,4 +329,35 @@ async fn test_upgrade_canister_with_options() {
          last_seen_module_hash = {last_seen_module_hash:?}, expected = {new_code_sha256:?}"
     );
     eprintln!("Yay! Canister has new code! This means that no panic occurred during upgrade.");
+}
+
+/// A freshly installed NNS has no standard engine replica version record, which
+/// makes it the cheapest way to reach the absent-record path.
+#[tokio::test]
+async fn test_get_standard_engine_replica_version_when_absent() {
+    // Step 1: Prepare the world.
+    let (_pocket_ic, nns_url) = setup().await;
+
+    // Step 2: Call code under test, in both output modes.
+    let plain = call_ic_admin(&nns_url, &["get-standard-engine-replica-version"]);
+    let json = call_ic_admin(&nns_url, &["--json", "get-standard-engine-replica-version"]);
+
+    // Step 3: Verify result(s).
+
+    // Step 3.1: Plain mode explains that no version has been set.
+    assert!(
+        plain.contains("no standard engine replica version"),
+        "{plain:?}"
+    );
+
+    // Step 3.2: JSON mode stays parseable, reporting the absence as nulls rather
+    // than as prose.
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&json).unwrap(),
+        serde_json::json!({
+            "key": "standard_engine_replica_version",
+            "version": null,
+            "value": null,
+        }),
+    );
 }
