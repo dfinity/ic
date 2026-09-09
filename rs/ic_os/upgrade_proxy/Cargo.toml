@@ -1,0 +1,15 @@
+[package]
+name = "upgrade_proxy"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+hex.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+tiny_http = "0.12.0"
+ureq = "3.4.1"

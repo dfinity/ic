@@ -545,7 +545,7 @@ members = [
     "rs/validator/ingress_message/test_canister",
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
-    "rs/xnet/uri",
+    "rs/xnet/uri", "rs/ic_os/upgrade_proxy",
 ]
 
 resolver = "2"
