@@ -19,7 +19,7 @@ use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_error_types::UserError;
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     QueryExecutionError, QueryExecutionInput, QueryExecutionResponse, QueryExecutionService,
     TransformExecutionInput, TransformExecutionService,
@@ -36,7 +36,7 @@ use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
     CanisterId, NumInstructions,
     ingress::WasmResult,
-    messages::{Blob, Certificate, CertificateDelegation, Query},
+    messages::{Blob, Certificate, CertificateDelegation, Query, QuerySource},
 };
 use prometheus::{Histogram, histogram_opts, labels};
 use serde::Serialize;
@@ -179,6 +179,22 @@ impl InternalHttpQueryHandler {
         max_instructions: Option<NumInstructions>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
+
+        // While the subnet is cooling down it rejects all query calls, the ones
+        // addressed to the management canister included. System queries, i.e. the
+        // `transform` functions of HTTP outcalls, are still executed, because subnet
+        // messages are still executed by a cooling down subnet.
+        if matches!(query.source, QuerySource::User { .. })
+            && state.get_ref().metadata.is_cooling_down()
+        {
+            return Err(UserError::new(
+                ErrorCode::SubnetCoolingDown,
+                format!(
+                    "Subnet {} is cooling down and does not accept query calls",
+                    state.get_ref().metadata.own_subnet_id
+                ),
+            ));
+        }
 
         // Serve the query locally if it is addressed to the management canister.
         if query.receiver == CanisterId::ic_00() {

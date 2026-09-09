@@ -277,23 +277,32 @@ mod tests {
     use tempfile::TempDir;
 
     /// Creates a checkpoint-shaped directory under `root`, holding a
-    /// `system_metadata.pbuf` and a canister directory (with a snapshot
-    /// directory of the same name) per entry of `canisters`.
+    /// `system_metadata.pbuf`, a canister directory per entry of `canisters`,
+    /// and one snapshot of each of those canisters.
     fn checkpoint(root: &Path, name: &str, canisters: &[&str]) -> PathBuf {
         let checkpoint = root.join(name);
         fs::create_dir_all(&checkpoint).unwrap();
         fs::write(checkpoint.join(SYSTEM_METADATA_FILE), name).unwrap();
         for canister in canisters {
-            for (dir, file) in [
-                (CANISTER_STATES_DIR, CANISTER_FILE),
-                (SNAPSHOTS_DIR, SNAPSHOT_FILE),
-            ] {
-                let canister_dir = checkpoint.join(dir).join(canister);
-                fs::create_dir_all(&canister_dir).unwrap();
-                fs::write(canister_dir.join(file), *canister).unwrap();
-            }
+            let canister_dir = checkpoint.join(CANISTER_STATES_DIR).join(canister);
+            fs::create_dir_all(&canister_dir).unwrap();
+            fs::write(canister_dir.join(CANISTER_FILE), *canister).unwrap();
+
+            let snapshot_dir = snapshot_dir(&checkpoint, canister);
+            fs::create_dir_all(&snapshot_dir).unwrap();
+            fs::write(snapshot_dir.join(SNAPSHOT_FILE), *canister).unwrap();
         }
         checkpoint
+    }
+
+    /// The directory of `canister`'s snapshot within `checkpoint`. Snapshots sit
+    /// one level deeper than canisters -- `snapshots/<canister>/<snapshot>` --
+    /// which is what makes them the deepest thing the merge has to link.
+    fn snapshot_dir(checkpoint: &Path, canister: &str) -> PathBuf {
+        checkpoint
+            .join(SNAPSHOTS_DIR)
+            .join(canister)
+            .join(format!("{canister}_snapshot"))
     }
 
     fn entries(dir: &Path) -> Vec<String> {
@@ -317,6 +326,11 @@ mod tests {
 
         for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
             assert_eq!(entries(&output.join(dir)), ["c1", "c2", "c3"], "{dir}");
+        }
+        // One canister from either input, down to the snapshot itself.
+        for canister in ["c2", "c3"] {
+            let snapshot = snapshot_dir(&output, canister).join(SNAPSHOT_FILE);
+            assert_eq!(fs::read_to_string(&snapshot).unwrap(), canister);
         }
     }
 
@@ -395,15 +409,17 @@ mod tests {
             fs::metadata(&marker).unwrap().permissions().readonly(),
             "the subnet merged marker is writable",
         );
-        for (dir, file) in [
-            (CANISTER_STATES_DIR, CANISTER_FILE),
-            (SNAPSHOTS_DIR, SNAPSHOT_FILE),
+        for file in [
+            output
+                .join(CANISTER_STATES_DIR)
+                .join("c1")
+                .join(CANISTER_FILE),
+            snapshot_dir(&output, "c1").join(SNAPSHOT_FILE),
         ] {
-            let canister = output.join(dir).join("c1").join(file);
             assert!(
-                fs::metadata(&canister).unwrap().permissions().readonly(),
+                fs::metadata(&file).unwrap().permissions().readonly(),
                 "{} is writable",
-                canister.display(),
+                file.display(),
             );
         }
         // Directories stay writable, as they are in a checkpoint the state

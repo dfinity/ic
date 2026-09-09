@@ -10,11 +10,12 @@ mod tests;
 #[cfg(test)]
 mod xnet_client_tests;
 
-pub use proximity::{GenRangeFn, ProximityMap, UNHEALTHY_NODE_TTL, UnhealthyNodes};
+pub use proximity::{GenRangeFn, ProximityMap, UnhealthyNodes};
 
 use crate::certified_slice_pool::{
     CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes,
 };
+use crate::proximity::UNHEALTHY_NODE_TTL;
 use async_trait::async_trait;
 use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
@@ -74,12 +75,14 @@ pub trait XNetSlicePool: Send + Sync {
     /// respecting the given message count and byte limits; or, if the provided
     /// `byte_limit` is too small for a header-only slice, returns `Ok(None)`.
     ///
-    /// If all messages are taken, the slice is removed from the pool.
+    /// If the pooled slice begins after `begin.message_index`, its messages cannot
+    /// be taken (yet), so a header-only slice is returned.
+    ///
+    /// If `Ok(Some(_))` is returned and no messages are left, the slice is removed
+    /// from the pool.
     ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` and drops
-    /// the pooled slice if malformed. Returns `Err(TakeBeforeSliceBegin)` and
-    /// drops the pooled slice if `begin`'s `message_index` is before the
-    /// first pooled message.
+    /// the pooled slice if malformed.
     fn take_slice(
         &self,
         subnet_id: SubnetId,
@@ -355,10 +358,7 @@ impl XNetPayloadBuilderImpl {
         ));
 
         let deterministic_rng_for_testing = Arc::new(None);
-        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            Arc::clone(&certified_stream_store),
-            metrics_registry,
-        )));
+        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(metrics_registry)));
         let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(metrics_registry));
         let endpoint_resolver = XNetEndpointResolver::new(
@@ -372,6 +372,7 @@ impl XNetPayloadBuilderImpl {
             Arc::clone(&certified_slice_pool),
             endpoint_resolver,
             Arc::clone(&xnet_client),
+            Arc::clone(&certified_stream_store),
             runtime_handle,
             Arc::clone(&metrics),
             log.clone(),
@@ -1443,7 +1444,10 @@ pub struct PoolRefillTask {
     /// Async client for querying `XNetEndpoints`.
     xnet_client: Arc<dyn XNetClient>,
 
-    /// tokio runtime to be used for spawning async query tasks.
+    /// Used for validating slices before they are pooled.
+    certified_stream_store: Arc<dyn CertifiedStreamStore>,
+
+    /// Tokio runtime to be used for spawning async query tasks.
     runtime_handle: runtime::Handle,
 
     metrics: Arc<XNetPayloadBuilderMetrics>,
@@ -1457,6 +1461,7 @@ impl PoolRefillTask {
         pool: Arc<Mutex<CertifiedSlicePool>>,
         endpoint_resolver: XNetEndpointResolver,
         xnet_client: Arc<dyn XNetClient>,
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
         runtime_handle: runtime::Handle,
         metrics: Arc<XNetPayloadBuilderMetrics>,
         log: ReplicaLogger,
@@ -1466,6 +1471,7 @@ impl PoolRefillTask {
             pool,
             endpoint_resolver,
             xnet_client,
+            certified_stream_store,
             runtime_handle: runtime_handle.clone(),
             metrics,
             log,
@@ -1506,6 +1512,7 @@ impl PoolRefillTask {
             let xnet_client = self.xnet_client.clone();
             let metrics = Arc::clone(&self.metrics);
             let pool = Arc::clone(&self.pool);
+            let certified_stream_store = Arc::clone(&self.certified_stream_store);
             let log = self.log.clone();
             self.runtime_handle.spawn(async move {
                 let since = Instant::now();
@@ -1520,14 +1527,24 @@ impl PoolRefillTask {
                         let res = tokio::task::spawn_blocking(move || {
                             if indices.witness_begin != indices.msg_begin {
                                 // Pulled a stream suffix, append to pooled slice.
-                                pool.lock()
-                                    .unwrap()
-                                    .append(subnet_id, slice, registry_version, log)
+                                CertifiedSlicePool::append(
+                                    &pool,
+                                    subnet_id,
+                                    slice,
+                                    certified_stream_store.as_ref(),
+                                    registry_version,
+                                    log,
+                                )
                             } else {
-                                // Pulled a complete stream, replace pooled slice (if any).
-                                pool.lock()
-                                    .unwrap()
-                                    .put(subnet_id, slice, registry_version, log)
+                                // Pulled a complete stream, put it into the pool.
+                                CertifiedSlicePool::put(
+                                    &pool,
+                                    subnet_id,
+                                    slice,
+                                    certified_stream_store.as_ref(),
+                                    registry_version,
+                                    log,
+                                )
                             }
                         })
                         .await;
