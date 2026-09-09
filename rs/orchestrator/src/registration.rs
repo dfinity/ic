@@ -517,40 +517,7 @@ impl NodeRegistration {
     async fn try_to_register_key(&self, idkg_pk: PublicKey) -> Result<(), String> {
         info!(self.log, "Trying to register rotated idkg key...");
 
-        let key_handler = self.key_handler.clone();
-        let node_pub_key_opt = tokio::task::spawn_blocking(move || {
-            key_handler
-                .current_node_public_keys()
-                .map(|cnpks| cnpks.node_signing_public_key)
-        })
-        .await
-        .unwrap();
-
-        let node_pub_key = match node_pub_key_opt {
-            Ok(Some(pk)) => pk,
-            Ok(None) => {
-                return Err("Missing node signing key.".into());
-            }
-            Err(e) => {
-                return Err(format!("Failed to retrieve current node public keys: {e}"));
-            }
-        };
-
-        let key_handler = self.key_handler.clone();
-        let sign_cmd = move |msg: &MessageId| {
-            // Implementation of 'sign_basic' uses Tokio's 'block_on' when issuing a RPC
-            // to the crypto service. 'block_on' panics when called from async context
-            // that's why we need to wrap 'sign_basic' in 'block_in_place'.
-            #[allow(clippy::disallowed_methods)]
-            tokio::task::block_in_place(|| {
-                key_handler
-                    .sign_basic(msg)
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-                    .map(|value| value.get().0)
-            })
-        };
-
-        let signer = NodeSender::new(node_pub_key, Arc::new(sign_cmd))?;
+        let signer = NodeSender::for_this_node(self.key_handler.clone())?;
         let agent = self.get_https_agent_to_random_nns_url(signer)?;
         let update_node_payload = UpdateNodeDirectlyPayload {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),

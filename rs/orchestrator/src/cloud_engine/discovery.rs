@@ -4,11 +4,11 @@
 //! subnet and is reached over the network, so its answer is treated as a hint
 //! and checked against the local, NNS-verified registry before it is used.
 
-use super::agent::AgentFactory;
-use crate::{
-    error::{OrchestratorError, OrchestratorResult},
-    registry_helper::RegistryHelper,
+use super::{
+    agent,
+    error::{CloudEngineError, CloudEngineResult},
 };
+use crate::registry_helper::RegistryHelper;
 use candid::{CandidType, Decode, Encode, Principal};
 use ic_agent::Agent;
 use ic_logger::{ReplicaLogger, info, warn};
@@ -55,15 +55,18 @@ impl Discovery {
     /// still vouches for.
     pub(super) async fn resolve(
         &mut self,
-        agent_factory: &AgentFactory,
         own_subnet: SubnetId,
         version: RegistryVersion,
-    ) -> OrchestratorResult<CanisterId> {
+    ) -> CloudEngineResult<CanisterId> {
         if let Some(operator) = self.validated_from_memory(own_subnet, version) {
             return Ok(operator);
         }
 
-        let agent = agent_factory.anonymous_via_api_boundary_node(version)?;
+        let agent = agent::anonymous_via_api_boundary_node(
+            self.registry.get_registry_client(),
+            version,
+            &self.logger,
+        )?;
         let candidate = self.lookup_operator_candidate(&agent, own_subnet).await?;
         self.validate_operator_candidate(candidate, own_subnet, version)?;
         info!(self.logger, "Resolved the engine operator: {}", candidate);
@@ -107,14 +110,12 @@ impl Discovery {
         &self,
         agent: &Agent,
         own_subnet: SubnetId,
-    ) -> OrchestratorResult<CanisterId> {
+    ) -> CloudEngineResult<CanisterId> {
         let arg = Encode!(&GetEngineOperatorBySubnetArgs {
             subnet_id: Some(own_subnet.get().0),
         })
         .map_err(|err| {
-            OrchestratorError::cloud_engine_error(format!(
-                "could not encode getEngineOperatorBySubnet: {err}"
-            ))
+            CloudEngineError::failed(format!("could not encode getEngineOperatorBySubnet: {err}"))
         })?;
 
         let response = agent
@@ -126,21 +127,19 @@ impl Discovery {
             .call()
             .await
             .map_err(|err| {
-                OrchestratorError::cloud_engine_error(format!(
-                    "getEngineOperatorBySubnet failed: {err}"
-                ))
+                CloudEngineError::failed(format!("getEngineOperatorBySubnet failed: {err}"))
             })?;
 
         Decode!(&response, GetEngineOperatorBySubnetResult)
             .map_err(|err| {
-                OrchestratorError::cloud_engine_error(format!(
+                CloudEngineError::failed(format!(
                     "could not decode getEngineOperatorBySubnet: {err}"
                 ))
             })?
             .engine_operator_id
             .map(PrincipalId::from)
             .ok_or_else(|| {
-                OrchestratorError::cloud_engine_error(
+                CloudEngineError::failed(
                     "the engine management canister does not know an operator for this subnet",
                 )
             })
@@ -156,14 +155,14 @@ impl Discovery {
         candidate: CanisterId,
         own_subnet: SubnetId,
         version: RegistryVersion,
-    ) -> OrchestratorResult<()> {
+    ) -> CloudEngineResult<()> {
         if !self
             .registry
             .get_subnet_canister_ranges(own_subnet, version)?
             .iter()
             .any(|range| range.contains(&candidate))
         {
-            return Err(OrchestratorError::cloud_engine_error(format!(
+            return Err(CloudEngineError::failed(format!(
                 "operator candidate {candidate} is not hosted by subnet {own_subnet}"
             )));
         }
@@ -173,7 +172,7 @@ impl Discovery {
             .get_subnet_admins(own_subnet, version)?
             .contains(&candidate.get())
         {
-            return Err(OrchestratorError::cloud_engine_error(format!(
+            return Err(CloudEngineError::failed(format!(
                 "operator candidate {candidate} is not an admin of subnet {own_subnet}"
             )));
         }
@@ -182,13 +181,25 @@ impl Discovery {
     }
 }
 
+#[cfg(test)]
+impl Discovery {
+    /// The operator id currently remembered, if any.
+    pub(super) fn remembered(&self) -> Option<CanisterId> {
+        self.resolved
+    }
+
+    /// Pretends `operator` was resolved, so that a test can observe whether it
+    /// survives.
+    pub(super) fn remember(&mut self, operator: CanisterId) {
+        self.resolved = Some(operator);
+    }
+}
+
 /// The engine management canister answers with a plain principal, which does
 /// not have to be a canister id.
-fn as_canister_id(candidate: PrincipalId) -> OrchestratorResult<CanisterId> {
+fn as_canister_id(candidate: PrincipalId) -> CloudEngineResult<CanisterId> {
     CanisterId::try_from_principal_id(candidate).map_err(|err| {
-        OrchestratorError::cloud_engine_error(format!(
-            "operator candidate is not a canister id: {err}"
-        ))
+        CloudEngineError::failed(format!("operator candidate is not a canister id: {err}"))
     })
 }
 
@@ -279,7 +290,7 @@ mod tests {
 
         assert_matches!(
             discovery.validate_operator_candidate(foreign, SUBNET_1, VERSION),
-            Err(OrchestratorError::CloudEngineError(msg)) if msg.contains("not hosted by")
+            Err(CloudEngineError::Failed(msg)) if msg.contains("not hosted by")
         );
     }
 
@@ -292,7 +303,7 @@ mod tests {
 
         assert_matches!(
             discovery.validate_operator_candidate(bystander, SUBNET_1, VERSION),
-            Err(OrchestratorError::CloudEngineError(msg)) if msg.contains("not an admin")
+            Err(CloudEngineError::Failed(msg)) if msg.contains("not an admin")
         );
     }
 
@@ -302,7 +313,7 @@ mod tests {
 
         assert_matches!(
             as_canister_id(user),
-            Err(OrchestratorError::CloudEngineError(msg)) if msg.contains("not a canister id")
+            Err(CloudEngineError::Failed(msg)) if msg.contains("not a canister id")
         );
     }
 
@@ -315,6 +326,7 @@ mod tests {
             discovery.validated_from_memory(SUBNET_1, VERSION),
             Some(operator())
         );
+        assert_eq!(discovery.resolved, Some(operator()));
     }
 
     #[test]

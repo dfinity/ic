@@ -1,6 +1,9 @@
 //! The `ic-gateway` configuration an engine's operator canister hands out.
 
-use super::operator::{AcmeCredentials, HttpGatewayConfig};
+use super::{
+    error::{CloudEngineError, CloudEngineResult},
+    operator::{AcmeCredentials, HttpGatewayConfig},
+};
 use crate::error::{OrchestratorError, OrchestratorResult};
 use idna::domain_to_ascii_strict;
 use serde::Serialize;
@@ -11,12 +14,12 @@ use url::Url;
 ///
 /// `ic-gateway` terminates TLS for the engine, so it cannot run without all of
 /// these. An incomplete config is therefore not an error but simply nothing to
-/// apply, which [`validate_gateway_config`] reports as
-/// [`Incomplete`](ConfigError::Incomplete).
+/// apply, which [`validate_engine_config`] reports as
+/// [`Incomplete`](CloudEngineError::Incomplete).
 #[derive(Clone, PartialEq, Eq)]
-pub(crate) struct GatewayConfig {
+pub(crate) struct EngineConfig {
     pub base_domains: Vec<String>,
-    pub dns_api_url: Url,
+    pub dns_api_urls: Vec<Url>,
     pub dns_api_key: String,
     pub acme_account: AcmeAccount,
 }
@@ -30,74 +33,71 @@ pub(crate) struct AcmeAccount {
     pub directory: String,
 }
 
-#[derive(Debug)]
-pub(crate) enum ConfigError {
-    /// At least one field is not configured yet. Nothing to apply, not a failure.
-    Incomplete(&'static str),
-    /// A configured field is unusable, e.g. a domain `ic-gateway` would reject.
-    Invalid(String),
-}
-
-/// Turns what the operator canister handed out into a [`GatewayConfig`],
+/// Turns what the operator canister handed out into an [`EngineConfig`],
 /// rejecting values `ic-gateway` could not run with.
-pub(super) fn validate_gateway_config(
+pub(super) fn validate_engine_config(
     gateway: HttpGatewayConfig,
     acme: AcmeCredentials,
-) -> Result<GatewayConfig, ConfigError> {
+) -> CloudEngineResult<EngineConfig> {
     let base_domains = gateway
         .base_domains
         .filter(|domains| !domains.is_empty())
-        .ok_or(ConfigError::Incomplete("base_domains"))?
+        .ok_or(CloudEngineError::Incomplete("base_domains"))?
         // `ic-gateway` parses DOMAIN as a comma-separated list of FQDNs, so a
         // value it would reject must not reach it: it would exit at startup.
         .iter()
         .map(|domain| match domain_to_ascii_strict(domain) {
             Ok(ascii) if !ascii.is_empty() => Ok(ascii),
-            _ => Err(ConfigError::Invalid(format!(
+            _ => Err(CloudEngineError::failed(format!(
                 "{domain} is not a valid domain name"
             ))),
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let dns_api_url = gateway
-        .dns_api_url
-        .ok_or(ConfigError::Incomplete("dns_api_url"))?;
-    let dns_api_url = Url::parse(&dns_api_url)
-        .map_err(|err| ConfigError::Invalid(format!("dns_api_url is not a URL: {err}")))?;
-    // The IC-DNS-LB client appends a path to this URL and rejects anything
-    // it cannot use as a base.
-    if dns_api_url.cannot_be_a_base() {
-        return Err(ConfigError::Invalid(
-            "dns_api_url cannot be used as a base URL".to_string(),
-        ));
-    }
+    let dns_api_urls = gateway
+        .dns_api_urls
+        .filter(|urls| !urls.is_empty())
+        .ok_or(CloudEngineError::Incomplete("dns_api_urls"))?
+        .iter()
+        .map(|url| match Url::parse(url) {
+            // The IC-DNS-LB client appends a path to each of these URLs and
+            // rejects anything it cannot use as a base.
+            Ok(parsed) if parsed.cannot_be_a_base() => Err(CloudEngineError::failed(format!(
+                "{url} cannot be used as a base URL"
+            ))),
+            Ok(parsed) => Ok(parsed),
+            Err(err) => Err(CloudEngineError::failed(format!(
+                "{url} is not a URL: {err}"
+            ))),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let dns_api_key = gateway
         .dns_api_key
         .filter(|key| !key.is_empty())
-        .ok_or(ConfigError::Incomplete("dns_api_key"))?;
+        .ok_or(CloudEngineError::Incomplete("dns_api_key"))?;
 
     // All three ACME fields are needed together: `instant_acme` requires the
     // directory URL to restore an account, and refuses one without a key.
     let acme_account = AcmeAccount {
-        id: acme.id.ok_or(ConfigError::Incomplete("acme id"))?,
+        id: acme.id.ok_or(CloudEngineError::Incomplete("acme id"))?,
         key_pkcs8: acme
             .key_pkcs8
-            .ok_or(ConfigError::Incomplete("acme key_pkcs8"))?,
+            .ok_or(CloudEngineError::Incomplete("acme key_pkcs8"))?,
         directory: acme
             .directory
-            .ok_or(ConfigError::Incomplete("acme directory"))?,
+            .ok_or(CloudEngineError::Incomplete("acme directory"))?,
     };
 
-    Ok(GatewayConfig {
+    Ok(EngineConfig {
         base_domains,
-        dns_api_url,
+        dns_api_urls,
         dns_api_key,
         acme_account,
     })
 }
 
-impl GatewayConfig {
+impl EngineConfig {
     /// The environment that overrides the shipped `ic-gateway.env`, which only
     /// carries policy (which challenge, which DNS backend, which ports).
     ///
@@ -109,15 +109,22 @@ impl GatewayConfig {
         acme_cache_dir: &Path,
     ) -> OrchestratorResult<HashMap<OsString, OsString>> {
         let account_credentials = serde_json::to_string(&self.acme_account).map_err(|err| {
-            OrchestratorError::cloud_engine_error(format!(
-                "could not encode the ACME account: {err}"
+            OrchestratorError::invalid_configuration_error(format!(
+                "the ACME account could not be encoded: {err}"
             ))
         })?;
 
         Ok([
             ("ACME_CACHE_PATH", acme_cache_dir.display().to_string()),
             ("DOMAIN", self.base_domains.join(",")),
-            ("ACME_DNS_IC_DNS_LB_URLS", self.dns_api_url.to_string()),
+            (
+                "ACME_DNS_IC_DNS_LB_URLS",
+                self.dns_api_urls
+                    .iter()
+                    .map(Url::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ),
             ("ACME_DNS_IC_DNS_LB_TOKEN", self.dns_api_key.clone()),
             ("ACME_ACCOUNT_CREDS", account_credentials),
         ]
@@ -128,13 +135,13 @@ impl GatewayConfig {
 }
 
 #[cfg(test)]
-impl GatewayConfig {
+impl EngineConfig {
     /// A complete config serving `base_domain`, for tests that only care about
     /// whether a config is present or has changed.
     pub(crate) fn for_test(base_domain: &str) -> Self {
         Self {
             base_domains: vec![base_domain.to_string()],
-            dns_api_url: Url::parse("https://dns.example.com/").unwrap(),
+            dns_api_urls: vec![Url::parse("https://dns.example.com/").unwrap()],
             dns_api_key: "dns-key".to_string(),
             acme_account: AcmeAccount {
                 id: "account-id".to_string(),
@@ -145,24 +152,22 @@ impl GatewayConfig {
     }
 }
 
-/// Redacts the credentials, so that a `GatewayConfig` is safe to log.
-impl fmt::Debug for GatewayConfig {
+/// Redacts the credentials, so that a `EngineConfig` is safe to log.
+impl fmt::Debug for EngineConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("GatewayConfig")
+        f.debug_struct("EngineConfig")
             .field("base_domains", &self.base_domains)
-            .field("dns_api_url", &self.dns_api_url.as_str())
+            .field(
+                "dns_api_urls",
+                &self
+                    .dns_api_urls
+                    .iter()
+                    .map(Url::as_str)
+                    .collect::<Vec<_>>(),
+            )
             .field("dns_api_key", &"<redacted>")
             .field("acme_account", &"<redacted>")
             .finish()
-    }
-}
-
-impl fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Incomplete(field) => write!(f, "{field} is not configured yet"),
-            Self::Invalid(msg) => write!(f, "{msg}"),
-        }
     }
 }
 
@@ -174,7 +179,7 @@ mod tests {
     fn gateway() -> HttpGatewayConfig {
         HttpGatewayConfig {
             base_domains: Some(vec!["engine.example.com".to_string()]),
-            dns_api_url: Some("https://dns.example.com/".to_string()),
+            dns_api_urls: Some(vec!["https://dns.example.com/".to_string()]),
             dns_api_key: Some("dns-key".to_string()),
         }
     }
@@ -187,11 +192,8 @@ mod tests {
         }
     }
 
-    fn parse(
-        gateway: HttpGatewayConfig,
-        acme: AcmeCredentials,
-    ) -> Result<GatewayConfig, ConfigError> {
-        validate_gateway_config(gateway, acme)
+    fn parse(gateway: HttpGatewayConfig, acme: AcmeCredentials) -> CloudEngineResult<EngineConfig> {
+        validate_engine_config(gateway, acme)
     }
 
     #[test]
@@ -199,7 +201,14 @@ mod tests {
         let config = parse(gateway(), acme()).expect("the config should be complete");
 
         assert_eq!(config.base_domains, vec!["engine.example.com".to_string()]);
-        assert_eq!(config.dns_api_url.as_str(), "https://dns.example.com/");
+        assert_eq!(
+            config
+                .dns_api_urls
+                .iter()
+                .map(Url::as_str)
+                .collect::<Vec<_>>(),
+            vec!["https://dns.example.com/"]
+        );
         assert_eq!(config.dns_api_key, "dns-key");
         assert_eq!(config.acme_account.id, "account-id");
     }
@@ -208,7 +217,7 @@ mod tests {
     fn empty_config_is_incomplete() {
         assert_matches!(
             parse(HttpGatewayConfig::default(), AcmeCredentials::default()),
-            Err(ConfigError::Incomplete("base_domains"))
+            Err(CloudEngineError::Incomplete("base_domains"))
         );
     }
 
@@ -224,9 +233,9 @@ mod tests {
                 acme(),
             ),
             (
-                "dns_api_url",
+                "dns_api_urls",
                 HttpGatewayConfig {
-                    dns_api_url: None,
+                    dns_api_urls: None,
                     ..gateway()
                 },
                 acme(),
@@ -261,7 +270,7 @@ mod tests {
         for (field, gateway, acme) in cases {
             assert_matches!(
                 parse(gateway, acme),
-                Err(ConfigError::Incomplete(missing)) if missing == field,
+                Err(CloudEngineError::Incomplete(missing)) if missing == field,
                 "expected {field} to be reported as missing"
             );
         }
@@ -277,7 +286,58 @@ mod tests {
                 },
                 acme()
             ),
-            Err(ConfigError::Incomplete("base_domains"))
+            Err(CloudEngineError::Incomplete("base_domains"))
+        );
+    }
+
+    #[test]
+    fn empty_dns_api_url_list_is_incomplete() {
+        assert_matches!(
+            parse(
+                HttpGatewayConfig {
+                    dns_api_urls: Some(vec![]),
+                    ..gateway()
+                },
+                acme()
+            ),
+            Err(CloudEngineError::Incomplete("dns_api_urls"))
+        );
+    }
+
+    #[test]
+    fn every_dns_api_url_is_handed_to_the_gateway() {
+        // `ic-gateway` parses ACME_DNS_IC_DNS_LB_URLS as a comma-separated list,
+        // so all of the operator's URLs have to survive into that one value.
+        let config = parse(
+            HttpGatewayConfig {
+                dns_api_urls: Some(vec![
+                    "https://dns1.example.com/".to_string(),
+                    "https://dns2.example.com/".to_string(),
+                ]),
+                ..gateway()
+            },
+            acme(),
+        )
+        .expect("multiple DNS API URLs should be accepted");
+
+        assert_eq!(
+            config
+                .dns_api_urls
+                .iter()
+                .map(Url::as_str)
+                .collect::<Vec<_>>(),
+            vec!["https://dns1.example.com/", "https://dns2.example.com/"]
+        );
+
+        let env = config
+            .env_overlay(Path::new("/var/lib/ic/data/acme"))
+            .expect("the overlay should be encodable");
+
+        assert_eq!(
+            env.get(&OsString::from("ACME_DNS_IC_DNS_LB_URLS")),
+            Some(&OsString::from(
+                "https://dns1.example.com/,https://dns2.example.com/"
+            ))
         );
     }
 
@@ -319,7 +379,7 @@ mod tests {
                     },
                     acme()
                 ),
-                Err(ConfigError::Invalid(_)),
+                Err(CloudEngineError::Failed(_)),
                 "expected {domain} to be rejected"
             );
         }
@@ -328,12 +388,12 @@ mod tests {
             assert_matches!(
                 parse(
                     HttpGatewayConfig {
-                        dns_api_url: Some(url.to_string()),
+                        dns_api_urls: Some(vec![url.to_string()]),
                         ..gateway()
                     },
                     acme()
                 ),
-                Err(ConfigError::Invalid(_)),
+                Err(CloudEngineError::Failed(_)),
                 "expected {url} to be rejected"
             );
         }

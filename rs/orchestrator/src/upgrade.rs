@@ -1093,7 +1093,7 @@ fn report_master_public_key_changed_metric(
 mod tests {
     use crate::catch_up_package_provider::LocalCUPReader;
     use crate::catch_up_package_provider::tests::mock_tls_config;
-    use crate::cloud_engine::config::GatewayConfig;
+    use crate::cloud_engine::config::EngineConfig;
     use crate::process_manager::{Process, ProcessRunner};
     use crate::processes::{
         IcGatewayManager, IcGatewayProcess, IcGatewayProcessConfig, ProcessManager, ReplicaProcess,
@@ -1537,10 +1537,12 @@ mod tests {
         };
         // ic-gateway only runs with an engine configuration, so cloud engine
         // scenarios need one published.
-        let gateway_config = Arc::new(RwLock::new(
+        let engine_config = Arc::new(RwLock::new(
             matches!(subnet_type, SubnetType::CloudEngine)
-                .then(|| GatewayConfig::for_test("engine.example.com")),
+                .then(|| EngineConfig::for_test("engine.example.com")),
         ));
+        let ic_gateway_started_previously = test_scenario.were_child_processes_started_previously()
+            && matches!(subnet_type, SubnetType::CloudEngine);
         // Start the child processes if the test scenario indicates so
         if test_scenario.were_child_processes_started_previously() {
             replica_runner
@@ -1552,14 +1554,14 @@ mod tests {
                     .unwrap(),
                 )
                 .unwrap();
-            if matches!(subnet_type, SubnetType::CloudEngine) {
+            if ic_gateway_started_previously {
                 ic_gateway_runner
                     .start(
                         IcGatewayProcess::build(
                             &ic_gateway_process_config,
                             (
                                 current_replica_version.clone(),
-                                GatewayConfig::for_test("engine.example.com"),
+                                EngineConfig::for_test("engine.example.com"),
                             ),
                         )
                         .unwrap(),
@@ -1574,13 +1576,18 @@ mod tests {
                 Arc::clone(&metrics),
                 logger.clone(),
             ),
-            IcGatewayManager::new_for_test(ProcessManager::new_for_test(
-                ic_gateway_runner,
-                ic_gateway_process_config,
-                Arc::clone(&metrics),
-                logger.clone(),
-            )),
-            gateway_config,
+            IcGatewayManager::new_for_test(
+                ProcessManager::new_for_test(
+                    ic_gateway_runner,
+                    ic_gateway_process_config,
+                    Arc::clone(&metrics),
+                    logger.clone(),
+                ),
+                // An iteration that started ic-gateway also recorded the
+                // configuration it started it with.
+                ic_gateway_started_previously.then(|| EngineConfig::for_test("engine.example.com")),
+            ),
+            engine_config,
             Arc::clone(&registry),
         )));
 

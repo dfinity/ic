@@ -25,7 +25,7 @@ use ic_registry_keys::FirewallRulesScope;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_types::{
     NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
-    hostos_version::HostosVersion,
+    hostos_version::HostosVersion, registry::RegistryClientError,
 };
 use std::{convert::TryFrom, net::IpAddr, sync::Arc};
 
@@ -437,9 +437,9 @@ impl RegistryHelper {
             .into_iter()
             .map(|admin| {
                 PrincipalId::try_from(admin).map_err(|err| {
-                    OrchestratorError::cloud_engine_error(format!(
-                        "subnet {subnet_id} has a malformed subnet admin: {err}"
-                    ))
+                    OrchestratorError::RegistryClientError(RegistryClientError::DecodeError {
+                        error: format!("subnet {subnet_id} has a malformed subnet admin: {err}"),
+                    })
                 })
             })
             .collect()

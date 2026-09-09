@@ -1,5 +1,5 @@
 use crate::{
-    cloud_engine::config::GatewayConfig,
+    cloud_engine::config::EngineConfig,
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
     process_manager::{Process, ProcessRunner, SingleProcessRunner},
@@ -171,11 +171,11 @@ impl Process for IcGatewayProcess {
     const NAME: &'static str = "ic-gateway";
     type Version = ReplicaVersion;
     type Config = IcGatewayProcessConfig;
-    type Args = (ReplicaVersion, GatewayConfig);
+    type Args = (ReplicaVersion, EngineConfig);
 
     fn build(
         config: &Self::Config,
-        (replica_version, gateway_config): Self::Args,
+        (replica_version, engine_config): Self::Args,
     ) -> OrchestratorResult<Self> {
         let mut env: HashMap<OsString, OsString> =
             match crate::env_file::read_file(&config.ic_gateway_env_file) {
@@ -193,7 +193,7 @@ impl Process for IcGatewayProcess {
 
         // The shipped file only carries policy; the engine's own values, the two
         // credentials among them, override it.
-        env.extend(gateway_config.env_overlay(&config.acme_cache_dir)?);
+        env.extend(engine_config.env_overlay(&config.acme_cache_dir)?);
 
         Ok(Self {
             ic_binary_dir: config.ic_binary_dir.clone(),
@@ -391,7 +391,7 @@ impl IcBoundaryManager {
 
 pub(crate) struct IcGatewayManager {
     inner: ProcessManager<IcGatewayProcess>,
-    current_config: Option<GatewayConfig>,
+    current_config: Option<EngineConfig>,
 }
 
 impl IcGatewayManager {
@@ -406,31 +406,38 @@ impl IcGatewayManager {
         }
     }
 
+    /// `current_config` is the configuration a previous call would have
+    /// applied, which decides whether this manager considers `ic-gateway` to be
+    /// running with an up-to-date environment.
     #[cfg(test)]
-    pub(crate) fn new_for_test(inner: ProcessManager<IcGatewayProcess>) -> Self {
+    pub(crate) fn new_for_test(
+        inner: ProcessManager<IcGatewayProcess>,
+        current_config: Option<EngineConfig>,
+    ) -> Self {
         Self {
             inner,
-            current_config: None,
+            current_config,
         }
     }
 
-    /// Runs `ic-gateway` with `gateway_config`, restarting it when the config
+    /// Runs `ic-gateway` with `engine_config`, restarting it when the config
     /// changed. `None` means the engine configuration is not (yet) known, in
     /// which case `ic-gateway` must not run at all: it terminates TLS for the
     /// engine and has nothing to serve without it.
     pub(crate) fn ensure_running_and_restarted_on_config_change(
         &mut self,
         replica_version: ReplicaVersion,
-        gateway_config: Option<GatewayConfig>,
+        engine_config: Option<EngineConfig>,
     ) -> OrchestratorResult<()> {
-        let Some(gateway_config) = gateway_config else {
+        let Some(engine_config) = engine_config else {
             return self.stop();
         };
 
-        // Restart only on a change we actually observed: with nothing applied
-        // yet there is nothing to compare against, and `ensure_running` is a
-        // no-op when the process is already up.
-        if self.current_config.is_some() && self.current_config.as_ref() != Some(&gateway_config) {
+        // `ensure_running` is a no-op when the process is already up, so an
+        // environment-only change only takes effect after an explicit stop.
+        // Stopping is itself a no-op while nothing runs yet, which is the case
+        // for the very first config.
+        if self.current_config.as_ref() != Some(&engine_config) {
             self.inner.stop()?;
             // `stop` only signals the process. While the old process is still
             // draining, neither start nor record the new config: the next call
@@ -443,11 +450,11 @@ impl IcGatewayManager {
         }
 
         self.inner
-            .ensure_running((replica_version, gateway_config.clone()))?;
+            .ensure_running((replica_version, engine_config.clone()))?;
 
         // Only remember the config once it was applied, so that a failure above
         // is retried on the next call.
-        self.current_config = Some(gateway_config);
+        self.current_config = Some(engine_config);
         Ok(())
     }
 
@@ -475,7 +482,7 @@ pub(crate) struct MultipleProcessesManager {
     replica_manager: ProcessManager<ReplicaProcess>,
     ic_gateway_manager: IcGatewayManager,
     /// Engine configuration published by [`crate::cloud_engine`].
-    gateway_config: Arc<RwLock<Option<GatewayConfig>>>,
+    engine_config: Arc<RwLock<Option<EngineConfig>>>,
     registry: Arc<RegistryHelper>,
 }
 
@@ -484,13 +491,13 @@ impl MultipleProcessesManager {
     pub(crate) fn new_for_test(
         replica_manager: ProcessManager<ReplicaProcess>,
         ic_gateway_manager: IcGatewayManager,
-        gateway_config: Arc<RwLock<Option<GatewayConfig>>>,
+        engine_config: Arc<RwLock<Option<EngineConfig>>>,
         registry: Arc<RegistryHelper>,
     ) -> Self {
         Self {
             replica_manager,
             ic_gateway_manager,
-            gateway_config,
+            engine_config,
             registry,
         }
     }
@@ -498,7 +505,7 @@ impl MultipleProcessesManager {
     pub(crate) fn new(
         replica_process_config: ReplicaProcessConfig,
         ic_gateway_process_config: IcGatewayProcessConfig,
-        gateway_config: Arc<RwLock<Option<GatewayConfig>>>,
+        engine_config: Arc<RwLock<Option<EngineConfig>>>,
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
         logger: ReplicaLogger,
@@ -510,7 +517,7 @@ impl MultipleProcessesManager {
         Self {
             replica_manager,
             ic_gateway_manager,
-            gateway_config,
+            engine_config,
             registry,
         }
     }
@@ -557,10 +564,10 @@ impl MultipleProcessesManager {
             .registry
             .is_cloud_engine_subnet(subnet_id, registry_version)?
         {
-            let gateway_config = self.gateway_config.read().unwrap().clone();
+            let engine_config = self.engine_config.read().unwrap().clone();
             result = result.and(
                 self.ic_gateway_manager
-                    .ensure_running_and_restarted_on_config_change(replica_version, gateway_config),
+                    .ensure_running_and_restarted_on_config_change(replica_version, engine_config),
             );
         } else {
             result = result.and(self.ic_gateway_manager.stop());
@@ -756,16 +763,16 @@ mod tests {
             no_op_logger(),
         );
 
-        (IcGatewayManager::new_for_test(inner), log)
+        (IcGatewayManager::new_for_test(inner, None), log)
     }
 
     fn ensure_gateway(
         manager: &mut IcGatewayManager,
-        gateway_config: Option<GatewayConfig>,
+        engine_config: Option<EngineConfig>,
     ) -> OrchestratorResult<()> {
         manager.ensure_running_and_restarted_on_config_change(
             ReplicaVersion::try_from(REPLICA_VERSION).unwrap(),
-            gateway_config,
+            engine_config,
         )
     }
 
@@ -791,7 +798,7 @@ mod tests {
         ensure_gateway(&mut manager, None).unwrap();
         ensure_gateway(
             &mut manager,
-            Some(GatewayConfig::for_test("engine.example.com")),
+            Some(EngineConfig::for_test("engine.example.com")),
         )
         .unwrap();
 
@@ -805,7 +812,7 @@ mod tests {
     fn ic_gateway_not_restarted_when_config_unchanged() {
         let dir = tempdir().unwrap();
         let (mut manager, log) = ic_gateway_manager_for_test(dir.path());
-        let config = GatewayConfig::for_test("engine.example.com");
+        let config = EngineConfig::for_test("engine.example.com");
 
         ensure_gateway(&mut manager, Some(config.clone())).unwrap();
         ensure_gateway(&mut manager, Some(config)).unwrap();
@@ -823,12 +830,12 @@ mod tests {
 
         ensure_gateway(
             &mut manager,
-            Some(GatewayConfig::for_test("one.example.com")),
+            Some(EngineConfig::for_test("one.example.com")),
         )
         .unwrap();
         ensure_gateway(
             &mut manager,
-            Some(GatewayConfig::for_test("two.example.com")),
+            Some(EngineConfig::for_test("two.example.com")),
         )
         .unwrap();
 
@@ -847,7 +854,7 @@ mod tests {
 
         ensure_gateway(
             &mut manager,
-            Some(GatewayConfig::for_test("one.example.com")),
+            Some(EngineConfig::for_test("one.example.com")),
         )
         .unwrap();
         assert_eq!(log.lock().unwrap().starts, 1);
@@ -857,7 +864,7 @@ mod tests {
         // the new config must not count as applied.
         ensure_gateway(
             &mut manager,
-            Some(GatewayConfig::for_test("two.example.com")),
+            Some(EngineConfig::for_test("two.example.com")),
         )
         .unwrap();
         {
@@ -870,7 +877,7 @@ mod tests {
         // case it ignored the first SIGTERM.
         ensure_gateway(
             &mut manager,
-            Some(GatewayConfig::for_test("two.example.com")),
+            Some(EngineConfig::for_test("two.example.com")),
         )
         .unwrap();
         assert_eq!(log.lock().unwrap().stops, 2);
@@ -879,7 +886,7 @@ mod tests {
         log.lock().unwrap().running = false;
         ensure_gateway(
             &mut manager,
-            Some(GatewayConfig::for_test("two.example.com")),
+            Some(EngineConfig::for_test("two.example.com")),
         )
         .unwrap();
         let log = log.lock().unwrap();
@@ -894,7 +901,7 @@ mod tests {
 
         ensure_gateway(
             &mut manager,
-            Some(GatewayConfig::for_test("engine.example.com")),
+            Some(EngineConfig::for_test("engine.example.com")),
         )
         .unwrap();
         assert!(log.lock().unwrap().running);
@@ -909,7 +916,7 @@ mod tests {
     #[test]
     fn ic_gateway_credentials_never_reach_the_argument_list() {
         let dir = tempdir().unwrap();
-        let config = GatewayConfig::for_test("engine.example.com");
+        let config = EngineConfig::for_test("engine.example.com");
         let process = IcGatewayProcess::build(
             &IcGatewayProcessConfig {
                 ic_binary_dir: dir.path().to_path_buf(),
