@@ -45,8 +45,8 @@ struct StreamBuilderMetrics {
     /// Output queues skipped because this subnet or their destination subnet was
     /// cooling down.
     pub cooling_down_skipped_queues: IntCounter,
-    /// Refunds skipped because this subnet or their destination subnet was cooling
-    /// down.
+    /// Refunds skipped because their destination subnet was cooling down while this
+    /// subnet was not.
     pub cooling_down_skipped_refunds: IntCounter,
     /// Critical error for payloads above the maximum supported size.
     pub critical_error_payload_too_large: IntCounter,
@@ -142,9 +142,9 @@ impl StreamBuilderMetrics {
         );
         let cooling_down_skipped_refunds = metrics_registry.int_counter(
             METRIC_COOLING_DOWN_SKIPPED_REFUNDS,
-            "Refunds skipped because this subnet or their destination subnet was cooling \
-            down. Counted once per refund per round, so the same refund is counted \
-            repeatedly for as long as either subnet keeps cooling down.",
+            "Refunds skipped because their destination subnet was cooling down while this \
+            subnet was not. Counted once per refund per round, so the same refund is counted \
+            repeatedly for as long as the destination subnet keeps cooling down.",
         );
         let critical_error_payload_too_large =
             metrics_registry.error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE);
@@ -818,8 +818,8 @@ impl StreamBuilderImpl {
     /// Routes up to `refund_limit` refunds per stream from `state` into `streams`.
     ///
     /// Refunds that could not be routed due to reaching the per stream limit, or
-    /// because this subnet or their destination subnet is cooling down, are retained
-    /// in `state`.
+    /// because their destination subnet is cooling down while this subnet is not, are
+    /// retained in `state`.
     fn route_refunds(
         &self,
         state: &mut ReplicatedState,
@@ -838,13 +838,18 @@ impl StreamBuilderImpl {
                     let dst_subnet_topology = network_topology.subnets().get(&dst_subnet_id);
                     let dst_subnet_type = dst_subnet_topology.map(|topology| topology.subnet_type);
 
-                    // No refunds are routed while either this subnet (the source) or the
-                    // destination subnet is cooling down; not even into the loopback stream.
-                    // Retain them in the refund pool until neither subnet is cooling down
-                    // anymore, rather than dropping them (which would lose their cycles).
+                    // Refunds are routed under the same conditions as subnet output
+                    // responses: always, unless this subnet (the source) is not cooling down
+                    // while the destination subnet is. This way a cooling down subnet can
+                    // still hand back the cycles it holds (before it is deleted), while no new
+                    // cycles are pushed onto a subnet that is cooling down.
+                    //
+                    // Retain the skipped refunds in the refund pool until the destination
+                    // subnet stops cooling down, rather than dropping them (which would lose
+                    // their cycles).
                     let dst_subnet_is_cooling_down =
                         dst_subnet_topology.is_some_and(|topology| topology.cooling_down);
-                    if own_subnet_is_cooling_down || dst_subnet_is_cooling_down {
+                    if !own_subnet_is_cooling_down && dst_subnet_is_cooling_down {
                         self.metrics.cooling_down_skipped_refunds.inc();
                         return false;
                     }
