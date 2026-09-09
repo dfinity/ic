@@ -24,10 +24,7 @@ use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
     Height, NodeId, PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId,
-    consensus::{
-        CatchUpPackage, HasHeight,
-        dkg::{PostSplitArgs, SubnetSplittingStatus},
-    },
+    consensus::{CatchUpPackage, HasHeight},
     crypto::{
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
@@ -406,9 +403,10 @@ impl Upgrade {
         // If we arrive here, we are on the newest replica version.
         // Now we check if a subnet recovery or a subnet split is in progress.
         // If it is, we restart to pass the new DKG material to consensus.
-        self.stop_replica_if_new_recovery_or_post_splitting_cup(
+        self.stop_replica_if_recovery_cup_or_subnet_changed(
             &latest_cup,
             old_cup_height,
+            subnet_id,
             old_subnet_id,
         );
 
@@ -616,19 +614,20 @@ impl Upgrade {
         Ok(())
     }
 
-    /// Stop the replica if the given CUP is a recovery CUP (unsigned) or a post-split CUP.
-    /// This is necessary as they both change the public key of the subnet, meaning that the
-    /// replicas' HTTP handlers would otherwise serve outdated delegations compared to the subnet's
-    /// new key material.
-    /// Also for recovery CUPs, consensus would otherwise reject the unsigned artifact.
-    ///
-    /// In any case, we do so only when the new CUP has a higher height than the previous one, in
-    /// order to stop the replica only once.
+    /// Stop the replica if the given CUP is unsigned.
+    /// Without restart, consensus would reject the unsigned artifact.
+    /// Also stop the replica if our new subnet ID has changed compared to what we had before.
+    /// This is also necessary because the subnet ID is passed as a CLI argument and kept constant
+    /// throughout the lifetime of the replica.
+    /// In any case, the replica is restarted only if the given CUP is strictly higher than the
+    /// previous CUP height. This is to avoid restarting the replica multiple times for the same
+    /// CUP.
     /// If stopping the replica fails, restart the current process instead.
-    fn stop_replica_if_new_recovery_or_post_splitting_cup(
+    fn stop_replica_if_recovery_cup_or_subnet_changed(
         &self,
         cup: &CatchUpPackage,
         old_cup_height: Option<Height>,
+        subnet_id: SubnetId,
         old_subnet_id: SubnetId,
     ) {
         let Some(old_cup_height) = old_cup_height else {
@@ -638,58 +637,32 @@ impl Upgrade {
             return;
         }
 
-        let cup_type_str = match cup.subnet_splitting_status() {
-            SubnetSplittingStatus::NotScheduled => {
-                if cup.is_signed() {
-                    // Regular subnet CUP
-                    return;
-                }
+        let mut should_restart = false;
+        if !cup.is_signed() {
+            info!(
+                self.logger,
+                "Found higher unsigned CUP, restarting replica for subnet recovery..."
+            );
+            should_restart = true;
+        }
+        if subnet_id != old_subnet_id {
+            info!(
+                self.logger,
+                "Subnet ID changed from {old_subnet_id} to {subnet_id}, evidence of \
+                a destination node of a subnet split, restarting replica...",
+            );
+            should_restart = true;
+        }
 
-                "recovery"
+        if should_restart {
+            // Restarting the replica is enough to pass the CUP/subnet ID forward.
+            // Note: if any other process depends on the CUP and/or subnet ID, they should be
+            // stopped here as well.
+            // If we fail, restart the current process instead.
+            if let Err(e) = self.processes_manager.write().unwrap().stop_replica() {
+                warn!(self.logger, "Failed to stop replica with error {:?}", e);
+                reexec_current_process(&self.logger);
             }
-            SubnetSplittingStatus::Scheduled { .. } => {
-                let error_message = "The orchestrator should never see a scheduled splitting CUP on the actual height \
-                    of the split, Consensus does not create a CUP, but instead directly creates a post-split one.";
-                if cfg!(debug_assertions) {
-                    panic!("{}", error_message);
-                }
-
-                error!(self.logger, "{}", error_message);
-                self.metrics
-                    .critical_error_observed_scheduled_splitting_cup
-                    .inc();
-
-                return;
-            }
-            SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }) => {
-                debug_assert!(
-                    cup.is_signed(),
-                    "A post-split CUP should have always been created by the subnet"
-                );
-
-                if new_subnet_id == old_subnet_id {
-                    // This is a post-split CUP for the same subnet, so we do not need to restart
-                    // the replica.
-                    return;
-                }
-
-                &format!("post-split (=> {})", new_subnet_id)
-            }
-        };
-
-        info!(
-            self.logger,
-            "Found higher {} CUP (registry version={}, height={}), restarting replica...",
-            cup_type_str,
-            cup.content.registry_version(),
-            cup.height(),
-        );
-
-        // Restarting the replica is enough to pass the CUP forward.
-        // If we fail, restart the current process instead.
-        if let Err(e) = self.processes_manager.write().unwrap().stop_replica() {
-            warn!(self.logger, "Failed to stop replica with error {:?}", e);
-            reexec_current_process(&self.logger);
         }
     }
 
@@ -1249,7 +1222,7 @@ mod tests {
         consensus::{
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
-            dkg::DkgSummary,
+            dkg::{DkgSummary, PostSplitArgs, SubnetSplittingStatus},
             idkg::{self, MasterKeyTranscript, TranscriptAttributes},
         },
         crypto::{
@@ -2998,7 +2971,7 @@ mod tests {
     }
 
     /// Asserts on the drained `logs` that the replica was restarted exactly `expected_restarts`
-    /// times due to the adoption of a post-split CUP of `new_subnet_id`.
+    /// times due to the changed subnet ID after a split.
     fn assert_n_post_split_restarts(
         logs: Vec<LogEntry>,
         expected_restarts: usize,
@@ -3014,7 +2987,7 @@ mod tests {
             .has_exactly_n_messages_containing(
                 expected_restarts,
                 &Level::Info,
-                &format!("Found higher post-split (=> {new_subnet_id}) CUP"),
+                &format!("Subnet ID changed from {SOURCE_SUBNET_ID} to {new_subnet_id}"),
             )
             .has_exactly_n_messages_containing(
                 expected_restarts,
@@ -3133,9 +3106,8 @@ mod tests {
     /// node that ends up either in the source subnet or in the destination subnet.
     ///
     /// The iteration adopting the post-split CUP must restart the replica if and only if we ended
-    /// up in the destination subnet, as only that subnet's public key changed. A further iteration
-    /// must then be a no-op, i.e. the replica must not be restarted over and over again for the
-    /// same post-split CUP.
+    /// up in the destination subnet. A further iteration must then be a no-op, i.e. the replica
+    /// must not be restarted over and over again for the same post-split CUP.
     #[rstest]
     #[case::stays_in_source(SOURCE_SUBNET_ID)]
     #[case::moves_to_destination(DESTINATION_SUBNET_ID)]
@@ -3360,11 +3332,7 @@ mod tests {
                 &format!("is for a different subnet (subnet_id={new_subnet_id})"),
             )
             // ... but it must reboot into the new version rather than take the usual restart path.
-            .has_exactly_n_messages_containing(
-                0,
-                &Level::Info,
-                &format!("Found higher post-split (=> {new_subnet_id}) CUP"),
-            )
+            .has_exactly_n_messages_containing(0, &Level::Info, "Subnet ID changed from")
             .has_exactly_n_messages_containing(0, &Level::Info, "Stopping replica process")
             .has_exactly_n_messages_containing(0, &Level::Info, "Starting new replica process");
     }
@@ -3559,8 +3527,12 @@ mod tests {
                 &Level::Info,
                 &format!("is for a different subnet (subnet_id={stuck_subnet_id})"),
             )
-            .has_exactly_n_messages_containing(0, &Level::Info, "Found higher post-split")
-            .has_exactly_n_messages_containing(1, &Level::Info, "Found higher recovery CUP")
+            .has_exactly_n_messages_containing(
+                usize::from(moves_to_destination),
+                &Level::Info,
+                &format!("Subnet ID changed from {SOURCE_SUBNET_ID} to {stuck_subnet_id}"),
+            )
+            .has_exactly_n_messages_containing(1, &Level::Info, "Found higher unsigned CUP")
             .has_exactly_n_messages_containing(1, &Level::Info, "Stopping replica process")
             .has_exactly_n_messages_containing(1, &Level::Info, "Starting new replica process");
     }
