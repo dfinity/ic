@@ -535,8 +535,8 @@ impl CatchUpPackageProvider {
         &mut self,
         local_cup: Option<pb::CatchUpPackage>,
         mut subnet_id: SubnetId,
+        latest_registry_version: RegistryVersion,
     ) -> OrchestratorResult<CatchUpPackage> {
-        let latest_registry_version = self.registry.get_latest_version();
         let local_cup_height = local_cup
             .as_ref()
             .map(|cup| {
@@ -1596,6 +1596,8 @@ pub(crate) mod tests {
             destination_nodes[0]
         };
         let registry = setup_split_registry(node_id, &source_nodes, &destination_nodes);
+        let latest_registry_version = registry.get_latest_version();
+
         let cup_provider = make_cup_provider_with_registry(
             tmp_dir.path().to_path_buf(),
             node_id,
@@ -1614,7 +1616,7 @@ pub(crate) mod tests {
             .maybe_mutate_subnet_id_due_to_split(
                 &mut subnet_id,
                 Some(&local_cup),
-                registry.get_latest_version(),
+                latest_registry_version,
             )
             .unwrap();
 
@@ -1660,6 +1662,7 @@ pub(crate) mod tests {
             },
             |_| {},
         );
+        let latest_registry_version = registry.get_latest_version();
 
         let mut cup_provider = make_cup_provider_with_crypto(
             tmp_dir.path().to_path_buf(),
@@ -1679,7 +1682,7 @@ pub(crate) mod tests {
         ));
 
         let fetched = cup_provider
-            .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID)
+            .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID, latest_registry_version)
             .await
             .expect("Should fetch the post-split CUP of our own subnet");
 
@@ -1718,6 +1721,8 @@ pub(crate) mod tests {
                 }
             },
         );
+        let latest_registry_version = registry.get_latest_version();
+
         let cup_provider = make_cup_provider_with_registry(
             tmp_dir.path().to_path_buf(),
             node_id,
@@ -1739,7 +1744,7 @@ pub(crate) mod tests {
             .maybe_mutate_subnet_id_due_to_split(
                 &mut subnet_id,
                 Some(&local_cup),
-                registry.get_latest_version(),
+                latest_registry_version,
             )
             .unwrap();
 
@@ -1776,6 +1781,8 @@ pub(crate) mod tests {
                     .unwrap();
             },
         );
+        let latest_registry_version = registry.get_latest_version();
+
         let cup_provider = make_cup_provider_with_registry(
             tmp_dir.path().to_path_buf(),
             node_id,
@@ -1793,7 +1800,7 @@ pub(crate) mod tests {
             .maybe_mutate_subnet_id_due_to_split(
                 &mut subnet_id,
                 Some(&local_cup),
-                registry.get_latest_version(),
+                latest_registry_version,
             )
             .unwrap();
 
@@ -1823,6 +1830,7 @@ pub(crate) mod tests {
             |_| node_record_serving(server_addr),
             |_| {},
         );
+        let latest_registry_version = registry.get_latest_version();
 
         let mut cup_provider = make_cup_provider_with_crypto(
             tmp_dir.path().to_path_buf(),
@@ -1833,7 +1841,11 @@ pub(crate) mod tests {
         );
 
         let fetched = cup_provider
-            .get_latest_cup(Some(local_cup.clone()), SOURCE_SUBNET_ID)
+            .get_latest_cup(
+                Some(local_cup.clone()),
+                SOURCE_SUBNET_ID,
+                latest_registry_version,
+            )
             .await
             .expect("Should fall back to the local CUP");
         assert_eq!(fetched.height(), local_cup_height);
@@ -1849,7 +1861,11 @@ pub(crate) mod tests {
             SOURCE_SUBNET_ID,
         ));
         let fetched = cup_provider
-            .get_latest_cup(Some(local_cup.clone()), SOURCE_SUBNET_ID)
+            .get_latest_cup(
+                Some(local_cup.clone()),
+                SOURCE_SUBNET_ID,
+                latest_registry_version,
+            )
             .await
             .expect("Should fall back to the local CUP");
         assert_eq!(fetched.height(), local_cup_height);
@@ -1862,7 +1878,7 @@ pub(crate) mod tests {
         ));
 
         let fetched = cup_provider
-            .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID)
+            .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID, latest_registry_version)
             .await
             .expect("Should fetch the post-split CUP of our own subnet");
         assert_eq!(fetched.height(), post_split_cup_height);
@@ -1886,6 +1902,8 @@ pub(crate) mod tests {
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(2);
         let registry = setup_split_registry(node_id, &[node_test_id(1)], &[node_id]);
+        let latest_registry_version = registry.get_latest_version();
+
         let cup_provider = make_cup_provider_with_registry(
             tmp_dir.path().to_path_buf(),
             node_id,
@@ -1902,7 +1920,7 @@ pub(crate) mod tests {
             .maybe_mutate_subnet_id_due_to_split(
                 &mut subnet_id,
                 local_cup.as_ref(),
-                registry.get_latest_version(),
+                latest_registry_version,
             )
             .unwrap();
 
@@ -1914,6 +1932,8 @@ pub(crate) mod tests {
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(2);
         let registry = setup_split_registry(node_id, &[node_test_id(1)], &[node_id]);
+        let latest_registry_version = registry.get_latest_version();
+
         let cup_provider = make_cup_provider_with_registry(
             tmp_dir.path().to_path_buf(),
             node_id,
@@ -1932,7 +1952,7 @@ pub(crate) mod tests {
         let result = cup_provider.maybe_mutate_subnet_id_due_to_split(
             &mut subnet_id,
             Some(&local_cup),
-            registry.get_latest_version() + RegistryVersion::from(1),
+            latest_registry_version + RegistryVersion::from(1),
         );
 
         assert_matches!(result, Err(OrchestratorError::RegistryClientError(_)));
@@ -1947,6 +1967,8 @@ pub(crate) mod tests {
         // We are member of neither subnet at the split registry version.
         let node_id = node_test_id(3);
         let registry = setup_split_registry(node_id, &source_nodes, &destination_nodes);
+        let latest_registry_version = registry.get_latest_version();
+
         let mut cup_provider = make_cup_provider_with_registry(
             tmp_dir.path().to_path_buf(),
             node_id,
@@ -1962,7 +1984,7 @@ pub(crate) mod tests {
         // A split is pending, but we can't tell which half we belong to, so the whole CUP fetch
         // must fail conservatively.
         let result = cup_provider
-            .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID)
+            .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID, latest_registry_version)
             .await;
 
         assert_matches!(
@@ -2002,6 +2024,8 @@ pub(crate) mod tests {
                 );
             },
         );
+        let latest_registry_version = registry.get_latest_version();
+
         let cup_provider = make_cup_provider_with_registry(
             tmp_dir.path().to_path_buf(),
             node_id,
@@ -2020,7 +2044,7 @@ pub(crate) mod tests {
         let result = cup_provider.maybe_mutate_subnet_id_due_to_split(
             &mut subnet_id,
             Some(&local_cup),
-            registry.get_latest_version(),
+            latest_registry_version,
         );
 
         assert_matches!(
