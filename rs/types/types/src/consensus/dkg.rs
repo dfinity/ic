@@ -944,7 +944,7 @@ mod tests {
 
     #[test]
     fn test_dkg_message_id_less_than_height() {
-        const TEST_HASHES: [Vec<u8>; 4] = [vec![], vec![0], vec![42; 32], vec![u8::MAX; 32]];
+        const TEST_HASHES: [&[u8]; 4] = [&[], &[0], &[42; 32], &[u8::MAX; 32]];
 
         fn message_id(height: u64, hash: &[u8]) -> DkgMessageId {
             DkgMessageId {
@@ -955,7 +955,7 @@ mod tests {
 
         let smallest_at_height = DkgMessageId::smallest_at_height(Height::from(10));
         for height in [0, 1, 9] {
-            for hash in &TEST_HASHES {
+            for hash in TEST_HASHES {
                 let id = message_id(height, hash);
                 assert!(
                     id < smallest_at_height,
@@ -964,7 +964,7 @@ mod tests {
             }
         }
         for height in [10, 11, u64::MAX] {
-            for hash in &TEST_HASHES {
+            for hash in TEST_HASHES {
                 let id = message_id(height, hash);
                 assert!(
                     smallest_at_height <= id,
@@ -976,7 +976,7 @@ mod tests {
         // Edge-case: height is 0
         let smallest_at_height = DkgMessageId::smallest_at_height(Height::from(0));
         for height in [0, 1, u64::MAX] {
-            for hash in &TEST_HASHES {
+            for hash in TEST_HASHES {
                 let id = message_id(height, hash);
                 assert!(
                     smallest_at_height <= id,
