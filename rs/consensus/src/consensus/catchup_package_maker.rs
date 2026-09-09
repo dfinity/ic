@@ -197,7 +197,7 @@ impl CatchUpPackageMaker {
                 self.membership.registry_client.as_ref(),
                 self.membership.subnet_id,
                 pool,
-                &self.replica_config.replica_version,
+                self.replica_config.replica_version(),
                 &self.log,
             ) == Some(true)
         };
@@ -516,7 +516,7 @@ mod tests {
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, insert_initial_dkg_transcript};
-    use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
+    use ic_test_utilities_types::ids::{subnet_test_id, test_platform_version};
     use ic_types::{
         CryptoHashOfState, Height, NodeId, RegistryVersion,
         consensus::{
@@ -1100,7 +1100,7 @@ mod tests {
                 .with_replica_config(ReplicaConfig {
                     node_id,
                     subnet_id: SOURCE_SUBNET_ID,
-                    replica_version: test_replica_version(),
+                    platform_version: test_platform_version(),
                 })
                 .build();
                 // Manually insert DKG transcripts at the splitting version to simulate what the
@@ -1311,7 +1311,7 @@ mod tests {
                     .with_replica_config(ReplicaConfig {
                         node_id: NODE_5,
                         subnet_id: SOURCE_SUBNET_ID,
-                        replica_version: test_replica_version(),
+                        platform_version: test_platform_version(),
                     })
                     .build();
 

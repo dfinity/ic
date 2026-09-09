@@ -4,10 +4,9 @@ mod framework;
 use crate::framework::ConsensusDriver;
 use assert_matches::assert_matches;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
-use ic_consensus::consensus::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_consensus_certification::CertifierImpl;
 use ic_consensus_dkg::{DkgKeyManager, get_dkg_summary_from_cup_contents};
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool, pool_reader::PoolReader};
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_registry::RegistryClient;
@@ -31,7 +30,7 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    CryptoHashOfState, Height, batch::BatchContent, crypto::CryptoHash,
+    CryptoHashOfState, Height, PlatformVersion, batch::BatchContent, crypto::CryptoHash,
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
 };
 use std::{
@@ -111,7 +110,10 @@ fn consensus_produces_expected_batches() {
         let replica_config = ReplicaConfig {
             node_id,
             subnet_id,
-            replica_version,
+            platform_version: PlatformVersion {
+                guestos_version: replica_version.clone(),
+                replica_version,
+            },
         };
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
@@ -131,7 +133,7 @@ fn consensus_produces_expected_batches() {
                 1,
                 SubnetRecordBuilder::from(&[node_id])
                     .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
-                    .with_replica_version(replica_config.replica_version.as_ref())
+                    .with_replica_version(replica_config.replica_version().as_ref())
                     .build(),
             )],
         );
@@ -153,7 +155,7 @@ fn consensus_produces_expected_batches() {
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            &replica_config.replica_version,
+            replica_config.replica_version(),
             make_genesis(summary).into(),
             pool_config.clone(),
             MetricsRegistry::new(),

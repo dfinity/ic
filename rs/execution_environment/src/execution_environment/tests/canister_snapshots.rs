@@ -1990,7 +1990,7 @@ fn take_canister_snapshot_records_nominal_cycles_on_free_subnet() {
         };
         (
             instructions(canister_metrics.consumed_cycles_by_use_cases()),
-            instructions(canister_metrics.consumed_cycles_by_use_cases_as_counters()),
+            instructions(canister_metrics.consumed_cycles_by_use_cases_monotonic()),
         )
     };
 

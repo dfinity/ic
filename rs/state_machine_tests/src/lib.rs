@@ -12,8 +12,8 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
-use ic_consensus_cup_utils::make_registry_cup_from_cup_contents;
-use ic_consensus_utils::crypto::SignVerify;
+use ic_consensus_cup_utils::make_registry_cup;
+use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool, crypto::SignVerify};
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
     SecretKeyBytes, dummy_initial_dkg_transcript_with_master_key, sign_message,
@@ -654,21 +654,14 @@ fn make_fresh_registry_cup(
     subnet_id: SubnetId,
     replica_logger: &ReplicaLogger,
 ) -> pb::CatchUpPackage {
-    let registry_version = registry_client.get_latest_version();
-    let cup_contents = registry_client
-        .get_cup_contents(subnet_id, registry_version)
-        .unwrap()
-        .value
-        .unwrap();
-    let cup = make_registry_cup_from_cup_contents(
+    make_registry_cup(
         registry_client.as_ref(),
         subnet_id,
-        cup_contents,
-        registry_version,
+        registry_client.get_latest_version(),
         replica_logger,
     )
-    .unwrap();
-    cup.into()
+    .unwrap()
+    .into()
 }
 
 /// Convert an object into CBOR binary.
@@ -2018,8 +2011,8 @@ impl StateMachine {
             let mut low_threshold_transcript_record = ni_dkg_transcript;
             low_threshold_transcript_record.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
             let initial_transcript_records = SetupInitialDKGResponse {
-                low_threshold_transcript_record: high_threshold_transcript_record.into(),
-                high_threshold_transcript_record: low_threshold_transcript_record.into(),
+                low_threshold_transcript_record: low_threshold_transcript_record.into(),
+                high_threshold_transcript_record: high_threshold_transcript_record.into(),
                 fresh_subnet_id: subnet_id,
                 subnet_threshold_public_key: public_key.into(),
             };
@@ -2212,6 +2205,7 @@ impl StateMachine {
             consensus_pool_cache.clone(),
             Arc::new(crypto),
             state_manager.clone(),
+            build_thread_pool(MAX_CONSENSUS_THREADS),
             subnet_id,
             registry_client.clone(),
             &metrics_registry,
@@ -2678,6 +2672,29 @@ impl StateMachine {
     /// Returns the latest state.
     pub fn get_latest_state(&self) -> Arc<ReplicatedState> {
         self.state_manager.get_latest_state().take()
+    }
+
+    /// Sets the `cooling_down` flag of this subnet's registry record, at a new
+    /// registry version, and updates this subnet's registry client to it. The
+    /// flag takes effect in the next round, when the network topology is
+    /// repopulated from the registry.
+    pub fn set_cooling_down(&self, cooling_down: bool) {
+        let registry_version = self.registry_client.get_latest_version();
+        let mut subnet_record = self
+            .registry_client
+            .get_subnet_record(self.subnet_id, registry_version)
+            .expect("malformed subnet record")
+            .expect("missing subnet record");
+        subnet_record.cooling_down = cooling_down;
+        add_single_subnet_record(
+            &self.registry_data_provider,
+            registry_version.increment().get(),
+            self.subnet_id,
+            subnet_record,
+        );
+
+        self.reload_registry();
+        self.registry_client.update_to_latest_version();
     }
 
     /// Generates a certified stream slice to a remote subnet.

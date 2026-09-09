@@ -59,7 +59,7 @@ use ic_types::{
     Time, artifact::ConsensusMessageId, consensus::ConsensusMessageHashable,
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
 };
-use rayon::{ThreadPool, ThreadPoolBuilder};
+use rayon::ThreadPool;
 use std::{
     cell::RefCell,
     collections::BTreeMap,
@@ -82,9 +82,6 @@ pub const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
 /// CUPs, which have no upper bound on the height to be validated.
 pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 130;
 
-/// The maximum number of threads used to create & validate block payloads in parallel.
-pub const MAX_CONSENSUS_THREADS: usize = 16;
-
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 enum ConsensusSubcomponent {
@@ -97,16 +94,6 @@ enum ConsensusSubcomponent {
     Validator,
     Aggregator,
     Purger,
-}
-
-/// Builds a rayon thread pool with the given number of threads.
-pub fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
-    Arc::new(
-        ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .expect("Failed to create thread pool"),
-    )
 }
 
 /// [ConsensusImpl] holds all consensus subcomponents, and implements the
@@ -622,6 +609,7 @@ mod tests {
     use super::*;
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+    use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;

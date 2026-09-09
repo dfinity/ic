@@ -903,6 +903,11 @@ pub struct HttpStatusResponse {
     pub root_key: Option<Blob>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub impl_version: Option<String>,
+    /// The GuestOS version the node booted from (from version.txt). Distinct
+    /// from `impl_version` (the replica binary version) when a fast-upgrade
+    /// overlay is active.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guestos_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replica_health_status: Option<ReplicaHealthStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]

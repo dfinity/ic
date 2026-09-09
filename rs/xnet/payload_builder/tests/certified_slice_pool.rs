@@ -18,8 +18,8 @@ use ic_types::xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice};
 use ic_types::{CountBytes, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{
     CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, InvalidAppend, InvalidSlice,
-    LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS, UnpackedStreamSlice, certified_slice_count_bytes,
-    testing,
+    LABEL_STATUS, STATUS_LESS_USEFUL, STATUS_NONE, STATUS_SUCCESS, UnpackedStreamSlice,
+    certified_slice_count_bytes, testing,
 };
 use ic_xnet_payload_builder::{ExpectedIndices, MAX_SIGNALS, max_message_index};
 use maplit::btreemap;
@@ -1482,7 +1482,7 @@ fn assert_pool_unlocked(pool: &Mutex<CertifiedSlicePool>) {
 
 /// Tests that the pool lock is not held while a slice is being validated (which
 /// is the expensive part of `put()` and `append()`); and that a concurrent
-/// `append()` that lands meanwhile is simply overwritten.
+/// `append()` that lands meanwhile is pooled iff more useful.
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn pool_append_concurrent_append(
     #[strategy(arb_stream_slice(
@@ -1531,11 +1531,152 @@ fn pool_append_concurrent_append(
         // Appending the second message produces a 2 message slice.
         append(&pool, SRC_SUBNET, second_slice, &*store, &log).unwrap();
 
-        // As with `put()`, the last writer wins, even though it pools a shorter slice.
-        // The remaining messages can be pulled later.
+        // The concurrently pooled slice is more useful and is not displaced by the
+        // shorter, appended one.
         assert_matches!(
             slice_stats(&pool, SRC_SUBNET),
-            (_, Some(messages_begin), 2, _) if messages_begin == from
+            (_, Some(messages_begin), count, _) if messages_begin == from && count == msg_count
+        );
+
+        // 2 successful puts (initial and concurrent), 1 less useful append.
+        assert_eq!(
+            metric_vec(&[
+                (&[(LABEL_STATUS, STATUS_SUCCESS)], 2),
+                (&[(LABEL_STATUS, STATUS_LESS_USEFUL)], 1)
+            ]),
+            fixture.fetch_pool_put_count()
+        );
+    });
+}
+
+/// Tests that a pooled slice is only ever replaced by a more useful one: one
+/// with more messages; or, failing that, with more signals.
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
+fn pool_put_more_useful_slice_only(
+    #[strategy(arb_stream_slice(
+        2, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+) {
+    let (mut stream, from, msg_count) = test_slice;
+
+    with_test_replica_logger(|log| {
+        let fixture =
+            StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
+        let prefix_slice = fixture.get_slice(DST_SUBNET, from, 1);
+        let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
+
+        // The same slice, but with one extra signal.
+        stream.push_accept_signal();
+        let fixture = fixture.with_stream(DST_SUBNET, stream.clone());
+        let more_signals_slice = fixture.get_slice(DST_SUBNET, from, msg_count);
+
+        let mut store = MockCertifiedStreamStore::new();
+        // Actual return value does not matter as long as it's `Ok(_)`.
+        store
+            .expect_decode_certified_stream_slice()
+            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
+        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
+
+        // Pool a single message slice, then replace it with the full slice.
+        put(&pool, SRC_SUBNET, prefix_slice.clone(), &store, &log).unwrap();
+        assert_matches!(slice_stats(&pool, SRC_SUBNET), (_, _, 1, _));
+        put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap();
+        assert_matches!(slice_stats(&pool, SRC_SUBNET), (_, _, count, _) if count == msg_count);
+
+        // Putting the single message slice again is a no-op: it has fewer messages.
+        put(&pool, SRC_SUBNET, prefix_slice.clone(), &store, &log).unwrap();
+        assert_matches!(slice_stats(&pool, SRC_SUBNET), (_, _, count, _) if count == msg_count);
+
+        // But the same messages plus an extra signal do replace it...
+        put(&pool, SRC_SUBNET, more_signals_slice.clone(), &store, &log).unwrap();
+        // ...while the slice with fewer signals does not.
+        put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap();
+        assert_opt_slices_eq(
+            Some(more_signals_slice),
+            take_slice(&pool, SRC_SUBNET, None, None, None),
+        );
+
+        assert_eq!(
+            metric_vec(&[
+                (&[(LABEL_STATUS, STATUS_SUCCESS)], 3),
+                (&[(LABEL_STATUS, STATUS_LESS_USEFUL)], 2)
+            ]),
+            fixture.fetch_pool_put_count()
+        );
+    });
+}
+
+/// Tests that a pooled slice beginning after the stream position is replaced by
+/// one beginning at the stream position, even if the latter has fewer messages.
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
+fn pool_put_after_stream_position_regression(
+    #[strategy(arb_stream_slice(
+        2, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+) {
+    let (stream, from, msg_count) = test_slice;
+
+    with_test_replica_logger(|log| {
+        let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
+        let prefix_slice = fixture.get_slice(DST_SUBNET, from, 1);
+        let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
+
+        let mut store = MockCertifiedStreamStore::new();
+        // Actual return value does not matter as long as it's `Ok(_)`.
+        store
+            .expect_decode_certified_stream_slice()
+            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
+        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
+
+        let position_at = |message_index| ExpectedIndices {
+            message_index,
+            signal_index: StreamIndex::from(0),
+        };
+
+        garbage_collect(&pool, btreemap! {SRC_SUBNET => position_at(from)});
+        put(&pool, SRC_SUBNET, slice, &store, &log).unwrap();
+
+        // Consume the first message, then have the stream position regress, as it
+        // would if the block the payload went into did not get finalized.
+        garbage_collect(
+            &pool,
+            btreemap! {SRC_SUBNET => position_at(from.increment())},
+        );
+        garbage_collect(&pool, btreemap! {SRC_SUBNET => position_at(from)});
+        assert_matches!(
+            slice_stats(&pool, SRC_SUBNET),
+            (_, Some(messages_begin), count, _)
+                if messages_begin == from.increment() && count == msg_count - 1
+        );
+
+        // No messages can be taken, `take_slice` returns a header-only slice.
+        let taken = take_slice(&pool, SRC_SUBNET, Some(&position_at(from)), None, None).unwrap();
+        assert_eq!(
+            0,
+            testing::slice_len(&UnpackedStreamSlice::try_from(taken).unwrap())
+        );
+        // Messages are still pooled.
+        assert_matches!(
+            slice_stats(&pool, SRC_SUBNET),
+            (_, Some(messages_begin), count, _)
+                if messages_begin == from.increment() && count == msg_count - 1
+        );
+
+        // A single message slice beginning at the stream position replaces it.
+        put(&pool, SRC_SUBNET, prefix_slice, &store, &log).unwrap();
+        assert_matches!(
+            slice_stats(&pool, SRC_SUBNET),
+            (_, Some(messages_begin), 1, _) if messages_begin == from
         );
     });
 }
