@@ -399,14 +399,9 @@ impl CatchUpPackageProvider {
     ///
     /// It is important to perform a scan of all registry versions of interest because if only the
     /// source subnet needs to be recovered and a recovery CUP is inserted after the subnet split,
-    /// the destination replicas are independent of this decision and their orchestrators will still
-    /// detect the split and restart the replicas, driving the destination subnet forward.
-    ///
-    /// Fails if this node is unassigned at the version of the split, or assigned to a subnet
-    /// which is neither the source nor the destination subnet of the split. This should not happen
-    /// in practice and the only way to recover from it is to reprovision the node, since we do not
-    /// know for what subnet to look for a recovery CUP and we would like to avoid removing the
-    /// state by accident.
+    /// the destination replicas should be independent of this decision and their orchestrators
+    /// should still detect the split and restart the replicas, driving the destination subnet
+    /// forward.
     ///
     /// Does nothing without a local CUP since that would mean we were previously unassigned and
     /// have no state to preserve anyways.
@@ -438,7 +433,7 @@ impl CatchUpPackageProvider {
             // The record was last written at or before the local CUP's registry version: any
             // recorded split here or below is a past one.
             if versioned_record.version <= local_cup.content.registry_version() {
-                return Ok(());
+                break;
             }
 
             let Some(contents) = versioned_record.value else {
@@ -456,22 +451,32 @@ impl CatchUpPackageProvider {
                 })
             })?;
 
-            // Our membership at the splitting record's version is our post-split subnet. Being
-            // unassigned there is unexpected and fails.
-            let new_subnet_id = self.registry.get_subnet_id(versioned_record.version)?;
+            let Some(new_subnet_id) = self
+                .registry
+                .get_subnet_id_from_node_id(self.node_id, versioned_record.version)?
+            else {
+                // Our membership at the splitting record's version is our post-split subnet. Being
+                // unassigned here is unexpected. Though, this could genuinely happen if we are
+                // lagging behind by a lot and were removed from the subnet *prior* to the split. We
+                // can return now, it makes no sense to continue searching for a previous split: we
+                // prioritize data at the later registry version.
+                return Ok(());
+            };
 
-            // Any other assignment than source or destination is unexpected and fails as well.
             if new_subnet_id != *subnet_id && new_subnet_id != destination_subnet_id {
-                return Err(OrchestratorError::DisallowedSubnetSplitAssignmentError {
-                    new_subnet_id,
-                    source_subnet_id: *subnet_id,
-                    destination_subnet_id,
-                });
+                // Any other assignment than source or destination is unexpected. This is very
+                // similar to the previous condition about being unassigned. This could happen if we
+                // were moved to a different subnet prior to the split, independently of the latter.
+                // But there could also very well be a previous split of the same subnet: we would
+                // not want to remove the state by mistake, continue scanning.
+                continue;
             }
 
             *subnet_id = new_subnet_id;
             return Ok(());
         }
+
+        // No split was found that is ahead of the local CUP.
 
         Ok(())
     }
@@ -1131,17 +1136,21 @@ pub(crate) mod tests {
         )
     }
 
-    /// Marks the source subnet's CUP contents record with [`CupType::SubnetSplitting`] at
-    /// [`SPLIT_REGISTRY_VERSION`], mirroring the mutation of `do_split_subnet`. This is how the
-    /// orchestrator detects a pending split.
-    pub(crate) fn add_subnet_splitting_record(data_provider: &ProtoRegistryDataProvider) {
+    /// Marks the source subnet's CUP contents record with [`CupType::SubnetSplitting`] into
+    /// `destination_subnet_id` at the given registry version. This is how the orchestrator detects
+    /// a pending split.
+    pub(crate) fn add_subnet_splitting_record(
+        data_provider: &ProtoRegistryDataProvider,
+        registry_version: RegistryVersion,
+        destination_subnet_id: SubnetId,
+    ) {
         data_provider
             .add(
                 &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
-                SPLIT_REGISTRY_VERSION,
+                registry_version,
                 Some(CatchUpPackageContents {
                     cup_type: Some(CupType::SubnetSplitting(SubnetSplittingArgs {
-                        destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
+                        destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
                     })),
                     ..Default::default()
                 }),
@@ -1185,7 +1194,11 @@ pub(crate) mod tests {
             1,
             vec![SOURCE_SUBNET_ID, DESTINATION_SUBNET_ID],
         );
-        add_subnet_splitting_record(&data_provider);
+        add_subnet_splitting_record(
+            &data_provider,
+            SPLIT_REGISTRY_VERSION,
+            DESTINATION_SUBNET_ID,
+        );
 
         let all_nodes = [source_nodes, destination_nodes].concat();
         add_single_subnet_record(
@@ -1960,16 +1973,17 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_latest_cup_fails_when_unassigned_at_split_version() {
+    async fn test_get_latest_cup_keeps_local_cup_when_unassigned_at_split_version() {
         let tmp_dir = tempfile::tempdir().unwrap();
         let source_nodes = vec![node_test_id(1)];
         let destination_nodes = vec![node_test_id(2)];
-        // We are member of neither subnet at the split registry version.
+        // We are member of neither subnet at the split registry version: we must have been removed
+        // from the source subnet prior to the split, independently of it.
         let node_id = node_test_id(3);
         let registry = setup_split_registry(node_id, &source_nodes, &destination_nodes);
         let latest_registry_version = registry.get_latest_version();
 
-        let mut cup_provider = make_cup_provider_with_registry(
+        let cup_provider = make_cup_provider_with_registry(
             tmp_dir.path().to_path_buf(),
             node_id,
             Duration::from_secs(5),
@@ -1981,46 +1995,46 @@ pub(crate) mod tests {
             Height::from(100),
         ));
 
-        // A split is pending, but we can't tell which half we belong to, so the whole CUP fetch
-        // must fail conservatively.
-        let result = cup_provider
-            .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID, latest_registry_version)
-            .await;
+        // A split is pending, but it is not ours to follow: the subnet ID must be left unchanged,
+        // leaving the situation to the regular leaving flow.
+        let mut subnet_id = SOURCE_SUBNET_ID;
+        cup_provider
+            .maybe_mutate_subnet_id_due_to_split(
+                &mut subnet_id,
+                Some(&local_cup),
+                latest_registry_version,
+            )
+            .unwrap();
 
-        assert_matches!(
-            result,
-            Err(OrchestratorError::NodeUnassignedError(id, version))
-                if id == node_id && version == SPLIT_REGISTRY_VERSION
-        );
+        assert_eq!(subnet_id, SOURCE_SUBNET_ID);
     }
 
     #[test]
-    fn test_pending_split_fails_if_assigned_to_a_third_subnet() {
+    fn test_pending_split_detected_below_a_later_split() {
         let tmp_dir = tempfile::tempdir().unwrap();
         let source_nodes = vec![node_test_id(1)];
         let destination_nodes = vec![node_test_id(2)];
-        let node_id = node_test_id(3);
+        // We move to the destination subnet.
+        let node_id = destination_nodes[0];
         let third_subnet_id = SUBNET_0;
-        // At the split registry version, we are a member of a third subnet, which a split must
-        // never do.
+        assert_ne!(third_subnet_id, SOURCE_SUBNET_ID);
+        assert_ne!(third_subnet_id, DESTINATION_SUBNET_ID);
+        // Chained splits: after our split, the source subnet is split *again*, into a third
+        // subnet. The scan first hits the later split's record, at whose version we are a member
+        // of neither the source nor that split's destination subnet (we are already in ours). It
+        // must keep scanning and still pick up our own split below.
         let registry = setup_split_registry_customized(
             node_id,
             &source_nodes,
             &destination_nodes,
             |_| NodeRecord::default(),
             |data_provider| {
-                add_subnet_list_record(
+                // Only the source subnet's CUP contents record matters for the scan; the third
+                // subnet's own records are never consulted here.
+                add_subnet_splitting_record(
                     data_provider,
-                    SPLIT_REGISTRY_VERSION.get(),
-                    vec![SOURCE_SUBNET_ID, DESTINATION_SUBNET_ID, third_subnet_id],
-                );
-                add_single_subnet_record(
-                    data_provider,
-                    SPLIT_REGISTRY_VERSION.get(),
+                    SPLIT_REGISTRY_VERSION + RegistryVersion::from(4),
                     third_subnet_id,
-                    SubnetRecordBuilder::new()
-                        .with_committee(&[node_id])
-                        .build(),
                 );
             },
         );
@@ -2038,25 +2052,16 @@ pub(crate) mod tests {
             Height::from(100),
         ));
 
-        // A split may only move us between its two halves, so we conservatively fail the CUP
-        // fetch.
         let mut subnet_id = SOURCE_SUBNET_ID;
-        let result = cup_provider.maybe_mutate_subnet_id_due_to_split(
-            &mut subnet_id,
-            Some(&local_cup),
-            latest_registry_version,
-        );
+        cup_provider
+            .maybe_mutate_subnet_id_due_to_split(
+                &mut subnet_id,
+                Some(&local_cup),
+                latest_registry_version,
+            )
+            .unwrap();
 
-        assert_matches!(
-            result,
-            Err(OrchestratorError::DisallowedSubnetSplitAssignmentError {
-                new_subnet_id,
-                source_subnet_id,
-                destination_subnet_id,
-            }) if new_subnet_id == third_subnet_id
-                && source_subnet_id == SOURCE_SUBNET_ID
-                && destination_subnet_id == DESTINATION_SUBNET_ID
-        );
-        assert_eq!(subnet_id, SOURCE_SUBNET_ID);
+        // The later split is not ours to follow, but our own split below is.
+        assert_eq!(subnet_id, DESTINATION_SUBNET_ID);
     }
 }
