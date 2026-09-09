@@ -136,6 +136,20 @@ The `nns` module provides helpers for interacting with the NNS in system tests.
 - **THEN** they simplify creating, submitting, and awaiting governance proposals
 - **AND** support common operations like subnet creation, node assignment, and replica upgrades
 
+### Requirement: Unallowed Log Pattern Detection
+
+The `assert_no_unallowed_log_patterns` teardown fails a system test when an IC node log line contains an unallowed phrase (e.g. `panicked`, `This is a bug`) not covered by that phrase's configured exclusions.
+
+#### Scenario: Configuring patterns and exclusions
+- **WHEN** a test uses `SystemTestGroup::{add,remove}_unallowed_log_pattern*`
+- **THEN** the configured map from pattern to its set of exclusion phrases is used by the teardown
+- **AND** `panicked` and `This is a bug` are unallowed by default
+
+#### Scenario: Selecting the log source
+- **WHEN** the plan is built
+- **THEN** IC node logs are read from Farm's ElasticSearch (fed by the Vector VM) unless `--no-logs` is set, or from the local JSON Lines files under `<group_dir>/journald_logs/nodes/` when `--stream-ic-node-logs` is set
+- **AND** IC nodes excluded via `--exclude-logs` are not scanned
+
 ### Requirement: ICT Tool
 
 The `ict` directory provides tooling for managing system test infrastructure.
