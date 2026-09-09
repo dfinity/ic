@@ -1,10 +1,15 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX, mutations::common::normalized_canister_cycles_cost_schedule,
+    registry::Registry,
+};
 use candid::CandidType;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::SubnetId;
+use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_routing_table::are_disjoint;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 
 impl Registry {
@@ -22,6 +27,8 @@ impl Registry {
     ///
     /// Note that only the routing table is updated: neither subnet record is
     /// modified and, in particular, the source subnet is not deleted.
+    ///
+    /// Both subnets must use the same cycles cost schedule; see the check below.
     pub fn merge_subnets(&mut self, payload: MergeSubnetsPayload) -> Result<(), String> {
         println!("{LOG_PREFIX}merge_subnets: {payload:?}");
 
@@ -40,13 +47,46 @@ impl Registry {
         let version = self.latest_version();
 
         // The subnets must exist.
-        self.get(&make_subnet_record_key(source_subnet).into_bytes(), version)
+        let source_subnet_record = self
+            .get(&make_subnet_record_key(source_subnet).into_bytes(), version)
             .ok_or_else(|| format!("source {source_subnet} is not a known subnet"))?;
-        self.get(
-            &make_subnet_record_key(destination_subnet).into_bytes(),
-            version,
-        )
-        .ok_or_else(|| format!("destination {destination_subnet} is not a known subnet"))?;
+        let destination_subnet_record = self
+            .get(
+                &make_subnet_record_key(destination_subnet).into_bytes(),
+                version,
+            )
+            .ok_or_else(|| format!("destination {destination_subnet} is not a known subnet"))?;
+
+        // The subnets must use the same cycles cost schedule. The merged canisters carry
+        // their callbacks along, and each callback records the cycles prepaid for its
+        // response execution under the cost schedule of the subnet on which the call was
+        // performed. When the response is executed, that prepayment is settled against
+        // the cycles the execution requires, derived under the cost schedule of the
+        // subnet hosting the canister by then
+        // (`CyclesAccountManager::adjust_prepayment_for_response_execution`). The two
+        // amounts are only comparable if both were derived under the same cost schedule:
+        // an amount that is free under the free cost schedule has a zero real part but a
+        // non-zero nominal one, so settling across a switch either forfeits the real part
+        // of the prepayment or credits real cycles that were never withdrawn.
+        let source_cost_schedule = normalized_canister_cycles_cost_schedule(
+            &SubnetRecord::decode(source_subnet_record.value.as_slice()).map_err(|err| {
+                format!("failed to decode the record of source subnet {source_subnet}: {err}")
+            })?,
+        );
+        let destination_cost_schedule = normalized_canister_cycles_cost_schedule(
+            &SubnetRecord::decode(destination_subnet_record.value.as_slice()).map_err(|err| {
+                format!(
+                    "failed to decode the record of destination subnet {destination_subnet}: {err}"
+                )
+            })?,
+        );
+        if source_cost_schedule != destination_cost_schedule {
+            return Err(format!(
+                "cycles cost schedules do not match: source subnet {source_subnet} uses the \
+                 {source_cost_schedule:?} cycles cost schedule, destination subnet \
+                 {destination_subnet} uses the {destination_cost_schedule:?} one"
+            ));
+        }
 
         // The source subnet must be nonempty.
         let routing_table = self.get_routing_table_or_panic(version);
@@ -103,7 +143,9 @@ mod tests {
             routing_table::routing_table_into_registry_mutation,
         },
     };
+    use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+    use ic_registry_transport::update;
     use ic_types::CanisterId;
     use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2, SUBNET_3};
     use lazy_static::lazy_static;
@@ -286,6 +328,40 @@ mod tests {
         let error_message = result.unwrap_err();
         assert!(
             error_message.contains(&format!("destination {SUBNET_3} is not a known subnet")),
+            "{error_message}"
+        );
+        assert_eq!(
+            get_routing_table_entries(&registry),
+            FIXTURE_ROUTING_TABLE_ENTRIES.to_vec(),
+        );
+    }
+
+    #[test]
+    fn test_merge_subnets_fails_when_cost_schedules_differ() {
+        // Step 1: Prepare the world: put the destination subnet on the free cycles cost
+        // schedule, as a rental subnet is. The mutation has to bypass the invariant
+        // checks, which reject a change of the cost schedule of an existing subnet (see
+        // `check_subnet_cost_schedule_immutability`).
+        let mut registry = TWO_SUBNETS_REGISTRY.clone();
+        let mut subnet_record = registry
+            .get_subnet(SUBNET_2, registry.latest_version())
+            .unwrap();
+        subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
+        registry.apply_mutations_for_test(vec![update(
+            make_subnet_record_key(SUBNET_2).as_bytes(),
+            subnet_record.encode_to_vec(),
+        )]);
+
+        // Step 2: Run the code under test.
+        let result = registry.merge_subnets(MergeSubnetsPayload {
+            source_subnet: SUBNET_1,
+            destination_subnet: SUBNET_2,
+        });
+
+        // Step 3: Verify results.
+        let error_message = result.unwrap_err();
+        assert!(
+            error_message.contains("cycles cost schedules do not match"),
             "{error_message}"
         );
         assert_eq!(

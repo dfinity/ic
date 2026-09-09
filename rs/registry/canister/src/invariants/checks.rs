@@ -1,5 +1,5 @@
 use crate::{
-    common::LOG_PREFIX,
+    common::{LOG_PREFIX, key_family::get_key_family_iter},
     invariants::{
         api_boundary_node::check_api_boundary_node_invariants,
         assignment::check_node_assignment_invariants,
@@ -11,7 +11,10 @@ use crate::{
         node_operator::check_node_operator_invariants,
         node_record::check_node_record_invariants,
         replica_version::check_replica_version_invariants,
-        routing_table::{check_canister_migrations_invariants, check_routing_table_invariants},
+        routing_table::{
+            check_canister_cost_schedule_invariants, check_canister_migrations_invariants,
+            check_routing_table_invariants,
+        },
         standard_engine_replica_version::check_standard_engine_replica_version_invariants,
         subnet::{check_subnet_cost_schedule_immutability, check_subnet_invariants},
         unassigned_nodes_config::check_unassigned_nodes_config_invariants,
@@ -30,7 +33,6 @@ use ic_registry_keys::SUBNET_RECORD_KEY_PREFIX;
 use ic_registry_transport::pb::v1::{
     RegistryMutation, high_capacity_registry_value, registry_mutation::Type,
 };
-use prost::Message;
 use std::collections::BTreeMap;
 
 impl Registry {
@@ -77,6 +79,7 @@ impl Registry {
         );
 
         let previous_subnet_cost_schedules = self.latest_subnet_cost_schedules();
+        let previous_routing_table = self.get_routing_table_or_panic(self.latest_version());
         let snapshot = self.take_latest_snapshot_with_mutations(mutations);
 
         // Node invariants
@@ -96,6 +99,11 @@ impl Registry {
 
         // Routing Table invariants
         result = result.and(check_routing_table_invariants(&snapshot));
+        result = result.and(check_canister_cost_schedule_invariants(
+            &previous_routing_table,
+            &previous_subnet_cost_schedules,
+            &snapshot,
+        ));
 
         // Canister migrations invariants
         result = result.and(check_canister_migrations_invariants(&snapshot));
@@ -141,23 +149,18 @@ impl Registry {
 
     /// Returns the cycles cost schedule of every subnet in the registry as of the
     /// latest version, i.e. before the mutations under check are applied, keyed by the
-    /// registry key of the subnet record.
+    /// registry key of the subnet record (as in `get_subnet_records_map`).
     ///
-    /// Unlike `take_latest_snapshot`, this only decodes the subnet records, of which
+    /// Unlike `take_latest_snapshot`, this only visits the subnet records, of which
     /// there are few, so that `check_subnet_cost_schedule_immutability` does not
     /// require a second snapshot of the whole registry.
     fn latest_subnet_cost_schedules(&self) -> BTreeMap<Vec<u8>, CanisterCyclesCostSchedule> {
-        let version = self.latest_version();
-        self.store
-            .keys()
-            .filter(|key| key.starts_with(SUBNET_RECORD_KEY_PREFIX.as_bytes()))
-            .filter_map(|key| {
-                let value = self.get(key, version)?;
-                let subnet_record = SubnetRecord::decode(value.value.as_slice()).ok()?;
-                Some((
-                    key.clone(),
+        get_key_family_iter::<SubnetRecord>(self, SUBNET_RECORD_KEY_PREFIX)
+            .map(|(subnet_id, subnet_record)| {
+                (
+                    format!("{SUBNET_RECORD_KEY_PREFIX}{subnet_id}").into_bytes(),
                     normalized_canister_cycles_cost_schedule(&subnet_record),
-                ))
+                )
             })
             .collect()
     }
