@@ -26,7 +26,7 @@ component here.
 | 0 | **Rosetta verification** | whether the chains have already diverged reorders everything after it, and nothing here repairs a divergence |
 | 1 | **Release 1** — archive only: A1, C1, archive half of E1 | closes the corruption. Safe on `master` as-is: an A1 refusal arrives as a graceful `Err` on the ledger's existing path and never rejects a transaction |
 | 2 | **DEFI-2967** — spawn instead of await | removes the committed-but-rejected reply, and with it the double-mint hazard |
-| 3 | **Raise `trigger_threshold` back**, by NNS proposal | archiving resumes, on a suite where a bad append is refused and a failure cannot contradict a reply |
+| 3 | **Lower `trigger_threshold` back**, by NNS proposal | archiving resumes, on a suite where a bad append is refused and a failure cannot contradict a reply |
 | 4 | **Release 2** — ledger: B, D, E2, E3, F | bounded retries, creation detection, reconciliation, single-message rounds |
 
 Two things about that order are deliberate:
