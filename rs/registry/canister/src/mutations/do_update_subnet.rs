@@ -235,10 +235,10 @@ impl Registry {
 
 /// Defence-in-depth check that the engine controller canister never reaches
 /// `do_update_subnet` with anything other than the small set of fields it is
-/// allowed to manage (currently `subnet_admins` and `is_halted`). The engine
-/// controller proxy already enforces this, but mirroring the check here keeps
-/// the registry's invariants self-contained and prevents future drift if the
-/// proxy's surface ever changes.
+/// allowed to manage (currently `subnet_admins`, `is_halted` and
+/// `cooling_down`). The engine controller proxy already enforces this, but
+/// mirroring the check here keeps the registry's invariants self-contained and
+/// prevents future drift if the proxy's surface ever changes.
 ///
 /// Uses exhaustive destructuring so adding a new field to `UpdateSubnetPayload`
 /// will fail to compile here until it is explicitly classified as
@@ -249,6 +249,7 @@ fn ensure_engine_controller_payload_scope(payload: &UpdateSubnetPayload) {
         // The fields the engine controller is allowed to set.
         subnet_admins: _,
         is_halted: _,
+        cooling_down: _,
 
         max_ingress_bytes_per_message,
         max_ingress_bytes_per_block,
@@ -261,7 +262,6 @@ fn ensure_engine_controller_payload_scope(payload: &UpdateSubnetPayload) {
         start_as_nns,
         subnet_type,
         halt_at_cup_height,
-        cooling_down,
         features,
         resource_limits,
         chain_key_config,
@@ -306,7 +306,6 @@ fn ensure_engine_controller_payload_scope(payload: &UpdateSubnetPayload) {
     check_none!(start_as_nns, "start_as_nns");
     check_none!(subnet_type, "subnet_type");
     check_none!(halt_at_cup_height, "halt_at_cup_height");
-    check_none!(cooling_down, "cooling_down");
     check_none!(features, "features");
     check_none!(resource_limits, "resource_limits");
     check_none!(chain_key_config, "chain_key_config");
@@ -333,8 +332,8 @@ fn ensure_engine_controller_payload_scope(payload: &UpdateSubnetPayload) {
     assert!(
         disallowed.is_empty(),
         "{LOG_PREFIX}do_update_subnet: engine controller may only update \
-         `subnet_admins` and `is_halted`, but the following fields were also \
-         set: {disallowed:?}",
+         `subnet_admins`, `is_halted` and `cooling_down`, but the following \
+         fields were also set: {disallowed:?}",
     );
 }
 
@@ -1909,7 +1908,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "engine controller may only update `subnet_admins` and `is_halted`")]
+    #[should_panic(
+        expected = "engine controller may only update `subnet_admins`, `is_halted` and `cooling_down`"
+    )]
     fn engine_controller_cannot_update_disallowed_fields() {
         use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
 
@@ -1937,18 +1938,25 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "engine controller may only update `subnet_admins` and `is_halted`")]
-    fn engine_controller_cannot_set_cooling_down() {
+    fn engine_controller_can_set_cooling_down() {
         use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
 
         let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
 
-        let mut payload = make_empty_update_payload(subnet_id);
-        // `cooling_down` is outside the engine controller's scope, even though
-        // it is halting-adjacent: only `is_halted` is in scope.
-        payload.cooling_down = Some(true);
+        // Sanity check: subnets do not cool down by default.
+        assert!(!registry.get_subnet_or_panic(subnet_id).cooling_down);
 
-        registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+        for cooling_down in [true, false] {
+            let mut payload = make_empty_update_payload(subnet_id);
+            payload.cooling_down = Some(cooling_down);
+
+            registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+
+            assert_eq!(
+                registry.get_subnet_or_panic(subnet_id).cooling_down,
+                cooling_down
+            );
+        }
     }
 
     #[test]
