@@ -13,7 +13,7 @@ use {
     config_types::GuestOSConfig,
     sev::firmware::guest::Firmware,
     sev_guest::is_tee_enabled,
-    vsock_lib::LinuxVSockClient,
+    vsock_lib::client::LinuxVsockClient,
 };
 
 /// Creates a new DiskEncryptionKeyExchangeServerAgent to be used by the Orchestrator.
@@ -68,7 +68,7 @@ pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
 
     Some(DiskEncryptionKeyExchangeServerAgent::new(
         handle,
-        Box::new(LinuxVSockClient::default()),
+        Box::new(LinuxVsockClient::default()),
         sev_firmware_factory,
         SevRootCertificateVerification::Verify,
         trusted_execution_config,
