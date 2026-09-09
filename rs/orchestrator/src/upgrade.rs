@@ -286,7 +286,7 @@ impl Upgrade {
         // persist it if necessary.
         let latest_cup = self
             .cup_provider
-            .get_latest_cup(maybe_local_cup_proto, subnet_id)
+            .get_latest_cup(maybe_local_cup_proto, subnet_id, latest_registry_version)
             .await?;
         // Replace the subnet ID of the local CUP with the subnet ID of the latest CUP.
         // In the vast majority of cases, they will be identical. In case of a subnet split, this is
