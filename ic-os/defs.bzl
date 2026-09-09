@@ -509,7 +509,8 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
             if fast_upgrades:
                 overlay_out = "overlay" + test_suffix + ".tzst"
                 upgrade_overlay_binaries = image_deps.get(
-                    "upgrade_overlay_binaries", []
+                    "upgrade_overlay_binaries",
+                    [],
                 )
                 ext4_image(
                     name = overlay_out,
