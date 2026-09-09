@@ -85,7 +85,7 @@ pub(crate) fn deliver_batches_for_finalizer(
     node_id: NodeId,
     subnet_id: SubnetId,
     result_processor: impl FnMut(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
-    status_observer: impl Fn(Status),
+    status_observer: impl FnMut(Status),
 ) -> Result<Height, MessageRoutingError> {
     deliver_batches(
         message_routing,
@@ -114,7 +114,7 @@ fn deliver_batches(
     subnet_id: SubnetId,
     max_batch_height_to_deliver: Option<Height>,
     mut result_processor: impl FnMut(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
-    status_observer: impl Fn(Status),
+    mut status_observer: impl FnMut(Status),
 ) -> Result<Height, MessageRoutingError> {
     let finalized_height = pool.get_finalized_height();
     // If `max_batch_height_to_deliver` is specified and smaller than
@@ -647,6 +647,7 @@ mod tests {
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
+    use ic_test_artifact_pool::consensus_pool::Round;
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{
@@ -858,6 +859,82 @@ mod tests {
             initial_response.fresh_subnet_id,
             SubnetId::from(PrincipalId::from_str(EXPECTED_FRESH_SUBNET_ID_STR).unwrap())
         );
+    }
+
+    /// Every status the delivery path computes is handed to the observer, which
+    /// is what keeps the finalizer's `consensus_status` metric current: a halted
+    /// subnet returns early, and a metric only set on the way to a delivered
+    /// batch would be stuck at whatever it said before the subnet halted.
+    #[rstest]
+    #[case::running(/* halt_at_cup_height= */ false, Status::Running)]
+    #[case::halted(/* halt_at_cup_height= */ true, Status::Halted)]
+    fn test_deliver_batches_observes_status(
+        #[case] halt_at_cup_height: bool,
+        #[case] expected_status: Status,
+    ) {
+        const INTERVAL_LENGTH: u64 = 3;
+        const HALT_REGISTRY_VERSION: u64 = 10;
+        // A summary, and hence a CUP, every `INTERVAL_LENGTH + 1` heights.
+        const CUP_HEIGHT: Height = Height::new(2 * (INTERVAL_LENGTH + 1));
+
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let record = || {
+                SubnetRecordBuilder::from(&[NODE_1])
+                    .with_dkg_interval_length(INTERVAL_LENGTH)
+                    .with_replica_version(test_replica_version().as_ref())
+            };
+            let Dependencies {
+                mut pool,
+                membership,
+                registry,
+                replica_config,
+                ..
+            } = DependenciesBuilder::single_subnet(
+                pool_config,
+                SUBNET_1,
+                vec![
+                    (1, record().build()),
+                    (
+                        HALT_REGISTRY_VERSION,
+                        record().with_halt_at_cup_height(halt_at_cup_height).build(),
+                    ),
+                ],
+            )
+            .build();
+
+            // Up to the CUP, and then one round more whose block is not a summary
+            // one: the delivery path only asks for the status of a subnet when the
+            // block it is about to deliver is not the CUP block.
+            pool.advance_round_normal_operation_n(CUP_HEIGHT.get());
+            Round::new(&mut pool)
+                .with_certified_height(CUP_HEIGHT)
+                .advance();
+
+            let message_routing = FakeMessageRouting::new();
+            *message_routing.next_batch_height.write().unwrap() = CUP_HEIGHT.increment();
+
+            // A plain mutable closure, as the observer is `FnMut`.
+            let mut observed = Vec::new();
+            let result = deliver_batches_for_finalizer(
+                &message_routing,
+                &membership,
+                &PoolReader::new(&pool),
+                registry.as_ref(),
+                &no_op_logger(),
+                replica_config.node_id,
+                replica_config.subnet_id,
+                |_, _, _| {},
+                |status| observed.push(status),
+            );
+
+            assert!(result.is_ok(), "delivery failed: {result:?}");
+            assert_eq!(
+                observed,
+                vec![expected_status],
+                "the observed statuses of a subnet that is {}halted",
+                if halt_at_cup_height { "" } else { "not " },
+            );
+        });
     }
 
     #[rstest]
