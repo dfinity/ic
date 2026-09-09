@@ -268,8 +268,6 @@ pub fn serial_log_path(guest_vm_type: GuestVMType, slot: VmSlot) -> PathBuf {
         GuestVMType::Default => DEFAULT_SERIAL_LOG_NAME,
         GuestVMType::Upgrade => UPGRADE_SERIAL_LOG_NAME,
     };
-    // The slot goes before the extension, so that every VM's log is still a
-    // .log file. export-guestos-serial-logs.sh forwards these by name.
     PathBuf::from(format!(
         "{SERIAL_LOG_DIR}/{name}{suffix}.log",
         suffix = slot.to_suffix()
@@ -541,26 +539,34 @@ mod tests {
         );
     }
 
-    // The names export-guestos-serial-logs.sh forwards, which are
-    // "<name><slot>.log" under /var/log/libvirt/qemu.
+    // The names export-guestos-serial-logs.sh forwards.
     #[test]
     fn test_serial_log_path() {
-        for (guest_vm_type, name) in [
-            (GuestVMType::Default, "guestos-serial"),
-            (GuestVMType::Upgrade, "upgrade-guestos-serial"),
-        ] {
-            assert_eq!(
-                serial_log_path(guest_vm_type, VmSlot::Plain),
-                PathBuf::from(format!("/var/log/libvirt/qemu/{name}.log"))
-            );
+        assert_eq!(
+            serial_log_path(GuestVMType::Default, VmSlot::Plain),
+            Path::new("/var/log/libvirt/qemu/guestos-serial.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Default, VmSlot::new(1)),
+            Path::new("/var/log/libvirt/qemu/guestos-serial1.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Default, VmSlot::new(60)),
+            Path::new("/var/log/libvirt/qemu/guestos-serial60.log")
+        );
 
-            for slot in [1, 15, 60] {
-                assert_eq!(
-                    serial_log_path(guest_vm_type, VmSlot::new(slot)),
-                    PathBuf::from(format!("/var/log/libvirt/qemu/{name}{slot}.log"))
-                );
-            }
-        }
+        assert_eq!(
+            serial_log_path(GuestVMType::Upgrade, VmSlot::Plain),
+            Path::new("/var/log/libvirt/qemu/upgrade-guestos-serial.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Upgrade, VmSlot::new(1)),
+            Path::new("/var/log/libvirt/qemu/upgrade-guestos-serial1.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Upgrade, VmSlot::new(60)),
+            Path::new("/var/log/libvirt/qemu/upgrade-guestos-serial60.log")
+        );
     }
 
     // Each VM must get its own domain, uuid and serial log, or VMs overwrite

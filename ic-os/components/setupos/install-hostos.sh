@@ -100,8 +100,7 @@ function resize_partition() {
 
     local vm_count=$(guestos_vm_count)
 
-    # Configure multiple GuestOS for the node types that run more than one.
-    # Every other type keeps its single volume.
+    # Split the volume when the node runs more than one GuestOS.
     if ((vm_count > 1)); then
         # Cleanup the initial GuestOS
         lvremove -f hostlvm/guestos >/dev/null 2>&1
