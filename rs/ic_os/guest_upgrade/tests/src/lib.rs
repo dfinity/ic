@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{bail, ensure};
 use attestation::SevAttestationPackage;
 use attestation::attestation_package::SevRootCertificateVerification;
 use config_types::{
@@ -249,11 +249,8 @@ impl DiskEncryptionKeyExchangeTestFixture {
                 device_path == store_device_path && luks_header_path == store_luks_header_path
             })
             .returning(move |_, _, _| {
-                if can_open {
-                    Ok(())
-                } else {
-                    anyhow!("cannot open")
-                }
+                ensure!(can_open, "cannot open");
+                Ok(())
             });
     }
 
