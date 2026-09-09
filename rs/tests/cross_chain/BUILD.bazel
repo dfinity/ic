@@ -138,7 +138,6 @@ system_test_nns(
     system_test(
         name = "adapter_basics_test",
         cpus = MIN_LOCAL_CPUS + DEFAULT_VCPUS_PER_VM + DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs + 1 UniversalVm (bitcoind) * 6 vCPUs.
-        enable_metrics = True,
         enable_uvm = True,
         env = {
             "ADAPTER_TO_TEST": adapter,
