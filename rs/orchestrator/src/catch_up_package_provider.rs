@@ -420,21 +420,23 @@ impl CatchUpPackageProvider {
             return Ok(());
         };
 
-        let from_version = latest_registry_version.get();
-        let to_version = local_cup.content.registry_version().get() + 1;
-        for registry_version in (to_version..=from_version).rev() {
-            let registry_version = RegistryVersion::new(registry_version);
+        let local_cup_registry_version = local_cup.content.registry_version();
+        let mut lookup_version = latest_registry_version;
+        loop {
             let versioned_record = self
                 .registry
                 .get_registry_client()
-                .get_cup_contents(*subnet_id, registry_version)
+                .get_cup_contents(*subnet_id, lookup_version)
                 .map_err(OrchestratorError::RegistryClientError)?;
 
             // The record was last written at or before the local CUP's registry version: any
             // recorded split here or below is a past one.
-            if versioned_record.version <= local_cup.content.registry_version() {
+            if versioned_record.version <= local_cup_registry_version {
                 break;
             }
+            // Continue the scan from the record's last write to avoid scanning every single
+            // registry version
+            lookup_version = versioned_record.version - RegistryVersion::from(1);
 
             let Some(contents) = versioned_record.value else {
                 continue;
