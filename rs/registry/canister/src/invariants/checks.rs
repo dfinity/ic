@@ -12,8 +12,8 @@ use crate::{
         node_record::check_node_record_invariants,
         replica_version::check_replica_version_invariants,
         routing_table::{
-            check_canister_cost_schedule_invariants, check_canister_migrations_invariants,
-            check_routing_table_invariants,
+            canister_ranges_from_snapshot, check_canister_cost_schedule_invariants,
+            check_canister_migrations_invariants, check_routing_table_invariants,
         },
         standard_engine_replica_version::check_standard_engine_replica_version_invariants,
         subnet::{check_subnet_cost_schedule_immutability, check_subnet_invariants},
@@ -27,12 +27,17 @@ use crate::{
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_nervous_system_string::clamp_debug_len;
-use ic_protobuf::registry::subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord};
+use ic_protobuf::registry::{
+    routing_table::v1::RoutingTable as pbRoutingTable,
+    subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord},
+};
 use ic_registry_canister_chunkify::dechunkify;
-use ic_registry_keys::SUBNET_RECORD_KEY_PREFIX;
+use ic_registry_keys::{CANISTER_RANGES_PREFIX, SUBNET_RECORD_KEY_PREFIX};
+use ic_registry_routing_table::RoutingTable;
 use ic_registry_transport::pb::v1::{
     RegistryMutation, high_capacity_registry_value, registry_mutation::Type,
 };
+use prost::Message;
 use std::collections::BTreeMap;
 
 impl Registry {
@@ -78,8 +83,6 @@ impl Registry {
             )
         );
 
-        let previous_subnet_cost_schedules = self.latest_subnet_cost_schedules();
-        let previous_routing_table = self.get_routing_table_or_panic(self.latest_version());
         let snapshot = self.take_latest_snapshot_with_mutations(mutations);
 
         // Node invariants
@@ -99,21 +102,45 @@ impl Registry {
 
         // Routing Table invariants
         result = result.and(check_routing_table_invariants(&snapshot));
-        result = result.and(check_canister_cost_schedule_invariants(
-            &previous_routing_table,
-            &previous_subnet_cost_schedules,
-            &snapshot,
-        ));
 
         // Canister migrations invariants
         result = result.and(check_canister_migrations_invariants(&snapshot));
 
         // Subnet invariants
         result = result.and(check_subnet_invariants(&snapshot));
-        result = result.and(check_subnet_cost_schedule_immutability(
-            &previous_subnet_cost_schedules,
-            &snapshot,
-        ));
+
+        // Cycles cost schedule invariants. Reading the subnet records and the routing
+        // table is not free, so only the mutations that could change the cost schedule
+        // a canister is charged under pay for these checks: a subnet record can change
+        // the cost schedule of a subnet, and a canister ranges shard can move a canister
+        // to a subnet on a different one.
+        let mutates_subnet_record = mutations.iter().any(|mutation| {
+            mutation
+                .key
+                .starts_with(SUBNET_RECORD_KEY_PREFIX.as_bytes())
+        });
+        let mutated_canister_ranges_shards = mutations
+            .iter()
+            .filter(|mutation| mutation.key.starts_with(CANISTER_RANGES_PREFIX.as_bytes()))
+            .map(|mutation| mutation.key.clone())
+            .collect::<Vec<Vec<u8>>>();
+        if mutates_subnet_record || !mutated_canister_ranges_shards.is_empty() {
+            let previous_subnet_cost_schedules = self.latest_subnet_cost_schedules();
+            if mutates_subnet_record {
+                result = result.and(check_subnet_cost_schedule_immutability(
+                    &previous_subnet_cost_schedules,
+                    &snapshot,
+                ));
+            }
+            if !mutated_canister_ranges_shards.is_empty() {
+                result = result.and(check_canister_cost_schedule_invariants(
+                    &self.latest_canister_ranges(&mutated_canister_ranges_shards),
+                    &canister_ranges_from_snapshot(&mutated_canister_ranges_shards, &snapshot),
+                    &previous_subnet_cost_schedules,
+                    &snapshot,
+                ));
+            }
+        }
 
         // Replica version invariants
         result = result.and(check_replica_version_invariants(&snapshot));
@@ -163,6 +190,19 @@ impl Registry {
                 )
             })
             .collect()
+    }
+
+    /// Returns the routing table restricted to the given canister ranges shards, as of
+    /// the latest version, i.e. before the mutations under check are applied. A shard
+    /// that those mutations create is simply absent.
+    fn latest_canister_ranges(&self, shard_keys: &[Vec<u8>]) -> RoutingTable {
+        let version = self.latest_version();
+        let shards = shard_keys
+            .iter()
+            .filter_map(|key| self.get(key, version))
+            .map(|value| pbRoutingTable::decode(value.value.as_slice()).unwrap())
+            .collect::<Vec<_>>();
+        RoutingTable::try_from(shards).unwrap()
     }
 
     fn take_latest_snapshot_with_mutations(
@@ -225,6 +265,7 @@ mod tests {
             add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
             prepare_registry_with_nodes,
         },
+        mutations::routing_table::routing_table_into_registry_mutation,
         registry::EncodedVersion,
     };
 
@@ -241,7 +282,9 @@ mod tests {
         make_canister_migrations_record_key, make_canister_ranges_key,
         make_node_operator_record_key, make_subnet_record_key,
     };
-    use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
+    use ic_registry_routing_table::{
+        CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable,
+    };
     use ic_registry_subnet_type::SubnetType;
     use ic_registry_transport::{
         delete, insert,
@@ -445,6 +488,65 @@ mod tests {
             make_subnet_record_key(subnet_id).as_bytes(),
             subnet_record.encode_to_vec(),
         )]);
+    }
+    /// The cycles cost schedule a canister is charged under must not change by moving
+    /// its canister ID range to a subnet on a different cost schedule; see
+    /// `check_canister_cost_schedule_invariants`. This also covers that a mutation of
+    /// the routing table alone is checked, i.e. that the check is not skipped for want
+    /// of a subnet record mutation.
+    #[test]
+    #[should_panic(expected = "changes its cycles cost schedule")]
+    fn canister_range_moved_across_cost_schedules_invariants_check_panic() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // Two application subnets, one on each cycles cost schedule: a rental subnet is
+        // an application subnet on the free one.
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let mut subnet_list_record = registry.get_subnet_list_record();
+        let mut subnet_ids = vec![];
+        for (index, (node_id, dkg_pk)) in node_ids_and_dkg_pks.into_iter().enumerate() {
+            let mut subnet_record = get_invariant_compliant_subnet_record(vec![node_id]);
+            subnet_record.subnet_type = i32::from(SubnetType::Application);
+            if index == 1 {
+                subnet_record.canister_cycles_cost_schedule =
+                    i32::from(CanisterCyclesCostSchedule::Free);
+            }
+            let subnet_id = subnet_test_id(1000 + index as u64);
+            let subnet_mutation = add_fake_subnet(
+                subnet_id,
+                &mut subnet_list_record,
+                subnet_record,
+                &btreemap! { node_id => dkg_pk },
+            );
+            registry.maybe_apply_mutation_internal(subnet_mutation);
+            subnet_ids.push(subnet_id);
+        }
+
+        // Host a canister ID range on the subnet on the normal cost schedule, which is
+        // fine as no subnet hosted it before, ...
+        let range = CanisterIdRange {
+            start: CanisterId::from_u64(0x1000),
+            end: CanisterId::from_u64(0x10ff),
+        };
+        let mut routing_table = registry.get_routing_table_or_panic(registry.latest_version());
+        routing_table.insert(range, subnet_ids[0]).unwrap();
+        registry.maybe_apply_mutation_internal(routing_table_into_registry_mutation(
+            &registry,
+            routing_table.clone(),
+        ));
+
+        // ... and then move it to the one on the free cost schedule, which is not.
+        routing_table
+            .assign_ranges(
+                CanisterIdRanges::try_from(vec![range]).unwrap(),
+                subnet_ids[1],
+            )
+            .unwrap();
+        registry.maybe_apply_mutation_internal(routing_table_into_registry_mutation(
+            &registry,
+            routing_table,
+        ));
     }
 }
 

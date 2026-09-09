@@ -55,6 +55,14 @@ pub(crate) fn check_routing_table_invariants(
 /// - changing the cost schedule of the subnet hosting the canister, which
 ///   `check_subnet_cost_schedule_immutability` rules out outright.
 ///
+/// The two routing tables are restricted to the canister ranges shards that the
+/// mutations under check touch, as reading the whole routing table on every mutation
+/// is not free. That is sound: a canister ID whose covering entry did not change is
+/// still assigned to the same subnet, and the cost schedule of that subnet cannot have
+/// changed either, which `check_subnet_cost_schedule_immutability` enforces. Note that
+/// an entry can move between shards, e.g. when two adjacent ranges are merged into one,
+/// which mutates the shard it leaves as well as the shard it lands in.
+///
 /// `previous_cost_schedules` maps the registry key of a subnet record to the cost
 /// schedule that subnet had before the mutations under check were applied. A canister
 /// ID whose cost schedule is unknown on either side is skipped: a subnet without a
@@ -81,6 +89,7 @@ pub(crate) fn check_routing_table_invariants(
 /// subnet on a different cost schedule.
 pub(crate) fn check_canister_cost_schedule_invariants(
     previous_routing_table: &RoutingTable,
+    routing_table: &RoutingTable,
     previous_cost_schedules: &BTreeMap<Vec<u8>, CanisterCyclesCostSchedule>,
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -105,7 +114,7 @@ pub(crate) fn check_canister_cost_schedule_invariants(
     // single sweep over both routing tables finds every pair of overlapping ranges,
     // i.e. every set of canister IDs that is hosted in both states.
     let previous_entries = as_entries(previous_routing_table);
-    let entries = as_entries(&get_routing_table(snapshot));
+    let entries = as_entries(routing_table);
     let (mut previous_index, mut index) = (0, 0);
     while previous_index < previous_entries.len() && index < entries.len() {
         let (previous_range, previous_subnet_id) = previous_entries[previous_index];
@@ -154,6 +163,20 @@ pub(crate) fn check_canister_cost_schedule_invariants(
     }
 
     Ok(())
+}
+
+/// Returns the routing table restricted to the given canister ranges shards, as held
+/// by `snapshot`. A shard that the mutations under check deleted is simply absent.
+pub(crate) fn canister_ranges_from_snapshot(
+    shard_keys: &[Vec<u8>],
+    snapshot: &RegistrySnapshot,
+) -> RoutingTable {
+    let shards = shard_keys
+        .iter()
+        .filter_map(|key| snapshot.get(key))
+        .map(|value| pbRoutingTable::decode(value.as_slice()).unwrap())
+        .collect::<Vec<_>>();
+    RoutingTable::try_from(shards).unwrap()
 }
 
 fn as_entries(routing_table: &RoutingTable) -> Vec<(CanisterIdRange, SubnetId)> {
@@ -323,10 +346,10 @@ mod tests {
             (range(0x100, 0x1ff), free_subnet_id),
         ]);
 
-        let check = |entries: Vec<(CanisterIdRange, SubnetId)>, snapshot: &mut RegistrySnapshot| {
-            insert_routing_table_to_snapshot(routing_table(entries), snapshot);
+        let check = |entries: Vec<(CanisterIdRange, SubnetId)>, snapshot: &RegistrySnapshot| {
             check_canister_cost_schedule_invariants(
                 &previous_routing_table,
+                &routing_table(entries),
                 &previous_cost_schedules,
                 snapshot,
             )
@@ -338,7 +361,7 @@ mod tests {
                 (range(0x0, 0xff), normal_subnet_id),
                 (range(0x100, 0x1ff), free_subnet_id),
             ],
-            &mut snapshot,
+            &snapshot,
         )
         .unwrap();
         // ... as is moving a range to a subnet on the same cost schedule, splitting it
@@ -349,11 +372,11 @@ mod tests {
                 (range(0x80, 0xff), other_normal_subnet_id),
                 (range(0x100, 0x1ff), free_subnet_id),
             ],
-            &mut snapshot,
+            &snapshot,
         )
         .unwrap();
         // ... dropping a range, ...
-        check(vec![(range(0x100, 0x1ff), free_subnet_id)], &mut snapshot).unwrap();
+        check(vec![(range(0x100, 0x1ff), free_subnet_id)], &snapshot).unwrap();
         // ... or assigning a range that was not hosted by any subnet before.
         check(
             vec![
@@ -361,7 +384,7 @@ mod tests {
                 (range(0x100, 0x1ff), free_subnet_id),
                 (range(0x200, 0x2ff), free_subnet_id),
             ],
-            &mut snapshot,
+            &snapshot,
         )
         .unwrap();
 
@@ -397,7 +420,7 @@ mod tests {
             // second one all along, so only the first one changes its cost schedule.
             (vec![(range(0x0, 0x1ff), free_subnet_id)], range(0x0, 0xff)),
         ] {
-            let err = check(entries, &mut snapshot)
+            let err = check(entries, &snapshot)
                 .expect_err("Expected the move across cost schedules to be rejected");
             assert!(
                 err.msg.contains("changes its cycles cost schedule"),
@@ -423,7 +446,7 @@ mod tests {
                 (range(0x0, 0xff), normal_subnet_id),
                 (range(0x100, 0x1ff), free_subnet_id),
             ],
-            &mut snapshot,
+            &snapshot,
         )
         .expect_err("Expected the change of the cost schedule to be rejected");
         assert!(
