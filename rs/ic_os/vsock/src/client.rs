@@ -1,5 +1,5 @@
 use crate::error::*;
-use crate::protocol::{Command, MAX_MESSAGE_SIZE, Response};
+use crate::protocol::{Command, Response};
 
 use mockall::automock;
 
@@ -15,7 +15,7 @@ pub use linux::*;
 mod linux {
     use super::*;
 
-    use crate::protocol::{Request, Response};
+    use crate::protocol::{MAX_MESSAGE_SIZE, Request, Response};
     use std::io::{Read, Write};
     use vsock::{VMADDR_CID_HOST, VsockStream};
 
