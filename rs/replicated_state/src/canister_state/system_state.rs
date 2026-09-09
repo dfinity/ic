@@ -2292,9 +2292,7 @@ impl SystemState {
     ///
     /// Returns `None` if the outstanding prepayments cannot be derived from the
     /// replicated state, i.e. if the canister has a paused execution whose
-    /// prepayment is not part of it. All paused executions are aborted before a
-    /// checkpoint, materializing their prepayments into the state, so the caller can
-    /// retry then.
+    /// prepayment is not part of it.
     pub fn outstanding_prepayments(&self) -> Option<NominalCycles> {
         /// The prepayments made when the request behind `callback` was sent (see
         /// `SandboxSafeSystemState::push_output_request`), to be refunded when its
@@ -2369,9 +2367,9 @@ impl SystemState {
     /// [`Self::outstanding_prepayments`]: the gauge differs from the monotonic
     /// amount by exactly the prepayments whose refund is still outstanding, all of
     /// which are recorded in the replicated state. And because the invariant holds
-    /// at all times (not just before the first observation of a canister), deriving
-    /// the monotonic amount this way is idempotent, so it is safe to redo it in
-    /// every round and after a downgrade has dropped it.
+    /// whenever no execution is paused, deriving the monotonic amount this way is
+    /// idempotent, so it is safe to redo it in every checkpoint round and after a
+    /// downgrade has dropped it.
     ///
     /// Does nothing if the canister has a paused execution whose prepayment is not
     /// part of the replicated state (see [`Self::outstanding_prepayments`]); the
@@ -2381,8 +2379,7 @@ impl SystemState {
             return;
         };
         // `max` rather than a plain assignment, as defense in depth: the monotonic
-        // amount must never go down, not even if a saturating subtraction somewhere
-        // made the gauge lag behind it.
+        // amount must never go down.
         self.canister_metrics.consumed_cycles_monotonic = self
             .canister_metrics
             .consumed_cycles_monotonic

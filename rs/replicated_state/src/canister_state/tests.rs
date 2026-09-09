@@ -1061,7 +1061,12 @@ fn outstanding_prepayments_of_open_callbacks() {
         Some(NominalCycles::zero())
     );
 
-    // See `SystemStateTesting::with_callback` for the prepayments of this callback.
+    // `SystemStateTesting::with_callback` prepays 42 for the response execution, 84
+    // for the response transmission and 168 for the call transmission. Only the
+    // first and the last are outstanding: the call transmission prepayment covers
+    // the transmission of both the request and the response, so the response
+    // transmission prepayment is not counted on top of it; it is the fallback for
+    // legacy callbacks only, see `outstanding_prepayments_of_legacy_callback`.
     fixture.make_callback(NO_DEADLINE);
     assert_eq!(
         fixture
@@ -1107,9 +1112,10 @@ fn outstanding_prepayments_of_legacy_callback() {
             call_context_id,
             OTHER_CANISTER_ID,
             Cycles::zero(),
-            CompoundCycles::new(Cycles::new(42), cost_schedule),
-            CompoundCycles::new(Cycles::new(84), cost_schedule),
-            CompoundCycles::new(Cycles::zero(), cost_schedule),
+            CompoundCycles::new(Cycles::new(42), cost_schedule), // response execution
+            CompoundCycles::new(Cycles::new(84), cost_schedule), // response transmission
+            // Zero, i.e. a callback created before April 2026.
+            CompoundCycles::new(Cycles::zero(), cost_schedule), // call transmission
             WasmClosure::new(0, 2),
             WasmClosure::new(0, 2),
             None,
@@ -1126,7 +1132,7 @@ fn outstanding_prepayments_of_legacy_callback() {
 }
 
 /// The prepayment of an aborted execution is outstanding until the execution is
-/// retried; a paused execution's is not part of the replicated state.
+/// retried and completed; a paused execution's is not part of the replicated state.
 #[test]
 fn outstanding_prepayments_of_paused_and_aborted_executions() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
@@ -1217,7 +1223,7 @@ fn outstanding_prepayments_of_aborted_response_execution() {
 
 /// Backfilling the monotonic amount from the gauge is exact, thanks to the
 /// invariant that the gauge exceeds it by exactly the outstanding prepayments. And
-/// it is idempotent, so it can be redone in every round.
+/// it is idempotent, so it can be redone in every checkpoint round.
 #[test]
 fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
