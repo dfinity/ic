@@ -462,3 +462,34 @@ rust_ic_test(
         "@crate_index//:candid",
     ],
 )
+
+rust_ic_test(
+    name = "ledger_archiving_atomicity_tests",
+    srcs = ["tests/archiving_atomicity_tests.rs"],
+    crate_features = [],
+    data = [
+        ":ledger_canister.wasm.gz",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
+    env = {
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister.wasm.gz)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
+    deps = [
+        # Keep sorted.
+        ":ledger",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/config",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
+        "//rs/registry/subnet_type",
+        "//rs/state_machine_tests",
+        "//rs/types/base_types",
+        "//rs/types/cycles",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:candid",
+        "@crate_index//:num-traits",
+    ],
+)

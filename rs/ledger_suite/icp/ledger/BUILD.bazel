@@ -121,6 +121,7 @@ rust_ic_test(
         ":ledger-canister-wasm-allowance-getter",
         ":ledger-canister-wasm-next-version",
         ":ledger-canister-wasm-prev-version",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
         "@mainnet_canisters//:ledger.wasm.gz",
     ],
     env = {
@@ -131,6 +132,7 @@ rust_ic_test(
         "LEDGER_CANISTER_ALLOWANCE_GETTER_WASM_PATH": "$(rootpath :ledger-canister-wasm-allowance-getter)",
         "LEDGER_CANISTER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-next-version)",
         "LEDGER_CANISTER_PREV_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-prev-version)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     exec_properties = {"cpu": "4"},
     deps = [
