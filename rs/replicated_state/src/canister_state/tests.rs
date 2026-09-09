@@ -24,8 +24,7 @@ use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessageOrTask, CanisterTask,
-    MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, RequestMetadata, StopCanisterCallId,
-    StopCanisterContext,
+    MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
@@ -1066,7 +1065,8 @@ fn outstanding_prepayments_of_open_callbacks() {
     // first and the last are outstanding: the call transmission prepayment covers
     // the transmission of both the request and the response, so the response
     // transmission prepayment is not counted on top of it; it is the fallback for
-    // legacy callbacks only, see `outstanding_prepayments_of_legacy_callback`. The
+    // legacy callbacks only, see
+    // `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`. The
     // same two are what an aborted response execution carries, see
     // `checkpoint_round_backfills_consumed_cycles_monotonic_of_aborted_response_execution`.
     fixture.make_callback(NO_DEADLINE);
@@ -1085,51 +1085,6 @@ fn outstanding_prepayments_of_open_callbacks() {
             .system_state
             .outstanding_prepayments(),
         Some(NominalCycles::new(2 * (42 + 168)))
-    );
-}
-
-/// `prepayment_for_call_transmission` is zero for callbacks created before April
-/// 2026; the refund path falls back to `prepayment_for_response_transmission` for
-/// those, and so must the outstanding prepayments.
-#[test]
-fn outstanding_prepayments_of_legacy_callback() {
-    let cost_schedule = CanisterCyclesCostSchedule::Normal;
-    let mut fixture = CanisterStateFixture::new();
-    let call_context_id = fixture
-        .canister_state
-        .system_state
-        .with_call_context(CallContext::new(
-            CallOrigin::SystemTask,
-            false,
-            false,
-            Cycles::zero(),
-            UNIX_EPOCH,
-            RequestMetadata::new(0, UNIX_EPOCH),
-            None,
-        ));
-    fixture
-        .canister_state
-        .system_state
-        .with_raw_callback(Callback::new(
-            call_context_id,
-            OTHER_CANISTER_ID,
-            Cycles::zero(),
-            CompoundCycles::new(Cycles::new(42), cost_schedule), // response execution
-            CompoundCycles::new(Cycles::new(84), cost_schedule), // response transmission
-            // Zero, i.e. a callback created before April 2026.
-            CompoundCycles::new(Cycles::zero(), cost_schedule), // call transmission
-            WasmClosure::new(0, 2),
-            WasmClosure::new(0, 2),
-            None,
-            NO_DEADLINE,
-        ));
-
-    assert_eq!(
-        fixture
-            .canister_state
-            .system_state
-            .outstanding_prepayments(),
-        Some(NominalCycles::new(42 + 84))
     );
 }
 

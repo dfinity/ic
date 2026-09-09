@@ -19,7 +19,7 @@ use ic_types::{
     messages::{CallbackId, MessageId},
 };
 use ic_types::{ComputeAllocation, MemoryAllocation};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_lt};
 
@@ -204,6 +204,96 @@ fn execute_response_refunds_cycles() {
         );
         assert_eq!(consumed_cycles_after, consumed_cycles_after_counter);
     }
+}
+
+/// A callback created before April 2026 carries no `prepayment_for_call_transmission`,
+/// so `prepayment_for_response_transmission` stands in for it. The refund path and
+/// `SystemState::outstanding_prepayments()` fall back on it independently of each
+/// other, and the two must agree on the amount that executing the response settles.
+///
+/// Note that the fallback cannot make the invariant on `outstanding_prepayments()`
+/// exact: the gauge holds the whole call transmission prepayment, of which the
+/// response transmission prepayment accounts for only a part. What is missing is the
+/// call fee, and it stays missing, as nothing ever refunds that part. Both assertions
+/// below are thus off by the very same call fee.
+#[test]
+fn execute_response_of_legacy_callback_settles_the_outstanding_prepayments() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    // Canister A calls canister B, which replies with the payload it received.
+    let b_callback = wasm().message_payload().append_and_reply().build();
+    let wasm_payload = wasm()
+        .call_simple(b_id, "update", call_args().other_side(b_callback.clone()))
+        .build();
+    test.ingress_raw(a_id, "update", wasm_payload);
+    test.execute_message(a_id);
+
+    // Turn the callback of that call into a legacy one, i.e. one whose prepayment for
+    // the call transmission was never stored.
+    let callback_id = *test
+        .canister_state(a_id)
+        .system_state
+        .call_context_manager()
+        .unwrap()
+        .callbacks()
+        .keys()
+        .next()
+        .unwrap();
+    test.canister_state_mut(a_id)
+        .system_state
+        .reset_prepayment_for_call_transmission(callback_id);
+
+    // Execute the message on B, so that it responds to A.
+    test.induct_messages();
+    test.execute_message(b_id);
+
+    // The `xnet_call_performed_fee` plus the fee for transmitting the request: the
+    // part of the call transmission prepayment that the response transmission
+    // prepayment cannot stand in for.
+    let call_fee = test.call_fee("update", &b_callback).nominal();
+
+    let system_state = &test.canister_state(a_id).system_state;
+    let callback = system_state
+        .call_context_manager()
+        .unwrap()
+        .callback(callback_id)
+        .unwrap()
+        .clone();
+    assert!(callback.prepayment_for_call_transmission.is_zero());
+    // The prepayments that the refund path is expected to report, with the response
+    // transmission prepayment standing in for the missing call transmission one.
+    let outstanding_before = system_state.outstanding_prepayments().unwrap();
+    assert_eq!(
+        outstanding_before,
+        callback.prepayment_for_response_execution.nominal()
+            + callback.prepayment_for_response_transmission.nominal()
+    );
+    let gauge_before = system_state.canister_metrics().consumed_cycles();
+    let monotonic_before = system_state.canister_metrics().consumed_cycles_monotonic();
+    assert_eq!(
+        gauge_before,
+        monotonic_before + outstanding_before + call_fee
+    );
+
+    // Execute the response on A.
+    test.induct_messages();
+    test.execute_message(a_id);
+
+    // Nothing is outstanding any more, and the monotonic amount has caught up with
+    // the gauge: the refund path reported the very prepayments predicted above.
+    let system_state = &test.canister_state(a_id).system_state;
+    assert_eq!(
+        system_state.outstanding_prepayments(),
+        Some(NominalCycles::zero())
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        system_state.canister_metrics().consumed_cycles_monotonic() + call_fee
+    );
 }
 
 #[test]

@@ -2720,6 +2720,10 @@ pub mod testing {
         /// Testing only: Registers the given callback and returns its ID.
         fn with_raw_callback(&mut self, callback: Callback) -> CallbackId;
 
+        /// Testing only: Zeroes the `prepayment_for_call_transmission` of the given
+        /// callback, e.g. to simulate a callback created before April 2026.
+        fn reset_prepayment_for_call_transmission(&mut self, callback_id: CallbackId);
+
         /// Testing only: Resets `CanisterMetrics::consumed_cycles_monotonic`, e.g. to
         /// simulate a canister loaded from a checkpoint predating the field.
         fn reset_consumed_cycles_monotonic(&mut self);
@@ -2768,6 +2772,12 @@ pub mod testing {
             call_context_manager_mut(&mut self.status)
                 .unwrap()
                 .register_callback(callback)
+        }
+
+        fn reset_prepayment_for_call_transmission(&mut self, callback_id: CallbackId) {
+            call_context_manager_mut(&mut self.status)
+                .unwrap()
+                .reset_prepayment_for_call_transmission(callback_id);
         }
 
         fn reset_consumed_cycles_monotonic(&mut self) {
