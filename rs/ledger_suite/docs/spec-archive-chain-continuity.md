@@ -1,11 +1,9 @@
 # Spec: chain-continuity check in the ICRC archive, and bounded archiving retries
 
-Follow-up to DEFI-2967. Separately shippable from the archive-off-reply-path
-change itself, and independent of it: every component here works whether
-archiving is awaited or spawned. Moving it off the reply path makes these
-failures *quieter* — the transaction succeeds and the archiving trap goes
-unseen — which raises the priority of this work without being a prerequisite
-for it.
+Follow-up to DEFI-2967. Every component here works whether archiving is awaited
+or spawned, so this is separately shippable — but the two changes address
+*different* failures and moving archiving off the reply path is the more urgent
+of the two. See *What awaiting costs, and why this spec does not fix it*.
 
 **Line references are against `master`**, paired with the symbol they point at so
 they stay findable once the numbers drift. The one branch-specific thing is the
@@ -143,11 +141,37 @@ local 1500, which is the second copy's block 500. Silent bad data from
 `icrc3_get_blocks`, which the index, Rosetta and any chain-verifying client would
 accept.
 
-Spawning archiving off the reply path (DEFI-2967) does not address this. It
-arguably makes it quieter, because no caller sees the reject.
-
 Note what the archive-side check does and does not do: it does not make the fact
 knowable, it makes *not knowing* safe, by refusing the re-send.
+
+### What awaiting costs, and why this spec does not fix it
+
+Spawning archiving off the reply path (DEFI-2967) does not address the divergence
+above — the ledger's bookkeeping rots identically either way. But the two models
+differ in something this spec cannot reach, and it is not merely a matter of how
+loud the failure is.
+
+**On `master`, archiving is awaited**, so the archiving continuations run before
+the update method returns. The transaction's block was committed at the chain's
+first `.await`, so a trap in a later continuation cannot roll it back — but it
+does turn the reply into a **reject**. The caller is told the transfer failed when
+it succeeded, and cannot distinguish that from a transfer that never happened. For
+clients that retry on reject — the ck minters — that risks minting a deposit
+twice. That is a correctness hazard, and it is DEFI-2967's whole motivation.
+
+**Spawned**, the reply is produced in the message that commits the transaction, so
+a later archiving failure can no longer contradict it. The blocks simply stay in
+the ledger until the next attempt.
+
+So off the reply path is not "the same bug, quieter": it trades a **correctness**
+hazard for an **observability** one. This spec addresses neither directly — E
+protects the *archive* from a lost acknowledgement; nothing in it stops a caller
+being misinformed by a reject. Only moving archiving off the reply path does that.
+
+The one component that helps the awaited model is **D2**, which removes the two
+multi-megabyte wasm copies that are the largest post-commit allocation, so it
+lowers the *probability* of the trap. DEFI-2967 removes its *consequence*. They
+are complementary, and the ordering argument favours DEFI-2967 first.
 
 ### Root causes
 
@@ -393,8 +417,8 @@ independent of each other and of the above, detailed in Components: an in-flight
 counter that detects an archive creation whose outcome was never recorded and
 halts archiving until an operator looks (D1); removing the two multi-megabyte
 copies of the archive Wasm that happen *after* `create_canister` has committed
-(D2); correcting a comment that still claims a panic there rolls the triggering
-transaction back, which stopped being true when archiving was spawned (D3); and
+(D2); correcting a comment that claims a panic there rolls the triggering transaction
+back, which is true only for the first archive a ledger ever creates (D3); and
 making error construction allocation-free, so a graceful failure cannot decay
 into a trap under memory pressure (D4).
 
@@ -783,7 +807,7 @@ better story for timer liveness.
 | C1 | counters for the causes that stay traps — chain mismatch, and a platform-refused memory growth counted separately | `icrc1/archive/src/main.rs` `encode_metrics` | a capacity *stop* is no longer a refusal under E1; it is reported in the reply, so what remains here is the mismatch plus the growth refusal as a diagnostic |
 | D1 | in-flight archive-creation counter; halt archiving while it is non-zero | `ledger_canister_core::archive`, checked in `blocks_to_archive`, exposed as a per-ledger metric | `+1` before `create_canister`, `-1` on a graceful `Err` from any creation step, `-1` when `nodes.push` succeeds. A trap skips the decrement, so a non-zero value means a creation was begun and never accounted for. `#[serde(skip)]`, so it is per-epoch and needs no baseline |
 | D2 | stop copying the archive wasm after a commit point | `ledger_canister_core::spawn::install_code` signature, `archive.rs` | `install_code` takes `Vec<u8>`, forcing `archive_wasm().into_owned()`, and `Rt::call` then serialises it again — two multi-MB copies in the continuation after `create_canister` committed. Take `Cow<'static, [u8]>`, pre-reserve the encode buffer before the first await, and `nodes.reserve(1)` |
-| D3 | correct the stale comment above `create_canister` (`archive.rs:451-453`) | `ledger_canister_core::archive` | it says a panic there "leads to the rolling back of the transaction that triggered the archiving", which stopped being true when archiving was spawned |
+| D3 | correct the comment above `create_canister` (`archive.rs:451-453`) | `ledger_canister_core::archive` | it says a panic there "leads to the rolling back of the transaction that triggered the archiving". That holds only when no await preceded it, i.e. the **first** node a ledger creates: on a roll-over, `node_and_capacity` awaits `remaining_capacity` first (`archive.rs:547-549`), which commits the transaction, so a panic at `create_canister` rejects the reply instead of rolling anything back. Spawning removes the rollback in the remaining case too. The comment should state the condition rather than the conclusion |
 | D4 | make error construction allocation-free, and trim the interpolating log lines | `ledger_canister_core::archive`, `::spawn` | `FailedToArchiveBlocks(pub String)` allocates on every error construction, so an allocation failure there turns a graceful `Err` into a trap: replace it with an enum carrying `Copy` payloads, rendered to text only where it is logged. `Rt::print` takes `impl AsRef<str>`, so non-interpolating messages become `&'static str` for free. **Keep** the canister id in the `create_canister` callback log — canister logs survive traps — verified, `test_appending_logs_in_trapped_update_call` in `rs/execution_environment/tests/canister_logging.rs` asserts the pre-trap `debug_print` persists *and* that the trap gets its own record — so it is the only possible record of an orphan's identity (D1 says one happened, this says which) — but drop the `{result:?}` debug format, which also stringifies the reject message. `reject_message()` borrows a `String` ic-cdk has already allocated, so only our second copy is avoidable |
 | E1 | `append_blocks` takes an optional expected start index and returns an optional result carrying the archive's next expected global index plus `at_capacity`, or a gap. Four-way placement of the index against `offset`/`offset + log_length`; capacity reported rather than trapped; chain mismatch still traps | `icrc1/archive/src/main.rs`, `archive.did`, `ledger_canister_core::archive::send_blocks_to_archive` | the only interface change; both `opt`, so tolerant in either direction. Verify with `didc` and the CI Candid check |
 | E2 | the ledger reconciles `nodes_block_ranges` from the reported index instead of incrementing, and treats a covered index as success. The coverage guard *detects* here and reports upward — the round returns a count that includes blocks an archive already held, and `archive_blocks` performs the removal, so the module boundary is not redrawn (Decision 6) | `ledger_canister_core::archive::send_blocks_to_archive`, return type consumed by `ledger::archive_blocks` | shared code, so it applies to both ledgers once their archives are upgraded; the incremental path stays as the fallback for archives that return nothing |
@@ -830,12 +854,17 @@ message. That allocation cannot be removed, so each call is a place where the
 ledger can trap with everything from earlier messages already committed. With
 A through F applied:
 
+The "already committed" column assumes archiving is **spawned**. Awaited, every
+row additionally commits the transaction and then rejects its reply — the
+correctness hazard described under *What awaiting costs* — which is a residual
+mode of the awaited model rather than of this spec.
+
 | allocation | already committed | consequence | severity |
 |---|---|---|---|
 | `create_canister` reply | canister exists, cycles gone | orphan; the id was never learned, and a canister cannot enumerate what it controls. D1 detects it and halts archiving | leak, irreducible; detected |
 | `install_code` reply | + wasm installed | orphan, installed. Same detection and halt via D1 | leak; detected |
 | `update_settings` reply | + controllers replaced | orphan, installed, controllers replaced. Same detection and halt via D1 | leak; detected |
-| `remaining_capacity` reply, existing node | the transaction, which already replied | round skipped, next attempt spaced by B | benign |
+| `remaining_capacity` reply, existing node | the transaction (whose reply has already gone out, if spawned) | round skipped, next attempt spaced by B | benign |
 | `remaining_capacity` reply, new node | + node recorded in `archive.nodes` | round skipped; next round finds the node and proceeds | benign, self-heals |
 | `append_blocks` reply | the archive holds the blocks | under E the re-send is idempotent: the archive recognises the index it already covers, replies with its position, and the ledger reconciles. Self-healing | none |
 
