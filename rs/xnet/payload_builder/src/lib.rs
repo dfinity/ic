@@ -455,9 +455,8 @@ impl XNetPayloadBuilderImpl {
     /// when that exists; or `messages_begin()` of the outgoing `Stream` to
     /// `subnet_id` in `state`.
     ///
-    /// The next expected garbage collected message index *that we are interested in
-    /// inducting* (in the absence of any messages or new signals) is the index of
-    /// the first reject signal at or beyond the most recent `header.begin()`.
+    /// The minimum useful `header.begin()` is one past the first reject signal at
+    /// or beyond the most recent `header.begin()` from `subnet_id` in `payloads`.
     ///
     /// Returns default (zero) values when no stream to or slices from the given
     /// subnet exist.

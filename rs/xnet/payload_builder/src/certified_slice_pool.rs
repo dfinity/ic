@@ -1239,6 +1239,7 @@ impl CertifiedSlicePool {
         self.metrics
             .observe_take_messages_gced(original_message_count - prefix_message_count);
         let signals_end = slice.payload.header.signals_end();
+        let header_begin = slice.payload.header.begin();
 
         let (prefix, slice) = slice.take_prefix(msg_limit, byte_limit)?;
 
@@ -1253,6 +1254,12 @@ impl CertifiedSlicePool {
             if let Some(stream_indices) = self.stream_positions.get_mut(&subnet_id) {
                 stream_indices.message_index += StreamIndex::from(prefix_message_count as u64);
                 stream_indices.signal_index = stream_indices.signal_index.max(signals_end);
+                // Inducting the returned prefix GCs all reject signals before its
+                // `header.begin()`, so advance `min_useful_header_begin` just past it, as we
+                // don't know where the next reject signal is.
+                stream_indices.min_useful_header_begin = stream_indices
+                    .min_useful_header_begin
+                    .map(|b| b.max(header_begin.increment()));
             }
             Ok(Some(prefix))
         } else {
