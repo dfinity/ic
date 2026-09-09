@@ -50,11 +50,7 @@ const RETRY_DELAY_JOURNALD_STREAM: Duration = Duration::from_secs(5);
 const RETRY_DELAY_DISCOVER_TARGETS: Duration = Duration::from_secs(5);
 
 /// `<group_dir>/journald_logs`: the persisted journald records, one JSON Lines
-/// file per streamed target (see [`JournalFileSink`]). A sibling of
-/// `root_env/`, `setup/` and `tests/` because those env directories are
-/// `cp -R`'d into every per-test directory (`TestEnv::fork_from`), and
-/// deliberately not under `local_backend/` because this task is
-/// backend-agnostic and runs on Farm too.
+/// file per streamed target (see [`JournalFileSink`]).
 pub(crate) const JOURNALD_LOGS_DIR: &str = "journald_logs";
 /// IC nodes: `journald_logs/nodes/<node_id>.jsonl`. The only sub-directory the
 /// `assert_no_unallowed_log_patterns` teardown scans, mirroring the data Vector
