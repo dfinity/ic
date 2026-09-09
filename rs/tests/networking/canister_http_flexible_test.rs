@@ -21,7 +21,7 @@ Runbook::
    - synchronous validation rejections,
    - runtime errors (too many rejects, responses too large),
    - adapter-level per-node failures,
-   - an outcall on the system subnet,
+   - an outcall on the system subnet, priced and then waived there,
    - pay-as-you-go charging, refunding and running out of cycles,
    - a free cost schedule pricing an outcall and then waiving the charge,
    - fault tolerance: an outcall still succeeds with a subnet node killed.
@@ -48,7 +48,10 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use ic_types::{NodeId, NumBytes, PrincipalId, canister_http::Replication};
+use ic_types::{
+    NodeId, NumBytes, NumberOfNodes, PrincipalId,
+    canister_http::{Replication, ReplicationKind},
+};
 use ic_types_cycles::CanisterCyclesCostSchedule;
 use proxy_canister::{
     FlexibleRemoteHttpRequest, FlexibleResponseWithRefundedCycles, RejectionCode,
@@ -65,6 +68,10 @@ const CYCLES: u64 = 500_000_000_000;
 const SUBNET_NODES: u32 = 4;
 const DEFAULT_MIN_RESPONSES: usize = 3; // floor(2*4/3) + 1
 const DEFAULT_MAX_RESPONSES: usize = SUBNET_NODES as usize;
+
+/// The system subnet has a single node, so under the default replication the
+/// committee is that one node and exactly one response comes back.
+const SYSTEM_SUBNET_NODES: u32 = 1;
 
 /// The minimum number of per-node reject details in a `TooManyRejects` error
 /// under default replication: the error fires only once more nodes reject than
@@ -143,15 +150,15 @@ fn main() -> Result<()> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Everything a scenario needs to reach one application subnet's proxy canister:
-/// a node to talk to, a runtime built on it, and the proxy's principal.
-struct AppSubnet {
+/// Everything a scenario needs to reach one subnet's proxy canister: a node to
+/// talk to, a runtime built on it, and the proxy's principal.
+struct TestSubnet {
     node: IcNodeSnapshot,
     runtime: Runtime,
     proxy_id: PrincipalId,
 }
 
-impl AppSubnet {
+impl TestSubnet {
     /// The application subnet running on `schedule`.
     fn on(env: &TestEnv, schedule: CanisterCyclesCostSchedule) -> Self {
         let nodes: Vec<_> = get_app_subnet_node_snapshots_with_schedule(env, schedule).collect();
@@ -160,10 +167,26 @@ impl AppSubnet {
             .into_iter()
             .next()
             .unwrap_or_else(|| panic!("there is no application node on a {schedule:?} subnet"));
+        Self::for_node_and_proxy(node, get_proxy_canister_id_for(env, schedule))
+    }
+
+    /// The system subnet, which is free for HTTP outcalls despite a normal cost
+    /// schedule.
+    fn system(env: &TestEnv) -> Self {
+        let nodes: Vec<_> = get_system_subnet_node_snapshots(env).collect();
+        assert_eq!(nodes.len(), SYSTEM_SUBNET_NODES as usize);
+        let node = nodes
+            .into_iter()
+            .next()
+            .expect("there is no system-subnet node");
+        Self::for_node_and_proxy(node, get_system_proxy_canister_id(env))
+    }
+
+    fn for_node_and_proxy(node: IcNodeSnapshot, proxy_id: PrincipalId) -> Self {
         Self {
             runtime: get_runtime_from_node(&node),
             node,
-            proxy_id: get_proxy_canister_id_for(env, schedule),
+            proxy_id,
         }
     }
 
@@ -187,20 +210,6 @@ fn retarget_transform(
     {
         transform.function.0.principal = proxy.0;
     }
-}
-
-/// Returns a runtime for the (single) system-subnet node.
-fn system_runtime(env: &TestEnv) -> Runtime {
-    let node = get_system_subnet_node_snapshots(env)
-        .next()
-        .expect("there is no system-subnet node");
-    get_runtime_from_node(&node)
-}
-
-/// Returns the proxy canister installed on the system subnet during setup.
-fn system_proxy_canister<'a>(env: &TestEnv, runtime: &'a Runtime) -> Canister<'a> {
-    let principal_id = get_system_proxy_canister_id(env);
-    Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
 }
 
 /// The principal the `make_args` closures name as their transform principal.
@@ -328,7 +337,7 @@ fn run_flexible_test_on<M, A>(
     A: Fn(Result<FlexibleHttpRequestResult, (RejectionCode, String)>) -> Result<()>,
 {
     let logger = env.logger();
-    let subnet = AppSubnet::on(env, schedule);
+    let subnet = TestSubnet::on(env, schedule);
     let proxy = subnet.proxy();
     let description = format!("{description} (on a {schedule:?} cost schedule)");
 
@@ -1532,27 +1541,56 @@ fn test_custom_max_response_bytes_within_limits(env: TestEnv) {
 /// The system subnet has a single node, so exactly one response comes back.
 fn test_system_subnet_outcall(env: TestEnv) {
     let logger = env.logger();
-    let runtime = system_runtime(&env);
-    let proxy = system_proxy_canister(&env, &runtime);
+    let subnet = TestSubnet::system(&env);
+    let proxy = subnet.proxy();
 
     block_on(async {
         ic_system_test_driver::retry_with_msg_async!(
-            "flexible outcall on a system subnet succeeds".to_string(),
+            "flexible outcall on a system subnet succeeds and is free".to_string(),
             &logger,
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                let args = get_args(format!("{}/ascii/system", webserver_base(&env)));
-                let result = send_flexible(&proxy, args, CYCLES).await?;
+                // Read raw rather than settled: where outcalls are free nothing is
+                // ever withheld, so there is no refund to wait for.
+                let before_consumed = consumed_cycles(&subnet.node, subnet.proxy_id).await?;
+                let before = cycle_balance(&subnet.node, subnet.proxy_id).await?;
+
+                let url = format!("{}/ascii/system", webserver_base(&env));
+                let fees = flexible_fees_on(&url, None, SYSTEM_SUBNET_NODES);
+                let started = Instant::now();
+                let (result, refunded) =
+                    send_flexible_reporting_refund(&proxy, get_args(url), CYCLES).await?;
+                let elapsed = started.elapsed();
                 // A single-node subnet returns exactly one response.
                 let payloads = expect_ok(result, 1, 1)?;
                 expect_all_status(&payloads, 200)?;
                 expect_all_bodies(&payloads, b"system")?;
+
+                // Nothing is charged, so the whole payment comes back with the
+                // reply rather than any of it being kept as a base fee or withheld
+                // as an allowance.
+                if refunded != CYCLES {
+                    bail!("a system-subnet outcall paying {CYCLES} was refunded only {refunded}");
+                }
+                let after = cycle_balance(&subnet.node, subnet.proxy_id).await?;
+                if after != before {
+                    bail!("a system-subnet outcall moved the balance from {before} to {after}");
+                }
+                // Priced exactly as on a subnet that charges, only the charge is
+                // waived: the consumption counters record the nominal fee whatever
+                // the cost schedule.
+                let consumed = consumed_cycles(&subnet.node, subnet.proxy_id)
+                    .await?
+                    .since(&before_consumed);
+                let delivered = DeliveredResponse::untransformed(&payloads);
+                fees.check_consumption(&consumed, &delivered, elapsed)
+                    .map_err(|wrong| anyhow::anyhow!("a system-subnet outcall {wrong}"))?;
                 Ok(())
             }
         )
         .await
-        .expect("flexible outcall on the system subnet did not succeed");
+        .expect("flexible outcall on the system subnet was not free");
     });
 }
 
@@ -1639,18 +1677,26 @@ const PAYG_BODY_BYTES: usize = 8 * 1024;
 /// size reaches the fee formulas, not who is in it. The request's variable parts
 /// are just the URL — [`get_args`] sets no headers, body or transform.
 fn flexible_fees(url: &str, max_response_bytes: Option<u64>) -> PaygFees {
-    let committee = (0..SUBNET_NODES)
+    flexible_fees_on(url, max_response_bytes, SUBNET_NODES)
+}
+
+/// Like [`flexible_fees`], but for a subnet of `nodes` nodes rather than the
+/// application subnets' [`SUBNET_NODES`]. The committee is filled with dummy node
+/// ids: only its size enters the price.
+fn flexible_fees_on(url: &str, max_response_bytes: Option<u64>, nodes: u32) -> PaygFees {
+    let committee = (0..nodes)
         .map(|i| NodeId::from(PrincipalId::new_node_test_id(i as u64)))
         .collect();
+    let counts = ReplicationKind::default_flexible_counts(NumberOfNodes::from(nodes));
     payg_fees(
         &Replication::Flexible {
             committee,
-            min_responses: DEFAULT_MIN_RESPONSES as u32,
-            max_responses: SUBNET_NODES,
+            min_responses: counts.min_responses,
+            max_responses: counts.max_responses,
         },
         NumBytes::from(url.len() as u64),
         max_response_bytes.map(NumBytes::from),
-        SUBNET_NODES as usize,
+        nodes as usize,
     )
 }
 
@@ -1688,7 +1734,7 @@ fn test_free_schedule_records_the_price_it_waives(env: TestEnv) {
     const SCHEDULE: CanisterCyclesCostSchedule = CanisterCyclesCostSchedule::Free;
 
     let logger = env.logger();
-    let subnet = AppSubnet::on(&env, SCHEDULE);
+    let subnet = TestSubnet::on(&env, SCHEDULE);
     let proxy = subnet.proxy();
 
     block_on(async {
@@ -1738,7 +1784,7 @@ fn test_charged_and_refunded(env: TestEnv) {
     const SCHEDULE: CanisterCyclesCostSchedule = CanisterCyclesCostSchedule::Normal;
 
     let logger = env.logger();
-    let subnet = AppSubnet::on(&env, SCHEDULE);
+    let subnet = TestSubnet::on(&env, SCHEDULE);
     let proxy = subnet.proxy();
 
     let url = format!("{}/bytes/{PAYG_BODY_BYTES}", webserver_base(&env));
@@ -1842,7 +1888,7 @@ fn test_out_of_cycles(env: TestEnv) {
     const SCHEDULE: CanisterCyclesCostSchedule = CanisterCyclesCostSchedule::Normal;
 
     let logger = env.logger();
-    let subnet = AppSubnet::on(&env, SCHEDULE);
+    let subnet = TestSubnet::on(&env, SCHEDULE);
     let proxy = subnet.proxy();
     let payment = u128::from(PAYMENT);
 
