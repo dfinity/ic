@@ -1,7 +1,16 @@
 # Spec: chain-continuity check in the ICRC archive, and bounded archiving retries
 
 Follow-up to DEFI-2967. Separately shippable from the archive-off-reply-path
-change itself.
+change itself, and independent of it: every component here works whether
+archiving is awaited or spawned. Moving it off the reply path makes these
+failures *quieter* — the transaction succeeds and the archiving trap goes
+unseen — which raises the priority of this work without being a prerequisite
+for it.
+
+**Line references are against `master`**, paired with the symbol they point at so
+they stay findable once the numbers drift. The one branch-specific thing is the
+*behavioural* baseline for the trap tests, which is the DEFI-2967 branch; see
+Testing strategy.
 
 ## What this proposes
 
@@ -173,7 +182,7 @@ divergence needs.
   included, whose rounds are single-chunk.
 
 So a single-chunk configuration is not safety. The chunk size is `min(archive.max_message_size_bytes, max_ledger_msg_size_bytes)`
-(`archive.rs:252-256`), so whichever is smaller governs:
+(`send_blocks_to_archive`, `archive.rs:233-236`), so whichever is smaller governs:
 
 | | archive option | ledger ceiling | effective chunk | 1000 blocks |
 |---|---|---|---|---|
@@ -225,9 +234,10 @@ i.e. node 0 filling mid-round — roughly once per 3 GiB of archive — plus a t
 in a specific window.
 
 Say a round starts at `num_archived_blocks = N` and selects N..N+1999. Chunk 1
-fills node 0; node 1 is then created with offset `N+1000`, correct because
-`sent_so_far` is 1000. Note `nodes.push` commits at that point, while the ranges
-and `num_archived_blocks` do not.
+fills node 0; node 1 is then created with offset `N+1000`, taken from
+`nodes_block_ranges.last().map(|(_, to)| to + 1)` — the ranges the previous chunk
+just advanced, never from a count of what this round has sent. Note `nodes.push`
+commits at that point, while the ranges and `num_archived_blocks` do not.
 
 * **Node 1 received chunk 2, then the round died.** The next round restarts at N
   and sends to `nodes.last()` = node 1, whose tip is N+1999. Block N's parent
@@ -264,7 +274,7 @@ coverage guard under E2.
 
 Note also that the ledger **cannot** catch this locally. It never records the
 offset it installed; when an append succeeds it re-derives the node's range entry
-from `(last_height + 1, ...)` (`archive.rs:296-301`), the same expression that
+from `(last_height + 1, ...)` (`archive.rs:300-301`), the same expression that
 produced the offset. So it writes a range that is self-consistent on paper while
 the node physically serves the wrong block for that index. The offset is the one
 piece of state only the archive holds, which is why the check has to live there.
@@ -322,8 +332,8 @@ already in the message: `BlockType::block_hash(&EncodedBlock)`
 already decodes blocks, so this is not a new capability.
 
 **B. The ledger stops spinning on a failing archive.**
-Archiving is triggered per transaction (`spawn_archiving()` at
-`icrc1/ledger/src/main.rs:585, 918, 1011, 1109`), so a permanently failing
+Archiving is triggered per transaction (`archive_blocks::<Access>` at
+`icrc1/ledger/src/main.rs:566, 901, 994, 1092`), so a permanently failing
 archive is retried on every transaction, each attempt materialising
 `min(num_blocks_to_archive, MAX_BLOCKS_TO_ARCHIVE)` blocks on the heap
 (`ledger.rs:462`), making a `remaining_capacity` call and encoding up to a
@@ -403,8 +413,7 @@ The second argument is the expected start index. The archive knows both its
 | incoming index | meaning | action |
 |---|---|---|
 | `< offset` | not this node's range at all — the blocks belong to an earlier node | report this node's start; the ledger is behind |
-| `offset <= i < offset + log_length` | already holds them | **no-op success** — this is the idempotency, not an error |
-| `== offset + log_length` | correct continuation | append, and report the new next index |
+| `offset <= i <= offset + log_length` | the chunk starts at or inside what it holds | **drop the covered prefix, append the rest** |
 | `> offset + log_length` | a gap | refuse, having appended nothing |
 
 The first case matters more than it looks. Collapsing it into "less, so I already
@@ -413,6 +422,50 @@ offset `N+1000` and nothing stored, handed index `N`, would otherwise answer "I
 have those" when it has nothing at all. It is also the **only** check available
 on an empty node, since there is no tip for A1 to compare against, and it is what
 lets the ledger learn that its `num_archived_blocks` is behind.
+
+#### One rule for covered, straddling and fresh chunks
+
+The middle row is deliberately a single rule rather than the two it looks like.
+A chunk can *straddle* the boundary: the archive holds `N..N+499`, the ledger
+re-sends `N..N+999`. That is reachable — a partial append followed by a trap
+before the ledger reconciled — and it becomes routine once F2 stops pre-checking
+capacity, since every node fill then produces a partial append. So the rule is:
+
+    k = incoming_index - offset - log_length ... covered prefix length
+    append blocks[k..], then report offset + log_length
+
+A wholly covered chunk is the degenerate case where `k == chunk.len()` and nothing
+is appended — the idempotent no-op, which falls out rather than needing its own
+branch. A chunk starting exactly at the tip is `k == 0`.
+
+**Placement is checked before the chain, and A1 applies only to the blocks
+actually appended.** Getting this order wrong destroys the idempotency: on a
+covered re-send the *chunk's* first block does not continue the archive's tip —
+it continues one of the archive's own earlier blocks — so an A1 check on
+`blocks[0]` would trap on precisely the re-send that E exists to make harmless.
+The chain check therefore runs on `blocks[k]`, the first block that will really be
+stored. Decision 5's "a mismatch still traps" applies to that block, not to a
+prefix the archive already has.
+
+#### With no index, the archive behaves exactly as it does today
+
+`append_blocks` with a `null` index must be indistinguishable from the current
+implementation: A1 only, trap on refusal, and an **empty reply**. It must never
+return a refusal as a value.
+
+This is not a detail — it is what makes the archive half safe to release on its
+own. An index-less append can only come from a ledger that has no code to read a
+result, and candid will not protect it: `done()` absorbs an unexpected trailing
+value as `Reserved` (`candid-0.10.34`, `de.rs`), so an old ledger decoding the
+reply as `()` reads `opt append_result { Gap = ... }` as `Ok(())`. It would then
+advance `heights.1 += chunk_len` and call `remove_archived_blocks` for blocks the
+archive refused to store. A trap, which the old ledger already handles on its
+`Err` path, is the only safe answer to a caller that cannot listen.
+
+So the rule is: **a value is only ever returned to a caller that asked with an
+index.** Verified in both directions by
+`test_append_blocks_ignores_an_extra_optional_start_index` (ICRC) and
+`should_ignore_an_extra_optional_start_index` (ICP).
 
 #### `next_index` may fall short, and `at_capacity` says why
 
@@ -535,11 +588,29 @@ loops go: pick a node, take what fits, one call, reconcile, done.
 
 Both terms of that cap are known locally, which is what makes it cheap. Tail
 capacity deliberately is **not** in it: selection happens before any await —
-`get_blocks_for_archiving` materialises blocks (`ledger.rs:462`) and only then does
-`node_and_capacity` ask — so folding capacity in would move selection after a call.
-Today's `take_prefix(remaining_capacity)` trims the selection instead. A round is
-therefore always *at most* one message, and a roll-over round is simply a short
-one.
+`Blockchain::get_blocks_for_archiving` (`blockchain.rs:125`) materialises blocks
+from `blocks_to_archive` (`ledger.rs:460`) and only then does `node_and_capacity`
+ask — so folding capacity in would move selection after a call.
+
+**How the round learns the node is full depends on F2**, and the two have to be
+read together:
+
+| | how capacity is known | what a full node looks like |
+|---|---|---|
+| F1 alone | `remaining_capacity` pre-call, as today | `take_prefix(remaining_capacity)` trims, so the round is short and the *next* round rolls over |
+| F1 + F2 | the previous append's `at_capacity` | no trim, so the round sends a full message, the archive stores what fits and answers `at_capacity = true`, and the *next* round rolls over |
+
+Under F2 the ledger stops predicting capacity and reacts to what the archive
+reports, which is the same move E makes for position — so `node_and_capacity`'s
+roll-over test (`remaining_capacity < needed`, `archive.rs:552`) is restated as
+"the last append to this node reported `at_capacity`", with the pre-call kept only
+for a cold start or a freshly spawned node.
+
+Two consequences worth stating plainly. "A roll-over round is short" holds only
+under F1 alone; under F2 the *overflowing* round is partial instead. And partial
+appends stop being a storage-pressure anomaly and become routine — one per node
+fill — which is why the straddling-chunk rule above is load-bearing rather than
+defensive.
 
 Note what this is not. "Remove chunking" deletes only the inner loop, and the
 outer one supplies multi-message rounds by itself — a round that outgrows the tail
@@ -655,11 +726,14 @@ better story for timer liveness.
 
 1. An ICRC archive rejects an `append_blocks` whose first block does not
    continue its stored chain, and its stored log is unchanged afterwards.
-2. An empty ICRC archive accepts its first append when that append starts at the
-   index the archive was created for, and refuses it otherwise. It has no tip to
-   compare against, so the chain check cannot help; the offset is the only thing
-   that can be checked, and it must be, because an empty node that accepts the
-   wrong blocks is mis-indexed for the life of that node, absent the repair path.
+2. An empty ICRC archive **that is sent an index** accepts its first append when
+   that append starts at the index the archive was created for, and refuses it
+   otherwise. It has no tip to compare against, so the chain check cannot help;
+   the offset is the only thing that can be checked, and it must be, because an
+   empty node that accepts the wrong blocks is mis-indexed for the life of that
+   node, absent the repair path. An index-less first append cannot be checked at
+   all and keeps today's behaviour, which is why this criterion is scoped to
+   indexed appends.
 3. A re-send after a lost ledger continuation is refused rather than stored, so
    no archive ever holds the same block twice and no index resolves to the
    wrong block.
@@ -671,9 +745,11 @@ better story for timer liveness.
 6. A ledger whose archiving keeps failing does not attempt it on every
    transaction; attempts are spaced by a growing interval up to a cap.
 7. Archiving resumes without operator action once a transient cause clears.
-8. Re-sending blocks an archive already holds is a no-op that reports the
-   archive's position, and the ledger reconciles from it rather than incrementing
-   — so a lost acknowledgement costs a round trip and nothing else. An append
+8. Re-sending blocks an archive already holds stores nothing again and reports
+   the archive's position, and the ledger reconciles from it rather than
+   incrementing — so a lost acknowledgement costs a round trip and nothing else. A
+   chunk that starts inside the stored range and ends past it appends only its
+   uncovered suffix, and a wholly covered chunk is the degenerate no-op. An append
    whose start index is beyond the archive's position is refused as a gap.
 9. A new node's `block_index_offset` is always derived from ranges that were
    reconciled against the archive, so it is never taken from stale state. If
@@ -687,8 +763,9 @@ better story for timer liveness.
    ledger advances only if an earlier node's range covers the skipped span —
    otherwise it halts with a distinct metric rather than dropping the blocks. The
    advance is applied by `archive_blocks`, from a count the round returns.
-12. A round issues exactly one `append_blocks`, and creates at most one node,
-   at its start.
+12. A round issues exactly one *block-carrying* `append_blocks`, and creates at
+   most one node, at its start. Empty appends used as a position probe do not
+   count against this.
 13. The ICP archive is unchanged. The ICP *ledger* does change: B1-B3, D1-D4, E2,
    E3 and F apply to both ledgers, so the backoff, the creation counter, the
    allocation work, the reconciliation and the single-message round are shared;
@@ -706,13 +783,13 @@ better story for timer liveness.
 | C1 | counters for the causes that stay traps — chain mismatch, and a platform-refused memory growth counted separately | `icrc1/archive/src/main.rs` `encode_metrics` | a capacity *stop* is no longer a refusal under E1; it is reported in the reply, so what remains here is the mismatch plus the growth refusal as a diagnostic |
 | D1 | in-flight archive-creation counter; halt archiving while it is non-zero | `ledger_canister_core::archive`, checked in `blocks_to_archive`, exposed as a per-ledger metric | `+1` before `create_canister`, `-1` on a graceful `Err` from any creation step, `-1` when `nodes.push` succeeds. A trap skips the decrement, so a non-zero value means a creation was begun and never accounted for. `#[serde(skip)]`, so it is per-epoch and needs no baseline |
 | D2 | stop copying the archive wasm after a commit point | `ledger_canister_core::spawn::install_code` signature, `archive.rs` | `install_code` takes `Vec<u8>`, forcing `archive_wasm().into_owned()`, and `Rt::call` then serialises it again — two multi-MB copies in the continuation after `create_canister` committed. Take `Cow<'static, [u8]>`, pre-reserve the encode buffer before the first await, and `nodes.reserve(1)` |
-| D3 | correct the stale comment at `archive.rs:468-474` | `ledger_canister_core::archive` | it says a panic there "leads to the rolling back of the transaction that triggered the archiving", which stopped being true when archiving was spawned |
+| D3 | correct the stale comment above `create_canister` (`archive.rs:451-453`) | `ledger_canister_core::archive` | it says a panic there "leads to the rolling back of the transaction that triggered the archiving", which stopped being true when archiving was spawned |
 | D4 | make error construction allocation-free, and trim the interpolating log lines | `ledger_canister_core::archive`, `::spawn` | `FailedToArchiveBlocks(pub String)` allocates on every error construction, so an allocation failure there turns a graceful `Err` into a trap: replace it with an enum carrying `Copy` payloads, rendered to text only where it is logged. `Rt::print` takes `impl AsRef<str>`, so non-interpolating messages become `&'static str` for free. **Keep** the canister id in the `create_canister` callback log — canister logs survive traps — verified, `test_appending_logs_in_trapped_update_call` in `rs/execution_environment/tests/canister_logging.rs` asserts the pre-trap `debug_print` persists *and* that the trap gets its own record — so it is the only possible record of an orphan's identity (D1 says one happened, this says which) — but drop the `{result:?}` debug format, which also stringifies the reject message. `reject_message()` borrows a `String` ic-cdk has already allocated, so only our second copy is avoidable |
 | E1 | `append_blocks` takes an optional expected start index and returns an optional result carrying the archive's next expected global index plus `at_capacity`, or a gap. Four-way placement of the index against `offset`/`offset + log_length`; capacity reported rather than trapped; chain mismatch still traps | `icrc1/archive/src/main.rs`, `archive.did`, `ledger_canister_core::archive::send_blocks_to_archive` | the only interface change; both `opt`, so tolerant in either direction. Verify with `didc` and the CI Candid check |
 | E2 | the ledger reconciles `nodes_block_ranges` from the reported index instead of incrementing, and treats a covered index as success. The coverage guard *detects* here and reports upward — the round returns a count that includes blocks an archive already held, and `archive_blocks` performs the removal, so the module boundary is not redrawn (Decision 6) | `ledger_canister_core::archive::send_blocks_to_archive`, return type consumed by `ledger::archive_blocks` | shared code, so it applies to both ledgers once their archives are upgraded; the incremental path stays as the fallback for archives that return nothing |
 | E3 | count every use of the incremental fallback | `ledger_canister_core::archive` + per-ledger metric | the path's problem is an unknowable lifetime; a counter makes it deletable once it reads zero everywhere |
-| F1 | cap the round's selection at `min(num_blocks_to_archive, one message)` in bytes, and delete both loops in `send_blocks_to_archive` | `ledger_canister_core::ledger::get_blocks_for_archiving`, `::archive::send_blocks_to_archive` | removes code; the byte-based cap is what makes it correct for variable-size blocks. Both terms are known locally, so selection stays before the first await; `take_prefix(remaining_capacity)` still trims, so a roll-over round is short. Expose the effective per-round count as a metric |
-| F2 | skip the `remaining_capacity` pre-call when the last append reported `at_capacity = false` | `ledger_canister_core::archive::node_and_capacity` | depends on E1; this is what makes F cheaper than today rather than dearer |
+| F1 | cap the round's selection at `min(num_blocks_to_archive, one message)` in bytes, and delete both loops in `send_blocks_to_archive` | `Blockchain::get_blocks_for_archiving` (`blockchain.rs:125`), called from `ledger::blocks_to_archive` (`ledger.rs:460`); `archive::send_blocks_to_archive` | removes code; the byte-based cap is what makes it correct for variable-size blocks, and both terms are known locally so selection stays before the first await. Expose the effective per-round count as a metric |
+| F2 | replace the `remaining_capacity` pre-call with the last append's `at_capacity`, keeping the call only for a cold start or a freshly spawned node | `ledger_canister_core::archive::node_and_capacity` (roll-over test at `archive.rs:552`) | depends on E1; this is what makes F cheaper than today rather than dearer, and it makes partial appends routine — see the straddling-chunk rule under E |
 
 A1, C1 and E1 are in `ic-icrc1-archive`. B1-B3, D1-D4, E2, E3, F1 and F2 are in
 shared ledger code and therefore affect both ledgers; see Decision 3.
@@ -830,8 +907,13 @@ reason the split matters here:
   new ledger reads as `null` and falls back to its current incremental behaviour.
   That tolerance is what makes the order irrelevant — but it also means the
   fallback path has to stay for as long as un-upgraded archives exist, which for
-  third-party ICRC ledgers is indefinitely. Verify the Candid compatibility with
-  `didc` and the CI check rather than relying on this paragraph.
+  third-party ICRC ledgers is indefinitely. It is not taken on trust:
+  `test_append_blocks_ignores_an_extra_optional_start_index` proves an unmodified
+  ICRC archive stores the blocks and ignores the argument, and that its empty
+  reply decodes as `null`; `should_ignore_an_extra_optional_start_index` proves
+  the same for the ICP archive's hand-rolled decode. Both carry a negative control
+  so they cannot pass vacuously. Verify the declared Candid with `didc` and the CI
+  check as well.
 
 ### Two releases, both in the standard order
 
@@ -841,8 +923,22 @@ normal index-ledger-archives sequence:
 * **Release 1 — archive only.** A, C and the archive half of E: the chain check,
   the refusal metric, and `append_blocks` accepting the optional index and
   returning the optional result. The ledger is unchanged, so it neither sends the
-  index nor reads the result. After this release every archive in our suites
-  speaks the protocol, and the corruption is closed.
+  index nor reads the result — which is exactly why the archive must keep today's
+  behaviour for an index-less append, including trapping rather than returning a
+  value. After this release every archive in our suites speaks the protocol, and
+  the corruption is closed.
+
+  **What Release 1 costs, and Rollout should not gloss it.** Release 1 converts a
+  *corruption* risk into an *availability* risk, deliberately, but not for free. An
+  old ledger cannot tell a refusal's cause, so a round that dies after a
+  successful append leaves the next round re-sending blocks the archive already
+  holds; A1 refuses, and the ledger has no way to advance past it — there is no
+  endpoint that sets `num_archived_blocks`. Archiving then halts indefinitely,
+  with no remedy short of Release 2, and because B is not in Release 1 the ledger
+  keeps retrying on every transaction while halted. Blocks accumulate locally, so
+  it is survivable, and a stall is strictly better than silent corruption. But it
+  is a reason to keep the window between the two releases short rather than to
+  treat Release 1 as unconditionally safe.
 * **Release 2 — ledger.** B, D, F and the ledger half of E: sending the index,
   reconciling from the reported position, the single-message round, the backoff
   and the creation counter. By now the archives it talks to already answer, so the
@@ -934,10 +1030,17 @@ mismatch, is a poor trade for what it buys.
 ## Testing strategy
 
 The goal is a failing test per issue on the current baseline, passing after the
-fix. Note the baseline is the **DEFI-2967 branch**, not `master`: on `master`
-archiving is awaited, so a trap in a continuation rejects the transaction and the
-observable behaviour differs. For A1 the archive behaves identically on both, so
-that one test is baseline-independent.
+fix.
+
+Two separate things are branch-dependent, and conflating them is what makes
+references drift. **Line numbers** throughout this document are against `master`.
+The **behavioural baseline** for the tests that need a trap is the *DEFI-2967
+branch*, not `master`: on `master` archiving is awaited, so a trap in a
+continuation rejects the transaction and the observable behaviour differs, and the
+harness those tests reuse (`archiving_recovers_after_a_trapped_attempt`,
+`routine_archiving_does_not_grow_the_ledger`) exists only there. Every
+archive-level test is baseline-independent, because the archive behaves identically
+either way.
 
 | # | issue | test | deterministic? |
 |---|---|---|---|
@@ -948,7 +1051,10 @@ that one test is baseline-independent.
 | 5 | D2 — the creation round's post-commit allocation | measure ledger memory across an archive-creation round, as `routine_archiving_does_not_grow_the_ledger` already does for a routine round; assert the growth is below a bound after D2 | yes, as a measurement |
 | 6 | E1 — a partial append reports its true position rather than trapping | archive-level: configure `max_memory_size_bytes` so a chunk only partly fits, append it, assert `Ok` with a short `next_index`, `at_capacity = true`, and that the blocks that fit are readable | **yes** — the archive's own limit is configurable at `init` |
 | 7 | F1 — a round issues one append and creates at most one node | count `append_blocks` calls per round against a configuration that is multi-chunk today; assert one, and assert the effective per-round count metric matches | **yes** |
-| 8 | both token variants for (1), (4) and (6) | | yes |
+| 8 | E1 — an index-less append must keep today's behaviour, and must not return a value an old caller would misread as success | archive-level, and **already written**: `test_append_blocks_ignores_an_extra_optional_start_index` asserts an unmodified archive stores the blocks, ignores the extra argument, and that its empty reply decodes as `null`; a wrong-typed payload is rejected as a negative control | **yes** — passing today, so it locks the premise rather than driving a fix |
+| 9 | Decision 3 — the ICP archive's hand-rolled `Decode!` tolerates the extra argument, which E2's always-send depends on | **already written**: `should_ignore_an_extra_optional_start_index` in `icp/archive/tests/tests.rs` appends with a trailing `opt nat64`, asserts capacity dropped by the block size so it really stored it, and asserts the empty reply decodes as `None` | **yes** — a release gate; a candid change that broke it would fail here |
+| 10 | E1 — a straddling chunk appends only its uncovered suffix | archive-level: append `N..N+499`, then append `N..N+999` and assert `log_length` becomes 1000, not 1500, and that every index resolves to the right block. Assert too that the chain check did not trap on the covered prefix | **yes** — no trap needed |
+| 11 | both token variants for (1), (4), (6), (8) and (10) | | yes |
 
 Two things deliberately not attempted:
 
@@ -974,13 +1080,28 @@ Two things deliberately not attempted:
    "resume now" lever, which is the right shape when the upgrade is usually the
    fix.
 3. **The shared components apply to both ledgers, with no trait seam.** B1-B3,
-   D1-D4, E2 and E3 stay in shared code: the wasteful per-transaction retry, the
+   D1-D4, E2, E3 and F stay in shared code: the wasteful per-transaction retry, the
    lost-creation window and the inferred bookkeeping all exist on both ledgers
    today, so fixing them fixes both. A seam introduced only to keep the ICP ledger
    on the old behaviour would be a layer with no beneficiary. A1, C1 and E1 are
    ICRC-only regardless, since `ic-icrc1-archive` and `ic-icp-archive` are
    separate crates — so the ICP ledger gains the ledger-side fixes but not the
    indexed protocol until its own archive grows one.
+
+   **Concretely, the shared code always sends the index**, including to
+   `ic-icp-archive`, which is what lets there be no seam:
+   `send_blocks_to_archive` does not know which ledger it serves and is not given
+   a way to find out. That is safe because the ICP archive decodes its argument by
+   hand — `Decode!(&msg_arg_data(), Vec<EncodedBlock>)`
+   (`icp/archive/src/main.rs:291`) — and candid's `done()` absorbs the extra
+   trailing value as `Reserved` rather than erroring; its empty reply then decodes
+   as `None`, putting the ledger on the E2 fallback path for ICP.
+
+   That tolerance is load-bearing and on a different code path from the ICRC
+   archive's macro-generated decode, so it has its own test:
+   `should_ignore_an_extra_optional_start_index` in
+   `icp/archive/tests/tests.rs`. It is a **release gate** — if it ever failed,
+   shipping E2 would break ICP archiving outright rather than degrade it.
 4. **The typed result is part of E, not deferred.** It is what lets the ledger
    distinguish a duplicate (success) from a gap (halt) without inspecting reject
    strings, and it is how the archive reports its position. An un-upgraded archive
@@ -1067,6 +1188,14 @@ So a repair is **two coordinated changes**, and neither exists:
 | archive | `post_upgrade` takes an optional `block_index_offset` and writes the stable cell | the offset is the corrupted value |
 | ledger | a migration or admin path that rewrites `nodes_block_ranges` | otherwise reads still route by the stale ranges |
 
+The archive half is cheaper on ICP than on ICRC, which is worth knowing before
+estimating it. `ic-icp-archive` already takes
+`post_upgrade(upgrade_arg: Option<ArchiveUpgradeArgument>)`
+(`icp/archive/src/main.rs:383`) and already mutates stable state through it
+(`set_max_memory_size_bytes`), so this is one more optional field on an existing
+record. The ICRC archive's `post_upgrade()` takes nothing, so there it is a
+signature change and a `.did` change.
+
 **Treat it as a break-glass tool, not a feature.** Writing an offset on a healthy
 archive corrupts it in exactly the way this spec exists to prevent, and the archive
 cannot validate the new value — it has no access to the previous node's tip, so
@@ -1107,7 +1236,7 @@ records as unobtainable for 2026-09-01. It is unreadable today only because
 `log_visibility` defaults to `Controllers` and the controller is NNS Root.
 
 The NNS `UpdateCanisterSettings` action already supports the field
-(`nns/governance/api/src/types.rs:2743`, validated in
+(`nns/governance/api/src/types.rs:2748`, validated in
 `proposals/update_canister_settings.rs:47-52`), so one proposal would open it.
 Two caveats: the action maps only `Controllers` and `Public`, so
 `AllowedViewers` is not reachable that way; and the store is a bounded ring
@@ -1144,7 +1273,7 @@ Reasoning worth keeping, on points that are settled but easy to re-litigate.
   inter-canister call. Awaiting anything a call does not wake — a timer, a channel
   — drops the refcount to zero, cancels the task and trips the panic. A second,
   independent reason not to make archiving timer-driven, and worth a comment at
-  `spawn_archiving` so nobody later adds a delay inside the task.
+  the archiving trigger so nobody later adds a delay inside the task.
 
 * **Gap versus duplicate needs no distinguishing.** A refusal could in principle
   mean either of two things with opposite severity: a *duplicate*, where the

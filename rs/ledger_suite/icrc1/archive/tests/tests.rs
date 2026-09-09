@@ -108,6 +108,17 @@ impl Setup {
             .unwrap();
         Decode!(&res.bytes(), GetBlocksResult).unwrap()
     }
+
+    fn log_length(&self) -> u64 {
+        self.icrc3_get_blocks(vec![GetBlocksRequest {
+            start: Nat::from(0_u64),
+            length: Nat::from(0_u64),
+        }])
+        .log_length
+        .0
+        .try_into()
+        .unwrap()
+    }
 }
 
 impl Default for Setup {
@@ -123,35 +134,28 @@ impl Default for Setup {
 fn test_empty_append_blocks_is_accepted_and_stores_nothing() {
     let setup = Setup::default();
 
-    let log_length = |setup: &Setup| -> u64 {
-        setup
-            .icrc3_get_blocks(vec![GetBlocksRequest {
-                start: Nat::from(0_u64),
-                length: Nat::from(0_u64),
-            }])
-            .log_length
-            .0
-            .try_into()
-            .unwrap()
-    };
-
     let capacity_before = setup.remaining_capacity();
 
     // With no extra argument, as an old ledger would call it.
     setup
         .append_blocks_with_start_index(vec![], None)
         .expect("an empty append should be accepted");
-    assert_eq!(log_length(&setup), 0, "an empty append must store nothing");
+    assert_eq!(setup.log_length(), 0, "an empty append must store nothing");
+    assert_eq!(
+        setup.remaining_capacity(),
+        capacity_before,
+        "an index-less empty append must not consume capacity"
+    );
 
     // And with the proposed index, as a new ledger would.
     setup
         .append_blocks_with_start_index(vec![], Some(0))
         .expect("an empty append carrying an index should be accepted");
-    assert_eq!(log_length(&setup), 0, "still nothing stored");
+    assert_eq!(setup.log_length(), 0, "still nothing stored");
     assert_eq!(
         setup.remaining_capacity(),
         capacity_before,
-        "an empty append must not consume capacity"
+        "an indexed empty append must not consume capacity either"
     );
 }
 
@@ -205,35 +209,34 @@ fn test_append_blocks_ignores_an_extra_optional_start_index() {
     let encoded0 = block0.encode();
     let encoded1 = block1.encode();
 
-    let log_length = |setup: &Setup| -> u64 {
-        setup
-            .icrc3_get_blocks(vec![GetBlocksRequest {
-                start: Nat::from(0_u64),
-                length: Nat::from(0_u64),
-            }])
-            .log_length
-            .0
-            .try_into()
-            .unwrap()
-    };
-
-    assert_eq!(log_length(&setup), 0);
+    assert_eq!(setup.log_length(), 0);
 
     // `opt nat64` present.
-    setup
+    let reply = setup
         .append_blocks_with_start_index(vec![encoded0.clone()], Some(0))
         .expect("an archive that does not know the argument should still accept the call");
     assert_eq!(
-        log_length(&setup),
+        setup.log_length(),
         1,
         "the block should have been stored even though the extra argument was ignored"
+    );
+
+    // The other direction, which is what an archive-only release depends on: a
+    // caller that expects `opt append_result` must read this archive's empty
+    // reply as `null` rather than as a decode failure. Asserted here so that a
+    // candid upgrade which changed it would fail visibly.
+    assert_eq!(
+        Decode!(&reply.bytes(), Option<u64>)
+            .expect("an empty reply must decode as a missing trailing optional"),
+        None,
+        "an empty reply must read as null, not as a value"
     );
 
     // `opt nat64` absent, i.e. the `null` case.
     setup
         .append_blocks_with_start_index(vec![encoded1.clone()], None)
         .expect("a null start index should be accepted too");
-    assert_eq!(log_length(&setup), 2);
+    assert_eq!(setup.log_length(), 2);
 
     // Negative control: the harness does surface a decode failure, so the two
     // assertions above are not passing vacuously.
@@ -247,7 +250,7 @@ fn test_append_blocks_ignores_an_extra_optional_start_index() {
         "a payload of the wrong type should have been rejected, but was accepted"
     );
     assert_eq!(
-        log_length(&setup),
+        setup.log_length(),
         2,
         "the rejected call must not have stored anything"
     );
