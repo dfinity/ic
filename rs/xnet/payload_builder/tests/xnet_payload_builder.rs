@@ -1114,7 +1114,7 @@ fn refill_pool_empty(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
-            gced_message_index: None,
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1234,7 +1234,7 @@ fn refill_pool_append(
         let stream_position = ExpectedIndices {
             message_index: stream_begin,
             signal_index: stream.signals_end(),
-            gced_message_index: None,
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1350,7 +1350,7 @@ fn refill_pool_put_invalid_slice(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
-            gced_message_index: None,
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1465,7 +1465,7 @@ fn refill_pool_append_invalid_slice(
         let stream_position = ExpectedIndices {
             message_index: stream_begin,
             signal_index: stream.signals_end(),
-            gced_message_index: None,
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
