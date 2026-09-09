@@ -19,14 +19,6 @@ pub(crate) enum OrchestratorError {
     /// The given node is not assigned to any Subnet
     NodeUnassignedError(NodeId, RegistryVersion),
 
-    /// During a subnet split of `source_subnet_id` into `destination_subnet_id`, the node was
-    /// assigned to `new_subnet_id`, which is neither of the two
-    DisallowedSubnetSplitAssignmentError {
-        new_subnet_id: SubnetId,
-        source_subnet_id: SubnetId,
-        destination_subnet_id: SubnetId,
-    },
-
     /// The given subnet ID does not map to a `SubnetRecord` at the given
     /// version
     SubnetMissingError(SubnetId, RegistryVersion),
@@ -115,16 +107,6 @@ impl fmt::Display for OrchestratorError {
             OrchestratorError::NodeUnassignedError(node_id, registry_version) => write!(
                 f,
                 "Node {node_id} is not found in any subnet at registry version {registry_version}"
-            ),
-            OrchestratorError::DisallowedSubnetSplitAssignmentError {
-                new_subnet_id,
-                source_subnet_id,
-                destination_subnet_id,
-            } => write!(
-                f,
-                "The node was assigned to subnet {new_subnet_id} during the split of subnet \
-                {source_subnet_id} into subnet {destination_subnet_id}, which is neither the \
-                source nor the destination subnet"
             ),
             OrchestratorError::RegistryClientError(e) => write!(f, "{e}"),
             OrchestratorError::ReplicaVersionMissingError(replica_version, registry_version) => {

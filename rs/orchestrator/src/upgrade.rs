@@ -3073,7 +3073,11 @@ mod tests {
             SPLIT_REGISTRY_VERSION.get(),
             vec![SUBNET_42, SOURCE_SUBNET_ID, DESTINATION_SUBNET_ID],
         );
-        add_subnet_splitting_record(&data_provider);
+        add_subnet_splitting_record(
+            &data_provider,
+            SPLIT_REGISTRY_VERSION,
+            DESTINATION_SUBNET_ID,
+        );
         for (subnet_id, member) in [(new_subnet_id, node_id), (other_subnet_id, other_node_id)] {
             add_subnet_record_to_provider(
                 &data_provider,
