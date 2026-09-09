@@ -1334,6 +1334,64 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Number of delegation authorizations the minter has signed and stored.",
                 )?;
 
+                w.encode_counter(
+                    "cketh_minter_sweeper_funding_cketh_burned_total",
+                    s.sweeper_funding.cumulative_burned().as_f64(),
+                    "Cumulative ckETH burned from the fee account to prepay sweep gas.",
+                )?;
+                w.encode_counter(
+                    "cketh_minter_sweeper_funding_eth_spent_total",
+                    s.sweeper_funding.cumulative_spent().as_f64(),
+                    "Cumulative ETH debited from the minter's main address for sweeping.",
+                )?;
+                w.counter_vec(
+                    "cketh_minter_sweeper_funding_finalized_total",
+                    "Funding transactions that finalized, by outcome.",
+                )?
+                .value(
+                    &[("status", "success")],
+                    s.sweeper_funding.successful_fundings() as f64,
+                )?
+                .value(
+                    &[("status", "failure")],
+                    s.sweeper_funding.failed_fundings() as f64,
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_burned_not_yet_spent",
+                    s.sweeper_funding.burned_not_yet_spent().as_f64(),
+                    "ckETH burned for sweeping and not yet spent, i.e. how far burn runs ahead of \
+                     spend. A funding that failed on chain leaves its whole undelivered amount \
+                     here, so this jumps alongside a failure.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_gas_balance",
+                    s.sweeper_funding.sweeper_balance_lower_bound().as_f64(),
+                    "Prepaid sweep gas: a lower bound on the sweeper address' ETH balance, from the \
+                     fundings the minter recorded as finalized.",
+                )?;
+                let funding_config = s.sweeper_funding_config();
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_low_water_mark",
+                    funding_config.low_water_mark.as_f64(),
+                    "Balance below which the sweeper address is topped up.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_target",
+                    funding_config.target.as_f64(),
+                    "Balance the sweeper address is topped up to.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_in_flight_age_seconds",
+                    s.withdrawal_transactions
+                        .outstanding_sweeper_funding()
+                        .map(|funding| {
+                            (now_nanos.saturating_sub(funding.created_at.unwrap_or(now_nanos))
+                                / 1_000_000_000) as f64
+                        })
+                        .unwrap_or(0.0),
+                    "Age of the sweeper funding awaiting finalization; 0 if none is outstanding.",
+                )?;
+
                 w.encode_gauge(
                     "cketh_minter_last_max_fee_per_gas",
                     s.last_transaction_price_estimate

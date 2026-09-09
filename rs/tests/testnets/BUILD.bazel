@@ -281,7 +281,6 @@ system_test_nns(
 
 system_test_nns(
     name = "medium",
-    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 11 * DEFAULT_VCPUS_PER_VM,  # 4 System + 4 Application + 1 unassigned + 1 API boundary node + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
     enable_uvm = True,

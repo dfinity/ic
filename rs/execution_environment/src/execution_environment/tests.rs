@@ -2712,16 +2712,7 @@ fn ingress_message_to_cooling_down_subnet_is_rejected() {
     test.should_accept_ingress_message(canister, "update", vec![])
         .unwrap();
 
-    let own_subnet_id = test.state().metadata.own_subnet_id;
-    test.state_mut()
-        .metadata
-        .modify_network_topology(|network_topology| {
-            network_topology
-                .subnets_mut()
-                .get_mut(&own_subnet_id)
-                .unwrap()
-                .cooling_down = true;
-        });
+    test.set_cooling_down(true);
 
     // Both canister-addressed and subnet-addressed messages are now rejected.
     let err = test
@@ -3375,7 +3366,7 @@ fn execute_canister_http_request() {
                 .canister_state(caller_canister)
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases_as_counters()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&CyclesUseCase::HTTPOutcalls)
                 .unwrap()
         );
@@ -5169,14 +5160,14 @@ fn replicated_query_can_burn_cycles() {
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
-    let burned_cycles_as_counters = *test
+    let burned_cycles_monotonic = *test
         .canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases_as_counters()
+        .consumed_cycles_by_use_cases_monotonic()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
-    assert_eq!(burned_cycles_as_counters, burned_cycles);
+    assert_eq!(burned_cycles_monotonic, burned_cycles);
 }
 
 #[test]
@@ -5221,7 +5212,7 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
         test.canister_state(canister_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::BurnedCycles)
             .is_none()
     );
@@ -5529,7 +5520,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
         let execution_cost_initial = test.canister_execution_cost(a_id);
@@ -5541,7 +5532,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
         let execution_cost_after_message = test.canister_execution_cost(a_id);
@@ -5598,14 +5589,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
         let instruction_consumption_before_response_counters = *test
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
 
@@ -5674,14 +5665,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
         let instruction_consumption_after_response_counters = *test
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
 
@@ -6586,7 +6577,7 @@ impl ExecutionAccounting {
                 .canister_state(canister_id)
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases_as_counters()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&CyclesUseCase::Instructions)
                 .cloned()
                 .unwrap_or_default(),

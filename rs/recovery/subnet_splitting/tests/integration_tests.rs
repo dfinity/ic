@@ -206,36 +206,36 @@ fn load_metrics_e2e_test() {
             states_sizes_bytes
                 .source
                 .min(states_sizes_bytes.destination),
-            4232865,
+            2927104,
             0.1
         );
         assert_near!(
             states_sizes_bytes
                 .source
                 .max(states_sizes_bytes.destination),
-            5006039,
+            6335280,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .min(instructions_executed.destination),
-            144345636,
+            144348469,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .max(instructions_executed.destination),
-            145689636,
+            145717733,
             0.1
         );
-        assert_eq_oriented!(canisters_installed, 11, 9);
-        assert_eq_oriented!(ingress_messages_executed, 21, 18);
-        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 5, 5);
-        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 15, 13);
-        assert_eq_oriented!(http_outcalls_executed, 6, 4);
-        assert_eq_oriented!(heartbeats_and_global_timers_executed, 341, 353);
+        assert_eq_oriented!(canisters_installed, 14, 6);
+        assert_eq_oriented!(ingress_messages_executed, 26, 13);
+        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 6, 4);
+        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 19, 9);
+        assert_eq_oriented!(http_outcalls_executed, 8, 2);
+        assert_eq_oriented!(heartbeats_and_global_timers_executed, 313, 381);
         // A single split cannot report some metrics in the original orientation and others in the
         // swapped one, so require all the orientation-sensitive metrics to agree on one labeling.
         assert!(

@@ -276,8 +276,8 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
                     cycles: Some((&cycles).into()),
                 })
                 .collect(),
-            consumed_cycles_by_use_case_as_counters: item
-                .consumed_cycles_by_use_case_as_counters
+            consumed_cycles_by_use_case_monotonic: item
+                .consumed_cycles_by_use_case_monotonic
                 .clone()
                 .into_iter()
                 .map(|(use_case, cycles)| ConsumedCyclesByUseCase {
@@ -308,9 +308,9 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             );
         }
 
-        let mut consumed_cycles_by_use_case_as_counters = BTreeMap::new();
-        for x in item.consumed_cycles_by_use_case_as_counters.into_iter() {
-            consumed_cycles_by_use_case_as_counters.insert(
+        let mut consumed_cycles_by_use_case_monotonic = BTreeMap::new();
+        for x in item.consumed_cycles_by_use_case_monotonic.into_iter() {
+            consumed_cycles_by_use_case_monotonic.insert(
                 CyclesUseCase::try_from(pbCyclesUseCase::try_from(x.use_case).map_err(|_| {
                     ProxyDecodeError::ValueOutOfRange {
                         typ: "CyclesUseCase",
@@ -349,7 +349,7 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             .unwrap_or_else(|_| NominalCycles::zero()),
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
-            consumed_cycles_by_use_case_as_counters,
+            consumed_cycles_by_use_case_monotonic,
             // Transient, with no corresponding proto field:
             // `ReplicatedState::new_from_checkpoint` derives it from the canisters
             // it loads.
