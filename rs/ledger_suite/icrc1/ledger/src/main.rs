@@ -9,6 +9,7 @@ use ic_cdk::init;
 use ic_cdk::stable::StableReader;
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_icrc1::archive_limits::{ARCHIVE_MEMORY_LIMIT, DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE};
 use ic_icrc1::{
     Operation, Transaction,
     endpoints::{StandardRecord, convert_transfer_error},
@@ -20,6 +21,9 @@ use ic_icrc1_ledger::{
 use ic_ledger_canister_core::ledger::{
     LedgerAccess, LedgerContext, LedgerData, TransferError as CoreTransferError, apply_transaction,
     archive_blocks,
+};
+use ic_ledger_canister_core::metrics::{
+    encode_archive_config_metrics, encode_dedup_config_metrics,
 };
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::BlockIndex;
@@ -402,6 +406,23 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                     num_archives as f64,
                     "Total number of archives.",
                 )?;
+                if let Some(archive) = archive_guard.as_ref() {
+                    encode_archive_config_metrics(
+                        w,
+                        archive,
+                        archive.node_max_memory_size_bytes.min(ARCHIVE_MEMORY_LIMIT),
+                    )?;
+                    w.encode_gauge(
+                        "ledger_archive_max_transactions_per_response",
+                        archive
+                            .max_transactions_per_response
+                            .unwrap_or(DEFAULT_MAX_TRANSACTIONS_PER_RESPONSE)
+                            as f64,
+                        "Maximum number of transactions an archive spawned from now on will \
+                         return per response. Existing archives keep the limit they were created \
+                         with, reported by their own archive_max_transactions_per_response metric.",
+                    )?;
+                }
             }
             Err(err) => Err(std::io::Error::other(format!(
                 "Failed to read number of archives: {err}"
@@ -412,6 +433,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             ledger.approvals().get_num_approvals() as f64,
             "Total number of approvals.",
         )?;
+        w.encode_gauge(
+            "ledger_max_message_size_bytes",
+            MAX_MESSAGE_SIZE as f64,
+            "Maximum inter-canister message size in bytes.",
+        )?;
+        encode_dedup_config_metrics(w, ledger)?;
         Ok(())
     })
 }
