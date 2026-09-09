@@ -130,6 +130,25 @@ The tool supports splitting replicated state as part of a subnet split operation
 - **THEN** the new subnet's batch time is set to the provided value
 - **AND** the original subnet retains its original batch time
 
+### Requirement: State Merge
+
+The tool assembles the merged replicated state as part of a subnet merge operation, the inverse of a subnet split.
+
+#### Scenario: Assembling a merged checkpoint
+- **WHEN** `state_tool merge --base <destination-checkpoint> --source <source-checkpoint> --output <path>` is executed
+- **THEN** a new checkpoint is created at `output` holding everything of `base`, with the canisters and canister snapshots of `source` added to those of `base`
+- **AND** everything else (system metadata, subnet queues, ingress history, ...) is taken from `base`
+- **AND** file contents are hard-linked rather than copied, so the merge is cheap regardless of state size and `output` shares storage with `base` and `source`
+
+#### Scenario: Rejecting overlapping canisters
+- **WHEN** the canister states or canister snapshots directories of `base` and `source` both contain an entry with the same name
+- **THEN** the merge fails, since the two checkpoints are not from the same merge
+
+#### Scenario: Cleaning up after a failed merge
+- **WHEN** assembling the merged checkpoint fails after `output` was created
+- **THEN** the partially-written `output` directory is removed
+- **AND** if that cleanup itself fails, the cleanup error is appended to the original error rather than replacing it
+
 ### Requirement: Manifest Splitting
 
 The tool can split a manifest to predict the outcome of a subnet split.
