@@ -71,13 +71,17 @@ Runbook::
    entries, `M`'s subnet input and output queues are empty, `M`'s subnet call
    context manager holds no call context, and the pending anonymous refunds are
    worth at most `MAX_REFUND_VALUE_CYCLES`.
-10. Check that `U2a` .. `U2e` have been installed, i.e. that the `install_code`
-   calls of step 5 ran to completion rather than being lost or rejected while
-   `M` was cooling down.
-11. Check that the two loops of step 2 are indeed stalled (their iteration
-   counters, read via queries, no longer advance): while `M` is cooling down,
-   neither `M` nor `T` routes any message to or from `M`, so the messages of
-   both loops are retained in their senders' output queues.
+10. Check that `M` answers no query call, which is the other half of what a
+   cooling down subnet stops doing: it neither accepts ingress messages nor
+   serves queries, and it executes no canister message. Whether the
+   `install_code` calls of step 5 installed the code is therefore only observable
+   after the merge, in step 17.
+11. Check that the two loops of step 2 are indeed stalled: while `M` is cooling
+   down, it executes no canister message, and neither `M` nor `T` routes any
+   message to or from `M`, so the messages of both loops are retained in their
+   senders' output queues. `UT`'s iteration counter is read via a query to `T`;
+   `US` sits on `M`, which answers no query, so `M`'s count of the rounds it
+   skipped canister execution in stands in for it.
 12. Submit (and adopt) `UpdateConfigOfSubnet` NNS proposals setting the
    `halt_at_cup_height` flag of both `M` and `R`, and wait until each of their
    nodes reports in its journal that it is halted. Record the heights of the
@@ -109,7 +113,9 @@ Runbook::
 17. Check that `U8`, now served by `R`, kept the stable memory, the snapshot and
    (up to what an idle canister burns) the cycles balance of step 4, and that
    `UR`, which `R` hosted all along, is undisturbed and can call `U8` now that
-   both are on the same subnet.
+   both are on the same subnet. Check that `U2a` .. `U2e`, also served by `R`
+   now, have been installed, i.e. that the `install_code` calls of step 5 ran to
+   completion while `M` was cooling down rather than being lost or rejected.
 18. Set the global data of `U3`, `U5` and `U7` to `LOOP_BREAK_TRIGGER`, ending
    the three endless loops, and check that every ingress message that was in
    progress across the merge completed. `U3` and `U5` are reached through `R`,
@@ -187,6 +193,8 @@ const METRIC_SUBNET_INPUT_QUEUE_MESSAGES: &str = "execution_subnet_input_queue_m
 const METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES: &str = "execution_subnet_output_queue_messages";
 const METRIC_SUBNET_CALL_CONTEXTS: &str = "replicated_state_subnet_call_contexts";
 const METRIC_PENDING_REFUNDS_CYCLES: &str = "replicated_state_pending_refunds_cycles";
+const METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION: &str =
+    "round_skipped_canister_execution_due_to_cooling_down";
 /// Timeout for a subnet to halt at its next CUP, which is up to a full DKG
 /// interval away.
 const HALT_TIMEOUT: Duration = Duration::from_secs(900);
@@ -710,56 +718,58 @@ async fn run(env: TestEnv) {
     .unwrap_or_else(|e| panic!("subnet M did not become \"merge ready\": {e}"));
     info!(logger, "Step 9 done: subnet M is \"merge ready\"");
 
-    // Step 10: Check that `U1`'s `install_code` calls did install the universal
-    // canister module: a canister that has no module rejects every query.
+    // Step 10: Check that `M` answers no query call. Step 8 saw it stop accepting
+    // ingress messages; refusing queries is the other half of what a cooling down
+    // subnet stops doing, and the reason the state of `M`'s canisters can only be
+    // inspected once `R` serves them (step 17).
     info!(
         logger,
-        "Step 10: Checking that {} have been installed",
-        INSTALL_CODE_TARGETS.join(", "),
+        "Step 10: Checking that subnet M rejects query calls"
     );
-    for (&target, name) in targets.iter().zip(INSTALL_CODE_TARGETS) {
-        let canister = UniversalCanister::from_canister_id(&m_agent, target);
-        let reply = canister
-            .query(wasm().reply_data(name.as_bytes()))
-            .await
-            .unwrap_or_else(|e| {
-                panic!("{name} ({target}) does not answer queries, so it was not installed: {e}")
-            });
-        assert_eq!(
-            reply,
-            name.as_bytes(),
-            "{name} ({target}) answered a query with an unexpected reply",
-        );
-    }
-    info!(
-        logger,
-        "Step 10 done: {} have been installed",
-        INSTALL_CODE_TARGETS.join(", "),
+    let err = us
+        .query(wasm().reply_data(&[]))
+        .await
+        .expect_err("query call to US was answered while subnet M was cooling down");
+    let err = err.to_string();
+    assert!(
+        err.contains("cooling down"),
+        "query call to US failed unexpectedly: {err}",
     );
+    info!(logger, "Step 10 done: subnet M rejects query calls");
 
     // Step 11: Check that both call loops are stalled, i.e. that `M` became
     // "merge ready" because it is cooling down and not because the loops
     // stopped making calls.
+    //
+    // `UT` is on `T`, so its iteration counter can be read directly. `US` is on
+    // `M`, which answers no query, so the number of rounds `M` skipped canister
+    // execution in stands in for it: while that keeps growing, `M` executes no
+    // canister message at all, the next iteration of `US`'s loop included.
     info!(
         logger,
         "Step 11: Checking that both call loops are stalled over {STALL_OBSERVATION_PERIOD:?}"
     );
-    let before = [
-        global_counter(&us).await.unwrap(),
-        global_counter(&ut).await.unwrap(),
-    ];
+    let ut_before = global_counter(&ut).await.unwrap();
+    let skipped_before = rounds_with_skipped_canister_execution(&m_subnet).await;
     tokio::time::sleep(STALL_OBSERVATION_PERIOD).await;
-    for ((canister, name), before) in [(&us, "US"), (&ut, "UT")].into_iter().zip(before) {
-        let after = global_counter(canister).await.unwrap();
-        assert_eq!(
-            before, after,
-            "{name}'s call loop advanced from iteration {before} to {after} while subnet M was \
-             cooling down",
-        );
-    }
+    let ut_after = global_counter(&ut).await.unwrap();
+    let skipped_after = rounds_with_skipped_canister_execution(&m_subnet).await;
+    assert_eq!(
+        ut_before, ut_after,
+        "UT's call loop advanced from iteration {ut_before} to {ut_after} while subnet M was \
+         cooling down",
+    );
+    assert!(
+        skipped_after > skipped_before,
+        "subnet M skipped canister execution in no round over {STALL_OBSERVATION_PERIOD:?} \
+         ({skipped_before} rounds before, {skipped_after} after), so it was not cooling down and \
+         US's loop was stalled for some other reason",
+    );
     info!(
         logger,
-        "Step 11 done: both call loops are stalled at iterations {before:?}"
+        "Step 11 done: UT's call loop is stalled at iteration {ut_after} and subnet M skipped \
+         canister execution in {} rounds while waiting",
+        skipped_after - skipped_before,
     );
 
     // Step 12: Halt both `M` and `R` at their next CUP, i.e. at a checkpoint
@@ -995,9 +1005,36 @@ async fn run(env: TestEnv) {
         ur_reply, MERGED_CALL_REPLY,
         "UR got an unexpected reply from U8",
     );
+    // `U1`'s `install_code` calls ran while `M` was cooling down, and whether they
+    // installed the universal canister module shows in a query: a canister that
+    // has no module rejects every query. `R` has to be the one asked, as `M`
+    // answered no query from the moment it started cooling down until it was
+    // halted for the merge.
     info!(
         logger,
-        "Step 17 done: U8 kept its stable memory, snapshot and cycles, and UR can call it"
+        "Step 17: Checking that {} have been installed",
+        INSTALL_CODE_TARGETS.join(", "),
+    );
+    for (&target, name) in targets.iter().zip(INSTALL_CODE_TARGETS) {
+        let canister = UniversalCanister::from_canister_id(&r_agent, target);
+        let reply = canister
+            .query(wasm().reply_data(name.as_bytes()))
+            .await
+            .unwrap_or_else(|e| {
+                panic!("{name} ({target}) does not answer queries, so it was not installed: {e}")
+            });
+        assert_eq!(
+            reply,
+            name.as_bytes(),
+            "{name} ({target}) answered a query with an unexpected reply",
+        );
+    }
+
+    info!(
+        logger,
+        "Step 17 done: U8 kept its stable memory, snapshot and cycles, UR can call it, and {} \
+         have been installed",
+        INSTALL_CODE_TARGETS.join(", "),
     );
 
     // Step 18: Let the endless loops finish and check that every ingress message
@@ -1868,6 +1905,24 @@ fn matching_series<'a>(
         })
         .map(|(_, values)| values)
         .collect()
+}
+
+/// The number of rounds `subnet` executed no canister message in because it is
+/// cooling down, as the median across its replicas.
+///
+/// A subnet that is not cooling down never touches the counter, and a replica
+/// that never touched it does not report it at all, which is a zero here.
+async fn rounds_with_skipped_canister_execution(subnet: &SubnetSnapshot) -> f64 {
+    let metrics = fetch_metrics(subnet, &[METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION])
+        .await
+        .unwrap_or_else(|e| {
+            panic!(
+                "failed to fetch the skipped canister execution metric of subnet {}: {e}",
+                subnet.subnet_id
+            )
+        });
+    median_across_replicas(&metrics, METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION, |_| true)
+        .unwrap_or(0.0)
 }
 
 /// Prometheus' `quantile(0.5, ...)`: the median of `values`, interpolating
