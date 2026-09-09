@@ -136,15 +136,26 @@ fn test_empty_append_blocks_is_accepted_and_stores_nothing() {
 
     let capacity_before = setup.remaining_capacity();
 
-    // With no extra argument, as an old ledger would call it.
-    setup
-        .append_blocks_with_start_index(vec![], None)
-        .expect("an empty append should be accepted");
+    // One argument only, which is the shape an old ledger actually sends.
+    setup.append_blocks(vec![]);
     assert_eq!(setup.log_length(), 0, "an empty append must store nothing");
     assert_eq!(
         setup.remaining_capacity(),
         capacity_before,
-        "an index-less empty append must not consume capacity"
+        "a one-argument empty append must not consume capacity"
+    );
+
+    // Two arguments with the index explicitly absent. This is a *different* wire
+    // shape from the call above: `None` is a present trailing argument whose value
+    // is `null`, not an omitted one.
+    setup
+        .append_blocks_with_start_index(vec![], None)
+        .expect("an empty append with a null index should be accepted");
+    assert_eq!(setup.log_length(), 0, "still nothing stored");
+    assert_eq!(
+        setup.remaining_capacity(),
+        capacity_before,
+        "a null-index empty append must not consume capacity"
     );
 
     // And with the proposed index, as a new ledger would.

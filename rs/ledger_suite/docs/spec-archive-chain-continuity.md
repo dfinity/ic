@@ -330,14 +330,34 @@ one-shot timer chain that failed to re-arm is exactly DEFI-2983.
 the cause and already serves `/metrics`, so a counter there puts it where an
 operator can read it without travelling over the wire.
 
-Where the line falls between wire and metrics is settled by E. **Position and
-capacity go in the reply**, because the ledger's response genuinely differs: a
-covered index is success, a `Gap` halts, `at_capacity` means spawn, and a short
-position without it means retry the same node. **A chain mismatch stays a trap**,
-diagnosed through C1 — there is no progress to preserve, the ledger's action is
-the same as for a `Gap`, and given E's index check it is an invariant violation
-rather than an expected outcome (Decision 5). Neither needs reject-string
-matching.
+**A trap cannot be counted, which decides where the line falls.** A trap discards
+every state change in its message, the counter included, so a cause that traps is
+invisible in `/metrics` by construction — the only record is the canister log, and
+that is a bounded ring buffer which is currently unreadable anyway (see *Adjacent*
+below). Anything an operator needs to see must therefore reach the archive's reply
+rather than trap.
+
+So on an **indexed** append nothing refuses by trapping:
+
+| cause | how it leaves the archive | counted |
+|---|---|---|
+| covered or straddling index | `Ok`, with the position after any append | yes |
+| gap | `Gap`, having appended nothing | yes |
+| at its own capacity | `Ok`, short position, `at_capacity = true` | yes |
+| platform refused a growth | `Ok`, short position, `at_capacity = false` | yes |
+| chain mismatch | a typed refusal, having appended nothing | yes |
+
+An **index-less** append is the exception and keeps trapping, because a caller
+that sent no index has no code to read a reply — so there is nothing to count
+there, and the canister log is the only record. That is a property of the
+compatibility path, not of the design.
+
+Atomicity is not lost by returning rather than trapping. The chain check runs
+before any append, so the message commits having changed nothing — the same
+argument this document already makes for `Gap`. What changes is that the
+invariant is enforced by ordering and by a test (criterion 1 asserts the stored
+log is unchanged after a refusal) rather than by the platform. That is the trade
+Decision 5 records.
 
 **D. Allocation and observability work on the ledger side.** Four independent
 items, detailed in Components: an in-flight counter that detects an archive
@@ -730,8 +750,10 @@ a much better story for timer liveness.
    indexed appends.
 3. A re-send after a lost ledger continuation is not stored again, so no archive
    holds the same block twice and no index resolves to the wrong block.
-4. Refusal causes that remain traps are visible on the archive's `/metrics`, chain
-   mismatch counted separately from a platform growth refusal.
+4. Every cause an indexed append can refuse or stop short for is counted
+   separately on the archive's `/metrics` — chain mismatch, gap, own-capacity stop,
+   platform growth refusal. None of them traps, because a trap would discard the
+   counter along with everything else in the message.
 5. The ledger treats a refusal as an ordinary archiving failure: counts it in
    `ledger_archiving_failures`, removes no blocks, releases the lock, and replies
    to the triggering transaction normally.
@@ -778,7 +800,7 @@ a much better story for timer liveness.
 | B1 | last-attempt timestamp + consecutive-failure count | `ledger_canister_core::archive::Archive` | `#[serde(skip)]` so an upgrade resets it |
 | B2 | skip the round while backing off | `ledger_canister_core::ledger::blocks_to_archive` | before the guard is taken, so it costs nothing |
 | B3 | backoff schedule constants | `ledger_canister_core::archive` | |
-| C1 | counters for the causes that stay traps — chain mismatch, and a platform-refused growth, separately | `icrc1/archive/src/main.rs` `encode_metrics` | a capacity *stop* is no longer a refusal under E1; it is reported in the reply |
+| C1 | a counter per refusal and short-stop cause: chain mismatch, gap, own-capacity stop, platform growth refusal | `icrc1/archive/src/main.rs` `encode_metrics` | all of them commit, because under E1 none of them traps. An index-less append still traps, so its mismatches are visible only in the canister log |
 | D1 | in-flight archive-creation counter; halt archiving while non-zero | `ledger_canister_core::archive`, checked in `blocks_to_archive`, per-ledger metric | `+1` before `create_canister`, `-1` on a graceful `Err` from any creation step, `-1` when `nodes.push` succeeds. A trap skips the decrement, so non-zero means a creation was begun and never accounted for. `#[serde(skip)]`, so per-epoch and needing no baseline |
 | D2 | stop copying the archive wasm after a commit point | `ledger_canister_core::spawn::install_code` signature, `archive.rs` | `install_code` takes `Vec<u8>`, forcing `archive_wasm().into_owned()`, and `Rt::call` serialises it again — two multi-MB copies in the continuation after `create_canister` committed. Take `Cow<'static, [u8]>`, pre-reserve the encode buffer before the first await, and `nodes.reserve(1)` |
 | D3 | correct the comment above `create_canister` (`archive.rs:452-454`) | `ledger_canister_core::archive` | it says a panic there rolls the triggering transaction back. That holds only when no await preceded it, i.e. the **first** node a ledger creates: on a roll-over, `node_and_capacity` awaits `remaining_capacity` first (`archive.rs:547-549`), committing the transaction, so a panic rejects the reply instead. The comment should state the condition, not the conclusion |
@@ -921,10 +943,15 @@ Only the **last** archive matters, since `node_and_capacity` appends only to
 requirement is "the current tail archive answers", satisfied permanently by one
 rollover.
 
-**Cache the answer in `#[serde(skip)]` state.** It then clears on every ledger
-upgrade — precisely the moment the archives were upgraded too — so the ledger
-re-probes exactly when the answer could have changed, and resumes on its own with
-no operator flag to flip.
+**Cache only a positive answer, and re-probe a negative one.** Caching "the tail
+cannot answer" would strand the ledger: the cache lives in the *ledger*, so
+upgrading only the archive — which is the whole scenario this check exists for —
+would not clear it, and archiving would stay halted until the ledger happened to be
+upgraded too. So a `null` answer is re-probed, spaced by B's backoff so it costs
+one call per interval, which is what makes recovery automatic. A positive answer is
+cached in `#[serde(skip)]` state, which clears on a ledger upgrade — the only event
+that could make a once-answering archive stop answering is a downgrade, and
+re-probing then is correct.
 
 **What to do with a `null` answer depends on whether this ledger's own archives
 should have answered**, and that is a property the ledger knows: it embeds the
@@ -995,13 +1022,14 @@ archive-level test is baseline-independent.
 | 5 | D2 — the creation round's post-commit allocation | measure ledger memory across an archive-creation round, as `routine_archiving_does_not_grow_the_ledger` does for a routine one; assert growth is below a bound | yes, as a measurement |
 | 6 | E1 — a partial append reports its true position rather than trapping | archive-level: set `max_memory_size_bytes` so a chunk only partly fits, append it, assert `Ok` with a short `next_index`, `at_capacity = true`, and that the blocks that fit are readable | **yes** — the limit is configurable at `init` |
 | 7 | F1 — a round issues one append and creates at most one node | count `append_blocks` calls per round against a configuration that is multi-chunk today; assert one, and that the effective per-round metric matches | **yes** |
-| 8 | E1 — an index-less append keeps today's behaviour and returns no value an old caller could misread | **already written**: `test_append_blocks_ignores_an_extra_optional_start_index` asserts the blocks are stored, the argument ignored, and the empty reply decodes as `null`; a wrong-typed payload is rejected as a negative control | **yes** — passing today, so it locks the premise |
+| 8 | the rollout premise — today's archive tolerates a trailing optional argument and its empty reply reads as absent | **already written**: `test_append_blocks_ignores_an_extra_optional_start_index` asserts the blocks are stored, the argument ignored, and the empty reply decodes as `null`; a wrong-typed payload is rejected as a negative control. Note this runs against the *current* one-argument archive, so it locks the premise Release 1 depends on — it says nothing about E1's own behaviour | **yes** — passing today |
+| 8b | E1 — the new two-argument archive must keep today's behaviour when the index is omitted | **planned, not covered by (8)**: against the E1 implementation, call `append_blocks` with a single argument and assert the blocks are stored, the reply is empty, and a chain mismatch *traps* rather than returning a typed refusal. This is the rule Release 1's safety rests on, and it can only be tested once E1 exists | **yes** — no trap needed for the positive case |
 | 9 | Decision 3 — the ICP archive's hand-rolled `Decode!` tolerates the extra argument | **already written**: `should_ignore_an_extra_optional_start_index` (`icp/archive/tests/tests.rs`) appends with a trailing `opt nat64`, asserts capacity dropped by the block size so it really stored it, and that the empty reply decodes as `None` | **yes** — a release gate |
 | 10 | E1 — a straddling chunk appends only its uncovered suffix | archive-level: append `N..N+499`, then `N..N+999`, and assert `log_length` becomes 1000 rather than 1500, that every index resolves correctly, and that the chain check did not trap on the covered prefix | **yes** |
 | 11 | E4 — a ledger halts against an un-upgraded tail, and resumes on upgrade | install an old archive wasm as the tail, generate transactions, assert nothing is archived and the halt metric rises; upgrade the archive, assert archiving resumes with no other intervention. Then assert an `INDEXED_APPENDS = false` ledger archives normally against the same archive | **yes** — both wasms are build artefacts |
-| 12 | E1 — an over-long covered prefix is a no-op rather than a panic | archive-level: append 1000 blocks, then append the first 600 of them again, and assert the call succeeds, stores nothing, and reports `next_index` unchanged at 1000 | **yes** |
+| 12 | E1 — an over-long covered prefix is a no-op rather than a panic (upper bound on `k`) | archive-level: append 1000 blocks, then append the first 600 of them again, and assert the call succeeds, stores nothing, and reports `next_index` unchanged at 1000 | **yes** |
 | 13 | E2 — an archive that has gone backwards halts the ledger | reduce the archive's position (reinstall it, or restore a snapshot taken before the appends), then run a round and assert the ledger halts, increments the distinct metric, and removes no blocks | **yes** — a reinstall is deterministic |
-| 14 | both token variants for (1), (4), (6), (8), (10) and (12) | (9) is ICP-only by nature, so it has no u256 variant | yes |
+| 14 | both token variants for (1), (4), (6), (8), (8b), (10) and (12) | (9) is ICP-only by nature, so it has no u256 variant | yes |
 
 Deliberately not attempted: **the duplicate-append and offset-divergence paths
 end-to-end**, by inducing a trap in the append continuation. Routine rounds grow
@@ -1048,14 +1076,19 @@ same reason.
    archive reports its position. An un-upgraded archive returns none of it, which is
    the whole of what the incremental path gives up — and the reason E4 refuses to
    use that path on a ledger whose archives should have answered.
-5. **Capacity is reported; a chain mismatch still traps.** Not symmetric. A capacity
-   stop has real progress to preserve and two causes needing opposite responses, so
-   it belongs in the reply as a short `next_index` plus `at_capacity`. A mismatch has
-   nothing to preserve, no distinct ledger action, and — given E's index check —
-   cannot happen on a correctly addressed append; a trap is the right response to an
-   invariant violation, platform-enforced rather than review-enforced. Capacity could
-   later gain its own variant without changing what `Ok` means; a typed mismatch
-   would leave us maintaining a handler for an impossible state.
+5. **An indexed append never refuses by trapping.** The deciding argument is
+   observability, not elegance: a trap discards its message's state changes,
+   including any counter, so a trapping cause cannot appear in `/metrics` at all.
+   The only record would be the canister log — a bounded ring buffer, and today an
+   unreadable one. A chain mismatch is the condition an operator most needs to see,
+   being an invariant violation rather than an expected outcome, so it is exactly
+   the wrong thing to make invisible.
+
+   The cost is that atomicity becomes ordering-plus-test rather than
+   platform-enforced: the check must run before any append, and criterion 1 asserts
+   the stored log is unchanged after a refusal. That is a real loss of rigour, and
+   it is worth accepting to avoid a severe condition with no metric. An index-less
+   append still traps, since a caller that sent no index cannot read a reply.
 6. **Accept the re-send; do not redraw the module boundary.** A trapped round
    re-sends chunks the archive discards. That is cheaper than giving
    `send_blocks_to_archive` ledger access, the divergence it leaves is benign, and F
