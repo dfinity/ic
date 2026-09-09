@@ -344,6 +344,7 @@ impl State {
             Some(delegation) if delegation.delegate == delegate => {
                 return SweepAuthorization::AlreadyDelegated;
             }
+            //TODO DEFI-2997: track and increment nonce of deposit address
             Some(_delegated_elsewhere) => TransactionNonce::ZERO,
             None => TransactionNonce::ZERO,
         };
