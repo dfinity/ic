@@ -2659,6 +2659,29 @@ impl StateMachine {
         self.state_manager.get_latest_state().take()
     }
 
+    /// Sets the `cooling_down` flag of this subnet's registry record, at a new
+    /// registry version, and updates this subnet's registry client to it. The
+    /// flag takes effect in the next round, when the network topology is
+    /// repopulated from the registry.
+    pub fn set_cooling_down(&self, cooling_down: bool) {
+        let registry_version = self.registry_client.get_latest_version();
+        let mut subnet_record = self
+            .registry_client
+            .get_subnet_record(self.subnet_id, registry_version)
+            .expect("malformed subnet record")
+            .expect("missing subnet record");
+        subnet_record.cooling_down = cooling_down;
+        add_single_subnet_record(
+            &self.registry_data_provider,
+            registry_version.increment().get(),
+            self.subnet_id,
+            subnet_record,
+        );
+
+        self.reload_registry();
+        self.registry_client.update_to_latest_version();
+    }
+
     /// Generates a certified stream slice to a remote subnet.
     fn generate_certified_stream_slice(
         &self,

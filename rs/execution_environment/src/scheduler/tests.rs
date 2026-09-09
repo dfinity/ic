@@ -1,10 +1,11 @@
 use super::test_utilities::{SchedulerTestBuilder, ingress, on_response, other_side};
 use super::*;
+use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::STOP_CANISTER_TIMEOUT_DURATION;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_error_types::RejectCode;
+use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
     CanisterStatusType, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
@@ -13,16 +14,20 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterStatus,
     metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
 };
-use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
+use ic_state_machine_tests::{PayloadBuilder, StateMachine, StateMachineBuilder};
 use ic_test_utilities_metrics::{fetch_counter, fetch_histogram_vec_buckets};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::messages::{CallbackId, Payload, RejectContext};
+use ic_types::messages::{
+    CallbackId, Payload, RejectContext, RequestOrResponse, StopCanisterCallId, StopCanisterContext,
+};
 use ic_types::time::{UNIX_EPOCH, expiry_time_from_now};
 use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use ic00::{CanisterHttpRequestArgs, HttpMethod};
+use more_asserts::assert_gt;
 use proptest::prelude::*;
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -445,6 +450,155 @@ fn can_timeout_stop_canister_requests() {
     }
 }
 
+/// Stop contexts without a call id (i.e. from before call ids were introduced)
+/// have no recorded time to expire against, so they are timed out immediately,
+/// without waiting for `STOP_CANISTER_TIMEOUT_DURATION`; and both the ingress
+/// and the canister originated ones are responded to.
+#[test]
+fn can_timeout_stop_canister_requests_without_call_id() {
+    let batch_time = Time::from_nanos_since_unix_epoch(u64::MAX / 2);
+    let mut test = SchedulerTestBuilder::new()
+        .with_batch_time(batch_time)
+        .build();
+
+    let canister = test.create_canister();
+    let xnet_canister = test.xnet_canister_id();
+
+    // Open a call context by calling a cross-net canister, so that the canister
+    // is not ready to stop.
+    test.send_ingress(
+        canister,
+        ingress(1).call(other_side(xnet_canister, 1), on_response(1)),
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Two stop requests from a canister. One of them is rewritten below to look
+    // like a request from before call ids were introduced; the other one is
+    // subject to the regular timeout.
+    let arg = Encode!(&CanisterIdRecord::from(canister)).unwrap();
+    for _ in 0..2 {
+        test.inject_call_to_ic00(
+            Method::StopCanister,
+            arg.clone(),
+            Cycles::zero(),
+            xnet_canister,
+            InputQueueType::RemoteSubnet,
+        );
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Drop the call id of the second stop context, remembering what it must be
+    // responded to with. Rewriting an actual stop context (as opposed to adding
+    // a synthetic one) preserves the response slot reserved for it when the stop
+    // request was inducted.
+    let mut status = test
+        .canister_state(canister)
+        .system_state
+        .get_status()
+        .clone();
+    let (reply_callback, refund, deadline) = match &mut status {
+        CanisterStatus::Stopping { stop_contexts, .. } => {
+            assert_eq!(stop_contexts.len(), 2);
+            match &mut stop_contexts[1] {
+                StopCanisterContext::Canister {
+                    reply_callback,
+                    call_id,
+                    cycles,
+                    deadline,
+                    ..
+                } => {
+                    *call_id = None;
+                    (*reply_callback, *cycles, *deadline)
+                }
+                StopCanisterContext::Ingress { .. } => {
+                    unreachable!("Expected a stop context from a canister");
+                }
+            }
+        }
+        CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
+            unreachable!("Expected the canister to be in stopping mode");
+        }
+    };
+    test.canister_state_mut(canister)
+        .system_state
+        .set_status(status);
+
+    // Plus an old stop request from a user.
+    let message_id = message_test_id(1);
+    test.canister_state_mut(canister)
+        .system_state
+        .add_stop_context(StopCanisterContext::Ingress {
+            sender: user_test_id(1),
+            message_id: message_id.clone(),
+            call_id: None,
+        });
+
+    match test.canister_state(canister).system_state.get_status() {
+        CanisterStatus::Stopping { stop_contexts, .. } => {
+            assert_eq!(stop_contexts.len(), 3);
+        }
+        CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
+            unreachable!("Expected the canister to be in stopping mode");
+        }
+    }
+
+    // Without advancing the time, so the stop request with a call id has not yet
+    // timed out.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let system_state = &test.canister_state(canister).system_state;
+
+    // Due to the open call context the canister still cannot be stopped.
+    assert!(!system_state.ready_to_stop());
+
+    match system_state.get_status() {
+        CanisterStatus::Stopping { stop_contexts, .. } => {
+            // Both stop contexts without a call id have expired, the one with a
+            // call id has not.
+            assert_eq!(stop_contexts.len(), 1);
+            assert_eq!(
+                stop_contexts[0].call_id(),
+                &Some(StopCanisterCallId::new(0))
+            );
+        }
+        CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
+            unreachable!("Expected the canister to be in stopping mode");
+        }
+    }
+
+    // The user is told that their stop request timed out.
+    assert_eq!(
+        test.ingress_error(&message_id).code(),
+        ErrorCode::StopCanisterRequestTimeout
+    );
+
+    // And the canister gets a `SysTransient` reject on the callback of its
+    // original stop request, with its cycles refunded.
+    let response = test
+        .state_mut()
+        .subnet_queues_mut()
+        .pop_canister_output(&xnet_canister)
+        .expect("Expected a response to the stop request from the canister");
+    match response {
+        RequestOrResponse::Response(response) => {
+            assert_eq!(response.originator, xnet_canister);
+            assert_eq!(response.originator_reply_callback, reply_callback);
+            assert_eq!(response.refund, refund);
+            assert_eq!(response.deadline, deadline);
+            assert_eq!(
+                response.response_payload,
+                Payload::Reject(RejectContext::new(
+                    RejectCode::SysTransient,
+                    "Stop canister request timed out"
+                ))
+            );
+        }
+        RequestOrResponse::Request(_) => unreachable!("Expected a response"),
+    }
+}
+
 #[test]
 fn test_maybe_add_heartbeat_or_global_timer_tasks() {
     use ExecutionTask as Task;
@@ -797,6 +951,163 @@ fn finalization_prunes_expired_ingress_history_entries() {
     assert_eq!(test.ingress_status(&msg_b), IngressStatus::Unknown);
     // The ingress history should be empty.
     assert_eq!(test.state().metadata.ingress_history.len(), 0);
+}
+
+/// Tests that while the subnet is cooling down it executes no canister messages
+/// and no canister tasks, and rejects query calls; subnet messages are still
+/// executed.
+#[test]
+fn cooling_down_subnet_only_executes_subnet_messages() {
+    use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
+
+    let test = StateMachineBuilder::new().build();
+    let canister_id = test
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .unwrap();
+
+    // Have the canister increment its global counter on every heartbeat.
+    test.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_heartbeat(wasm().inc_global_counter().build())
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    let global_counter = |test: &StateMachine| {
+        let result = test
+            .query(
+                canister_id,
+                "query",
+                wasm().get_global_counter().reply_int64().build(),
+            )
+            .unwrap();
+        u64::from_le_bytes(result.bytes().try_into().unwrap())
+    };
+    let tasks = |test: &StateMachine| {
+        test.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .len()
+    };
+    let input_messages = |test: &StateMachine| {
+        test.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .queues()
+            .input_queues_message_count()
+    };
+    let http_request_contexts = |test: &StateMachine| {
+        test.get_latest_state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .len()
+    };
+
+    // Sanity check: heartbeats are executed while the subnet is not cooling down.
+    test.tick();
+    let counter_before = global_counter(&test);
+    assert_gt!(counter_before, 0);
+
+    // Make an HTTP outcall, so that the subnet has a subnet message to execute
+    // (and a response to deliver to the canister) while it is cooling down.
+    let payload = Encode!(&CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        headers: BoundedHttpHeaders::new(vec![]),
+        method: HttpMethod::GET,
+        body: None,
+        transform: None,
+        max_response_bytes: None,
+        is_replicated: None,
+        pricing_version: None,
+    })
+    .unwrap();
+    let msg_id = test.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        wasm()
+            .call_simple(
+                ic00::IC_00,
+                "http_request",
+                call_args()
+                    .other_side(payload)
+                    .on_reject(wasm().reject_message().reject()),
+            )
+            .build(),
+    );
+    test.tick();
+    assert_matches!(
+        test.ingress_status(&msg_id),
+        IngressStatus::Known {
+            state: IngressState::Processing,
+            ..
+        }
+    );
+    assert_eq!(1, http_request_contexts(&test));
+
+    test.set_cooling_down(true);
+
+    // Deliver the HTTP response. The subnet message is executed, i.e. the outcall
+    // context is consumed and the response is routed to the canister (via the
+    // loopback stream, whence it is inducted in the next round).
+    let response = CanisterHttpResponsePayload {
+        status: 200,
+        headers: vec![],
+        body: vec![],
+    };
+    test.execute_payload(PayloadBuilder::new().http_response(CallbackId::from(0), &response));
+    assert_eq!(0, http_request_contexts(&test));
+
+    // But the canister does not execute the response: further rounds only ever
+    // induct it into the canister's input queue, where it stays. And they leave no
+    // task behind in the canister's task queue either: a `Heartbeat` task is only
+    // ever enqueued right before the canister execution that a cooling down round
+    // skips altogether, so there is none to pop or to clean up.
+    for _ in 0..3 {
+        test.tick();
+        assert_eq!(1, input_messages(&test));
+        assert_eq!(0, tasks(&test));
+        assert_matches!(
+            test.ingress_status(&msg_id),
+            IngressStatus::Known {
+                state: IngressState::Processing,
+                ..
+            }
+        );
+    }
+
+    // And query calls are rejected while the subnet is cooling down.
+    let err = test
+        .query(
+            canister_id,
+            "query",
+            wasm().get_global_counter().reply_int64().build(),
+        )
+        .unwrap_err();
+    assert_eq!(ErrorCode::SubnetCoolingDown, err.code());
+    assert_eq!(RejectCode::SysTransient, err.reject_code());
+
+    // Once the subnet stops cooling down, a single round executes the response and
+    // exactly one heartbeat: none of the 4 cooling down rounds above executed any.
+    test.set_cooling_down(false);
+    test.tick();
+
+    assert_eq!(0, input_messages(&test));
+    assert_matches!(
+        test.ingress_status(&msg_id),
+        IngressStatus::Known {
+            state: IngressState::Completed(_),
+            ..
+        }
+    );
+    assert_eq!(counter_before + 1, global_counter(&test));
 }
 
 fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {
