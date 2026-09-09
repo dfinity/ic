@@ -2,8 +2,9 @@
 
 Follow-up to DEFI-2967. Every component here works whether archiving is awaited
 or spawned, so this is separately shippable — but the two changes address
-*different* failures and moving archiving off the reply path is the more urgent
-of the two. See *What awaiting costs, and why this spec does not fix it*.
+*different* failures, and re-enabling archiving needs both. See *The operational
+goal: re-enabling archiving* for the sequence, and *What awaiting costs, and why
+this spec does not fix it* for why.
 
 **Line references are against `master`**, paired with the symbol they point at so
 they stay findable once the numbers drift. The one branch-specific thing is the
@@ -1165,6 +1166,44 @@ Two things deliberately not attempted:
    the work is mechanically the same in a second crate — but it must be a tracked
    follow-up with its own ticket, not a line in an open-items list. Whoever
    approves this spec is approving that ICP stays exposed until that lands.
+
+## The operational goal: re-enabling archiving
+
+This spec exists because archiving is currently **disabled by configuration** on
+two ck ledgers — `trigger_threshold` raised far beyond any reachable block count
+— as an incident mitigation. Everything here is in service of turning it back on.
+That makes the sequence, not any single change, the deliverable.
+
+**Archiving cannot be safely re-enabled on `master` as it stands.** Re-enabling it
+re-exposes the trap that caused the incident, and awaited archiving turns that
+trap into a reject for a transaction that committed — the double-mint hazard under
+*What awaiting costs*. So DEFI-2967 is a prerequisite for re-enablement even
+though it is not a prerequisite for any component here.
+
+| # | step | why it sits there |
+|---|---|---|
+| 0 | Rosetta verification (see below) | whether the chains have already diverged reorders everything after it |
+| 1 | **Release 1** — archive only: A1, C1, the archive half of E1 | closes the corruption. Safe on `master` as-is, because an A1 refusal arrives as a graceful `Err` on the ledger's existing path and never rejects a transaction |
+| 2 | **DEFI-2967** — spawn archiving instead of awaiting it | removes the committed-but-rejected reply, and with it the double-mint hazard |
+| 3 | **Raise `trigger_threshold` back**, by NNS proposal | archiving resumes, on a suite where a bad append is refused and a failure cannot contradict a reply |
+| 4 | **Release 2** — ledger: B, D, E2, E3, F | bounded retries, creation detection, reconciliation, single-message rounds |
+
+Two things about that order are deliberate:
+
+* **1 before 2.** DEFI-2967 makes an archiving trap silent. Landing it first would
+  leave the corruption path open *and* remove the loud symptom that would
+  otherwise reveal it. Closing the hole before removing the alarm is the safer
+  sequence, and the two are independent enough that the choice is free.
+* **Step 4 is not a precondition for step 3.** Without Release 2 the ledger stays
+  on the incremental path, so it does not reconcile — but the archive still
+  refuses an append that does not fit, so the outcome is a stall rather than
+  corruption. Release 2 buys **operability**: a stall that heals itself instead of
+  waiting for an operator. Re-enablement does not have to wait for it.
+
+**DEFI-2967 is reviewed as a PR, not specced here.** It is already implemented, and
+its rationale lives as the doc comment on `spawn_archiving`, next to the code it
+explains. Folding its design into this document would make both harder to review
+without making either clearer; the dependency between them is this table.
 
 ## Precondition: verify the live suites with Rosetta
 
