@@ -48,10 +48,13 @@ pub(crate) fn check_routing_table_invariants(
 /// in any combination, and hence every mutation that could:
 ///
 /// - moving the canister to a subnet on a different cost schedule, be it with
-///   `reroute_canister_ranges` (the second step of a canister migration prepared by
-///   `prepare_canister_migration`), `merge_subnets` or `do_migrate_canisters`. The
-///   former two validate the cost schedules themselves, so that a proposal is rejected
-///   with an error rather than trapping here;
+///   `reroute_canister_ranges` (the second step of a canister migration),
+///   `merge_subnets` or `do_migrate_canisters`. The latter two compare the cost
+///   schedules themselves, as does `prepare_canister_migration`, on which
+///   `reroute_canister_ranges` relies: rerouting compares nothing of its own, it only
+///   reroutes ranges that an already validated canister migration covers. Those
+///   comparisons report which subnets, or which canister, are at fault, whereas this
+///   invariant only names the affected canister ID range;
 /// - changing the cost schedule of the subnet hosting the canister, which
 ///   `check_subnet_cost_schedule_immutability` rules out outright.
 ///
