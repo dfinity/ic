@@ -52,10 +52,11 @@ use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
     consensus::{
-        HasHeight, HasVersion,
+        HasHeight, HasVersion, SubnetSplittingArgs,
         catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
     },
     crypto::*,
+    registry::RegistryClientError,
 };
 use prost::Message;
 use rand::seq::SliceRandom;
@@ -401,8 +402,9 @@ impl CatchUpPackageProvider {
     /// the destination replicas are independent of this decision and their orchestrators will still
     /// detect the split and restart the replicas, driving the destination subnet forward.
     ///
-    /// Fails if this node is unassigned at the version of the split. This should not happen in
-    /// practice and the only way to recover from it is to reprovision the node, since we do not
+    /// Fails if this node is unassigned at the version of the split, or assigned to a subnet
+    /// which is neither the source nor the destination subnet of the split. This should not happen
+    /// in practice and the only way to recover from it is to reprovision the node, since we do not
     /// know for what subnet to look for a recovery CUP and we would like to avoid removing the
     /// state by accident.
     ///
@@ -443,13 +445,30 @@ impl CatchUpPackageProvider {
                 continue;
             };
 
-            let Some(CupType::SubnetSplitting(_)) = contents.cup_type else {
+            let Some(CupType::SubnetSplitting(subnet_splitting_args)) = contents.cup_type else {
                 continue;
             };
+            let SubnetSplittingArgs {
+                destination_subnet_id,
+            } = SubnetSplittingArgs::try_from(subnet_splitting_args).map_err(|err| {
+                OrchestratorError::RegistryClientError(RegistryClientError::DecodeError {
+                    error: format!("Failed to decode the subnet splitting args: {err}"),
+                })
+            })?;
 
             // Our membership at the splitting record's version is our post-split subnet. Being
-            // unassigned there is unexpected and fails the fetch.
+            // unassigned there is unexpected and fails.
             let new_subnet_id = self.registry.get_subnet_id(versioned_record.version)?;
+
+            // Any other assignment than source or destination is unexpected and fails as well.
+            if new_subnet_id != *subnet_id && new_subnet_id != destination_subnet_id {
+                return Err(OrchestratorError::DisallowedSubnetSplitAssignmentError {
+                    new_subnet_id,
+                    source_subnet_id: *subnet_id,
+                    destination_subnet_id,
+                });
+            }
+
             *subnet_id = new_subnet_id;
             return Ok(());
         }
@@ -1158,7 +1177,7 @@ pub(crate) mod tests {
         source_nodes: &[NodeId],
         destination_nodes: &[NodeId],
         mut node_record: impl FnMut(NodeId) -> NodeRecord,
-        add_extra_records: impl FnOnce(&ProtoRegistryDataProvider),
+        add_extra_records: impl FnOnce(&Arc<ProtoRegistryDataProvider>),
     ) -> Arc<RegistryHelper> {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         add_subnet_list_record(
@@ -1941,7 +1960,7 @@ pub(crate) mod tests {
         ));
 
         // A split is pending, but we can't tell which half we belong to, so the whole CUP fetch
-        // must fail conservatively, i.e. nothing gets adopted and we retry later.
+        // must fail conservatively.
         let result = cup_provider
             .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID)
             .await;
@@ -1951,5 +1970,69 @@ pub(crate) mod tests {
             Err(OrchestratorError::NodeUnassignedError(id, version))
                 if id == node_id && version == SPLIT_REGISTRY_VERSION
         );
+    }
+
+    #[test]
+    fn test_pending_split_fails_if_assigned_to_a_third_subnet() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let source_nodes = vec![node_test_id(1)];
+        let destination_nodes = vec![node_test_id(2)];
+        let node_id = node_test_id(3);
+        let third_subnet_id = SUBNET_0;
+        // At the split registry version, we are a member of a third subnet, which a split must
+        // never do.
+        let registry = setup_split_registry_customized(
+            node_id,
+            &source_nodes,
+            &destination_nodes,
+            |_| NodeRecord::default(),
+            |data_provider| {
+                add_subnet_list_record(
+                    data_provider,
+                    SPLIT_REGISTRY_VERSION.get(),
+                    vec![SOURCE_SUBNET_ID, DESTINATION_SUBNET_ID, third_subnet_id],
+                );
+                add_single_subnet_record(
+                    data_provider,
+                    SPLIT_REGISTRY_VERSION.get(),
+                    third_subnet_id,
+                    SubnetRecordBuilder::new()
+                        .with_committee(&[node_id])
+                        .build(),
+                );
+            },
+        );
+        let cup_provider = make_cup_provider_with_registry(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+        );
+
+        let local_cup = pb::CatchUpPackage::from(make_pre_split_source_cup(
+            [source_nodes, destination_nodes].concat(),
+            Height::from(100),
+        ));
+
+        // A split may only move us between its two halves, so we conservatively fail the CUP
+        // fetch.
+        let mut subnet_id = SOURCE_SUBNET_ID;
+        let result = cup_provider.maybe_mutate_subnet_id_due_to_split(
+            &mut subnet_id,
+            Some(&local_cup),
+            registry.get_latest_version(),
+        );
+
+        assert_matches!(
+            result,
+            Err(OrchestratorError::DisallowedSubnetSplitAssignmentError {
+                new_subnet_id,
+                source_subnet_id,
+                destination_subnet_id,
+            }) if new_subnet_id == third_subnet_id
+                && source_subnet_id == SOURCE_SUBNET_ID
+                && destination_subnet_id == DESTINATION_SUBNET_ID
+        );
+        assert_eq!(subnet_id, SOURCE_SUBNET_ID);
     }
 }
