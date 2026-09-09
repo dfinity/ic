@@ -90,6 +90,7 @@ fn slice_garbage_collect(
             .garbage_collect(&ExpectedIndices {
                 message_index,
                 signal_index,
+                min_useful_header_begin: None,
             })
             .unwrap()
             .map(|leftover| leftover.into())
@@ -138,6 +139,70 @@ fn slice_garbage_collect(
         );
         // Garbage collecting all messages and all signals should yield `None`.
         assert_opt_slices_eq(None, gc(&certified_slice, to, signals_end));
+    });
+}
+
+/// Tests that a slice with no messages or signals is retained iff its
+/// `header.begin()` is at or past `min_useful_header_begin`, i.e. if inducting it
+/// would garbage collect at least one of our reject signals.
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+fn slice_garbage_collect_reject_signals(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+) {
+    let (mut stream, from, msg_count) = test_slice;
+
+    fn gc(
+        certified_slice: &CertifiedStreamSlice,
+        message_index: StreamIndex,
+        signal_index: StreamIndex,
+        min_useful_header_begin: Option<StreamIndex>,
+    ) -> Option<CertifiedStreamSlice> {
+        UnpackedStreamSlice::try_from(certified_slice.clone())
+            .expect("failed to unpack certified stream")
+            .garbage_collect(&ExpectedIndices {
+                message_index,
+                signal_index,
+                min_useful_header_begin,
+            })
+            .unwrap()
+            .map(|leftover| leftover.into())
+    }
+
+    // Increment `signals_end` so all signals can be garbage collected below.
+    stream.push_accept_signal();
+    let signals_end = stream.signals_end();
+    let stream_begin = stream.messages_begin();
+
+    with_test_replica_logger(|log| {
+        let fixture = StateManagerFixture::remote(log).with_stream(DST_SUBNET, stream);
+        let certified_slice = fixture.get_slice(DST_SUBNET, from, msg_count);
+        let to = from + StreamIndex::from(msg_count as u64);
+
+        // Header `begin` before `min_useful_header_begin`: nothing left to garbage
+        // collect, so the slice is dropped.
+        assert_opt_slices_eq(
+            None,
+            gc(
+                &certified_slice,
+                to,
+                signals_end,
+                Some(stream_begin.increment()),
+            ),
+        );
+
+        // Header `begin` at `min_useful_header_begin`: inducting the slice would
+        // garbage collect the reject signal just before, so an empty slice is retained.
+        assert_opt_slices_eq(
+            Some(fixture.get_slice(DST_SUBNET, to, 0)),
+            gc(&certified_slice, to, signals_end, Some(stream_begin)),
+        );
     });
 }
 
@@ -391,6 +456,7 @@ fn invalid_slice(
                 match unpacked.garbage_collect(&ExpectedIndices {
                     message_index: from.increment(),
                     signal_index: StreamIndex::from(u64::MAX),
+                    min_useful_header_begin: None,
                 }) {
                     Err(CertifiedSliceError::WitnessPruningFailed(_)) => {}
                     actual => panic!(
@@ -644,6 +710,7 @@ fn pool(
         let indices_before = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end().decrement(),
+            min_useful_header_begin: None,
         };
         let zero_indices = ExpectedIndices::default();
 
@@ -737,6 +804,7 @@ fn pool(
         let mut stream_position = ExpectedIndices {
             message_index: from,
             signal_index: indices_before.signal_index.increment(),
+            min_useful_header_begin: None,
         };
         if msg_count == 0 {
             // Slice had length zero, it should have been consumed.
@@ -803,6 +871,7 @@ fn pool(
         let earlier_indices = ExpectedIndices {
             message_index: earlier_message_index,
             signal_index: stream_position.signal_index,
+            min_useful_header_begin: None,
         };
         garbage_collect(&pool, btreemap! {SRC_SUBNET => earlier_indices.clone()});
         assert_has_slice(
@@ -876,6 +945,7 @@ fn pool_append_same_slice(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end().decrement(),
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -899,6 +969,7 @@ fn pool_append_same_slice(
         let mut stream_position = ExpectedIndices {
             message_index: to,
             signal_index: stream.signals_end(),
+            min_useful_header_begin: None,
         };
         assert_eq!(
             (Some(stream_position.clone()), None, 0, 0),
@@ -982,6 +1053,7 @@ fn pool_append_non_empty_to_empty(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1041,6 +1113,7 @@ fn pool_append_non_empty_to_non_empty(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1147,6 +1220,7 @@ fn pool_put_invalid_slice(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1207,6 +1281,7 @@ fn pool_append_invalid_slice(
         let mut stream_position = ExpectedIndices {
             message_index: stream_begin,
             signal_index: stream.signals_end(),
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1286,6 +1361,7 @@ fn pool_append_invalid_slice_to_empty(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1337,6 +1413,7 @@ fn pool_take_slice_respects_signal_limit(
         let begin = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
+            min_useful_header_begin: None,
         };
 
         let stream_begin = stream.messages_begin();
@@ -1366,6 +1443,61 @@ fn pool_take_slice_respects_signal_limit(
     });
 }
 
+/// Tests that taking a slice advances the cached `min_useful_header_begin` past the
+/// taken slice's `header.begin()`, but never regresses it.
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+fn pool_take_slice_advances_min_useful_header_begin(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+) {
+    let (stream, from, msg_count) = test_slice;
+
+    with_test_replica_logger(|log| {
+        let stream_begin = stream.messages_begin();
+        let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
+        let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
+
+        let mut store = MockCertifiedStreamStore::new();
+        store
+            .expect_decode_certified_stream_slice()
+            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
+
+        // Takes one message from a freshly populated pool, with the given
+        // `min_useful_header_begin`; and returns the updated value.
+        let take_one = |min_useful_header_begin| {
+            let pool = Mutex::new(CertifiedSlicePool::new(&MetricsRegistry::new()));
+            put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap();
+            let stream_position = ExpectedIndices {
+                message_index: from,
+                signal_index: StreamIndex::from(0),
+                min_useful_header_begin,
+            };
+            assert!(take_slice(&pool, SRC_SUBNET, Some(&stream_position), Some(1), None).is_some());
+            slice_stats(&pool, SRC_SUBNET)
+                .0
+                .unwrap()
+                .min_useful_header_begin
+        };
+
+        // Taking a slice with a `header.begin() == min_useful_header_begin` advances
+        // the latter just past the former.
+        assert_eq!(Some(stream_begin.increment()), take_one(Some(stream_begin)));
+
+        // A later `min_useful_header_begin` is preserved.
+        let later = stream_begin + StreamIndex::from(2);
+        assert_eq!(Some(later), take_one(Some(later)));
+
+        // `None` (nothing left to garbage collect) stays `None`.
+        assert_eq!(None, take_one(None));
+    });
+}
+
 /// Tests that a pooled certified stream slice from a subnet that has been
 /// deleted (i.e., removed from the subnet list) is garbage collected when
 /// `garbage_collect()` is called without that subnet.
@@ -1386,6 +1518,7 @@ fn pool_garbage_collect_deleted_subnet(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
+            min_useful_header_begin: None,
         };
 
         let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
@@ -1641,6 +1774,7 @@ fn pool_put_after_stream_position_regression(
         let position_at = |message_index| ExpectedIndices {
             message_index,
             signal_index: StreamIndex::from(0),
+            min_useful_header_begin: None,
         };
 
         garbage_collect(&pool, btreemap! {SRC_SUBNET => position_at(from)});
