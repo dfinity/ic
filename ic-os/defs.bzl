@@ -15,7 +15,6 @@ load("//bazel:defs.bzl", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
-load("//ic-os/guestos:fast_upgrades.bzl", "OVERLAY_BINARIES")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "upgrade_image")
 
 def icos_build(
@@ -506,24 +505,27 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
     if upgrades:
         for test_suffix in ["", "-test"]:
             update_image_tar = "update-img" + test_suffix + ".tar"
-            overlay_out = "overlay" + test_suffix + ".tzst"
-            overlay_files = {
-                binary_label: image_deps["rootfs"][binary_label]
-                for binary_label in OVERLAY_BINARIES
-            } | {
-                "//ic-os/components/guestos/fast-upgrade:restart.list": "/opt/upgrade_metadata/restart.list:0644",
-                "//ic-os/components/guestos/fast-upgrade:extension-release.ic-upgrade": "/usr/lib/extension-release.d/extension-release.ic-upgrade:0644",
-                ":replica_version" + test_suffix + ".txt": "/opt/ic/share/replica_version.txt:0644",
-            }
 
-            ext4_image(
-                name = overlay_out,
-                extra_files = overlay_files,
-                file_contexts = ":file_contexts",
-                partition_size = "2G",
-                target_compatible_with = ["@platforms//os:linux"],
-                tags = ["manual", "no-cache"],
-            )
+            if fast_upgrades:
+                overlay_out = "overlay" + test_suffix + ".tzst"
+                upgrade_overlay_binaries = image_deps.get(
+                    "upgrade_overlay_binaries", []
+                )
+                ext4_image(
+                    name = overlay_out,
+                    extra_files = {
+                        binary_label: image_deps["rootfs"][binary_label]
+                        for binary_label in upgrade_overlay_binaries
+                    } | {
+                        "//ic-os/components/guestos/fast-upgrade:restart.list": "/opt/upgrade_metadata/restart.list:0644",
+                        "//ic-os/components/guestos/fast-upgrade:extension-release.ic-upgrade": "/usr/lib/extension-release.d/extension-release.ic-upgrade:0644",
+                        ":replica_version" + test_suffix + ".txt": "/opt/ic/share/replica_version.txt:0644",
+                    },
+                    file_contexts = ":file_contexts",
+                    partition_size = "2G",
+                    target_compatible_with = ["@platforms//os:linux"],
+                    tags = ["manual", "no-cache"],
+                )
 
             upgrade_image_kwargs = {
                 "name": update_image_tar,
