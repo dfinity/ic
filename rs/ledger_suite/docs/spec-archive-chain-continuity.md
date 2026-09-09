@@ -402,9 +402,28 @@ F removes is the multi-*chunk* round: the batch that gets re-sent is then the
 round's single message rather than one chunk of several, and the arithmetic below
 is the same either way.
 
-    k = offset + log_length - incoming_index   // covered prefix length
+**It is nonetheless safe, and the reason is the arithmetic.** `blocks[k]`'s true
+global index is `incoming_index + k`, which by construction equals
+`offset + log_length` — so the appended suffix lands at exactly the indices those
+blocks belong at, and A1 confirms it, since `blocks[k]`'s parent is the block at
+`offset + log_length - 1`, which is the archive's tip. E2 then reconciles the
+node's range *from the report* rather than by incrementing, so the range is
+correct whatever it was before. The round self-heals and the only cost is
+re-sending the covered prefix. Nor can a straddle produce a double-mint: that
+hazard is on the reply path, which DEFI-2967 removes, whereas a straddle happens
+inside archiving, after the caller was answered.
+
+    k = min(offset + log_length - incoming_index, blocks.len())
     append blocks[k..]
     report offset + log_length   // re-read AFTER the append
+
+The `min` is load-bearing, not defensive. Without it `k` can exceed `blocks.len()`
+and `blocks[k..]` panics — reachable whenever the batch size varies between rounds:
+round 1 sends 1000 blocks and the archive stores them all, the reconciliation is
+lost, then block sizes grow (or `num_blocks_to_archive` changes) so round 2's
+message fits only 600. `k` is then 1000 against a 600-block batch. The panic would
+reach the ledger as a reject — graceful, so nothing is corrupted — but archiving
+would stall with an opaque cause on a path that should have been a clean no-op.
 
 A wholly covered chunk is the degenerate case `k == chunk.len()` — the idempotent
 no-op, which falls out rather than needing its own branch. A chunk starting at the
@@ -499,6 +518,25 @@ The blocks are never *lost* in either branch. A lagging `num_archived_blocks` me
 the ledger removed nothing, so it still holds them; a hole in the archive address
 space costs the ability to archive them, not the data.
 
+#### The mirror case: an archive that has gone backwards
+
+The guard above handles the archive being *ahead* of the ledger. The opposite is
+also worth one comparison, because it is the only shape of this bug that loses
+data: **`next_index < num_archived_blocks`** means the ledger has already removed
+blocks the archive no longer holds.
+
+Normally unreachable, since `num_archived_blocks` only ever advances to a position
+the archive reported. It becomes reachable if the archive itself goes backwards —
+an operator restoring it with `load_canister_snapshot`, or reinstalling it — which
+walks `log_length` back below what the ledger has already trusted.
+
+The response is to **halt with its own metric and never remove another block**, and
+to say so loudly: unlike every other case here, waiting does not help and retrying
+does not either. The blocks between the archive's position and the ledger's are
+gone from the system, and recovering them needs whatever backup the operator took.
+Detection is a single comparison against a value the reply already carries, so
+there is no reason not to make it.
+
 #### What E buys, and what it retires
 
 * **Retries become idempotent**, so a lost acknowledgement is harmless instead of
@@ -552,10 +590,15 @@ start or a freshly spawned node. Two consequences: "a roll-over round is short"
 holds only under F1 alone, and partial appends become routine — one per node fill —
 which is why the straddling rule above is load-bearing rather than defensive.
 
-What it buys: one "did it land?" question per round instead of N, so the bookkeeping
-lag Decision 6 accepts is bounded to a single message; no node creation mid-round;
-and less state to reason about, which is worth more than any single fix, since most
-of the case analysis here exists because a round has interior states.
+What it buys: one "did it land?" question per round instead of N; no node creation
+mid-round; and less state to reason about, which is worth more than any single fix,
+since most of the case analysis here exists because a round has interior states.
+
+It also does more for Decision 6 than bounding the waste. With one append there is
+**no await after it**, so the range reconciliation and `remove_archived_blocks`
+land in the same message and commit together — the divergence Decision 6 accepts
+exists only for multi-chunk rounds. Under F a round either records both values or
+neither, and the re-send it accepts is at most one batch.
 
 It does **not** make `index < offset` unreachable, and should not be sold that way.
 A round whose append landed but whose removal did not leaves `num_archived_blocks`
@@ -664,10 +707,15 @@ a much better story for timer liveness.
    answer an empty indexed `append_blocks` archives nothing, increments a distinct
    metric, and resumes without operator action once the archive is upgraded. The
    probe stores no blocks and consumes no capacity.
-14. A ledger whose `Wasm::INDEXED_APPENDS` is false uses the incremental path
+14. An archive whose reported position is *below* the ledger's
+   `num_archived_blocks` causes the ledger to halt permanently with a distinct
+   metric and remove no further blocks, since blocks it already removed are gone.
+15. A batch whose covered prefix is longer than the batch itself is a no-op, not a
+   panic: the archive clamps the prefix to the batch length.
+16. A ledger whose `Wasm::INDEXED_APPENDS` is false uses the incremental path
    instead of halting, so the ICP ledger keeps archiving; E3's counter
    distinguishes the two cases.
-15. The ICP archive is unchanged; the ICP *ledger* gains B1-B3, D1-D4, E2, E3, E4
+17. The ICP archive is unchanged; the ICP *ledger* gains B1-B3, D1-D4, E2, E3, E4
    and F, but not the indexed protocol (Decisions 3 and 7).
 
 ## Components
@@ -899,7 +947,9 @@ archive-level test is baseline-independent.
 | 9 | Decision 3 — the ICP archive's hand-rolled `Decode!` tolerates the extra argument | **already written**: `should_ignore_an_extra_optional_start_index` (`icp/archive/tests/tests.rs`) appends with a trailing `opt nat64`, asserts capacity dropped by the block size so it really stored it, and that the empty reply decodes as `None` | **yes** — a release gate |
 | 10 | E1 — a straddling chunk appends only its uncovered suffix | archive-level: append `N..N+499`, then `N..N+999`, and assert `log_length` becomes 1000 rather than 1500, that every index resolves correctly, and that the chain check did not trap on the covered prefix | **yes** |
 | 11 | E4 — a ledger halts against an un-upgraded tail, and resumes on upgrade | install an old archive wasm as the tail, generate transactions, assert nothing is archived and the halt metric rises; upgrade the archive, assert archiving resumes with no other intervention. Then assert an `INDEXED_APPENDS = false` ledger archives normally against the same archive | **yes** — both wasms are build artefacts |
-| 12 | both token variants for (1), (4), (6), (8) and (10) | (9) is ICP-only by nature, so it has no u256 variant | yes |
+| 12 | E1 — an over-long covered prefix is a no-op rather than a panic | archive-level: append 1000 blocks, then append the first 600 of them again, and assert the call succeeds, stores nothing, and reports `next_index` unchanged at 1000 | **yes** |
+| 13 | E2 — an archive that has gone backwards halts the ledger | reduce the archive's position (reinstall it, or restore a snapshot taken before the appends), then run a round and assert the ledger halts, increments the distinct metric, and removes no blocks | **yes** — a reinstall is deterministic |
+| 14 | both token variants for (1), (4), (6), (8), (10) and (12) | (9) is ICP-only by nature, so it has no u256 variant | yes |
 
 Deliberately not attempted: **the duplicate-append and offset-divergence paths
 end-to-end**, by inducing a trap in the append continuation. Routine rounds grow
