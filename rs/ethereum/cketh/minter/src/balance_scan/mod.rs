@@ -4,6 +4,7 @@ pub mod batcher;
 mod tests;
 
 use crate::asset::Asset;
+use crate::deposit_address::DepositAddress;
 use crate::eth_rpc_client::{AnyOf, MIN_ATTACHED_CYCLES, ToReducedWithStrategy, rpc_client};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
@@ -47,15 +48,18 @@ async fn scan<R: Runtime, T: TimeProvider>(
             return;
         }
     };
-    let (targets, watchlist_len) = read_state(|s| {
-        (
-            s.automatic_deposits
-                .scan_targets_iter(now, latest_block)
-                .collect::<Vec<_>>(),
-            s.automatic_deposits.watchlist_len(),
-        )
+    let (erc20_targets, eth_targets, watchlist_len) = read_state(|s| {
+        let mut erc20 = Vec::new();
+        let mut eth = Vec::new();
+        for target in s.automatic_deposits.scan_targets_iter(now, latest_block) {
+            match target.asset() {
+                Asset::Erc20(token) => erc20.push((target, token)),
+                Asset::Eth => eth.push(target),
+            }
+        }
+        (erc20, eth, s.automatic_deposits.watchlist_len())
     });
-    if targets.is_empty() {
+    if erc20_targets.is_empty() && eth_targets.is_empty() {
         log!(
             DEBUG,
             "[balance_scan] SKIPPING: 0/{watchlist_len} deposits ready to be scanned"
@@ -65,9 +69,11 @@ async fn scan<R: Runtime, T: TimeProvider>(
 
     // Await every balance read first, then apply the outcomes in a single `mutate_state`: the state
     // borrow must never span an await, and re-reading the watchlist after the outcalls is what this
-    // scan deliberately avoids (a concurrent `deposit_erc20` can evict a pair whose window closed
-    // mid-scan, which would drop funds already observed on-chain). See `scan_balances`.
-    let outcomes = scan_balances(&targets, latest_block, client).await;
+    // scan deliberately avoids (a concurrent registration can evict a pair whose window closed
+    // mid-scan, which would drop funds already observed on-chain). See `scan_balances`. Both scans
+    // read at the same `latest_block`, so an address' assets are observed at one block.
+    let mut outcomes = scan_balances(&erc20_targets, latest_block, &client).await;
+    outcomes.extend(scan_eth_balances(&eth_targets, latest_block, &client).await);
 
     mutate_state(|s| {
         for outcome in outcomes {
@@ -104,60 +110,113 @@ enum ScanOutcome {
 /// Pairs whose chunk failed yield no outcome at all, so a failed chunk is retried next tick rather
 /// than silently advanced until its next scheduled slot.
 async fn scan_balances<R: Runtime>(
-    due: &[ScanTarget],
+    due: &[(ScanTarget, Address)],
     latest_block: BlockNumber,
-    client: EvmRpcClient<R, CandidResponseConverter, DoubleCycles>,
+    client: &EvmRpcClient<R, CandidResponseConverter, DoubleCycles>,
 ) -> Vec<ScanOutcome> {
     let mut outcomes = Vec::new();
-    let mut decode_errors = 0_usize;
-    let mut call_errors = 0_usize;
+    let mut errors = ScanErrors::default();
 
     // Each pair is one `balanceOf` call, so chunks split at any pair boundary; a chunk yields its
     // outcomes together once it succeeds.
     for chunk in due.chunks(MAX_CALLS_PER_BATCH) {
         let calls: Vec<BalanceOfCall> = chunk
             .iter()
-            .map(|target| BalanceOfCall {
-                token: target.token(),
+            .map(|(target, token)| BalanceOfCall {
+                token: *token,
                 holder: target.address(),
             })
             .collect();
         let input = batcher::encode_balance_batch(&calls);
-        match client
-            .call(call_args(input, latest_block))
-            .with_cycles(MIN_ATTACHED_CYCLES)
-            .try_send()
-            .await
-            .reduce_with_strategy(AnyOf)
+        if let Some(balances) =
+            chunk_balances(input, calls.len(), latest_block, client, &mut errors).await
         {
-            Ok(hex) => match batcher::decode_balance_batch(hex.as_ref(), calls.len()) {
-                Ok(balances) => {
-                    for (target, balance) in chunk.iter().zip(balances) {
-                        outcomes.push(scan_outcome(target, balance, latest_block));
-                    }
-                }
-                Err(e) => {
-                    decode_errors += 1;
-                    log!(INFO, "balance scan decode error: {e:?}");
-                }
-            },
-            Err(e) => {
-                call_errors += 1;
-                log!(INFO, "balance scan eth_call error: {e:?}");
+            for ((target, _token), balance) in chunk.iter().zip(balances) {
+                outcomes.push(scan_outcome(target, balance, latest_block));
             }
         }
     }
 
+    log_scan_summary("token", &outcomes, &errors);
+    outcomes
+}
+
+/// The ETH counterpart of [`scan_balances`]: one batched `BALANCE` read per chunk of `due`
+/// `(address, ETH)` pairs, at the same `latest_block` the ERC-20 scan is pinned to.
+async fn scan_eth_balances<R: Runtime>(
+    due: &[ScanTarget],
+    latest_block: BlockNumber,
+    client: &EvmRpcClient<R, CandidResponseConverter, DoubleCycles>,
+) -> Vec<ScanOutcome> {
+    let mut outcomes = Vec::new();
+    let mut errors = ScanErrors::default();
+
+    for chunk in due.chunks(MAX_CALLS_PER_BATCH) {
+        let holders: Vec<DepositAddress> = chunk.iter().map(ScanTarget::address).collect();
+        let input = batcher::encode_eth_balance_batch(&holders);
+        if let Some(balances) =
+            chunk_balances(input, holders.len(), latest_block, client, &mut errors).await
+        {
+            for (target, balance) in chunk.iter().zip(balances) {
+                outcomes.push(scan_outcome(target, balance, latest_block));
+            }
+        }
+    }
+
+    log_scan_summary("ETH", &outcomes, &errors);
+    outcomes
+}
+
+#[derive(Default)]
+struct ScanErrors {
+    decode: usize,
+    call: usize,
+}
+
+/// Send one deployless-batcher `input` pinned at `latest_block` and decode its `n` balances,
+/// counting a failed call or an undecodable return in `errors` instead of yielding balances.
+async fn chunk_balances<R: Runtime>(
+    input: Vec<u8>,
+    n: usize,
+    latest_block: BlockNumber,
+    client: &EvmRpcClient<R, CandidResponseConverter, DoubleCycles>,
+    errors: &mut ScanErrors,
+) -> Option<Vec<Erc20Value>> {
+    match client
+        .call(call_args(input, latest_block))
+        .with_cycles(MIN_ATTACHED_CYCLES)
+        .try_send()
+        .await
+        .reduce_with_strategy(AnyOf)
+    {
+        Ok(hex) => match batcher::decode_balance_batch(hex.as_ref(), n) {
+            Ok(balances) => Some(balances),
+            Err(e) => {
+                errors.decode += 1;
+                log!(INFO, "balance scan decode error: {e:?}");
+                None
+            }
+        },
+        Err(e) => {
+            errors.call += 1;
+            log!(INFO, "balance scan eth_call error: {e:?}");
+            None
+        }
+    }
+}
+
+fn log_scan_summary(kind: &str, outcomes: &[ScanOutcome], errors: &ScanErrors) {
     let candidates_found = outcomes
         .iter()
         .filter(|o| matches!(o, ScanOutcome::Detected(_)))
         .count();
     log!(
         INFO,
-        "[balance_scan]: scanned {} (address, token) pair(s), found {candidates_found} candidate(s), {decode_errors} decode error(s), {call_errors} call error(s)",
+        "[balance_scan]: scanned {} (address, {kind}) pair(s), found {candidates_found} candidate(s), {} decode error(s), {} call error(s)",
         outcomes.len(),
+        errors.decode,
+        errors.call,
     );
-    outcomes
 }
 
 /// Classify one pair's scanned `balance`: a [`ScanOutcome::Detected`] built entirely from the
@@ -168,14 +227,14 @@ fn scan_outcome(
     balance: Erc20Value,
     latest_block: BlockNumber,
 ) -> ScanOutcome {
-    if balance < min_deposit(&Asset::Erc20(target.token())) {
+    if balance < min_deposit(&target.asset()) {
         return ScanOutcome::NothingFound(target.request());
     }
     ScanOutcome::Detected(AutomaticDeposit {
         owner: target.account().owner,
         subaccount: target.account().subaccount,
         address: target.address(),
-        asset: Asset::Erc20(target.token()),
+        asset: target.asset(),
         last_scanned_block: latest_block,
         scan_count: target.scan_count().saturating_add(1),
         scanned_balance: balance,

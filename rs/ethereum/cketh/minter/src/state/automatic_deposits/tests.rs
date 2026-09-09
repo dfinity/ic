@@ -322,7 +322,7 @@ mod scan_targets_iter {
     };
 
     #[test]
-    fn should_not_yield_a_target_for_an_eth_pair() {
+    fn should_yield_a_target_for_an_eth_pair() {
         let deposits = deposits_from(vec![
             scan_state(account(0), Asset::Eth, ts(window_nanos()), None, 0),
             scan_state(account(0), usdc(), ts(window_nanos()), None, 0),
@@ -330,13 +330,19 @@ mod scan_targets_iter {
 
         let due: Vec<_> = deposits
             .scan_targets_iter(ts(0), BlockNumber::new(1_000))
-            .map(|t| (t.account(), t.token(), t.address()))
+            .map(|t| (t.account(), t.asset(), t.address()))
             .collect();
 
         assert_eq!(
             due,
-            vec![(account(0), usdc(), deposit_address(&account(0)))],
-            "BUG: the ETH pair is not scannable until the batcher can read ETH balances"
+            vec![
+                (account(0), Asset::Eth, deposit_address(&account(0))),
+                (
+                    account(0),
+                    Asset::Erc20(usdc()),
+                    deposit_address(&account(0))
+                ),
+            ]
         );
     }
 
@@ -352,12 +358,16 @@ mod scan_targets_iter {
 
         let due: Vec<_> = deposits
             .scan_targets_iter(ts(0), BlockNumber::new(1_000))
-            .map(|t| (t.account(), t.token(), t.address()))
+            .map(|t| (t.account(), t.asset(), t.address()))
             .collect();
 
         assert_eq!(
             due,
-            vec![(account(0), usdc(), deposit_address(&account(0)))]
+            vec![(
+                account(0),
+                Asset::Erc20(usdc()),
+                deposit_address(&account(0))
+            )]
         );
     }
 
@@ -830,7 +840,7 @@ fn request(account: Account, token: Address) -> DepositRequest {
 
 fn automatic_deposit(
     account: Account,
-    token: Address,
+    asset: impl Into<Asset>,
     scanned_balance: u128,
     last_scanned_block: BlockNumber,
     scan_count: u32,
@@ -839,11 +849,40 @@ fn automatic_deposit(
         owner: account.owner,
         subaccount: account.subaccount,
         address: deposit_address(&account),
-        asset: Asset::Erc20(token),
+        asset: asset.into(),
         last_scanned_block,
         scan_count,
         scanned_balance: Erc20Value::new(scanned_balance),
     }
+}
+
+#[test]
+fn should_keep_eth_entries_out_of_sweep_batches() {
+    let mut deposits = AutomaticDeposits::default();
+    deposits.record_automatic_deposit_received(&automatic_deposit(
+        account(0),
+        Asset::Eth,
+        10,
+        BlockNumber::new(900),
+        3,
+    ));
+    deposits.record_automatic_deposit_received(&automatic_deposit(
+        account(1),
+        usdc(),
+        10,
+        BlockNumber::new(900),
+        3,
+    ));
+
+    let batches = deposits.requests_batch(10);
+
+    assert_eq!(batches.len(), 1);
+    assert_eq!(accounts_in(&batches, usdc()), vec![account(1)]);
+    assert_eq!(
+        deposits.sweep_len(),
+        2,
+        "BUG: the ETH entry stays queued, awaiting the sweepEthBatch lane"
+    );
 }
 
 #[test]

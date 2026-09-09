@@ -199,13 +199,32 @@ impl CkErc20Setup {
     }
 
     /// Advance the balance-scan timer and answer the resulting deployless-batcher `eth_call` with
-    /// `balances` — one entry per scanned `(deposit address, supported token)` pair, in scan order
-    /// (i.e. `live-due addresses × supported tokens`). Settles the reply so the per-address scan
-    /// schedule is advanced before returning.
+    /// `balances` — one entry per scanned `(deposit address, asset)` pair, in scan order. Fits a
+    /// tick where a single batch goes out (only ERC-20 pairs or only ETH pairs are due); for a
+    /// mixed tick use [`Self::run_balance_scan_with_eth`]. Settles the reply so the per-address
+    /// scan schedule is advanced before returning.
     pub fn run_balance_scan(&self, balances: &[u128]) {
         self.env.advance_time(BALANCE_SCAN_INTERVAL);
         MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
             .respond_for_all_with(balance_scan_response(balances))
+            .build()
+            .expect_rpc_calls(self);
+        for _ in 0..MAX_TICKS {
+            self.env.tick();
+        }
+    }
+
+    /// Like [`Self::run_balance_scan`], but for a tick where both ERC-20 and ETH pairs are
+    /// due: the scanner sends the ERC-20 batch first and the ETH batch second, each answered
+    /// with its own balances.
+    pub fn run_balance_scan_with_eth(&self, erc20_balances: &[u128], eth_balances: &[u128]) {
+        self.env.advance_time(BALANCE_SCAN_INTERVAL);
+        MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
+            .respond_for_all_with(balance_scan_response(erc20_balances))
+            .build()
+            .expect_rpc_calls(self);
+        MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
+            .respond_for_all_with(balance_scan_response(eth_balances))
             .build()
             .expect_rpc_calls(self);
         for _ in 0..MAX_TICKS {

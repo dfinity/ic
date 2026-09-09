@@ -375,9 +375,6 @@ impl AutomaticDeposits {
     /// latest block height, using elapsed blocks as a proxy for elapsed time against the
     /// backoff schedule. `now` filters expired entries.
     ///
-    /// ETH pairs are armed but yield no target yet: the balance batcher cannot read an ETH
-    /// balance until it gains its ETH slot, so an ETH pair stays on the watchlist unscanned.
-    ///
     /// Each target carries everything a scan of it needs (address, scan count), so the scanner
     /// never looks the entry up again: a scan spans several await points, and a concurrent
     /// [`Self::watch_deposit`] can evict an entry whose window closed at any of them — re-reading
@@ -407,13 +404,8 @@ impl AutomaticDeposits {
                     }
                 }
             };
-            let token = match request.asset {
-                Asset::Erc20(token) => token,
-                Asset::Eth => return None,
-            };
             due.then_some(ScanTarget {
                 request: *request,
-                token,
                 address: progress.address,
                 scan_count: progress.scan_count,
             })
@@ -554,6 +546,8 @@ impl AutomaticDeposits {
 
     /// The queued deposits a sweep could take next, batched by token, skipping those a sweep
     /// already holds: taking them twice would move a balance the minter has already accounted for.
+    /// ETH entries stay queued but are never batched yet: they wait for the `sweepEthBatch` lane
+    /// (DEFI-2931).
     pub fn requests_batch(
         &self,
         requested_batch_size: usize,
@@ -564,7 +558,7 @@ impl AutomaticDeposits {
         {
             let token = match deposit_request.asset {
                 Asset::Erc20(token) => token,
-                Asset::Eth => todo!("DEFI-2931: sweep ETH deposits via sweepEthBatch"),
+                Asset::Eth => continue,
             };
             let batch: &mut Vec<_> = batches.entry(token).or_default();
             if batch.len() < requested_batch_size {
@@ -679,7 +673,6 @@ pub enum RegisterDepositError {
 #[derive(Clone, Copy, Debug)]
 pub struct ScanTarget {
     request: DepositRequest,
-    token: Address,
     address: DepositAddress,
     scan_count: u32,
 }
@@ -693,8 +686,8 @@ impl ScanTarget {
         self.request.account
     }
 
-    pub fn token(&self) -> Address {
-        self.token
+    pub fn asset(&self) -> Asset {
+        self.request.asset
     }
 
     pub fn address(&self) -> DepositAddress {

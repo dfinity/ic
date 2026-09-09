@@ -148,6 +148,7 @@ fn should_mint_with_ckerc20_setup() {
 mod deposit_eth {
     use assert_matches::assert_matches;
     use candid::Principal;
+    use ic_cketh_minter::endpoints::events::{Asset as EventAsset, EventPayload};
     use ic_cketh_minter::endpoints::{DepositEthStatus, DepositStatus};
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
     use ic_cketh_test_utils::ckerc20::{CkErc20Setup, ckwbtc};
@@ -207,7 +208,63 @@ mod deposit_eth {
     }
 
     #[test]
-    fn should_not_scan_the_eth_pair() {
+    fn should_detect_eth_deposit() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let caller = ckerc20.caller();
+
+        let (ckerc20, before) = ckerc20
+            .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+
+        let scanned_at = 4_500_000_u64;
+        ckerc20.refresh_latest_block(scanned_at);
+        ckerc20.run_balance_scan(&[MINIMUM_ETH_DEPOSIT_WEI as u128]);
+
+        let received: Vec<_> = ckerc20
+            .cketh
+            .get_all_events()
+            .into_iter()
+            .filter_map(|event| match event.payload {
+                EventPayload::AutomaticDepositReceived {
+                    owner,
+                    subaccount,
+                    address,
+                    asset,
+                    scanned_balance,
+                    ..
+                } => Some((owner, subaccount, address, asset, scanned_balance)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            received.len(),
+            1,
+            "one AutomaticDepositReceived event for the funded ETH pair"
+        );
+        let (owner, subaccount, address, asset, scanned_balance) = &received[0];
+        assert_eq!(*owner, caller);
+        assert_eq!(*subaccount, Some(DEFAULT_USER_SUBACCOUNT));
+        assert_eq!(*address, before.address);
+        assert_eq!(*asset, EventAsset::Eth);
+        assert_eq!(*scanned_balance, candid::Nat::from(MINIMUM_ETH_DEPOSIT_WEI));
+
+        let (_ckerc20, detected) = ckerc20
+            .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_eq!(detected.address, before.address);
+        let deposit = match &detected.status {
+            DepositEthStatus::AwaitingSweep(deposit) => deposit.clone(),
+            other => panic!("BUG: expected AwaitingSweep, got {other:?}"),
+        };
+        assert_eq!(
+            deposit.scanned_balance,
+            candid::Nat::from(MINIMUM_ETH_DEPOSIT_WEI)
+        );
+        assert_eq!(deposit.detected_at_block, candid::Nat::from(scanned_at));
+    }
+
+    #[test]
+    fn should_scan_eth_and_erc20_pairs_in_one_tick() {
         let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
         let caller = ckerc20.caller();
         let token =
@@ -220,16 +277,18 @@ mod deposit_eth {
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
             .expect_deposit_response();
 
-        ckerc20.refresh_latest_block(4_500_000);
-        ckerc20.run_balance_scan(&[1_000_000_000_u128]);
+        // Balances below both minimums: both pairs are scanned, neither is detected.
+        let scanned_at = 4_500_000_u64;
+        ckerc20.refresh_latest_block(scanned_at);
+        ckerc20.run_balance_scan_with_eth(&[1_u128], &[1_u128]);
 
         let (ckerc20, erc20_response) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token)
             .expect_deposit_response();
         assert_matches!(
             erc20_response.status,
-            DepositStatus::AwaitingSweep(_),
-            "BUG: the funded ERC-20 pair should have been detected by the scan"
+            DepositStatus::Scanning { scan_count: 1, last_scanned_block: Some(ref block), .. }
+                if *block == candid::Nat::from(scanned_at)
         );
 
         let (_ckerc20, eth_response) = ckerc20
@@ -237,12 +296,8 @@ mod deposit_eth {
             .expect_deposit_response();
         assert_matches!(
             eth_response.status,
-            DepositEthStatus::Scanning {
-                scan_count: 0,
-                last_scanned_block: None,
-                ..
-            },
-            "BUG: the ETH pair must stay armed and unscanned until the batcher can read ETH balances"
+            DepositEthStatus::Scanning { scan_count: 1, last_scanned_block: Some(ref block), .. }
+                if *block == candid::Nat::from(scanned_at)
         );
     }
 
