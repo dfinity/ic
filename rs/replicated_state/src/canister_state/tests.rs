@@ -1066,7 +1066,9 @@ fn outstanding_prepayments_of_open_callbacks() {
     // first and the last are outstanding: the call transmission prepayment covers
     // the transmission of both the request and the response, so the response
     // transmission prepayment is not counted on top of it; it is the fallback for
-    // legacy callbacks only, see `outstanding_prepayments_of_legacy_callback`.
+    // legacy callbacks only, see `outstanding_prepayments_of_legacy_callback`. The
+    // same two are what an aborted response execution carries, see
+    // `checkpoint_round_backfills_consumed_cycles_monotonic_of_aborted_response_execution`.
     fixture.make_callback(NO_DEADLINE);
     assert_eq!(
         fixture
@@ -1171,53 +1173,6 @@ fn outstanding_prepayments_of_paused_and_aborted_executions() {
             .system_state
             .outstanding_prepayments(),
         None
-    );
-}
-
-/// An aborted response execution prepays nothing of its own: it is paid for by the
-/// callback that the task carries, which is no longer registered with the
-/// `CallContextManager` (so it is not counted twice).
-#[test]
-fn outstanding_prepayments_of_aborted_response_execution() {
-    let mut fixture = CanisterStateFixture::new();
-    let callback_id = fixture.make_callback(NO_DEADLINE);
-    let callback = fixture
-        .canister_state
-        .system_state
-        .call_context_manager()
-        .unwrap()
-        .callback(callback_id)
-        .unwrap()
-        .clone();
-    // The prepayments that the callback carries, i.e. the ones expected below.
-    assert_eq!(
-        callback.prepayment_for_response_execution.nominal(),
-        NominalCycles::new(42)
-    );
-    assert_eq!(
-        callback.prepayment_for_call_transmission.nominal(),
-        NominalCycles::new(168)
-    );
-    let response = default_input_response(callback_id, NO_DEADLINE);
-
-    let system_state = &mut fixture.canister_state.system_state;
-    system_state.unregister_callback(callback_id).unwrap();
-    system_state
-        .task_queue
-        .enqueue(ExecutionTask::AbortedExecution {
-            input: CanisterMessageOrTask::Message(CanisterMessage::Response {
-                response: response.into(),
-                callback: callback.into(),
-            }),
-            prepaid_execution_cycles: CompoundCycles::new(
-                Cycles::zero(),
-                CanisterCyclesCostSchedule::Normal,
-            ),
-        });
-
-    assert_eq!(
-        system_state.outstanding_prepayments(),
-        Some(NominalCycles::new(42 + 168))
     );
 }
 
