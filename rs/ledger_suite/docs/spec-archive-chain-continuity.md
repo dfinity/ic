@@ -413,17 +413,32 @@ re-sending the covered prefix. Nor can a straddle produce a double-mint: that
 hazard is on the reply path, which DEFI-2967 removes, whereas a straddle happens
 inside archiving, after the caller was answered.
 
-    k = min(offset + log_length - incoming_index, blocks.len())
-    append blocks[k..]
-    report offset + log_length   // re-read AFTER the append
+    // reached only in the middle branch, where offset <= i <= offset + log_length
+    k = min(offset + log_length - i, blocks.len())   // leading blocks to skip
+    append blocks.iter().skip(k)                     // saturating, so never out of range
+    report offset + log_length                       // re-read AFTER the append
 
-The `min` is load-bearing, not defensive. Without it `k` can exceed `blocks.len()`
-and `blocks[k..]` panics — reachable whenever the batch size varies between rounds:
-round 1 sends 1000 blocks and the archive stores them all, the reconciliation is
-lost, then block sizes grow (or `num_blocks_to_archive` changes) so round 2's
-message fits only 600. `k` is then 1000 against a 600-block batch. The panic would
-reach the ledger as a reject — graceful, so nothing is corrupted — but archiving
-would stall with an opaque cause on a path that should have been a clean no-op.
+`k` is unsigned and both of its bounds matter, in opposite directions:
+
+* **Upper.** `offset + log_length - i` can exceed `blocks.len()`, so slicing on it
+  panics. Reachable whenever the batch size varies between rounds: round 1 sends
+  1000 blocks and the archive stores them all, the reconciliation is lost, then
+  block sizes grow (or `num_blocks_to_archive` changes) so round 2's message fits
+  only 600 — `k` is 1000 against a 600-block batch. The `min` handles it, and
+  `skip` rather than `blocks[k..]` makes the clamp structural instead of a separate
+  line a later edit can drop.
+* **Lower.** The subtraction underflows if `i > offset + log_length`. That is the
+  `Gap` row, so it must be **impossible to reach this line** with such an `i` —
+  which is why `k` is computed *inside* the middle branch rather than before the
+  placement check. Ordering the checks the other way round would turn a gap into a
+  wrapped `k` and an append at the wrong place: silent corruption, not a panic.
+
+Both are worth stating because the failure modes differ so much. The upper bound
+fails loudly — the panic reaches the ledger as a reject, so archiving stalls with
+an opaque cause on a path that should have been a clean no-op, but nothing is
+corrupted. The lower bound, if the branch order were ever inverted, fails
+silently. Placement first is therefore not only about A1 (above); it is also what
+keeps this arithmetic in range.
 
 A wholly covered chunk is the degenerate case `k == chunk.len()` — the idempotent
 no-op, which falls out rather than needing its own branch. A chunk starting at the
