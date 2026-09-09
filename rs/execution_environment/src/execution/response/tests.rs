@@ -215,7 +215,8 @@ fn execute_response_refunds_cycles() {
 /// exact: the gauge holds the whole call transmission prepayment, of which the
 /// response transmission prepayment accounts for only a part. What is missing is the
 /// call fee, and it stays missing, as nothing ever refunds that part. Both assertions
-/// below are thus off by the very same call fee.
+/// below are thus off by the very same call fee -- until a backfill closes the gap,
+/// as the gauge is the amount that the canister really consumed.
 #[test]
 fn execute_response_of_legacy_callback_settles_the_outstanding_prepayments() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
@@ -255,6 +256,8 @@ fn execute_response_of_legacy_callback_settles_the_outstanding_prepayments() {
     // part of the call transmission prepayment that the response transmission
     // prepayment cannot stand in for.
     let call_fee = test.call_fee("update", &b_callback).nominal();
+    // Non-zero, or the offset it stands for below would be vacuous.
+    assert_ne!(call_fee, NominalCycles::zero());
 
     let system_state = &test.canister_state(a_id).system_state;
     let callback = system_state
@@ -293,6 +296,18 @@ fn execute_response_of_legacy_callback_settles_the_outstanding_prepayments() {
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
         system_state.canister_metrics().consumed_cycles_monotonic() + call_fee
+    );
+
+    // The next backfill rectifies that last offset: with nothing outstanding, the
+    // gauge is exactly what the canister consumed over its lifetime, call fee
+    // included, so the monotonic amount is raised to it.
+    test.canister_state_mut(a_id)
+        .system_state
+        .migrate_consumed_cycles_to_monotonic();
+    let system_state = &test.canister_state(a_id).system_state;
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        system_state.canister_metrics().consumed_cycles_monotonic()
     );
 }
 
