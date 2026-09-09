@@ -606,15 +606,26 @@ pub struct ConsumedCycles {
 impl ConsumedCycles {
     /// Everything the canister has been charged for, whatever the reason.
     pub fn total(&self) -> u128 {
-        self.memory
-            + self.compute_allocation
-            + self.ingress_induction
-            + self.instructions
-            + self.request_and_response_transmission
-            + self.uninstall
-            + self.canister_creation
-            + self.http_outcalls
-            + self.burned_cycles
+        let ConsumedCycles {
+            memory,
+            compute_allocation,
+            ingress_induction,
+            instructions,
+            request_and_response_transmission,
+            uninstall,
+            canister_creation,
+            http_outcalls,
+            burned_cycles,
+        } = self;
+        memory
+            + compute_allocation
+            + ingress_induction
+            + instructions
+            + request_and_response_transmission
+            + uninstall
+            + canister_creation
+            + http_outcalls
+            + burned_cycles
     }
 
     /// What has been charged since `earlier`.
