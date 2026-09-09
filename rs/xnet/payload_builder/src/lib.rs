@@ -74,12 +74,14 @@ pub trait XNetSlicePool: Send + Sync {
     /// respecting the given message count and byte limits; or, if the provided
     /// `byte_limit` is too small for a header-only slice, returns `Ok(None)`.
     ///
-    /// If all messages are taken, the slice is removed from the pool.
+    /// If the pooled slice begins after `begin.message_index`, its messages cannot
+    /// be taken (yet), so a header-only slice is returned.
+    ///
+    /// If `Ok(Some(_))` is returned and no messages are left, the slice is removed
+    /// from the pool.
     ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` and drops
-    /// the pooled slice if malformed. Returns `Err(TakeBeforeSliceBegin)` and
-    /// drops the pooled slice if `begin`'s `message_index` is before the
-    /// first pooled message.
+    /// the pooled slice if malformed.
     fn take_slice(
         &self,
         subnet_id: SubnetId,
@@ -1524,7 +1526,7 @@ impl PoolRefillTask {
                                     .unwrap()
                                     .append(subnet_id, slice, registry_version, log)
                             } else {
-                                // Pulled a complete stream, replace pooled slice (if any).
+                                // Pulled a complete stream, put it into the pool.
                                 pool.lock()
                                     .unwrap()
                                     .put(subnet_id, slice, registry_version, log)
