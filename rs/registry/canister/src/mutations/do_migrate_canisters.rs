@@ -1,4 +1,7 @@
-use crate::registry::{Registry, Version};
+use crate::{
+    mutations::common::normalized_canister_cycles_cost_schedule,
+    registry::{Registry, Version},
+};
 use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use serde::Serialize;
@@ -51,7 +54,65 @@ impl Registry {
         // Hence, we intentionally do not validate that the target subnet exists here.
         let target_subnet_id = SubnetId::new(target_subnet_id);
 
+        self.validate_cost_schedules(&canister_ids, target_subnet_id)?;
+
         Ok((canister_ids, target_subnet_id))
+    }
+
+    /// Validates that migrating `canister_ids` to `target_subnet_id` does not change
+    /// the cycles cost schedule any of them is charged under.
+    ///
+    /// That schedule has to stay put for as long as a canister has calls in flight:
+    /// the cycles prepaid for a response execution are settled against the cycles that
+    /// execution requires, derived when the response is executed
+    /// (`CyclesAccountManager::adjust_prepayment_for_response_execution`), and the two
+    /// amounts are only comparable if both were derived under the same cost schedule.
+    /// An amount that is free under the free cost schedule has a zero real part but a
+    /// non-zero nominal one, so settling across a switch either forfeits the real part
+    /// of the prepayment or credits real cycles that were never withdrawn.
+    ///
+    /// The `check_canister_cost_schedule_invariants` registry invariant enforces this
+    /// too, whichever mutation would change a canister's cost schedule; validating it
+    /// here as well reports which canister and which subnets are at fault.
+    fn validate_cost_schedules(
+        &self,
+        canister_ids: &[CanisterId],
+        target_subnet_id: SubnetId,
+    ) -> Result<(), String> {
+        let version = self.latest_version();
+        let routing_table = self.get_routing_table_or_panic(version);
+
+        // Only a target subnet that already appears in the routing table hosts the
+        // canisters after the migration; otherwise they are unassigned rather than
+        // moved (see above), which leaves no cost schedule to preserve. This mirrors
+        // the condition in `migrate_canisters_to_subnet`.
+        if !routing_table
+            .iter()
+            .any(|(_range, subnet_id)| *subnet_id == target_subnet_id)
+        {
+            return Ok(());
+        }
+        let target_cost_schedule =
+            normalized_canister_cycles_cost_schedule(&self.get_subnet(target_subnet_id, version)?);
+
+        for canister_id in canister_ids {
+            // A canister that no subnet hosts has no cost schedule to preserve either.
+            let Some((_range, source_subnet_id)) = routing_table.lookup_entry(*canister_id) else {
+                continue;
+            };
+            let source_cost_schedule = normalized_canister_cycles_cost_schedule(
+                &self.get_subnet(source_subnet_id, version)?,
+            );
+            if source_cost_schedule != target_cost_schedule {
+                return Err(format!(
+                    "canister {canister_id} is hosted by subnet {source_subnet_id} on the \
+                     {source_cost_schedule:?} cycles cost schedule and hence cannot be migrated \
+                     to subnet {target_subnet_id} on the {target_cost_schedule:?} one"
+                ));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -76,8 +137,12 @@ mod test {
     use crate::mutations::routing_table::routing_table_into_registry_mutation;
     use ic_base_types::CanisterId;
     use ic_base_types::PrincipalId;
+    use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
+    use ic_registry_keys::make_subnet_record_key;
     use ic_registry_routing_table::CanisterIdRange;
     use ic_registry_routing_table::RoutingTable;
+    use ic_registry_transport::update;
+    use prost::Message;
 
     // We only need a basic test, because the rest of the logic for this is tested in the tests
     // for migrating canister ranges, which is already supported.
@@ -322,5 +387,64 @@ mod test {
             )
             .unwrap();
         assert_eq!(updated_routing_table, expected_routing_table);
+    }
+    /// A canister must not be migrated to a subnet that uses a different cycles cost
+    /// schedule; see `Registry::validate_cost_schedules`.
+    #[test]
+    #[should_panic(expected = "cannot be migrated to subnet")]
+    fn test_migrate_canisters_to_subnet_with_different_cost_schedule() {
+        let mut registry = invariant_compliant_registry(0);
+        let system_subnet =
+            PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
+                .unwrap();
+
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 6);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let target_subnet_id =
+            registry_create_subnet_with_nodes(&mut registry, &node_ids_and_dkg_pks, &[0, 1, 2, 3]);
+
+        // Put the target subnet on the free cycles cost schedule, as a rental subnet
+        // is, while the system subnet hosting the canister stays on the normal one. The
+        // mutation has to bypass the invariant checks, which reject a change of the cost
+        // schedule of an existing subnet (see `check_subnet_cost_schedule_immutability`).
+        let mut subnet_record = registry
+            .get_subnet(target_subnet_id, registry.latest_version())
+            .unwrap();
+        subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
+        registry.apply_mutations_for_test(vec![update(
+            make_subnet_record_key(target_subnet_id).as_bytes(),
+            subnet_record.encode_to_vec(),
+        )]);
+
+        // As above, the target subnet must already appear in the routing table for the
+        // migration to keep the canister assigned to it.
+        let mut initial_routing_table = RoutingTable::new();
+        initial_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from(0),
+                    end: CanisterId::from(255),
+                },
+                system_subnet.into(),
+            )
+            .unwrap();
+        initial_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(256),
+                    end: CanisterId::from_u64(256),
+                },
+                target_subnet_id,
+            )
+            .unwrap();
+        registry.apply_mutations_for_test(routing_table_into_registry_mutation(
+            &registry,
+            initial_routing_table,
+        ));
+
+        registry.do_migrate_canisters(MigrateCanistersPayload {
+            canister_ids: vec![PrincipalId::from(CanisterId::from(100))],
+            target_subnet_id: target_subnet_id.get(),
+        });
     }
 }

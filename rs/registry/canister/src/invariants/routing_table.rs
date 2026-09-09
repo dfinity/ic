@@ -107,10 +107,17 @@ pub(crate) fn check_canister_cost_schedule_invariants(
             && let Some(cost_schedule) = cost_schedule(&cost_schedules, subnet_id)
             && previous_cost_schedule != cost_schedule
         {
+            // Only the intersection of the two ranges changes its cost schedule: the
+            // rest of either range is hosted by the same subnet in both states, is
+            // newly assigned, or is not hosted anymore.
+            let affected_range = CanisterIdRange {
+                start: previous_range.start.max(range.start),
+                end: previous_range.end.min(range.end),
+            };
             return Err(InvariantCheckError {
                 msg: format!(
-                    "canister ID range {range:?} changes its cycles cost schedule from \
-                    {previous_cost_schedule:?} on subnet {previous_subnet_id} to \
+                    "canister ID range {affected_range:?} changes its cycles cost schedule \
+                    from {previous_cost_schedule:?} on subnet {previous_subnet_id} to \
                     {cost_schedule:?} on subnet {subnet_id}"
                 ),
                 source: None,
@@ -339,27 +346,47 @@ mod tests {
         .unwrap();
 
         // Moving a range to a subnet on a different cost schedule is not, in either
-        // direction, and neither is moving only a part of it.
-        for entries in [
-            vec![
-                (range(0x0, 0xff), free_subnet_id),
-                (range(0x100, 0x1ff), free_subnet_id),
-            ],
-            vec![
-                (range(0x0, 0x7f), normal_subnet_id),
-                (range(0x80, 0xff), free_subnet_id),
-                (range(0x100, 0x1ff), free_subnet_id),
-            ],
-            vec![
-                (range(0x0, 0xff), normal_subnet_id),
-                (range(0x100, 0x1ff), normal_subnet_id),
-            ],
+        // direction, and neither is moving only a part of it. The reported range is the
+        // part that actually changed its cost schedule, i.e. the intersection of the
+        // range hosting the canisters before and the one hosting them now.
+        for (entries, affected_range) in [
+            (
+                vec![
+                    (range(0x0, 0xff), free_subnet_id),
+                    (range(0x100, 0x1ff), free_subnet_id),
+                ],
+                range(0x0, 0xff),
+            ),
+            // Only the second half of the first range moves.
+            (
+                vec![
+                    (range(0x0, 0x7f), normal_subnet_id),
+                    (range(0x80, 0xff), free_subnet_id),
+                    (range(0x100, 0x1ff), free_subnet_id),
+                ],
+                range(0x80, 0xff),
+            ),
+            (
+                vec![
+                    (range(0x0, 0xff), normal_subnet_id),
+                    (range(0x100, 0x1ff), normal_subnet_id),
+                ],
+                range(0x100, 0x1ff),
+            ),
+            // The two ranges are merged into one hosted by the subnet that hosted the
+            // second one all along, so only the first one changes its cost schedule.
+            (vec![(range(0x0, 0x1ff), free_subnet_id)], range(0x0, 0xff)),
         ] {
             let err = check(entries, &mut snapshot)
                 .expect_err("Expected the move across cost schedules to be rejected");
             assert!(
                 err.msg.contains("changes its cycles cost schedule"),
                 "unexpected error message: {}",
+                err.msg
+            );
+            assert!(
+                err.msg.contains(&format!("{affected_range:?}")),
+                "expected {affected_range:?} to be reported: {}",
                 err.msg
             );
         }
