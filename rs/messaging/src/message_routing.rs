@@ -1453,13 +1453,12 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .set(batch.batch_number.get() as i64);
             state.metadata.subnet_split_from = None;
         }
-        // If this is the first round after a subnet merge, reset the merge
-        // marker and record all in-progress ingress messages (i.e. all not yet
-        // responded ingress-induced canister call contexts) in the ingress history.
+        // If this is the first round after a subnet merge, make the necessary
+        // adjustments to the state (see `ReplicatedState::after_merge()`).
         if state.metadata.subnet_merged {
             info!(
                 self.log,
-                "State has resulted from a subnet merge, recording in-progress ingress messages"
+                "State has resulted from a subnet merge, making post-merge state adjustments"
             );
             state.after_merge(
                 batch.time,

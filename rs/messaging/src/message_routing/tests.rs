@@ -2392,14 +2392,13 @@ fn process_batch_resets_split_marker() {
         // Reading from the registry must succeed for fully specified records.
         let (batch_processor, _metrics, state_manager, _registry_settings) =
             make_batch_processor(fixture.registry.clone(), log);
-        let (mut height, mut state) = state_manager.take_tip();
+        let (_, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
         state.metadata.subnet_split_from = Some(other_subnet_id);
-        height.inc_assign();
         state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
         batch_processor.process_batch(Batch {
-            batch_number: height.increment(),
+            batch_number: state_manager.tip_height().increment(),
             batch_summary: None,
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
@@ -2456,14 +2455,13 @@ fn process_batch_resets_merge_marker() {
         // Reading from the registry must succeed for fully specified records.
         let (batch_processor, _metrics, state_manager, _registry_settings) =
             make_batch_processor(fixture.registry.clone(), log);
-        let (mut height, mut state) = state_manager.take_tip();
+        let (_, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
         state.metadata.subnet_merged = true;
-        height.inc_assign();
         state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
         batch_processor.process_batch(Batch {
-            batch_number: height.increment(),
+            batch_number: state_manager.tip_height().increment(),
             batch_summary: None,
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
