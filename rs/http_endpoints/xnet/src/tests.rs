@@ -1,9 +1,13 @@
 use super::*;
 use bytes::Bytes;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
+use ic_logger::no_op_logger;
+use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_protobuf::{messaging::xnet::v1 as pb, proxy::ProtoProxy};
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_keys::make_subnet_record_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_replicated_state::testing::{ReplicatedStateTesting, StreamTesting};
 use ic_replicated_state::{ReplicatedState, Stream};
 use ic_test_utilities::state_manager::FakeStateManager;
@@ -11,11 +15,11 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count, metric_vec,
 };
-use ic_test_utilities_types::{
-    ids::{SUBNET_6, SUBNET_7, canister_test_id},
-    messages::RequestBuilder,
+use ic_test_utilities_types::ids::{
+    NODE_3, NODE_5, NODE_42, SUBNET_6, SUBNET_7, SUBNET_12, canister_test_id,
 };
-use ic_types::{SubnetId, messages::CallbackId, xnet::StreamIndexedQueue};
+use ic_test_utilities_types::messages::RequestBuilder;
+use ic_types::{NodeId, RegistryVersion, SubnetId, messages::CallbackId, xnet::StreamIndexedQueue};
 use maplit::btreemap;
 use std::sync::Barrier;
 use url::Url;
@@ -24,14 +28,28 @@ const SRC_CANISTER: u64 = 2;
 const DST_CANISTER: u64 = 3;
 const CALLBACK_ID: u64 = 4;
 const DST_SUBNET: SubnetId = SUBNET_6;
-const UNKNOWN_SUBNET: SubnetId = SUBNET_7;
+/// An existent subnet for which we have no stream.
+const NO_STREAM_SUBNET: SubnetId = SUBNET_7;
+/// A nonexistent subnet (no registry record).
+const UNKNOWN_SUBNET: SubnetId = SUBNET_12;
 
 const STREAM_BEGIN: StreamIndex = StreamIndex::new(7);
 const STREAM_COUNT: u64 = 3;
 
+/// A node of `DST_SUBNET`, i.e. the only one allowed to fetch its stream.
+const DST_SUBNET_NODE: NodeId = NODE_3;
+/// A node of `NO_STREAM_SUBNET`.
+const NO_STREAM_SUBNET_NODE: NodeId = NODE_5;
+/// A node not belonging to any subnet.
+const UNASSIGNED_NODE: NodeId = NODE_42;
+
+const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
+
 pub(crate) struct EndpointTestFixture {
     pub state_manager: Arc<FakeStateManager>,
-    pub registry_client: Arc<MockRegistryClient>,
+    pub registry_client: Arc<FakeRegistryClient>,
+    /// Backs either a `XNetEndpoint` or a `Context` for `route_request()`:
+    /// attempting to create a second `XNetEndpointMetrics` instance would panic.
     pub metrics: MetricsRegistry,
     pub tls_handshake: Arc<MockTlsConfig>,
 }
@@ -41,6 +59,22 @@ impl EndpointTestFixture {
         let fixture = EndpointTestFixture::default();
         put_replicated_state_for_testing(&*fixture.state_manager);
         fixture
+    }
+
+    /// Routes the given URL on behalf of `peer_node_id`.
+    fn route_request(&self, url: Url, peer_node_id: Option<NodeId>) -> Response<Body> {
+        route_request(
+            url,
+            peer_node_id,
+            &Context {
+                log: no_op_logger(),
+                semaphore: Semaphore::new(XNetEndpoint::num_workers()).into(),
+                metrics: XNetEndpointMetrics::new(&self.metrics).into(),
+                certified_stream_store: self.state_manager.clone(),
+                registry_client: self.registry_client.clone(),
+                base_url: "http://localhost".try_into().unwrap(),
+            },
+        )
     }
 
     /// Returns the values of the `METRIC_REQUEST_DURATION` histograms' `count`
@@ -66,10 +100,35 @@ impl Default for EndpointTestFixture {
         EndpointTestFixture {
             metrics: MetricsRegistry::new(),
             state_manager: Arc::new(FakeStateManager::new()),
-            registry_client: Arc::new(MockRegistryClient::new()),
+            registry_client: Arc::new(registry_with_subnet_memberships()),
             tls_handshake: Arc::new(MockTlsConfig::new()),
         }
     }
+}
+
+/// Returns a registry holding records for `DST_SUBNET` and `NO_STREAM_SUBNET`,
+/// each with a single member; `UNASSIGNED_NODE` is a member of neither.
+fn registry_with_subnet_memberships() -> FakeRegistryClient {
+    let data_provider = ProtoRegistryDataProvider::new();
+    for (subnet_id, node) in [
+        (DST_SUBNET, DST_SUBNET_NODE),
+        (NO_STREAM_SUBNET, NO_STREAM_SUBNET_NODE),
+    ] {
+        data_provider
+            .add(
+                &make_subnet_record_key(subnet_id),
+                REGISTRY_VERSION,
+                Some(SubnetRecord {
+                    membership: vec![node.get().into_vec()],
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+    }
+
+    let registry_client = FakeRegistryClient::new(Arc::new(data_provider));
+    registry_client.update_to_latest_version();
+    registry_client
 }
 
 // Get a free port on this host to which we can connect transport to.
@@ -253,11 +312,7 @@ async fn handle_streams() {
 
     let url = Url::parse("http://localhost/api/v1/streams").unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
     let (parsed_status, body) = parse_response(response).await;
 
     assert_eq!(
@@ -288,11 +343,7 @@ async fn handle_existing_stream_impl(
     ))
     .unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
     (parse_response(response).await, fixture)
 }
 
@@ -438,11 +489,7 @@ async fn handle_stream_with_witness_begin() {
     ))
     .unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
     let (status_code, body) = parse_response(response).await;
 
     assert_response_is_slice(status_code, body, witness_begin, msg_begin, msg_limit, None);
@@ -467,11 +514,7 @@ async fn handle_stream_no_index() {
     ))
     .unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
     let (status_code, body) = parse_response(response).await;
 
     assert_response_is_slice(
@@ -503,11 +546,7 @@ async fn handle_stream_with_byte_limit() {
     ))
     .unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
     let (status_code, body) = parse_response(response).await;
 
     assert_response_is_slice(
@@ -533,13 +572,12 @@ async fn handle_stream_with_byte_limit() {
 async fn handle_stream_nonexistent() {
     let fixture = EndpointTestFixture::with_replicated_state();
 
-    let url = Url::parse(&format!("http://localhost/api/v1/stream/{UNKNOWN_SUBNET}")).unwrap();
+    let url = Url::parse(&format!(
+        "http://localhost/api/v1/stream/{NO_STREAM_SUBNET}"
+    ))
+    .unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(NO_STREAM_SUBNET_NODE));
     let (status_code, body) = parse_response(response).await;
 
     assert_eq!((204, &b""[..]), (status_code, body.as_slice()));
@@ -551,16 +589,57 @@ async fn handle_stream_nonexistent() {
     assert!(fixture.response_size_counts().is_empty());
 }
 
+/// Common implementation for all `handle_stream` tests that expect a request
+/// for `DST_SUBNET`'s stream to be refused.
+async fn handle_refused_stream_impl(peer_node_id: NodeId) {
+    let fixture = EndpointTestFixture::with_replicated_state();
+
+    let url = Url::parse(&format!(
+        "http://localhost/api/v1/stream/{DST_SUBNET}?msg_begin={STREAM_BEGIN}"
+    ))
+    .unwrap();
+
+    let response = fixture.route_request(url, Some(peer_node_id));
+    let (status_code, _body) = parse_response(response).await;
+
+    assert_eq!(403, status_code);
+    assert_eq!(
+        metric_vec(&[(&[("resource", "stream"), ("status", "403")], 1)]),
+        fixture.request_counts()
+    );
+    assert_eq!(0, fixture.slice_payload_size_stats().count);
+    assert!(fixture.response_size_counts().is_empty());
+}
+
+#[tokio::test]
+async fn handle_stream_for_other_subnet() {
+    handle_refused_stream_impl(NO_STREAM_SUBNET_NODE).await;
+}
+
+#[tokio::test]
+async fn handle_stream_from_unassigned_node() {
+    handle_refused_stream_impl(UNASSIGNED_NODE).await;
+}
+
+/// Tests that a caller whose membership the registry cannot confirm is refused,
+/// rather than assumed to be a member.
+#[tokio::test]
+async fn handle_stream_for_subnet_without_registry_record() {
+    let fixture = EndpointTestFixture::with_replicated_state();
+
+    let url = Url::parse(&format!("http://localhost/api/v1/stream/{UNKNOWN_SUBNET}")).unwrap();
+
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
+
+    assert_eq!(403, parse_response(response).await.0);
+}
+
 #[tokio::test]
 async fn handle_bad_api_path() {
     let fixture = EndpointTestFixture::with_replicated_state();
     let url = Url::parse("http://localhost/api/v1/bad/api/path").unwrap();
 
-    let response = route_request(
-        url,
-        &*fixture.state_manager,
-        &XNetEndpointMetrics::new(&fixture.metrics),
-    );
+    let response = fixture.route_request(url, Some(DST_SUBNET_NODE));
     let (status_code, body) = parse_response(response).await;
 
     assert_eq!((404, &b"Not Found"[..]), (status_code, body.as_slice()));
