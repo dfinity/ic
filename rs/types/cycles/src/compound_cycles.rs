@@ -74,7 +74,12 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 /// let total = cc_instructions + cc_memory;
 /// assert_eq!(total.real(), Cycles::new(30));
 /// ```
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
+///
+/// `CompoundCycles` deliberately implements neither `Ord` nor `PartialOrd`: a
+/// comparison has to say which of the two parts it is made on, and the two parts do
+/// not order an amount the same way. Use `min_nominal` and the `real()`/`nominal()`
+/// accessors to compare explicitly.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct CompoundCycles<T: CyclesUseCaseKind> {
     real: Cycles,
     nominal: NominalCycles,
@@ -128,6 +133,21 @@ impl<T: CyclesUseCaseKind> CompoundCycles<T> {
     // are zero.
     pub fn is_zero(&self) -> bool {
         self.real.is_zero() && self.nominal.is_zero()
+    }
+
+    /// Returns the smaller of `self` and `other`, compared on their nominal parts.
+    ///
+    /// The nominal part is the one that is independent of the cost schedule: the real
+    /// part of an amount whose use case is free under the free cost schedule is zero
+    /// (cf. `CompoundCycles::new`), so a comparison of real parts cannot tell two such
+    /// amounts apart. The two parts coincide under the normal cost schedule, hence
+    /// this is equivalent to comparing the real parts there.
+    pub fn min_nominal(self, other: Self) -> Self {
+        if self.nominal <= other.nominal {
+            self
+        } else {
+            other
+        }
     }
 
     /// Returns this amount reduced by the part of `real()` that could not be

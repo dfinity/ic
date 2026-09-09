@@ -560,7 +560,7 @@ impl CyclesAccountManager {
                 self.convert_instructions_to_cycles(num_instructions_to_refund, execution_mode),
                 subnet_cycles_config,
             )
-            .min(prepaid_execution_cycles);
+            .min_nominal(prepaid_execution_cycles);
         system_state.refund_cycles(prepaid_execution_cycles, cycles_to_refund);
     }
 
@@ -954,7 +954,7 @@ impl CyclesAccountManager {
         );
         // The prepayment covers the fixed per-message execution fee, but clamp the
         // charge to it so that no more than the prepayment is ever charged.
-        let charge = base_fee.min(prepayment_for_response_execution);
+        let charge = base_fee.min_nominal(prepayment_for_response_execution);
         system_state.refund_cycles(
             prepayment_for_response_execution,
             prepayment_for_response_execution - charge,
@@ -1001,7 +1001,7 @@ impl CyclesAccountManager {
             subnet_cycles_config,
         );
         prepayment_for_response_transmission
-            - transmission_cost.min(prepayment_for_response_transmission)
+            - transmission_cost.min_nominal(prepayment_for_response_transmission)
     }
 
     ////////////////////////////////////////////////////////////////////////////

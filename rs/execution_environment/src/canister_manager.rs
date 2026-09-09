@@ -2408,7 +2408,7 @@ impl CanisterManager {
                     subnet_cycles_config,
                     wasm_execution_mode,
                 )
-                .min(prepaid_execution_cycles);
+                .min_nominal(prepaid_execution_cycles);
             consumed_cycles.add(
                 prepaid_execution_cycles - cycles_to_refund,
                 instructions_for_execution,
