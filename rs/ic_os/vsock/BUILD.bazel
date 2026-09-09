@@ -9,13 +9,13 @@ rust_library(
         exclude = ["src/bin/**"],
     ),
     deps = [
+        "@crate_index//:mockall",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:thiserror",
     ] + select({
         "@platforms//os:linux": [
             "//rs/http_utils",
-            "@crate_index//:mockall",
             "@crate_index//:procfs",
             "@crate_index//:rusb",
             "@crate_index//:tempfile",

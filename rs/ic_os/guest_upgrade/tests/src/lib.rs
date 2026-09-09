@@ -256,7 +256,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
                         .send(client_result)
                         .expect("Failed to send client result")
                 });
-                Ok(Payload::NoPayload)
+                Ok(Ok(Payload::NoPayload))
             });
 
         let server_agent = self.create_server_agent(vsock_client);
@@ -511,7 +511,7 @@ async fn test_server_timeout() {
         .return_once(move |_| {
             println!("Not starting upgrade client - simulating timeout");
             // Don't start the client - this will cause the server to timeout
-            Ok(Payload::NoPayload)
+            Ok(Ok(Payload::NoPayload))
         });
 
     let replica_version = ReplicaVersion::try_from(REPLICA_VERSION).unwrap();
@@ -623,7 +623,7 @@ async fn test_start_upgrade_vm_command_fails() {
         .expect_send_command()
         .once()
         .withf(|command| matches!(command, Command::StartUpgradeGuestVM))
-        .return_once(move |_| Err("boom".to_string()));
+        .return_once(move |_| Ok(Err("boom".to_string())));
 
     let replica_version = ReplicaVersion::try_from(REPLICA_VERSION).unwrap();
     let result = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default())

@@ -8,13 +8,13 @@ edition.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true } # only needed by bin, can't express in direct Cargo.toml
+mockall = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ic-http-utils = { path = "../../http_utils" }
-mockall = { workspace = true }
 procfs = { workspace = true }
 # vendored: build the bundled libusb instead of linking the system one, so
 # neither build needs libusb-1.0-0-dev (Bazel additionally disables the

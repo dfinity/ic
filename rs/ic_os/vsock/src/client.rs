@@ -1,6 +1,9 @@
 use crate::error::*;
 use crate::protocol::{Command, MAX_MESSAGE_SIZE, Response};
 
+use mockall::automock;
+
+#[automock]
 pub trait VsockClient {
     fn send_command(&self, command: Command) -> Result<Response, VsockClientError>;
 }
