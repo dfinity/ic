@@ -1462,6 +1462,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 "State has resulted from a subnet merge, recording in-progress ingress messages"
             );
             state.after_merge(
+                batch.time,
                 self.ingress_history_memory_capacity,
                 |message_id, status| {
                     self.metrics.observe_unexpected_ingress_status_after_merge(

@@ -1454,11 +1454,14 @@ fn online_split() {
 fn after_merge() {
     const CANISTER_1: CanisterId = CanisterId::from_u64(1);
     const CANISTER_2: CanisterId = CanisterId::from_u64(2);
-    const CANISTERS: [CanisterId; 2] = [CANISTER_1, CANISTER_2];
 
     // A time different from the state time (`UNIX_EPOCH`), so that pre-existing
     // ingress history entries can be told apart from newly recorded ones.
     let before = Time::from_nanos_since_unix_epoch(13);
+    // The time of the batch being processed. Different from both the state time
+    // and `before`, to ensure that newly recorded entries are timestamped with the
+    // batch time (as opposed to the time of the state resulting from the merge).
+    let batch_time = Time::from_nanos_since_unix_epoch(42);
 
     // Makes a not yet responded call context with the given origin.
     fn open_call_context(call_origin: CallOrigin) -> CallContext {
@@ -1490,7 +1493,37 @@ fn after_merge() {
         state,
     };
 
-    let mut fixture = ReplicatedStateFixture::with_canisters(&CANISTERS);
+    // Start off with `CANISTER_1` only, as `CANISTER_2` was hosted by another subnet
+    // before the merge.
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_1]);
+
+    // An input from `CANISTER_2` to `CANISTER_1`, enqueued while `CANISTER_2` was
+    // still remote, so it landed in `CANISTER_1`'s remote sender schedule.
+    assert!(
+        fixture
+            .push_input(
+                RequestBuilder::default()
+                    .sender(CANISTER_2)
+                    .receiver(CANISTER_1)
+                    .build()
+                    .into(),
+            )
+            .unwrap()
+    );
+    assert!(fixture.local_subnet_input_schedule(&CANISTER_1).is_empty());
+    assert_eq!(
+        &VecDeque::from(vec![CANISTER_2]),
+        fixture.remote_subnet_input_schedule(&CANISTER_1)
+    );
+
+    // `CANISTER_2` is now hosted by the merged subnet.
+    let canister_2_fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_2]);
+    let canister_2_state = canister_2_fixture
+        .state
+        .canister_state(&CANISTER_2)
+        .unwrap()
+        .clone();
+    fixture.state.put_canister_state(canister_2_state);
 
     // An in-progress ingress message to `CANISTER_1`, with no ingress history entry.
     let canister_1 = fixture.state.canister_state_make_mut(&CANISTER_1).unwrap();
@@ -1542,14 +1575,31 @@ fn after_merge() {
     state.metadata.subnet_merged = true;
 
     let unexpected_statuses = RefCell::new(Vec::new());
-    state.after_merge(NumBytes::from(u64::MAX), |message_id, status| {
-        unexpected_statuses
-            .borrow_mut()
-            .push((message_id.clone(), status.clone()));
-    });
+    state.after_merge(
+        batch_time,
+        NumBytes::from(u64::MAX),
+        |message_id, status| {
+            unexpected_statuses
+                .borrow_mut()
+                .push((message_id.clone(), status.clone()));
+        },
+    );
 
     // The merge marker was reset.
     assert!(!state.metadata.subnet_merged);
+
+    // And `CANISTER_2` was moved from `CANISTER_1`'s remote to its local sender
+    // schedule, now that both canisters are hosted by the same subnet.
+    let queues = state
+        .canister_state(&CANISTER_1)
+        .unwrap()
+        .system_state
+        .queues();
+    assert_eq!(
+        &VecDeque::from(vec![CANISTER_2]),
+        queues.local_sender_schedule()
+    );
+    assert!(queues.remote_sender_schedule().is_empty());
 
     // Only the `Received` entry of message 6 was reported as unexpected.
     assert_eq!(
@@ -1557,16 +1607,16 @@ fn after_merge() {
         unexpected_statuses.into_inner()
     );
 
-    // Messages 1 and 4 were recorded as `Processing` at the state time; the existing
+    // Messages 1 and 4 were recorded as `Processing` at the batch time; the existing
     // entries of messages 5 and 6 were left alone; and nothing else was recorded.
     let expected = BTreeMap::from([
         (
             message_test_id(1),
-            ingress_status(CANISTER_1, 1, UNIX_EPOCH, IngressState::Processing),
+            ingress_status(CANISTER_1, 1, batch_time, IngressState::Processing),
         ),
         (
             message_test_id(4),
-            ingress_status(CANISTER_2, 4, UNIX_EPOCH, IngressState::Processing),
+            ingress_status(CANISTER_2, 4, batch_time, IngressState::Processing),
         ),
         (message_test_id(5), processing_5),
         (message_test_id(6), received_6),
@@ -1585,9 +1635,11 @@ fn after_merge() {
 #[test]
 #[should_panic(expected = "Not a state resulting from a subnet merge")]
 fn after_merge_without_merge_marker() {
-    ReplicatedStateFixture::new()
-        .state
-        .after_merge(NumBytes::from(u64::MAX), |_, _| {});
+    ReplicatedStateFixture::new().state.after_merge(
+        UNIX_EPOCH,
+        NumBytes::from(u64::MAX),
+        |_, _| {},
+    );
 }
 
 #[test]

@@ -1614,13 +1614,23 @@ impl ReplicatedState {
     }
 
     /// Makes adjustments to the replicated state during the first round after a
-    /// subnet merge: resets the "subnet was merged" marker and records all
-    /// not yet responded ingress-induced call contexts as `Processing` in the
-    /// ingress history.
+    /// subnet merge:
+    ///
+    ///  * Resets the "subnet was merged" marker.
+    ///  * Updates canisters' input schedules, based on `self.canister_states`.
+    ///  * Records all not yet responded ingress-induced call contexts as
+    ///    `Processing` in the ingress history.
+    ///
+    /// Canisters hosted by the other merged subnets used to be remote and are now
+    /// local, so their input queues may sit in the wrong input schedule. As with a
+    /// subnet split, the schedules are explicitly re-partitioned, because a queue
+    /// in the wrong schedule is only corrected once it becomes empty (which is not
+    /// guaranteed to ever happen).
     ///
     /// The ingress history of the merged subnet does not necessarily cover the
     /// in-progress ingress messages of all merged subnets, so the corresponding
-    /// entries are (re)created here, ensuring that every in-progress ingress
+    /// entries are (re)created here (timestamped with `batch_time`, the time of
+    /// the batch being processed), ensuring that every in-progress ingress
     /// message can be tracked to completion.
     ///
     /// Only call contexts of canisters are considered; subnet call contexts are
@@ -1632,18 +1642,46 @@ impl ReplicatedState {
     /// `on_unexpected_ingress_status()` (as it indicates a bug).
     pub fn after_merge(
         &mut self,
+        batch_time: Time,
         ingress_memory_capacity: NumBytes,
         on_unexpected_ingress_status: impl Fn(&MessageId, &IngressStatus),
     ) {
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS A `match`!
+        let Self {
+            canister_states,
+            metadata,
+            subnet_queues: _,
+            consensus_queue: _,
+            refunds: _,
+            epoch_query_stats: _,
+        } = self;
+
         assert!(
-            self.metadata.subnet_merged,
+            metadata.subnet_merged,
             "Not a state resulting from a subnet merge"
         );
-        self.metadata.subnet_merged = false;
+        metadata.subnet_merged = false;
 
-        let time = self.time();
-        let ingress_statuses = self
-            .canisters_iter()
+        // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which
+        // canisters are present in `canister_states`.
+        let local_canister_ids = canister_states.all_keys().cloned().collect::<Vec<_>>();
+        for canister_id in local_canister_ids.iter() {
+            let mut canister_state = canister_states.remove(canister_id).unwrap();
+            if canister_state.has_input() {
+                Arc::make_mut(&mut canister_state)
+                    .system_state
+                    .split_input_schedules(canister_id, canister_states);
+            }
+            canister_states.insert(canister_state);
+        }
+
+        // Record all not yet responded ingress-induced call contexts as `Processing`
+        // in the ingress history.
+        let ingress_statuses = canister_states
+            .all_values()
             .flat_map(|canister_state| {
                 let receiver = canister_state.canister_id().get();
                 canister_state
@@ -1658,7 +1696,7 @@ impl ReplicatedState {
                             IngressStatus::Known {
                                 receiver,
                                 user_id: *user_id,
-                                time,
+                                time: batch_time,
                                 state: IngressState::Processing,
                             },
                         )),
@@ -1671,10 +1709,16 @@ impl ReplicatedState {
             .collect::<Vec<_>>();
 
         for (message_id, status) in ingress_statuses {
-            match self.metadata.ingress_history.get(&message_id).cloned() {
+            match metadata.ingress_history.get(&message_id) {
                 // No entry yet, record the in-progress ingress message.
                 None => {
-                    self.set_ingress_status(message_id, status, ingress_memory_capacity, |_| {});
+                    metadata.ingress_history.insert(
+                        message_id,
+                        status,
+                        batch_time,
+                        ingress_memory_capacity,
+                        |_| {},
+                    );
                 }
 
                 // Already recorded as `Processing`, nothing to do.
@@ -1686,7 +1730,7 @@ impl ReplicatedState {
                 // Any other status indicates a bug, report it. The existing entry is
                 // preserved, as overwriting a terminal status would be worse.
                 Some(unexpected_status) => {
-                    on_unexpected_ingress_status(&message_id, &unexpected_status)
+                    on_unexpected_ingress_status(&message_id, unexpected_status)
                 }
             }
         }
