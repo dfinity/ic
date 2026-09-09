@@ -19,7 +19,7 @@ use crate::{
 };
 use ic_protobuf::types::v1 as pb;
 use serde_with::serde_as;
-use std::{collections::BTreeMap, ops::RangeBounds};
+use std::collections::BTreeMap;
 
 /// Contains a Node's contribution to a DKG dealing.
 pub type Message = BasicSigned<DealingContent>;
@@ -47,10 +47,9 @@ pub struct DkgMessageId {
 }
 
 impl DkgMessageId {
-    /// Returns a range bound that includes all DKG messages with a height less than the given
-    /// height.
-    pub fn less_than_height(height: Height) -> impl RangeBounds<DkgMessageId> {
-        ..DkgMessageId {
+    /// Returns the lexicographically-smallest DkgMessageId at the given height.
+    pub fn smallest_at_height(height: Height) -> Self {
+        Self {
             height,
             // The lexicographically-smallest possible hash is an empty vector
             hash: CryptoHashOf::from(CryptoHash(vec![])),
@@ -945,6 +944,8 @@ mod tests {
 
     #[test]
     fn test_dkg_message_id_less_than_height() {
+        const TEST_HASHES: [Vec<u8>; 4] = [vec![], vec![0], vec![42; 32], vec![u8::MAX; 32]];
+
         fn message_id(height: u64, hash: &[u8]) -> DkgMessageId {
             DkgMessageId {
                 height: Height::from(height),
@@ -952,25 +953,36 @@ mod tests {
             }
         }
 
-        let range = DkgMessageId::less_than_height(Height::from(10));
+        let smallest_at_height = DkgMessageId::smallest_at_height(Height::from(10));
         for height in [0, 1, 9] {
-            for hash in [vec![], vec![0], vec![42; 32], vec![u8::MAX; 32]] {
-                let id = message_id(height, &hash);
-                assert!(range.contains(&id), "expected {id:?} to be in range");
+            for hash in &TEST_HASHES {
+                let id = message_id(height, hash);
+                assert!(
+                    id < smallest_at_height,
+                    "expected {id:?} to be less than smallest_at_height"
+                );
             }
         }
         for height in [10, 11, u64::MAX] {
-            for hash in [vec![], vec![0], vec![42; 32], vec![u8::MAX; 32]] {
-                let id = message_id(height, &hash);
-                assert!(!range.contains(&id), "expected {id:?} to be out of range");
+            for hash in &TEST_HASHES {
+                let id = message_id(height, hash);
+                assert!(
+                    smallest_at_height <= id,
+                    "expected {id:?} to be greater than or equal to smallest_at_height"
+                );
             }
         }
 
         // Edge-case: height is 0
-        let range = DkgMessageId::less_than_height(Height::from(0));
-        for hash in [vec![], vec![0], vec![u8::MAX; 32]] {
-            let id = message_id(0, &hash);
-            assert!(!range.contains(&id), "expected {id:?} to be out of range");
+        let smallest_at_height = DkgMessageId::smallest_at_height(Height::from(0));
+        for height in [0, 1, u64::MAX] {
+            for hash in &TEST_HASHES {
+                let id = message_id(height, hash);
+                assert!(
+                    smallest_at_height <= id,
+                    "expected {id:?} to be greater than or equal to smallest_at_height"
+                );
+            }
         }
     }
 }

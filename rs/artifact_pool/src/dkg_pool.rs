@@ -58,11 +58,13 @@ impl DkgPoolImpl {
     /// purged
     fn purge(&mut self, height: Height) -> Vec<DkgMessageId> {
         self.current_start_height = height;
-        self.unvalidated
-            .extract_keys_in(DkgMessageId::less_than_height(height));
 
+        let _ = self
+            .unvalidated
+            .extract_keys_below(&DkgMessageId::smallest_at_height(height));
         self.validated
-            .extract_keys_in(DkgMessageId::less_than_height(height))
+            .extract_keys_below(&DkgMessageId::smallest_at_height(height))
+            .collect()
     }
 }
 
