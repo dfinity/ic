@@ -4,8 +4,8 @@ Hold manifest common to all GuestOS variants.
 
 load(
     "//ic-os/components:guestos.bzl",
-    "upgrade_overlay_component_files",
     "component_files",
+    "upgrade_overlay_component_files",
 )
 
 # Declare the dependencies that we will have for the built filesystem images.
