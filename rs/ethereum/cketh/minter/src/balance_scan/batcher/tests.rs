@@ -73,6 +73,77 @@ fn initcode_matches_readable_assembly() {
 }
 
 #[test]
+fn eth_initcode_matches_readable_assembly() {
+    use Op::*;
+
+    // The byte-for-byte source of truth for ETH_BATCHER_INITCODE, as a commented EVM assembly
+    // listing. A create-style `eth_call` runs this as init code; it reads its args appended
+    // right after the code (`[n][ holder x n ]`, from code offset ARGS_START) and RETURNs each
+    // holder's ETH balance, read with the BALANCE opcode. No sub-calls, so unlike the ERC-20
+    // batcher nothing here can fail: the program has no revert path.
+    //
+    // Memory layout (all offsets in bytes):
+    //   [0x00] n    [0x20] loop counter i    [0x40] holder (rewritten per iteration)
+    //   [OUTPUT..]  returned balances (n x 32 bytes)
+    const ARGS_START: u16 = 0x4e; // == ETH_BATCHER_INITCODE.len(): the `n` word sits right after the code
+    const FIRST_HOLDER: u16 = 0x6e; // == ARGS_START + WORD: first holder word
+    const OUTPUT: u8 = 0x60; // start of the returned balances region in memory
+    const LOOP: u16 = 0x0d; // JUMPDEST at the top of the per-holder loop
+    const DONE: u16 = 0x44; // JUMPDEST for the RETURN path
+
+    #[rustfmt::skip]
+    let program = assemble(&[
+        // mem[0x00] = n  (one word copied from code[ARGS_START])
+        Push1(0x20), Push2(ARGS_START), Push1(0x00), Codecopy,
+        // mem[0x20] = i = 0
+        Push1(0x00), Push1(0x20), Mstore,
+        Jumpdest, // LOOP
+        // if !(i < n) goto DONE
+        Push1(0x00), Mload, Push1(0x20), Mload, Lt, IsZero, Push2(DONE), Jumpi,
+        // mem[0x40] = holder = code[FIRST_HOLDER + i * 0x20]
+        Push1(0x20), Push1(0x20), Mload, Push1(0x20), Mul, Push2(FIRST_HOLDER), Add,
+        Push1(0x40), Codecopy,
+        // mem[OUTPUT + i * 0x20] = BALANCE(holder)
+        Push1(0x40), Mload, Balance,
+        Push1(0x20), Mload, Push1(0x20), Mul, Push1(OUTPUT), Add, Mstore,
+        // i += 1; goto LOOP
+        Push1(0x20), Mload, Push1(0x01), Add, Push1(0x20), Mstore, Push2(LOOP), Jump,
+        Jumpdest, // DONE: RETURN(OUTPUT, n * 0x20)
+        Push1(0x00), Mload, Push1(0x20), Mul, Push1(OUTPUT), Return,
+    ]);
+
+    assert_eq!(program, ETH_BATCHER_INITCODE);
+    // Offsets baked into the code must match the actual layout.
+    assert_eq!(ARGS_START as usize, ETH_BATCHER_INITCODE.len());
+    assert_eq!(FIRST_HOLDER, ARGS_START + WORD as u16);
+}
+
+#[test]
+fn encode_eth_single_holder_golden_vector() {
+    let encoded = encode_eth_balance_batch(&[HOLDER0]);
+
+    assert_eq!(encoded.len(), ETH_BATCHER_INITCODE.len() + 2 * WORD);
+    assert_eq!(
+        &encoded[..ETH_BATCHER_INITCODE.len()],
+        &ETH_BATCHER_INITCODE
+    );
+    let args = &encoded[ETH_BATCHER_INITCODE.len()..];
+    assert_eq!(&args[0..32], &word(1)); // n
+    assert_eq!(&args[32..64], &left_padded_address(HOLDER0.as_address()));
+}
+
+#[test]
+fn encode_eth_two_holders_layout() {
+    let encoded = encode_eth_balance_batch(&[HOLDER0, HOLDER1]);
+
+    assert_eq!(encoded.len(), ETH_BATCHER_INITCODE.len() + WORD * (1 + 2));
+    let args = &encoded[ETH_BATCHER_INITCODE.len()..];
+    assert_eq!(&args[0..32], &word(2));
+    assert_eq!(&args[32..64], &left_padded_address(HOLDER0.as_address()));
+    assert_eq!(&args[64..96], &left_padded_address(HOLDER1.as_address()));
+}
+
+#[test]
 fn encode_single_call_golden_vector() {
     let encoded = encode_balance_batch(&[BalanceOfCall {
         token: TOKEN0,
@@ -178,6 +249,7 @@ enum Op {
     Gas,
     Mload,
     Mstore,
+    Balance,
     Jump,
     Jumpi,
     Jumpdest,
@@ -205,6 +277,7 @@ fn assemble(ops: &[Op]) -> Vec<u8> {
             Op::Lt => out.push(0x10),
             Op::Eq => out.push(0x14),
             Op::IsZero => out.push(0x15),
+            Op::Balance => out.push(0x31),
             Op::Codecopy => out.push(0x39),
             Op::Gas => out.push(0x5a),
             Op::Mload => out.push(0x51),

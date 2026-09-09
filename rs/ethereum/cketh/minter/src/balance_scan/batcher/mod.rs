@@ -83,6 +83,26 @@ pub const MAX_CALLS_PER_BATCH: usize = {
     }
 };
 
+/// Deployless ETH balance-batcher creation bytecode.
+///
+/// The native-ETH sibling of [`BATCHER_INITCODE`], executed the same way (create-style
+/// `eth_call`, `to` omitted). It reads its inputs from the calldata appended right after this
+/// bytecode (`[n][ holder x n ]`, one 32-byte word each) and, for each holder, reads its ETH
+/// balance with the `BALANCE` opcode — no sub-calls, so unlike the ERC-20 batcher nothing here
+/// can fail and the program has no revert path. On success it returns the balances as a flat
+/// `n x 32`-byte array (no ABI array header), decoded positionally by [`decode_balance_batch`].
+///
+/// The program is fixed regardless of `n` (only the appended args grow). It was assembled from
+/// the opcode listing in `eth_initcode_matches_readable_assembly` and validated against a live
+/// anvil node; see `rs/ethereum/cketh/minter/tests/deposit_from_cex.rs`.
+pub const ETH_BATCHER_INITCODE: [u8; 78] = [
+    0x60, 0x20, 0x61, 0x00, 0x4e, 0x60, 0x00, 0x39, 0x60, 0x00, 0x60, 0x20, 0x52, 0x5b, 0x60, 0x00,
+    0x51, 0x60, 0x20, 0x51, 0x10, 0x15, 0x61, 0x00, 0x44, 0x57, 0x60, 0x20, 0x60, 0x20, 0x51, 0x60,
+    0x20, 0x02, 0x61, 0x00, 0x6e, 0x01, 0x60, 0x40, 0x39, 0x60, 0x40, 0x51, 0x31, 0x60, 0x20, 0x51,
+    0x60, 0x20, 0x02, 0x60, 0x60, 0x01, 0x52, 0x60, 0x20, 0x51, 0x60, 0x01, 0x01, 0x60, 0x20, 0x52,
+    0x61, 0x00, 0x0d, 0x56, 0x5b, 0x60, 0x00, 0x51, 0x60, 0x20, 0x02, 0x60, 0x60, 0xf3,
+];
+
 /// Function selector for `balanceOf(address)`, i.e. `keccak256("balanceOf(address)")[..4]`.
 /// Embedded in [`BATCHER_INITCODE`] right after its leading `PUSH32` opcode; asserted by tests.
 #[cfg(test)]
@@ -111,6 +131,18 @@ pub fn encode_balance_batch(calls: &[BalanceOfCall]) -> Vec<u8> {
     for call in calls {
         out.extend_from_slice(&left_padded_address(&call.token));
         out.extend_from_slice(&left_padded_address(call.holder.as_address()));
+    }
+    out
+}
+
+/// Build the create-call `input` for a batch of ETH balance reads:
+/// `ETH_BATCHER_INITCODE ++ [n] ++ [ holder x n ]`, every value a 32-byte word.
+pub fn encode_eth_balance_batch(holders: &[DepositAddress]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(ETH_BATCHER_INITCODE.len() + WORD * (1 + holders.len()));
+    out.extend_from_slice(&ETH_BATCHER_INITCODE);
+    out.extend_from_slice(&word_from_usize(holders.len()));
+    for holder in holders {
+        out.extend_from_slice(&left_padded_address(holder.as_address()));
     }
     out
 }
