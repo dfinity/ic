@@ -3,12 +3,15 @@ use std::{
     convert::TryFrom,
 };
 
-use crate::invariants::{
-    common::{
-        InvariantCheckError, RegistrySnapshot, get_node_record_from_snapshot,
-        get_subnet_ids_from_snapshot, get_value_from_snapshot,
+use crate::{
+    invariants::{
+        common::{
+            InvariantCheckError, RegistrySnapshot, get_node_record_from_snapshot,
+            get_subnet_ids_from_snapshot, get_value_from_snapshot,
+        },
+        replica_version::has_launch_measurements,
     },
-    replica_version::has_launch_measurements,
+    mutations::common::normalized_canister_cycles_cost_schedule,
 };
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId, subnet_id_try_from_protobuf};
@@ -277,6 +280,48 @@ pub(crate) fn get_subnet_records_map(
         }
     }
     subnets
+}
+
+/// Checks that no subnet changes its cycles cost schedule.
+///
+/// The cost schedule a canister is charged under has to stay put for as long as the
+/// canister has calls in flight: the cycles prepaid for a response execution are
+/// settled against the cycles that execution requires, derived when the response is
+/// executed (`CyclesAccountManager::adjust_prepayment_for_response_execution`), and
+/// the two amounts are only comparable if both were derived under the same cost
+/// schedule. An amount that is free under the free cost schedule has a zero real part
+/// but a non-zero nominal one, so settling across a switch either forfeits the real
+/// part of the prepayment or credits real cycles that were never withdrawn.
+///
+/// A subnet is assigned its cost schedule when it is created and no payload exposes a
+/// field to change it afterwards, so this invariant is a backstop: it holds whichever
+/// path a mutation of a subnet record takes.
+///
+/// `previous_cost_schedules` maps the registry key of a subnet record to the cost
+/// schedule that subnet had before the mutations under check were applied; subnets
+/// missing from it are newly created and are free to pick any cost schedule.
+pub(crate) fn check_subnet_cost_schedule_immutability(
+    previous_cost_schedules: &BTreeMap<Vec<u8>, CanisterCyclesCostSchedule>,
+    snapshot: &RegistrySnapshot,
+) -> Result<(), InvariantCheckError> {
+    for (key, subnet_record) in get_subnet_records_map(snapshot) {
+        let Some(previous_cost_schedule) = previous_cost_schedules.get(&key) else {
+            continue;
+        };
+        let cost_schedule = normalized_canister_cycles_cost_schedule(&subnet_record);
+        if cost_schedule != *previous_cost_schedule {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Subnet record {} changes its cycles cost schedule from \
+                    {previous_cost_schedule:?} to {cost_schedule:?}",
+                    String::from_utf8_lossy(&key),
+                ),
+                source: None,
+            });
+        }
+    }
+
+    Ok(())
 }
 
 /// SEV-enabled subnets must consist of SEV-supporting nodes only, and must run a

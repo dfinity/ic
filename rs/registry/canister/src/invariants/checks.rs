@@ -13,9 +13,10 @@ use crate::{
         replica_version::check_replica_version_invariants,
         routing_table::{check_canister_migrations_invariants, check_routing_table_invariants},
         standard_engine_replica_version::check_standard_engine_replica_version_invariants,
-        subnet::check_subnet_invariants,
+        subnet::{check_subnet_cost_schedule_immutability, check_subnet_invariants},
         unassigned_nodes_config::check_unassigned_nodes_config_invariants,
     },
+    mutations::common::normalized_canister_cycles_cost_schedule,
     registry::Registry,
     storage::with_chunks,
 };
@@ -23,10 +24,14 @@ use crate::{
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_nervous_system_string::clamp_debug_len;
+use ic_protobuf::registry::subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord};
 use ic_registry_canister_chunkify::dechunkify;
+use ic_registry_keys::SUBNET_RECORD_KEY_PREFIX;
 use ic_registry_transport::pb::v1::{
     RegistryMutation, high_capacity_registry_value, registry_mutation::Type,
 };
+use prost::Message;
+use std::collections::BTreeMap;
 
 impl Registry {
     pub fn check_changelog_version_invariants(&self) {
@@ -71,6 +76,7 @@ impl Registry {
             )
         );
 
+        let previous_subnet_cost_schedules = self.latest_subnet_cost_schedules();
         let snapshot = self.take_latest_snapshot_with_mutations(mutations);
 
         // Node invariants
@@ -96,6 +102,10 @@ impl Registry {
 
         // Subnet invariants
         result = result.and(check_subnet_invariants(&snapshot));
+        result = result.and(check_subnet_cost_schedule_immutability(
+            &previous_subnet_cost_schedules,
+            &snapshot,
+        ));
 
         // Replica version invariants
         result = result.and(check_replica_version_invariants(&snapshot));
@@ -127,6 +137,29 @@ impl Registry {
                 LOG_PREFIX, e.msg
             );
         }
+    }
+
+    /// Returns the cycles cost schedule of every subnet in the registry as of the
+    /// latest version, i.e. before the mutations under check are applied, keyed by the
+    /// registry key of the subnet record.
+    ///
+    /// Unlike `take_latest_snapshot`, this only decodes the subnet records, of which
+    /// there are few, so that `check_subnet_cost_schedule_immutability` does not
+    /// require a second snapshot of the whole registry.
+    fn latest_subnet_cost_schedules(&self) -> BTreeMap<Vec<u8>, CanisterCyclesCostSchedule> {
+        let version = self.latest_version();
+        self.store
+            .keys()
+            .filter(|key| key.starts_with(SUBNET_RECORD_KEY_PREFIX.as_bytes()))
+            .filter_map(|key| {
+                let value = self.get(key, version)?;
+                let subnet_record = SubnetRecord::decode(value.value.as_slice()).ok()?;
+                Some((
+                    key.clone(),
+                    normalized_canister_cycles_cost_schedule(&subnet_record),
+                ))
+            })
+            .collect()
     }
 
     fn take_latest_snapshot_with_mutations(
@@ -184,7 +217,13 @@ impl Registry {
 
 #[cfg(test)]
 mod tests {
-    use crate::registry::EncodedVersion;
+    use crate::{
+        common::test_helpers::{
+            add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+            prepare_registry_with_nodes,
+        },
+        registry::EncodedVersion,
+    };
 
     use super::*;
     use ic_base_types::CanisterId;
@@ -197,12 +236,14 @@ mod tests {
     };
     use ic_registry_keys::{
         make_canister_migrations_record_key, make_canister_ranges_key,
-        make_node_operator_record_key,
+        make_node_operator_record_key, make_subnet_record_key,
     };
     use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
+    use ic_registry_subnet_type::SubnetType;
     use ic_registry_transport::{
         delete, insert,
         pb::v1::{RegistryAtomicMutateRequest, RegistryMutation},
+        update,
     };
     use ic_test_utilities_types::ids::subnet_test_id;
     use maplit::btreemap;
@@ -370,6 +411,37 @@ mod tests {
         let snapshot = registry.take_latest_snapshot_with_mutations(&mutations);
         let snapshot_data = snapshot.get(key.as_bytes());
         assert!(snapshot_data.is_none());
+    }
+
+    /// The cycles cost schedule of a subnet must not change, whichever mutation would
+    /// change it; see `check_subnet_cost_schedule_immutability`.
+    #[test]
+    #[should_panic(expected = "changes its cycles cost schedule from Normal to Free")]
+    fn subnet_cost_schedule_change_invariants_check_panic() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // Add an application subnet: `check_subnet_invariants` permits either cost
+        // schedule for those, so this invariant is the one under test.
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let mut subnet_list_record = registry.get_subnet_list_record();
+        let mut subnet_record =
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
+        subnet_record.subnet_type = i32::from(SubnetType::Application);
+        let subnet_id = subnet_test_id(1000);
+        let subnet_mutation = add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record.clone(),
+            &node_ids_and_dkg_pks,
+        );
+        registry.maybe_apply_mutation_internal(subnet_mutation);
+
+        subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
+        registry.maybe_apply_mutation_internal(vec![update(
+            make_subnet_record_key(subnet_id).as_bytes(),
+            subnet_record.encode_to_vec(),
+        )]);
     }
 }
 

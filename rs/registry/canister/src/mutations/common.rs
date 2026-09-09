@@ -1,7 +1,8 @@
 use crate::{common::key_family::get_key_family_iter, registry::Registry};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::{
-    replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetListRecord,
+    replica_version::v1::ReplicaVersionRecord,
+    subnet::v1::{CanisterCyclesCostSchedule, SubnetListRecord, SubnetRecord},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
@@ -10,6 +11,22 @@ use ic_registry_keys::{
 };
 use prost::Message;
 use std::{cmp::Eq, collections::HashSet, convert::TryFrom, hash::Hash};
+
+/// Returns the cycles cost schedule of `subnet_record`, with `Unspecified` normalized
+/// to `Normal`.
+///
+/// A subnet record that predates the field leaves it `Unspecified`, which the replica
+/// reads as `Normal` (cf. `Registry::get_subnet`), so the two must compare equal.
+pub(crate) fn normalized_canister_cycles_cost_schedule(
+    subnet_record: &SubnetRecord,
+) -> CanisterCyclesCostSchedule {
+    match subnet_record.canister_cycles_cost_schedule() {
+        CanisterCyclesCostSchedule::Unspecified | CanisterCyclesCostSchedule::Normal => {
+            CanisterCyclesCostSchedule::Normal
+        }
+        CanisterCyclesCostSchedule::Free => CanisterCyclesCostSchedule::Free,
+    }
+}
 
 pub fn get_subnet_ids_from_subnet_list(subnet_list: SubnetListRecord) -> Vec<SubnetId> {
     subnet_list

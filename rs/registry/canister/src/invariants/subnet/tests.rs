@@ -580,6 +580,80 @@ fn only_cloud_engine_subnets_can_have_type4_nodes() {
     );
 }
 
+#[test]
+fn subnet_cycles_cost_schedule_is_immutable() {
+    let key = make_subnet_record_key(subnet_test_id(1)).into_bytes();
+    let snapshot_with = |cost_schedule: CanisterCyclesCostSchedule| {
+        let subnet_record = SubnetRecord {
+            canister_cycles_cost_schedule: i32::from(cost_schedule),
+            ..Default::default()
+        };
+        let mut snapshot = RegistrySnapshot::new();
+        snapshot.insert(key.clone(), subnet_record.encode_to_vec());
+        snapshot
+    };
+
+    // A newly created subnet may pick any cost schedule.
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Unspecified,
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        check_subnet_cost_schedule_immutability(&BTreeMap::new(), &snapshot_with(cost_schedule))
+            .unwrap();
+    }
+
+    // Keeping the cost schedule is fine, ...
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let previous_cost_schedules = BTreeMap::from([(key.clone(), cost_schedule)]);
+        check_subnet_cost_schedule_immutability(
+            &previous_cost_schedules,
+            &snapshot_with(cost_schedule),
+        )
+        .unwrap();
+    }
+
+    // ... as is leaving it `Unspecified`, which means `Normal`.
+    let previous_cost_schedules =
+        BTreeMap::from([(key.clone(), CanisterCyclesCostSchedule::Normal)]);
+    check_subnet_cost_schedule_immutability(
+        &previous_cost_schedules,
+        &snapshot_with(CanisterCyclesCostSchedule::Unspecified),
+    )
+    .unwrap();
+
+    // Changing the cost schedule is not, in either direction.
+    for (previous_cost_schedule, cost_schedule) in [
+        (
+            CanisterCyclesCostSchedule::Normal,
+            CanisterCyclesCostSchedule::Free,
+        ),
+        (
+            CanisterCyclesCostSchedule::Free,
+            CanisterCyclesCostSchedule::Normal,
+        ),
+        (
+            CanisterCyclesCostSchedule::Free,
+            CanisterCyclesCostSchedule::Unspecified,
+        ),
+    ] {
+        let previous_cost_schedules = BTreeMap::from([(key.clone(), previous_cost_schedule)]);
+        let err = check_subnet_cost_schedule_immutability(
+            &previous_cost_schedules,
+            &snapshot_with(cost_schedule),
+        )
+        .expect_err("Expected the change of the cycles cost schedule to be rejected");
+        assert!(
+            err.msg.contains("changes its cycles cost schedule"),
+            "unexpected error message: {}",
+            err.msg
+        );
+    }
+}
+
 fn setup_minimal_registry_snapshot_for_check_subnet_invariants(
     system_subnet_id: SubnetId,
     test_subnet_id: SubnetId,

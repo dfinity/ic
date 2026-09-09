@@ -1,7 +1,10 @@
-use crate::registry::{Registry, Version};
+use crate::{
+    mutations::common::normalized_canister_cycles_cost_schedule,
+    registry::{Registry, Version},
+};
 use candid::CandidType;
 use ic_base_types::SubnetId;
-use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
+use ic_protobuf::registry::subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType};
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, WellFormedError, are_disjoint, is_subset_of,
 };
@@ -32,6 +35,10 @@ pub enum PrepareCanisterMigrationError {
         /*destination size=*/ usize,
     ),
     SubnetTypesMismatch(Option<SubnetType>, Option<SubnetType>),
+    CostSchedulesMismatch(
+        /*source schedule=*/ CanisterCyclesCostSchedule,
+        /*destination schedule=*/ CanisterCyclesCostSchedule,
+    ),
     CanisterIdsNotWellFormed(WellFormedError),
     UnhostedCanisterIds,
     CanisterIdsAlreadyBeingMigrated(CanisterIdRanges),
@@ -119,8 +126,9 @@ impl Registry {
 /// Validates that the subnets satisfy the following conditions:
 /// 1. Both subnets have the same size,
 /// 2. Both subnets have the same type,
-/// 3. Neither of the subnets is a signing subnet, and
-/// 4. Both subnets are Application subnets.
+/// 3. Both subnets have the same cycles cost schedule,
+/// 4. Neither of the subnets is a signing subnet, and
+/// 5. Both subnets are Application subnets.
 fn validate_subnets(
     source_subnet_id: SubnetId,
     source_subnet_record: &SubnetRecord,
@@ -179,6 +187,25 @@ fn validate_subnets_consistency(
         ));
     }
 
+    // A migrated canister carries its callbacks along, and each callback records the
+    // cycles prepaid for its response execution under the cost schedule of the subnet
+    // on which the call was performed. When the response is executed, that prepayment
+    // is settled against the cycles the execution requires, derived under the cost
+    // schedule of the subnet hosting the canister by then
+    // (`CyclesAccountManager::adjust_prepayment_for_response_execution`). The two
+    // amounts are only comparable if both were derived under the same cost schedule:
+    // an amount that is free under the free cost schedule has a zero real part but a
+    // non-zero nominal one, so settling across a switch either forfeits the real part
+    // of the prepayment or credits real cycles that were never withdrawn.
+    let source_cost_schedule = normalized_canister_cycles_cost_schedule(source_subnet);
+    let destination_cost_schedule = normalized_canister_cycles_cost_schedule(destination_subnet);
+    if source_cost_schedule != destination_cost_schedule {
+        return Err(PrepareCanisterMigrationError::CostSchedulesMismatch(
+            source_cost_schedule,
+            destination_cost_schedule,
+        ));
+    }
+
     Ok(())
 }
 
@@ -210,6 +237,17 @@ impl fmt::Display for PrepareCanisterMigrationError {
                     f,
                     "Subnet types do not match. \
                     Source subnet's type: {source_type:?}, destination subnet's type: {destination_type:?}"
+                )
+            }
+            PrepareCanisterMigrationError::CostSchedulesMismatch(
+                source_cost_schedule,
+                destination_cost_schedule,
+            ) => {
+                write!(
+                    f,
+                    "Subnet cycles cost schedules do not match. \
+                    Source subnet's cost schedule: {source_cost_schedule:?}, \
+                    destination subnet's cost schedule: {destination_cost_schedule:?}"
                 )
             }
             PrepareCanisterMigrationError::UnhostedCanisterIds => {
@@ -254,6 +292,7 @@ mod tests {
     struct SubnetInfo {
         subnet_id: SubnetId,
         subnet_type: SubnetType,
+        cost_schedule: CanisterCyclesCostSchedule,
         nodes_count: u64,
         canister_id_ranges: Vec<CanisterIdRange>,
     }
@@ -281,10 +320,13 @@ mod tests {
             source_node_ids_and_dkg_pks.keys().copied().collect(),
         );
         source_subnet_record.subnet_type = source_subnet.subnet_type as i32;
+        source_subnet_record.canister_cycles_cost_schedule = source_subnet.cost_schedule as i32;
         let mut destination_subnet_record = get_invariant_compliant_subnet_record(
             destination_node_ids_and_dkg_pks.keys().copied().collect(),
         );
         destination_subnet_record.subnet_type = destination_subnet.subnet_type as i32;
+        destination_subnet_record.canister_cycles_cost_schedule =
+            destination_subnet.cost_schedule as i32;
 
         let subnet_mutation = add_fake_subnet(
             source_subnet.subnet_id,
@@ -329,6 +371,7 @@ mod tests {
             SubnetInfo {
                 subnet_id: source_subnet_id,
                 subnet_type: SubnetType::Application,
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
                 nodes_count: 1,
                 canister_id_ranges: vec![CanisterIdRange {
                     start: CanisterId::from(0),
@@ -338,6 +381,7 @@ mod tests {
             SubnetInfo {
                 subnet_id: destination_subnet_id,
                 subnet_type: SubnetType::Application,
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
                 nodes_count: 1,
                 canister_id_ranges: vec![],
             },
@@ -363,12 +407,14 @@ mod tests {
             SubnetInfo {
                 subnet_id: source_subnet_id,
                 subnet_type: SubnetType::Application,
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
                 nodes_count: 2,
                 canister_id_ranges: vec![],
             },
             SubnetInfo {
                 subnet_id: destination_subnet_id,
                 subnet_type: SubnetType::Application,
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
                 nodes_count: 1,
                 canister_id_ranges: vec![],
             },
@@ -398,12 +444,14 @@ mod tests {
             SubnetInfo {
                 subnet_id: source_subnet_id,
                 subnet_type: SubnetType::Application,
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
                 nodes_count: 1,
                 canister_id_ranges: vec![],
             },
             SubnetInfo {
                 subnet_id: destination_subnet_id,
                 subnet_type: SubnetType::VerifiedApplication,
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
                 nodes_count: 1,
                 canister_id_ranges: vec![],
             },
@@ -433,6 +481,7 @@ mod tests {
             SubnetInfo {
                 subnet_id: source_subnet_id,
                 subnet_type: SubnetType::Application,
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
                 nodes_count: 1,
                 canister_id_ranges: vec![CanisterIdRange {
                     start: CanisterId::from(0),
@@ -442,6 +491,7 @@ mod tests {
             SubnetInfo {
                 subnet_id: destination_subnet_id,
                 subnet_type: SubnetType::Application,
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
                 nodes_count: 1,
                 canister_id_ranges: vec![],
             },
@@ -461,5 +511,85 @@ mod tests {
             .expect_err("Canister migration preparation should fail");
 
         assert_matches!(err, PrepareCanisterMigrationError::UnhostedCanisterIds);
+    }
+
+    #[test]
+    fn prepare_canister_migration_should_fail_when_cost_schedules_dont_match_test() {
+        let (source_subnet_id, destination_subnet_id) = dummy_subnet_ids();
+
+        // A rental subnet is an application subnet on the free cost schedule, i.e. it
+        // has the same type and may have the same size as a regular application subnet.
+        let mut registry = set_up(
+            SubnetInfo {
+                subnet_id: source_subnet_id,
+                subnet_type: SubnetType::Application,
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
+                nodes_count: 1,
+                canister_id_ranges: vec![],
+            },
+            SubnetInfo {
+                subnet_id: destination_subnet_id,
+                subnet_type: SubnetType::Application,
+                cost_schedule: CanisterCyclesCostSchedule::Free,
+                nodes_count: 1,
+                canister_id_ranges: vec![],
+            },
+        );
+
+        let payload = PrepareCanisterMigrationPayload {
+            canister_id_ranges: vec![],
+            source_subnet: source_subnet_id,
+            destination_subnet: destination_subnet_id,
+        };
+
+        let err = registry
+            .prepare_canister_migration(payload)
+            .expect_err("Canister migration preparation should fail");
+
+        assert_matches!(
+            err,
+            PrepareCanisterMigrationError::CostSchedulesMismatch(
+                CanisterCyclesCostSchedule::Normal,
+                CanisterCyclesCostSchedule::Free,
+            )
+        );
+    }
+
+    /// A subnet record that predates the cycles cost schedule field leaves it
+    /// `Unspecified`, which means the same as `Normal`.
+    #[test]
+    fn prepare_canister_migration_should_succeed_when_cost_schedule_is_unspecified_test() {
+        let (source_subnet_id, destination_subnet_id) = dummy_subnet_ids();
+
+        let mut registry = set_up(
+            SubnetInfo {
+                subnet_id: source_subnet_id,
+                subnet_type: SubnetType::Application,
+                cost_schedule: CanisterCyclesCostSchedule::Unspecified,
+                nodes_count: 1,
+                canister_id_ranges: vec![CanisterIdRange {
+                    start: CanisterId::from(0),
+                    end: CanisterId::from(10),
+                }],
+            },
+            SubnetInfo {
+                subnet_id: destination_subnet_id,
+                subnet_type: SubnetType::Application,
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
+                nodes_count: 1,
+                canister_id_ranges: vec![],
+            },
+        );
+
+        let payload = PrepareCanisterMigrationPayload {
+            canister_id_ranges: vec![CanisterIdRange {
+                start: CanisterId::from(3),
+                end: CanisterId::from(7),
+            }],
+            source_subnet: source_subnet_id,
+            destination_subnet: destination_subnet_id,
+        };
+
+        assert!(registry.prepare_canister_migration(payload).is_ok());
     }
 }
