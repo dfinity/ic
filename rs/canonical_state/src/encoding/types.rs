@@ -737,9 +737,10 @@ impl
         // `consumed_cycles_total_v28`, which double counts the cycles consumed
         // by deleted canisters and does not account for non-deleted canisters.
         //
-        // Starting with `V29`, the reported total uses the fixed
-        // `consumed_cycles_total` (which no longer double counts deleted
-        // canisters) plus `SubnetMetrics::consumed_cycles_by_canisters`.
+        // Starting with `V29`, the reported total is the stored
+        // `SubnetMetrics::consumed_cycles_total_including_canisters`, which no
+        // longer double counts deleted canisters and does account for the existing
+        // ones.
         let consumed_cycles_total = if certification_version >= CertificationVersion::V29 {
             metrics.consumed_cycles_total_including_canisters()
         } else {

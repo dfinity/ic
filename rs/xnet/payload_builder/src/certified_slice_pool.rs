@@ -23,6 +23,7 @@ use ic_types::{
 };
 use messages::Messages;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
+use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom, TryInto};
 use std::sync::Arc;
@@ -41,6 +42,7 @@ pub type CertifiedSliceResult<T> = Result<T, CertifiedSliceError>;
 /// Metrics for [`CertifiedSlicePool`].
 struct CertifiedSlicePoolMetrics {
     pool_size_bytes: IntGauge,
+    put_count: IntCounterVec,
     take_count: IntCounterVec,
     take_messages: Histogram,
     take_gced_messages: Histogram,
@@ -48,6 +50,7 @@ struct CertifiedSlicePoolMetrics {
 }
 
 pub const METRIC_POOL_SIZE_BYTES: &str = "xnet_pool_size_bytes";
+pub const METRIC_PUT_COUNT: &str = "xnet_pool_put_count";
 pub const METRIC_TAKE_COUNT: &str = "xnet_pool_take_count";
 pub const METRIC_TAKE_MESSAGES: &str = "xnet_pool_take_messages";
 pub const METRIC_TAKE_SIZE_BYTES: &str = "xnet_pool_take_size_bytes";
@@ -57,6 +60,7 @@ pub const LABEL_STATUS: &str = "status";
 
 pub const STATUS_SUCCESS: &str = "success";
 pub const STATUS_NONE: &str = "none";
+pub const STATUS_LESS_USEFUL: &str = "less_useful";
 
 impl CertifiedSlicePoolMetrics {
     fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -64,6 +68,11 @@ impl CertifiedSlicePoolMetrics {
             pool_size_bytes: metrics_registry.int_gauge(
                 METRIC_POOL_SIZE_BYTES,
                 "Total size of the XNet slice pool, in bytes.",
+            ),
+            put_count: metrics_registry.int_counter_vec(
+                METRIC_PUT_COUNT,
+                "Count of XNet slice pool puts and appends, by status.",
+                &[LABEL_STATUS]
             ),
             take_count: metrics_registry.int_counter_vec(
                 METRIC_TAKE_COUNT,
@@ -89,6 +98,11 @@ impl CertifiedSlicePoolMetrics {
                 decimal_buckets(2, 6)
             ),
         }
+    }
+
+    /// Observes the status of a pool put or append.
+    fn observe_put(&self, status: &str) {
+        self.put_count.with_label_values(&[status]).inc();
     }
 
     /// Observes the status of a pool take.
@@ -695,6 +709,11 @@ impl Payload {
         self.messages.as_ref().map(|m| m.begin())
     }
 
+    /// Returns the `StreamIndex` just past the last message, if any.
+    fn messages_end(&self) -> Option<StreamIndex> {
+        self.messages.as_ref().map(|m| m.end())
+    }
+
     /// Returns the `FlatMap` contained in a `SubTree`; `Err(InvalidPayload)` if
     /// `tree` is a `Leaf`.
     fn children_of(mut tree: PayloadTree) -> CertifiedSliceResult<PayloadTreeMap> {
@@ -1011,10 +1030,6 @@ pub enum CertifiedSliceError {
     /// Provided slice could not be appended to pooled slice. Provided slice was
     /// discarded.
     InvalidAppend(InvalidAppend),
-
-    /// Attempted to take already garbage-collected messages, slice was dropped
-    /// from pool.
-    TakeBeforeSliceBegin,
 }
 
 /// `CertifiedSliceError::InvalidPayload` and
@@ -1051,7 +1066,6 @@ impl CertifiedSliceError {
             Self::WitnessPruningFailed(_) => "WitnessPruningFailed",
             Self::DecodeFailed(_) => "DecodeFailed",
             Self::InvalidAppend(_) => "InvalidAppend",
-            Self::TakeBeforeSliceBegin => "TakeBeforeSliceBegin",
         }
     }
 }
@@ -1132,15 +1146,17 @@ impl CertifiedSlicePool {
     /// respecting the given message count and byte limits; or, if the provided
     /// `byte_limit` is too small for a header-only slice, returns `Ok(None)`.
     ///
-    /// If a `begin` index was provided, garbage collects all messages before it,
-    /// regardless of whether a non-empty slice was returned.
+    /// If a `begin` index is provided, it first garbage collects all messages
+    /// before it.
     ///
-    /// If all messages are taken, the slice is removed from the pool.
+    /// If the pooled slice begins after `begin.message_index`, its messages cannot
+    /// be taken (yet), so a header-only slice is returned.
+    ///
+    /// If `Ok(Some(_))` is returned and no messages are left, the slice is removed
+    /// from the pool.
     ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` and drops
-    /// the pooled slice if malformed. Returns `Err(TakeBeforeSliceBegin)` and
-    /// drops the pooled slice if `begin`'s `message_index` is before the
-    /// first pooled message.
+    /// the pooled slice if malformed.
     pub fn take_slice(
         &mut self,
         subnet_id: SubnetId,
@@ -1178,14 +1194,12 @@ impl CertifiedSlicePool {
     /// On success, returns a prefix respecting the given limits.
     ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
-    /// `self.payload` is malformed. Returns `Err(TakeBeforeSliceBegin)` if
-    /// `begin`'s `message_index` is before the pooled slice's messages begin
-    /// index.
+    /// `self.payload` is malformed.
     fn take_slice_impl(
         &mut self,
         subnet_id: SubnetId,
         begin: Option<&ExpectedIndices>,
-        msg_limit: Option<usize>,
+        mut msg_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<Option<UnpackedStreamSlice>> {
         // Update the stream position in case we bail out early with no slice returned.
@@ -1211,8 +1225,11 @@ impl CertifiedSlicePool {
             if let Some(actual_begin) = slice.payload.messages_begin()
                 && actual_begin != begin.message_index
             {
-                // Slice's `messages.begin` is past the requested stream index, bail out.
-                return Err(CertifiedSliceError::TakeBeforeSliceBegin);
+                // Slice's `messages.begin` is past the requested stream index, so it does not
+                // have the next expected message. Take the signals only and put the messages
+                // back: the stream position may yet advance past `messages.begin`, e.g. because
+                // another block maker included the messages before it.
+                msg_limit = Some(0);
             }
         }
 
@@ -1330,15 +1347,22 @@ impl CertifiedSlicePool {
     /// Places the provided slice into the pool, after trimming off any prefix
     /// before the corresponding `self.stream_positions` entry.
     ///
-    /// On success always replaces the pooled slice regardless of its contents,
-    /// as slices may originate from malicious replicas and we would rather
-    /// temporarily replace a good slice with a bad one than be stuck with a bad
-    /// one (e.g. because it has an exceedingly high `signals_end`).
-    ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
     /// `slice` is malformed. Returns `Err(DecodeStreamError)` if the slice could
     /// not be decoded or its certification was invalid.
     pub fn put(
+        &mut self,
+        subnet_id: SubnetId,
+        slice: CertifiedStreamSlice,
+        registry_version: RegistryVersion,
+        log: ReplicaLogger,
+    ) -> CertifiedSliceResult<()> {
+        self.put_impl(subnet_id, slice, registry_version, log)
+            .inspect_err(|e| self.metrics.observe_put(e.to_label_value()))
+    }
+
+    /// Helper function to allow easy instrumentation of `put` results.
+    fn put_impl(
         &mut self,
         subnet_id: SubnetId,
         slice: CertifiedStreamSlice,
@@ -1353,7 +1377,7 @@ impl CertifiedSlicePool {
             log,
         )?;
 
-        self.put_impl(subnet_id, slice.try_into()?)
+        self.pool_slice(subnet_id, slice.try_into()?)
     }
 
     /// Appends a partial slice to the corresponding pool entry, trimming
@@ -1372,6 +1396,18 @@ impl CertifiedSlicePool {
     /// Returns `Err(DecodeStreamError)` if the partial slice could not be decoded
     /// or the certification was invalid for the merged slice.
     pub fn append(
+        &mut self,
+        subnet_id: SubnetId,
+        partial: CertifiedStreamSlice,
+        registry_version: RegistryVersion,
+        log: ReplicaLogger,
+    ) -> CertifiedSliceResult<()> {
+        self.append_impl(subnet_id, partial, registry_version, log)
+            .inspect_err(|e| self.metrics.observe_put(e.to_label_value()))
+    }
+
+    /// Helper function to allow easy instrumentation of `append` results.
+    fn append_impl(
         &mut self,
         subnet_id: SubnetId,
         partial: CertifiedStreamSlice,
@@ -1408,29 +1444,43 @@ impl CertifiedSlicePool {
             log,
         )?;
 
-        self.put_impl(subnet_id, slice)?;
-        Ok(())
+        self.pool_slice(subnet_id, slice)
     }
 
-    /// Garbage collects the provided slice and pools the rest, if any.
+    /// Garbage collects the provided slice and pools the rest, iff more useful than
+    /// the already pooled slice (see `compare_usefulness()`).
     ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
     /// `unpacked` is malformed.
-    fn put_impl(
+    fn pool_slice(
         &mut self,
         subnet_id: SubnetId,
         mut unpacked: UnpackedStreamSlice,
     ) -> CertifiedSliceResult<()> {
         // Trim off everything before the cached stream position.
-        if let Some(cutoff) = self.stream_positions.get(&subnet_id) {
-            unpacked = match unpacked.garbage_collect(cutoff)? {
+        let stream_position = self.stream_positions.get(&subnet_id);
+        if let Some(stream_position) = stream_position {
+            unpacked = match unpacked.garbage_collect(stream_position)? {
                 Some(unpacked) => unpacked,
                 // Bail out if nothing left.
-                None => return Ok(()),
+                None => {
+                    self.metrics.observe_put(STATUS_NONE);
+                    return Ok(());
+                }
             };
         }
 
-        self.slices.insert(subnet_id, unpacked);
+        // If there's a pooled slice, only replace it if `unpacked` is more useful (i.e.
+        // has more messages or signals).
+        if let Some(pooled) = self.slices.get(&subnet_id)
+            && compare_usefulness(pooled, &unpacked, stream_position).is_ge()
+        {
+            self.metrics.observe_put(STATUS_LESS_USEFUL);
+        } else {
+            self.slices.insert(subnet_id, unpacked);
+            self.metrics.observe_put(STATUS_SUCCESS);
+        }
+
         Ok(())
     }
 
@@ -1553,6 +1603,53 @@ fn witness_count_bytes(
         - PRUNED_NODE_BYTES + MESSAGES_LABEL_BYTES
         // And added all the pruned, known and fork nodes.
         + pruned_nodes_bytes + known_nodes_bytes + fork_nodes_bytes
+}
+
+/// Compares two slices by how useful they are, in decreasing order of weight:
+///
+///  * First useful (beyond `stream_position`) message index: a slice beginning
+///    after it may not have the messages to satisfy the next `take_slice()`.
+///  * Its `messages_end`: more messages are better (and subjectively weighted
+///    higher than more signals).
+///  * Its `signals_end`: more signals are better.
+///  * Its stream `begin`: a higher one allows us to garbage collect more
+///    signals and, as a result, induct more messages.
+///
+/// Slices beginning after the cached stream position are not hypothetical: the
+/// stream position may regress whenever we built a payload for a block that did
+/// not get finalized (e.g. the rank 1 block was picked instead).
+///
+/// Safety never enters into it: the slice has been certified by its source
+/// subnet. The only question is which of two slices is worth holding on to.
+fn compare_usefulness(
+    lhs: &UnpackedStreamSlice,
+    rhs: &UnpackedStreamSlice,
+    stream_position: Option<&ExpectedIndices>,
+) -> Ordering {
+    let first_useful_message = |slice: &UnpackedStreamSlice| {
+        match (slice.payload.messages_begin(), stream_position) {
+            (Some(messages_begin), Some(stream_position)) => {
+                Some(messages_begin.max(stream_position.message_index))
+            }
+
+            // No messages or no stream position, go with the slice's begin, if any.
+            (messages_begin, _) => messages_begin,
+        }
+    };
+
+    // `Reverse` goes inside the `Option`: an earlier begin is more useful, but a
+    // slice with no messages at all is the least useful.
+    first_useful_message(lhs)
+        .map(Reverse)
+        .cmp(&first_useful_message(rhs).map(Reverse))
+        .then_with(|| lhs.payload.messages_end().cmp(&rhs.payload.messages_end()))
+        .then_with(|| {
+            lhs.payload
+                .header
+                .signals_end()
+                .cmp(&rhs.payload.header.signals_end())
+        })
+        .then_with(|| lhs.payload.header.begin().cmp(&rhs.payload.header.begin()))
 }
 
 /// Decodes the certified stream slice coming from `subnet_id` and validates

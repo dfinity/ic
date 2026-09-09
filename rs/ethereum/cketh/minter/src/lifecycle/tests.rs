@@ -159,7 +159,7 @@ mod init {
         .expect("valid init args");
 
         assert_eq!(
-            state.sweeper_transactions.next_transaction_nonce(),
+            state.automatic_deposits.next_sweeper_transaction_nonce(),
             TransactionNonce::ZERO
         );
     }
@@ -178,7 +178,7 @@ mod init {
             TransactionNonce::from(7_u8)
         );
         assert_eq!(
-            state.sweeper_transactions.next_transaction_nonce(),
+            state.automatic_deposits.next_sweeper_transaction_nonce(),
             TransactionNonce::from(42_u8)
         );
     }

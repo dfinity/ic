@@ -435,6 +435,18 @@ impl SchedulerImpl {
         //      - Update the ingress history with the resulting ingress statuses.
         //      - Induct messages on the same subnet.
         let mut state = loop {
+            // In every iteration after the first, recompute the subnet available
+            // memory from the state.
+            //
+            // The memory consumed by the previous iteration's parallel execution
+            // threads is not subtracted from `scheduler_round_limits` (see
+            // `execute_canisters_in_inner_round()`), so this recomputation is what
+            // brings the subnet available memory back in sync with the state.
+            if !is_first_iteration {
+                scheduler_round_limits.subnet_available_memory =
+                    self.exec_env.scaled_subnet_available_memory(&state);
+            }
+
             // Execute subnet messages.
             // If new messages are inducted into the subnet input queues,
             // they are processed until the subnet messages' instruction limit is reached.
@@ -457,6 +469,22 @@ impl SchedulerImpl {
                     chain_key_data,
                 );
                 scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
+            }
+
+            // A cooling down subnet only drains its subnet queues: it executes no
+            // canister messages and no canister tasks, i.e. neither `Heartbeat` and
+            // `GlobalTimer` (which are not even enqueued, as they are enqueued right
+            // below) nor the on-low-wasm-memory hook (which, unlike the former two, is
+            // a persistent part of the canister's task queue and is thus simply left
+            // there until the subnet stops cooling down).
+            //
+            // It follows that a cooling down subnet also has no messages to induct on
+            // the same subnet.
+            if state.metadata.is_cooling_down() {
+                self.metrics
+                    .round_skipped_canister_execution_due_to_cooling_down
+                    .inc();
+                break state;
             }
 
             let mut round_limits = scheduler_round_limits.canister_round_limits();
@@ -494,14 +522,7 @@ impl SchedulerImpl {
             }
             drop(scheduling_timer);
 
-            // In every iteration after the first, recompute the subnet available memory,
-            // before taking out the canisters.
             let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
-            if !is_first_iteration {
-                round_limits.subnet_available_memory =
-                    self.exec_env.scaled_subnet_available_memory(&state);
-            }
-
             let canisters = state.take_canister_states();
             let (active_canisters_partitioned_by_cores, inactive_canisters) =
                 iteration_schedule.partition_canisters_to_cores(canisters);
@@ -754,8 +775,9 @@ impl SchedulerImpl {
         // Deduct all created callbacks from the available callbacks limit. This is a
         // pessimistic estimate, as it ignores any closed callbacks.
         round_limits.subnet_available_callbacks -= callbacks_created;
-        // `subnet_available_memory` will be recomputed at the beginning of the next
-        // iteration.
+        // The memory consumed by the threads is not deducted from
+        // `subnet_available_memory`; it is recomputed from the state at the very
+        // beginning of the next iteration instead (see `inner_round()`).
 
         IterationResult {
             canisters,
@@ -1928,6 +1950,7 @@ fn get_instruction_limits_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | NodeMetricsHistory
+            | SubnetMetrics
             | SubnetInfo
             | FetchCanisterLogs
             | ProvisionalCreateCanisterWithCycles

@@ -34,6 +34,7 @@ use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase};
 use maplit::btreemap;
 use mockall::{Sequence, mock, predicate::*};
 use std::collections::{BTreeMap, BTreeSet};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -820,7 +821,7 @@ fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> Repl
             .checked_add(Duration::from_secs(1))
             .unwrap(),
         blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-        replica_version: ReplicaVersion::default(),
+        replica_version: ReplicaVersion::from_str("foo").unwrap(),
     };
 
     let state_after_split = with_test_replica_logger(|log| {

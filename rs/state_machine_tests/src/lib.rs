@@ -12,8 +12,8 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
-use ic_consensus_cup_utils::make_registry_cup_from_cup_contents;
-use ic_consensus_utils::crypto::SignVerify;
+use ic_consensus_cup_utils::make_registry_cup;
+use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool, crypto::SignVerify};
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
     SecretKeyBytes, dummy_initial_dkg_transcript_with_master_key, sign_message,
@@ -140,10 +140,11 @@ use ic_test_utilities_registry::{
     SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::ids::test_replica_version;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
     CanisterId, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes,
-    PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId, SubnetId, UserId,
+    PrincipalId, Randomness, RegistryVersion, SnapshotId, SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
@@ -352,7 +353,7 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
         .unwrap();
 
     // replica version record
-    let replica_version = ReplicaVersion::default();
+    let replica_version = test_replica_version();
     let replica_version_record = ReplicaVersionRecord {
         replica_version_id: Some(replica_version.to_string()),
         release_package_sha256_hex: "".to_string(),
@@ -653,21 +654,14 @@ fn make_fresh_registry_cup(
     subnet_id: SubnetId,
     replica_logger: &ReplicaLogger,
 ) -> pb::CatchUpPackage {
-    let registry_version = registry_client.get_latest_version();
-    let cup_contents = registry_client
-        .get_cup_contents(subnet_id, registry_version)
-        .unwrap()
-        .value
-        .unwrap();
-    let cup = make_registry_cup_from_cup_contents(
+    make_registry_cup(
         registry_client.as_ref(),
         subnet_id,
-        cup_contents,
-        registry_version,
+        registry_client.get_latest_version(),
         replica_logger,
     )
-    .unwrap();
-    cup.into()
+    .unwrap()
+    .into()
 }
 
 /// Convert an object into CBOR binary.
@@ -790,6 +784,25 @@ impl PocketIngressPool {
                 timestamp,
             },
         );
+    }
+
+    /// Removes the ingress messages that were just included in a block, along
+    /// with any messages whose ingress expiry has passed (those can never be
+    /// included in a block anymore).
+    ///
+    /// Without this the pool is never pruned and retains every ingress message
+    /// ever submitted -- including its payload -- for the lifetime of the
+    /// instance.
+    fn remove_inducted_and_expired(&mut self, inducted: &[SignedIngress], now: Time) {
+        for m in inducted {
+            self.validated
+                .remove(&IngressMessageId::new(m.expiry_time(), m.id()));
+        }
+        // Keys are ordered by `(expiry_time, message_id)`, so everything strictly
+        // below this bound has already expired.
+        let expiry_bound =
+            IngressMessageId::new(now, MessageId::from([0; EXPECTED_MESSAGE_ID_LENGTH]));
+        self.validated = self.validated.split_off(&expiry_bound);
     }
 }
 
@@ -1931,7 +1944,13 @@ impl StateMachine {
         // used by the function `Self::execute_payload` of the `StateMachine`.
         let xnet_payload = batch_payload.xnet.clone();
         let ingress = &batch_payload.ingress;
-        let ingress_messages = ingress.clone().try_into().unwrap();
+        let ingress_messages: Vec<SignedIngress> = ingress.clone().try_into().unwrap();
+        // Prune the ingress pool, mirroring what is done for the canister HTTP
+        // pool (`RemoveValidated`) and the query stats builder (`purge`) below.
+        self.ingress_pool
+            .write()
+            .unwrap()
+            .remove_inducted_and_expired(&ingress_messages, validation_context.time);
         let (http_responses, http_spent, _) =
             CanisterHttpPayloadBuilderImpl::into_messages(&batch_payload.canister_http);
         let inducted: Vec<_> = http_responses
@@ -1977,8 +1996,8 @@ impl StateMachine {
             let mut low_threshold_transcript_record = ni_dkg_transcript;
             low_threshold_transcript_record.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
             let initial_transcript_records = SetupInitialDKGResponse {
-                low_threshold_transcript_record: high_threshold_transcript_record.into(),
-                high_threshold_transcript_record: low_threshold_transcript_record.into(),
+                low_threshold_transcript_record: low_threshold_transcript_record.into(),
+                high_threshold_transcript_record: high_threshold_transcript_record.into(),
                 fresh_subnet_id: subnet_id,
                 subnet_threshold_public_key: public_key.into(),
             };
@@ -2171,6 +2190,7 @@ impl StateMachine {
             consensus_pool_cache.clone(),
             Arc::new(crypto),
             state_manager.clone(),
+            build_thread_pool(MAX_CONSENSUS_THREADS),
             subnet_id,
             registry_client.clone(),
             &metrics_registry,
@@ -2639,6 +2659,29 @@ impl StateMachine {
         self.state_manager.get_latest_state().take()
     }
 
+    /// Sets the `cooling_down` flag of this subnet's registry record, at a new
+    /// registry version, and updates this subnet's registry client to it. The
+    /// flag takes effect in the next round, when the network topology is
+    /// repopulated from the registry.
+    pub fn set_cooling_down(&self, cooling_down: bool) {
+        let registry_version = self.registry_client.get_latest_version();
+        let mut subnet_record = self
+            .registry_client
+            .get_subnet_record(self.subnet_id, registry_version)
+            .expect("malformed subnet record")
+            .expect("missing subnet record");
+        subnet_record.cooling_down = cooling_down;
+        add_single_subnet_record(
+            &self.registry_data_provider,
+            registry_version.increment().get(),
+            self.subnet_id,
+            subnet_record,
+        );
+
+        self.reload_registry();
+        self.registry_client.update_to_latest_version();
+    }
+
     /// Generates a certified stream slice to a remote subnet.
     fn generate_certified_stream_slice(
         &self,
@@ -2764,13 +2807,25 @@ impl StateMachine {
             .push(msg, self.get_time(), self.nodes[0].node_id);
     }
 
-    pub fn mock_canister_http_response(
+    /// Injects one response share per entry of `responses`, signed by the node it
+    /// is keyed by and carrying that node's payment receipt.
+    ///
+    /// This does not require one response per subnet node, which is what
+    /// non-fully-replicated outcalls need: only the nodes of the outcall's committee
+    /// produce a response, their responses may differ, and some of them may not
+    /// respond at all.
+    pub fn mock_canister_http_response_for_nodes(
         &self,
         request_id: u64,
-        contents: Vec<CanisterHttpResponseContent>,
+        responses: BTreeMap<NodeId, (CanisterHttpResponseContent, CanisterHttpPaymentReceipt)>,
     ) {
-        assert_eq!(contents.len(), self.nodes.len());
-        for (node, content) in std::iter::zip(self.nodes.iter(), contents) {
+        for node_id in responses.keys() {
+            assert!(
+                self.nodes.iter().any(|node| node.node_id == *node_id),
+                "cannot respond as {node_id}, which is not a node of this subnet"
+            );
+        }
+        for (node_id, (content, payment_receipt)) in responses {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
@@ -2782,12 +2837,12 @@ impl StateMachine {
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: content.count_bytes() as u32,
                     is_reject: content.is_reject(),
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: test_replica_version(),
                 },
-                payment_receipt: CanisterHttpPaymentReceipt::default(),
+                payment_receipt,
             };
             let signature = CryptoReturningOk::default()
-                .sign(&receipt_share, node.node_id, registry_version)
+                .sign(&receipt_share, node_id, registry_version)
                 .unwrap();
             let share = Signed {
                 content: receipt_share,
@@ -3159,7 +3214,7 @@ impl StateMachine {
             randomness: Randomness::from(seed),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         };
 
         self.message_routing

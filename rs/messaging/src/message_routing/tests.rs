@@ -31,7 +31,9 @@ use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metr
 use ic_test_utilities_registry::{SubnetRecordBuilder, get_mainnet_delta_00_6d_c1};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::batch::BatchBuilder;
-use ic_test_utilities_types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{
+    canister_test_id, node_test_id, subnet_test_id, test_replica_version, user_test_id,
+};
 use ic_types::batch::{Batch, BatchMessages, BlockmakerMetrics};
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
@@ -39,7 +41,6 @@ use ic_types::time::Time;
 use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
 use ic_types::{
     CanisterId, ExecutionRound, NodeId, NumBytes, NumInstructions, PrincipalId, Randomness,
-    ReplicaVersion,
 };
 use maplit::{btreemap, btreeset};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
@@ -1046,7 +1047,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         });
         let latest_state = state_manager.get_latest_state().take();
         assert_eq!(
@@ -2338,7 +2339,7 @@ fn process_batch_updates_subnet_metrics() {
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         });
 
         let latest_state = state_manager.get_latest_state().take();
@@ -2409,7 +2410,7 @@ fn process_batch_resets_split_marker() {
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(1),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         });
 
         // The subnet split marker was reset.

@@ -9,7 +9,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, warn};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    ReplicaVersion, SubnetId,
+    PlatformVersion, SubnetId,
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     replica_version::REPLICA_BINARY_HASH,
 };
@@ -22,6 +22,7 @@ pub(crate) struct StatusService {
     registry_client: Arc<dyn RegistryClient>,
     replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    platform_version: PlatformVersion,
 }
 
 impl StatusService {
@@ -37,6 +38,7 @@ impl StatusService {
         registry_client: Arc<dyn RegistryClient>,
         replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        platform_version: PlatformVersion,
     ) -> Router {
         let state = Self {
             log,
@@ -44,6 +46,7 @@ impl StatusService {
             registry_client,
             replica_health_status,
             state_reader,
+            platform_version,
         };
         Router::new().route_service(
             StatusService::route(),
@@ -75,7 +78,8 @@ pub(crate) async fn status(State(state): State<StatusService>) -> Cbor<HttpStatu
         //
         // USE WITH EXTREME CAUTION.
         root_key: root_key.map(Blob),
-        impl_version: Some(ReplicaVersion::default().to_string()),
+        impl_version: Some(state.platform_version.replica_version.to_string()),
+        guestos_version: Some(state.platform_version.guestos_version.to_string()),
         impl_hash: REPLICA_BINARY_HASH.get().map(|s| s.to_string()),
         replica_health_status: Some(state.replica_health_status.load()),
         certified_height: Some(state.state_reader.latest_certified_height()),

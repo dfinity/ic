@@ -129,8 +129,7 @@ mod tests {
     };
     use ic_registry_subnet_type::SubnetType;
     use ic_registry_transport::insert;
-    use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::ReplicaVersion;
+    use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
     use maplit::btreemap;
 
     // StandardEngineReplicaVersionRecord.
@@ -174,7 +173,7 @@ mod tests {
     fn deploy_payload(subnet_id: SubnetId) -> DeployGuestosToAllSubnetNodesPayload {
         DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_id.get(),
-            replica_version_id: ReplicaVersion::default().to_string(),
+            replica_version_id: test_replica_version().to_string(),
         }
     }
 
@@ -241,7 +240,7 @@ mod tests {
         let subnet_record = registry.get_subnet_or_panic(subnet_id);
         assert_eq!(
             subnet_record.replica_version_id,
-            ReplicaVersion::default().to_string()
+            test_replica_version().to_string()
         );
     }
 
@@ -270,7 +269,7 @@ mod tests {
         let subnet_record = registry.get_subnet_or_panic(subnet_id);
         assert_eq!(
             subnet_record.replica_version_id,
-            ReplicaVersion::default().to_string()
+            test_replica_version().to_string()
         );
     }
 

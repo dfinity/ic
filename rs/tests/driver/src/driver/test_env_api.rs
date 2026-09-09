@@ -1438,16 +1438,6 @@ pub fn get_mainnet_application_subnet_revision() -> Result<ReplicaVersion> {
     Ok(replica_version)
 }
 
-pub fn get_empty_disk_img_url() -> Result<Url> {
-    let url = Url::parse(&std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?)?;
-
-    Ok(url)
-}
-
-pub fn get_empty_disk_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
-}
-
 pub fn get_build_setupos_config_image_tool() -> PathBuf {
     get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG")
 }

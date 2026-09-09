@@ -461,8 +461,8 @@ pub struct ResourceLimits {
     /// The protocol uses a default value if the limit of `0` is specified.
     #[prost(uint64, optional, tag = "3")]
     pub maximum_query_instructions: ::core::option::Option<u64>,
-    /// The maximum wall-clock time, in seconds, that a query (including a composite query call
-    /// graph) is allowed to run.
+    /// The maximum wall-clock time, in seconds, that a composite query call graph is allowed to
+    /// run.
     /// The protocol uses a default value if the limit of `0` is specified.
     #[prost(uint64, optional, tag = "4")]
     pub maximum_query_walltime_seconds: ::core::option::Option<u64>,

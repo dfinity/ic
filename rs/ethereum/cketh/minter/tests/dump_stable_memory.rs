@@ -4,12 +4,15 @@ use flate2::bufread::GzEncoder;
 use flate2::read::GzDecoder;
 use ic_cketh_minter::attestation::AttestationRequest;
 use ic_cketh_minter::checked_amount::CheckedAmountOf;
+use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::events::{
-    AccessListItem as CandidAccessListItem, Event as CandidEvent, EventSource as CandidEventSource,
-    GetEventsResult, ReimbursementIndex as CandidReimbursementIndex,
+    AccessListItem as CandidAccessListItem, AuthorizedSweepItem as CandidAuthorizedSweepItem,
+    Event as CandidEvent, EventSource as CandidEventSource, GetEventsResult,
+    ReimbursementIndex as CandidReimbursementIndex,
     SignedAuthorization as CandidSignedAuthorization,
-    TransactionReceipt as CandidTransactionReceipt, TransactionStatus as CandidTransactionStatus,
-    UnsignedSweeperTransaction, UnsignedTransaction,
+    TransactionReceipt as CandidTransactionReceipt,
+    TransactionSignature as CandidTransactionSignature,
+    TransactionStatus as CandidTransactionStatus, UnsignedSweeperTransaction, UnsignedTransaction,
 };
 use ic_cketh_minter::erc20::CkErc20Token;
 use ic_cketh_minter::eth_logs::{
@@ -20,14 +23,15 @@ use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::state::audit::EventType as ET;
 use ic_cketh_minter::state::event::Event;
 use ic_cketh_minter::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest, SweepId, SweepRequest,
+    AuthorizedSweepItem, Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed,
+    ReimbursementIndex, ReimbursementRequest, SweepId, SweepRequest,
 };
+use ic_cketh_minter::sweeper_contract::SweepItem;
 use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::{
-    AccessList, AccessListItem, DelegatingSweep, Eip1559TransactionRequest, SignedAuthorization,
-    SignedEip1559TransactionRequest, SignedEip7702TransactionRequest, SignedSweepTransaction,
-    SweepTransaction, TransactionSignature,
+    AccessList, AccessListItem, AuthorizationRequest, DelegatingSweep, Eip1559TransactionRequest,
+    Eip7702TransactionRequest, SignedAuthorization, SignedEip1559TransactionRequest,
+    SignedSweepTransaction, SweepTransaction, TransactionSignature,
 };
 use ic_stable_structures::Memory;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
@@ -135,96 +139,130 @@ fn map_unsigned_transaction(tx: UnsignedTransaction) -> Eip1559TransactionReques
 fn decode_signed_transaction(
     raw_transaction: &str,
 ) -> (Eip1559TransactionRequest, TransactionSignature) {
-    use ethers_core::types::transaction::eip2718::TypedTransaction;
-    use ethnum::u256;
-    use ic_ethereum_types::Address;
-    use std::str::FromStr;
+    use alloy_consensus::TxEnvelope;
+    use alloy_eips::eip2718::Decodable2718;
 
-    fn map_ethers_u256(num: ethers_core::types::U256) -> u256 {
-        u256::from_be_bytes(ethers_u256_to_be_bytes(num))
+    let raw_bytes = hex::decode(raw_transaction.trim_start_matches("0x"))
+        .expect("BUG: sent ETH transaction is not hex-encoded");
+    match TxEnvelope::decode_2718(&mut raw_bytes.as_slice())
+        .expect("BUG: failed to deserialize sent ETH transaction")
+    {
+        TxEnvelope::Eip1559(signed) => {
+            signed
+                .recover_signer()
+                .expect("BUG: unrecoverable signature on sent ETH transaction");
+            (
+                map_eip_1559_transaction(signed.tx()),
+                map_signature(signed.signature()),
+            )
+        }
+        transaction => panic!("BUG: unexpected sent ETH transaction type {transaction:?}"),
     }
-
-    fn ethers_u256_to_be_bytes(num: ethers_core::types::U256) -> [u8; 32] {
-        let mut bytes = [0_u8; 32];
-        num.to_big_endian(&mut bytes);
-        bytes
-    }
-
-    fn map_ethers_u256_to_checked_amount<T>(num: ethers_core::types::U256) -> CheckedAmountOf<T> {
-        CheckedAmountOf::from_be_bytes(ethers_u256_to_be_bytes(num))
-    }
-
-    fn map_ethers_address(address: ethers_core::types::Address) -> Address {
-        Address::new(address.as_bytes().to_vec().try_into().unwrap())
-    }
-
-    let (decoded_request, decoded_sig) = TypedTransaction::decode_signed(&rlp::Rlp::new(
-        &ethers_core::types::Bytes::from_str(raw_transaction).unwrap(),
-    ))
-    .map(|(tx, sig)| match tx {
-        TypedTransaction::Eip1559(eip1559_tx) => (eip1559_tx, sig),
-        _ => panic!("BUG: unexpected sent ETH transaction type {tx:?}"),
-    })
-    .expect("BUG: failed to deserialize sent ETH transaction");
-
-    let request = Eip1559TransactionRequest {
-        chain_id: decoded_request.chain_id.unwrap().as_u64(),
-        nonce: map_ethers_u256_to_checked_amount(decoded_request.nonce.unwrap()),
-        max_priority_fee_per_gas: map_ethers_u256_to_checked_amount(
-            decoded_request.max_priority_fee_per_gas.unwrap(),
-        ),
-        max_fee_per_gas: map_ethers_u256_to_checked_amount(
-            decoded_request.max_fee_per_gas.unwrap(),
-        ),
-        gas_limit: map_ethers_u256_to_checked_amount(decoded_request.gas.unwrap()),
-        destination: map_ethers_address(*decoded_request.to.unwrap().as_address().unwrap()),
-        amount: map_ethers_u256_to_checked_amount(decoded_request.value.unwrap()),
-        data: decoded_request.data.map(|d| d.to_vec()).unwrap_or_default(),
-        access_list: AccessList(
-            decoded_request
-                .access_list
-                .0
-                .into_iter()
-                .map(|item| AccessListItem {
-                    address: map_ethers_address(item.address),
-                    storage_keys: item
-                        .storage_keys
-                        .into_iter()
-                        .map(|s| ic_cketh_minter::tx::StorageKey(s.0))
-                        .collect(),
-                })
-                .collect(),
-        ),
-    };
-
-    let signature = ic_cketh_minter::tx::TransactionSignature {
-        signature_y_parity: decoded_sig.recovery_id().unwrap().is_y_odd(),
-        r: map_ethers_u256(decoded_sig.r),
-        s: map_ethers_u256(decoded_sig.s),
-    };
-
-    (request, signature)
 }
+
+fn map_eip_1559_transaction(transaction: &alloy_consensus::TxEip1559) -> Eip1559TransactionRequest {
+    Eip1559TransactionRequest {
+        chain_id: transaction.chain_id,
+        nonce: transaction.nonce.into(),
+        max_priority_fee_per_gas: transaction.max_priority_fee_per_gas.into(),
+        max_fee_per_gas: transaction.max_fee_per_gas.into(),
+        gas_limit: transaction.gas_limit.into(),
+        destination: map_address(
+            transaction
+                .to
+                .to()
+                .expect("BUG: sent ETH transaction creates a contract"),
+        ),
+        amount: CheckedAmountOf::from_be_bytes(transaction.value.to_be_bytes()),
+        data: transaction.input.to_vec(),
+        access_list: map_access_list(&transaction.access_list),
+    }
+}
+
+fn map_eip_7702_transaction(transaction: &alloy_consensus::TxEip7702) -> Eip7702TransactionRequest {
+    Eip7702TransactionRequest {
+        chain_id: transaction.chain_id,
+        nonce: transaction.nonce.into(),
+        max_priority_fee_per_gas: transaction.max_priority_fee_per_gas.into(),
+        max_fee_per_gas: transaction.max_fee_per_gas.into(),
+        gas_limit: transaction.gas_limit.into(),
+        destination: map_address(&transaction.to),
+        amount: CheckedAmountOf::from_be_bytes(transaction.value.to_be_bytes()),
+        data: transaction.input.to_vec(),
+        access_list: map_access_list(&transaction.access_list),
+        authorization_list: transaction
+            .authorization_list
+            .iter()
+            .map(map_signed_authorization)
+            .collect(),
+    }
+}
+
+fn map_access_list(access_list: &alloy_eips::eip2930::AccessList) -> AccessList {
+    AccessList(
+        access_list
+            .iter()
+            .map(|item| AccessListItem {
+                address: map_address(&item.address),
+                storage_keys: item
+                    .storage_keys
+                    .iter()
+                    .map(|key| ic_cketh_minter::tx::StorageKey(key.0))
+                    .collect(),
+            })
+            .collect(),
+    )
+}
+
+fn map_signed_authorization(
+    authorization: &alloy_eips::eip7702::SignedAuthorization,
+) -> SignedAuthorization {
+    SignedAuthorization {
+        chain_id: authorization.chain_id.to::<u64>(),
+        delegate: map_address(&authorization.address),
+        nonce: authorization.nonce.into(),
+        y_parity: authorization.y_parity() == 1,
+        r: ethnum::u256::from_be_bytes(authorization.r().to_be_bytes()),
+        s: ethnum::u256::from_be_bytes(authorization.s().to_be_bytes()),
+    }
+}
+
+fn map_signature(signature: &alloy_primitives::Signature) -> TransactionSignature {
+    use ethnum::u256;
+
+    ic_cketh_minter::tx::TransactionSignature {
+        signature_y_parity: signature.v(),
+        r: u256::from_be_bytes(signature.r().to_be_bytes()),
+        s: u256::from_be_bytes(signature.s().to_be_bytes()),
+    }
+}
+
+fn map_address(address: &alloy_primitives::Address) -> ic_ethereum_types::Address {
+    ic_ethereum_types::Address::new(address.into_array())
+}
+
 fn map_signed_sweep_transaction(raw_transaction: &str) -> SignedSweepTransaction {
-    use std::str::FromStr;
+    use alloy_consensus::TxEnvelope;
+    use alloy_eips::eip2718::Decodable2718;
 
-    const EIP_7702_TRANSACTION_TYPE: u8 = 4;
-
-    let raw_bytes = ethers_core::types::Bytes::from_str(raw_transaction)
+    let raw_bytes = hex::decode(raw_transaction.trim_start_matches("0x"))
         .expect("BUG: sent sweep transaction is not hex-encoded");
-    if raw_bytes.first() == Some(&EIP_7702_TRANSACTION_TYPE) {
-        let signed = SignedEip7702TransactionRequest::decode(&raw_bytes)
-            .expect("BUG: failed to deserialize sent EIP-7702 sweep transaction");
-        return SignedSweepTransaction::from((
+    match TxEnvelope::decode_2718(&mut raw_bytes.as_slice())
+        .expect("BUG: failed to deserialize sent sweep transaction")
+    {
+        TxEnvelope::Eip1559(signed) => SignedSweepTransaction::from((
+            SweepTransaction::Eip1559(map_eip_1559_transaction(signed.tx())),
+            map_signature(signed.signature()),
+        )),
+        TxEnvelope::Eip7702(signed) => SignedSweepTransaction::from((
             SweepTransaction::Eip7702(
-                DelegatingSweep::new(signed.transaction().clone())
+                DelegatingSweep::new(map_eip_7702_transaction(signed.tx()))
                     .expect("BUG: sent EIP-7702 sweep installs no delegation"),
             ),
-            signed.signature().clone(),
-        ));
+            map_signature(signed.signature()),
+        )),
+        transaction => panic!("BUG: unexpected sent sweep transaction type {transaction:?}"),
     }
-    let (transaction, signature) = decode_signed_transaction(raw_transaction);
-    SignedSweepTransaction::from((SweepTransaction::Eip1559(transaction), signature))
 }
 
 fn map_unsigned_sweeper_transaction(tx: UnsignedSweeperTransaction) -> SweepTransaction {
@@ -234,20 +272,54 @@ fn map_unsigned_sweeper_transaction(tx: UnsignedSweeperTransaction) -> SweepTran
     )
 }
 
-fn map_authorizations(authorizations: Vec<CandidSignedAuthorization>) -> Vec<SignedAuthorization> {
-    fn map_signature_component(bytes: &[u8]) -> ethnum::u256 {
+fn map_candid_signature(signature: CandidTransactionSignature) -> TransactionSignature {
+    fn component(bytes: &[u8]) -> ethnum::u256 {
         ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(bytes).unwrap())
     }
 
+    TransactionSignature {
+        signature_y_parity: signature.y_parity,
+        r: component(&signature.r),
+        s: component(&signature.s),
+    }
+}
+
+fn map_authorizations(authorizations: Vec<CandidSignedAuthorization>) -> Vec<SignedAuthorization> {
     authorizations
         .into_iter()
-        .map(|authorization| SignedAuthorization {
-            chain_id: authorization.chain_id.0.to_u64().unwrap(),
-            delegate: authorization.delegate.parse().unwrap(),
-            nonce: authorization.nonce.try_into().unwrap(),
-            y_parity: authorization.y_parity,
-            r: map_signature_component(&authorization.r),
-            s: map_signature_component(&authorization.s),
+        .map(|authorization| {
+            let signature = map_candid_signature(authorization.signature);
+            SignedAuthorization {
+                chain_id: authorization.chain_id.0.to_u64().unwrap(),
+                delegate: authorization.delegate.parse().unwrap(),
+                nonce: authorization.nonce.try_into().unwrap(),
+                y_parity: signature.signature_y_parity,
+                r: signature.r,
+                s: signature.s,
+            }
+        })
+        .collect()
+}
+
+fn map_authorized_sweep_items(items: Vec<CandidAuthorizedSweepItem>) -> Vec<AuthorizedSweepItem> {
+    items
+        .into_iter()
+        .map(|item| AuthorizedSweepItem {
+            item: SweepItem {
+                deposit: DepositAddress::new(item.deposit.parse().unwrap()),
+                account: Account {
+                    owner: item.owner,
+                    subaccount: item
+                        .subaccount
+                        .map(|s| <[u8; 32]>::try_from(s.as_ref()).unwrap()),
+                },
+                attestation: map_candid_signature(item.attestation),
+            },
+            authorization: item.authorization.map(|authorization| {
+                map_authorizations(vec![authorization])
+                    .pop()
+                    .expect("BUG: one authorization in, one out")
+            }),
         })
         .collect()
 }
@@ -381,9 +453,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 deposit_helper,
                 owner,
                 subaccount,
-                y_parity,
-                r,
-                s,
+                attestation,
             } => ET::AttestedDepositAddress {
                 request: AttestationRequest::new(
                     chain_id.0.to_u64().unwrap(),
@@ -395,28 +465,50 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                         }),
                     },
                 ),
-                signature: TransactionSignature {
-                    signature_y_parity: y_parity,
-                    r: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(r.as_slice()).unwrap()),
-                    s: ethnum::u256::from_be_bytes(<[u8; 32]>::try_from(s.as_slice()).unwrap()),
-                },
+                signature: map_candid_signature(attestation),
             },
+            EventPayload::AuthorizedDepositAddress {
+                owner,
+                subaccount,
+                authorization,
+            } => {
+                let account = Account {
+                    owner,
+                    subaccount: subaccount.map(|subaccount| {
+                        <[u8; 32]>::try_from(subaccount.into_vec().as_slice()).unwrap()
+                    }),
+                };
+                let authorization = map_authorizations(vec![authorization])
+                    .pop()
+                    .expect("BUG: one authorization in, one out");
+                ET::AuthorizedDepositAddress {
+                    request: AuthorizationRequest::new(
+                        account,
+                        authorization.chain_id,
+                        authorization.delegate,
+                        authorization.nonce,
+                    ),
+                    signature: TransactionSignature {
+                        signature_y_parity: authorization.y_parity,
+                        r: authorization.r,
+                        s: authorization.s,
+                    },
+                }
+            }
             EventPayload::AcceptedSweepRequest {
                 sweep_id,
                 destination,
-                amount,
-                data,
+                token,
+                items,
                 max_transaction_fee,
                 created_at,
-                authorizations,
             } => ET::AcceptedSweepRequest(SweepRequest {
                 id: SweepId(sweep_id.0.to_u64().unwrap()),
                 destination: destination.parse().unwrap(),
-                amount: amount.try_into().unwrap(),
-                data: data.into_vec(),
+                token: token.parse().unwrap(),
+                items: map_authorized_sweep_items(items),
                 max_transaction_fee: max_transaction_fee.try_into().unwrap(),
                 created_at,
-                authorizations: map_authorizations(authorizations),
             }),
             EventPayload::CreatedSweeperTransaction {
                 sweep_id,

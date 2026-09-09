@@ -287,6 +287,7 @@ impl Request {
             | Ok(Method::BitcoinGetSuccessors)
             | Ok(Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Method::NodeMetricsHistory)
+            | Ok(Method::SubnetMetrics)
             | Ok(Method::SubnetInfo) => {
                 // No effective canister id.
                 None
@@ -558,7 +559,9 @@ impl Hash for Response {
 }
 
 /// XNet message type (like `Request` and `Response`) for guaranteed delivery of
-/// refunds for best-effort calls.
+/// cycles that are refunded outside of a response: e.g. the payment of a dropped
+/// best-effort call; or the unspent part of an HTTP outcall's payment that was
+/// only settled after the response was already delivered.
 ///
 /// Represents an _anonymous refund_.
 ///

@@ -15,8 +15,7 @@ use ic_protobuf::types::v1::PrincipalId as PrincipalIdPb;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
-use ic_test_utilities_types::ids::user_test_id;
-use ic_types::ReplicaVersion;
+use ic_test_utilities_types::ids::{test_replica_version, user_test_id};
 use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
@@ -158,7 +157,7 @@ fn test_subnet_admins_cannot_be_updated_for_system_subnet() {
                             max_block_payload_size: 4 * 1024 * 1024,
                             unit_delay_millis: 500,
                             initial_notary_delay_millis: 1500,
-                            replica_version_id: ReplicaVersion::default().into(),
+                            replica_version_id: test_replica_version().to_string(),
                             dkg_interval_length: 0,
                             dkg_dealings_per_block: 1,
                             start_as_nns: false,
@@ -250,7 +249,7 @@ fn test_subnet_admins_cannot_be_updated_for_non_rented_subnet() {
                             max_block_payload_size: 4 * 1024 * 1024,
                             unit_delay_millis: 500,
                             initial_notary_delay_millis: 1500,
-                            replica_version_id: ReplicaVersion::default().into(),
+                            replica_version_id: test_replica_version().to_string(),
                             dkg_interval_length: 0,
                             dkg_dealings_per_block: 1,
                             start_as_nns: false,
@@ -341,7 +340,7 @@ fn test_subnet_rental_canister_can_update_subnet_admins_of_rented_subnet() {
                             max_block_payload_size: 4 * 1024 * 1024,
                             unit_delay_millis: 500,
                             initial_notary_delay_millis: 1500,
-                            replica_version_id: ReplicaVersion::default().into(),
+                            replica_version_id: test_replica_version().to_string(),
                             dkg_interval_length: 0,
                             dkg_dealings_per_block: 1,
                             start_as_nns: false,
@@ -433,7 +432,7 @@ fn test_rate_limit_subnet_admin_updates_per_subnet() {
                             max_block_payload_size: 4 * 1024 * 1024,
                             unit_delay_millis: 500,
                             initial_notary_delay_millis: 1500,
-                            replica_version_id: ReplicaVersion::default().into(),
+                            replica_version_id: test_replica_version().to_string(),
                             dkg_interval_length: 0,
                             dkg_dealings_per_block: 1,
                             start_as_nns: false,

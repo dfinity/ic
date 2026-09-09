@@ -14,15 +14,12 @@ attestation = { path = "../../sev/attestation" }
 clap = { workspace = true }
 ic_os_logging = { path = "../../logging" }
 tracing = { workspace = true }
-config_tool = { path = "../../config/tool" }
-config_types = { path = "../../config/types" }
 hex = { workspace = true }
 libcryptsetup-rs = { workspace = true }
 ic_device = { path = "../../device" }
 sev_guest = { path = "../../sev/guest" }
 ic-sys = { path = "../../../sys" }
 itertools = { workspace = true }
-mockall = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
