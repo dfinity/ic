@@ -144,7 +144,8 @@ impl StreamBuilderMetrics {
             METRIC_COOLING_DOWN_SKIPPED_REFUNDS,
             "Refunds skipped because their destination subnet was cooling down while this \
             subnet was not. Counted once per refund per round, so the same refund is counted \
-            repeatedly for as long as the destination subnet keeps cooling down.",
+            repeatedly for as long as that remains the case, i.e. until the destination subnet \
+            stops cooling down or this subnet starts.",
         );
         let critical_error_payload_too_large =
             metrics_registry.error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE);
@@ -841,12 +842,12 @@ impl StreamBuilderImpl {
                     // Refunds are routed under the same conditions as subnet output
                     // responses: always, unless this subnet (the source) is not cooling down
                     // while the destination subnet is. This way a cooling down subnet can
-                    // still hand back the cycles it holds (before it is deleted), while no new
-                    // cycles are pushed onto a subnet that is cooling down.
+                    // still hand back the cycles it holds (before it is deleted), while a
+                    // subnet that is not cooling down pushes no new cycles onto one that is.
                     //
-                    // Retain the skipped refunds in the refund pool until the destination
-                    // subnet stops cooling down, rather than dropping them (which would lose
-                    // their cycles).
+                    // Retain the skipped refunds in the refund pool until this no longer holds
+                    // (the destination subnet stops cooling down, or this subnet starts),
+                    // rather than dropping them (which would lose their cycles).
                     let dst_subnet_is_cooling_down =
                         dst_subnet_topology.is_some_and(|topology| topology.cooling_down);
                     if !own_subnet_is_cooling_down && dst_subnet_is_cooling_down {
