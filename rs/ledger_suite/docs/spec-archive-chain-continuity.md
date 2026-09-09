@@ -533,6 +533,40 @@ The blocks are never *lost* in either branch. A lagging `num_archived_blocks` me
 the ledger removed nothing, so it still holds them; a hole in the archive address
 space costs the ability to archive them, not the data.
 
+#### Restoring from a canister snapshot is not a recovery path
+
+Both guards name snapshot restore as the way to reach them, so it is worth saying
+what such a restore does — the answer is worse than "some transactions are lost".
+
+`num_archived_blocks` and `nodes_block_ranges` are ordinary ledger state, so
+restoring the **ledger** walks them backwards while the archives keep theirs. Every
+block created after the snapshot and not yet archived is indeed gone. But the
+restored ledger then resumes minting indices the archives *already hold with
+different content*, so the ledger's chain forks from the archived prefix: balances
+rewind, and for the ck suites the minter's view desynchronises in the
+over-minting direction. An immutable ledger that changed history is a much larger
+problem than an archiving stall.
+
+Three checks catch it, and which one fires depends on where the restore lands:
+
+| restore lands | what fires |
+|---|---|
+| below the tail node's `offset` | the **coverage guard** — the restored ranges no longer cover the skipped span, so it halts |
+| *inside* the tail node's range | **A1** — the suffix is appended at indices the archive really lacks, so placement sees nothing wrong, but `blocks[k]`'s `parent_hash` is the restored ledger's block and differs from the archive's tip |
+| the archives rolled back instead of the ledger | the **mirror check** below |
+
+The middle row is the case worth noticing: it is the one the coverage guard misses
+and the one where the append would otherwise succeed, so the hash chain is the
+*only* thing standing between a forked ledger and a silently extended archive.
+That is a better argument for keeping A1 than its cost.
+
+All three are detectors, not mitigations — they fire after the ledger has forked,
+since it accepts transactions the moment it is back up. The only coherent rollback
+is **the whole suite to a common point** — ledger, archives, index and minter,
+accepting that everything after it is gone — which works precisely because it
+leaves no divergence to find. A partial rollback in either direction is caught but
+not repairable.
+
 #### The mirror case: an archive that has gone backwards
 
 The guard above handles the archive being *ahead* of the ledger. The opposite is
@@ -566,9 +600,12 @@ there is no reason not to make it.
   reject string, and no wasted work.
 * **A full archive stops being an error**, distinguished from a platform growth
   refusal, so the ledger spawns in one case and waits in the other.
-* **A1 is demoted** to belt-and-braces. Indexes verify *position*; the hash chain
-  still verifies *content*, catching a ledger that sends right indexes with wrong
-  blocks. Cheap, so worth keeping.
+* **A1 is demoted** to belt-and-braces, but not to optional. Indexes verify
+  *position*; the hash chain verifies *content*, catching a ledger that sends the
+  right indexes with the wrong blocks. There is a concrete case where it is the
+  only check that fires — a ledger restored from a snapshot into the tail node's
+  range, where every index is plausible and only the parent hash disagrees. See
+  *Restoring from a canister snapshot*.
 * **No separate range endpoint is needed.** A dedicated `archive_range() ->
   (start, end)` would answer the same question, but E already answers it on every
   append — and an **empty** `append_blocks` answers it when there is no round to
