@@ -64,7 +64,6 @@ impl DkgPoolImpl {
             .extract_keys_below(&DkgMessageId::smallest_at_height(height));
         self.validated
             .extract_keys_below(&DkgMessageId::smallest_at_height(height))
-            .collect()
     }
 }
 

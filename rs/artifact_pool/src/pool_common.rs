@@ -70,13 +70,16 @@ impl<K: Ord, V: HasLabel> PoolSection<K, V> {
     }
 
     /// Removes all entries with keys below the given key and returns the removed keys.
-    pub(crate) fn extract_keys_below(&mut self, key: &K) -> impl Iterator<Item = K> {
+    pub(crate) fn extract_keys_below(&mut self, key: &K) -> Vec<K> {
         let above_key = self.messages.split_off(key);
         let below_key = std::mem::replace(&mut self.messages, above_key);
 
-        below_key.into_iter().map(|(k, v)| {
-            self.metrics.observe_remove(MESSAGE_SIZE_BYTES, v.label());
-            k
-        })
+        below_key
+            .into_iter()
+            .map(|(k, v)| {
+                self.metrics.observe_remove(MESSAGE_SIZE_BYTES, v.label());
+                k
+            })
+            .collect()
     }
 }
