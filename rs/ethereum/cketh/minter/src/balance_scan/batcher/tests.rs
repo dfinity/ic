@@ -196,6 +196,18 @@ fn full_batch_fits_the_initcode_limit_and_one_more_call_does_not() {
 }
 
 #[test]
+fn full_batch_of_eth_balance_reads_fits_both_node_limits() {
+    let holders: Vec<DepositAddress> = (0..MAX_CALLS_PER_BATCH)
+        .map(|index| DepositAddress::new(Address::new([index as u8; 20])))
+        .collect();
+
+    let returned_blob_size = holders.len() * WORD;
+
+    assert!(encode_eth_balance_batch(&holders).len() <= MAX_INITCODE_SIZE);
+    assert!(returned_blob_size <= MAX_CODE_SIZE);
+}
+
+#[test]
 fn decode_round_trip() {
     let mut ret = Vec::new();
     for v in [1_000_000_u64, 0, u64::MAX] {

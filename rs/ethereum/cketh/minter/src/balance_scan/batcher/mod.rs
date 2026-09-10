@@ -53,7 +53,7 @@ const MAX_CODE_SIZE: usize = 24_576;
 /// [EIP-3860]: https://eips.ethereum.org/EIPS/eip-3860
 const MAX_INITCODE_SIZE: usize = 2 * MAX_CODE_SIZE;
 
-/// Maximum number of `balanceOf` sub-calls in a single deployless-batcher `eth_call`.
+/// Maximum number of balance reads in a single deployless-batcher `eth_call`, for both batchers.
 ///
 /// A create-style `eth_call` is bounded at both ends: the initcode it carries is rejected beyond
 /// [`MAX_INITCODE_SIZE`] (EIP-3860), and the blob the program `RETURN`s is rejected beyond
@@ -73,6 +73,12 @@ const MAX_INITCODE_SIZE: usize = 2 * MAX_CODE_SIZE;
 /// registered pairs into chunks of this size and advances each chunk all-or-nothing, so a
 /// whole-call failure re-does that chunk on the next tick — and a chunk that always exceeds a
 /// provider limit fails *every* time, permanently stalling its pairs.
+///
+/// The value is derived from the ERC-20 encoding, yet it caps [`ETH_BATCHER_INITCODE`] batches
+/// too, with margin on both ends. The returned-blob term is shared — both programs return one
+/// word per entry — so the cap can never exceed `MAX_CODE_SIZE / WORD`; and the ETH initcode
+/// side is far looser than the ERC-20 one (one word per entry after a 78-byte program, so 1532
+/// reads) and never binds. `full_batch_of_eth_balance_reads_fits_both_node_limits` pins this.
 pub const MAX_CALLS_PER_BATCH: usize = {
     let by_initcode_size = (MAX_INITCODE_SIZE - BATCHER_INITCODE.len() - WORD) / (2 * WORD);
     let by_returned_code_size = MAX_CODE_SIZE / WORD;
