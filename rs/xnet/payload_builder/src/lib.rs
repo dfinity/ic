@@ -1413,8 +1413,8 @@ pub fn adjusted_byte_limit(slice_byte_size: usize) -> usize {
     slice_byte_size.saturating_sub(350) * 98 / 100
 }
 
-/// Computes `RefillStreamSliceIndices` for every subnet whose stream slices should be refilled
-/// in the given certified slice pool owned by the given subnet.
+/// Computes `RefillStreamSliceIndices` for every subnet with a cached stream
+/// position in the given certified slice pool owned by the given subnet.
 pub fn refill_stream_slice_indices(
     pool_lock: Arc<Mutex<CertifiedSlicePool>>,
     own_subnet_id: SubnetId,
@@ -1467,11 +1467,10 @@ pub fn refill_stream_slice_indices(
             ),
         };
 
-        if slice_byte_limit < SLICE_BYTE_SIZE_MIN {
-            // No more space left in the pool for this slice, skip it.
-            continue;
-        }
-
+        // Poll every subnet regardless of how low `slice_byte_limit` is:
+        //  * A header-only suffix may usefully replace the pooled slice's.
+        //  * A complete slice will always include the first message, if any. We rely on
+        //    this to avoid stalling streams indefinitely behind large messages.
         result.insert(
             subnet_id,
             RefillStreamSliceIndices {
