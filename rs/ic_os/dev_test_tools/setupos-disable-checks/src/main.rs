@@ -49,8 +49,7 @@ fn main() -> Result<()> {
 }
 
 /// Disable checks from the kernel command line
-// Naming each binding at its assignment is clearer here than destructuring a 5-tuple,
-// where it is easy to misread which value ends up in which variable.
+// Naming each binding at its assignment is clearer than destructuring a 5-tuple.
 #[allow(clippy::needless_late_init)]
 fn process_cmdline(input: &str) -> Result<String> {
     let boot_args_re = Regex::new(r"(^|\n)BOOT_ARGS=(.*)(\s+#|\n|$)").unwrap();
