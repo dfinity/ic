@@ -11,8 +11,8 @@ package(default_visibility = ["//ic-os/guestos/envs/sev-recovery-dev:__pkg__"])
 #    or //ic-os/defs.bzl for the full list of targets.
 icos_images = icos_build(
     name = "dev",
-    image_deps_func = image_deps,
     fast_upgrades = True,
+    image_deps_func = image_deps,
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
