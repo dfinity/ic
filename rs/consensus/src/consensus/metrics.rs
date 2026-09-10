@@ -781,8 +781,18 @@ mod tests {
         let metrics_registry = MetricsRegistry::new();
         let metrics = FinalizerMetrics::new(metrics_registry.clone());
 
-        // Zero across the statuses: batch delivery has not computed one yet.
-        assert_eq!(consensus_status(&metrics_registry).values().sum::<i64>(), 0);
+        // Every status reported, and zero: batch delivery has not computed one
+        // yet. Asserted over the whole map, as a sum of zero would also be what
+        // an empty one adds up to -- the very state this is here to catch.
+        assert_eq!(
+            consensus_status(&metrics_registry),
+            BTreeMap::from([
+                (STATUS_RUNNING.into(), 0),
+                (STATUS_HALTING.into(), 0),
+                (STATUS_HALTED.into(), 0),
+                (STATUS_UNKNOWN.into(), 0),
+            ]),
+        );
 
         metrics.observe_status(Some(Status::Halted));
 
