@@ -407,7 +407,7 @@ mod tests {
     }
 
     #[test]
-    fn test_make_registry_cup_with_subnet_splitting_cup_contents() {
+    fn test_make_registry_cup_with_subnet_splitting_cup_type() {
         let registry_client = setup_registry_with_cup_type(
             /*registry_store_uri=*/ None,
             CupType::SubnetSplitting(Default::default()),
