@@ -180,10 +180,8 @@ fn deliver_batches(
 
         // The status is computed for every block, the CUP block included, and
         // handed to the observer before it is acted upon. The CUP block is
-        // delivered whatever the status is, but a subnet halting at its CUP
-        // height is halting while that batch is delivered, and an observer that
-        // only heard about the blocks the status is acted upon would report it
-        // as running until the first block above the CUP is finalized.
+        // delivered whatever the status is, and a subnet halting at its CUP
+        // height is already halting as that batch is delivered.
         let status = status::get_status(
             height,
             &summary_block,
@@ -896,9 +894,10 @@ mod tests {
     #[case::halting_at_cup_height(
         /* halt_at_cup_height= */ true,
         /* at_cup_height= */ true,
-        // The certified height of the finalized tip is below the CUP height, as
-        // the batch delivering the state of the CUP height is the one about to
-        // be delivered, so the subnet is halting rather than halted.
+        // `Halted` needs the subnet to have been halting as of the certified
+        // height of the finalized tip as well. That height is still below the
+        // CUP height, as delivering this batch is what produces the state of
+        // the CUP height, and the subnet halts only from the CUP height on.
         Status::Halting
     )]
     fn test_deliver_batches_observes_status(
@@ -936,13 +935,15 @@ mod tests {
             )
             .build();
 
-            // Up to the CUP, and, unless the CUP block is the one to deliver, one
-            // round more, whose block is not a summary one and whose certified
-            // height has reached the CUP height.
+            // Advance to the CUP height, whose block is a summary one.
             pool.advance_round_normal_operation_n(CUP_HEIGHT.get());
             let batch_height = if at_cup_height {
+                // That summary block is the one to deliver.
                 CUP_HEIGHT
             } else {
+                // One round more, to a data block. Its certified height has
+                // reached the CUP height, which is what tells a subnet that is
+                // halted from one that is only halting.
                 Round::new(&mut pool)
                     .with_certified_height(CUP_HEIGHT)
                     .advance();
