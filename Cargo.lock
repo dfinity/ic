@@ -1754,12 +1754,6 @@ dependencies = [
 
 [[package]]
 name = "base64"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
-
-[[package]]
-name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
@@ -3061,7 +3055,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "askama",
- "base64 0.13.1",
+ "base64 0.22.1",
  "clap",
  "config_types",
  "deterministic_ips",
@@ -6568,7 +6562,7 @@ dependencies = [
  "anyhow",
  "assert_matches",
  "async-trait",
- "base64 0.13.1",
+ "base64 0.22.1",
  "candid",
  "canister-test",
  "chrono",
@@ -7221,7 +7215,7 @@ name = "ic-btc-checker"
 version = "0.9.0"
 dependencies = [
  "askama",
- "base64 0.13.1",
+ "base64 0.22.1",
  "bitcoin-dogecoin",
  "candid",
  "candid_parser",
@@ -8480,7 +8474,7 @@ name = "ic-crypto-iccsa"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "base64 0.13.1",
+ "base64 0.22.1",
  "hex",
  "ic-certification 0.9.0",
  "ic-certification-test-utils",
@@ -8545,7 +8539,7 @@ name = "ic-crypto-internal-basic-sig-ecdsa-secp256k1"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "base64 0.13.1",
+ "base64 0.22.1",
  "hex",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
@@ -8565,7 +8559,7 @@ name = "ic-crypto-internal-basic-sig-ecdsa-secp256r1"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "base64 0.13.1",
+ "base64 0.22.1",
  "hex",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
@@ -8585,7 +8579,7 @@ name = "ic-crypto-internal-basic-sig-ed25519"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "base64 0.13.1",
+ "base64 0.22.1",
  "curve25519-dalek",
  "hex",
  "ic-crypto-internal-seed",
@@ -8661,7 +8655,7 @@ name = "ic-crypto-internal-csp"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "base64 0.13.1",
+ "base64 0.22.1",
  "bincode",
  "bytes",
  "educe 0.5.11",
@@ -8813,7 +8807,7 @@ name = "ic-crypto-internal-multi-sig-bls12381"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "base64 0.13.1",
+ "base64 0.22.1",
  "hex",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-seed",
@@ -8857,7 +8851,7 @@ dependencies = [
 name = "ic-crypto-internal-threshold-sig-bls12381"
 version = "0.9.0"
 dependencies = [
- "base64 0.13.1",
+ "base64 0.22.1",
  "criterion",
  "hex",
  "ic-crypto-internal-bls12-381-type",
@@ -9471,7 +9465,7 @@ dependencies = [
 name = "ic-crypto-utils-threshold-sig"
 version = "0.9.0"
 dependencies = [
- "base64 0.13.1",
+ "base64 0.22.1",
  "ic-crypto-internal-csp",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
@@ -11338,7 +11332,7 @@ dependencies = [
 
 [[package]]
 name = "ic-management-canister-types"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "candid",
  "candid_parser",
@@ -11651,7 +11645,7 @@ name = "ic-nervous-system-common"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "base64 0.13.1",
+ "base64 0.22.1",
  "build-info-build",
  "by_address",
  "bytes",
@@ -12087,7 +12081,7 @@ dependencies = [
 name = "ic-nervous-system-tools-signed-canister-reply"
 version = "0.9.0"
 dependencies = [
- "base64 0.13.1",
+ "base64 0.22.1",
  "candid",
  "canister-test",
  "clap",
@@ -13918,7 +13912,7 @@ dependencies = [
  "actix-web",
  "anyhow",
  "async-trait",
- "base64 0.13.1",
+ "base64 0.22.1",
  "candid",
  "clap",
  "dfn_protobuf",
@@ -13986,7 +13980,7 @@ dependencies = [
 name = "ic-rosetta-test-utils"
 version = "0.9.0"
 dependencies = [
- "base64 0.13.1",
+ "base64 0.22.1",
  "hex",
  "ic-crypto-utils-threshold-sig-der",
  "ic-icrc1-test-utils",
@@ -14135,7 +14129,7 @@ name = "ic-sns-cli"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "base64 0.13.1",
+ "base64 0.22.1",
  "candid",
  "candid-utils",
  "clap",
@@ -14184,7 +14178,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
- "base64 0.13.1",
+ "base64 0.22.1",
  "build-info",
  "build-info-build",
  "canbench-rs",
@@ -14356,7 +14350,7 @@ dependencies = [
 name = "ic-sns-init"
 version = "0.9.0"
 dependencies = [
- "base64 0.13.1",
+ "base64 0.22.1",
  "candid",
  "ic-base-types",
  "ic-icrc1-index-ng",
@@ -15691,7 +15685,7 @@ name = "ic-types"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "base64 0.13.1",
+ "base64 0.22.1",
  "bincode",
  "candid",
  "chrono",
@@ -15866,7 +15860,7 @@ name = "ic-validator"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "base64 0.13.1",
+ "base64 0.22.1",
  "hex",
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
@@ -15929,7 +15923,7 @@ name = "ic-validator-ingress-message"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "base64 0.13.1",
+ "base64 0.22.1",
  "getrandom 0.2.17",
  "hex",
  "ic-canister-client-sender",
@@ -16271,6 +16265,7 @@ name = "ic_consensus_system_test_utils"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "candid",
  "canister-test",
  "chrono",
@@ -16293,7 +16288,6 @@ dependencies = [
  "ic-types",
  "ic_consensus_threshold_sig_system_test_utils",
  "leb128",
- "openssh-keys",
  "prost",
  "rand 0.8.6",
  "registry-canister",
@@ -16401,7 +16395,7 @@ name = "ic_crypto_system_tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "base64 0.13.1",
+ "base64 0.22.1",
  "candid",
  "ic-agent",
  "ic-certification 3.1.0",
@@ -17322,11 +17316,11 @@ dependencies = [
 
 [[package]]
 name = "jsonrpc"
-version = "0.18.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3662a38d341d77efecb73caf01420cfa5aa63c0253fd7bc05289ef9f6616e1bf"
+checksum = "f106cca655869522988b976127096f0aa36e0f1a8ff1f1f425a5c85b61e59391"
 dependencies = [
- "base64 0.13.1",
+ "base64 0.22.1",
  "serde",
  "serde_json",
 ]
@@ -17423,7 +17417,7 @@ dependencies = [
 name = "kv_store"
 version = "0.9.0"
 dependencies = [
- "base64 0.13.1",
+ "base64 0.22.1",
  "candid",
  "flate2",
  "ic-cdk",
@@ -18140,17 +18134,6 @@ dependencies = [
  "memchr",
  "serde",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "md-5"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b5a279bb9607f9f53c22d496eade00d138d1bdcccd07d74650387cf94942a15"
-dependencies = [
- "block-buffer 0.9.0",
- "digest 0.9.0",
- "opaque-debug",
 ]
 
 [[package]]
@@ -19250,19 +19233,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "openssh-keys"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7249a699cdeea261ac73f1bf9350777cb867324f44373aafb5a287365bf1771"
-dependencies = [
- "base64 0.13.1",
- "byteorder",
- "md-5",
- "sha2 0.9.9",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "openssl"
 version = "0.10.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20045,7 +20015,7 @@ name = "pocket-ic"
 version = "16.0.0"
 dependencies = [
  "backon",
- "base64 0.13.1",
+ "base64 0.22.1",
  "bitcoin",
  "candid",
  "candid_parser",
@@ -20115,7 +20085,7 @@ dependencies = [
  "axum-extra 0.10.3",
  "axum-server",
  "backon",
- "base64 0.13.1",
+ "base64 0.22.1",
  "bitcoin-dogecoin",
  "bytes",
  "candid",
@@ -22611,11 +22581,11 @@ dependencies = [
 
 [[package]]
 name = "serde-bytes-repr"
-version = "0.1.5"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9eb83481bce328081ced4404f986de002bf2e08865bec386734595ebf3b2c425"
+checksum = "011bbe7d7ea2cad78c139dc465355a3965254def5d20d54ce59c358341fa7bd9"
 dependencies = [
- "base64 0.13.1",
+ "base64 0.22.1",
  "hex",
  "serde",
 ]
@@ -22894,7 +22864,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "attestation",
- "base64 0.13.1",
+ "base64 0.22.1",
  "config_types",
  "hkdf",
  "linux_kernel_command_line",

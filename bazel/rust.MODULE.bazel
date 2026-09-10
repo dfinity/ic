@@ -190,7 +190,7 @@ crate.spec(
 )
 crate.spec(
     package = "base64",
-    version = "^0.13.1",
+    version = "^0.22",
 )
 crate.spec(
     package = "bech32",
@@ -923,7 +923,7 @@ crate.spec(
 )
 crate.spec(
     package = "jsonrpc",
-    version = "^0.18.0",
+    version = "^0.20.1",
 )
 crate.spec(
     package = "json-patch",
@@ -1134,10 +1134,6 @@ crate.spec(
 crate.spec(
     package = "once_cell",
     version = "^1.8",
-)
-crate.spec(
-    package = "openssh-keys",
-    version = "^0.5.0",
 )
 crate.spec(
     features = [
@@ -1568,7 +1564,7 @@ crate.spec(
 )
 crate.spec(
     package = "serde-bytes-repr",
-    version = "^0.1.5",
+    version = "^0.3.0",
 )
 crate.spec(
     package = "serde_bytes",
