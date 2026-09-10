@@ -145,6 +145,18 @@ fn deliver_batches(
             );
             break;
         };
+        let Some(tape) = pool.get_random_tape(height) else {
+            // Do not deliver batch if we don't have random tape, and report the
+            // status as not known, as this height did not reach one.
+            status_observer(None);
+            warn!(
+                every_n_seconds => 30,
+                log,
+                "Do not deliver height {} because RandomTape is not ready. Will re-try later",
+                height
+            );
+            break;
+        };
         let replica_version = block.version();
         let mut block_stats = BlockStats::from(&block);
         debug!(
@@ -174,9 +186,11 @@ fn deliver_batches(
         let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
 
         // The status is computed for every block, the CUP block included, and
-        // handed to the observer before it is acted upon. The CUP block is
-        // delivered whatever the status is, and a subnet halting at its CUP
-        // height is already halting as that batch is delivered.
+        // handed to the observer before it is acted upon. A subnet halting at
+        // its CUP height stops running at exactly that height, and the CUP
+        // block is delivered whatever the status says, which makes it the one
+        // block whose status is observed without being acted upon -- and the
+        // block on which the answer changes.
         let status = status::get_status(
             height,
             &summary_block,
@@ -220,19 +234,6 @@ fn deliver_batches(
             }
         }
 
-        // Looked up here rather than above the status, which does not need it,
-        // so that a height whose tape is not ready yet still has its status
-        // reported instead of the loop leaving with nothing to say.
-        let Some(tape) = pool.get_random_tape(height) else {
-            // Do not deliver batch if we don't have random tape
-            warn!(
-                every_n_seconds => 30,
-                log,
-                "Do not deliver height {} because RandomTape is not ready. Will re-try later",
-                height
-            );
-            break;
-        };
         let randomness = randomness_from_crypto_hashable(&tape);
 
         let mut chain_key_subnet_public_keys = BTreeMap::new();
@@ -993,12 +994,12 @@ mod tests {
         });
     }
 
-    /// The random tape is needed to deliver a batch but not to compute a status,
-    /// and a height whose tape is not ready yet is one the delivery path has a
-    /// status for. The status is reported before the tape is looked up, so that
-    /// waiting on the tape does not leave the metric with nothing to say.
+    /// A height the delivery path cannot get past has its status reported as not
+    /// known, rather than leaving the metric reporting the status of an earlier
+    /// height as though it still held. The missing random tape stands here for
+    /// all three of the guards that leave the loop.
     #[test]
-    fn test_deliver_batches_observes_status_without_random_tape() {
+    fn test_deliver_batches_observes_unknown_without_random_tape() {
         const INTERVAL_LENGTH: u64 = 3;
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -1046,10 +1047,10 @@ mod tests {
                 |status| observed.push(status),
             );
 
-            // The batch is not delivered, and the status is reported all the same.
+            // The batch is not delivered, and the status is reported as not known.
             assert_eq!(result, Ok(height.decrement()));
             assert!(message_routing.batches.read().unwrap().is_empty());
-            assert_eq!(observed, vec![Some(Status::Running)]);
+            assert_eq!(observed, vec![None]);
         })
     }
 
