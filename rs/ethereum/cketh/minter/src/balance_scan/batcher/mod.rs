@@ -153,13 +153,14 @@ pub fn encode_eth_balance_batch(holders: &[DepositAddress]) -> Vec<u8> {
     out
 }
 
-/// Decode the flat `n x 32`-byte return blob into `n` balances, in call order.
+/// Decode the flat `n x 32`-byte return blob of either batcher into `n` balances, in call order.
 ///
-/// Every entry is a genuine `balanceOf` result: the batcher reverts the whole
-/// call if any sub-call fails, so a successful return means all `n` balances are
-/// present (a failed batch surfaces as an `eth_call` error upstream, never as a
-/// `0` here). Returns `Err` if the blob length is not exactly `n` words; never
-/// panics.
+/// Every entry is a genuine balance, never a `0` standing in for a failure, because neither
+/// program can return a partial result: [`BATCHER_INITCODE`] reverts the whole call if any
+/// `balanceOf` sub-call fails, and [`ETH_BATCHER_INITCODE`] has no failure path at all — the
+/// `BALANCE` opcode makes no sub-calls. A failed batch therefore surfaces as an `eth_call` error
+/// upstream, never as a `0` here. Returns `Err` if the blob length is not exactly `n` words;
+/// never panics.
 pub fn decode_balance_batch(ret: &[u8], n: usize) -> Result<Vec<Erc20Value>, BatcherDecodeError> {
     let expected = n * WORD;
     if ret.len() != expected {
