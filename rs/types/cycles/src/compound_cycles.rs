@@ -55,7 +55,10 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 ///
 /// Extra type-safety is added via use of generics and phantom data to enforce
 /// that arithmetic operations can only be performed on amounts that were
-/// created for the same `CyclesUseCase` and `CanisterCyclesCostSchedule`.
+/// created for the same `CyclesUseCase`. The `CanisterCyclesCostSchedule` is not
+/// part of the type: `new` folds it into the real part and does not retain it, so
+/// nothing stops two amounts created under different cost schedules from being
+/// combined (see the note on ordering below).
 ///
 /// E.g. the following code would not compile:
 ///
@@ -263,5 +266,48 @@ impl<T: CyclesUseCaseKind> TryFrom<PbCompoundCycles> for CompoundCycles<T> {
             nominal,
             _cycles_use_case_marker: PhantomData,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cycles_use_case::Instructions;
+    use crate::nominal_cycles::testing::NominalCyclesTesting;
+
+    /// An `Instructions` amount has coincident parts under the normal cost schedule,
+    /// whereas its real part is zero under the free cost schedule. The two amounts
+    /// below therefore order one way in their real parts and the other way in their
+    /// nominal parts, which is exactly the case a lexicographic ordering of the pair
+    /// would decide on the real parts alone. Both identities documented on
+    /// `CompoundCycles` hold for it.
+    #[test]
+    fn saturating_subtraction_is_part_wise() {
+        let x =
+            CompoundCycles::<Instructions>::new(Cycles::new(5), CanisterCyclesCostSchedule::Normal);
+        let y =
+            CompoundCycles::<Instructions>::new(Cycles::new(10), CanisterCyclesCostSchedule::Free);
+        assert_eq!(
+            (x.real(), x.nominal()),
+            (Cycles::new(5), NominalCycles::new(5))
+        );
+        assert_eq!(
+            (y.real(), y.nominal()),
+            (Cycles::zero(), NominalCycles::new(10))
+        );
+
+        // Subtracting `y` from `x` without going below zero, part by part.
+        let difference = x - y;
+        assert_eq!(
+            (difference.real(), difference.nominal()),
+            (Cycles::new(5), NominalCycles::zero())
+        );
+
+        // The part-wise minimum of `x` and `y`.
+        let minimum = x - (x - y);
+        assert_eq!(
+            (minimum.real(), minimum.nominal()),
+            (Cycles::zero(), NominalCycles::new(5))
+        );
     }
 }

@@ -564,10 +564,13 @@ impl CyclesAccountManager {
         //
         // The refund covers at most the instructions the prepayment was made for, but
         // it is priced with the Wasm execution mode, the cost schedule and the subnet
-        // size passed to this function, i.e. with the ones in effect now rather than
-        // the ones the prepayment was priced with. `scale_cost` scales both parts of
-        // an amount by the subnet size, so a subnet that grew in between makes the
-        // refund exceed the prepayment, and the cap bounds it.
+        // size passed to this function, which need not be the ones the prepayment was
+        // priced with. For an update call or an install these coincide, as the caller
+        // passes the same `subnet_cycles_config` it prepaid with. They can differ for
+        // a response execution, whose prepayment was made in an earlier round, when
+        // the corresponding call was performed: `scale_cost` scales both parts of an
+        // amount by the subnet size, so a subnet that grew in between can price the
+        // refund above the prepayment, and the cap bounds it.
         let cycles_to_refund =
             prepaid_execution_cycles - (prepaid_execution_cycles - cycles_to_refund);
         system_state.refund_cycles(prepaid_execution_cycles, cycles_to_refund);
