@@ -571,31 +571,38 @@ The `guest_disk` crate manages LUKS2-encrypted disk partitions (var and store) f
 
 #### Scenario: Open var partition with SEV-derived key
 - **WHEN** a var partition is opened with SEV encryption
-- **THEN** a key is derived from the SEV measurement using HKDF-SHA256
+- **THEN** the LUKS2 token records the launch measurement and launch TCB version the keyslot was derived under
+- **AND** a key is derived at that recorded TCB version and used to unlock the attached header
 - **AND** the LUKS device with its attached header is activated under `/dev/mapper/var_crypt`
 
 #### Scenario: Open store partition with detached header
 - **WHEN** a store partition is opened with SEV encryption
-- **THEN** a key is derived from the SEV measurement
+- **THEN** a key is derived at the TCB version recorded in the detached header's LUKS2 token
 - **AND** the LUKS device is activated using the detached header stored on the Var partition
+
+#### Scenario: TCB rotation on firmware upgrade
+- **WHEN** a partition is opened and the current firmware's launch TCB version differs from the one recorded in the keyslot's LUKS2 token
+- **THEN** on the Default VM, the keyslot is re-keyed in place to a key derived at the current TCB version, and the token is updated to the new TCB version
+- **AND** on any other VM type (e.g. an Upgrade VM), TCB rotation is skipped
 
 #### Scenario: Format partition with LUKS2
 - **WHEN** `format` is called on a device path
-- **THEN** a key is derived from the SEV measurement
+- **THEN** a key is derived at the current launch TCB version
 - **AND** the device is formatted with LUKS2 using the derived key (attached header for Var, detached header for Store)
-- **AND** launch-measurement/TCB metadata is written to the new keyslot's LUKS2 token
+- **AND** the launch measurement and launch TCB version are written to the new keyslot's LUKS2 token
 - **AND** formatting the Store partition refuses to proceed if a detached header already exists at the target path
 
 #### Scenario: Check if a partition can be opened with the SEV-derived key
 - **WHEN** `can_open` is called with a device path and header location
-- **THEN** it derives the SEV key and attempts to unlock the device (attached or detached header) with it
-- **AND** returns `true` only if that derived key succeeds
+- **THEN** it derives the SEV key at the TCB version recorded in the header's LUKS2 token and attempts to unlock the device with it, without creating a mapper device
+- **AND** returns success only if that derived key unlocks the keyslot
 
-#### Scenario: Re-key a detached header during upgrade
+#### Scenario: Re-key a header at the current TCB and measurement
 - **WHEN** `rekey` is called with an old key, the device path, and header location
-- **THEN** it derives the new SEV key, opens the LUKS2 device, and replaces the passphrase in keyslot 0 from the old key to the new SEV-derived key
+- **THEN** it derives a new key from the current launch measurement and current launch TCB version, opens the LUKS2 device, and replaces the passphrase in keyslot 0 from the old key to the new SEV-derived key
 - **AND** destroys any other keyslots left over from legacy headers
-- **AND** writes updated launch-measurement/TCB metadata to the keyslot's LUKS2 token
+- **AND** writes the current launch measurement and TCB version to the keyslot's LUKS2 token
+- **AND** the process is not atomic (the LUKS header is written multiple times), so a failure partway through may leave it in an inconsistent state
 
 #### Scenario: Var partition does not allow discards
 - **WHEN** the var partition is opened
@@ -606,8 +613,9 @@ The `guest_disk` crate manages LUKS2-encrypted disk partitions (var and store) f
 - **THEN** `CryptActivate::ALLOW_DISCARDS` flag is set to enable TRIM
 
 #### Scenario: Derive key from SEV measurement
-- **WHEN** `derive_key_from_sev_measurement` is called
-- **THEN** the SEV firmware provides a 32-byte derived key bound to both the guest launch measurement and the guest policy (`GuestFieldSelect` with `measurement` and `guest_policy` set)
+- **WHEN** `derive_key_from_sev_measurement` is called with a caller-supplied `tcb_version`
+- **THEN** the SEV firmware provides a 32-byte derived key bound to the guest launch measurement, the guest policy, and the given TCB version (`GuestFieldSelect` with `measurement`, `guest_policy`, and `tcb_version` all set)
+- **AND** the `tcb_version` must be at most the current platform TCB version, and the caller must remember it to retrieve the same key again later
 - **AND** HKDF-SHA256 is used with an info string including the device path
 - **AND** the result is returned as a base64-encoded string
 
@@ -730,10 +738,10 @@ The `sev_guest` crate provides guest-side SEV-SNP operations including key deriv
 - **AND** the report is combined with the certificate chain from the TEE config
 - **AND** the resulting package can be verified by remote parties
 
-#### Scenario: Key derivation uses measurement and guest policy binding
+#### Scenario: Key derivation uses measurement, guest policy, and TCB version binding
 - **WHEN** a key is derived via `derive_key_from_sev_measurement`
-- **THEN** `GuestFieldSelect::measurement` and `GuestFieldSelect::guest_policy` are both set to true
-- **AND** the derived key is unique per guest measurement (code identity) and per guest policy
+- **THEN** `GuestFieldSelect::measurement`, `GuestFieldSelect::guest_policy`, and `GuestFieldSelect::tcb_version` are all set to true
+- **AND** the derived key is unique per guest measurement (code identity), per guest policy, and per TCB version, so an AMD firmware upgrade changes the key and a firmware downgrade cannot recover it
 
 ---
 
