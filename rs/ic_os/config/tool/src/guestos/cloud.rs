@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use std::{
     net::{Ipv4Addr, Ipv6Addr},
     str::FromStr,
@@ -102,7 +103,8 @@ impl CloudType {
                     .bytes()
                     .context("unable to fetch config JSON")?;
 
-                base64::decode(&b64)
+                BASE64_STANDARD
+                    .decode(&b64)
                     .context("unable to decode from Base64")?
                     .to_vec()
             }

@@ -41,6 +41,7 @@ use crate::{
     topics::topic_descriptions,
 };
 use async_trait::async_trait;
+use base64::prelude::*;
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
@@ -1689,7 +1690,7 @@ impl SnsMetadata {
                 "SnsMetadata.logo must be a base64 encoded PNG, but the provided string does't begin with `{PREFIX}`."
             ));
         }
-        if base64::decode(&logo[PREFIX.len()..]).is_err() {
+        if BASE64_STANDARD.decode(&logo[PREFIX.len()..]).is_err() {
             return Err("Couldn't decode base64 in SnsMetadata.logo".to_string());
         }
         Ok(())

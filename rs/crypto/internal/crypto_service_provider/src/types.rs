@@ -5,6 +5,7 @@
 // defined in another module).
 #![allow(clippy::unit_arg)]
 
+use base64::prelude::*;
 pub use conversions::CspSecretKeyConversionError;
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1::types as ecdsa_secp256k1_types;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types as ecdsa_secp256r1_types;
@@ -178,7 +179,11 @@ impl std::fmt::Debug for CspSignature {
             Ed25519(data) => write!(f, "CspSignature::Ed25519({data:?})"),
             MultiBls12_381(data) => write!(f, "CspSignature::MultiBls12_381({data:?})"),
             ThresBls12_381(data) => write!(f, "CspSignature::ThresBls12_381({data:?})"),
-            RsaSha256(data) => write!(f, "CspSignature::RsaSha256({:?})", base64::encode(data)),
+            RsaSha256(data) => write!(
+                f,
+                "CspSignature::RsaSha256({:?})",
+                BASE64_STANDARD.encode(data)
+            ),
         }
     }
 }

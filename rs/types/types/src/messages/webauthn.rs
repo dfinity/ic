@@ -1,5 +1,5 @@
 use crate::{CountBytes, crypto::SignedBytesWithoutDomainSeparator, messages::Blob};
-use base64::URL_SAFE_NO_PAD;
+use base64::prelude::*;
 use ic_crypto_sha2::Sha256;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -91,7 +91,7 @@ impl TryFrom<&WebAuthnSignature> for WebAuthnEnvelope {
                 Err(err) => return Err(format!("ClientDataJSON parsing failed with: {err}")),
             };
 
-        let challenge = match base64::decode_config(&client_data.challenge, URL_SAFE_NO_PAD) {
+        let challenge = match BASE64_URL_SAFE_NO_PAD.decode(&client_data.challenge) {
             Ok(challenge) => challenge,
             Err(err) => return Err(format!("Challenge base64url parsing failed with: {err}")),
         };

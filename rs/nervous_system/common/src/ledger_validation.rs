@@ -1,3 +1,5 @@
+use base64::prelude::*;
+
 /// The maximum number of characters allowed for token symbol.
 pub const MAX_TOKEN_SYMBOL_LENGTH: usize = 10;
 
@@ -99,7 +101,7 @@ pub fn validate_token_logo(token_logo: &str) -> Result<(), String> {
         ));
     }
 
-    if base64::decode(&token_logo[PREFIX.len()..]).is_err() {
+    if BASE64_STANDARD.decode(&token_logo[PREFIX.len()..]).is_err() {
         return Err("Couldn't decode base64 in SnsMetadata.logo".to_string());
     }
 

@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use std::io::Write;
 
 use candid::{
@@ -202,8 +203,8 @@ pub fn request(req: HttpRequest) -> HttpResponse {
 
     let mut headers = Vec::new();
     if !skip_certificate {
-        let cert = base64::encode(crate::cert::get());
-        let tree = base64::encode(crate::cert::get_tree(&req.url));
+        let cert = BASE64_STANDARD.encode(crate::cert::get());
+        let tree = BASE64_STANDARD.encode(crate::cert::get_tree(&req.url));
         headers.push(HeaderField::new(
             "ic-certificate",
             format!("certificate=:{cert}:, tree=:{tree}:"),
