@@ -27,11 +27,24 @@ use std::sync::RwLock;
 const RANKS_TO_RECORD: [&str; 6] = ["0", "1", "2", "3", "4", "5"];
 
 /// The label of `consensus_status`, whose values are the statuses of
-/// [`Status`], lowercased.
+/// [`Status`], lowercased, plus `unknown` for a status that could not be
+/// computed at all.
 const STATUS_LABEL: &str = "status";
 const STATUS_RUNNING: &str = "running";
 const STATUS_HALTING: &str = "halting";
 const STATUS_HALTED: &str = "halted";
+const STATUS_UNKNOWN: &str = "unknown";
+
+/// The label value `consensus_status` reports each status under. [`None`] is
+/// the status the delivery path failed to compute, rather than a status of its
+/// own, so that a subnet whose registry cannot be read is not mistaken for one
+/// that is running.
+const CONSENSUS_STATUSES: [(&str, Option<Status>); 4] = [
+    (STATUS_RUNNING, Some(Status::Running)),
+    (STATUS_HALTING, Some(Status::Halting)),
+    (STATUS_HALTED, Some(Status::Halted)),
+    (STATUS_UNKNOWN, None),
+];
 
 pub(crate) const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "consensus_payload_too_large";
 pub(crate) const CRITICAL_ERROR_VALIDATION_NOT_PASSED: &str = "consensus_validation_not_passed";
@@ -205,6 +218,22 @@ pub(crate) struct FinalizerMetrics {
 
 impl FinalizerMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
+        let consensus_status = metrics_registry.int_gauge_vec(
+            "consensus_status",
+            "Whether consensus is running, halting (producing empty blocks but delivering \
+             no batches), halted (producing no blocks either) or unknown (the status could \
+             not be computed), as of the last time batch delivery looked. 1 for the status \
+             that held then, 0 for the other three.",
+            &[STATUS_LABEL],
+        );
+        // Create every child up front. A gauge vector with no children is
+        // dropped by the Prometheus registry, so until the delivery path first
+        // computes a status the scrape would carry no `consensus_status` at all,
+        // which a dashboard cannot tell apart from a subnet that is not halted.
+        for (label, _) in CONSENSUS_STATUSES {
+            consensus_status.with_label_values(&[label]).set(0);
+        }
+
         Self {
             batches_delivered: metrics_registry.int_counter_vec(
                 "consensus_batches_delivered",
@@ -215,13 +244,7 @@ impl FinalizerMetrics {
                 "consensus_batch_height",
                 "The height of batches sent to Message Routing",
             ),
-            consensus_status: metrics_registry.int_gauge_vec(
-                "consensus_status",
-                "Whether consensus is running, halting (producing empty blocks but delivering \
-                 no batches) or halted (producing no blocks either), as of the last time batch \
-                 delivery looked. 1 for the status that held then, 0 for the other two.",
-                &[STATUS_LABEL],
-            ),
+            consensus_status,
             batch_delivery_interval: metrics_registry.histogram(
                 "consensus_batch_delivery_interval_seconds",
                 "Time elapsed since the delivery of the previous batch, in seconds",
@@ -344,8 +367,9 @@ impl FinalizerMetrics {
         }
     }
 
-    /// Records `status` as the status consensus is in, and the other two as ones
-    /// it is not.
+    /// Records `status` as the status consensus is in, and the other three as
+    /// ones it is not. [`None`] is recorded as `unknown`, the status the
+    /// delivery path failed to compute.
     ///
     /// Reported as a gauge per status rather than a single number, so that a
     /// dashboard can select the status it asks about by name. Only the batch
@@ -353,12 +377,8 @@ impl FinalizerMetrics {
     /// consider, so this says what that path saw the last time it looked: a
     /// subnet that stopped producing blocks altogether keeps reporting the
     /// status that made it stop.
-    pub fn observe_status(&self, status: Status) {
-        for (label, value) in [
-            (STATUS_RUNNING, Status::Running),
-            (STATUS_HALTING, Status::Halting),
-            (STATUS_HALTED, Status::Halted),
-        ] {
+    pub fn observe_status(&self, status: Option<Status>) {
+        for (label, value) in CONSENSUS_STATUSES {
             self.consensus_status
                 .with_label_values(&[label])
                 .set((value == status) as i64);
@@ -713,6 +733,76 @@ impl PurgerMetrics {
                 "validated_pool_bounds_exceeded",
                 "The validated pool exceeded its size bounds",
             ),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    /// The `consensus_status` gauges the registry reports, by label.
+    fn consensus_status(metrics_registry: &MetricsRegistry) -> BTreeMap<String, i64> {
+        metrics_registry
+            .prometheus_registry()
+            .gather()
+            .into_iter()
+            .filter(|family| family.name() == "consensus_status")
+            .flat_map(|family| family.get_metric().to_vec())
+            .map(|metric| {
+                let labels = metric.get_label();
+                assert_eq!(labels.len(), 1);
+                assert_eq!(labels[0].name(), STATUS_LABEL);
+
+                (
+                    labels[0].value().to_string(),
+                    metric.get_gauge().value() as i64,
+                )
+            })
+            .collect()
+    }
+
+    /// A gauge vector with no children is dropped by the Prometheus registry, so
+    /// the statuses are reported as zero from the moment the metrics are built:
+    /// a replica that has not delivered a batch since it started -- one whose
+    /// subnet is halted, for instance -- would otherwise report no
+    /// `consensus_status` at all, which reads the same as a subnet that is fine.
+    #[test]
+    fn test_consensus_status_is_reported_before_it_is_observed() {
+        let metrics_registry = MetricsRegistry::new();
+        let _metrics = FinalizerMetrics::new(metrics_registry.clone());
+
+        assert_eq!(
+            consensus_status(&metrics_registry),
+            BTreeMap::from([
+                (STATUS_RUNNING.into(), 0),
+                (STATUS_HALTING.into(), 0),
+                (STATUS_HALTED.into(), 0),
+                (STATUS_UNKNOWN.into(), 0),
+            ]),
+        );
+    }
+
+    /// Every status, the one that could not be computed included, is reported as
+    /// itself and as not any of the others.
+    #[test]
+    fn test_observe_status() {
+        let metrics_registry = MetricsRegistry::new();
+        let metrics = FinalizerMetrics::new(metrics_registry.clone());
+
+        for (observed_label, observed) in CONSENSUS_STATUSES {
+            metrics.observe_status(observed);
+
+            let expected = CONSENSUS_STATUSES
+                .iter()
+                .map(|(label, _)| ((*label).into(), i64::from(*label == observed_label)))
+                .collect();
+            assert_eq!(
+                consensus_status(&metrics_registry),
+                expected,
+                "after observing {observed:?}",
+            );
         }
     }
 }

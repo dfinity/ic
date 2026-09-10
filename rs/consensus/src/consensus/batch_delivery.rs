@@ -85,7 +85,7 @@ pub(crate) fn deliver_batches_for_finalizer(
     node_id: NodeId,
     subnet_id: SubnetId,
     result_processor: impl FnMut(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
-    status_observer: impl FnMut(Status),
+    status_observer: impl FnMut(Option<Status>),
 ) -> Result<Height, MessageRoutingError> {
     deliver_batches(
         message_routing,
@@ -114,7 +114,7 @@ fn deliver_batches(
     subnet_id: SubnetId,
     max_batch_height_to_deliver: Option<Height>,
     mut result_processor: impl FnMut(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
-    mut status_observer: impl FnMut(Status),
+    mut status_observer: impl FnMut(Option<Status>),
 ) -> Result<Height, MessageRoutingError> {
     let finalized_height = pool.get_finalized_height();
     // If `max_batch_height_to_deliver` is specified and smaller than
@@ -178,6 +178,23 @@ fn deliver_batches(
         };
         let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
 
+        // The status is computed for every block, the CUP block included, and
+        // handed to the observer before it is acted upon. The CUP block is
+        // delivered whatever the status is, but a subnet halting at its CUP
+        // height is halting while that batch is delivered, and an observer that
+        // only heard about the blocks the status is acted upon would report it
+        // as running until the first block above the CUP is finalized.
+        let status = status::get_status(
+            height,
+            &summary_block,
+            registry_client,
+            subnet_id,
+            pool,
+            replica_version,
+            log,
+        );
+        status_observer(status);
+
         if block.payload.is_summary() {
             info!(
                 log,
@@ -186,17 +203,8 @@ fn deliver_batches(
         }
         // When we are not delivering CUP block, we must check if the subnet is halted.
         else {
-            match status::get_status(
-                height,
-                &summary_block,
-                registry_client,
-                subnet_id,
-                pool,
-                replica_version,
-                log,
-            ) {
-                Some(status @ (Status::Halting | Status::Halted)) => {
-                    status_observer(status);
+            match status {
+                Some(Status::Halting | Status::Halted) => {
                     info!(
                         every_n_seconds => 5,
                         log,
@@ -205,7 +213,7 @@ fn deliver_batches(
                     );
                     return Ok(last_delivered_batch_height);
                 }
-                Some(Status::Running) => status_observer(Status::Running),
+                Some(Status::Running) => {}
                 None => {
                     warn!(
                         log,
@@ -865,11 +873,40 @@ mod tests {
     /// is what keeps the finalizer's `consensus_status` metric current: a halted
     /// subnet returns early, and a metric only set on the way to a delivered
     /// batch would be stuck at whatever it said before the subnet halted.
+    ///
+    /// `at_cup_height` delivers the CUP block itself, the round on which a
+    /// subnet halting at its CUP height halts. That batch is delivered whatever
+    /// the status is, so the status is observed but not acted upon; were it only
+    /// observed where it is acted upon, the metric would report the subnet as
+    /// running for as long as it took the first block above the CUP to be
+    /// finalized -- or forever, on a node that never gets that block.
     #[rstest]
-    #[case::running(/* halt_at_cup_height= */ false, Status::Running)]
-    #[case::halted(/* halt_at_cup_height= */ true, Status::Halted)]
+    #[case::running(
+        /* halt_at_cup_height= */ false,
+        /* at_cup_height= */ false,
+        Status::Running
+    )]
+    #[case::halted(
+        /* halt_at_cup_height= */ true,
+        /* at_cup_height= */ false,
+        Status::Halted
+    )]
+    #[case::running_at_cup_height(
+        /* halt_at_cup_height= */ false,
+        /* at_cup_height= */ true,
+        Status::Running
+    )]
+    #[case::halting_at_cup_height(
+        /* halt_at_cup_height= */ true,
+        /* at_cup_height= */ true,
+        // The certified height of the finalized tip is below the CUP height, as
+        // the batch delivering the state of the CUP height is the one about to
+        // be delivered, so the subnet is halting rather than halted.
+        Status::Halting
+    )]
     fn test_deliver_batches_observes_status(
         #[case] halt_at_cup_height: bool,
+        #[case] at_cup_height: bool,
         #[case] expected_status: Status,
     ) {
         const INTERVAL_LENGTH: u64 = 3;
@@ -902,16 +939,21 @@ mod tests {
             )
             .build();
 
-            // Up to the CUP, and then one round more whose block is not a summary
-            // one: the delivery path only asks for the status of a subnet when the
-            // block it is about to deliver is not the CUP block.
+            // Up to the CUP, and, unless the CUP block is the one to deliver, one
+            // round more, whose block is not a summary one and whose certified
+            // height has reached the CUP height.
             pool.advance_round_normal_operation_n(CUP_HEIGHT.get());
-            Round::new(&mut pool)
-                .with_certified_height(CUP_HEIGHT)
-                .advance();
+            let batch_height = if at_cup_height {
+                CUP_HEIGHT
+            } else {
+                Round::new(&mut pool)
+                    .with_certified_height(CUP_HEIGHT)
+                    .advance();
+                CUP_HEIGHT.increment()
+            };
 
             let message_routing = FakeMessageRouting::new();
-            *message_routing.next_batch_height.write().unwrap() = CUP_HEIGHT.increment();
+            *message_routing.next_batch_height.write().unwrap() = batch_height;
 
             // A plain mutable closure, as the observer is `FnMut`.
             let mut observed = Vec::new();
@@ -930,9 +972,14 @@ mod tests {
             assert!(result.is_ok(), "delivery failed: {result:?}");
             assert_eq!(
                 observed,
-                vec![expected_status],
-                "the observed statuses of a subnet that is {}halted",
+                vec![Some(expected_status)],
+                "the observed statuses of a subnet that is {}halted, at height {batch_height}",
                 if halt_at_cup_height { "" } else { "not " },
+            );
+            // The CUP batch is delivered even by a subnet that is halting.
+            assert_eq!(
+                message_routing.batches.read().unwrap().len(),
+                usize::from(at_cup_height || !halt_at_cup_height),
             );
         });
     }
