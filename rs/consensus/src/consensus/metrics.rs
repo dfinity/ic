@@ -92,7 +92,6 @@ pub(crate) struct ConsensusMetrics {
     pub on_state_change_change_set_size: HistogramVec,
     pub time_since_last_invoked: GaugeVec,
     pub starvation_counter: IntCounterVec,
-    pub halted_by_subnet_record: IntGauge,
 }
 
 impl ConsensusMetrics {
@@ -105,16 +104,6 @@ impl ConsensusMetrics {
                 // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
                 decimal_buckets(-4, 2),
                 &["sub_component"],
-            ),
-            halted_by_subnet_record: metrics_registry.int_gauge(
-                "consensus_halted_by_subnet_record",
-                "Whether the `is_halted` flag of the subnet record instructs the subnet to halt, \
-                 as of the latest registry version: 1 while it does, 0 while it does not. A \
-                 subnet halting this way creates no blocks and delivers no batches, and does so \
-                 from whatever height it is at rather than from a CUP height, which is what \
-                 `consensus_status` reports instead. A registry that cannot be read reads as 0 \
-                 here, as consensus carries on in that case rather than halting; the read \
-                 failure itself is logged as an error.",
             ),
             on_state_change_invocations: metrics_registry.int_counter_vec(
                 "consensus_on_state_change_invocations",
