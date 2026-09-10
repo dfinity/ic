@@ -223,12 +223,12 @@ impl FinalizerMetrics {
         let consensus_status = metrics_registry.int_gauge_vec(
             "consensus_status",
             "Whether consensus is running, halting towards a CUP height (producing empty \
-             blocks but delivering no batches), halted at a CUP height (producing no blocks \
-             either) or unknown (the status could not be computed), as of the last time \
-             batch delivery looked. 1 for the status that held then, 0 for the other three. \
-             All four are 0 until batch delivery computes a status for the first time, so a \
-             sum of 0 over the four is a replica that has not looked yet rather than a \
-             status of its own. A subnet halted by the `is_halted` flag of its subnet record \
+             blocks and delivering no batch but the one at that height), halted at a CUP \
+             height (producing no blocks either) or unknown (the status could not be \
+             computed), as of the last time batch delivery looked. 1 for the status that \
+             held then, 0 for the other three. All four are 0 until batch delivery computes \
+             a status for the first time, so a sum of 0 over the four is a replica that has \
+             not looked yet rather than a status of its own. A subnet halted by the `is_halted` flag of its subnet record \
              rather than at a CUP height has no status of its own here: consensus acts on \
              that flag before batch delivery runs, so this metric goes on reporting whatever \
              it last did, or all four zeros on a replica that started while the subnet was \

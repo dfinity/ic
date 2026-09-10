@@ -19,11 +19,12 @@ use ic_types::{
 pub(crate) enum Status {
     /// The Consensus is running normally.
     Running,
-    /// The Consensus is halting towards a CUP height, meaning we will produce *empty* blocks but
-    /// no batches will be delivered.
+    /// The Consensus is halting towards a CUP height, meaning we will produce *empty* blocks and
+    /// deliver no batch but the one at that CUP height.
     Halting,
-    /// The Consensus is halted at a CUP height, meaning that no blocks are created and no batches
-    /// are delivered.
+    /// The Consensus is halted at a CUP height, meaning that no blocks are created and no
+    /// batches are delivered. The batch at that CUP height has been delivered by then: the
+    /// status holds only once certification has passed the height.
     Halted,
 }
 
