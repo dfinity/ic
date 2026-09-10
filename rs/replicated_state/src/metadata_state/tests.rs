@@ -2785,13 +2785,14 @@ fn consumed_cycles_total_calculates_the_right_amount() {
 }
 
 /// The `replicated_state_consumed_cycles_since_replica_started` gauge is set in
-/// `ReplicatedStateMetrics::observe` from
-/// [`SubnetMetrics::consumed_cycles_total_including_canisters`]. This test
-/// exercises every subnet-level use case that contributes to the total, so that
-/// omitting any of them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use
-/// cases once were) would change the reported value and fail the assertion, plus
-/// the canisters' part of the total. Distinct powers of two are used so that a
-/// missing contribution is always detectable in the total.
+/// `ReplicatedStateMetrics::observe` to [`SubnetMetrics::consumed_cycles_total`]
+/// plus the canisters' monotonic consumption. This test exercises every
+/// subnet-level use case that contributes to the total, so that omitting any of
+/// them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use cases once were)
+/// would change the reported value and fail the assertion. Distinct powers of two
+/// are used so that a missing contribution is always detectable in the total. (The
+/// canisters' part is covered by the scheduler test
+/// `consumed_cycles_total_is_exported_net_of_outstanding_prepayments`.)
 #[test]
 fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
     // The three use cases with a dedicated scalar field are also mirrored in the
@@ -2824,14 +2825,13 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         consumed_cycles_by_use_case.insert(use_case, NominalCycles::new(1024));
     }
 
-    let mut subnet_metrics = SubnetMetrics {
+    let subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(1),
         consumed_cycles_ecdsa_outcalls: NominalCycles::new(2),
         consumed_cycles_http_outcalls: NominalCycles::new(4),
         consumed_cycles_by_use_case,
         ..Default::default()
     };
-    subnet_metrics.refresh_consumed_cycles(NominalCycles::new(64));
 
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
     state.metadata.subnet_metrics = subnet_metrics;
@@ -2846,7 +2846,7 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
     );
 
     // Deleted canisters (1) + ECDSA (2) + HTTP (4) + Schnorr (8) + VetKd (16)
-    // + dropped messages (32) + the canisters' part (64) = 127. The
+    // + dropped messages (32) = 63; the state holds no canisters. The
     // canister-level use cases inserted into the map above (each worth 1024)
     // must not appear in the total.
     let gauge = fetch_gauge(
@@ -2854,7 +2854,7 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         "replicated_state_consumed_cycles_since_replica_started",
     )
     .unwrap();
-    assert_eq!(gauge, 127.0);
+    assert_eq!(gauge, 63.0);
 }
 
 #[test]

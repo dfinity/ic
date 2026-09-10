@@ -46,10 +46,11 @@ use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id
 use more_asserts::assert_ge;
 use std::time::Duration;
 
-/// Observes the state metrics at `height`, having first refreshed the derived
-/// consumed-cycles total that the `replicated_state_consumed_cycles_since_replica_started`
-/// gauge reads. Production refreshes it on every `commit_and_certify`, which this
-/// harness never does.
+/// Observes the state metrics at `height`, having first refreshed
+/// `SubnetMetrics::consumed_cycles_total_including_canisters`, the derived
+/// certified total that the assertions below compare the exported gauge against.
+/// Production refreshes it on every `commit_and_certify`, which this harness never
+/// does.
 fn observe_state_metrics(test: &mut SchedulerTest, height: u64) {
     test.state_mut().refresh_consumed_cycles();
     test.state_metrics().observe(
@@ -1722,6 +1723,33 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
             ),]),
         );
     }
+}
+
+/// The exported total is the subnet-level aggregate (already monotonic) plus the
+/// canisters' `consumed_cycles_monotonic`; i.e. the certified
+/// `consumed_cycles_total_including_canisters`, net of the outstanding prepayments.
+#[test]
+fn consumed_cycles_total_is_exported_net_of_outstanding_prepayments() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    call_xnet_canister(&mut test, canister);
+    let outstanding = assert_consumed_cycles_invariant(&test, canister);
+    assert_ne!(outstanding, NominalCycles::zero());
+
+    observe_state_metrics(&mut test, 0);
+
+    let certified_total = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_total_including_canisters();
+    let exported = fetch_gauge(
+        test.metrics_registry(),
+        "replicated_state_consumed_cycles_since_replica_started",
+    )
+    .unwrap();
+    assert_eq!((certified_total - outstanding).get() as f64, exported);
 }
 
 #[test]
