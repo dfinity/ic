@@ -555,9 +555,7 @@ impl CyclesAccountManager {
         }
         let num_instructions_to_refund =
             std::cmp::min(num_instructions, num_instructions_initially_charged);
-        // Never refund more than was prepaid, in either the real or the nominal part:
-        // a prepayment made in an earlier round can have been priced with a smaller
-        // subnet size than the refund is.
+        // Never refund more than was prepaid, in either the real or the nominal part.
         let cycles_to_refund = self
             .scale_cost(
                 self.convert_instructions_to_cycles(num_instructions_to_refund, execution_mode),
