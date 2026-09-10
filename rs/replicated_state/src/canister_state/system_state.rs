@@ -2371,15 +2371,14 @@ impl SystemState {
     /// idempotent, so it is safe to redo it in every checkpoint round and after a
     /// downgrade has dropped it.
     ///
-    /// Redoing it also keeps the monotonic amount in step with the gauge as callbacks
-    /// created before `prepayment_for_call_transmission` was stored in them (#9859,
-    /// April 2026) are responded to: the fallback that
+    /// A callback created before `prepayment_for_call_transmission` was stored in it
+    /// (#9859, April 2026) is no exception, even though the fallback that
     /// [`Self::outstanding_prepayments`] and the refund path apply to such a callback
-    /// cannot account for its call fee, so settling it leaves the monotonic amount
-    /// lagging the gauge by that fee until the next backfill (see
+    /// cannot account for its call fee: that fee is part of the gauge, so the first
+    /// backfill credits it -- whether the callback is still open or already responded
+    /// to -- and executing the response of a callback so credited keeps the monotonic
+    /// amount in step with the gauge, requiring no further backfill (see
     /// `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`).
-    /// This is therefore to stay in place for as long as such a callback may still be
-    /// open.
     ///
     /// Does nothing if the canister has a paused execution whose prepayment is not
     /// part of the replicated state (see [`Self::outstanding_prepayments`]); the

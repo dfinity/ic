@@ -211,12 +211,12 @@ fn execute_response_refunds_cycles() {
 /// `SystemState::outstanding_prepayments()` fall back on it independently of each
 /// other, and the two must agree on the amount that executing the response settles.
 ///
-/// Note that the fallback cannot make the invariant on `outstanding_prepayments()`
-/// exact: the gauge holds the whole call transmission prepayment, of which the
-/// response transmission prepayment accounts for only a part. What is missing is the
-/// call fee, and it stays missing, as nothing ever refunds that part. Both assertions
-/// below are thus off by the very same call fee -- until a backfill closes the gap,
-/// as the gauge is the amount that the canister really consumed.
+/// Note that the fallback leaves the call fee out: the gauge holds the whole call
+/// transmission prepayment, of which the response transmission prepayment accounts
+/// for only a part, and nothing ever refunds the rest. A canister that has not been
+/// backfilled yet is thus short of the gauge by that fee, but the first backfill
+/// credits it -- the gauge being what the canister really consumed -- while the
+/// callback is still open, so executing the response then keeps the two in step.
 #[test]
 fn execute_response_of_legacy_callback_settles_the_outstanding_prepayments() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
@@ -282,29 +282,30 @@ fn execute_response_of_legacy_callback_settles_the_outstanding_prepayments() {
         monotonic_before + outstanding_before + call_fee
     );
 
+    // The first backfill, as a checkpoint round performs it while the callback is
+    // still open, credits the call fee: the gauge is what the canister consumed, of
+    // which only the outstanding prepayments are still to be refunded.
+    test.canister_state_mut(a_id)
+        .system_state
+        .migrate_consumed_cycles_to_monotonic();
+    let system_state = &test.canister_state(a_id).system_state;
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles_monotonic(),
+        monotonic_before + call_fee
+    );
+
     // Execute the response on A.
     test.induct_messages();
     test.execute_message(a_id);
 
-    // Nothing is outstanding any more, and the monotonic amount has caught up with
-    // the gauge: the refund path reported the very prepayments predicted above.
+    // Nothing is outstanding any more, and the monotonic amount is in step with the
+    // gauge without a further backfill: the refund path reported the very prepayments
+    // predicted above.
     let system_state = &test.canister_state(a_id).system_state;
     assert_eq!(
         system_state.outstanding_prepayments(),
         Some(NominalCycles::zero())
     );
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles(),
-        system_state.canister_metrics().consumed_cycles_monotonic() + call_fee
-    );
-
-    // The next backfill rectifies that last offset: with nothing outstanding, the
-    // gauge is exactly what the canister consumed over its lifetime, call fee
-    // included, so the monotonic amount is raised to it.
-    test.canister_state_mut(a_id)
-        .system_state
-        .migrate_consumed_cycles_to_monotonic();
-    let system_state = &test.canister_state(a_id).system_state;
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
         system_state.canister_metrics().consumed_cycles_monotonic()
