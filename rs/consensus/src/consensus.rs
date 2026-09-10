@@ -29,7 +29,7 @@ use crate::consensus::{
     catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer, metrics::ConsensusMetrics,
     notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
     random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
-    share_aggregator::ShareAggregator, validator::Validator,
+    share_aggregator::ShareAggregator, status::Status, validator::Validator,
 };
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
@@ -404,6 +404,11 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
 
         // Consensus halts if instructed by the registry
         if self.should_halt_by_subnet_record() {
+            // Report the status from here, as this returns without reaching the
+            // finalizer, which is what observes it for a subnet that is not
+            // halted this way. No blocks are created and no batches delivered
+            // for as long as the subnet record says so, which is `Halted`.
+            self.finalizer.observe_status(Status::Halted);
             info!(
                 every_n_seconds => 5,
                 self.log,
@@ -630,7 +635,12 @@ mod tests {
     fn set_up_consensus_with_subnet_record(
         record: SubnetRecord,
         pool_config: ArtifactPoolConfig,
-    ) -> (ConsensusImpl, TestConsensusPool, Arc<FastForwardTimeSource>) {
+    ) -> (
+        ConsensusImpl,
+        TestConsensusPool,
+        Arc<FastForwardTimeSource>,
+        MetricsRegistry,
+    ) {
         let Dependencies {
             pool,
             registry,
@@ -685,10 +695,23 @@ mod tests {
             time_source.clone(),
             0,
             MaliciousFlags::default(),
-            metrics_registry,
+            metrics_registry.clone(),
             no_op_logger(),
         );
-        (consensus_impl, pool, time_source)
+        (consensus_impl, pool, time_source, metrics_registry)
+    }
+
+    /// The `consensus_status` gauge of `status`, or [None] if the metric does
+    /// not report that status at all.
+    fn consensus_status(metrics_registry: &MetricsRegistry, status: &str) -> Option<i64> {
+        metrics_registry
+            .prometheus_registry()
+            .gather()
+            .into_iter()
+            .filter(|family| family.name() == "consensus_status")
+            .flat_map(|family| family.get_metric().to_vec())
+            .find(|metric| metric.get_label()[0].value() == status)
+            .map(|metric| metric.get_gauge().value() as i64)
     }
 
     #[test]
@@ -699,7 +722,7 @@ mod tests {
 
             // ensure that a consensus implementation with a subnet record with is_halted =
             // false returns changes
-            let (consensus_impl, pool, _) = set_up_consensus_with_subnet_record(
+            let (consensus_impl, pool, _, metrics_registry) = set_up_consensus_with_subnet_record(
                 SubnetRecordBuilder::from(&committee)
                     .with_dkg_interval_length(interval_length)
                     .with_is_halted(false)
@@ -708,10 +731,11 @@ mod tests {
             );
 
             assert!(!consensus_impl.on_state_change(&pool).is_empty());
+            assert_eq!(consensus_status(&metrics_registry, "halted"), Some(0));
 
             // ensure that an consensus_impl with a subnet record with is_halted =
             // true returns no changes
-            let (consensus_impl, pool, _) = set_up_consensus_with_subnet_record(
+            let (consensus_impl, pool, _, metrics_registry) = set_up_consensus_with_subnet_record(
                 SubnetRecordBuilder::from(&committee)
                     .with_dkg_interval_length(interval_length)
                     .with_is_halted(true)
@@ -719,6 +743,10 @@ mod tests {
                 pool_config,
             );
             assert!(consensus_impl.on_state_change(&pool).is_empty());
+            // A subnet halted this way returns above the finalizer, so the
+            // status is reported from there rather than by the delivery path.
+            assert_eq!(consensus_status(&metrics_registry, "halted"), Some(1));
+            assert_eq!(consensus_status(&metrics_registry, "running"), Some(0));
         })
     }
 }
