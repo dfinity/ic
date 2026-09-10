@@ -130,6 +130,10 @@ fn deliver_batches(
     let mut last_delivered_batch_height = height.decrement();
     while height <= target_height {
         let Some(block) = pool.get_finalized_block(height) else {
+            // There is no block to compute a status from, so report that the
+            // status is not known rather than leave the metric reporting the
+            // status of an earlier height as though it still held.
+            status_observer(None);
             warn!(
                 every_n_seconds => 30,
                 log,
@@ -138,16 +142,6 @@ fn deliver_batches(
                 Finalized height: {}",
                 height,
                 finalized_height
-            );
-            break;
-        };
-        let Some(tape) = pool.get_random_tape(height) else {
-            // Do not deliver batch if we don't have random tape
-            warn!(
-                every_n_seconds => 30,
-                log,
-                "Do not deliver height {} because RandomTape is not ready. Will re-try later",
-                height
             );
             break;
         };
@@ -166,6 +160,7 @@ fn deliver_batches(
 
         // Retrieve the dkg summary block
         let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
+            status_observer(None);
             warn!(
                 every_n_seconds => 30,
                 log,
@@ -222,6 +217,19 @@ fn deliver_batches(
             }
         }
 
+        // Looked up here rather than above the status, which does not need it,
+        // so that a height whose tape is not ready yet still has its status
+        // reported instead of the loop leaving with nothing to say.
+        let Some(tape) = pool.get_random_tape(height) else {
+            // Do not deliver batch if we don't have random tape
+            warn!(
+                every_n_seconds => 30,
+                log,
+                "Do not deliver height {} because RandomTape is not ready. Will re-try later",
+                height
+            );
+            break;
+        };
         let randomness = randomness_from_crypto_hashable(&tape);
 
         let mut chain_key_subnet_public_keys = BTreeMap::new();
@@ -980,6 +988,66 @@ mod tests {
                 usize::from(at_cup_height || !halt_at_cup_height),
             );
         });
+    }
+
+    /// The random tape is needed to deliver a batch but not to compute a status,
+    /// and a height whose tape is not ready yet is one the delivery path has a
+    /// status for. The status is reported before the tape is looked up, so that
+    /// waiting on the tape does not leave the metric with nothing to say.
+    #[test]
+    fn test_deliver_batches_observes_status_without_random_tape() {
+        const INTERVAL_LENGTH: u64 = 3;
+
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                membership,
+                registry,
+                replica_config,
+                ..
+            } = DependenciesBuilder::single_subnet(
+                pool_config,
+                SUBNET_1,
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&[NODE_1])
+                        .with_dkg_interval_length(INTERVAL_LENGTH)
+                        .with_replica_version(test_replica_version().as_ref())
+                        .build(),
+                )],
+            )
+            .build();
+
+            pool.advance_round_normal_operation_n(1);
+
+            // Finalize a block, leaving out the random tape of its height.
+            let proposal = pool.make_next_block();
+            pool.insert_validated(proposal.clone());
+            pool.notarize(&proposal);
+            pool.finalize(&proposal);
+            let height = proposal.content.as_ref().height;
+
+            let message_routing = FakeMessageRouting::new();
+            *message_routing.next_batch_height.write().unwrap() = height;
+
+            let mut observed = Vec::new();
+            let result = deliver_batches_for_finalizer(
+                &message_routing,
+                &membership,
+                &PoolReader::new(&pool),
+                registry.as_ref(),
+                &no_op_logger(),
+                replica_config.node_id,
+                replica_config.subnet_id,
+                |_, _, _| {},
+                |status| observed.push(status),
+            );
+
+            // The batch is not delivered, and the status is reported all the same.
+            assert_eq!(result, Ok(height.decrement()));
+            assert!(message_routing.batches.read().unwrap().is_empty());
+            assert_eq!(observed, vec![Some(Status::Running)]);
+        })
     }
 
     #[rstest]

@@ -386,10 +386,10 @@ impl FinalizerMetrics {
     ///
     /// Reported as a gauge per status rather than a single number, so that a
     /// dashboard can select the status it asks about by name. Only the batch
-    /// delivery path computes the status, and only when it has a block to
-    /// consider, so this says what that path saw the last time it looked: a
-    /// subnet that stopped producing blocks altogether keeps reporting the
-    /// status that made it stop.
+    /// delivery path computes the status, so this says what that path saw the
+    /// last time it looked: a subnet that stopped producing blocks altogether
+    /// keeps reporting the status that made it stop, and a replica with no
+    /// block to compute a status from reports `unknown`.
     pub fn observe_status(&self, status: Option<Status>) {
         for (label, value) in CONSENSUS_STATUSES {
             self.consensus_status
