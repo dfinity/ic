@@ -3,6 +3,8 @@ mod tests;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
+use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
+use config_types::{GuestOSConfig, GuestVMType};
 use guest_disk::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
 use guest_disk::metrics::write_metrics;
 use guest_disk::sev::SevDiskEncryption;
@@ -51,8 +53,12 @@ fn main() -> Result<()> {
         bail!("This program requires root privileges.");
     }
 
+    let guestos_config: GuestOSConfig = deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
+        .context("Failed to read GuestOS config")?;
+
     run(
         args,
+        guestos_config.guest_vm_type,
         sev_guest::is_tee_enabled().context("Failed to check if SEV is active")?,
         || {
             ::sev::firmware::guest::Firmware::open()
@@ -69,6 +75,7 @@ fn main() -> Result<()> {
 /// `sev_firmware_factory` must be provided if SEV is active.
 fn run(
     args: Args,
+    guest_vm_type: GuestVMType,
     is_tee_enabled: bool,
     sev_firmware_factory: impl Fn() -> Result<Box<dyn SevGuestFirmware>>,
     store_luks_header_path: &Path,
@@ -83,6 +90,7 @@ fn run(
         Box::new(SevDiskEncryption {
             sev_firmware: sev_firmware_factory().context("Failed to open SEV firmware")?,
             store_luks_header_path: store_luks_header_path.to_path_buf(),
+            guest_vm_type,
             metrics_registry: metrics_registry.clone(),
         })
     } else {

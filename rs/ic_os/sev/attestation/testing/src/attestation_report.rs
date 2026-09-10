@@ -5,6 +5,7 @@ use p384::ecdsa::signature::Signer;
 use p384::pkcs8::EncodePublicKey;
 use rand::SeedableRng;
 use rsa::RsaPrivateKey;
+use sev::Generation;
 use sev::certs::snp::ecdsa::Signature as AttestationReportSignature;
 use sev::firmware::guest::{AttestationReport, GuestPolicy};
 use sev::firmware::host::TcbVersion;
@@ -18,6 +19,8 @@ use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
 use x509_cert::spki::SubjectPublicKeyInfo;
 use x509_cert::time::Validity;
+
+pub const DEFAULT_GENERATION: Generation = Generation::Milan;
 
 /// Builder for creating test attestation reports with customizable fields.
 pub struct AttestationReportBuilder {
