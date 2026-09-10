@@ -13,6 +13,7 @@ use candid::Nat;
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_management_canister_types_private::ChunkHash;
+use ic_nervous_system_common::ledger_validation::MAX_LOGO_LENGTH;
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nervous_system_proto::pb::v1::Principals;
 use ic_sns_governance_api::pb::v1::topics::Topic;
@@ -639,7 +640,7 @@ fn test_mode_allows_proposal_action_or_err_panic_when_function_has_no_target_can
 #[test]
 fn test_sns_metadata_validate() {
     let default = SnsMetadata {
-        logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
+        logo: Some(VALID_PNG_LOGO.to_string()),
         url: Some("https://forum.dfinity.org".to_string()),
         name: Some("X".repeat(SnsMetadata::MIN_NAME_LENGTH)),
         description: Some("X".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH)),
@@ -1014,9 +1015,18 @@ fn test_nervous_system_parameters_wont_validate_without_the_required_claimer_per
     }
 }
 
+const VALID_PNG_LOGO: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
+
 #[test]
-fn test_validate_logo_lets_base64_through() {
-    SnsMetadata::validate_logo("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==").unwrap();
+fn test_validate_logo_accepts_a_real_png() {
+    SnsMetadata::validate_logo(VALID_PNG_LOGO).unwrap();
+}
+
+#[test]
+fn test_validate_logo_rejects_valid_base64_that_is_not_a_png() {
+    let logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==";
+    let err = SnsMetadata::validate_logo(logo).unwrap_err();
+    assert!(err.contains("PNG"), "unexpected error: {err}");
 }
 
 #[test]

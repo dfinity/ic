@@ -11,6 +11,9 @@ on the process that this file is part of, see
 
 ## Changed
 
+Logo validation now rejects a `logo` whose decoded bytes are not actually a PNG,
+instead of accepting any base64 that carries the `data:image/png;base64,` prefix.
+
 ## Deprecated
 
 ## Removed

@@ -157,7 +157,7 @@ fn test_manage_ledger_parameters_change_name_and_symbol_and_logo() {
     let original_symbol = icrc1_token_symbol(&state_machine, sns_canisters.ledger_canister_id);
 
     // change ledger logo, name, and symbol with the ManageLedgerParameters proposal
-    let new_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+    let new_logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC".to_string();
     let new_name = "MySns".to_string();
     let new_symbol = "MYS".to_string();
 
