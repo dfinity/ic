@@ -870,16 +870,13 @@ mod tests {
     }
 
     /// Every status the delivery path computes is handed to the observer, which
-    /// is what keeps the finalizer's `consensus_status` metric current: a halted
-    /// subnet returns early, and a metric only set on the way to a delivered
-    /// batch would be stuck at whatever it said before the subnet halted.
+    /// is what keeps the finalizer's `consensus_status` metric current. The
+    /// status of a halting or halted subnet is observed on the early return that
+    /// leaves its batch undelivered.
     ///
     /// `at_cup_height` delivers the CUP block itself, the round on which a
     /// subnet halting at its CUP height halts. That batch is delivered whatever
-    /// the status is, so the status is observed but not acted upon; were it only
-    /// observed where it is acted upon, the metric would report the subnet as
-    /// running for as long as it took the first block above the CUP to be
-    /// finalized -- or forever, on a node that never gets that block.
+    /// the status is, so the status is observed but not acted upon.
     #[rstest]
     #[case::running(
         /* halt_at_cup_height= */ false,

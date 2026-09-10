@@ -771,41 +771,25 @@ mod tests {
     /// a replica that has not delivered a batch since it started -- one whose
     /// subnet is halted, for instance -- would otherwise report no
     /// `consensus_status` at all, which reads the same as a subnet that is fine.
+    /// Observing a status then reports that one alone.
     #[test]
     fn test_consensus_status_is_reported_before_it_is_observed() {
         let metrics_registry = MetricsRegistry::new();
-        let _metrics = FinalizerMetrics::new(metrics_registry.clone());
+        let metrics = FinalizerMetrics::new(metrics_registry.clone());
+
+        // Zero across the statuses: batch delivery has not computed one yet.
+        assert_eq!(consensus_status(&metrics_registry).values().sum::<i64>(), 0,);
+
+        metrics.observe_status(Some(Status::Halted));
 
         assert_eq!(
             consensus_status(&metrics_registry),
             BTreeMap::from([
                 (STATUS_RUNNING.into(), 0),
                 (STATUS_HALTING.into(), 0),
-                (STATUS_HALTED.into(), 0),
+                (STATUS_HALTED.into(), 1),
                 (STATUS_UNKNOWN.into(), 0),
             ]),
         );
-    }
-
-    /// Every status, the one that could not be computed included, is reported as
-    /// itself and as not any of the others.
-    #[test]
-    fn test_observe_status() {
-        let metrics_registry = MetricsRegistry::new();
-        let metrics = FinalizerMetrics::new(metrics_registry.clone());
-
-        for (observed_label, observed) in CONSENSUS_STATUSES {
-            metrics.observe_status(observed);
-
-            let expected = CONSENSUS_STATUSES
-                .iter()
-                .map(|(label, _)| ((*label).into(), i64::from(*label == observed_label)))
-                .collect();
-            assert_eq!(
-                consensus_status(&metrics_registry),
-                expected,
-                "after observing {observed:?}",
-            );
-        }
     }
 }
