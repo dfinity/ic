@@ -223,13 +223,16 @@ impl FinalizerMetrics {
             "Whether consensus is running, halting (producing empty blocks but delivering \
              no batches), halted (producing no blocks either) or unknown (the status could \
              not be computed), as of the last time batch delivery looked. 1 for the status \
-             that held then, 0 for the other three.",
+             that held then, 0 for the other three. All four are 0 until batch delivery \
+             computes a status for the first time, so a sum of 0 over the four is a replica \
+             that has not looked yet rather than a status of its own.",
             &[STATUS_LABEL],
         );
         // Create every child up front. A gauge vector with no children is
         // dropped by the Prometheus registry, so until the delivery path first
         // computes a status the scrape would carry no `consensus_status` at all,
         // which a dashboard cannot tell apart from a subnet that is not halted.
+        // All four reading 0 is that state instead, as the help text says.
         for (label, _) in CONSENSUS_STATUSES {
             consensus_status.with_label_values(&[label]).set(0);
         }
