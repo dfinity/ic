@@ -147,7 +147,7 @@ fn should_mint_with_ckerc20_setup() {
 
 mod deposit_eth {
     use assert_matches::assert_matches;
-    use candid::Principal;
+    use candid::{Nat, Principal};
     use ic_cketh_minter::endpoints::events::{Asset as EventAsset, EventPayload};
     use ic_cketh_minter::endpoints::{DepositEthStatus, DepositStatus};
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
@@ -278,6 +278,7 @@ mod deposit_eth {
             .expect_deposit_response();
 
         let scanned_at = 4_500_000_u64;
+        let scanned_at_block = Nat::from(scanned_at);
         ckerc20.refresh_latest_block(scanned_at);
         ckerc20.run_balance_scan_with_eth(
             &[(armed.address.as_str(), 1)],
@@ -290,7 +291,7 @@ mod deposit_eth {
         assert_matches!(
             erc20_response.status,
             DepositStatus::Scanning { scan_count: 1, last_scanned_block: Some(ref block), .. }
-                if *block == candid::Nat::from(scanned_at)
+                if *block == scanned_at_block
         );
 
         let (_ckerc20, eth_response) = ckerc20
@@ -299,7 +300,7 @@ mod deposit_eth {
         assert_matches!(
             eth_response.status,
             DepositEthStatus::Scanning { scan_count: 1, last_scanned_block: Some(ref block), .. }
-                if *block == candid::Nat::from(scanned_at)
+                if *block == scanned_at_block
         );
     }
 
