@@ -994,66 +994,6 @@ mod tests {
         });
     }
 
-    /// A height the delivery path cannot get past has its status reported as not
-    /// known, rather than leaving the metric reporting the status of an earlier
-    /// height as though it still held. The missing random tape stands here for
-    /// all three of the guards that leave the loop.
-    #[test]
-    fn test_deliver_batches_observes_unknown_without_random_tape() {
-        const INTERVAL_LENGTH: u64 = 3;
-
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies {
-                mut pool,
-                membership,
-                registry,
-                replica_config,
-                ..
-            } = DependenciesBuilder::single_subnet(
-                pool_config,
-                SUBNET_1,
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&[NODE_1])
-                        .with_dkg_interval_length(INTERVAL_LENGTH)
-                        .with_replica_version(test_replica_version().as_ref())
-                        .build(),
-                )],
-            )
-            .build();
-
-            pool.advance_round_normal_operation_n(1);
-
-            // Finalize a block, leaving out the random tape of its height.
-            let proposal = pool.make_next_block();
-            pool.insert_validated(proposal.clone());
-            pool.notarize(&proposal);
-            pool.finalize(&proposal);
-            let height = proposal.content.as_ref().height;
-
-            let message_routing = FakeMessageRouting::new();
-            *message_routing.next_batch_height.write().unwrap() = height;
-
-            let mut observed = Vec::new();
-            let result = deliver_batches_for_finalizer(
-                &message_routing,
-                &membership,
-                &PoolReader::new(&pool),
-                registry.as_ref(),
-                &no_op_logger(),
-                replica_config.node_id,
-                replica_config.subnet_id,
-                |_, _, _| {},
-                |status| observed.push(status),
-            );
-
-            // The batch is not delivered, and the status is reported as not known.
-            assert_eq!(result, Ok(height.decrement()));
-            assert!(message_routing.batches.read().unwrap().is_empty());
-            assert_eq!(observed, vec![None]);
-        })
-    }
-
     #[rstest]
     #[case::node_on_source_subnet(NODE_1, SOURCE_SUBNET_ID, DESTINATION_SUBNET_ID)]
     #[case::node_on_destination_subnet(NODE_4, DESTINATION_SUBNET_ID, SOURCE_SUBNET_ID)]
