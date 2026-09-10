@@ -2400,17 +2400,17 @@ impl CanisterManager {
                 &self.log,
             );
             // Record the net cycle charge (prepay minus refund) so it survives
-            // the canister state rollback if a subsequent step fails.
-            // This recomputes the refund that `refund_unused_execution_cycles` above
-            // derived from the identical formula, before the `component_wise_min` cap
-            // to the prepayment that it applies. Applying that cap here as well would
-            // make no difference, as the subtraction below saturates part by part, so
-            // the net charge recorded here matches what that function refunded.
-            let cycles_to_refund = self.cycles_account_manager.variable_execution_cost(
-                instructions_to_refund,
-                subnet_cycles_config,
-                wasm_execution_mode,
-            );
+            // the canister state rollback if a subsequent step fails. This recomputes
+            // what `refund_unused_execution_cycles` above refunded, cap included, so
+            // that the two agree by construction.
+            let cycles_to_refund = self
+                .cycles_account_manager
+                .variable_execution_cost(
+                    instructions_to_refund,
+                    subnet_cycles_config,
+                    wasm_execution_mode,
+                )
+                .component_wise_min(prepaid_execution_cycles);
             consumed_cycles.add(
                 prepaid_execution_cycles - cycles_to_refund,
                 instructions_for_execution,

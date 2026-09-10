@@ -96,9 +96,9 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 /// amount however large its nominal part is.
 ///
 /// Compare `real()` or `nominal()` explicitly instead, or use `component_wise_min`
-/// to bound both parts at once. Note also that subtraction saturates part by part,
-/// so capping an amount before subtracting it is redundant: `x - y` already equals
-/// `x - x.component_wise_min(y)`.
+/// to bound both parts at once. Note also that subtraction saturates in both the
+/// real and the nominal part, so capping an amount before subtracting it is
+/// redundant: `x - y` already equals `x - x.component_wise_min(y)`.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct CompoundCycles<T: CyclesUseCaseKind> {
     real: Cycles,
@@ -311,7 +311,7 @@ mod tests {
             (Cycles::zero(), NominalCycles::new(10))
         );
 
-        // Subtracting `y` from `x` without going below zero, part by part.
+        // Subtracting `y` from `x` without going below zero in either part.
         let difference = x - y;
         assert_eq!(
             (difference.real(), difference.nominal()),
