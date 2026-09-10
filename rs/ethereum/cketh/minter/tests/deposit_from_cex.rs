@@ -178,15 +178,15 @@ fn should_read_eth_balances_across_holders() {
 
     let h1 = Address::new([0x11; 20]);
     let h2 = Address::new([0x22; 20]);
-    let h3 = Address::new([0x33; 20]); // never funded -> balance 0
+    let never_funded = Address::new([0x33; 20]);
 
-    anvil.send_eth(&dev, &h1, 5_000_000_000_000_000); // the 0.005 ETH minimum deposit
+    anvil.send_eth(&dev, &h1, 5_000_000_000_000_000);
     anvil.send_eth(&dev, &h2, 1_234_567_890_123_456_789);
 
     let holders = vec![
         DepositAddress::new(h1),
         DepositAddress::new(h2),
-        DepositAddress::new(h3),
+        DepositAddress::new(never_funded),
     ];
     let out = anvil
         .eth_call_create(&dev, &encode_eth_balance_batch(&holders))
@@ -223,8 +223,6 @@ fn should_read_many_eth_balances_in_a_single_call() {
     let anvil = Anvil::start();
     let dev = address_from_hex(DEV_ACCOUNT);
 
-    // A single create-style eth_call carrying many BALANCE reads, to exercise
-    // the loop and the per-holder CODECOPY offset arithmetic at scale.
     const N: u64 = 32;
     let holders: Vec<Address> = (0..N).map(holder_at).collect();
     for (i, holder) in holders.iter().enumerate() {

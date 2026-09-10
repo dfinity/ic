@@ -277,7 +277,6 @@ mod deposit_eth {
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
             .expect_deposit_response();
 
-        // Balances below both minimums: both pairs are scanned, neither is detected.
         let scanned_at = 4_500_000_u64;
         ckerc20.refresh_latest_block(scanned_at);
         ckerc20.run_balance_scan_with_eth(&[1_u128], &[1_u128]);
@@ -318,8 +317,6 @@ mod deposit_eth {
         ckerc20.refresh_latest_block(4_500_000);
         ckerc20.answer_erc20_balance_scan(&[1_u128]);
 
-        // The tick is still suspended on its unanswered ETH batch, yet the ERC-20 outcome is
-        // already recorded: funds observed on-chain must not hinge on a later await resuming.
         let (ckerc20, erc20_response) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token)
             .expect_deposit_response();

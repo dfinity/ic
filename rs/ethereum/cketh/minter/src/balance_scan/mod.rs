@@ -145,8 +145,6 @@ async fn scan_balances<R: Runtime>(
     outcomes
 }
 
-/// The ETH counterpart of [`scan_balances`]: one batched `BALANCE` read per chunk of `due`
-/// `(address, ETH)` pairs, at the same `latest_block` the ERC-20 scan is pinned to.
 async fn scan_eth_balances<R: Runtime>(
     due: &[ScanTarget],
     latest_block: BlockNumber,
@@ -177,8 +175,6 @@ struct ScanErrors {
     call: usize,
 }
 
-/// Send one deployless-batcher `input` pinned at `latest_block` and decode its `n` balances,
-/// counting a failed call or an undecodable return in `errors` instead of yielding balances.
 async fn chunk_balances<R: Runtime>(
     input: Vec<u8>,
     n: usize,
