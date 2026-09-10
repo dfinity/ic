@@ -67,6 +67,9 @@ and a ledger must space its attempts while archiving is failing.
   triggered by a transaction.
 - **Archived_Prefix**: the blocks a ledger has stopped serving itself because an
   archive confirmed holding them.
+- **ARCHIVE_CALL_TIMEOUT**: the longest a ledger waits for a response to a call it
+  is willing to stop waiting for. Req 13 fixes the behaviour; `design.md` settles
+  the number.
 - **BACKOFF_INITIAL**: the minimum spacing between archiving attempts after the
   first failure. Req 9 fixes the behaviour; `design.md` settles the number.
 - **BACKOFF_CAP**: the ceiling that spacing grows to under repeated failure. Req 9
@@ -114,25 +117,6 @@ and a ledger must space its attempts while archiving is failing.
   rewind. Req 8 and Req 1 require that such a fork is detected rather than
   extended into the archives; they do not make the restore safe. The only coherent
   rollback is the whole suite to a common point, accepting the loss after it.
-- **Bounding the time a ledger waits for an archive.** Every archiving call today
-  waits unboundedly for a response, so a call that does not resolve holds the
-  archiving guard with no timeout, and the subnet must reserve capacity for a
-  response it may never need. Once Req 2 and Req 3 make an append idempotent, a
-  best-effort call becomes safe: an unknown outcome is resolved by retrying, and a
-  timeout becomes an ordinary failure subject to Req 9 rather than a hang. It is
-  deferred because it is not needed for correctness and it changes how *all* the
-  ledger's outbound calls are made, but the reasoning is recorded because it is
-  half of what the idempotency in Req 2 is worth.
-
-  Two constraints hold whenever it is taken up. It must not be applied to an
-  append before Req 2 and Req 3 are in place, nor to a ledger exempt under Req
-  10.5, because an unknown outcome there is exactly the ambiguity this
-  specification exists to remove — bounding the wait first would make the
-  divergence more frequent, not less. And it cannot be applied uniformly: creating
-  a canister and installing code are not idempotent, so an unknown outcome for
-  either leaves precisely the unaddressable canister Req 11 exists to detect,
-  whereas reading remaining capacity and replacing controllers are safe.
-
 - **Making the archive's canister logs readable.** Some obligations here are
   satisfiable only through a metric because a canister's log is not readable by
   default. Changing that is a governance proposal, not a code change, and is out
@@ -416,3 +400,31 @@ rather than several.
    one.
 5. THE Ledger SHALL NOT count an append carrying no blocks, made to satisfy 10.3,
    against 12.1.
+
+### Requirement 13: A Ledger Does Not Wait Indefinitely For An Archive
+
+**User Story:** As a canister operator, I want a ledger to give up on a call an
+archive is not answering, so that archiving cannot be stuck on one call
+indefinitely and the subnet need not hold response capacity for a call that may
+never be answered.
+
+#### Acceptance Criteria
+
+1. WHEN THE ICRC Ledger sends an Indexed_Append, THE ICRC Ledger SHALL stop
+   waiting for a response after at most ARCHIVE_CALL_TIMEOUT.
+2. WHEN THE ICRC Ledger stops waiting per 13.1, THE ICRC Ledger SHALL treat the
+   Archiving_Round as failed per Req 9, so that a call that never answers costs a
+   backoff interval rather than blocking archiving indefinitely.
+3. THE ICRC Ledger SHALL NOT treat a response it stopped waiting for as evidence
+   that the archive stored nothing, because the archive may have stored the blocks
+   and answered after the wait ended.
+4. WHEN THE ICRC Ledger stopped waiting for an append the archive did in fact
+   store, THE ICRC Ledger SHALL converge on that archive's reported extent on a
+   later Archiving_Round without any block being stored twice, per 2.4 and 3.1.
+5. THE Ledger SHALL NOT stop waiting for a call whose unknown outcome it has no
+   means of resolving afterwards, because an unresolvable unknown outcome is the
+   state Req 11 exists to detect and bounding such a call would make it routine
+   rather than exceptional.
+6. THE ICP Ledger SHALL wait unboundedly for an append, because its archives do
+   not satisfy Req 2 and a retry against them would store the blocks a second
+   time (per 10.5).
