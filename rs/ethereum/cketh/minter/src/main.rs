@@ -15,10 +15,10 @@ use ic_cketh_minter::endpoints::events::{
 };
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Arg,
-    DepositErc20Error, DepositEthArg, DepositEthError, DepositMode, DepositResponse,
-    Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance, Erc20MinimumDeposit,
-    GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg,
-    WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
+    DepositErc20Error, DepositErc20Response, DepositEthArg, DepositEthError, DepositEthResponse,
+    DepositMode, Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance,
+    Erc20MinimumDeposit, GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus,
+    WithdrawalArg, WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
@@ -32,7 +32,9 @@ use ic_cketh_minter::memo::{self, BurnMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::runtime::IC_CANISTER_RUNTIME;
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
-use ic_cketh_minter::state::automatic_deposits::{DepositRequest, RegisterDepositError};
+use ic_cketh_minter::state::automatic_deposits::{
+    DepositRequest, DepositStatusInfo, RegisterDepositError,
+};
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     AuthorizedSweepItem, Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed,
@@ -204,7 +206,7 @@ async fn minter_address() -> String {
 }
 
 #[update]
-async fn deposit_eth(arg: DepositEthArg) -> Result<DepositResponse, DepositEthError> {
+async fn deposit_eth(arg: DepositEthArg) -> Result<DepositEthResponse, DepositEthError> {
     let caller = validate_caller_not_anonymous();
     // Held for the whole call, including across the ECDSA public key fetch in `arm_deposit`, so
     // that the status check and the registration that follows it cannot be interleaved with
@@ -221,11 +223,14 @@ async fn deposit_eth(arg: DepositEthArg) -> Result<DepositResponse, DepositEthEr
         owner: caller,
         subaccount,
     };
-    Ok(arm_deposit(account, Asset::Eth).await?)
+    Ok(DepositEthResponse::new(
+        arm_deposit(account, Asset::Eth).await?,
+        min_deposit(&Asset::Eth),
+    ))
 }
 
 #[update]
-async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositResponse, DepositErc20Error> {
+async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, DepositErc20Error> {
     validate_ckerc20_active();
     let caller = validate_caller_not_anonymous();
     // Held for the whole call, including across the ECDSA public key fetch in `arm_deposit`, so
@@ -255,21 +260,21 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositResponse, DepositE
         owner: caller,
         subaccount,
     };
-    Ok(arm_deposit(account, Asset::Erc20(token)).await?)
+    Ok(DepositErc20Response::new(
+        arm_deposit(account, Asset::Erc20(token)).await?,
+        token,
+        min_deposit(&Asset::Erc20(token)),
+    ))
 }
 
 async fn arm_deposit(
     account: Account,
     asset: Asset,
-) -> Result<DepositResponse, RegisterDepositError> {
+) -> Result<DepositStatusInfo, RegisterDepositError> {
     let request = DepositRequest::new(account, asset);
-    let minimum_deposit_amount = min_deposit(&asset);
     let now = Timestamp::from_nanos(ic_cdk::api::time());
 
-    if let Some(status) = read_state(|s| {
-        s.automatic_deposits
-            .deposit_status(now, &request, minimum_deposit_amount)
-    }) {
+    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &request)) {
         return Ok(status);
     }
 
@@ -282,18 +287,14 @@ async fn arm_deposit(
     // after an upgrade, before the key is cached). Returning its status here keeps `register_deposit_
     // address` from trying to re-arm an already-swept pair. From here on the call is synchronous, so
     // no further scan can interleave before the registration below.
-    if let Some(status) = read_state(|s| {
-        s.automatic_deposits
-            .deposit_status(now, &request, minimum_deposit_amount)
-    }) {
+    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &request)) {
         return Ok(status);
     }
     mutate_state(|s| s.register_deposit_address(now, account, asset))?;
-    Ok(read_state(|s| {
-        s.automatic_deposits
-            .deposit_status(now, &request, minimum_deposit_amount)
-    })
-    .expect("BUG: a just-registered pair must report a Scanning status"))
+    Ok(
+        read_state(|s| s.automatic_deposits.deposit_status(now, &request))
+            .expect("BUG: a just-registered pair must report a Scanning status"),
+    )
 }
 
 #[query]

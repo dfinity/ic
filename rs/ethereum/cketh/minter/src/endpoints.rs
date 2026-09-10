@@ -244,15 +244,56 @@ pub enum DepositMode {
     // },
 }
 
-/// Response of the `deposit_erc20` and `deposit_eth` endpoints.
+/// Response of the `deposit_eth` endpoint.
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
-pub struct DepositResponse {
+pub struct DepositEthResponse {
+    /// The Ethereum deposit address derived for the caller. It is the same address as the one
+    /// derived by the `deposit_erc20` endpoint for the same account, whatever the ERC-20 token.
+    pub address: String,
+    /// Minimum balance, in wei, that the deposit address must hold for the balance scan to
+    /// detect it. The scan reads the address' whole ETH balance, so several smaller transfers
+    /// count together; the funds stay undetected only while their total is below this.
+    pub minimum_deposit_amount: Nat,
+    /// Where the deposit stands in the detect-and-sweep pipeline.
+    pub status: DepositEthStatus,
+}
+
+/// The stage an ETH deposit address is at.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub enum DepositEthStatus {
+    /// Armed and being scanned; no deposit at or above the minimum detected yet.
+    Scanning {
+        /// Timestamp in nanoseconds since the Unix epoch until which a deposit
+        /// sent to the address is guaranteed to be noticed by the minter.
+        valid_until: u64,
+        /// The latest Ethereum block at which the address' ETH balance was scanned,
+        /// or `None` if it has not been scanned yet.
+        last_scanned_block: Option<Nat>,
+        /// How many times the address' ETH balance has been scanned so far.
+        scan_count: u64,
+    },
+    /// Funds were detected at or above the minimum and queued for sweeping.
+    AwaitingSweep(DetectedEthDeposit),
+}
+
+/// A funded ETH balance detected at a deposit address and queued for sweeping.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct DetectedEthDeposit {
+    /// The ETH balance scanned, in wei; may change before the sweep.
+    pub scanned_balance: Nat,
+    /// The Ethereum block at which the balance was detected.
+    pub detected_at_block: Nat,
+}
+
+/// Response of the `deposit_erc20` endpoint.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct DepositErc20Response {
     /// The Ethereum deposit address derived for the caller, the same one whatever the asset.
     pub address: String,
-    /// Minimum balance, in the asset's own units (wei for ETH), that the deposit address must
-    /// hold for the balance scan to detect it. The scan reads the address' whole balance for
-    /// the asset, so several smaller transfers count together; the funds stay undetected only
-    /// while their total is below this.
+    /// Minimum balance, in the token's own units, that the deposit address must hold for the
+    /// balance scan to detect it. The scan reads the address' whole balance for the token, so
+    /// several smaller transfers count together; the funds stay undetected only while their
+    /// total is below this.
     ///
     /// A supported token with no configured minimum reports `2^256 - 1`, which no real balance
     /// can reach: a deposit of that token would never be detected. Treat such a value as
@@ -307,6 +348,70 @@ pub enum DepositEthError {
     TooManyActiveDeposits,
     /// The minter is temporarily unavailable, retry the request.
     TemporarilyUnavailable(String),
+}
+
+impl DepositErc20Response {
+    pub fn new(
+        info: crate::state::automatic_deposits::DepositStatusInfo,
+        token: ic_ethereum_types::Address,
+        minimum_deposit_amount: crate::numeric::Erc20Value,
+    ) -> Self {
+        use crate::state::automatic_deposits::DepositStage;
+        Self {
+            address: info.address.to_string(),
+            minimum_deposit_amount: minimum_deposit_amount.into(),
+            status: match info.stage {
+                DepositStage::Scanning {
+                    valid_until,
+                    last_scanned_block,
+                    scan_count,
+                } => DepositStatus::Scanning {
+                    valid_until: valid_until.as_nanos(),
+                    last_scanned_block: last_scanned_block.map(Into::into),
+                    scan_count: scan_count as u64,
+                },
+                DepositStage::AwaitingSweep {
+                    scanned_balance,
+                    detected_at_block,
+                } => DepositStatus::AwaitingSweep(DetectedDeposit {
+                    erc20_contract_address: token.to_string(),
+                    scanned_balance: scanned_balance.into(),
+                    detected_at_block: detected_at_block.into(),
+                }),
+            },
+        }
+    }
+}
+
+impl DepositEthResponse {
+    pub fn new(
+        info: crate::state::automatic_deposits::DepositStatusInfo,
+        minimum_deposit_amount: crate::numeric::Erc20Value,
+    ) -> Self {
+        use crate::state::automatic_deposits::DepositStage;
+        Self {
+            address: info.address.to_string(),
+            minimum_deposit_amount: minimum_deposit_amount.into(),
+            status: match info.stage {
+                DepositStage::Scanning {
+                    valid_until,
+                    last_scanned_block,
+                    scan_count,
+                } => DepositEthStatus::Scanning {
+                    valid_until: valid_until.as_nanos(),
+                    last_scanned_block: last_scanned_block.map(Into::into),
+                    scan_count: scan_count as u64,
+                },
+                DepositStage::AwaitingSweep {
+                    scanned_balance,
+                    detected_at_block,
+                } => DepositEthStatus::AwaitingSweep(DetectedEthDeposit {
+                    scanned_balance: scanned_balance.into(),
+                    detected_at_block: detected_at_block.into(),
+                }),
+            },
+        }
+    }
 }
 
 impl From<crate::state::automatic_deposits::RegisterDepositError> for DepositEthError {

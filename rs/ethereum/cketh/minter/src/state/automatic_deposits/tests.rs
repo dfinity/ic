@@ -1,11 +1,10 @@
 use super::{
-    AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, MAX_ACTIVE_DEPOSITS,
-    MAX_ASSETS_PER_ACCOUNT, RegisterDepositError, SCAN_GAP_SECS, SECS_PER_BLOCK, ScanProgress,
-    SweepEntry, SweepTarget,
+    AutomaticDeposits, DEPOSIT_ADDRESS_SCAN_WINDOW, DepositRequest, DepositStage,
+    DepositStatusInfo, MAX_ACTIVE_DEPOSITS, MAX_ASSETS_PER_ACCOUNT, RegisterDepositError,
+    SCAN_GAP_SECS, SECS_PER_BLOCK, ScanProgress, SweepEntry, SweepTarget,
 };
 use crate::asset::Asset;
 use crate::deposit_address::DepositAddress;
-use crate::endpoints::{DepositResponse, DepositStatus, DetectedDeposit};
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
@@ -749,19 +748,15 @@ fn record_automatic_deposit_received_inserts_unconditionally_without_a_watchlist
 
 #[test]
 fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
-    const MINIMUM_DEPOSIT_AMOUNT: u128 = 10_000_000;
-
     let mut deposits = AutomaticDeposits::default();
-    let minimum = Erc20Value::new(MINIMUM_DEPOSIT_AMOUNT);
 
     // Unknown pair: neither armed nor funded.
     assert_eq!(
-        deposits.deposit_status(ts(0), &request(account(0), usdc()), minimum),
+        deposits.deposit_status(ts(0), &request(account(0), usdc())),
         None
     );
 
-    // Armed but not yet funded: Scanning until the window closes, with the token's minimum
-    // reported alongside it.
+    // Armed but not yet funded: Scanning until the window closes.
     deposits
         .watch_deposit(
             ts(0),
@@ -771,12 +766,11 @@ fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
         )
         .unwrap();
     assert_eq!(
-        deposits.deposit_status(ts(0), &request(account(0), usdc()), minimum),
-        Some(DepositResponse {
-            address: deposit_address(&account(0)).to_string(),
-            minimum_deposit_amount: Nat::from(MINIMUM_DEPOSIT_AMOUNT),
-            status: DepositStatus::Scanning {
-                valid_until: window_nanos(),
+        deposits.deposit_status(ts(0), &request(account(0), usdc())),
+        Some(DepositStatusInfo {
+            address: deposit_address(&account(0)),
+            stage: DepositStage::Scanning {
+                valid_until: ts(window_nanos()),
                 last_scanned_block: None,
                 scan_count: 0,
             },
@@ -802,24 +796,22 @@ fn deposit_status_reports_none_scanning_then_awaiting_sweep() {
     // Once funds are detected, AwaitingSweep takes precedence over Scanning, carrying the balance
     // and finding block for that one token.
     assert_eq!(
-        deposits.deposit_status(ts(0), &request(account(0), usdc()), minimum),
-        Some(DepositResponse {
-            address: deposit_address(&account(0)).to_string(),
-            minimum_deposit_amount: Nat::from(MINIMUM_DEPOSIT_AMOUNT),
-            status: DepositStatus::AwaitingSweep(DetectedDeposit {
-                erc20_contract_address: usdc().to_string(),
-                scanned_balance: Nat::from(10_u8),
-                detected_at_block: Nat::from(900_u16),
-            }),
+        deposits.deposit_status(ts(0), &request(account(0), usdc())),
+        Some(DepositStatusInfo {
+            address: deposit_address(&account(0)),
+            stage: DepositStage::AwaitingSweep {
+                scanned_balance: Erc20Value::new(10),
+                detected_at_block: BlockNumber::new(900),
+            },
         })
     );
     // A different token at the same account is still unknown.
     assert_eq!(
-        deposits.deposit_status(ts(0), &request(account(0), usdt()), minimum),
+        deposits.deposit_status(ts(0), &request(account(0), usdt())),
         None
     );
     assert_eq!(
-        deposits.deposit_status(ts(0), &request(account(2), usdc()), minimum),
+        deposits.deposit_status(ts(0), &request(account(2), usdc())),
         None
     );
 }

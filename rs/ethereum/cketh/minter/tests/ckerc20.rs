@@ -148,7 +148,7 @@ fn should_mint_with_ckerc20_setup() {
 mod deposit_eth {
     use assert_matches::assert_matches;
     use candid::Principal;
-    use ic_cketh_minter::endpoints::DepositStatus;
+    use ic_cketh_minter::endpoints::{DepositEthStatus, DepositStatus};
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
     use ic_cketh_test_utils::ckerc20::{CkErc20Setup, ckwbtc};
     use ic_cketh_test_utils::{DEFAULT_USER_SUBACCOUNT, format_ethereum_address_to_eip_55};
@@ -172,7 +172,7 @@ mod deposit_eth {
             candid::Nat::from(MINIMUM_ETH_DEPOSIT_WEI)
         );
         let valid_until = match &response.status {
-            DepositStatus::Scanning {
+            DepositEthStatus::Scanning {
                 valid_until,
                 last_scanned_block: None,
                 scan_count: 0,
@@ -237,7 +237,7 @@ mod deposit_eth {
             .expect_deposit_response();
         assert_matches!(
             eth_response.status,
-            DepositStatus::Scanning {
+            DepositEthStatus::Scanning {
                 scan_count: 0,
                 last_scanned_block: None,
                 ..

@@ -4,7 +4,6 @@ mod tests;
 use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
-use crate::endpoints::{DepositResponse, DepositStatus, DetectedDeposit};
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::logs::INFO;
@@ -527,34 +526,28 @@ impl AutomaticDeposits {
 
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
     /// funds queued for sweeping (so it must be registered). Reports
-    /// [`DepositStatus::AwaitingSweep`] once funds have been detected and queued, otherwise
-    /// [`DepositStatus::Scanning`] while the address is armed and being scanned as of `now`.
-    /// `minimum_deposit_amount` is the balance the address must hold for the scan to detect it,
-    /// reported back to the caller alongside the status.
+    /// [`DepositStage::AwaitingSweep`] once funds have been detected and queued, otherwise
+    /// [`DepositStage::Scanning`] while the address is armed and being scanned as of `now`.
     pub fn deposit_status(
         &self,
         now: Timestamp,
         request: &DepositRequest,
-        minimum_deposit_amount: Erc20Value,
-    ) -> Option<DepositResponse> {
+    ) -> Option<DepositStatusInfo> {
         if let Some(entry) = self.sweep.get(request) {
-            return Some(DepositResponse {
-                address: entry.address.to_string(),
-                minimum_deposit_amount: minimum_deposit_amount.into(),
-                status: DepositStatus::AwaitingSweep(DetectedDeposit {
-                    erc20_contract_address: request.asset().to_string(),
-                    scanned_balance: entry.scanned_balance.into(),
-                    detected_at_block: entry.last_scanned_block.into(),
-                }),
+            return Some(DepositStatusInfo {
+                address: entry.address,
+                stage: DepositStage::AwaitingSweep {
+                    scanned_balance: entry.scanned_balance,
+                    detected_at_block: entry.last_scanned_block,
+                },
             });
         }
-        self.get_entry(now, request).map(|entry| DepositResponse {
-            address: entry.value.address.to_string(),
-            minimum_deposit_amount: minimum_deposit_amount.into(),
-            status: DepositStatus::Scanning {
-                valid_until: entry.expires_at.as_nanos(),
-                last_scanned_block: entry.value.last_scanned_block.map(Into::into),
-                scan_count: entry.value.scan_count as u64,
+        self.get_entry(now, request).map(|entry| DepositStatusInfo {
+            address: entry.value.address,
+            stage: DepositStage::Scanning {
+                valid_until: entry.expires_at,
+                last_scanned_block: entry.value.last_scanned_block,
+                scan_count: entry.value.scan_count,
             },
         })
     }
@@ -648,6 +641,27 @@ impl DepositRequest {
     pub fn asset(&self) -> Asset {
         self.asset
     }
+}
+
+/// Where a deposit pair currently stands, in the minter's own types: the candid layer shapes
+/// it per endpoint (the ERC-20 status names a contract, the ETH one does not).
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct DepositStatusInfo {
+    pub address: DepositAddress,
+    pub stage: DepositStage,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum DepositStage {
+    Scanning {
+        valid_until: Timestamp,
+        last_scanned_block: Option<BlockNumber>,
+        scan_count: u32,
+    },
+    AwaitingSweep {
+        scanned_balance: Erc20Value,
+        detected_at_block: BlockNumber,
+    },
 }
 
 /// Why arming a deposit pair was refused.

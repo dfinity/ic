@@ -52,8 +52,8 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, TransactionStatus};
 use ic_cketh_minter::endpoints::{
-    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositMode, DepositResponse, DepositStatus,
-    MinterInfo,
+    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
+    DepositStatus, MinterInfo,
 };
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
@@ -270,7 +270,7 @@ impl LiveSetup<CkErc20Setup> {
         caller: Principal,
         subaccount: [u8; 32],
         token: &Erc20Token,
-    ) -> DepositResponse {
+    ) -> DepositErc20Response {
         let arg = DepositErc20Arg {
             erc20_contract_address: token.contract.address.clone(),
             mode: DepositMode::Unsponsored {
@@ -286,7 +286,7 @@ impl LiveSetup<CkErc20Setup> {
                 Encode!(&arg).unwrap(),
             )
             .expect("BUG: deposit_erc20 was rejected");
-        Decode!(&reply, Result<DepositResponse, DepositErc20Error>)
+        Decode!(&reply, Result<DepositErc20Response, DepositErc20Error>)
             .unwrap()
             .expect("BUG: deposit_erc20 returned an error")
     }
@@ -357,7 +357,7 @@ impl LiveSetup<CkErc20Setup> {
         caller: Principal,
         subaccount: [u8; 32],
         token: &Erc20Token,
-    ) -> DepositResponse {
+    ) -> DepositErc20Response {
         let funded_by = Nat::from(self.anvil.block_number());
         self.await_deposit_status(
             caller,
@@ -385,7 +385,7 @@ impl LiveSetup<CkErc20Setup> {
         caller: Principal,
         subaccount: [u8; 32],
         token: &Erc20Token,
-    ) -> DepositResponse {
+    ) -> DepositErc20Response {
         self.await_deposit_status(
             caller,
             subaccount,
@@ -402,7 +402,7 @@ impl LiveSetup<CkErc20Setup> {
         token: &Erc20Token,
         what: &str,
         is_done: impl Fn(&DepositStatus) -> bool,
-    ) -> DepositResponse {
+    ) -> DepositErc20Response {
         let mut reached = None;
         self.drive_until_with(
             SCAN_TICK,
@@ -1133,7 +1133,7 @@ pub struct FundingBaseline {
 #[must_use]
 pub struct DepositErc20Calls {
     setup: LiveSetup<CkErc20Setup>,
-    responses: Vec<(DepositPlan, DepositResponse)>,
+    responses: Vec<(DepositPlan, DepositErc20Response)>,
 }
 
 impl DepositErc20Calls {
