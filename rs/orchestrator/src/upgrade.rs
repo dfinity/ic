@@ -3057,10 +3057,10 @@ mod tests {
             add_subnet_record_to_provider(
                 &data_provider,
                 SPLIT_REGISTRY_VERSION - RegistryVersion::from(1),
-                new_subnet_id,
+                SOURCE_SUBNET_ID,
                 SubnetType::Application,
                 [node_id, other_node_id],
-                replica_version,
+                post_split_replica_version,
                 &no_recalled_replica_versions,
             );
         }
