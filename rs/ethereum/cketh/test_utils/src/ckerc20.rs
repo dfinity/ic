@@ -4,7 +4,8 @@ use crate::flow::{
     ProcessWithdrawal, encode_principal,
 };
 use crate::mock::{
-    JsonRpcMethod, JsonRpcRequestMatcher, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
+    JsonRpcMethod, JsonRpcRequestMatcher, MatchRequestParams, MockJsonRpcProviders,
+    MockJsonRpcProvidersBuilder,
 };
 use crate::response::{balance_scan_response, block_response, empty_logs, fee_history};
 use crate::{
@@ -44,7 +45,7 @@ use num_traits::ToPrimitive;
 use pocket_ic::common::rest::RawMessageId;
 use pocket_ic::{ErrorCode, PocketIc};
 use serde_json::json;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::convert::identity;
 use std::iter::{once, zip};
 use std::str::FromStr;
@@ -238,7 +239,9 @@ impl CkErc20Setup {
     fn answer_balance_scan_batch(&self, kind: Option<ScanBatchKind>, balances: &[(&str, u128)]) {
         let request =
             JsonRpcRequestMatcher::new(JsonRpcProvider::Provider1, JsonRpcMethod::EthCall)
-                .with_eth_call_input_prefix(kind.map(ScanBatchKind::initcode))
+                .with_request_params(
+                    kind.map(|kind| EthCallInputStartsWith::batcher(kind).into_filter()),
+                )
                 .find_rpc_call(&self.env)
                 .expect("BUG: no balance-scan eth_call pending");
         let (kind, holders) = parse_scan_batch(&eth_call_input_bytes(&request));
@@ -247,7 +250,7 @@ impl CkErc20Setup {
             .map(|holder| scanned_balance(balances, holder))
             .collect();
         MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
-            .with_eth_call_input_prefix(kind.initcode())
+            .with_request_params_filter(EthCallInputStartsWith::batcher(kind))
             .respond_for_all_with(balance_scan_response(&response))
             .build()
             .expect_rpc_calls(self);
@@ -1066,12 +1069,15 @@ impl RefreshGasFeeEstimate {
     }
 
     pub fn expect_no_refresh_gas_fee_estimate(self) -> Erc20WithdrawalFlow {
-        assert_eq!(
+        let providers_with_pending_call: Vec<JsonRpcProvider> =
             JsonRpcRequestMatcher::new_for_all_providers(JsonRpcMethod::EthFeeHistory)
-                .iter()
+                .into_iter()
                 .filter(|(_provider, matcher)| matcher.find_rpc_call(&self.setup.env).is_some())
-                .collect::<BTreeMap<_, _>>(),
-            BTreeMap::new(),
+                .map(|(provider, _matcher)| provider)
+                .collect();
+        assert_eq!(
+            providers_with_pending_call,
+            Vec::new(),
             "BUG: unexpected EthFeeHistory RPC call"
         );
 
@@ -1214,11 +1220,37 @@ impl ScanBatchKind {
     }
 }
 
+/// Matches an `eth_call` whose `input` calldata starts with the given bytes, e.g. one of the
+/// deployless balance-batcher programs.
+#[derive(Debug)]
+struct EthCallInputStartsWith(String);
+
+impl EthCallInputStartsWith {
+    fn batcher(kind: ScanBatchKind) -> Self {
+        Self(format!("0x{}", hex::encode(kind.initcode())))
+    }
+
+    fn into_filter(self) -> Arc<dyn MatchRequestParams> {
+        Arc::new(self)
+    }
+}
+
+impl MatchRequestParams for EthCallInputStartsWith {
+    fn matches(&self, params: &serde_json::Value) -> bool {
+        eth_call_input(params)
+            .map(|input| input.to_lowercase().starts_with(&self.0))
+            .unwrap_or(false)
+    }
+}
+
+fn eth_call_input(params: &serde_json::Value) -> Option<&str> {
+    params.get(0)?.get("input")?.as_str()
+}
+
 fn eth_call_input_bytes(request: &pocket_ic::common::rest::CanisterHttpRequest) -> Vec<u8> {
     let body: serde_json::Value =
         serde_json::from_slice(&request.body).expect("BUG: request body is not JSON");
-    let input =
-        crate::mock::eth_call_input(&body["params"]).expect("BUG: eth_call request without input");
+    let input = eth_call_input(&body["params"]).expect("BUG: eth_call request without input");
     hex::decode(input.trim_start_matches("0x")).expect("BUG: input is not hex")
 }
 
