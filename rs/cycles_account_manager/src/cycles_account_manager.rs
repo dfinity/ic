@@ -555,12 +555,7 @@ impl CyclesAccountManager {
         }
         let num_instructions_to_refund =
             std::cmp::min(num_instructions, num_instructions_initially_charged);
-        let cycles_to_refund = self.scale_cost(
-            self.convert_instructions_to_cycles(num_instructions_to_refund, execution_mode),
-            subnet_cycles_config,
-        );
-        // Never refund more than was prepaid, part by part: `x - (x - y)` is the
-        // part-wise minimum of `x` and `y` because both subtractions saturate.
+        // Never refund more than was prepaid, in either component.
         //
         // The refund covers at most the instructions the prepayment was made for, but
         // it is priced with the Wasm execution mode, the cost schedule and the subnet
@@ -570,9 +565,13 @@ impl CyclesAccountManager {
         // a response execution, whose prepayment was made in an earlier round, when
         // the corresponding call was performed: `scale_cost` scales both parts of an
         // amount by the subnet size, so a subnet that grew in between can price the
-        // refund above the prepayment, and the cap bounds it.
-        let cycles_to_refund =
-            prepaid_execution_cycles - (prepaid_execution_cycles - cycles_to_refund);
+        // refund above the prepayment, and this cap bounds it.
+        let cycles_to_refund = self
+            .scale_cost(
+                self.convert_instructions_to_cycles(num_instructions_to_refund, execution_mode),
+                subnet_cycles_config,
+            )
+            .component_wise_min(prepaid_execution_cycles);
         system_state.refund_cycles(prepaid_execution_cycles, cycles_to_refund);
     }
 

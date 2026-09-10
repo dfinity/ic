@@ -2402,10 +2402,9 @@ impl CanisterManager {
             // Record the net cycle charge (prepay minus refund) so it survives
             // the canister state rollback if a subsequent step fails.
             // This recomputes the refund that `refund_unused_execution_cycles` above
-            // derived from the identical formula, before the part-wise cap to the
-            // prepayment that it applies. Applying that cap here as well would make no
-            // difference: both subtractions saturate part by part, so in each part
-            // `prepaid - refund` equals `prepaid - min(prepaid, refund)`, and hence
+            // derived from the identical formula, before the `component_wise_min` cap
+            // to the prepayment that it applies. Applying that cap here as well would
+            // make no difference, as the subtraction below saturates part by part, so
             // the net charge recorded here matches what that function refunded.
             let cycles_to_refund = self.cycles_account_manager.variable_execution_cost(
                 instructions_to_refund,

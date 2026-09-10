@@ -95,10 +95,10 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 /// executed: the one made free has a zero real part and compares as the smaller
 /// amount however large its nominal part is.
 ///
-/// Compare `real()` or `nominal()` explicitly instead. Note that subtraction
-/// saturates part by part, which covers the two idioms that would otherwise reach
-/// for an ordering: subtracting `y` from `x` without going below zero is `x - y`,
-/// and the part-wise minimum of `x` and `y` is `x - (x - y)`.
+/// Compare `real()` or `nominal()` explicitly instead, or use `component_wise_min`
+/// to bound both parts at once. Note also that subtraction saturates part by part,
+/// so capping an amount before subtracting it is redundant: `x - y` already equals
+/// `x - x.component_wise_min(y)`.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct CompoundCycles<T: CyclesUseCaseKind> {
     real: Cycles,
@@ -153,6 +153,22 @@ impl<T: CyclesUseCaseKind> CompoundCycles<T> {
     // are zero.
     pub fn is_zero(&self) -> bool {
         self.real.is_zero() && self.nominal.is_zero()
+    }
+
+    /// Returns the component-wise minimum of this amount and `other`, i.e. the
+    /// minimum of their real parts paired with the minimum of their nominal parts.
+    ///
+    /// The two components are minimized separately because there is no ordering on
+    /// the pair (see the note on this type). They coincide under the normal cost
+    /// schedule; under the free cost schedule the real part of a use case made free
+    /// is zero, so minimizing by the real parts alone would leave the nominal part
+    /// of the result unbounded.
+    pub fn component_wise_min(self, other: Self) -> Self {
+        Self {
+            real: self.real.min(other.real),
+            nominal: self.nominal.min(other.nominal),
+            _cycles_use_case_marker: self._cycles_use_case_marker,
+        }
     }
 
     /// Returns this amount reduced by the part of `real()` that could not be
@@ -279,10 +295,9 @@ mod tests {
     /// whereas its real part is zero under the free cost schedule. The two amounts
     /// below therefore order one way in their real parts and the other way in their
     /// nominal parts, which is exactly the case a lexicographic ordering of the pair
-    /// would decide on the real parts alone. Both identities documented on
-    /// `CompoundCycles` hold for it.
+    /// would decide on the real parts alone.
     #[test]
-    fn saturating_subtraction_is_part_wise() {
+    fn arithmetic_is_component_wise() {
         let x =
             CompoundCycles::<Instructions>::new(Cycles::new(5), CanisterCyclesCostSchedule::Normal);
         let y =
@@ -303,11 +318,15 @@ mod tests {
             (Cycles::new(5), NominalCycles::zero())
         );
 
-        // The part-wise minimum of `x` and `y`.
-        let minimum = x - (x - y);
+        // The component-wise minimum takes each part from a different amount.
+        let minimum = x.component_wise_min(y);
         assert_eq!(
             (minimum.real(), minimum.nominal()),
             (Cycles::zero(), NominalCycles::new(5))
         );
+        assert_eq!(y.component_wise_min(x), minimum);
+
+        // Capping before subtracting is redundant.
+        assert_eq!(x - x.component_wise_min(y), difference);
     }
 }
