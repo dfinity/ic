@@ -54,8 +54,8 @@ use ic_cketh_minter::endpoints::events::{
     Asset as EventAsset, Event, EventPayload, TransactionStatus,
 };
 use ic_cketh_minter::endpoints::{
-    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
-    DepositStatus, MinterInfo,
+    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositEthArg,
+    DepositEthError, DepositEthResponse, DepositEthStatus, DepositMode, DepositStatus, MinterInfo,
 };
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
@@ -148,6 +148,20 @@ pub struct CexDeposit {
     pub owner: Principal,
     pub subaccount: [u8; 32],
     pub token: Erc20Token,
+    pub amount: u128,
+    pub address: Address,
+}
+
+pub struct EthDepositPlan {
+    pub owner: Principal,
+    pub subaccount: [u8; 32],
+    pub amount: u128,
+}
+
+#[derive(Clone)]
+pub struct EthCexDeposit {
+    pub owner: Principal,
+    pub subaccount: [u8; 32],
     pub amount: u128,
     pub address: Address,
 }
@@ -263,6 +277,28 @@ impl LiveSetup<CkErc20Setup> {
             token.contract.address
         );
         nat_to_u128(minimum.minimum_deposit_amount)
+    }
+
+    /// Calls `deposit_eth` as `caller`, which registers (idempotently) that user's
+    /// `(address, ETH)` pair for balance scanning and reports its scan progress.
+    fn deposit_eth(&self, caller: Principal, subaccount: [u8; 32]) -> DepositEthResponse {
+        let arg = DepositEthArg {
+            mode: DepositMode::Unsponsored {
+                subaccount: Some(subaccount),
+            },
+        };
+        let reply = self
+            .env()
+            .update_call(
+                self.minter_id(),
+                caller,
+                "deposit_eth",
+                Encode!(&arg).unwrap(),
+            )
+            .expect("BUG: deposit_eth was rejected");
+        Decode!(&reply, Result<DepositEthResponse, DepositEthError>)
+            .unwrap()
+            .expect("BUG: deposit_eth returned an error")
     }
 
     /// Calls `deposit_erc20` as `caller`, which registers (idempotently) that user's
@@ -397,6 +433,28 @@ impl LiveSetup<CkErc20Setup> {
         )
     }
 
+    pub fn await_eth_detection(
+        &self,
+        caller: Principal,
+        subaccount: [u8; 32],
+    ) -> DepositEthResponse {
+        let mut reached = None;
+        self.drive_until_with(
+            SCAN_TICK,
+            SCAN_TICKS,
+            |_| "the ETH deposit was not detected".to_string(),
+            |setup| {
+                let progress = setup.deposit_eth(caller, subaccount);
+                let done = matches!(progress.status, DepositEthStatus::AwaitingSweep(_));
+                if done {
+                    reached = Some(progress);
+                }
+                done
+            },
+        );
+        reached.expect("drive_until_with returns only once observe held")
+    }
+
     fn await_deposit_status(
         &self,
         caller: Principal,
@@ -467,6 +525,61 @@ impl LiveSetup<CkErc20Setup> {
             },
             |setup| setup.balance_of_ledger(ledger_id, account) == credited,
         );
+    }
+
+    pub fn call_minter_deposit_eth(
+        self,
+        plans: impl IntoIterator<Item = EthDepositPlan>,
+    ) -> DepositEthCalls {
+        let responses = plans
+            .into_iter()
+            .map(|plan| {
+                let response = self.deposit_eth(plan.owner, plan.subaccount);
+                (plan, response)
+            })
+            .collect();
+        DepositEthCalls {
+            setup: self,
+            responses,
+        }
+    }
+
+    /// Funds each ETH deposit with a plain transfer from the CEX-style dev account, the shape an
+    /// exchange withdrawal has: no calldata, no principal, just value.
+    pub fn credit_eth_deposits_from_cex(self, deposits: &[EthCexDeposit]) -> EthCexCredit<'_> {
+        let cex = address_from_hex(DEV_ACCOUNT);
+        for deposit in deposits {
+            self.anvil.send_eth(&cex, &deposit.address, deposit.amount);
+        }
+        EthCexCredit {
+            setup: self,
+            deposits,
+        }
+    }
+
+    pub fn expect_cketh_mints(self, deposits: &[EthCexDeposit]) -> Self {
+        let ledger_id = self.fixture.cketh_ledger_id();
+        let mut credits: BTreeMap<(Principal, Option<[u8; 32]>), u128> = BTreeMap::new();
+        for deposit in deposits {
+            *credits
+                .entry((deposit.owner, Some(deposit.subaccount)))
+                .or_default() += deposit.amount;
+        }
+        for ((owner, subaccount), amount) in credits {
+            self.await_credited(ledger_id, Account { owner, subaccount }, amount);
+        }
+        self
+    }
+
+    pub fn assert_eth_addresses_swept_empty(self, deposits: &[EthCexDeposit]) -> Self {
+        for deposit in deposits {
+            assert_eq!(
+                self.anvil.balance(&deposit.address),
+                0,
+                "the swept deposit address must hold no ETH"
+            );
+        }
+        self
     }
 
     pub fn call_minter_deposit_erc20(
@@ -1167,6 +1280,86 @@ impl DepositErc20Calls {
             "every account must get its own deposit address"
         );
         (self.setup, deposits)
+    }
+}
+
+#[must_use]
+pub struct DepositEthCalls {
+    setup: LiveSetup<CkErc20Setup>,
+    responses: Vec<(EthDepositPlan, DepositEthResponse)>,
+}
+
+impl DepositEthCalls {
+    pub fn expect_deposit_responses(self) -> (LiveSetup<CkErc20Setup>, Vec<EthCexDeposit>) {
+        let deposits: Vec<EthCexDeposit> = self
+            .responses
+            .into_iter()
+            .map(|(plan, response)| {
+                let minimum = nat_to_u128(response.minimum_deposit_amount);
+                assert!(
+                    plan.amount >= minimum,
+                    "the planned deposit of {} wei is below the reported minimum of {minimum} wei",
+                    plan.amount
+                );
+                EthCexDeposit {
+                    address: Address::from_str(&response.address)
+                        .expect("BUG: minter returned an invalid deposit address"),
+                    owner: plan.owner,
+                    subaccount: plan.subaccount,
+                    amount: plan.amount,
+                }
+            })
+            .collect();
+        (self.setup, deposits)
+    }
+}
+
+#[must_use]
+pub struct EthCexCredit<'a> {
+    setup: LiveSetup<CkErc20Setup>,
+    deposits: &'a [EthCexDeposit],
+}
+
+impl<'a> EthCexCredit<'a> {
+    pub fn expect_deposit_balances_on_anvil(self) -> EthDetectionWatch<'a> {
+        for deposit in self.deposits {
+            assert_eq!(
+                self.setup.anvil.balance(&deposit.address),
+                deposit.amount,
+                "the deposited ETH should be readable on anvil"
+            );
+        }
+        EthDetectionWatch {
+            setup: self.setup,
+            deposits: self.deposits,
+        }
+    }
+}
+
+#[must_use]
+pub struct EthDetectionWatch<'a> {
+    pub setup: LiveSetup<CkErc20Setup>,
+    deposits: &'a [EthCexDeposit],
+}
+
+impl EthDetectionWatch<'_> {
+    pub fn expect_each_awaiting_sweep(self) -> LiveSetup<CkErc20Setup> {
+        for deposit in self.deposits {
+            let detected = match self
+                .setup
+                .await_eth_detection(deposit.owner, deposit.subaccount)
+                .status
+            {
+                DepositEthStatus::AwaitingSweep(detected) => detected,
+                status => panic!("BUG: await_eth_detection returned {status:?}"),
+            };
+            assert_eq!(
+                detected.scanned_balance,
+                Nat::from(deposit.amount),
+                "the detected balance must match the deposited amount"
+            );
+        }
+        self.setup
     }
 }
 
