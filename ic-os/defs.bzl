@@ -506,8 +506,8 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         for test_suffix in ["", "-test"]:
             update_image_tar = "update-img" + test_suffix + ".tar"
 
+            overlay_out = "overlay" + test_suffix + ".tzst"
             if fast_upgrades:
-                overlay_out = "overlay" + test_suffix + ".tzst"
                 upgrade_overlay_binaries = image_deps.get(
                     "upgrade_overlay_binaries",
                     [],
