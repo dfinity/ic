@@ -19,7 +19,6 @@
 use crate::consensus::{
     batch_delivery::deliver_batches_for_finalizer,
     metrics::{BatchStats, BlockStats, FinalizerMetrics},
-    status::Status,
 };
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
@@ -115,15 +114,6 @@ impl Finalizer {
         (finalized_height.increment().get()..=notarized_height.get())
             .filter_map(|h| self.finalize_height(pool, Height::from(h)))
             .collect()
-    }
-
-    /// Records the status consensus is in, for the `consensus_status` metric.
-    ///
-    /// The delivery path observes the status of every block it considers on its
-    /// own. This is for the callers that halt consensus before the finalizer is
-    /// reached at all, and so before that path has anything to say.
-    pub(crate) fn observe_status(&self, status: Status) {
-        self.metrics.observe_status(Some(status));
     }
 
     /// Write logs, report metrics depending on the batch deliver result.

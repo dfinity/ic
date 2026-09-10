@@ -29,7 +29,7 @@ use crate::consensus::{
     catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer, metrics::ConsensusMetrics,
     notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
     random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
-    share_aggregator::ShareAggregator, status::Status, validator::Validator,
+    share_aggregator::ShareAggregator, validator::Validator,
 };
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
@@ -402,13 +402,17 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
             .unwrap()
             .on_state_change(&pool_reader);
 
-        // Consensus halts if instructed by the registry
-        if self.should_halt_by_subnet_record() {
-            // Report the status from here, as this returns without reaching the
-            // finalizer, which is what observes it for a subnet that is not
-            // halted this way. No blocks are created and no batches delivered
-            // for as long as the subnet record says so, which is `Halted`.
-            self.finalizer.observe_status(Status::Halted);
+        // Consensus halts if instructed by the registry. Reported on every
+        // invocation, whether it halts or not, so that the metric answers what
+        // the registry says right now. `consensus_status` cannot answer it: the
+        // subnet produces no blocks while halted this way, so once the flag is
+        // cleared the delivery path has nothing to look at and would go on
+        // reporting the status it last computed.
+        let halted_by_subnet_record = self.should_halt_by_subnet_record();
+        self.metrics
+            .halted_by_subnet_record
+            .set(halted_by_subnet_record as i64);
+        if halted_by_subnet_record {
             info!(
                 every_n_seconds => 5,
                 self.log,
@@ -619,6 +623,8 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
@@ -626,24 +632,30 @@ mod tests {
         xnet_payload_builder::FakeXNetPayloadBuilder,
     };
     use ic_test_utilities_consensus::batch::MockBatchPayloadBuilder;
-    use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_single_subnet_record};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash};
     use std::sync::Arc;
 
+    struct ConsensusSetUp {
+        consensus_impl: ConsensusImpl,
+        pool: TestConsensusPool,
+        #[allow(dead_code)]
+        time_source: Arc<FastForwardTimeSource>,
+        metrics_registry: MetricsRegistry,
+        registry: Arc<FakeRegistryClient>,
+        registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    }
+
     fn set_up_consensus_with_subnet_record(
         record: SubnetRecord,
         pool_config: ArtifactPoolConfig,
-    ) -> (
-        ConsensusImpl,
-        TestConsensusPool,
-        Arc<FastForwardTimeSource>,
-        MetricsRegistry,
-    ) {
+    ) -> ConsensusSetUp {
         let Dependencies {
             pool,
             registry,
+            registry_data_provider,
             crypto,
             time_source,
             replica_config,
@@ -686,7 +698,7 @@ mod tests {
                 crypto,
                 no_op_logger(),
                 &PoolReader::new(&pool),
-                registry,
+                registry.clone(),
                 replica_config,
             ))),
             Arc::new(FakeMessageRouting::new()),
@@ -698,19 +710,25 @@ mod tests {
             metrics_registry.clone(),
             no_op_logger(),
         );
-        (consensus_impl, pool, time_source, metrics_registry)
+        ConsensusSetUp {
+            consensus_impl,
+            pool,
+            time_source,
+            metrics_registry,
+            registry,
+            registry_data_provider,
+        }
     }
 
-    /// The `consensus_status` gauge of `status`, or [None] if the metric does
-    /// not report that status at all.
-    fn consensus_status(metrics_registry: &MetricsRegistry, status: &str) -> Option<i64> {
+    /// The `consensus_halted_by_subnet_record` gauge, or [None] if the metrics
+    /// registry does not report it.
+    fn halted_by_subnet_record(metrics_registry: &MetricsRegistry) -> Option<i64> {
         metrics_registry
             .prometheus_registry()
             .gather()
             .into_iter()
-            .filter(|family| family.name() == "consensus_status")
-            .flat_map(|family| family.get_metric().to_vec())
-            .find(|metric| metric.get_label()[0].value() == status)
+            .find(|family| family.name() == "consensus_halted_by_subnet_record")
+            .and_then(|family| family.get_metric().first().cloned())
             .map(|metric| metric.get_gauge().value() as i64)
     }
 
@@ -720,33 +738,52 @@ mod tests {
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
             let interval_length = 99;
 
-            // ensure that a consensus implementation with a subnet record with is_halted =
-            // false returns changes
-            let (consensus_impl, pool, _, metrics_registry) = set_up_consensus_with_subnet_record(
+            let record = |is_halted| {
                 SubnetRecordBuilder::from(&committee)
                     .with_dkg_interval_length(interval_length)
-                    .with_is_halted(false)
-                    .build(),
-                pool_config.clone(),
-            );
+                    .with_is_halted(is_halted)
+                    .build()
+            };
 
-            assert!(!consensus_impl.on_state_change(&pool).is_empty());
-            assert_eq!(consensus_status(&metrics_registry, "halted"), Some(0));
+            // ensure that a consensus implementation with a subnet record with is_halted =
+            // false returns changes
+            let running = set_up_consensus_with_subnet_record(record(false), pool_config.clone());
+
+            assert!(
+                !running
+                    .consensus_impl
+                    .on_state_change(&running.pool)
+                    .is_empty()
+            );
+            assert_eq!(halted_by_subnet_record(&running.metrics_registry), Some(0));
 
             // ensure that an consensus_impl with a subnet record with is_halted =
             // true returns no changes
-            let (consensus_impl, pool, _, metrics_registry) = set_up_consensus_with_subnet_record(
-                SubnetRecordBuilder::from(&committee)
-                    .with_dkg_interval_length(interval_length)
-                    .with_is_halted(true)
-                    .build(),
-                pool_config,
+            let halted = set_up_consensus_with_subnet_record(record(true), pool_config);
+            assert!(
+                halted
+                    .consensus_impl
+                    .on_state_change(&halted.pool)
+                    .is_empty()
             );
-            assert!(consensus_impl.on_state_change(&pool).is_empty());
-            // A subnet halted this way returns above the finalizer, so the
-            // status is reported from there rather than by the delivery path.
-            assert_eq!(consensus_status(&metrics_registry, "halted"), Some(1));
-            assert_eq!(consensus_status(&metrics_registry, "running"), Some(0));
+            // A subnet halted this way returns above the finalizer, which is what
+            // reports `consensus_status`, so it has a gauge of its own.
+            assert_eq!(halted_by_subnet_record(&halted.metrics_registry), Some(1));
+
+            // Clearing the flag clears the gauge, on the very next invocation
+            // rather than once consensus has a block to show for it. Reported
+            // above the branch that returns, so that it is reported whether the
+            // subnet halts or not.
+            add_single_subnet_record(
+                &halted.registry_data_provider,
+                /*version=*/ 2,
+                subnet_test_id(0),
+                record(false),
+            );
+            halted.registry.update_to_latest_version();
+
+            halted.consensus_impl.on_state_change(&halted.pool);
+            assert_eq!(halted_by_subnet_record(&halted.metrics_registry), Some(0));
         })
     }
 }
