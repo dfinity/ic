@@ -1,6 +1,6 @@
 use crate::address::ecdsa_public_key_to_address;
 use crate::attestation::AttestationRequest;
-use crate::deposit_address::{DepositAddressSchema, deposit_address, sweeper_address};
+use crate::deposit_address::{DepositAddress, deposit_address, sweeper_address};
 use crate::endpoints::{CandidBlockTag, DepositErc20Error};
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
@@ -260,6 +260,13 @@ impl State {
     pub fn sweeper_address(&self) -> Option<Address> {
         let (master_public_key, chain_code) = self.public_key_and_chain_code()?;
         Some(sweeper_address(&master_public_key, &chain_code))
+    }
+
+    /// The deposit address derived for `account`, shared by ETH and ckERC20 deposits, or `None`
+    /// while the master public key is still unknown.
+    pub fn deposit_address(&self, account: &Account) -> Option<DepositAddress> {
+        let (master_public_key, chain_code) = self.public_key_and_chain_code()?;
+        Some(deposit_address(&master_public_key, &chain_code, account))
     }
 
     /// What a ckERC20 deposit address must attest to in order to be swept: the account it credits,
@@ -847,17 +854,11 @@ impl State {
         account: Account,
         token: Address,
     ) -> Result<Entry<ScanProgress>, DepositErc20Error> {
-        let (master_public_key, chain_code) =
-            self.public_key_and_chain_code()
+        let address =
+            self.deposit_address(&account)
                 .ok_or(DepositErc20Error::TemporarilyUnavailable(
                     "Minter's ECDSA public key not yet initialized".to_string(),
                 ))?;
-        let address = deposit_address(
-            &master_public_key,
-            &chain_code,
-            DepositAddressSchema::CkErc20,
-            &account,
-        );
         self.automatic_deposits
             .watch_deposit(now, account, token, address)
     }

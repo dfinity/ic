@@ -24,7 +24,8 @@ use ic_cketh_minter::endpoints::ckerc20::{
 };
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{
-    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode, MinterInfo,
+    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositEthArg,
+    DepositEthError, DepositEthResponse, DepositMode, MinterInfo,
 };
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
 use ic_cketh_minter::{
@@ -406,6 +407,29 @@ impl CkErc20Setup {
             )
             .expect("failed to submit withdraw_erc20 call");
         RefreshGasFeeEstimate {
+            setup: self,
+            message_id,
+        }
+    }
+
+    pub fn call_minter_deposit_eth(
+        self,
+        from: Principal,
+        subaccount: Option<[u8; 32]>,
+    ) -> DepositEthFlow {
+        let arg = DepositEthArg {
+            mode: DepositMode::Unsponsored { subaccount },
+        };
+        let message_id = self
+            .env
+            .submit_call(
+                self.cketh.minter_id,
+                from,
+                "deposit_eth",
+                Encode!(&arg).expect("failed to encode deposit_eth args"),
+            )
+            .expect("failed to submit deposit_eth call");
+        DepositEthFlow {
             setup: self,
             message_id,
         }
@@ -1056,6 +1080,29 @@ impl Erc20WithdrawalFlow {
             Result<RetrieveErc20Request, WithdrawErc20Error>
         )
         .unwrap()
+    }
+}
+
+pub struct DepositEthFlow {
+    pub setup: CkErc20Setup,
+    pub message_id: RawMessageId,
+}
+
+impl DepositEthFlow {
+    pub fn expect_trap(self, error_substring: &str) -> CkErc20Setup {
+        let result = self.setup.env.await_call(self.message_id.clone());
+        assert_matches!(result, Err(e) if e.error_code == ErrorCode::CanisterCalledTrap && e.reject_message.contains(error_substring));
+        self.setup
+    }
+
+    pub fn expect_deposit_response(self) -> (CkErc20Setup, DepositEthResponse) {
+        let response = Decode!(
+            &assert_reply(self.setup.env.await_call(self.message_id.clone())),
+            Result<DepositEthResponse, DepositEthError>
+        )
+        .unwrap()
+        .expect("BUG: unexpected error from minter during deposit_eth");
+        (self.setup, response)
     }
 }
 

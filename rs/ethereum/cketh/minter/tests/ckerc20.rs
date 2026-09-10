@@ -145,6 +145,55 @@ fn should_mint_with_ckerc20_setup() {
         .expect_mint();
 }
 
+mod deposit_eth {
+    use candid::Principal;
+    use ic_cketh_test_utils::ckerc20::{CkErc20Setup, ckwbtc};
+    use ic_cketh_test_utils::{DEFAULT_USER_SUBACCOUNT, format_ethereum_address_to_eip_55};
+
+    #[test]
+    fn should_derive_same_address_as_deposit_erc20() {
+        let mut ckerc20 = CkErc20Setup::default()
+            .add_supported_erc20_tokens()
+            .add_supported_erc20_token(ckwbtc());
+        let caller = ckerc20.caller();
+        let tokens: Vec<String> = ckerc20
+            .supported_erc20_tokens
+            .iter()
+            .map(|token| format_ethereum_address_to_eip_55(&token.contract.address))
+            .collect();
+        assert!(
+            tokens.len() > 1,
+            "BUG: need several tokens to show the address does not depend on the token"
+        );
+
+        for subaccount in [None, Some(DEFAULT_USER_SUBACCOUNT)] {
+            let (setup, eth_response) = ckerc20
+                .call_minter_deposit_eth(caller, subaccount)
+                .expect_deposit_response();
+            ckerc20 = setup;
+
+            for token in &tokens {
+                let (setup, erc20_response) = ckerc20
+                    .call_minter_deposit_erc20(caller, subaccount, token.clone())
+                    .expect_deposit_response();
+                ckerc20 = setup;
+
+                assert_eq!(
+                    eth_response.address, erc20_response.address,
+                    "BUG: deposit_eth and deposit_erc20 disagree for token {token} and subaccount {subaccount:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn should_trap_when_caller_anonymous() {
+        CkErc20Setup::default()
+            .call_minter_deposit_eth(Principal::anonymous(), None)
+            .expect_trap("anonymous");
+    }
+}
+
 mod deposit_erc20 {
     use assert_matches::assert_matches;
     use candid::{Nat, Principal};

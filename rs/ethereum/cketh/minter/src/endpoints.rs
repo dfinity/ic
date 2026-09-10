@@ -292,6 +292,25 @@ pub struct DetectedDeposit {
     pub detected_at_block: Nat,
 }
 
+/// Argument for the `deposit_eth` endpoint.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct DepositEthArg {
+    pub mode: DepositMode,
+}
+
+/// Response of the `deposit_eth` endpoint.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct DepositEthResponse {
+    /// The Ethereum deposit address derived for the caller.
+    pub address: String,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub enum DepositEthError {
+    /// The minter is temporarily unavailable, retry the request.
+    TemporarilyUnavailable(String),
+}
+
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum DepositErc20Error {
     /// The `erc20_contract_address` is not a ckERC20 token supported by the minter.
