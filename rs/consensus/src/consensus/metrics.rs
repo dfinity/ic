@@ -112,7 +112,9 @@ impl ConsensusMetrics {
                  as of the latest registry version: 1 while it does, 0 while it does not. A \
                  subnet halting this way creates no blocks and delivers no batches, and does so \
                  from whatever height it is at rather than from a CUP height, which is what \
-                 `consensus_status` reports instead.",
+                 `consensus_status` reports instead. A registry that cannot be read reads as 0 \
+                 here, as consensus carries on in that case rather than halting; the read \
+                 failure itself is logged as an error.",
             ),
             on_state_change_invocations: metrics_registry.int_counter_vec(
                 "consensus_on_state_change_invocations",
