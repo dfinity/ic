@@ -562,11 +562,12 @@ impl CyclesAccountManager {
         // Never refund more than was prepaid, part by part: `x - (x - y)` is the
         // part-wise minimum of `x` and `y` because both subtractions saturate.
         //
-        // The refund is derived from the instruction count, the Wasm execution mode,
-        // the cost schedule and the subnet size passed to this function, all of which
-        // the prepayment was made with as well. Should any of them have changed since
-        // then, e.g. should the subnet have grown between the prepayment and this
-        // refund, the refund can exceed the prepayment and is capped at it.
+        // The refund covers at most the instructions the prepayment was made for, but
+        // it is priced with the Wasm execution mode, the cost schedule and the subnet
+        // size passed to this function, i.e. with the ones in effect now rather than
+        // the ones the prepayment was priced with. `scale_cost` scales both parts of
+        // an amount by the subnet size, so a subnet that grew in between makes the
+        // refund exceed the prepayment, and the cap bounds it.
         let cycles_to_refund =
             prepaid_execution_cycles - (prepaid_execution_cycles - cycles_to_refund);
         system_state.refund_cycles(prepaid_execution_cycles, cycles_to_refund);
