@@ -50,7 +50,9 @@
 
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_cketh_minter::endpoints::events::{Event, EventPayload, TransactionStatus};
+use ic_cketh_minter::endpoints::events::{
+    Asset as EventAsset, Event, EventPayload, TransactionStatus,
+};
 use ic_cketh_minter::endpoints::{
     CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode,
     DepositStatus, MinterInfo,
@@ -504,7 +506,11 @@ impl LiveSetup<CkErc20Setup> {
             .minter_events()
             .into_iter()
             .filter_map(|event| match event.payload {
-                EventPayload::AcceptedSweepRequest { token, items, .. } => Some((
+                EventPayload::AcceptedSweepRequest {
+                    asset: EventAsset::Erc20(token),
+                    items,
+                    ..
+                } => Some((
                     Address::from_str(&token).expect("BUG: the sweep names an invalid token"),
                     items.len(),
                 )),

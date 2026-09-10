@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests;
 
+use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
-use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::logs::INFO;
@@ -48,9 +48,10 @@ const SECS_PER_BLOCK: u64 = 12;
 // Use 1 transaction per block to a minter-controlled address as a crude upper-bound.
 const MAX_ACTIVE_DEPOSITS: NonZeroUsize = NonZeroUsize::new(7_000).unwrap();
 
-/// Maximum number of ERC-20 tokens a single account may have armed at once. Bounds an
-/// account's share of every scan tick, so a caller cannot arm the whole supported set.
-const MAX_TOKENS_PER_ACCOUNT: usize = 5;
+/// Maximum number of assets (ETH and ERC-20 tokens together) a single account may have armed at
+/// once. Bounds an account's share of every scan tick, so a caller cannot arm the whole supported
+/// set.
+const MAX_ASSETS_PER_ACCOUNT: usize = 5;
 
 /// Registry of minter-controlled ckERC20 deposits, each a user account paired with an
 /// ERC-20 token it wants to deposit. Every account's tokens share one deposit address,
@@ -208,7 +209,7 @@ impl AutomaticDeposits {
         let accounts: Vec<_> = request.items.iter().map(|item| item.item.account).collect();
 
         for account in accounts {
-            let request = DepositRequest::new(account, token);
+            let request = DepositRequest::new(account, Asset::Erc20(token));
             let entry = self
                 .sweep
                 .remove(&request)
@@ -278,14 +279,14 @@ impl AutomaticDeposits {
         self.authorizations.insert(request, signature);
     }
 
-    /// Arm the `(account, token)` pair, whose deposit `address` is derived for `account`.
+    /// Arm the `(account, asset)` pair, whose deposit `address` is derived for `account`.
     ///
     /// Returns the watched pair together with the timestamp until which a deposit to it is
     /// guaranteed to be noticed. Re-registering a pair that is still armed returns the
     /// already-stored request and its original validity window without re-arming it, fails with
-    /// [`DepositErc20Error::TooManyTokensForAccount`] when the account already has
-    /// [`MAX_TOKENS_PER_ACCOUNT`] tokens armed, and with
-    /// [`DepositErc20Error::TooManyActiveDeposits`] when the watchlist is full of live entries.
+    /// [`RegisterDepositError::TooManyAssetsForAccount`] when the account already has
+    /// [`MAX_ASSETS_PER_ACCOUNT`] assets armed, and with
+    /// [`RegisterDepositError::TooManyActiveDeposits`] when the watchlist is full of live entries.
     ///
     /// # Panics
     ///
@@ -294,18 +295,18 @@ impl AutomaticDeposits {
         &mut self,
         now: Timestamp,
         account: Account,
-        token: Address,
+        asset: Asset,
         address: DepositAddress,
-    ) -> Result<Entry<ScanProgress>, DepositErc20Error> {
-        let request = DepositRequest::new(account, token);
+    ) -> Result<Entry<ScanProgress>, RegisterDepositError> {
+        let request = DepositRequest::new(account, asset);
         assert!(
             !self.sweep.contains_key(&request),
             "BUG: cannot arm {request:?}, it already has funds queued for sweeping"
         );
         if self.watchlist.get_entry(now, &request).is_none()
-            && self.armed_token_count(now, &account) >= MAX_TOKENS_PER_ACCOUNT
+            && self.armed_asset_count(now, &account) >= MAX_ASSETS_PER_ACCOUNT
         {
-            return Err(DepositErc20Error::TooManyTokensForAccount);
+            return Err(RegisterDepositError::TooManyAssetsForAccount);
         }
         match self
             .watchlist
@@ -318,12 +319,12 @@ impl AutomaticDeposits {
                     .expect("BUG: the entry is live right after insert or AlreadyPresent");
                 Ok(entry.clone())
             }
-            Err(InsertError::AtCapacity { .. }) => Err(DepositErc20Error::TooManyActiveDeposits),
+            Err(InsertError::AtCapacity { .. }) => Err(RegisterDepositError::TooManyActiveDeposits),
         }
     }
 
-    /// The number of tokens `account` currently has armed (live as of `now`).
-    fn armed_token_count(&self, now: Timestamp, account: &Account) -> usize {
+    /// The number of assets `account` currently has armed (live as of `now`).
+    fn armed_asset_count(&self, now: Timestamp, account: &Account) -> usize {
         self.watchlist
             .iter()
             .filter(|(request, entry)| &request.account == account && entry.expires_at >= now)
@@ -355,7 +356,7 @@ impl AutomaticDeposits {
                         owner: deposit.owner,
                         subaccount: deposit.subaccount,
                     },
-                    deposit.erc20_contract_address,
+                    deposit.asset,
                 ),
                 Entry {
                     value: ScanProgress {
@@ -373,6 +374,9 @@ impl AutomaticDeposits {
     /// Iterate the live [`ScanTarget`]s that are due for a balance scan as of the given
     /// latest block height, using elapsed blocks as a proxy for elapsed time against the
     /// backoff schedule. `now` filters expired entries.
+    ///
+    /// ETH pairs are armed but yield no target yet: the balance batcher cannot read an ETH
+    /// balance until it gains its ETH slot, so an ETH pair stays on the watchlist unscanned.
     ///
     /// Each target carries everything a scan of it needs (address, scan count), so the scanner
     /// never looks the entry up again: a scan spans several await points, and a concurrent
@@ -403,8 +407,13 @@ impl AutomaticDeposits {
                     }
                 }
             };
+            let token = match request.asset {
+                Asset::Erc20(token) => token,
+                Asset::Eth => return None,
+            };
             due.then_some(ScanTarget {
                 request: *request,
+                token,
                 address: progress.address,
                 scan_count: progress.scan_count,
             })
@@ -454,7 +463,7 @@ impl AutomaticDeposits {
             owner: deposit.owner,
             subaccount: deposit.subaccount,
         };
-        let request = DepositRequest::new(account, deposit.erc20_contract_address);
+        let request = DepositRequest::new(account, deposit.asset);
         self.watchlist.remove(&request);
         let previous = self.sweep.insert(
             request,
@@ -468,8 +477,8 @@ impl AutomaticDeposits {
         );
         assert!(
             previous.is_none(),
-            "BUG: sweep queue already has an entry for account {account:?} token {}",
-            deposit.erc20_contract_address
+            "BUG: sweep queue already has an entry for account {account:?} asset {}",
+            deposit.asset
         );
     }
 
@@ -485,7 +494,7 @@ impl AutomaticDeposits {
             .map(|(request, deposit)| DepositAddressRegistration {
                 owner: request.account.owner,
                 subaccount: request.account.subaccount,
-                erc20_contract_address: request.token,
+                asset: request.asset,
                 address: deposit.value.address,
                 expires_at_nanos: deposit.expires_at,
                 last_scanned_block: deposit.value.last_scanned_block,
@@ -517,37 +526,30 @@ impl AutomaticDeposits {
 
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
     /// funds queued for sweeping (so it must be registered). Reports
-    /// [`DepositStatus::AwaitingSweep`] once funds have been detected and queued, otherwise
-    /// [`DepositStatus::Scanning`] while the address is armed and being scanned as of `now`.
-    /// `minimum_deposit_amount` is the balance the address must hold for the scan to detect it,
-    /// reported back to the caller alongside the status.
+    /// [`DepositStage::AwaitingSweep`] once funds have been detected and queued, otherwise
+    /// [`DepositStage::Scanning`] while the address is armed and being scanned as of `now`.
     pub fn deposit_status(
         &self,
         now: Timestamp,
         request: &DepositRequest,
-        minimum_deposit_amount: Erc20Value,
-    ) -> Option<DepositErc20Response> {
+    ) -> Option<DepositStatusInfo> {
         if let Some(entry) = self.sweep.get(request) {
-            return Some(DepositErc20Response {
-                address: entry.address.to_string(),
-                minimum_deposit_amount: minimum_deposit_amount.into(),
-                status: DepositStatus::AwaitingSweep(DetectedDeposit {
-                    erc20_contract_address: request.token().to_string(),
-                    scanned_balance: entry.scanned_balance.into(),
-                    detected_at_block: entry.last_scanned_block.into(),
-                }),
+            return Some(DepositStatusInfo {
+                address: entry.address,
+                stage: DepositStage::AwaitingSweep {
+                    scanned_balance: entry.scanned_balance,
+                    detected_at_block: entry.last_scanned_block,
+                },
             });
         }
-        self.get_entry(now, request)
-            .map(|entry| DepositErc20Response {
-                address: entry.value.address.to_string(),
-                minimum_deposit_amount: minimum_deposit_amount.into(),
-                status: DepositStatus::Scanning {
-                    valid_until: entry.expires_at.as_nanos(),
-                    last_scanned_block: entry.value.last_scanned_block.map(Into::into),
-                    scan_count: entry.value.scan_count as u64,
-                },
-            })
+        self.get_entry(now, request).map(|entry| DepositStatusInfo {
+            address: entry.value.address,
+            stage: DepositStage::Scanning {
+                valid_until: entry.expires_at,
+                last_scanned_block: entry.value.last_scanned_block,
+                scan_count: entry.value.scan_count,
+            },
+        })
     }
 
     /// The queued deposits a sweep could take next, batched by token, skipping those a sweep
@@ -560,7 +562,11 @@ impl AutomaticDeposits {
         for (deposit_request, sweep_entry) in
             self.sweep.iter().filter(|(_, entry)| entry.is_sweepable())
         {
-            let batch: &mut Vec<_> = batches.entry(deposit_request.token).or_default();
+            let token = match deposit_request.asset {
+                Asset::Erc20(token) => token,
+                Asset::Eth => todo!("DEFI-2931: sweep ETH deposits via sweepEthBatch"),
+            };
+            let batch: &mut Vec<_> = batches.entry(token).or_default();
             if batch.len() < requested_batch_size {
                 batch.push(SweepTarget {
                     account: deposit_request.account,
@@ -585,7 +591,7 @@ impl AutomaticDeposits {
         accounts: impl IntoIterator<Item = Account>,
     ) {
         for account in accounts {
-            let request = DepositRequest::new(account, token);
+            let request = DepositRequest::new(account, Asset::Erc20(token));
             let entry = self
                 .sweep
                 .get_mut(&request)
@@ -611,30 +617,59 @@ impl Default for AutomaticDeposits {
     }
 }
 
-/// What `deposit_erc20` asks for, and the unit of registration, scanning, and sweeping: a user
-/// `account` paired with the ERC-20 `token` contract it intends to deposit. Nothing has been
+/// What `deposit_erc20` and `deposit_eth` ask for, and the unit of registration, scanning, and
+/// sweeping: a user `account` paired with the [`Asset`] it intends to deposit. Nothing has been
 /// deposited yet — the request only arms the pair so a later deposit to it is noticed.
 ///
-/// All of an account's tokens share one derived deposit address, but each pair is armed, scanned,
+/// All of an account's assets share one derived deposit address, but each pair is armed, scanned,
 /// and swept independently.
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct DepositRequest {
     account: Account,
-    token: Address,
+    asset: Asset,
 }
 
 impl DepositRequest {
-    pub fn new(account: Account, token: Address) -> Self {
-        Self { account, token }
+    pub fn new(account: Account, asset: Asset) -> Self {
+        Self { account, asset }
     }
 
     pub fn account(&self) -> Account {
         self.account
     }
 
-    pub fn token(&self) -> Address {
-        self.token
+    pub fn asset(&self) -> Asset {
+        self.asset
     }
+}
+
+/// Where a deposit pair currently stands, in the minter's own types: the candid layer shapes
+/// it per endpoint (the ERC-20 status names a contract, the ETH one does not).
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct DepositStatusInfo {
+    pub address: DepositAddress,
+    pub stage: DepositStage,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum DepositStage {
+    Scanning {
+        valid_until: Timestamp,
+        last_scanned_block: Option<BlockNumber>,
+        scan_count: u32,
+    },
+    AwaitingSweep {
+        scanned_balance: Erc20Value,
+        detected_at_block: BlockNumber,
+    },
+}
+
+/// Why arming a deposit pair was refused.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum RegisterDepositError {
+    TooManyAssetsForAccount,
+    TooManyActiveDeposits,
+    KeyNotInitialized,
 }
 
 /// A [`DepositRequest`] due for a balance scan, carrying everything a scan of it needs read off the
@@ -644,6 +679,7 @@ impl DepositRequest {
 #[derive(Clone, Copy, Debug)]
 pub struct ScanTarget {
     request: DepositRequest,
+    token: Address,
     address: DepositAddress,
     scan_count: u32,
 }
@@ -658,7 +694,7 @@ impl ScanTarget {
     }
 
     pub fn token(&self) -> Address {
-        self.request.token
+        self.token
     }
 
     pub fn address(&self) -> DepositAddress {

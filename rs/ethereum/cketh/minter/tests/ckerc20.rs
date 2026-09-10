@@ -146,9 +146,105 @@ fn should_mint_with_ckerc20_setup() {
 }
 
 mod deposit_eth {
+    use assert_matches::assert_matches;
     use candid::Principal;
+    use ic_cketh_minter::endpoints::{DepositEthStatus, DepositStatus};
+    use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
     use ic_cketh_test_utils::ckerc20::{CkErc20Setup, ckwbtc};
     use ic_cketh_test_utils::{DEFAULT_USER_SUBACCOUNT, format_ethereum_address_to_eip_55};
+
+    const MINIMUM_ETH_DEPOSIT_WEI: u64 = 5_000_000_000_000_000;
+
+    #[test]
+    fn should_arm_the_pair_and_report_scanning() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let caller = ckerc20.caller();
+        let scan_window_nanos = DEPOSIT_ADDRESS_SCAN_WINDOW.as_nanos() as u64;
+
+        let time_before = ckerc20.env.get_time().as_nanos_since_unix_epoch();
+        let (ckerc20, response) = ckerc20
+            .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        let time_after = ckerc20.env.get_time().as_nanos_since_unix_epoch();
+
+        assert_eq!(
+            response.minimum_deposit_amount,
+            candid::Nat::from(MINIMUM_ETH_DEPOSIT_WEI)
+        );
+        let valid_until = match &response.status {
+            DepositEthStatus::Scanning {
+                valid_until,
+                last_scanned_block: None,
+                scan_count: 0,
+            } => *valid_until,
+            other => panic!("BUG: expected a never-scanned Scanning status, got {other:?}"),
+        };
+        assert!(
+            (time_before + scan_window_nanos..=time_after + scan_window_nanos)
+                .contains(&valid_until),
+            "BUG: valid_until {} not in [{}, {}]",
+            valid_until,
+            time_before + scan_window_nanos,
+            time_after + scan_window_nanos,
+        );
+
+        let (ckerc20, response2) = ckerc20
+            .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_eq!(response, response2, "BUG: deposit_eth should be idempotent");
+
+        ckerc20
+            .cketh
+            .check_audit_logs_and_upgrade_as_ref(Default::default());
+
+        let (_ckerc20, response3) = ckerc20
+            .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_eq!(
+            response, response3,
+            "BUG: the armed ETH pair should survive a canister upgrade"
+        );
+    }
+
+    #[test]
+    fn should_not_scan_the_eth_pair() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let caller = ckerc20.caller();
+        let token =
+            format_ethereum_address_to_eip_55(&ckerc20.supported_erc20_tokens[0].contract.address);
+
+        let (ckerc20, _) = ckerc20
+            .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        let (ckerc20, _) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
+            .expect_deposit_response();
+
+        ckerc20.refresh_latest_block(4_500_000);
+        ckerc20.run_balance_scan(&[1_000_000_000_u128]);
+
+        let (ckerc20, erc20_response) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token)
+            .expect_deposit_response();
+        assert_matches!(
+            erc20_response.status,
+            DepositStatus::AwaitingSweep(_),
+            "BUG: the funded ERC-20 pair should have been detected by the scan"
+        );
+
+        let (_ckerc20, eth_response) = ckerc20
+            .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_matches!(
+            eth_response.status,
+            DepositEthStatus::Scanning {
+                scan_count: 0,
+                last_scanned_block: None,
+                ..
+            },
+            "BUG: the ETH pair must stay armed and unscanned until the batcher can read ETH balances"
+        );
+    }
 
     #[test]
     fn should_derive_same_address_as_deposit_erc20() {
@@ -197,7 +293,7 @@ mod deposit_eth {
 mod deposit_erc20 {
     use assert_matches::assert_matches;
     use candid::{Nat, Principal};
-    use ic_cketh_minter::endpoints::events::EventPayload;
+    use ic_cketh_minter::endpoints::events::{Asset as EventAsset, EventPayload};
     use ic_cketh_minter::endpoints::{DepositErc20Error, DepositStatus};
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
     use ic_cketh_test_utils::ckerc20::{CKWBTC_CONTRACT_ADDRESS, CkErc20Setup, ckwbtc};
@@ -515,10 +611,10 @@ mod deposit_erc20 {
                     owner,
                     subaccount,
                     address,
-                    erc20_contract_address: event_token,
+                    asset,
                     scanned_balance,
                     ..
-                } => Some((owner, subaccount, address, event_token, scanned_balance)),
+                } => Some((owner, subaccount, address, asset, scanned_balance)),
                 _ => None,
             })
             .collect();
@@ -527,11 +623,11 @@ mod deposit_erc20 {
             1,
             "one AutomaticDepositReceived event for the funded pair"
         );
-        let (owner, subaccount, address, event_token, scanned_balance) = &received[0];
+        let (owner, subaccount, address, asset, scanned_balance) = &received[0];
         assert_eq!(*owner, caller);
         assert_eq!(*subaccount, Some(DEFAULT_USER_SUBACCOUNT));
         assert_eq!(*address, before.address);
-        assert_eq!(*event_token, token);
+        assert_eq!(*asset, EventAsset::Erc20(token.clone()));
         assert_eq!(*scanned_balance, candid::Nat::from(1_000_000_000_u64));
 
         // deposit_erc20 now reports the detected funds (AwaitingSweep) at the same address, with a
