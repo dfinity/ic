@@ -114,6 +114,25 @@ and a ledger must space its attempts while archiving is failing.
   rewind. Req 8 and Req 1 require that such a fork is detected rather than
   extended into the archives; they do not make the restore safe. The only coherent
   rollback is the whole suite to a common point, accepting the loss after it.
+- **Bounding the time a ledger waits for an archive.** Every archiving call today
+  waits unboundedly for a response, so a call that does not resolve holds the
+  archiving guard with no timeout, and the subnet must reserve capacity for a
+  response it may never need. Once Req 2 and Req 3 make an append idempotent, a
+  best-effort call becomes safe: an unknown outcome is resolved by retrying, and a
+  timeout becomes an ordinary failure subject to Req 9 rather than a hang. It is
+  deferred because it is not needed for correctness and it changes how *all* the
+  ledger's outbound calls are made, but the reasoning is recorded because it is
+  half of what the idempotency in Req 2 is worth.
+
+  Two constraints hold whenever it is taken up. It must not be applied to an
+  append before Req 2 and Req 3 are in place, nor to a ledger exempt under Req
+  10.5, because an unknown outcome there is exactly the ambiguity this
+  specification exists to remove — bounding the wait first would make the
+  divergence more frequent, not less. And it cannot be applied uniformly: creating
+  a canister and installing code are not idempotent, so an unknown outcome for
+  either leaves precisely the unaddressable canister Req 11 exists to detect,
+  whereas reading remaining capacity and replacing controllers are safe.
+
 - **Making the archive's canister logs readable.** Some obligations here are
   satisfiable only through a metric because a canister's log is not readable by
   default. Changing that is a governance proposal, not a code change, and is out
