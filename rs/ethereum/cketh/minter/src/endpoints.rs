@@ -543,6 +543,34 @@ pub mod events {
     use candid::{CandidType, Deserialize, Nat, Principal};
     use serde_bytes::ByteBuf;
 
+    /// An asset a deposit pipeline event names: ETH, or an ERC-20 token by its contract
+    /// address in EIP-55 format.
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub enum Asset {
+        Eth,
+        Erc20(String),
+    }
+
+    impl From<crate::asset::Asset> for Asset {
+        fn from(asset: crate::asset::Asset) -> Self {
+            match asset {
+                crate::asset::Asset::Eth => Asset::Eth,
+                crate::asset::Asset::Erc20(address) => Asset::Erc20(address.to_string()),
+            }
+        }
+    }
+
+    impl TryFrom<Asset> for crate::asset::Asset {
+        type Error = String;
+
+        fn try_from(asset: Asset) -> Result<Self, Self::Error> {
+            match asset {
+                Asset::Eth => Ok(crate::asset::Asset::Eth),
+                Asset::Erc20(address) => address.parse().map(crate::asset::Asset::Erc20),
+            }
+        }
+    }
+
     #[derive(Clone, Debug, CandidType, Deserialize)]
     pub struct GetEventsArg {
         pub start: u64,
@@ -746,8 +774,8 @@ pub mod events {
         AcceptedSweepRequest {
             sweep_id: Nat,
             destination: String,
-            /// The single ERC-20 contract this sweep moves.
-            token: String,
+            /// The single asset this sweep moves.
+            asset: Asset,
             /// The deposits the sweep moves, one per account.
             items: Vec<AuthorizedSweepItem>,
             max_transaction_fee: Nat,
@@ -832,7 +860,7 @@ pub mod events {
             owner: Principal,
             subaccount: Option<[u8; 32]>,
             address: String,
-            erc20_contract_address: String,
+            asset: Asset,
             last_scanned_block: Nat,
             scan_count: u64,
             scanned_balance: Nat,
@@ -843,7 +871,7 @@ pub mod events {
     pub struct DepositAddressRegistration {
         pub owner: Principal,
         pub subaccount: Option<[u8; 32]>,
-        pub erc20_contract_address: String,
+        pub asset: Asset,
         pub address: String,
         pub expires_at_nanos: u64,
         pub last_scanned_block: Option<Nat>,

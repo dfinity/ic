@@ -293,7 +293,7 @@ mod deposit_eth {
 mod deposit_erc20 {
     use assert_matches::assert_matches;
     use candid::{Nat, Principal};
-    use ic_cketh_minter::endpoints::events::EventPayload;
+    use ic_cketh_minter::endpoints::events::{Asset as EventAsset, EventPayload};
     use ic_cketh_minter::endpoints::{DepositErc20Error, DepositStatus};
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
     use ic_cketh_test_utils::ckerc20::{CKWBTC_CONTRACT_ADDRESS, CkErc20Setup, ckwbtc};
@@ -611,10 +611,10 @@ mod deposit_erc20 {
                     owner,
                     subaccount,
                     address,
-                    erc20_contract_address: event_token,
+                    asset,
                     scanned_balance,
                     ..
-                } => Some((owner, subaccount, address, event_token, scanned_balance)),
+                } => Some((owner, subaccount, address, asset, scanned_balance)),
                 _ => None,
             })
             .collect();
@@ -623,11 +623,11 @@ mod deposit_erc20 {
             1,
             "one AutomaticDepositReceived event for the funded pair"
         );
-        let (owner, subaccount, address, event_token, scanned_balance) = &received[0];
+        let (owner, subaccount, address, asset, scanned_balance) = &received[0];
         assert_eq!(*owner, caller);
         assert_eq!(*subaccount, Some(DEFAULT_USER_SUBACCOUNT));
         assert_eq!(*address, before.address);
-        assert_eq!(*event_token, token);
+        assert_eq!(*asset, EventAsset::Erc20(token.clone()));
         assert_eq!(*scanned_balance, candid::Nat::from(1_000_000_000_u64));
 
         // deposit_erc20 now reports the detected funds (AwaitingSweep) at the same address, with a

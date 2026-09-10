@@ -918,7 +918,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                         .map(|r| CandidDepositAddressRegistration {
                             owner: r.owner,
                             subaccount: r.subaccount,
-                            erc20_contract_address: r.asset.to_string(),
+                            asset: r.asset.into(),
                             address: r.address.to_string(),
                             expires_at_nanos: r.expires_at_nanos.as_nanos(),
                             last_scanned_block: r.last_scanned_block.map(Into::into),
@@ -930,7 +930,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     owner: deposit.owner,
                     subaccount: deposit.subaccount,
                     address: deposit.address.to_string(),
-                    erc20_contract_address: deposit.asset.to_string(),
+                    asset: deposit.asset.into(),
                     last_scanned_block: deposit.last_scanned_block.into(),
                     scan_count: deposit.scan_count.into(),
                     scanned_balance: deposit.scanned_balance.into(),
@@ -1086,7 +1086,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 }) => EP::AcceptedSweepRequest {
                     sweep_id: id.0.into(),
                     destination: destination.to_string(),
-                    token: token.to_string(),
+                    asset: Asset::Erc20(token).into(),
                     items: map_authorized_sweep_items(&items),
                     max_transaction_fee: max_transaction_fee.into(),
                     created_at,
