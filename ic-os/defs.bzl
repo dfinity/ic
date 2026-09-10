@@ -527,7 +527,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                     name = overlay_out,
                     extra_files = overlay_binary_files | overlay_component_files | replica_version_file,
                     file_contexts = ":file_contexts",
-                    partition_size = "2G",
+                    partition_size = "1G",
                     target_compatible_with = ["@platforms//os:linux"],
                     tags = ["manual", "no-cache"],
                 )
