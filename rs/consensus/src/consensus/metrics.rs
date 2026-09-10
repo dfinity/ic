@@ -228,11 +228,12 @@ impl FinalizerMetrics {
              that has not looked yet rather than a status of its own.",
             &[STATUS_LABEL],
         );
-        // Create every child up front. A gauge vector with no children is
-        // dropped by the Prometheus registry, so until the delivery path first
-        // computes a status the scrape would carry no `consensus_status` at all,
-        // which a dashboard cannot tell apart from a subnet that is not halted.
-        // All four reading 0 is that state instead, as the help text says.
+        // Report every status from the start. A gauge vector reports only the
+        // label values it has been given, so until the delivery path computes a
+        // status for the first time the scrape would carry no `consensus_status`
+        // at all, and a query for the halted status would find nothing -- the
+        // answer it also gives for a subnet that is not halted. All four reading
+        // 0 is that state instead, as the help text says.
         for (label, _) in CONSENSUS_STATUSES {
             consensus_status.with_label_values(&[label]).set(0);
         }
@@ -766,19 +767,22 @@ mod tests {
             .collect()
     }
 
-    /// A gauge vector with no children is dropped by the Prometheus registry, so
-    /// the statuses are reported as zero from the moment the metrics are built:
-    /// a replica that has not delivered a batch since it started -- one whose
-    /// subnet is halted, for instance -- would otherwise report no
-    /// `consensus_status` at all, which reads the same as a subnet that is fine.
-    /// Observing a status then reports that one alone.
+    /// The statuses are reported, as zero, from the moment the metrics are
+    /// built, rather than from the first time one of them is observed. A gauge
+    /// vector reports only the label values it has been given, and one that has
+    /// been given none is left out of the scrape altogether, so on a replica
+    /// that has not delivered a batch since it started -- one whose subnet is
+    /// halted, say -- a query for the halted status would find nothing, which is
+    /// the answer that query also gives for a subnet that is not halted.
+    ///
+    /// Observing a status sets that one to one and the other three back to zero.
     #[test]
     fn test_consensus_status_is_reported_before_it_is_observed() {
         let metrics_registry = MetricsRegistry::new();
         let metrics = FinalizerMetrics::new(metrics_registry.clone());
 
         // Zero across the statuses: batch delivery has not computed one yet.
-        assert_eq!(consensus_status(&metrics_registry).values().sum::<i64>(), 0,);
+        assert_eq!(consensus_status(&metrics_registry).values().sum::<i64>(), 0);
 
         metrics.observe_status(Some(Status::Halted));
 
