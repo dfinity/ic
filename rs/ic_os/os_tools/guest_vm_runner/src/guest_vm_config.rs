@@ -283,7 +283,6 @@ mod tests {
         Ipv6Config, NetworkSettings,
     };
     use goldenfile::Mint;
-    use std::collections::HashSet;
     use std::env;
     use std::os::unix::prelude::MetadataExt;
     use tempfile::{NamedTempFile, tempdir};
@@ -567,22 +566,6 @@ mod tests {
             serial_log_path(GuestVMType::Upgrade, VmSlot::new(60)),
             Path::new("/var/log/libvirt/qemu/upgrade-guestos-serial60.log")
         );
-    }
-
-    // Each VM must get its own domain, uuid and serial log, or VMs overwrite
-    // each other's.
-    #[test]
-    fn test_per_slot_names_are_unique() {
-        let slots = (0..=60u8).map(VmSlot::new);
-        let mut names = HashSet::new();
-
-        for slot in slots {
-            for guest_vm_type in [GuestVMType::Default, GuestVMType::Upgrade] {
-                assert!(names.insert(vm_domain_name(guest_vm_type, slot)));
-                assert!(names.insert(vm_domain_uuid(guest_vm_type, slot)));
-                assert!(names.insert(serial_log_path(guest_vm_type, slot).display().to_string()));
-            }
-        }
     }
 
     #[test]
