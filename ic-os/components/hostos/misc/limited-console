@@ -168,7 +168,7 @@ execute_command() {
         "guestos-alternative")
             case "${2:-}" in
                 "show")
-                    /opt/ic/bin/hostos_tool guestos-alternative show
+                    sudo /opt/ic/bin/hostos_tool guestos-alternative show
                     ;;
                 "swap")
                     sudo /opt/ic/bin/hostos_tool guestos-alternative swap ${3:+"$3"}
