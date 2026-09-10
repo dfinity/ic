@@ -1079,14 +1079,14 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,
-                    token,
+                    asset,
                     items,
                     max_transaction_fee,
                     created_at,
                 }) => EP::AcceptedSweepRequest {
                     sweep_id: id.0.into(),
                     destination: destination.to_string(),
-                    asset: Asset::Erc20(token).into(),
+                    asset: asset.into(),
                     items: map_authorized_sweep_items(&items),
                     max_transaction_fee: max_transaction_fee.into(),
                     created_at,

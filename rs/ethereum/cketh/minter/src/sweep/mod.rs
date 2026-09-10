@@ -12,6 +12,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::asset::Asset;
 use crate::attestation::{AttestationRequest, sign_attestation};
 use crate::sweeper_contract::SweepItem;
 use crate::{
@@ -69,9 +70,9 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         return;
     }
 
-    let batch_per_token =
+    let batch_per_asset =
         read_state(|s| s.automatic_deposits.requests_batch(MAX_DEPOSITS_PER_SWEEP));
-    if batch_per_token.is_empty() {
+    if batch_per_asset.is_empty() {
         return;
     }
 
@@ -83,7 +84,7 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         return;
     };
 
-    for (token, targets) in batch_per_token {
+    for (asset, targets) in batch_per_asset {
         let Some(attestation_requests) = read_state(|s| s.attestation_requests(&targets)) else {
             log!(
                 DEBUG,
@@ -101,18 +102,18 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         };
         sign_attestations_batch(attestation_requests, runtime).await;
         sign_authorizations_batch(authorization_requests, runtime).await;
-        enqueue_sweep(token, &targets, &gas_fee_estimate, runtime);
+        enqueue_sweep(asset, &targets, &gas_fee_estimate, runtime);
     }
 }
 
-/// Enqueues one sweep of `token` from the targets both signing passes covered, so the pipeline can
+/// Enqueues one sweep of `asset` from the targets both signing passes covered, so the pipeline can
 /// price, sign and send it.
 ///
 /// A target whose attestation or authorization is missing is left out rather than swept: its
 /// signing failed, so the sweep has nothing to prove the address credits the account, or nothing to
 /// delegate it with. It stays queued, and the next tick tries it again.
 fn enqueue_sweep<R: CanisterRuntime>(
-    token: Address,
+    asset: Asset,
     targets: &[SweepTarget],
     gas_fee_estimate: &GasFeeEstimate,
     runtime: &R,
@@ -150,7 +151,7 @@ fn enqueue_sweep<R: CanisterRuntime>(
         if items.is_empty() {
             log!(
                 INFO,
-                "[create_pending_sweeper_requests]: SKIPPING {token}: none of its queued deposits could be signed for"
+                "[create_pending_sweeper_requests]: SKIPPING {asset}: none of its queued deposits could be signed for"
             );
             return;
         }
@@ -163,7 +164,7 @@ fn enqueue_sweep<R: CanisterRuntime>(
         if max_transaction_fee > sweeper_gas {
             log!(
                 INFO,
-                "[create_pending_sweeper_requests]: SKIPPING {token}: the sweep needs \
+                "[create_pending_sweeper_requests]: SKIPPING {asset}: the sweep needs \
                  {max_transaction_fee} of gas but the sweeper holds at least {sweeper_gas}"
             );
             return;
@@ -171,7 +172,7 @@ fn enqueue_sweep<R: CanisterRuntime>(
         let request = SweepRequest {
             id: s.next_sweep_id,
             destination,
-            token,
+            asset,
             items,
             max_transaction_fee,
             created_at: runtime.time(),

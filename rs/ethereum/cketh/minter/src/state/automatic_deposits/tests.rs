@@ -854,7 +854,7 @@ fn automatic_deposit(
 }
 
 #[test]
-fn should_keep_eth_entries_out_of_sweep_batches() {
+fn should_batch_eth_entries_alongside_tokens() {
     let mut deposits = AutomaticDeposits::default();
     deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
@@ -873,13 +873,9 @@ fn should_keep_eth_entries_out_of_sweep_batches() {
 
     let batches = deposits.requests_batch(10);
 
-    assert_eq!(batches.len(), 1);
+    assert_eq!(batches.len(), 2);
+    assert_eq!(accounts_in(&batches, Asset::Eth), vec![account(0)]);
     assert_eq!(accounts_in(&batches, usdc()), vec![account(1)]);
-    assert_eq!(
-        deposits.sweep_len(),
-        2,
-        "BUG: the ETH entry stays queued, awaiting the sweepEthBatch lane"
-    );
 }
 
 #[test]
@@ -894,7 +890,7 @@ fn should_batch_queued_deposits_by_token() {
 
     assert_eq!(
         batches.keys().copied().collect::<Vec<_>>(),
-        vec![usdc(), usdt()]
+        vec![Asset::Erc20(usdc()), Asset::Erc20(usdt())]
     );
     assert_eq!(accounts_in(&batches, usdc()), vec![account(0), account(1)]);
     assert_eq!(accounts_in(&batches, usdt()), vec![account(2)]);
@@ -909,7 +905,7 @@ fn should_batch_queued_deposits_by_token() {
 fn should_stop_offering_a_deposit_a_sweep_has_taken() {
     let mut deposits = queued(&[(account(0), usdc()), (account(1), usdc())]);
 
-    deposits.record_sweep_scheduled(SweepId(7), usdc(), [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(7), Asset::Erc20(usdc()), [account(0)]);
 
     let batches = deposits.requests_batch(10);
     assert_eq!(accounts_in(&batches, usdc()), vec![account(1)]);
@@ -922,8 +918,8 @@ fn should_stop_offering_a_deposit_a_sweep_has_taken() {
 fn should_offer_nothing_once_every_deposit_is_taken() {
     let mut deposits = queued(&[(account(0), usdc()), (account(1), usdt())]);
 
-    deposits.record_sweep_scheduled(SweepId(1), usdc(), [account(0)]);
-    deposits.record_sweep_scheduled(SweepId(2), usdt(), [account(1)]);
+    deposits.record_sweep_scheduled(SweepId(1), Asset::Erc20(usdc()), [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(2), Asset::Erc20(usdt()), [account(1)]);
 
     assert!(deposits.requests_batch(10).is_empty());
     assert_eq!(deposits.sweep_len(), 2);
@@ -934,8 +930,8 @@ fn should_offer_nothing_once_every_deposit_is_taken() {
 fn should_refuse_to_hand_the_same_deposit_to_two_sweeps() {
     let mut deposits = queued(&[(account(0), usdc())]);
 
-    deposits.record_sweep_scheduled(SweepId(1), usdc(), [account(0)]);
-    deposits.record_sweep_scheduled(SweepId(2), usdc(), [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(1), Asset::Erc20(usdc()), [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(2), Asset::Erc20(usdc()), [account(0)]);
 }
 
 #[test]
@@ -943,7 +939,7 @@ fn should_refuse_to_hand_the_same_deposit_to_two_sweeps() {
 fn should_refuse_to_schedule_a_deposit_that_is_not_queued() {
     let mut deposits = queued(&[(account(0), usdc())]);
 
-    deposits.record_sweep_scheduled(SweepId(1), usdt(), [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(1), Asset::Erc20(usdt()), [account(0)]);
 }
 
 #[tokio::test]
@@ -993,7 +989,7 @@ async fn should_refuse_to_finalize_a_sweep_whose_deposit_left_the_queue() {
     let (_, request) =
         deposits_with_enqueued_sweep(&[(account(0), usdc()), (account(1), usdc())]).await;
     let mut deposits = queued(&[(account(0), usdc())]);
-    deposits.record_sweep_scheduled(SweepId(0), usdc(), [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(0), Asset::Erc20(usdc()), [account(0)]);
     deposits.record_sweep_request(request.clone());
 
     finalize_sweep(&mut deposits, request, TransactionStatus::Success);
@@ -1063,9 +1059,12 @@ fn queue(deposits: &mut AutomaticDeposits, pairs: &[(Account, Address)]) {
     }
 }
 
-fn accounts_in(batches: &BTreeMap<Address, Vec<SweepTarget>>, token: Address) -> Vec<Account> {
+fn accounts_in(
+    batches: &BTreeMap<Asset, Vec<SweepTarget>>,
+    asset: impl Into<Asset>,
+) -> Vec<Account> {
     batches
-        .get(&token)
+        .get(&asset.into())
         .map(|targets| targets.iter().map(|target| target.account()).collect())
         .unwrap_or_default()
 }
