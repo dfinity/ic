@@ -218,7 +218,7 @@ mod deposit_eth {
 
         let scanned_at = 4_500_000_u64;
         ckerc20.refresh_latest_block(scanned_at);
-        ckerc20.run_balance_scan(&[MINIMUM_ETH_DEPOSIT_WEI as u128]);
+        ckerc20.run_balance_scan(&[(before.address.as_str(), MINIMUM_ETH_DEPOSIT_WEI as u128)]);
 
         let received: Vec<_> = ckerc20
             .cketh
@@ -270,7 +270,7 @@ mod deposit_eth {
         let token =
             format_ethereum_address_to_eip_55(&ckerc20.supported_erc20_tokens[0].contract.address);
 
-        let (ckerc20, _) = ckerc20
+        let (ckerc20, armed) = ckerc20
             .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
             .expect_deposit_response();
         let (ckerc20, _) = ckerc20
@@ -279,7 +279,10 @@ mod deposit_eth {
 
         let scanned_at = 4_500_000_u64;
         ckerc20.refresh_latest_block(scanned_at);
-        ckerc20.run_balance_scan_with_eth(&[1_u128], &[1_u128]);
+        ckerc20.run_balance_scan_with_eth(
+            &[(armed.address.as_str(), 1)],
+            &[(armed.address.as_str(), 1)],
+        );
 
         let (ckerc20, erc20_response) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token)
@@ -307,7 +310,7 @@ mod deposit_eth {
         let token =
             format_ethereum_address_to_eip_55(&ckerc20.supported_erc20_tokens[0].contract.address);
 
-        let (ckerc20, _) = ckerc20
+        let (ckerc20, armed) = ckerc20
             .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
             .expect_deposit_response();
         let (ckerc20, _) = ckerc20
@@ -315,7 +318,7 @@ mod deposit_eth {
             .expect_deposit_response();
 
         ckerc20.refresh_latest_block(4_500_000);
-        ckerc20.answer_erc20_balance_scan(&[1_u128]);
+        ckerc20.answer_erc20_balance_scan(&[(armed.address.as_str(), 1)]);
 
         let (ckerc20, erc20_response) = ckerc20
             .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token)
@@ -329,20 +332,20 @@ mod deposit_eth {
             .expect_deposit_response();
         assert_matches!(
             eth_response.status,
-            DepositStatus::Scanning {
+            DepositEthStatus::Scanning {
                 scan_count: 0,
                 last_scanned_block: None,
                 ..
             }
         );
 
-        ckerc20.answer_eth_balance_scan(&[1_u128]);
+        ckerc20.answer_eth_balance_scan(&[(armed.address.as_str(), 1)]);
         let (_ckerc20, eth_response) = ckerc20
             .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
             .expect_deposit_response();
         assert_matches!(
             eth_response.status,
-            DepositStatus::Scanning { scan_count: 1, .. }
+            DepositEthStatus::Scanning { scan_count: 1, .. }
         );
     }
 
@@ -657,7 +660,7 @@ mod deposit_erc20 {
         // pair (one balance; the value is irrelevant to scan progress).
         let scanned_at = 4_500_000_u64;
         ckerc20.refresh_latest_block(scanned_at);
-        ckerc20.run_balance_scan(&[2_000_000_u128]);
+        ckerc20.run_balance_scan(&[(before.address.as_str(), 2_000_000)]);
 
         // deposit_erc20 now reports the pair as scanned once, at that block height.
         let (ckerc20, after) = ckerc20
@@ -697,7 +700,7 @@ mod deposit_erc20 {
         // it is moved out of the watchlist into the sweep queue.
         let scanned_at = 4_500_000_u64;
         ckerc20.refresh_latest_block(scanned_at);
-        ckerc20.run_balance_scan(&[1_000_000_000_u128]);
+        ckerc20.run_balance_scan(&[(before.address.as_str(), 1_000_000_000)]);
 
         // The move is event-sourced (metrics are deferred to DEFI-2965, so get_events is the sole
         // observable): a single AutomaticDepositReceived event for the scanned (account, token) pair,

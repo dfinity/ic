@@ -81,6 +81,7 @@ pub struct JsonRpcRequestMatcher {
     provider: JsonRpcProvider,
     json_rpc_method: JsonRpcMethod,
     match_request_params: Option<serde_json::Value>,
+    match_eth_call_input_prefix: Option<String>,
     max_response_bytes: Option<u64>,
 }
 
@@ -91,6 +92,7 @@ impl JsonRpcRequestMatcher {
             provider,
             json_rpc_method: method,
             match_request_params: None,
+            match_eth_call_input_prefix: None,
             max_response_bytes: None,
         }
     }
@@ -103,6 +105,13 @@ impl JsonRpcRequestMatcher {
 
     pub fn with_request_params(mut self, params: Option<serde_json::Value>) -> Self {
         self.match_request_params = params;
+        self
+    }
+
+    /// Match only `eth_call` requests whose `input` calldata starts with `prefix`, e.g. one of
+    /// the deployless balance-batcher programs.
+    pub fn with_eth_call_input_prefix(mut self, prefix: Option<&[u8]>) -> Self {
+        self.match_eth_call_input_prefix = prefix.map(|p| format!("0x{}", hex::encode(p)));
         self
     }
 
@@ -158,7 +167,21 @@ impl Matcher for JsonRpcRequestMatcher {
                 .as_ref()
                 .map(|expected_params| expected_params == &json_rpc_request.params)
                 .unwrap_or(true)
+            && self
+                .match_eth_call_input_prefix
+                .as_ref()
+                .map(|prefix| {
+                    eth_call_input(&json_rpc_request.params)
+                        .map(|input| input.to_lowercase().starts_with(prefix))
+                        .unwrap_or(false)
+                })
+                .unwrap_or(true)
     }
+}
+
+/// The `input` calldata of an `eth_call`'s JSON-RPC `params`, if the params have that shape.
+pub fn eth_call_input(params: &serde_json::Value) -> Option<&str> {
+    params.get(0)?.get("input")?.as_str()
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -240,6 +263,7 @@ impl MockJsonRpcProviders {
         MockJsonRpcProvidersBuilder {
             json_rpc_method,
             json_rpc_params: None,
+            eth_call_input_prefix: None,
             max_response_bytes: None,
             responses: Default::default(),
         }
@@ -263,6 +287,7 @@ impl MockJsonRpcProviders {
 pub struct MockJsonRpcProvidersBuilder {
     json_rpc_method: JsonRpcMethod,
     json_rpc_params: Option<serde_json::Value>,
+    eth_call_input_prefix: Option<Vec<u8>>,
     max_response_bytes: Option<u64>,
     responses: BTreeMap<JsonRpcProvider, serde_json::Value>,
 }
@@ -270,6 +295,11 @@ pub struct MockJsonRpcProvidersBuilder {
 impl MockJsonRpcProvidersBuilder {
     pub fn with_request_params(mut self, params: serde_json::Value) -> Self {
         self.json_rpc_params = Some(params);
+        self
+    }
+
+    pub fn with_eth_call_input_prefix(mut self, prefix: &[u8]) -> Self {
+        self.eth_call_input_prefix = Some(prefix.to_vec());
         self
     }
 
@@ -333,6 +363,7 @@ impl MockJsonRpcProvidersBuilder {
             stubs.push(StubOnce {
                 matcher: JsonRpcRequestMatcher::new(provider, self.json_rpc_method.clone())
                     .with_request_params(self.json_rpc_params.clone())
+                    .with_eth_call_input_prefix(self.eth_call_input_prefix.as_deref())
                     .with_max_response_bytes(self.max_response_bytes),
                 response_result: response,
             });
