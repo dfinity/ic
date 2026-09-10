@@ -555,12 +555,18 @@ impl CyclesAccountManager {
         }
         let num_instructions_to_refund =
             std::cmp::min(num_instructions, num_instructions_initially_charged);
-        let cycles_to_refund = self
-            .scale_cost(
-                self.convert_instructions_to_cycles(num_instructions_to_refund, execution_mode),
-                subnet_cycles_config,
-            )
-            .min(prepaid_execution_cycles);
+        let cycles_to_refund = self.scale_cost(
+            self.convert_instructions_to_cycles(num_instructions_to_refund, execution_mode),
+            subnet_cycles_config,
+        );
+        // Never refund more than was prepaid, part by part: `x - (x - y)` is the
+        // part-wise minimum of `x` and `y` because both subtractions saturate. The
+        // prepayment covers the instructions it was made for, and hence any refund
+        // derived from them, so this is defense in depth against a caller whose
+        // prepayment and refund disagree on the instruction count, the Wasm
+        // execution mode or the cost schedule.
+        let cycles_to_refund =
+            prepaid_execution_cycles - (prepaid_execution_cycles - cycles_to_refund);
         system_state.refund_cycles(prepaid_execution_cycles, cycles_to_refund);
     }
 
@@ -938,7 +944,8 @@ impl CyclesAccountManager {
     ///
     /// Note that the prepayment is never topped up for such a response: the additional
     /// cycles would be refunded right away and, unlike this refund, the withdrawal
-    /// could fail.
+    /// could fail. The subtraction below saturates part by part, so the canister is
+    /// charged at most what it prepaid in each part.
     pub fn settle_prepayment_for_unexecuted_response(
         &self,
         system_state: &mut SystemState,
@@ -952,12 +959,11 @@ impl CyclesAccountManager {
             subnet_cycles_config,
             execution_mode,
         );
-        // The prepayment covers the fixed per-message execution fee, but clamp the
-        // charge to it so that no more than the prepayment is ever charged.
-        let charge = base_fee.min(prepayment_for_response_execution);
+        // The prepayment covers the fixed per-message execution fee. The subtraction
+        // saturates part by part, so no more than the prepayment is ever charged.
         system_state.refund_cycles(
             prepayment_for_response_execution,
-            prepayment_for_response_execution - charge,
+            prepayment_for_response_execution - base_fee,
         );
     }
 
@@ -1000,8 +1006,9 @@ impl CyclesAccountManager {
             self.config.xnet_byte_transmission_fee * transmitted_bytes,
             subnet_cycles_config,
         );
-        prepayment_for_response_transmission
-            - transmission_cost.min(prepayment_for_response_transmission)
+        // The subtraction saturates part by part, so a transmission cost exceeding
+        // the prepayment simply leaves nothing to refund.
+        prepayment_for_response_transmission - transmission_cost
     }
 
     ////////////////////////////////////////////////////////////////////////////

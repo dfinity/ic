@@ -74,7 +74,22 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 /// let total = cc_instructions + cc_memory;
 /// assert_eq!(total.real(), Cycles::new(30));
 /// ```
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
+///
+/// # No ordering
+///
+/// `CompoundCycles` deliberately implements neither `Ord` nor `PartialOrd`: its two
+/// parts are accounted for independently and there is no meaningful order on the
+/// pair. A derived impl would order lexicographically, i.e. by the real part first,
+/// and hence answer "which of the two amounts is larger?" from the real part alone
+/// whenever the real parts differ. That is exactly the wrong tie-break under the
+/// free cost schedule, where the real part of a use case made free is zero no matter
+/// how large the nominal part is.
+///
+/// Compare `real()` or `nominal()` explicitly instead. Note that subtraction
+/// saturates part by part, which covers the two idioms that would otherwise want an
+/// ordering: `x - x.min(y)` is simply `x - y`, and the part-wise minimum of `x` and
+/// `y` is `x - (x - y)`.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct CompoundCycles<T: CyclesUseCaseKind> {
     real: Cycles,
     nominal: NominalCycles,

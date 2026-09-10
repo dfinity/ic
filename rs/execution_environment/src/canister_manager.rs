@@ -2401,14 +2401,14 @@ impl CanisterManager {
             );
             // Record the net cycle charge (prepay minus refund) so it survives
             // the canister state rollback if a subsequent step fails.
-            let cycles_to_refund = self
-                .cycles_account_manager
-                .variable_execution_cost(
-                    instructions_to_refund,
-                    subnet_cycles_config,
-                    wasm_execution_mode,
-                )
-                .min(prepaid_execution_cycles);
+            // This is exactly the refund that `refund_unused_execution_cycles` above
+            // derived; the subtraction below saturates part by part, so its clamp to
+            // the prepayment needs no counterpart here.
+            let cycles_to_refund = self.cycles_account_manager.variable_execution_cost(
+                instructions_to_refund,
+                subnet_cycles_config,
+                wasm_execution_mode,
+            );
             consumed_cycles.add(
                 prepaid_execution_cycles - cycles_to_refund,
                 instructions_for_execution,
