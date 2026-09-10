@@ -1,3 +1,4 @@
+use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::erc20::CkErc20Token;
@@ -281,12 +282,12 @@ pub struct AutomaticDeposit {
     #[n(2)]
     pub address: DepositAddress,
     #[n(3)]
-    pub erc20_contract_address: Address,
+    pub asset: Asset,
     #[n(4)]
     pub last_scanned_block: BlockNumber,
     #[n(5)]
     pub scan_count: u32,
-    /// The balance detected for `erc20_contract_address` at `last_scanned_block`.
+    /// The balance detected for `asset` at `last_scanned_block`.
     #[n(6)]
     pub scanned_balance: Erc20Value,
 }
@@ -301,7 +302,7 @@ pub struct DepositAddressRegistration {
     #[n(2)]
     pub address: DepositAddress,
     #[n(3)]
-    pub erc20_contract_address: Address,
+    pub asset: Asset,
     #[n(4)]
     pub expires_at_nanos: Timestamp,
     /// Latest block number at which this pair's balance was scanned; `None` if

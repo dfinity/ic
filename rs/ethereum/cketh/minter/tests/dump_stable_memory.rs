@@ -498,14 +498,19 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
             EventPayload::AcceptedSweepRequest {
                 sweep_id,
                 destination,
-                token,
+                asset,
                 items,
                 max_transaction_fee,
                 created_at,
             } => ET::AcceptedSweepRequest(SweepRequest {
                 id: SweepId(sweep_id.0.to_u64().unwrap()),
                 destination: destination.parse().unwrap(),
-                token: token.parse().unwrap(),
+                token: match ic_cketh_minter::asset::Asset::try_from(asset).unwrap() {
+                    ic_cketh_minter::asset::Asset::Erc20(address) => address,
+                    ic_cketh_minter::asset::Asset::Eth => {
+                        panic!("BUG: no recorded sweep moves ETH yet")
+                    }
+                },
                 items: map_authorized_sweep_items(items),
                 max_transaction_fee: max_transaction_fee.try_into().unwrap(),
                 created_at,
@@ -656,7 +661,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                             |a| ic_cketh_minter::state::event::DepositAddressRegistration {
                                 owner: a.owner,
                                 subaccount: a.subaccount,
-                                erc20_contract_address: a.erc20_contract_address.parse().unwrap(),
+                                asset: a.asset.try_into().unwrap(),
                                 address: a.address.parse().unwrap(),
                                 expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
                                 last_scanned_block: a
@@ -672,7 +677,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 owner,
                 subaccount,
                 address,
-                erc20_contract_address,
+                asset,
                 last_scanned_block,
                 scan_count,
                 scanned_balance,
@@ -680,7 +685,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                 owner,
                 subaccount,
                 address: address.parse().unwrap(),
-                erc20_contract_address: erc20_contract_address.parse().unwrap(),
+                asset: asset.try_into().unwrap(),
                 last_scanned_block: last_scanned_block.try_into().unwrap(),
                 scan_count: scan_count.try_into().unwrap(),
                 scanned_balance: scanned_balance.try_into().unwrap(),

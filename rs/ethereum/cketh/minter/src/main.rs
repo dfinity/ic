@@ -4,6 +4,7 @@ use dashboard::DashboardTemplate;
 use ic_canister_log::log;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{AddressValidationError, validate_address_as_destination};
+use ic_cketh_minter::asset::Asset;
 use ic_cketh_minter::balance_scan::{balance_scan, min_deposit};
 use ic_cketh_minter::deposit::{refresh_latest_block_height, scrape_logs};
 use ic_cketh_minter::endpoints::ckerc20::{
@@ -14,16 +15,16 @@ use ic_cketh_minter::endpoints::events::{
 };
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Arg,
-    DepositErc20Error, DepositErc20Response, DepositMode, Eip1559TransactionPrice,
-    Eip1559TransactionPriceArg, Erc20Balance, Erc20MinimumDeposit, GasFeeEstimate, MinterInfo,
-    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
-    WithdrawalSearchParameter,
+    DepositErc20Error, DepositErc20Response, DepositEthArg, DepositEthError, DepositEthResponse,
+    DepositMode, Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance,
+    Erc20MinimumDeposit, GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus,
+    WithdrawalArg, WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
     EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent,
 };
-use ic_cketh_minter::guard::{deposit_erc20_guard, retrieve_withdraw_guard};
+use ic_cketh_minter::guard::{deposit_registration_guard, retrieve_withdraw_guard};
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
@@ -31,7 +32,9 @@ use ic_cketh_minter::memo::{self, BurnMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::runtime::IC_CANISTER_RUNTIME;
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
-use ic_cketh_minter::state::automatic_deposits::DepositRequest;
+use ic_cketh_minter::state::automatic_deposits::{
+    DepositRequest, DepositStatusInfo, RegisterDepositError,
+};
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     AuthorizedSweepItem, Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed,
@@ -203,13 +206,37 @@ async fn minter_address() -> String {
 }
 
 #[update]
+async fn deposit_eth(arg: DepositEthArg) -> Result<DepositEthResponse, DepositEthError> {
+    let caller = validate_caller_not_anonymous();
+    // Held for the whole call, including across the ECDSA public key fetch in `arm_deposit`, so
+    // that the status check and the registration that follows it cannot be interleaved with
+    // another deposit registration from the same principal.
+    let _guard = deposit_registration_guard(caller).unwrap_or_else(|e| {
+        ic_cdk::trap(format!(
+            "Failed retrieving guard for principal {caller}: {e:?}"
+        ))
+    });
+    let subaccount = match arg.mode {
+        DepositMode::Unsponsored { subaccount } => subaccount,
+    };
+    let account = Account {
+        owner: caller,
+        subaccount,
+    };
+    Ok(DepositEthResponse::new(
+        arm_deposit(account, Asset::Eth).await?,
+        min_deposit(&Asset::Eth),
+    ))
+}
+
+#[update]
 async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, DepositErc20Error> {
     validate_ckerc20_active();
     let caller = validate_caller_not_anonymous();
-    // Held for the whole call, including across the ECDSA public key fetch below, so that the
-    // status check and the registration that follows it cannot be interleaved with another
-    // `deposit_erc20` from the same principal.
-    let _guard = deposit_erc20_guard(caller).unwrap_or_else(|e| {
+    // Held for the whole call, including across the ECDSA public key fetch in `arm_deposit`, so
+    // that the status check and the registration that follows it cannot be interleaved with
+    // another deposit registration from the same principal.
+    let _guard = deposit_registration_guard(caller).unwrap_or_else(|e| {
         ic_cdk::trap(format!(
             "Failed retrieving guard for principal {caller}: {e:?}"
         ))
@@ -233,14 +260,21 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
         owner: caller,
         subaccount,
     };
-    let request = DepositRequest::new(account, token);
-    let minimum_deposit_amount = min_deposit(&token);
+    Ok(DepositErc20Response::new(
+        arm_deposit(account, Asset::Erc20(token)).await?,
+        token,
+        min_deposit(&Asset::Erc20(token)),
+    ))
+}
+
+async fn arm_deposit(
+    account: Account,
+    asset: Asset,
+) -> Result<DepositStatusInfo, RegisterDepositError> {
+    let request = DepositRequest::new(account, asset);
     let now = Timestamp::from_nanos(ic_cdk::api::time());
 
-    if let Some(status) = read_state(|s| {
-        s.automatic_deposits
-            .deposit_status(now, &request, minimum_deposit_amount)
-    }) {
+    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &request)) {
         return Ok(status);
     }
 
@@ -253,18 +287,14 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     // after an upgrade, before the key is cached). Returning its status here keeps `register_deposit_
     // address` from trying to re-arm an already-swept pair. From here on the call is synchronous, so
     // no further scan can interleave before the registration below.
-    if let Some(status) = read_state(|s| {
-        s.automatic_deposits
-            .deposit_status(now, &request, minimum_deposit_amount)
-    }) {
+    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &request)) {
         return Ok(status);
     }
-    mutate_state(|s| s.register_deposit_address(now, account, token))?;
-    Ok(read_state(|s| {
-        s.automatic_deposits
-            .deposit_status(now, &request, minimum_deposit_amount)
-    })
-    .expect("BUG: a just-registered pair must report a Scanning status"))
+    mutate_state(|s| s.register_deposit_address(now, account, asset))?;
+    Ok(
+        read_state(|s| s.automatic_deposits.deposit_status(now, &request))
+            .expect("BUG: a just-registered pair must report a Scanning status"),
+    )
 }
 
 #[query]
@@ -339,7 +369,10 @@ async fn get_minter_info() -> MinterInfo {
                     .supported_ck_erc20_tokens()
                     .map(|token| Erc20MinimumDeposit {
                         erc20_contract_address: token.erc20_contract_address.to_string(),
-                        minimum_deposit_amount: min_deposit(&token.erc20_contract_address).into(),
+                        minimum_deposit_amount: min_deposit(&Asset::Erc20(
+                            token.erc20_contract_address,
+                        ))
+                        .into(),
                     })
                     .collect();
                 (Some(balances), Some(tokens), Some(minimum_deposit_amounts))
@@ -885,7 +918,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                         .map(|r| CandidDepositAddressRegistration {
                             owner: r.owner,
                             subaccount: r.subaccount,
-                            erc20_contract_address: r.erc20_contract_address.to_string(),
+                            asset: r.asset.into(),
                             address: r.address.to_string(),
                             expires_at_nanos: r.expires_at_nanos.as_nanos(),
                             last_scanned_block: r.last_scanned_block.map(Into::into),
@@ -897,7 +930,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     owner: deposit.owner,
                     subaccount: deposit.subaccount,
                     address: deposit.address.to_string(),
-                    erc20_contract_address: deposit.erc20_contract_address.to_string(),
+                    asset: deposit.asset.into(),
                     last_scanned_block: deposit.last_scanned_block.into(),
                     scan_count: deposit.scan_count.into(),
                     scanned_balance: deposit.scanned_balance.into(),
@@ -1053,7 +1086,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 }) => EP::AcceptedSweepRequest {
                     sweep_id: id.0.into(),
                     destination: destination.to_string(),
-                    token: token.to_string(),
+                    asset: Asset::Erc20(token).into(),
                     items: map_authorized_sweep_items(&items),
                     max_transaction_fee: max_transaction_fee.into(),
                     created_at,

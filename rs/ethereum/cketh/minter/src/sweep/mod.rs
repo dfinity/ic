@@ -15,7 +15,7 @@ mod tests;
 use crate::attestation::{AttestationRequest, sign_attestation};
 use crate::sweeper_contract::SweepItem;
 use crate::{
-    deposit_address::sweeper_derivation_path,
+    deposit_address::AddressSchema,
     guard::TimerGuard,
     logs::{DEBUG, INFO},
     numeric::TransactionCount,
@@ -428,7 +428,7 @@ async fn sign_transactions_batch<R: CanisterRuntime>(runtime: &R) {
             .map(|(sweep_id, tx)| async move {
                 (
                     sweep_id,
-                    crate::tx::sign(tx, sweeper_derivation_path(), runtime).await,
+                    crate::tx::sign(tx, AddressSchema::Sweeper.derivation_path(), runtime).await,
                 )
             }),
     )

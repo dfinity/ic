@@ -18,11 +18,19 @@ fn account(owner: u64) -> Account {
 }
 
 #[test]
+fn eth_has_its_own_minimum_deposit() {
+    assert_eq!(
+        min_deposit(&Asset::Eth),
+        Erc20Value::new(5_000_000_000_000_000)
+    );
+}
+
+#[test]
 fn unsupported_token_has_an_unreachable_minimum_deposit() {
     // A token absent from MIN_DEPOSITS gets Erc20Value::MAX as its threshold, so no real balance
     // (below the u256 max) ever clears it and it is never a candidate.
-    assert_eq!(min_deposit(&TOKEN_A), Erc20Value::MAX);
-    assert!(Erc20Value::from(u128::MAX) < min_deposit(&TOKEN_A));
+    assert_eq!(min_deposit(&Asset::Erc20(TOKEN_A)), Erc20Value::MAX);
+    assert!(Erc20Value::from(u128::MAX) < min_deposit(&Asset::Erc20(TOKEN_A)));
 }
 
 #[test]
@@ -118,7 +126,7 @@ fn should_have_a_min_deposit_for_every_deployed_supported_token() {
         let contract = Address::from_str(address)
             .unwrap_or_else(|e| panic!("{symbol}: invalid test address {address}: {e}"));
         assert_eq!(
-            min_deposit(&contract),
+            min_deposit(&Asset::Erc20(contract)),
             Erc20Value::new(*min),
             "{symbol} ({address}) has a missing or wrong MIN_DEPOSITS threshold"
         );
@@ -295,7 +303,7 @@ async fn should_detect_a_funded_pair_from_pre_scan_targets_even_after_eviction()
             owner: holder.0.owner,
             subaccount: holder.0.subaccount,
             address: holder.1,
-            erc20_contract_address: token,
+            asset: Asset::Erc20(token),
             last_scanned_block: latest,
             scan_count: 1,
             scanned_balance: min,
@@ -318,7 +326,8 @@ async fn should_yield_nothing_found_for_a_below_minimum_pair() {
     assert_eq!(
         outcomes,
         vec![ScanOutcome::NothingFound(DepositRequest::new(
-            holder.0, token
+            holder.0,
+            Asset::Erc20(token)
         ))]
     );
 }
@@ -394,7 +403,7 @@ fn seed_state(
     for (account, address) in holders {
         state
             .automatic_deposits
-            .watch_deposit(now, *account, token, *address)
+            .watch_deposit(now, *account, Asset::Erc20(token), *address)
             .expect("BUG: failed to arm deposit");
     }
     test_fixtures::init_state(state);
@@ -428,7 +437,7 @@ fn ok_balances(balances: &[Erc20Value]) -> Result<MultiRpcResult<Hex>, IcError> 
 fn live_entry(now: Timestamp, account: &Account, token: Address) -> ScanProgress {
     read_state(|s| {
         s.automatic_deposits
-            .get_entry(now, &DepositRequest::new(*account, token))
+            .get_entry(now, &DepositRequest::new(*account, Asset::Erc20(token)))
             .cloned()
     })
     .expect("BUG: expected a live watchlist entry")

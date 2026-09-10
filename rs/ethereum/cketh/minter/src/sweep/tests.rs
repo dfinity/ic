@@ -1,5 +1,6 @@
+use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
-use crate::deposit_address::{DepositAddressSchema, deposit_derivation_path};
+use crate::deposit_address::AddressSchema;
 use crate::management::{CallError, Reason};
 use crate::numeric::{BlockNumber, TransactionNonce, Wei, WeiPerGas};
 use crate::state::audit::{EventType, apply_state_transition};
@@ -382,7 +383,8 @@ fn authorization_digest(delegate: Address) -> [u8; 32] {
 }
 
 fn derivation_path_bytes() -> Vec<Vec<u8>> {
-    deposit_derivation_path(DepositAddressSchema::CkErc20, &account())
+    AddressSchema::Deposit(account())
+        .derivation_path()
         .into_iter()
         .map(|index| index.into_vec())
         .collect()
@@ -420,7 +422,7 @@ fn deposit_received(account: &Account, token: &Address) -> EventType {
         owner: account.owner,
         subaccount: account.subaccount,
         address: deposit_address(account),
-        erc20_contract_address: *token,
+        asset: Asset::Erc20(*token),
         ..automatic_deposit()
     })
 }

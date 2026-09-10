@@ -409,6 +409,28 @@ type WithdrawalError = variant {
     TemporarilyUnavailable : text;
 };
 
+// An asset a deposit pipeline event names: ETH, or an ERC-20 token by its contract address
+// in EIP-55 format.
+type Asset = variant {
+    Eth;
+    Erc20 : text;
+};
+
+// Argument for the deposit_eth endpoint.
+type DepositEthArg = record {
+    mode : DepositMode;
+};
+
+type DepositEthError = variant {
+    // The account already has the maximum number of assets armed.
+    TooManyTokensForAccount;
+    // The maximum number of concurrently armed deposits ((account, asset) pairs) has been
+    // reached.
+    TooManyActiveDeposits;
+    // The minter is temporarily unavailable, retry the request.
+    TemporarilyUnavailable : text;
+};
+
 // Argument for the deposit_erc20 endpoint.
 type DepositErc20Arg = record {
     // The Ethereum ERC-20 contract address of the token to deposit (e.g. USDC).
@@ -418,7 +440,7 @@ type DepositErc20Arg = record {
     mode : DepositMode;
 };
 
-// How the fee for a ckERC20 deposit address registration is settled.
+// How the fee for a deposit address registration is settled.
 type DepositMode = variant {
     // The registration fee is deducted from the deposited amount. The deposit
     // address is derived from the caller's principal and the given subaccount.
@@ -430,7 +452,7 @@ type DepositMode = variant {
 
 // Response of the deposit_erc20 endpoint.
 type DepositErc20Response = record {
-    // The Ethereum deposit address derived for the caller.
+    // The Ethereum deposit address derived for the caller, the same one whatever the asset.
     address : text;
     // Minimum balance, in the token's own units, that the deposit address must hold for the
     // balance scan to detect it. The scan reads the address' whole balance for the token, so
@@ -444,6 +466,44 @@ type DepositErc20Response = record {
     minimum_deposit_amount : nat;
     // Where the deposit stands in the detect-and-sweep pipeline.
     status : DepositStatus;
+};
+
+// Response of the deposit_eth endpoint.
+type DepositEthResponse = record {
+    // The Ethereum deposit address derived for the caller. It is the same address as the one
+    // derived by the deposit_erc20 endpoint for the same account, whatever the ERC-20 token.
+    address : text;
+    // Minimum balance, in wei, that the deposit address must hold for the balance scan to
+    // detect it. The scan reads the address' whole ETH balance, so several smaller transfers
+    // count together; the funds stay undetected only while their total is below this.
+    minimum_deposit_amount : nat;
+    // Where the deposit stands in the detect-and-sweep pipeline.
+    status : DepositEthStatus;
+};
+
+// The stage an ETH deposit address is at.
+type DepositEthStatus = variant {
+    // Armed and being scanned; no deposit at or above the minimum detected yet.
+    Scanning : record {
+        // Timestamp in nanoseconds since the Unix epoch until which a deposit
+        // sent to the address is guaranteed to be noticed by the minter.
+        valid_until : nat64;
+        // The latest Ethereum block at which the address' ETH balance was scanned,
+        // or null if it has not been scanned yet.
+        last_scanned_block : opt nat;
+        // How many times the address' ETH balance has been scanned so far.
+        scan_count : nat64;
+    };
+    // Funds were detected at or above the minimum and queued for sweeping.
+    AwaitingSweep : DetectedEthDeposit;
+};
+
+// A funded ETH balance detected at a deposit address and queued for sweeping.
+type DetectedEthDeposit = record {
+    // The ETH balance scanned, in wei; may change before the sweep.
+    scanned_balance : nat;
+    // The Ethereum block at which the balance was detected.
+    detected_at_block : nat;
 };
 
 // The stage a ckERC20 deposit address is at.
@@ -684,8 +744,8 @@ type Event = record {
         AcceptedSweepRequest : record {
             sweep_id : nat;
             destination : text;
-            // The single ERC-20 contract this sweep moves.
-            token : text;
+            // The single asset this sweep moves.
+            asset : Asset;
             // The deposits the sweep moves, one per account.
             items : vec AuthorizedSweepItem;
             max_transaction_fee : nat;
@@ -777,7 +837,7 @@ type Event = record {
             registrations : vec record {
                 owner : principal;
                 subaccount : opt Subaccount;
-                erc20_contract_address : text;
+                asset : Asset;
                 address : text;
                 expires_at_nanos : nat64;
                 last_scanned_block : opt nat;
@@ -788,7 +848,7 @@ type Event = record {
             owner : principal;
             subaccount : opt Subaccount;
             address : text;
-            erc20_contract_address : text;
+            asset : Asset;
             last_scanned_block : nat;
             scan_count : nat64;
             scanned_balance : nat;
@@ -949,6 +1009,15 @@ service : (MinterArg) -> {
     // (nanoseconds since the Unix epoch) until which a deposit to it is guaranteed to be noticed,
     // and the minimum balance of the requested token the address must hold to be noticed.
     deposit_erc20 : (DepositErc20Arg) -> (variant { Ok : DepositErc20Response; Err : DepositErc20Error });
+
+    // Derive and register the ETH deposit address for the caller.
+    // The account is derived from the caller's principal and the subaccount in the argument.
+    // Returns the EIP-55 checksummed deposit address, which is the same address as the one
+    // derived by deposit_erc20 for the same account, whatever the ERC-20 token, together with
+    // `valid_until`, the timestamp (nanoseconds since the Unix epoch) until which a deposit to
+    // it is guaranteed to be noticed, and the minimum balance in wei the address must hold to
+    // be noticed.
+    deposit_eth : (DepositEthArg) -> (variant { Ok : DepositEthResponse; Err : DepositEthError });
 
     // Retrieve the status of a Eth withdrawal request.
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);

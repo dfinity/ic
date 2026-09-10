@@ -45,58 +45,56 @@ impl FromStr for DepositAddress {
     }
 }
 
-const CKERC20_DEPOSIT_SCHEMA_TAG: u8 = 1;
-const CKETH_DEPOSIT_SCHEMA_TAG: u8 = 2;
-const SWEEPER_SCHEMA_TAG: u8 = 3;
-
-/// Schema tag distinguishing the families of per-account deposit addresses
-/// derived by the minter.
+/// Family of Ethereum addresses the minter derives from its master threshold-ECDSA public key,
+/// each owning the derivation path its addresses are derived under. The leading tag byte keeps
+/// the families collision-free and must never change once used; tag `2`, initially planned for a
+/// separate ckETH deposit family, was never used since ETH and ckERC20 deposits share one address.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
-pub enum DepositAddressSchema {
-    CkErc20,
-    CkEth,
+pub enum AddressSchema {
+    /// The deposit address of an IC account, shared by ETH and ckERC20 deposits.
+    Deposit(Account),
+    /// The minter's dedicated sweeper address.
+    Sweeper,
 }
 
-impl DepositAddressSchema {
-    fn tag(self) -> u8 {
+impl AddressSchema {
+    pub fn derivation_path(&self) -> Vec<ByteBuf> {
+        const DEPOSIT_SCHEMA_TAG: u8 = 1;
+        const SWEEPER_SCHEMA_TAG: u8 = 3;
+
         match self {
-            DepositAddressSchema::CkErc20 => CKERC20_DEPOSIT_SCHEMA_TAG,
-            DepositAddressSchema::CkEth => CKETH_DEPOSIT_SCHEMA_TAG,
+            AddressSchema::Deposit(account) => vec![
+                ByteBuf::from(vec![DEPOSIT_SCHEMA_TAG]),
+                ByteBuf::from(account.owner.as_slice().to_vec()),
+                ByteBuf::from(account.effective_subaccount().to_vec()),
+            ],
+            AddressSchema::Sweeper => vec![ByteBuf::from(vec![SWEEPER_SCHEMA_TAG])],
         }
     }
 }
 
-/// Derive the deposit address of an IC account for the given schema from the
-/// minter's master threshold-ECDSA public key.
+/// Derive the deposit address of an IC account from the minter's master
+/// threshold-ECDSA public key.
 pub fn deposit_address(
     master_public_key: &PublicKey,
     chain_code: &[u8; 32],
-    schema: DepositAddressSchema,
     account: &Account,
 ) -> DepositAddress {
     DepositAddress::new(derive_address(
         master_public_key,
         chain_code,
-        deposit_derivation_path(schema, account),
+        AddressSchema::Deposit(*account).derivation_path(),
     ))
 }
 
 /// Derive the minter's dedicated sweeper address from its master
 /// threshold-ECDSA public key.
 pub fn sweeper_address(master_public_key: &PublicKey, chain_code: &[u8; 32]) -> Address {
-    derive_address(master_public_key, chain_code, sweeper_derivation_path())
-}
-
-pub fn deposit_derivation_path(schema: DepositAddressSchema, account: &Account) -> Vec<ByteBuf> {
-    vec![
-        ByteBuf::from(vec![schema.tag()]),
-        ByteBuf::from(account.owner.as_slice().to_vec()),
-        ByteBuf::from(account.effective_subaccount().to_vec()),
-    ]
-}
-
-pub(crate) fn sweeper_derivation_path() -> Vec<ByteBuf> {
-    vec![ByteBuf::from(vec![SWEEPER_SCHEMA_TAG])]
+    derive_address(
+        master_public_key,
+        chain_code,
+        AddressSchema::Sweeper.derivation_path(),
+    )
 }
 
 fn derive_address(
