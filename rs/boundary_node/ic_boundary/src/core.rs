@@ -34,7 +34,7 @@ use axum::{
     Router,
     extract::Request,
     middleware,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::method_routing::{any, get, post},
 };
 use axum_extra::middleware::option_layer;
@@ -844,6 +844,22 @@ fn setup_https(
 #[derive(Clone, Debug)]
 struct RequestTypeExtractor;
 
+/// Maps the generic response of a load shedder to an Axum response.
+///
+/// This is deliberately a named function rather than a closure. The layer
+/// stack built in `setup_router` is deeply nested (`Either`s of optional
+/// layers wrapping each other, each wrapped again in axum-extra's
+/// `ResponseAxumBodyLayer`), and with a closure here rustc spends tens of
+/// minutes in trait solving when type-checking that stack, even if the
+/// closure's signature is fully annotated. With a function item the crate
+/// type-checks in seconds.
+fn shed_map_response(resp: ShedResponse<Response>) -> Response {
+    match resp {
+        ShedResponse::Inner(inner) => inner,
+        ShedResponse::Overload(_) => ErrorCause::LoadShed.into_response(),
+    }
+}
+
 impl TypeExtractor for RequestTypeExtractor {
     type Type = RequestType;
     type Request = Request;
@@ -966,10 +982,7 @@ pub fn setup_router(
     // Load shedders
 
     // We need to map the generic response of a shedder to an Axum's Response
-    let shed_map_response = MapResponseLayer::new(|resp| match resp {
-        ShedResponse::Inner(inner) => inner,
-        ShedResponse::Overload(_) => ErrorCause::LoadShed.into_response(),
-    });
+    let shed_map_response = MapResponseLayer::new(shed_map_response);
 
     let load_shedder_system_mw = option_layer({
         let opts = &[

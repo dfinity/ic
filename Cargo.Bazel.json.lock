@@ -1,5 +1,5 @@
 {
-  "checksum": "045c2124b66060700903b339fc81a146c46b89aadce8fc576e1b43f16fc597fc",
+  "checksum": "e2869aadaa74bf57897300d2127b31b109918d9d426ad9f3be95d2796a6d22ad",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -8247,122 +8247,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "axum-extra 0.10.1": {
-      "name": "axum-extra",
-      "version": "0.10.1",
-      "package_url": "https://github.com/tokio-rs/axum",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/axum-extra/0.10.1/download",
-          "sha256": "45bf463831f5131b7d3c756525b305d40f1185b688565648a92e1392ca35713d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "axum_extra",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "axum_extra",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "tracing",
-            "typed-header"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "axum 0.8.9",
-              "target": "axum"
-            },
-            {
-              "id": "axum-core 0.5.6",
-              "target": "axum_core"
-            },
-            {
-              "id": "bytes 1.11.1",
-              "target": "bytes"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "headers 0.4.1",
-              "target": "headers"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "http-body 1.0.1",
-              "target": "http_body"
-            },
-            {
-              "id": "http-body-util 0.1.3",
-              "target": "http_body_util"
-            },
-            {
-              "id": "mime 0.3.17",
-              "target": "mime"
-            },
-            {
-              "id": "pin-project-lite 0.2.17",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "tower 0.5.2",
-              "target": "tower"
-            },
-            {
-              "id": "tower-layer 0.3.3",
-              "target": "tower_layer"
-            },
-            {
-              "id": "tower-service 0.3.3",
-              "target": "tower_service"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "rustversion 1.0.14",
-              "target": "rustversion"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.10.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "axum-extra 0.12.6": {
       "name": "axum-extra",
       "version": "0.12.6",
@@ -8396,7 +8280,8 @@
           "common": [
             "default",
             "middleware",
-            "tracing"
+            "tracing",
+            "typed-header"
           ],
           "selects": {}
         },
@@ -8421,6 +8306,10 @@
             {
               "id": "futures-util 0.3.31",
               "target": "futures_util"
+            },
+            {
+              "id": "headers 0.4.1",
+              "target": "headers"
             },
             {
               "id": "http 1.3.1",
@@ -16082,55 +15971,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "colored 3.0.0": {
-      "name": "colored",
-      "version": "3.0.0",
-      "package_url": "https://github.com/mackwic/colored",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/colored/3.0.0/download",
-          "sha256": "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "colored",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "colored",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [],
-          "selects": {
-            "cfg(windows)": [
-              {
-                "id": "windows-sys 0.59.0",
-                "target": "windows_sys"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "3.0.0"
-      },
-      "license": "MPL-2.0",
-      "license_ids": [
-        "MPL-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "combine 4.6.7": {
       "name": "combine",
       "version": "4.6.7",
@@ -22935,7 +22775,7 @@
               "target": "axum"
             },
             {
-              "id": "axum-extra 0.10.1",
+              "id": "axum-extra 0.12.6",
               "target": "axum_extra"
             },
             {
@@ -23562,7 +23402,7 @@
               "alias": "loopdev_3"
             },
             {
-              "id": "lru 0.7.8",
+              "id": "lru 0.12.5",
               "target": "lru"
             },
             {
@@ -46466,44 +46306,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "lru 0.7.8": {
-      "name": "lru",
-      "version": "0.7.8",
-      "package_url": "https://github.com/jeromefroe/lru-rs.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/lru/0.7.8/download",
-          "sha256": "e999beba7b6e8345721bd280141ed958096a2e4abdf74f67ff4ce49b4b54e47a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "lru",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "lru",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.7.8"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "lru 0.12.5": {
       "name": "lru",
       "version": "0.12.5",
@@ -48698,15 +48500,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "color",
-            "colored",
-            "default",
-            "parking_lot"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -48716,10 +48509,6 @@
             {
               "id": "bytes 1.11.1",
               "target": "bytes"
-            },
-            {
-              "id": "colored 3.0.0",
-              "target": "colored"
             },
             {
               "id": "futures-util 0.3.31",
@@ -94128,7 +93917,7 @@
     "async-stream 0.3.6",
     "async-trait 0.1.89",
     "axum 0.8.9",
-    "axum-extra 0.10.1",
+    "axum-extra 0.12.6",
     "axum-otel-metrics 0.14.1",
     "axum-server 0.7.3",
     "backon 1.6.0",
@@ -94287,7 +94076,7 @@
     "local-ip-address 0.6.13",
     "log 0.4.33",
     "loopdev-3 0.5.1",
-    "lru 0.7.8",
+    "lru 0.12.5",
     "lzma-sys 0.1.20",
     "macaddr 1.0.1",
     "maplit 1.0.2",

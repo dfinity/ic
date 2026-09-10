@@ -11,7 +11,7 @@ documentation.workspace = true
 [dependencies]
 ic-heap-bytes = { path = "../../../packages/ic-heap-bytes" }
 ic-types = { path = "../../types/types" }
-lru = { version = "0.7.8", default-features = false }
+lru = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
