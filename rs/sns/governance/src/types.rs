@@ -1480,6 +1480,16 @@ impl manage_neuron::Command {
         }
         .to_string()
     }
+
+    // Currently, the only thing that's allowed is proposals. I.e. making them, and voting on
+    // them. These are allowed, because they can be used to recover (e.g. from low on free
+    // memory).
+    pub fn allowed_when_resources_are_low(&self) -> bool {
+        matches!(
+            self,
+            manage_neuron::Command::MakeProposal(_) | manage_neuron::Command::RegisterVote(_)
+        )
+    }
 }
 
 impl ManageNeuronResponse {
@@ -1754,6 +1764,7 @@ impl Action {
             Action::UpgradeSnsControlledCanister(_) => true,
             // Due to possible need of an emergency upgrade of the SNS
             Action::UpgradeSnsToNextVersion(_) => true,
+            Action::AdvanceSnsTargetVersion(_) => true,
             // Due to possible need of emergency functions defined as
             // GenericNervousSystemFunctions
             Action::ExecuteGenericNervousSystemFunction(_) => true,
