@@ -125,15 +125,9 @@ struct ResponseHelper {
     prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
     refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
-    /// Cycles prepaid for the execution of this response.
-    ///
-    /// Initially the prepayment recorded in the callback when the corresponding call
-    /// was performed, i.e., the cycles required for executing the response in the
-    /// Wasm execution mode the canister had at that time. Before the callback is
-    /// executed, `adjust_prepayment_for_response_execution()` replaces this with the
-    /// cycles required for executing the response in the canister's current Wasm
-    /// execution mode; for responses whose callback is not executed at all,
-    /// `early_finish()` settles the prepayment in full instead.
+    /// Cycles prepaid for the execution of this response, taken from the callback
+    /// and adjusted to the canister's current Wasm execution mode before the
+    /// callback runs.
     prepayment_for_response_execution: CompoundCycles<Instructions>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
@@ -255,11 +249,8 @@ impl ResponseHelper {
         );
     }
 
-    /// Returns the Wasm execution mode of the canister executing this response.
-    ///
-    /// This is the mode of the code that actually runs the callback, which is not
-    /// necessarily the mode the canister had when it performed the corresponding
-    /// call: the canister might have been upgraded in the meantime.
+    /// Returns the Wasm execution mode of the code that runs the callback, which is
+    /// not necessarily the one the canister had when it performed the call.
     fn wasm_execution_mode(&self) -> WasmExecutionMode {
         self.canister
             .execution_state
@@ -267,17 +258,9 @@ impl ResponseHelper {
             .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode)
     }
 
-    /// Adjusts the cycles prepaid for the execution of this response to the cycles
-    /// required for executing it in the canister's current Wasm execution mode.
-    ///
-    /// The cycles were prepaid when the corresponding call was performed, i.e.,
-    /// using the instruction costs of the Wasm execution mode of the canister at
-    /// that time. If the canister has been upgraded since then, then the missing
-    /// cycles are withdrawn from the canister's balance (without applying the
-    /// freezing threshold) or the excess cycles are refunded to it.
-    ///
-    /// Returns an error if the canister's balance does not cover the additional
-    /// prepayment, in which case the canister state is left unchanged.
+    /// Adjusts `prepayment_for_response_execution` to the canister's current Wasm
+    /// execution mode, see
+    /// `CyclesAccountManager::adjust_prepayment_for_response_execution()`.
     fn adjust_prepayment_for_response_execution(
         &mut self,
         original: &OriginalContext,
@@ -456,21 +439,11 @@ impl ResponseHelper {
             return Err((helper, err));
         }
 
-        // Replay the adjustment of the prepayment for the response execution: the
-        // initial steps are replayed on the clean canister state, which does not
-        // contain the changes of the ongoing DTS execution.
-        //
-        // The required prepayment is the same as in `execute_response()`: the Wasm
-        // module, and hence its Wasm execution mode, cannot change while a DTS
-        // execution of this canister is in progress because installing code is not
-        // executed for a canister that has a paused or an aborted execution (see
-        // `can_execute_subnet_msg()`), i.e., it is deferred to a later round. Should
-        // the paused execution be aborted nevertheless, e.g., before a checkpoint,
-        // then the response execution starts over in `execute_response()`, where the
-        // prepayment is adjusted afresh for whatever module is installed by then.
-        //
-        // Together with the check above that the cycles balance of the clean canister
-        // has not decreased, this replay is therefore expected to succeed.
+        // The adjustment is not persisted in the callback, so it must be replayed on
+        // the clean canister state. It is expected to succeed: the balance has not
+        // decreased (checked above) and the Wasm module cannot change while a DTS
+        // execution is in progress, as installing code is deferred for a canister
+        // with a paused or an aborted execution (see `can_execute_subnet_msg()`).
         if let Err(err) = helper.adjust_prepayment_for_response_execution(original, round) {
             let msg = format!("Failed to prepay for resuming a response call: {err}");
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
@@ -735,15 +708,9 @@ impl ResponseHelper {
     /// Completes execution of the response and cleanup callbacks without
     /// consuming any instructions and without producing any heap delta.
     ///
-    /// No Wasm code is executed at all, hence the fixed per-message execution fee is
-    /// all that is due: it is charged here and the rest of the cycles prepaid for the
-    /// response execution is refunded, independently of the Wasm execution mode the
-    /// cycles were prepaid for and of the one the canister has now. In particular,
-    /// the canister keeps the rest of its prepayment even if the prepayment falls
-    /// short of what its current Wasm execution mode requires.
-    ///
-    /// Note that the prepayment is never topped up here: the additional cycles would
-    /// be refunded right away and, unlike this refund, the withdrawal could fail.
+    /// The prepayment for the response execution is settled here instead of being
+    /// adjusted, see
+    /// `CyclesAccountManager::settle_prepayment_for_unexecuted_response()`.
     fn early_finish(
         mut self,
         result: Result<Option<WasmResult>, HypervisorError>,
@@ -760,8 +727,7 @@ impl ResponseHelper {
                 original.subnet_cycles_config,
                 execution_mode,
             );
-        // The prepayment has been settled in full, hence there is nothing left for
-        // `finish()` to settle.
+        // Settled in full, so `finish()` has nothing left to refund.
         self.prepayment_for_response_execution =
             CompoundCycles::new(Cycles::zero(), original.subnet_cycles_config.cost_schedule);
 
@@ -1150,10 +1116,9 @@ pub fn execute_response(
         }
     };
 
-    // The cycles prepaid for this response execution when the corresponding call was
-    // performed might not match the cost of executing it in the canister's current
-    // Wasm execution mode. If the canister cannot pay a shortfall, then the response
-    // is rejected without executing the callback.
+    // An upgrade since the call was performed may have made the response execution
+    // more expensive; if the canister cannot pay the difference, the response is
+    // rejected without executing the callback.
     if let Err(err) = helper.adjust_prepayment_for_response_execution(&original, &round) {
         info!(
             round.log,
