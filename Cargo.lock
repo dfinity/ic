@@ -5679,6 +5679,8 @@ dependencies = [
  "anyhow",
  "attestation",
  "clap",
+ "config_tool",
+ "config_types",
  "hex",
  "ic-sys",
  "ic_device",
@@ -5794,6 +5796,7 @@ dependencies = [
  "ic-types",
  "rand 0.8.6",
  "rustls",
+ "sev",
  "sev_guest",
  "sev_guest_testing",
  "tempfile",
@@ -22850,6 +22853,7 @@ dependencies = [
 name = "sev_guest_testing"
 version = "0.0.0"
 dependencies = [
+ "attestation",
  "attestation_testing",
  "sev",
  "sev_guest_firmware",
