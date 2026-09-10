@@ -302,6 +302,54 @@ mod deposit_eth {
     }
 
     #[test]
+    fn should_record_erc20_outcomes_before_awaiting_the_eth_scan() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let caller = ckerc20.caller();
+        let token =
+            format_ethereum_address_to_eip_55(&ckerc20.supported_erc20_tokens[0].contract.address);
+
+        let (ckerc20, _) = ckerc20
+            .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        let (ckerc20, _) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token.clone())
+            .expect_deposit_response();
+
+        ckerc20.refresh_latest_block(4_500_000);
+        ckerc20.answer_erc20_balance_scan(&[1_u128]);
+
+        // The tick is still suspended on its unanswered ETH batch, yet the ERC-20 outcome is
+        // already recorded: funds observed on-chain must not hinge on a later await resuming.
+        let (ckerc20, erc20_response) = ckerc20
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT), token)
+            .expect_deposit_response();
+        assert_matches!(
+            erc20_response.status,
+            DepositStatus::Scanning { scan_count: 1, .. }
+        );
+        let (ckerc20, eth_response) = ckerc20
+            .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_matches!(
+            eth_response.status,
+            DepositStatus::Scanning {
+                scan_count: 0,
+                last_scanned_block: None,
+                ..
+            }
+        );
+
+        ckerc20.answer_eth_balance_scan(&[1_u128]);
+        let (_ckerc20, eth_response) = ckerc20
+            .call_minter_deposit_eth(caller, Some(DEFAULT_USER_SUBACCOUNT))
+            .expect_deposit_response();
+        assert_matches!(
+            eth_response.status,
+            DepositStatus::Scanning { scan_count: 1, .. }
+        );
+    }
+
+    #[test]
     fn should_derive_same_address_as_deposit_erc20() {
         let mut ckerc20 = CkErc20Setup::default()
             .add_supported_erc20_tokens()

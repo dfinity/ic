@@ -67,14 +67,25 @@ async fn scan<R: Runtime, T: TimeProvider>(
         return;
     }
 
-    // Await every balance read first, then apply the outcomes in a single `mutate_state`: the state
-    // borrow must never span an await, and re-reading the watchlist after the outcalls is what this
-    // scan deliberately avoids (a concurrent registration can evict a pair whose window closed
-    // mid-scan, which would drop funds already observed on-chain). See `scan_balances`. Both scans
-    // read at the same `latest_block`, so an address' assets are observed at one block.
-    let mut outcomes = scan_balances(&erc20_targets, latest_block, &client).await;
-    outcomes.extend(scan_eth_balances(&eth_targets, latest_block, &client).await);
+    // Each batch's outcomes are applied in a single `mutate_state` before the next batch is
+    // awaited: the state borrow must never span an await, re-reading the watchlist after the
+    // outcalls is what this scan deliberately avoids (a concurrent registration can evict a pair
+    // whose window closed mid-scan, which would drop funds already observed on-chain — see
+    // `scan_balances`), and outcomes already in hand are recorded durably rather than hinging on
+    // a later await resuming. Both scans read at the same `latest_block`, so an address' assets
+    // are observed at one block.
+    let outcomes = scan_balances(&erc20_targets, latest_block, &client).await;
+    apply_scan_outcomes(outcomes, now, latest_block, time_provider);
+    let outcomes = scan_eth_balances(&eth_targets, latest_block, &client).await;
+    apply_scan_outcomes(outcomes, now, latest_block, time_provider);
+}
 
+fn apply_scan_outcomes<T: TimeProvider>(
+    outcomes: Vec<ScanOutcome>,
+    now: Timestamp,
+    latest_block: BlockNumber,
+    time_provider: &T,
+) {
     mutate_state(|s| {
         for outcome in outcomes {
             match outcome {

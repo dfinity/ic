@@ -218,13 +218,28 @@ impl CkErc20Setup {
     /// due: the scanner sends the ERC-20 batch first and the ETH batch second, each answered
     /// with its own balances.
     pub fn run_balance_scan_with_eth(&self, erc20_balances: &[u128], eth_balances: &[u128]) {
+        self.answer_erc20_balance_scan(erc20_balances);
+        self.answer_eth_balance_scan(eth_balances);
+    }
+
+    /// Advance the balance-scan timer and answer only the ERC-20 batch of a mixed tick,
+    /// leaving the scanner suspended on its ETH batch until
+    /// [`Self::answer_eth_balance_scan`] runs.
+    pub fn answer_erc20_balance_scan(&self, balances: &[u128]) {
         self.env.advance_time(BALANCE_SCAN_INTERVAL);
         MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
-            .respond_for_all_with(balance_scan_response(erc20_balances))
+            .respond_for_all_with(balance_scan_response(balances))
             .build()
             .expect_rpc_calls(self);
+        for _ in 0..MAX_TICKS {
+            self.env.tick();
+        }
+    }
+
+    /// Answer the ETH batch a mixed tick is suspended on and settle the reply.
+    pub fn answer_eth_balance_scan(&self, balances: &[u128]) {
         MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
-            .respond_for_all_with(balance_scan_response(eth_balances))
+            .respond_for_all_with(balance_scan_response(balances))
             .build()
             .expect_rpc_calls(self);
         for _ in 0..MAX_TICKS {
