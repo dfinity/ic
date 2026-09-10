@@ -1,0 +1,8 @@
+load("@rules_python//python:defs.bzl", "py_test")
+
+py_test(
+    name = "repro_check_test",
+    size = "small",
+    srcs = ["repro_check_test.py"],
+    data = ["repro-check"],
+)
