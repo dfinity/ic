@@ -221,7 +221,7 @@ pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::Neuron)
 }
 
 // Get the balance by directly calling the PocketIC, without agent. Useful
-// if the agent time is behind the PocketIC time due to advanving the PocketIC time.
+// if the agent time is behind the PocketIC time due to advancing the PocketIC time.
 pub async fn account_balance(pocket_ic: &PocketIc, account: &AccountIdentifier) -> Tokens {
     let arg = Encode!(&BinaryAccountBalanceArgs {
         account: account.to_address(),
