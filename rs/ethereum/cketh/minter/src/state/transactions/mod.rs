@@ -5,6 +5,7 @@ pub(in crate::state) mod tests;
 
 pub use request::PipelineRequest;
 
+use crate::asset::Asset;
 use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus};
 use crate::eth_logs::LedgerSubaccount;
 use crate::eth_rpc::Hash;
@@ -16,7 +17,7 @@ use crate::numeric::{
     CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
-use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch};
+use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch, encode_sweep_eth_batch};
 use crate::tx::{
     Eip1559TransactionRequest, Finalized, FinalizedEip1559Transaction, GasFeeEstimate,
     Resubmittable, SignableTransaction, Signed, SignedAuthorization,
@@ -229,12 +230,13 @@ pub struct SweepRequest {
     /// sweeps every delegated deposit address the sweep names.
     #[n(1)]
     pub destination: Address,
-    /// The single ERC-20 this sweep moves. One token per sweep: the delegate applies the token
-    /// list to every item it walks, so a sweep mixing tokens would check balances that cannot be
-    /// there. Holding it as one address rather than a list is what makes that an invariant of the
-    /// request instead of a property of how the batch happened to be picked.
+    /// The single asset this sweep moves: one ERC-20 token, or ETH. One asset per sweep: the
+    /// delegate applies the token list to every item it walks, so a sweep mixing tokens would
+    /// check balances that cannot be there. Holding it as one asset rather than a list is what
+    /// makes that an invariant of the request instead of a property of how the batch happened to
+    /// be picked.
     #[n(2)]
-    pub token: Address,
+    pub asset: Asset,
     /// The deposits this sweep moves, one per account. A deposit address is derived per account,
     /// so an account has one address, one attestation and one authorization however many tokens
     /// it has queued.
@@ -333,10 +335,13 @@ impl SweepRequest {
     }
 
     /// The delegate's batch call, naming every deposit address this sweep walks and the single
-    /// token it moves.
+    /// asset it moves.
     pub fn call_data(&self) -> Vec<u8> {
         let items: Vec<_> = self.items.iter().map(|item| item.item.clone()).collect();
-        encode_sweep_erc20_batch(&items, &[self.token])
+        match self.asset {
+            Asset::Erc20(token) => encode_sweep_erc20_batch(&items, &[token]),
+            Asset::Eth => encode_sweep_eth_batch(&items),
+        }
     }
 
     /// The delegations the sweep installs on the way, one per deposit address it still has to

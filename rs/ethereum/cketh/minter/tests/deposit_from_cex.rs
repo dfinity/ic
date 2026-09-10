@@ -20,7 +20,7 @@ use ic_cketh_test_utils::anvil::{
     Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
 };
 use ic_cketh_test_utils::ckerc20::{CkErc20Setup, Erc20Token};
-use ic_cketh_test_utils::live::{CexDeposit, DepositPlan, LiveSetup};
+use ic_cketh_test_utils::live::{CexDeposit, DepositPlan, EthDepositPlan, LiveSetup};
 use ic_cketh_test_utils::{CkEthSetup, SWEEPER_ADDRESS};
 use ic_ethereum_types::Address;
 
@@ -432,6 +432,43 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
         .assert_sweeper_spent_gas(&sweeper, funded_gas);
 
     setup.expect_mints(&deposits);
+}
+
+#[test]
+fn should_credit_an_eth_cex_deposit_through_a_sweep() {
+    const DEPOSIT_SUBACCOUNT: [u8; 32] = [11; 32];
+    const DEPOSIT_WEI: u128 = 20_000_000_000_000_000;
+
+    let setup = LiveSetup::<CkErc20Setup>::new()
+        .fund_fee_account()
+        .expect_fee_account_credited()
+        .upgrade_minter()
+        .expect_sweeper_address_derived()
+        .expect_eth_received()
+        .expect_funding_finalized();
+    let sweeper = setup.await_sweeper_address();
+    let owner = setup.depositor(1);
+
+    let (setup, deposits) = setup
+        .call_minter_deposit_eth([EthDepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            amount: DEPOSIT_WEI,
+        }])
+        .expect_deposit_responses();
+
+    let setup = setup
+        .credit_eth_deposits_from_cex(&deposits)
+        .expect_deposit_balances_on_anvil()
+        .expect_each_awaiting_sweep();
+
+    let (setup, _sweeps) = setup
+        .await_sweeps(&sweeper, 1)
+        .expect_all_delegating_sweeps();
+
+    setup
+        .assert_eth_addresses_swept_empty(&deposits)
+        .expect_cketh_mints(&deposits);
 }
 
 #[test]
