@@ -194,6 +194,6 @@ def component_files(mode):
 
 # Component files packed into the fast-upgrade overlay image
 upgrade_overlay_component_files = {
-    Label("//ic-os/components/guestos/fast-upgrade:restart.list"): "/opt/upgrade_metadata/restart.list",
-    Label("//ic-os/components/guestos/fast-upgrade:extension-release.ic-upgrade"): "/usr/lib/extension-release.d/extension-release.ic-upgrade",
+    Label("guestos/fast-upgrade/restart.list"): "/opt/upgrade_metadata/restart.list",
+    Label("guestos/fast-upgrade/extension-release.ic-upgrade"): "/usr/lib/extension-release.d/extension-release.ic-upgrade",
 }

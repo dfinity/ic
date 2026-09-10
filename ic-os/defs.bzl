@@ -512,14 +512,20 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                     "upgrade_overlay_binaries",
                     [],
                 )
+                overlay_binary_files = {
+                    binary_label: image_deps["rootfs"][binary_label]
+                    for binary_label in upgrade_overlay_binaries
+                }
+                overlay_component_files = {
+                    label: install_path + ":0644"
+                    for label, install_path in image_deps.get("upgrade_overlay_files", {}).items()
+                }
+                replica_version_file = {
+                    ":replica_version" + test_suffix + ".txt": "/opt/ic/share/replica_version.txt:0644",
+                }
                 ext4_image(
                     name = overlay_out,
-                    extra_files = {
-                        binary_label: image_deps["rootfs"][binary_label]
-                        for binary_label in upgrade_overlay_binaries
-                    } | image_deps.get("upgrade_overlay_files", {}) | {
-                        ":replica_version" + test_suffix + ".txt": "/opt/ic/share/replica_version.txt:0644",
-                    },
+                    extra_files = overlay_binary_files | overlay_component_files | replica_version_file,
                     file_contexts = ":file_contexts",
                     partition_size = "2G",
                     target_compatible_with = ["@platforms//os:linux"],
