@@ -322,27 +322,27 @@ mod scan_targets_iter {
     };
 
     #[test]
-    fn should_yield_a_target_for_an_eth_pair() {
+    fn should_partition_due_targets_by_asset_kind() {
         let deposits = deposits_from(vec![
             scan_state(account(0), Asset::Eth, ts(window_nanos()), None, 0),
             scan_state(account(0), usdc(), ts(window_nanos()), None, 0),
         ]);
 
-        let due: Vec<_> = deposits
-            .scan_targets_iter(ts(0), BlockNumber::new(1_000))
-            .map(|t| (t.account(), t.asset(), t.address()))
-            .collect();
+        let due = deposits.due_scan_targets(ts(0), BlockNumber::new(1_000));
 
         assert_eq!(
-            due,
-            vec![
-                (account(0), Asset::Eth, deposit_address(&account(0))),
-                (
-                    account(0),
-                    Asset::Erc20(usdc()),
-                    deposit_address(&account(0))
-                ),
-            ]
+            due.eth
+                .iter()
+                .map(|t| (t.account(), t.address()))
+                .collect::<Vec<_>>(),
+            vec![(account(0), deposit_address(&account(0)))]
+        );
+        assert_eq!(
+            due.erc20
+                .iter()
+                .map(|t| (t.account(), t.token(), t.address()))
+                .collect::<Vec<_>>(),
+            vec![(account(0), usdc(), deposit_address(&account(0)))]
         );
     }
 
@@ -356,18 +356,15 @@ mod scan_targets_iter {
             0,
         )]);
 
-        let due: Vec<_> = deposits
-            .scan_targets_iter(ts(0), BlockNumber::new(1_000))
-            .map(|t| (t.account(), t.asset(), t.address()))
-            .collect();
+        let due = deposits.due_scan_targets(ts(0), BlockNumber::new(1_000));
 
+        assert!(due.eth.is_empty());
         assert_eq!(
-            due,
-            vec![(
-                account(0),
-                Asset::Erc20(usdc()),
-                deposit_address(&account(0))
-            )]
+            due.erc20
+                .iter()
+                .map(|t| (t.account(), t.token(), t.address()))
+                .collect::<Vec<_>>(),
+            vec![(account(0), usdc(), deposit_address(&account(0)))]
         );
     }
 
@@ -397,15 +394,16 @@ mod scan_targets_iter {
             let just_before = BlockNumber::new(1_000 + u128::from(gap_blocks) - 1);
             let at_boundary = BlockNumber::new(1_000 + u128::from(gap_blocks));
 
-            assert_eq!(
-                deposits.scan_targets_iter(ts(0), just_before).count(),
-                0,
+            assert!(
+                deposits.due_scan_targets(ts(0), just_before).is_empty(),
                 "scan_count {}: not due one block before the gap elapses",
                 case.scan_count
             );
             assert_eq!(
                 deposits
-                    .scan_targets_iter(ts(0), at_boundary)
+                    .due_scan_targets(ts(0), at_boundary)
+                    .erc20
+                    .iter()
                     .map(|t| (t.account(), t.address()))
                     .collect::<Vec<_>>(),
                 vec![(account(0), deposit_address(&account(0)))],
@@ -419,11 +417,10 @@ mod scan_targets_iter {
     fn should_never_yield_an_expired_entry() {
         let deposits = deposits_from(vec![scan_state(account(0), usdc(), ts(100), None, 0)]);
 
-        assert_eq!(
+        assert!(
             deposits
-                .scan_targets_iter(ts(101), BlockNumber::new(1_000_000))
-                .count(),
-            0
+                .due_scan_targets(ts(101), BlockNumber::new(1_000_000))
+                .is_empty()
         );
     }
 
@@ -439,11 +436,10 @@ mod scan_targets_iter {
             SCAN_GAP_SECS.len() as u32 + 1,
         )]);
 
-        assert_eq!(
+        assert!(
             deposits
-                .scan_targets_iter(ts(0), BlockNumber::new(u128::MAX))
-                .count(),
-            0
+                .due_scan_targets(ts(0), BlockNumber::new(u128::MAX))
+                .is_empty()
         );
     }
 }
@@ -568,8 +564,9 @@ fn record_scan_advances_the_schedule() {
     // Never scanned -> due immediately.
     assert_eq!(
         deposits
-            .scan_targets_iter(ts(0), BlockNumber::new(1_000))
-            .count(),
+            .due_scan_targets(ts(0), BlockNumber::new(1_000))
+            .erc20
+            .len(),
         1
     );
 
@@ -584,16 +581,16 @@ fn record_scan_advances_the_schedule() {
     assert_eq!(snapshot.registrations[0].scan_count, 1);
 
     // Not due at the just-scanned block; due again well after the next gap.
-    assert_eq!(
+    assert!(
         deposits
-            .scan_targets_iter(ts(0), BlockNumber::new(1_000))
-            .count(),
-        0
+            .due_scan_targets(ts(0), BlockNumber::new(1_000))
+            .is_empty()
     );
     assert_eq!(
         deposits
-            .scan_targets_iter(ts(0), BlockNumber::new(2_000))
-            .count(),
+            .due_scan_targets(ts(0), BlockNumber::new(2_000))
+            .erc20
+            .len(),
         1
     );
 }

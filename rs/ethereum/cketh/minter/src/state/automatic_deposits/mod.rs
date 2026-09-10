@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::asset::Asset;
+use crate::asset::{Asset, Erc20Asset, EthAsset};
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::eth_rpc::Hash;
@@ -371,22 +371,19 @@ impl AutomaticDeposits {
         self.watchlist = TimedSizedMap::from_ordered_entries(ttl, capacity, entries);
     }
 
-    /// Iterate the live [`ScanTarget`]s that are due for a balance scan as of the given
-    /// latest block height, using elapsed blocks as a proxy for elapsed time against the
-    /// backoff schedule. `now` filters expired entries.
+    /// The live [`ScanTarget`]s that are due for a balance scan as of the given latest block
+    /// height, using elapsed blocks as a proxy for elapsed time against the backoff schedule,
+    /// partitioned by the asset kind whose batcher can read them. `now` filters expired entries.
     ///
     /// Each target carries everything a scan of it needs (address, scan count), so the scanner
     /// never looks the entry up again: a scan spans several await points, and a concurrent
     /// [`Self::watch_deposit`] can evict an entry whose window closed at any of them — re-reading
     /// it could come back empty and drop funds already observed on-chain.
-    pub fn scan_targets_iter(
-        &self,
-        now: Timestamp,
-        latest_block: BlockNumber,
-    ) -> impl Iterator<Item = ScanTarget> + '_ {
-        self.watchlist.iter().filter_map(move |(request, entry)| {
+    pub fn due_scan_targets(&self, now: Timestamp, latest_block: BlockNumber) -> ScanTargets {
+        let mut targets = ScanTargets::default();
+        for (request, entry) in self.watchlist.iter() {
             if entry.expires_at < now {
-                return None;
+                continue;
             }
             let progress = &entry.value;
             let due = match progress.last_scanned_block {
@@ -404,12 +401,25 @@ impl AutomaticDeposits {
                     }
                 }
             };
-            due.then_some(ScanTarget {
-                request: *request,
-                address: progress.address,
-                scan_count: progress.scan_count,
-            })
-        })
+            if !due {
+                continue;
+            }
+            match request.asset {
+                Asset::Erc20(token) => targets.erc20.push(ScanTarget {
+                    account: request.account,
+                    asset: Erc20Asset::new(token),
+                    address: progress.address,
+                    scan_count: progress.scan_count,
+                }),
+                Asset::Eth => targets.eth.push(ScanTarget {
+                    account: request.account,
+                    asset: EthAsset,
+                    address: progress.address,
+                    scan_count: progress.scan_count,
+                }),
+            }
+        }
+        targets
     }
 
     /// The live watchlist entry for the `(account, token)` pair, or `None` if the pair is not
@@ -666,28 +676,45 @@ pub enum RegisterDepositError {
     KeyNotInitialized,
 }
 
-/// A [`DepositRequest`] due for a balance scan, carrying everything a scan of it needs read off the
+/// The due targets of one balance-scan tick, partitioned by asset kind: each vector can only
+/// be fed to the batcher that reads its kind's balances.
+#[derive(Default, Debug)]
+pub struct ScanTargets {
+    pub erc20: Vec<ScanTarget<Erc20Asset>>,
+    pub eth: Vec<ScanTarget<EthAsset>>,
+}
+
+impl ScanTargets {
+    pub fn is_empty(&self) -> bool {
+        self.erc20.is_empty() && self.eth.is_empty()
+    }
+}
+
+/// A deposit pair due for a balance scan, carrying everything a scan of it needs read off the
 /// watchlist up front: the deposit `address` derived for its account and the `scan_count` before
 /// this scan. Self-contained so the scanner never re-reads the watchlist (which a concurrent
-/// arming could have evicted from) after its outcalls.
+/// arming could have evicted from) after its outcalls. The asset is carried as a type
+/// ([`EthAsset`] or [`Erc20Asset`]), so a target cannot reach the wrong batcher, and only
+/// [`AutomaticDeposits::due_scan_targets`] constructs one.
 #[derive(Clone, Copy, Debug)]
-pub struct ScanTarget {
-    request: DepositRequest,
+pub struct ScanTarget<A> {
+    account: Account,
+    asset: A,
     address: DepositAddress,
     scan_count: u32,
 }
 
-impl ScanTarget {
+impl<A: Copy + Into<Asset>> ScanTarget<A> {
     pub fn request(&self) -> DepositRequest {
-        self.request
+        DepositRequest::new(self.account, self.asset.into())
     }
 
     pub fn account(&self) -> Account {
-        self.request.account
+        self.account
     }
 
     pub fn asset(&self) -> Asset {
-        self.request.asset
+        self.asset.into()
     }
 
     pub fn address(&self) -> DepositAddress {
@@ -696,6 +723,12 @@ impl ScanTarget {
 
     pub fn scan_count(&self) -> u32 {
         self.scan_count
+    }
+}
+
+impl ScanTarget<Erc20Asset> {
+    pub fn token(&self) -> Address {
+        self.asset.contract_address()
     }
 }
 

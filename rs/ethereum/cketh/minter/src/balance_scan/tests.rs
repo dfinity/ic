@@ -350,16 +350,8 @@ async fn should_yield_no_outcome_for_a_pair_whose_chunk_failed() {
     assert!(outcomes.is_empty(), "a failed chunk must yield no outcome");
 }
 
-fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<(ScanTarget, Address)> {
-    read_state(|s| {
-        s.automatic_deposits
-            .scan_targets_iter(now, latest)
-            .map(|target| match target.asset() {
-                Asset::Erc20(token) => (target, token),
-                Asset::Eth => panic!("BUG: these tests only seed ERC-20 pairs"),
-            })
-            .collect()
-    })
+fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<ScanTarget<Erc20Asset>> {
+    read_state(|s| s.automatic_deposits.due_scan_targets(now, latest).erc20)
 }
 
 #[tokio::test]

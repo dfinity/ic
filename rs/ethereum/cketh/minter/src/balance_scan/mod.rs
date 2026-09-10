@@ -3,7 +3,7 @@ pub mod batcher;
 #[cfg(test)]
 mod tests;
 
-use crate::asset::Asset;
+use crate::asset::{Asset, Erc20Asset, EthAsset};
 use crate::deposit_address::DepositAddress;
 use crate::eth_rpc_client::{AnyOf, MIN_ATTACHED_CYCLES, ToReducedWithStrategy, rpc_client};
 use crate::guard::TimerGuard;
@@ -48,18 +48,13 @@ async fn scan<R: Runtime, T: TimeProvider>(
             return;
         }
     };
-    let (erc20_targets, eth_targets, watchlist_len) = read_state(|s| {
-        let mut erc20 = Vec::new();
-        let mut eth = Vec::new();
-        for target in s.automatic_deposits.scan_targets_iter(now, latest_block) {
-            match target.asset() {
-                Asset::Erc20(token) => erc20.push((target, token)),
-                Asset::Eth => eth.push(target),
-            }
-        }
-        (erc20, eth, s.automatic_deposits.watchlist_len())
+    let (targets, watchlist_len) = read_state(|s| {
+        (
+            s.automatic_deposits.due_scan_targets(now, latest_block),
+            s.automatic_deposits.watchlist_len(),
+        )
     });
-    if erc20_targets.is_empty() && eth_targets.is_empty() {
+    if targets.is_empty() {
         log!(
             DEBUG,
             "[balance_scan] SKIPPING: 0/{watchlist_len} deposits ready to be scanned"
@@ -67,9 +62,9 @@ async fn scan<R: Runtime, T: TimeProvider>(
         return;
     }
 
-    let outcomes = scan_balances(&erc20_targets, latest_block, &client).await;
+    let outcomes = scan_balances(&targets.erc20, latest_block, &client).await;
     apply_scan_outcomes(outcomes, now, latest_block, time_provider);
-    let outcomes = scan_eth_balances(&eth_targets, latest_block, &client).await;
+    let outcomes = scan_eth_balances(&targets.eth, latest_block, &client).await;
     apply_scan_outcomes(outcomes, now, latest_block, time_provider);
 }
 
@@ -114,7 +109,7 @@ enum ScanOutcome {
 /// Pairs whose chunk failed yield no outcome at all, so a failed chunk is retried next tick rather
 /// than silently advanced until its next scheduled slot.
 async fn scan_balances<R: Runtime>(
-    due: &[(ScanTarget, Address)],
+    due: &[ScanTarget<Erc20Asset>],
     latest_block: BlockNumber,
     client: &EvmRpcClient<R, CandidResponseConverter, DoubleCycles>,
 ) -> Vec<ScanOutcome> {
@@ -126,8 +121,8 @@ async fn scan_balances<R: Runtime>(
     for chunk in due.chunks(MAX_CALLS_PER_BATCH) {
         let calls: Vec<BalanceOfCall> = chunk
             .iter()
-            .map(|(target, token)| BalanceOfCall {
-                token: *token,
+            .map(|target| BalanceOfCall {
+                token: target.token(),
                 holder: target.address(),
             })
             .collect();
@@ -135,7 +130,7 @@ async fn scan_balances<R: Runtime>(
         if let Some(balances) =
             chunk_balances(input, calls.len(), latest_block, client, &mut errors).await
         {
-            for ((target, _token), balance) in chunk.iter().zip(balances) {
+            for (target, balance) in chunk.iter().zip(balances) {
                 outcomes.push(scan_outcome(target, balance, latest_block));
             }
         }
@@ -146,7 +141,7 @@ async fn scan_balances<R: Runtime>(
 }
 
 async fn scan_eth_balances<R: Runtime>(
-    due: &[ScanTarget],
+    due: &[ScanTarget<EthAsset>],
     latest_block: BlockNumber,
     client: &EvmRpcClient<R, CandidResponseConverter, DoubleCycles>,
 ) -> Vec<ScanOutcome> {
@@ -222,8 +217,8 @@ fn log_scan_summary(kind: &str, outcomes: &[ScanOutcome], errors: &ScanErrors) {
 /// Classify one pair's scanned `balance`: a [`ScanOutcome::Detected`] built entirely from the
 /// pre-scan `target` when the balance is at or above the token's minimum, otherwise
 /// [`ScanOutcome::NothingFound`].
-fn scan_outcome(
-    target: &ScanTarget,
+fn scan_outcome<A: Copy + Into<Asset>>(
+    target: &ScanTarget<A>,
     balance: Erc20Value,
     latest_block: BlockNumber,
 ) -> ScanOutcome {
