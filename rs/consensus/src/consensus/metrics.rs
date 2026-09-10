@@ -232,9 +232,10 @@ impl FinalizerMetrics {
              All four are 0 until batch delivery computes a status for the first time, so a \
              sum of 0 over the four is a replica that has not looked yet rather than a \
              status of its own. A subnet halted by the `is_halted` flag of its subnet record \
-             rather than at a CUP height is not reported here at all: consensus acts on that \
-             flag before batch delivery runs, so this metric reads as it did before, or not \
-             at all on a replica that started while the subnet was already halted.",
+             rather than at a CUP height has no status of its own here: consensus acts on \
+             that flag before batch delivery runs, so this metric goes on reporting whatever \
+             it last did, or all four zeros on a replica that started while the subnet was \
+             already halted.",
             &[STATUS_LABEL],
         );
         // Report every status from the start. A gauge vector reports only the

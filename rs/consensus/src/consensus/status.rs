@@ -33,6 +33,16 @@ pub(crate) enum Status {
     Halted,
 }
 
+impl Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Status::Running => write!(f, "running"),
+            Status::Halting => write!(f, "halting towards a CUP height"),
+            Status::Halted => write!(f, "halted at a CUP height"),
+        }
+    }
+}
+
 /// Get the status of the consensus.
 ///
 /// Note: If 'height' is smaller than the height of the last CUP, this will return [None].
