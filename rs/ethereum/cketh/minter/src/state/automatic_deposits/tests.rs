@@ -16,7 +16,7 @@ use crate::test_fixtures::{
 };
 use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::{SignableTransaction, Signed, TransactionSignature};
-use candid::{Nat, Principal};
+use candid::Principal;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
