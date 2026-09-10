@@ -85,7 +85,7 @@ pub struct RosettaBlock {
 
 impl RosettaBlock {
     // Converts a generic block to a RosettaBlock
-    // Use this method for blocks that come directly from an ICRC-1 Ledger, because only then can be guarenteed that the block hash is correct
+    // Use this method for blocks that come directly from an ICRC-1 Ledger, because only then can be guaranteed that the block hash is correct
     pub fn from_generic_block(generic_block: GenericBlock, block_idx: u64) -> anyhow::Result<Self> {
         Ok(Self {
             block: IcrcBlock::try_from(generic_block)?,

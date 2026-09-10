@@ -724,7 +724,7 @@ pub mod blocks_verifier {
         Ok(())
     }
 
-    /// Checks whether the blocks in the blockchain are a continous subset of the requested indices
+    /// Checks whether the blocks in the blockchain are a continuous subset of the requested indices
     pub fn indices_are_valid(
         blockchain: &[RosettaBlock],
         requested_indices: RangeInclusive<u64>,
@@ -735,7 +735,7 @@ pub mod blocks_verifier {
 
         let mut current_index = *requested_indices.start();
         for block in blockchain {
-            // The fetched blockchain should be continous with respect to the requested indices.
+            // The fetched blockchain should be continuous with respect to the requested indices.
             if block.index != current_index {
                 return false;
             }
