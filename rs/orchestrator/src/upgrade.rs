@@ -3122,8 +3122,7 @@ mod tests {
         let current_replica_version = ReplicaVersion::try_from("replica_version_0.1").unwrap();
         let local_cup_height = Height::from(100);
         let post_split_cup_height = Height::from(200);
-        // Only the destination subnet's replicas need to be restarted, as only their subnet public
-        // key changed.
+        // Only destination replicas need to be restarted, because only their subnet ID changes.
         let should_restart_replica = new_subnet_id != SOURCE_SUBNET_ID;
 
         let (server_addr, _served_cup) = start_cup_server(pb::CatchUpPackage::from(
