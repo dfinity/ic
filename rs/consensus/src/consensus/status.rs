@@ -12,14 +12,24 @@ use ic_types::{
     },
 };
 
+/// The status of the consensus with respect to the halts that end a subnet on a CUP: a pending
+/// upgrade, a scheduled subnet split, and the subnet record's `halt_at_cup_height`. Each of them
+/// takes effect from a summary height on, so a subnet halted this way stops with a final
+/// checkpoint at a CUP height.
+///
+/// The subnet record's other halt, `is_halted`, is not one of these and never produces a
+/// [`Status::Halted`]: it stops a subnet wherever it happens to be, and
+/// `ConsensusImpl::on_state_change` acts on it before reaching any of the callers of
+/// [`get_status`].
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) enum Status {
     /// The Consensus is running normally.
     Running,
-    /// The Consensus is halting, meaning we will produce *empty* blocks but no batches will be
-    /// delivered.
+    /// The Consensus is halting towards a CUP height, meaning we will produce *empty* blocks but
+    /// no batches will be delivered.
     Halting,
-    /// The Consensus is halted, meaning that no blocks are created and no batches are delivered.
+    /// The Consensus is halted at a CUP height, meaning that no blocks are created and no batches
+    /// are delivered.
     Halted,
 }
 

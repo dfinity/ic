@@ -26,13 +26,18 @@ use std::sync::RwLock;
 // the range of ranks that are permitted to show up in metrics.
 const RANKS_TO_RECORD: [&str; 6] = ["0", "1", "2", "3", "4", "5"];
 
-/// The label of `consensus_status`, whose values are the statuses of
-/// [`Status`], lowercased, plus `unknown` for a status that could not be
-/// computed at all.
+/// The label of `consensus_status`, whose values name the statuses of
+/// [`Status`], plus `unknown` for a status that could not be computed at all.
+///
+/// [`Status::Halted`] is reported as `halted_at_cup_height` rather than
+/// `halted`: it is the halt that ends a subnet on a CUP, which is the only halt
+/// the delivery path can see. The subnet record's `is_halted` stops a subnet
+/// wherever it happens to be, above the finalizer, and reads as
+/// `halted_at_cup_height=0` here like a subnet that is not halting at all.
 const STATUS_LABEL: &str = "status";
 const STATUS_RUNNING: &str = "running";
 const STATUS_HALTING: &str = "halting";
-const STATUS_HALTED: &str = "halted";
+const STATUS_HALTED_AT_CUP_HEIGHT: &str = "halted_at_cup_height";
 const STATUS_UNKNOWN: &str = "unknown";
 
 /// The label value `consensus_status` reports each status under. [`None`] is
@@ -42,7 +47,7 @@ const STATUS_UNKNOWN: &str = "unknown";
 const CONSENSUS_STATUSES: [(&str, Option<Status>); 4] = [
     (STATUS_RUNNING, Some(Status::Running)),
     (STATUS_HALTING, Some(Status::Halting)),
-    (STATUS_HALTED, Some(Status::Halted)),
+    (STATUS_HALTED_AT_CUP_HEIGHT, Some(Status::Halted)),
     (STATUS_UNKNOWN, None),
 ];
 
@@ -220,20 +225,24 @@ impl FinalizerMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         let consensus_status = metrics_registry.int_gauge_vec(
             "consensus_status",
-            "Whether consensus is running, halting (producing empty blocks but delivering \
-             no batches), halted (producing no blocks either) or unknown (the status could \
-             not be computed), as of the last time batch delivery looked. 1 for the status \
-             that held then, 0 for the other three. All four are 0 until batch delivery \
-             computes a status for the first time, so a sum of 0 over the four is a replica \
-             that has not looked yet rather than a status of its own.",
+            "Whether consensus is running, halting towards a CUP height (producing empty \
+             blocks but delivering no batches), halted at a CUP height (producing no blocks \
+             either) or unknown (the status could not be computed), as of the last time \
+             batch delivery looked. 1 for the status that held then, 0 for the other three. \
+             All four are 0 until batch delivery computes a status for the first time, so a \
+             sum of 0 over the four is a replica that has not looked yet rather than a \
+             status of its own. A subnet halted by the `is_halted` flag of its subnet record \
+             rather than at a CUP height is not reported here at all: consensus acts on that \
+             flag before batch delivery runs, so this metric reads as it did before, or not \
+             at all on a replica that started while the subnet was already halted.",
             &[STATUS_LABEL],
         );
         // Report every status from the start. A gauge vector reports only the
         // label values it has been given, so until the delivery path computes a
         // status for the first time the scrape would carry no `consensus_status`
-        // at all, and a query for the halted status would find nothing -- the
-        // answer it also gives for a subnet that is not halted. All four reading
-        // 0 is that state instead, as the help text says.
+        // at all, and a query for one of the statuses would find nothing -- the
+        // answer it also gives for a subnet that is not in that status. All four
+        // reading 0 is that state instead, as the help text says.
         for (label, _) in CONSENSUS_STATUSES {
             consensus_status.with_label_values(&[label]).set(0);
         }
@@ -373,7 +382,8 @@ impl FinalizerMetrics {
 
     /// Records `status` as the status consensus is in, and the other three as
     /// ones it is not. [`None`] is recorded as `unknown`, the status the
-    /// delivery path failed to compute.
+    /// delivery path failed to compute, and [`Status::Halted`] as
+    /// `halted_at_cup_height`, the only halt this path sees.
     ///
     /// Reported as a gauge per status rather than a single number, so that a
     /// dashboard can select the status it asks about by name. Only the batch
@@ -771,9 +781,9 @@ mod tests {
     /// built, rather than from the first time one of them is observed. A gauge
     /// vector reports only the label values it has been given, and one that has
     /// been given none is left out of the scrape altogether, so on a replica
-    /// that has not delivered a batch since it started -- one whose subnet is
-    /// halted, say -- a query for the halted status would find nothing, which is
-    /// the answer that query also gives for a subnet that is not halted.
+    /// that has not reached the status computation a query for one of the
+    /// statuses would find nothing, which is the answer that query also gives
+    /// for a subnet that is not in that status.
     ///
     /// Observing a status sets that one to one and the other three back to zero.
     #[test]
@@ -789,7 +799,7 @@ mod tests {
             BTreeMap::from([
                 (STATUS_RUNNING.into(), 0),
                 (STATUS_HALTING.into(), 0),
-                (STATUS_HALTED.into(), 0),
+                (STATUS_HALTED_AT_CUP_HEIGHT.into(), 0),
                 (STATUS_UNKNOWN.into(), 0),
             ]),
         );
@@ -801,7 +811,7 @@ mod tests {
             BTreeMap::from([
                 (STATUS_RUNNING.into(), 0),
                 (STATUS_HALTING.into(), 0),
-                (STATUS_HALTED.into(), 1),
+                (STATUS_HALTED_AT_CUP_HEIGHT.into(), 1),
                 (STATUS_UNKNOWN.into(), 0),
             ]),
         );

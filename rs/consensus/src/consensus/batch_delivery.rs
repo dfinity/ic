@@ -194,7 +194,8 @@ fn deliver_batches(
                 "Delivering finalized batch at CUP height of {}", height
             );
         }
-        // When we are not delivering CUP block, we must check if the subnet is halted.
+        // When we are not delivering CUP block, we must check if the subnet is
+        // halting towards, or halted at, a CUP height.
         else {
             match status {
                 Some(Status::Halting | Status::Halted) => {
@@ -877,8 +878,8 @@ mod tests {
 
     /// Every status the delivery path computes is handed to the observer, which
     /// is what keeps the finalizer's `consensus_status` metric current. The
-    /// status of a halting or halted subnet is observed on the early return that
-    /// leaves its batch undelivered.
+    /// status of a subnet halting towards, or halted at, a CUP height is observed
+    /// on the early return that leaves its batch undelivered.
     ///
     /// `at_cup_height` delivers the CUP block itself, the round on which a
     /// subnet halting at its CUP height halts. That batch is delivered whatever
