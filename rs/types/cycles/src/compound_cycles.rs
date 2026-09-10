@@ -80,15 +80,22 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 /// `CompoundCycles` deliberately implements neither `Ord` nor `PartialOrd`: its two
 /// parts are accounted for independently and there is no meaningful order on the
 /// pair. A derived impl would order lexicographically, i.e. by the real part first,
-/// and hence answer "which of the two amounts is larger?" from the real part alone
-/// whenever the real parts differ. That is exactly the wrong tie-break under the
-/// free cost schedule, where the real part of a use case made free is zero no matter
-/// how large the nominal part is.
+/// and hence decide a comparison on the real parts alone whenever those differ, no
+/// matter how the nominal parts compare.
+///
+/// Two amounts carrying the same cost schedule are safe to compare that way: under
+/// the normal cost schedule the two parts of an amount coincide, and under the free
+/// cost schedule the real part of a use case made free is zero on both sides, so the
+/// comparison falls through to the nominal parts. Such an order is misleading
+/// precisely when the two amounts carry *different* cost schedules, e.g. because one
+/// was recorded when a call was performed and the other derived when its response is
+/// executed: the one made free has a zero real part and compares as the smaller
+/// amount however large its nominal part is.
 ///
 /// Compare `real()` or `nominal()` explicitly instead. Note that subtraction
-/// saturates part by part, which covers the two idioms that would otherwise want an
-/// ordering: `x - x.min(y)` is simply `x - y`, and the part-wise minimum of `x` and
-/// `y` is `x - (x - y)`.
+/// saturates part by part, which covers the two idioms that would otherwise reach
+/// for an ordering: subtracting `y` from `x` without going below zero is `x - y`,
+/// and the part-wise minimum of `x` and `y` is `x - (x - y)`.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct CompoundCycles<T: CyclesUseCaseKind> {
     real: Cycles,
