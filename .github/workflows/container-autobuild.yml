@@ -4,14 +4,12 @@ on:
   pull_request:
     paths:
       - '.github/workflows/container-autobuild.yml'
-      - 'rust-toolchain.toml'
       - 'ci/container/**'
   push:
     branches:
       - 'dev-gh-*'
     paths:
       - '.github/workflows/container-autobuild.yml'
-      - 'rust-toolchain.toml'
       - 'ci/container/**'
   workflow_dispatch:
 
