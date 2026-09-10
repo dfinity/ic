@@ -159,25 +159,21 @@ impl MetricsRunner {
         health: Arc<dyn Health>,
     ) -> Self {
         let mem_allocated = register_int_gauge_with_registry!(
-            "memory_allocated".to_string(),
-            "Allocated memory in bytes".to_string(),
+            "memory_allocated",
+            "Allocated memory in bytes",
             registry
         )
         .unwrap();
 
         let mem_resident = register_int_gauge_with_registry!(
-            "memory_resident".to_string(),
-            "Resident memory in bytes".to_string(),
+            "memory_resident",
+            "Resident memory in bytes",
             registry
         )
         .unwrap();
 
-        let healthy = register_int_gauge_with_registry!(
-            "healthy".to_string(),
-            "Node health status".to_string(),
-            registry
-        )
-        .unwrap();
+        let healthy =
+            register_int_gauge_with_registry!("healthy", "Node health status", registry).unwrap();
 
         Self {
             metrics_cache,
@@ -242,16 +238,16 @@ impl MetricParamsPersist {
         Self {
             // Number of ranges
             ranges: register_int_gauge_with_registry!(
-                "persist_ranges".to_string(),
-                "Number of canister ranges currently published".to_string(),
+                "persist_ranges",
+                "Number of canister ranges currently published",
                 registry
             )
             .unwrap(),
 
             // Number of nodes
             nodes: register_int_gauge_with_registry!(
-                "persist_nodes".to_string(),
-                "Number of nodes currently published".to_string(),
+                "persist_nodes",
+                "Number of nodes currently published",
                 registry
             )
             .unwrap(),
@@ -390,15 +386,15 @@ impl MetricParamsSnapshot {
     pub fn new(registry: &Registry) -> Self {
         Self {
             version: register_int_gauge_with_registry!(
-                "registry_version".to_string(),
-                "Currently published registry version".to_string(),
+                "registry_version",
+                "Currently published registry version",
                 registry
             )
             .unwrap(),
 
             timestamp: register_int_gauge_with_registry!(
-                "registry_timestamp".to_string(),
-                "Timestamp of the last registry update".to_string(),
+                "registry_timestamp",
+                "Timestamp of the last registry update",
                 registry
             )
             .unwrap(),
@@ -415,8 +411,8 @@ impl HttpMetricParamsStatus {
     pub fn new(registry: &Registry) -> Self {
         Self {
             counter: register_int_counter_vec_with_registry!(
-                "http_request_status_total".to_string(),
-                "Counts occurrences of status calls".to_string(),
+                "http_request_status_total",
+                "Counts occurrences of status calls",
                 &["health"],
                 registry
             )

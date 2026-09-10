@@ -35,21 +35,21 @@ impl Metrics {
         Self {
             last_successful_fetch: register_int_gauge_with_registry!(
                 format!("{METRIC_PREFIX}_last_successful_fetch"),
-                "The Unix timestamp of the last successful salt fetch".to_string(),
+                "The Unix timestamp of the last successful salt fetch",
                 registry
             )
             .unwrap(),
 
             last_salt_id: register_int_gauge_with_registry!(
                 format!("{METRIC_PREFIX}_last_salt_id"),
-                "ID of the latest fetched salt".to_string(),
+                "ID of the latest fetched salt",
                 registry,
             )
             .unwrap(),
 
             fetches: register_int_counter_vec_with_registry!(
                 format!("{METRIC_PREFIX}_fetches"),
-                "Count of salt fetches and their outcome".to_string(),
+                "Count of salt fetches and their outcome",
                 &["status", "message"],
                 registry
             )
