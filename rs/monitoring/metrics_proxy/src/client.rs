@@ -53,6 +53,8 @@ impl From<HttpError> for ScrapeError {
 ///
 /// # Errors
 /// * `ScrapeError`
+// Boxing the error would be a breaking change of this function's public API.
+#[allow(clippy::result_large_err)]
 pub async fn scrape(
     client: reqwest::Client,
     c: &crate::config::ConnectTo,

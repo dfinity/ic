@@ -265,10 +265,8 @@ fn parse_hex_into_32_byte_words<const N: usize>(
         });
     }
     let mut result = Vec::with_capacity(N);
-    for chunk in data.chunks_exact(32) {
-        let mut word = [0; 32];
-        word.copy_from_slice(chunk);
-        result.push(word);
+    for chunk in data.as_chunks::<32>().0 {
+        result.push(*chunk);
     }
     Ok(result.try_into().unwrap())
 }

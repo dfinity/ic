@@ -804,6 +804,8 @@ where
         }
     }
 
+    // Boxing `DeployError` would require changing all of its (many) call sites.
+    #[allow(clippy::result_large_err)]
     async fn do_deploy_new_sns(
         thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister<M>>>,
         canister_api: &impl CanisterApi,
@@ -1229,6 +1231,8 @@ where
 
     /// Creates the Canisters for the SNS to be deployed, or returns a failure message and
     /// SnsCanisterIds to delete if any.
+    // Boxing the error would require changing all of this function's call sites.
+    #[allow(clippy::result_large_err)]
     async fn create_sns_canisters(
         canister_api: &impl CanisterApi,
         subnet_id: SubnetId,

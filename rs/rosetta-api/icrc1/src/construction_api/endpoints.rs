@@ -1,3 +1,8 @@
+// The handlers in this module return `axum::response::Result`, whose `Err` variant is
+// axum's `ErrorResponse`. Its size is not under our control and boxing it would change
+// the handler signatures axum expects.
+#![allow(clippy::result_large_err)]
+
 use super::{services, types::ConstructionPayloadsRequestMetadata};
 use crate::{
     MultiTokenAppState,

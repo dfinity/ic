@@ -398,7 +398,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> MultiSigVerif
             crypto.method_name => "combine_multi_sig_individuals",
         );
         debug!(logger;
-            crypto.description => format!("start"),
+            crypto.description => "start".to_string(),
             crypto.registry_version => registry_version.get(),
             crypto.signature_shares => format!("{:?}", signatures),
         );
@@ -417,7 +417,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> MultiSigVerif
             start_time,
         );
         debug!(logger;
-            crypto.description => format!("end"),
+            crypto.description => "end".to_string(),
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
             crypto.signature => log_ok_content(&result),
@@ -441,7 +441,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> MultiSigVerif
             crypto.method_name => "verify_multi_sig_combined",
         );
         debug!(logger;
-            crypto.description => format!("start"),
+            crypto.description => "start".to_string(),
             crypto.registry_version => registry_version.get(),
             crypto.signature => format!("{:?}", signature),
             crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
@@ -464,7 +464,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> MultiSigVerif
             start_time,
         );
         debug!(logger;
-            crypto.description => format!("end"),
+            crypto.description => "end".to_string(),
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
         );
@@ -574,7 +574,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> ThresholdSigV
             crypto.method_name => "combine_threshold_sig_shares",
         );
         debug!(logger;
-            crypto.description => format!("start"),
+            crypto.description => "start".to_string(),
             crypto.dkg_id => format!("{}", dkg_id),
             crypto.signature_shares => format!("{:?}", shares),
         );
@@ -593,7 +593,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> ThresholdSigV
             start_time,
         );
         debug!(logger;
-            crypto.description => format!("end"),
+            crypto.description => "end".to_string(),
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
             crypto.signature => log_ok_content(&result),

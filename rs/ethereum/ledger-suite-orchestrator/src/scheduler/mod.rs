@@ -1,3 +1,7 @@
+// `TaskError` is intentionally a plain (non-boxed) enum: boxing it would be a
+// breaking change for the many functions and tests returning `Result<_, TaskError>`.
+#![allow(clippy::result_large_err)]
+
 mod metrics;
 #[cfg(test)]
 pub mod test_fixtures;

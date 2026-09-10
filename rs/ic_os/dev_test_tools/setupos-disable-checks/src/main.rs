@@ -52,28 +52,19 @@ fn main() -> Result<()> {
 fn process_cmdline(input: &str) -> Result<String> {
     let boot_args_re = Regex::new(r"(^|\n)BOOT_ARGS=(.*)(\s+#|\n|$)").unwrap();
 
-    let left;
-    let indent;
-    let boot_args;
-    let tail;
-    let right;
-    match boot_args_re.captures(input) {
+    let (left, indent, boot_args, tail, right) = match boot_args_re.captures(input) {
         Some(captures) => {
             let whole_match = captures.get(0).unwrap();
 
-            left = whole_match.start();
-            indent = captures.get(1).unwrap().as_str();
-            boot_args = captures.get(2).unwrap().as_str().trim().trim_matches('"');
-            tail = captures.get(3).unwrap().as_str();
-            right = whole_match.end();
+            (
+                whole_match.start(),
+                captures.get(1).unwrap().as_str(),
+                captures.get(2).unwrap().as_str().trim().trim_matches('"'),
+                captures.get(3).unwrap().as_str(),
+                whole_match.end(),
+            )
         }
-        None => {
-            left = input.len();
-            indent = "";
-            boot_args = "";
-            tail = "\n";
-            right = input.len();
-        }
+        None => (input.len(), "", "", "\n", input.len()),
     };
 
     let mut cmdline = KernelCommandLine::from_str(boot_args)?;

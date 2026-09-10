@@ -522,6 +522,8 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
 }
 
 #[update]
+// Boxing the error would be a breaking change of the canister's Candid interface.
+#[allow(clippy::result_large_err)]
 async fn withdraw_erc20(
     WithdrawErc20Arg {
         amount,
