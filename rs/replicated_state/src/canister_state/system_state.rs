@@ -2375,9 +2375,8 @@ impl SystemState {
     /// (#9859, April 2026) is no exception, even though the fallback that
     /// [`Self::outstanding_prepayments`] and the refund path apply to such a callback
     /// cannot account for its call fee: that fee is part of the gauge, so the first
-    /// backfill credits it -- whether the callback is still open or already responded
-    /// to -- and executing the response of a callback so credited keeps the monotonic
-    /// amount in step with the gauge, requiring no further backfill (see
+    /// backfill credits it, and executing the response of a callback so credited keeps
+    /// the monotonic amount in step with the gauge, requiring no further backfill (see
     /// `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`).
     ///
     /// Does nothing if the canister has a paused execution whose prepayment is not
