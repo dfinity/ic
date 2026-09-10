@@ -871,39 +871,27 @@ impl CyclesAccountManager {
     /// the instructions it executed, at the instruction costs of the Wasm execution
     /// mode it executed them in.
     ///
-    /// The prepayment is compared to the requirement on its nominal part rather than
-    /// on its real part, so that the adjustment applies under the free cost schedule
-    /// too: the real part of an `Instructions` amount is zero under that schedule, so
-    /// a comparison of real parts would see no difference between the Wasm execution
-    /// modes and leave the nominal part unadjusted, misreporting the consumed cycles
-    /// metrics. Under the free cost schedule nothing is withdrawn from or refunded to
-    /// the balance, hence only those metrics are adjusted; under the normal cost
-    /// schedule the real and the nominal parts coincide, so this comparison is
-    /// equivalent to comparing the real parts.
+    /// Both directions are applied unconditionally instead of picking one of them by
+    /// comparing the prepayment against the requirement: subtracting two
+    /// `CompoundCycles` saturates part by part, so `required - prepaid` is the
+    /// shortfall and `prepaid - required` the excess of the real and of the nominal
+    /// part on its own, and for either part at most one of the two is non-zero.
     ///
-    /// # Assumption: the cost schedule of a subnet never changes
+    /// This means that the adjustment does not rely on the prepayment and the
+    /// requirement carrying the same cost schedule: the prepayment recorded in the
+    /// callback carries the cost schedule in effect when the call was performed,
+    /// whereas the requirement is derived from the cost schedule in effect when the
+    /// response is executed. The two always coincide today, since a subnet keeps the
+    /// cost schedule it was created with, but were the cost schedule of a live
+    /// subnet allowed to change, then a canister whose subnet switched from the
+    /// normal to the free cost schedule across a call would get back here the whole
+    /// real prepayment it made under the normal cost schedule, and one whose subnet
+    /// switched the other way round would pay the real requirement here; either way
+    /// it ends up with exactly the prepayment that the cost schedule in effect at
+    /// response time requires.
     ///
-    /// Comparing a single part, be it the real or the nominal one, is only sound
-    /// because the prepayment and the requirement are stamped with the same cost
-    /// schedule: the prepayment recorded in the callback carries the cost schedule in
-    /// effect when the call was performed, whereas the requirement is derived from the
-    /// cost schedule in effect when the response is executed. A subnet is assigned its
-    /// cost schedule when it is created (`do_create_subnet`) and keeps it (a subnet
-    /// split inherits it and splitting a rental subnet is rejected outright), and
-    /// `UpdateSubnetPayload` exposes no field to change it, so the two schedules always
-    /// coincide today.
-    ///
-    /// Were the cost schedule of a live subnet allowed to change, this would break:
-    /// the real and the nominal parts would no longer agree on how the prepayment and
-    /// the requirement compare, and settling the prepayment would need to account for
-    /// both parts separately. In particular, a canister whose subnet switched from the
-    /// normal to the free cost schedule across a call would hit the branch below that
-    /// returns the prepayment unchanged, i.e. keep the prepayment it made under the
-    /// normal cost schedule, real part and all. `refund_unused_execution_cycles` would
-    /// then derive the refund under the free cost schedule, where the real part of an
-    /// `Instructions` amount is zero, so it would return nothing at all to the balance
-    /// and the canister would forfeit that whole real prepayment instead of getting it
-    /// back.
+    /// The withdrawal is performed before the refund so that a failing withdrawal
+    /// leaves the canister state unchanged, as the callers expect.
     ///
     /// Returns the prepayment matching the cycles required for executing the response
     /// in the given Wasm execution mode, or a `CanisterOutOfCyclesError` if the
@@ -918,50 +906,18 @@ impl CyclesAccountManager {
     ) -> Result<CompoundCycles<Instructions>, CanisterOutOfCyclesError> {
         let required = self.prepayment_for_response_execution(subnet_cycles_config, execution_mode);
         let prepaid = prepayment_for_response_execution;
-        if prepaid.nominal() < required.nominal() {
-            // No freezing threshold is applied, i.e., the threshold is zero.
-            self.consume_with_threshold_impl(
-                system_state,
-                required - prepaid,
-                Cycles::zero(),
-                reveal_top_up,
-            )?;
-            return Ok(required);
-        }
-        Ok(self.refund_excess_prepayment_for_response_execution(
+        // No freezing threshold is applied, i.e., the threshold is zero.
+        self.consume_with_threshold_impl(
             system_state,
-            prepaid,
-            subnet_cycles_config,
-            execution_mode,
-        ))
-    }
-
-    /// Refunds the part of the cycles prepaid for the execution of a response that
-    /// exceeds the cycles required for executing the response in the given Wasm
-    /// execution mode and returns the remaining prepayment.
-    ///
-    /// Unlike `adjust_prepayment_for_response_execution`, which uses this function to
-    /// handle an excessive prepayment, this never withdraws cycles from the canister's
-    /// balance and hence it cannot fail.
-    ///
-    /// The prepayment is compared to the requirement on its nominal part for the same
-    /// reason as in `adjust_prepayment_for_response_execution`.
-    fn refund_excess_prepayment_for_response_execution(
-        &self,
-        system_state: &mut SystemState,
-        prepayment_for_response_execution: CompoundCycles<Instructions>,
-        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-        execution_mode: WasmExecutionMode,
-    ) -> CompoundCycles<Instructions> {
-        let required = self.prepayment_for_response_execution(subnet_cycles_config, execution_mode);
-        if prepayment_for_response_execution.nominal() <= required.nominal() {
-            return prepayment_for_response_execution;
-        }
+            required - prepaid,
+            Cycles::zero(),
+            reveal_top_up,
+        )?;
         // The excess part of the prepayment is refunded in full and hence it does not
         // contribute to the consumed cycles of the canister.
-        let excess = prepayment_for_response_execution - required;
+        let excess = prepaid - required;
         system_state.refund_cycles(excess, excess);
-        required
+        Ok(required)
     }
 
     /// Settles the cycles prepaid for the execution of a response whose callback is
