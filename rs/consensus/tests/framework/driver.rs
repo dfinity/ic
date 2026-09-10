@@ -40,18 +40,12 @@ impl<'a> ConsensusDriver<'a> {
                 + 'a,
         >,
         consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
+        certification_pool: Arc<RwLock<CertificationPoolImpl>>,
         dkg_pool: Arc<RwLock<DkgPoolImpl>>,
         idkg_pool: Arc<RwLock<IDkgPoolImpl>>,
         logger: ReplicaLogger,
-        metrics_registry: MetricsRegistry,
     ) -> ConsensusDriver<'a> {
-        let ingress_pool = RefCell::new(TestIngressPool::new(node_id, pool_config.clone()));
-        let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
-            node_id,
-            pool_config,
-            logger.clone(),
-            metrics_registry,
-        )));
+        let ingress_pool = RefCell::new(TestIngressPool::new(node_id, pool_config));
         let consensus_priority =
             BouncerState::new(&consensus_bouncer, &*consensus_pool.read().unwrap());
         ConsensusDriver {

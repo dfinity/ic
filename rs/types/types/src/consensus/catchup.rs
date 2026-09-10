@@ -474,6 +474,14 @@ pub enum CatchUpPackageType {
     PostSplit {
         new_subnet_id: SubnetId,
     },
+    /// During an automated recovery (the subnet record's `is_in_recovery_mode` flag is set at the
+    /// latest registry version), we create a CUP skipping the rest of the current DKG interval
+    /// plus one entire interval, with a new summary block and a dummy random beacon created on
+    /// the fly. The CUP references the checkpoint created right above the recovery target.
+    Recovery {
+        /// The registry version at which the recovery was requested; adopted by the CUP.
+        scheduled_at: RegistryVersion,
+    },
 }
 
 #[cfg(test)]

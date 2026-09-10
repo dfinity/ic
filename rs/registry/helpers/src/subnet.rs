@@ -154,6 +154,14 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<bool>;
 
+    /// Returns whether the subnet record instructs the subnet to perform an automated recovery.
+    /// Consensus reads this flag at the *latest* registry version.
+    fn get_is_in_recovery_mode(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<bool>;
+
     /// Except for CloudEngine subnets, this just returns the value in the
     /// [SubnetRecord]'s `replica_version_id` field, which is generally the git
     /// commit ID from which Replica was built.
@@ -412,6 +420,16 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         Ok(deserialize_registry_value::<SubnetRecord>(bytes)?
             .map(|subnet| subnet.halt_at_cup_height))
+    }
+
+    fn get_is_in_recovery_mode(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<bool> {
+        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
+        Ok(deserialize_registry_value::<SubnetRecord>(bytes)?
+            .map(|subnet| subnet.is_in_recovery_mode))
     }
 
     fn get_replica_version(
@@ -1141,6 +1159,27 @@ mod tests {
             assert_eq!(
                 registry.get_halt_at_cup_height(subnet_id, version),
                 Ok(Some(halt_at_cup_height))
+            );
+        }
+    }
+
+    #[test]
+    fn can_get_is_in_recovery_mode_from_subnet() {
+        let subnet_id = subnet_id(4);
+        let version = RegistryVersion::from(2);
+
+        for is_in_recovery_mode in [false, true] {
+            let subnet_record = SubnetRecord {
+                is_in_recovery_mode,
+                ..Default::default()
+            };
+
+            let registry =
+                create_test_registry_client(version, vec![(subnet_id, subnet_record)], None);
+
+            assert_eq!(
+                registry.get_is_in_recovery_mode(subnet_id, version),
+                Ok(Some(is_in_recovery_mode))
             );
         }
     }

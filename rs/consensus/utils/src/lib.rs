@@ -30,6 +30,7 @@ pub mod chain_key;
 pub mod crypto;
 pub mod membership;
 pub mod pool_reader;
+pub mod recovery;
 pub mod subnet_splitting;
 
 /// When purging consensus or certification artifacts, we always keep a

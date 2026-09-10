@@ -21,22 +21,33 @@ use crate::consensus::{
     metrics::{BatchStats, BlockStats, FinalizerMetrics},
 };
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
+    crypto::ConsensusCrypto,
+    membership::Membership,
+    pool_reader::PoolReader,
+    recovery::{RecoveryStatus, RecoveryTarget, get_recovery_status, recovery_target},
 };
 use ic_interfaces::{
+    certification::CertificationPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, MessageRoutingError},
     time_source::system_time_now,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{ReplicaLogger, debug, trace};
+use ic_logger::{ReplicaLogger, debug, info, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    Height,
-    consensus::{FinalizationContent, FinalizationShare, HashedBlock},
+    Height, Randomness,
+    batch::{Batch, BatchContent},
+    consensus::{
+        FinalizationContent, FinalizationShare, HasVersion, HashedBlock, get_faults_tolerated,
+    },
     replica_config::ReplicaConfig,
 };
-use std::{cell::RefCell, sync::Arc, time::Instant};
+use std::{
+    cell::RefCell,
+    sync::{Arc, RwLock},
+    time::{Duration, Instant},
+};
 
 pub(crate) struct Finalizer {
     replica_config: ReplicaConfig,
@@ -45,6 +56,7 @@ pub(crate) struct Finalizer {
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     message_routing: Arc<dyn MessageRouting>,
     ingress_selector: Arc<dyn IngressSelector>,
+    certification_pool: Arc<RwLock<dyn CertificationPool + Send + Sync>>,
     log: ReplicaLogger,
     metrics: FinalizerMetrics,
     prev_finalized_height: RefCell<Height>,
@@ -60,6 +72,7 @@ impl Finalizer {
         crypto: Arc<dyn ConsensusCrypto>,
         message_routing: Arc<dyn MessageRouting>,
         ingress_selector: Arc<dyn IngressSelector>,
+        certification_pool: Arc<RwLock<dyn CertificationPool + Send + Sync>>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> Self {
@@ -70,6 +83,7 @@ impl Finalizer {
             crypto,
             message_routing,
             ingress_selector,
+            certification_pool,
             log,
             metrics: FinalizerMetrics::new(metrics_registry),
             prev_finalized_height: RefCell::new(Height::from(0)),
@@ -94,25 +108,209 @@ impl Finalizer {
             *self.prev_finalized_height.borrow_mut() = finalized_height;
         }
 
-        // Try to deliver finalized batches to messaging
-        let _ = deliver_batches_for_finalizer(
-            &*self.message_routing,
-            &self.membership,
-            pool,
-            &*self.registry_client,
-            &self.log,
-            self.replica_config.node_id,
-            self.replica_config.subnet_id,
-            |result, block_stats, batch_stats| {
-                self.process_batch_delivery_result(result, block_stats, batch_stats)
-            },
-        );
+        // If an automated recovery is pending, batch delivery is capped at the recovery target,
+        // and one `CheckpointingWithoutExecution` batch is delivered right above it.
+        match self.pending_recovery_target(pool) {
+            None => {
+                // Try to deliver finalized batches to messaging
+                let _ = deliver_batches_for_finalizer(
+                    &*self.message_routing,
+                    &self.membership,
+                    pool,
+                    &*self.registry_client,
+                    &self.log,
+                    self.replica_config.node_id,
+                    self.replica_config.subnet_id,
+                    /*max_batch_height_to_deliver=*/ None,
+                    /*deliver_while_halting=*/ false,
+                    |result, block_stats, batch_stats| {
+                        self.process_batch_delivery_result(result, block_stats, batch_stats)
+                    },
+                );
+            }
+            Some(Some(target)) => {
+                // Try to deliver finalized batches up to the recovery target. The recovery halts
+                // the subnet (see `status::should_halt`), so batches up to the target must be
+                // delivered even while halting — in particular when they are replayed from the
+                // consensus pool after a restart.
+                let _ = deliver_batches_for_finalizer(
+                    &*self.message_routing,
+                    &self.membership,
+                    pool,
+                    &*self.registry_client,
+                    &self.log,
+                    self.replica_config.node_id,
+                    self.replica_config.subnet_id,
+                    /*max_batch_height_to_deliver=*/ Some(target.height),
+                    /*deliver_while_halting=*/ true,
+                    |result, block_stats, batch_stats| {
+                        self.process_batch_delivery_result(result, block_stats, batch_stats)
+                    },
+                );
+
+                self.maybe_deliver_checkpointing_batch(pool, &target);
+            }
+            // A recovery is pending, but the target is unknown (yet): deliver nothing.
+            Some(None) => {}
+        }
 
         // Try to finalize rounds from finalized_height + 1 up to (and including)
         // notarized_height
         (finalized_height.increment().get()..=notarized_height.get())
             .filter_map(|h| self.finalize_height(pool, Height::from(h)))
             .collect()
+    }
+
+    /// Returns `None` if no automated recovery is pending, `Some(None)` if a recovery is pending
+    /// but the target can't be determined (yet), and `Some(Some(target))` otherwise.
+    ///
+    /// The target is the highest state supported by `f + 1` validated certification shares of
+    /// distinct signers (or by a full certification): at least one *honest* node executed that
+    /// state, so it is safe to recover to it. It is also necessary: if we recovered to a lower
+    /// height, up to `f` malicious nodes could later complete a full certification on top of the
+    /// `f + 1` honest shares, leaving the recovered subnet behind a certified state.
+    fn pending_recovery_target(&self, pool: &PoolReader<'_>) -> Option<Option<RecoveryTarget>> {
+        let watermark_version = pool
+            .get_highest_catch_up_package()
+            .content
+            .registry_version();
+
+        match get_recovery_status(
+            self.registry_client.as_ref(),
+            self.replica_config.subnet_id,
+            watermark_version,
+        ) {
+            Ok(RecoveryStatus::NotScheduled) => None,
+            Ok(RecoveryStatus::Scheduled { .. }) => Some(self.recovery_target(pool)),
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Couldn't determine the automated recovery status: {err}"
+                );
+
+                None
+            }
+        }
+    }
+
+    /// Computes the recovery target from the certification pool, see
+    /// [`pending_recovery_target`].
+    fn recovery_target(&self, pool: &PoolReader<'_>) -> Option<RecoveryTarget> {
+        let nodes = self
+            .membership
+            .get_nodes(pool.get_catch_up_height())
+            .map_err(|err| {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Couldn't determine the subnet members to compute the recovery target: {err:?}"
+                )
+            })
+            .ok()?;
+
+        let target = recovery_target(
+            &*self.certification_pool.read().unwrap(),
+            get_faults_tolerated(nodes.len()),
+        );
+
+        match &target {
+            None => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "A recovery is pending, but no state is supported by f + 1 certification \
+                    shares yet; delivering no batches"
+                );
+            }
+            Some(target) if target.ambiguous => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Multiple state hashes are supported by f + 1 certification shares at the \
+                    recovery target height {}; the recovery may not converge",
+                    target.height,
+                );
+            }
+            Some(target) => {
+                info!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "A recovery is pending; delivering batches up to the recovery target {} \
+                    with state hash {:?}",
+                    target.height,
+                    target.hash,
+                );
+            }
+        }
+
+        target
+    }
+
+    /// If the batch right above the recovery target is the next expected batch, deliver it as a
+    /// `Checkpointing` batch: a batch which creates a checkpoint without inducting, executing or
+    /// routing any messages. The recovery CUP references the (full) hash of this checkpoint.
+    ///
+    /// The delivery is structurally idempotent: once message routing has processed the batch (or
+    /// after a restart from the created checkpoint), the expected batch height moves past the
+    /// checkpointing height and nothing is delivered anymore.
+    ///
+    /// Note that nodes which already delivered batches beyond the target before observing the
+    /// recovery ("overshot") never deliver the checkpointing batch — they can't checkpoint at the
+    /// target anymore and instead rely on state sync once the recovery CUP is aggregated. After a
+    /// restart, batch replay restarts from the last persisted checkpoint, which is usually below
+    /// the target, and re-enters this path.
+    fn maybe_deliver_checkpointing_batch(&self, pool: &PoolReader<'_>, target: &RecoveryTarget) {
+        let checkpoint_height = target.height.increment();
+        if self.message_routing.expected_batch_height() != checkpoint_height {
+            return;
+        }
+
+        // All fields must be derived deterministically from the finalized block at the target
+        // height, so that all nodes create the exact same checkpoint.
+        let Some(block) = pool.get_finalized_block(target.height) else {
+            warn!(
+                every_n_seconds => 30,
+                self.log,
+                "Can't deliver the checkpointing batch at height {checkpoint_height} because \
+                there is no finalized block at the recovery target height"
+            );
+
+            return;
+        };
+
+        let batch = Batch {
+            batch_number: checkpoint_height,
+            batch_summary: None,
+            content: BatchContent::CheckpointingWithoutExecution,
+            // Checkpointing rounds don't execute anything, so the randomness is irrelevant; it
+            // must only be identical on all nodes.
+            randomness: Randomness::from([0_u8; 32]),
+            registry_version: block.context.registry_version,
+            // The batch time must be strictly greater than the previous batch's.
+            time: block.context.time + Duration::from_nanos(1),
+            // This batch is not derived from a block created by a block maker.
+            blockmaker_metrics: None,
+            replica_version: block.version().clone(),
+        };
+
+        match self.message_routing.deliver_batch(batch) {
+            Ok(()) => {
+                info!(
+                    self.log,
+                    "Delivered the checkpointing batch at height {checkpoint_height} above the \
+                    recovery target"
+                );
+            }
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 5,
+                    self.log,
+                    "Couldn't deliver the checkpointing batch at height {checkpoint_height}: \
+                    {err:?}"
+                );
+            }
+        }
     }
 
     /// Write logs, report metrics depending on the batch deliver result.
@@ -267,6 +465,20 @@ mod tests {
     };
     use std::sync::Arc;
 
+    fn test_certification_pool(
+        node_id: ic_types::NodeId,
+        pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
+    ) -> Arc<RwLock<dyn CertificationPool + Send + Sync>> {
+        Arc::new(RwLock::new(
+            ic_artifact_pool::certification_pool::CertificationPoolImpl::new(
+                node_id,
+                pool_config,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            ),
+        ))
+    }
+
     /// Given a single block, just finalize it
     #[test]
     fn test_finalizer_behavior() {
@@ -278,7 +490,7 @@ mod tests {
                 registry,
                 crypto,
                 ..
-            } = DependenciesBuilder::new(pool_config, 1).build();
+            } = DependenciesBuilder::new(pool_config.clone(), 1).build();
             let message_routing = FakeMessageRouting::new();
 
             assert_eq!(pool.advance_round_normal_operation(), Height::from(1));
@@ -289,6 +501,7 @@ mod tests {
             let message_routing = Arc::new(message_routing);
             let ingress_selector = Arc::new(FakeIngressSelector::new());
 
+            let certification_pool = test_certification_pool(replica_config.node_id, pool_config);
             let finalizer = Finalizer::new(
                 replica_config,
                 registry,
@@ -296,6 +509,7 @@ mod tests {
                 crypto,
                 message_routing.clone(),
                 ingress_selector,
+                certification_pool,
                 no_op_logger(),
                 MetricsRegistry::new(),
             );
@@ -341,6 +555,122 @@ mod tests {
         })
     }
 
+    /// During an automated recovery, the finalizer delivers batches only up to the recovery
+    /// target (the highest height with `f + 1` certification shares on the same hash), followed
+    /// by exactly one `Checkpointing` batch right above it. Nodes which already delivered batches
+    /// beyond the target deliver nothing.
+    #[test]
+    fn test_finalizer_delivers_checkpointing_batch_during_recovery() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let dkg_interval_length = 9;
+            let subnet_record = || {
+                SubnetRecordBuilder::from(&committee).with_dkg_interval_length(dkg_interval_length)
+            };
+            let Dependencies {
+                mut pool,
+                replica_config,
+                membership,
+                registry,
+                registry_data_provider,
+                crypto,
+                ..
+            } = DependenciesBuilder::single_subnet(
+                pool_config.clone(),
+                subnet_test_id(0),
+                vec![(1, subnet_record().build())],
+            )
+            .build();
+            let subnet_id = replica_config.subnet_id;
+
+            // Finalize a few heights within the first DKG interval.
+            pool.advance_round_normal_operation_n(5);
+
+            let message_routing = Arc::new(FakeMessageRouting::new());
+            let certification_pool =
+                crate::consensus::catchup_package_maker::tests::test_certification_pool(
+                    replica_config.node_id,
+                    pool_config,
+                );
+            let finalizer = Finalizer::new(
+                replica_config,
+                registry.clone(),
+                membership,
+                crypto,
+                message_routing.clone(),
+                Arc::new(FakeIngressSelector::new()),
+                certification_pool.clone(),
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+
+            // Insert f + 1 (= 2) validated certification shares on the same hash at height 3:
+            // the recovery target.
+            for node in [1, 2] {
+                certification_pool.read().unwrap().validated.insert(
+                    crate::consensus::catchup_package_maker::tests::fake_certification_share(
+                        3,
+                        node_test_id(node),
+                    ),
+                );
+            }
+
+            // Set the recovery flag at a fresh registry version.
+            ic_test_utilities_registry::add_subnet_record(
+                &registry_data_provider,
+                /*version=*/ 2,
+                subnet_id,
+                subnet_record().with_is_in_recovery_mode(true).build(),
+            );
+            registry.update_to_latest_version();
+
+            finalizer.on_state_change(&PoolReader::new(&pool));
+
+            // Despite the finalized height being 5, only the batches up to the recovery target
+            // (height 3) are delivered, followed by one `Checkpointing` batch at height 4.
+            let batches = message_routing.batches.read().unwrap().clone();
+            assert_eq!(batches.len(), 4);
+            for batch in &batches[0..3] {
+                assert!(matches!(
+                    batch.content,
+                    ic_types::batch::BatchContent::Data { .. }
+                ));
+            }
+            let checkpointing_batch = &batches[3];
+            assert_eq!(checkpointing_batch.batch_number, Height::from(4));
+            assert!(matches!(
+                checkpointing_batch.content,
+                ic_types::batch::BatchContent::CheckpointingWithoutExecution
+            ));
+            assert!(checkpointing_batch.batch_summary.is_none());
+            assert!(checkpointing_batch.blockmaker_metrics.is_none());
+            // All fields are derived from the finalized block at the target height.
+            let target_block = PoolReader::new(&pool)
+                .get_finalized_block(Height::from(3))
+                .unwrap();
+            assert_eq!(
+                checkpointing_batch.time,
+                target_block.context.time + Duration::from_nanos(1)
+            );
+            assert_eq!(
+                checkpointing_batch.registry_version,
+                target_block.context.registry_version
+            );
+            assert_eq!(checkpointing_batch.replica_version, *target_block.version());
+
+            // The delivery is idempotent: nothing new is delivered on the next invocation.
+            finalizer.on_state_change(&PoolReader::new(&pool));
+            assert_eq!(message_routing.batches.read().unwrap().len(), 4);
+
+            // A node which already delivered batches beyond the target ("overshot") delivers
+            // nothing during the recovery.
+            *message_routing.batches.write().unwrap() = Vec::new();
+            *message_routing.next_batch_height.write().unwrap() = Height::from(6);
+            finalizer.on_state_change(&PoolReader::new(&pool));
+            assert!(message_routing.batches.read().unwrap().is_empty());
+        })
+    }
+
     // We expect block maker to correctly detect version change and start
     // making only empty blocks.
     #[test]
@@ -356,7 +686,7 @@ mod tests {
                 crypto,
                 ..
             } = DependenciesBuilder::single_subnet(
-                pool_config,
+                pool_config.clone(),
                 subnet_test_id(0),
                 vec![
                     (
@@ -380,6 +710,7 @@ mod tests {
             let message_routing = Arc::new(FakeMessageRouting::new());
             *message_routing.next_batch_height.write().unwrap() = Height::from(2);
             let ingress_selector = Arc::new(FakeIngressSelector::new());
+            let certification_pool = test_certification_pool(replica_config.node_id, pool_config);
             let finalizer = Finalizer::new(
                 replica_config,
                 registry,
@@ -387,6 +718,7 @@ mod tests {
                 crypto,
                 message_routing.clone(),
                 ingress_selector,
+                certification_pool,
                 no_op_logger(),
                 metrics_registry,
             );

@@ -144,6 +144,33 @@ impl ShareAggregator {
         let mut start_block = pool.get_highest_finalized_summary_block();
         let current_cup_height = pool.get_catch_up_height();
 
+        // During an automated recovery, the recovery CUP is created at a height *above* the last
+        // summary block, so shares for the last summary block must be aggregated even when a CUP
+        // at its own height already exists (which is the normal case).
+        if start_block.height() == current_cup_height
+            && matches!(
+                catchup_package_maker::get_catch_up_package_type(
+                    self.registry.as_ref(),
+                    self.replica_config.node_id,
+                    self.replica_config.subnet_id,
+                    &start_block,
+                ),
+                Ok(CatchUpPackageType::Recovery { .. })
+            )
+        {
+            match self.aggregate_catch_up_package_shares_for_summary_block(pool, start_block) {
+                Ok(messages) => return to_messages(messages),
+                Err(err) => {
+                    warn!(
+                        every_n_seconds => 5,
+                        self.log,
+                        "Encountered an error while aggregating recovery CUP shares: {err}",
+                    );
+                    return Vec::new();
+                }
+            }
+        }
+
         loop {
             let start_block_height = start_block.height();
             if start_block_height <= current_cup_height {
@@ -191,6 +218,7 @@ impl ShareAggregator {
         let cup_type = catchup_package_maker::get_catch_up_package_type(
             self.registry.as_ref(),
             self.replica_config.node_id,
+            self.replica_config.subnet_id,
             &summary_block,
         )
         .map_err(|err| format!("Failed to determine the cup type: {err}"))?;
@@ -204,6 +232,15 @@ impl ShareAggregator {
                     self.registry.as_ref(),
                 )
                 .map_err(|err| format!("Failed to create a post-split summary block: {err}"))?
+            }
+            CatchUpPackageType::Recovery { scheduled_at } => {
+                catchup_package_maker::create_recovery_summary_block(
+                    &summary_block,
+                    scheduled_at,
+                    self.replica_config.subnet_id,
+                    self.registry.as_ref(),
+                )
+                .map_err(|err| format!("Failed to create a recovery summary block: {err}"))?
             }
         };
 
@@ -241,13 +278,26 @@ impl ShareAggregator {
             shares,
         );
 
-        if let CatchUpPackageType::PostSplit { new_subnet_id } = cup_type {
-            for cup in &cups {
-                info!(
-                    self.log,
-                    "Aggregated a Post-Split CUP for subnet {new_subnet_id} at height {}",
-                    cup.height()
-                );
+        match cup_type {
+            CatchUpPackageType::Normal => {}
+            CatchUpPackageType::PostSplit { new_subnet_id } => {
+                for cup in &cups {
+                    info!(
+                        self.log,
+                        "Aggregated a Post-Split CUP for subnet {new_subnet_id} at height {}",
+                        cup.height()
+                    );
+                }
+            }
+            CatchUpPackageType::Recovery { scheduled_at } => {
+                for cup in &cups {
+                    info!(
+                        self.log,
+                        "Aggregated a Recovery CUP (scheduled at registry version \
+                        {scheduled_at}) at height {}",
+                        cup.height()
+                    );
+                }
             }
         }
 
@@ -482,6 +532,135 @@ mod tests {
         })
     }
 
+    /// Recovery CUP shares of different nodes aggregate into a recovery CUP once the
+    /// high-threshold number of nodes signed the same content.
+    #[rstest]
+    #[trace]
+    #[case::not_enough_shares(&[NODE_1, NODE_2], false)]
+    #[case::enough_shares(&[NODE_1, NODE_2, NODE_3], true)]
+    fn aggregate_recovery_cup_shares_test(#[case] signers: &[NodeId], #[case] expected_cup: bool) {
+        with_test_replica_logger(|log| {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                const DKG_INTERVAL_LENGTH: u64 = 9;
+                let committee = [NODE_1, NODE_2, NODE_3, NODE_4];
+                let subnet_record = || {
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                };
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
+
+                let Dependencies {
+                    mut pool,
+                    membership,
+                    registry,
+                    registry_data_provider,
+                    crypto,
+                    state_manager,
+                    replica_config,
+                    ..
+                } = DependenciesBuilder::single_subnet(
+                    pool_config.clone(),
+                    SUBNET_1,
+                    vec![(1, subnet_record().build())],
+                )
+                .with_replica_config(ReplicaConfig {
+                    node_id: NODE_1,
+                    subnet_id: SUBNET_1,
+                    platform_version: test_platform_version(),
+                })
+                .build();
+
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(fake_state_hash.clone()));
+
+                let message_routing = FakeMessageRouting::new();
+                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+                let message_routing = Arc::new(message_routing);
+
+                pool.advance_round_normal_operation_n(3);
+
+                // Schedule a recovery at a fresh registry version.
+                ic_test_utilities_registry::add_subnet_record(
+                    &registry_data_provider,
+                    /*version=*/ 2,
+                    SUBNET_1,
+                    subnet_record().with_is_in_recovery_mode(true).build(),
+                );
+                registry.reload();
+
+                // Every node's recovery target (height 2) is supported by the same f + 1
+                // certification shares.
+                let mut insert_cup_share = |node_id: NodeId| {
+                    let certification_pool =
+                        crate::consensus::catchup_package_maker::tests::test_certification_pool(
+                            node_id,
+                            pool_config.clone(),
+                        );
+                    for node in [NODE_1, NODE_2] {
+                        certification_pool.read().unwrap().validated.insert(
+                            crate::consensus::catchup_package_maker::tests::fake_certification_share(
+                                2, node,
+                            ),
+                        );
+                    }
+
+                    let cup_maker = CatchUpPackageMaker::new(
+                        ReplicaConfig {
+                            node_id,
+                            subnet_id: SUBNET_1,
+                            platform_version: test_platform_version(),
+                        },
+                        membership.clone(),
+                        crypto.clone(),
+                        state_manager.clone(),
+                        message_routing.clone(),
+                        registry.clone(),
+                        certification_pool,
+                        log.clone(),
+                    );
+
+                    let share = cup_maker
+                        .on_state_change(&PoolReader::new(&pool))
+                        .expect("Should create a recovery CUP share");
+                    pool.insert_validated(share.clone());
+                    share
+                };
+
+                let shares = signers
+                    .iter()
+                    .map(|node_id| insert_cup_share(*node_id))
+                    .collect::<Vec<_>>();
+
+                let aggregator = ShareAggregator::new(
+                    membership,
+                    message_routing,
+                    crypto,
+                    registry,
+                    replica_config,
+                    log,
+                );
+
+                let messages = aggregator.on_state_change(&PoolReader::new(&pool));
+
+                if expected_cup {
+                    let [ConsensusMessage::CatchUpPackage(cup)] = messages.as_slice() else {
+                        panic!("Should have aggregated a single CUP: {messages:?}");
+                    };
+
+                    assert!(cup.check_integrity());
+                    assert_eq!(cup.height(), Height::from(2 * (DKG_INTERVAL_LENGTH + 1)));
+                    for share in shares {
+                        assert_eq!(CatchUpShareContent::from(&cup.content), share.content);
+                    }
+                } else {
+                    assert_eq!(messages, vec![], "Shouldn't have aggregated any artifacts");
+                }
+            })
+        })
+    }
+
     #[rstest]
     #[trace]
     #[case::no_shares(&[], false)]
@@ -512,7 +691,7 @@ mod tests {
                     replica_config,
                     ..
                 } = DependenciesBuilder::multiple_subnets(
-                    pool_config,
+                    pool_config.clone(),
                     vec![
                         (
                             INITIAL_REGISTRY_VERSION.get(),
@@ -598,6 +777,10 @@ mod tests {
                         state_manager.clone(),
                         message_routing.clone(),
                         registry.clone(),
+                        crate::consensus::catchup_package_maker::tests::test_certification_pool(
+                            node_id,
+                            pool_config.clone(),
+                        ),
                         log.clone(),
                     );
 

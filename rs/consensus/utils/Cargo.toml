@@ -25,6 +25,8 @@ thiserror = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 ic-consensus-mocks = { path = "../mocks" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-registry-client-fake = { path = "../../registry/fake" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-test-utilities = { path = "../../test_utilities" }

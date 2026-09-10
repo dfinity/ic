@@ -730,6 +730,13 @@ fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
         CatchUpPackageType::PostSplit { new_subnet_id } => {
             SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })
         }
+        CatchUpPackageType::Recovery { .. } => {
+            return Err(
+                "Recovery CUP summaries are not created from registry CUP contents; \
+                use `get_recovery_dkg_summary` instead"
+                    .to_string(),
+            );
+        }
     };
 
     Ok(DkgSummary::new(
@@ -1003,6 +1010,57 @@ pub fn get_post_split_dkg_summary(
         CatchUpPackageType::PostSplit { new_subnet_id },
     )
     .map_err(|err| format!("Failed to create post-split dkg summary from contents: {err}"))
+}
+
+/// Creates the DKG summary of the recovery CUP during an automated recovery.
+///
+/// The recovery summary (and thus the recovery CUP) is placed at
+/// `last_summary.get_next_start_height() + last_summary.next_interval_length + 1`, i.e. it skips
+/// whatever is left of the current DKG interval plus one entire interval. For the recovery to be
+/// safe, this height must never be reachable by the pre-recovery chain, so that the recovery
+/// summary block created here is the only agreed-upon block at that height. This mirrors the
+/// argument for [`get_post_split_dkg_summary`]: once the recovery flag is observed at the latest
+/// registry version, consensus halts (see `status::should_halt`) and the certifier stops signing,
+/// so the chain can grow at most `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP` heights past the
+/// frozen certified height. Since the flag is observed asynchronously (it is read at the latest
+/// registry version, not from the chain), the extra full interval provides the slack that the
+/// post-split summary gets from being anchored in the chain. As with subnet splitting, DKG
+/// interval lengths below `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP` are *not* supported.
+///
+/// Unlike the post-split summary, the recovery summary cannot take its transcripts from the
+/// registry (no `SetupInitialDKG` runs during an automated recovery — this also means the
+/// membership cannot change). Instead, the transcripts of the last summary are reused: every node
+/// still holds the corresponding key shares, so certification and CUP signing keep working. Key
+/// rotation pauses for the skipped intervals. The summary carries no DKG configs, so no new
+/// transcripts are created in the interval following the recovery — restarting DKG cleanly after
+/// a recovery is out of scope of this proof of concept.
+pub fn get_recovery_dkg_summary(
+    subnet_id: SubnetId,
+    registry: &dyn RegistryClient,
+    last_summary_block: &Block,
+    scheduled_at: RegistryVersion,
+) -> Result<DkgSummary, String> {
+    let last_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
+
+    let interval_length = get_dkg_interval_length(registry, scheduled_at, subnet_id)
+        .map_err(|err| format!("Failed to get the DKG interval length: {err:?}"))?;
+
+    // Skip the rest of the current interval plus one entire interval. The pre-recovery chain can
+    // never reach this height — see the function documentation for why.
+    let height =
+        last_summary.get_next_start_height() + last_summary.next_interval_length + Height::from(1);
+
+    Ok(DkgSummary::new(
+        /*configs=*/ vec![],
+        last_summary.current_transcripts().clone(),
+        last_summary.next_transcripts().clone(),
+        scheduled_at,
+        interval_length,
+        interval_length,
+        height,
+        /*remote_dkg_attempts=*/ BTreeMap::new(),
+        SubnetSplittingStatus::NotScheduled,
+    ))
 }
 
 #[cfg(test)]

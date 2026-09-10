@@ -1,6 +1,10 @@
 use std::fmt::Display;
 
-use ic_consensus_utils::{lookup_replica_version, pool_reader::PoolReader};
+use ic_consensus_utils::{
+    lookup_replica_version,
+    pool_reader::PoolReader,
+    recovery::{RecoveryStatus, get_recovery_status},
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -125,10 +129,30 @@ pub(crate) fn should_halt(
             ),
         );
 
+    // Note: unlike the other signals, which are derived from the chain and are therefore
+    // identical on all nodes, this one is read at the *latest* registry version, so nodes may
+    // observe it at different times. During a recovery this asymmetry only accelerates the
+    // intended stall: a flagged validator will reject a non-flagged proposer's full block, and
+    // the recovery CUP rescues any node left behind.
+    let should_halt_due_to_recovery = match get_recovery_status(
+        registry_client,
+        subnet_id,
+        pool.get_highest_catch_up_package()
+            .content
+            .registry_version(),
+    ) {
+        Ok(status) => Some(matches!(status, RecoveryStatus::Scheduled { .. })),
+        Err(err) => None.warn_if_none(
+            logger,
+            format!("Failed to check if a recovery of the subnet is pending: {err}"),
+        ),
+    };
+
     any(&[
         should_halt_due_to_upgrading,
         should_halt_due_to_subnet_splitting,
         should_halt_by_subnet_record,
+        should_halt_due_to_recovery,
     ])
 }
 

@@ -14,13 +14,16 @@
 //! block is considered finalized.
 
 use crate::consensus::status;
-use ic_consensus_dkg::payload_builder::get_post_split_dkg_summary;
+use ic_consensus_dkg::payload_builder::{get_post_split_dkg_summary, get_recovery_dkg_summary};
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, get_current_transcript_from_summary_block,
-    get_oldest_state_registry_version, membership::Membership, pool_reader::PoolReader,
+    crypto::ConsensusCrypto,
+    get_current_transcript_from_summary_block, get_oldest_state_registry_version,
+    membership::Membership,
+    pool_reader::PoolReader,
+    recovery::{RecoveryStatus, get_recovery_status, recovery_target},
     subnet_splitting,
 };
-use ic_interfaces::messaging::MessageRouting;
+use ic_interfaces::{certification::CertificationPool, messaging::MessageRouting};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, TransientStateHashError::*,
@@ -28,12 +31,12 @@ use ic_interfaces_state_manager::{
 use ic_logger::{ReplicaLogger, debug, error, trace, warn};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, SubnetId,
+    Height, NodeId, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpPackageShare, CatchUpShareContent, HasHeight,
         HashedBlock, HashedRandomBeacon, Payload, RandomBeacon, RandomBeaconContent, Rank,
-        SummaryPayload, catchup::CatchUpPackageType,
+        SummaryPayload, catchup::CatchUpPackageType, get_faults_tolerated,
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
@@ -42,7 +45,7 @@ use ic_types::{
     replica_config::ReplicaConfig,
     signature::ThresholdSignature,
 };
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 /// [`CatchUpPackage`] maker is responsible for creating CUP shares
 pub(crate) struct CatchUpPackageMaker {
@@ -52,11 +55,13 @@ pub(crate) struct CatchUpPackageMaker {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     message_routing: Arc<dyn MessageRouting>,
     registry: Arc<dyn RegistryClient>,
+    certification_pool: Arc<RwLock<dyn CertificationPool + Send + Sync>>,
     log: ReplicaLogger,
 }
 
 impl CatchUpPackageMaker {
     /// Instantiate a new CatchUpPackage maker and save a copy of the config.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         replica_config: ReplicaConfig,
         membership: Arc<Membership>,
@@ -64,6 +69,7 @@ impl CatchUpPackageMaker {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         message_routing: Arc<dyn MessageRouting>,
         registry: Arc<dyn RegistryClient>,
+        certification_pool: Arc<RwLock<dyn CertificationPool + Send + Sync>>,
         log: ReplicaLogger,
     ) -> Self {
         Self {
@@ -73,6 +79,7 @@ impl CatchUpPackageMaker {
             state_manager,
             message_routing,
             registry,
+            certification_pool,
             log,
         }
     }
@@ -136,6 +143,23 @@ impl CatchUpPackageMaker {
         let current_cup_height = pool.get_catch_up_height();
         let mut block = pool.get_highest_finalized_summary_block();
 
+        // During an automated recovery, the recovery CUP is created at a height *above* the last
+        // summary block, so the last summary block must be considered even when a CUP at its own
+        // height already exists (which is the normal case).
+        if block.height() == current_cup_height
+            && matches!(
+                get_catch_up_package_type(
+                    self.registry.as_ref(),
+                    self.replica_config.node_id,
+                    self.replica_config.subnet_id,
+                    &block,
+                ),
+                Ok(CatchUpPackageType::Recovery { .. })
+            )
+        {
+            return self.consider_block(pool, block);
+        }
+
         while block.height() > current_cup_height {
             let result = self.consider_block(pool, block.clone());
             if result.is_some() {
@@ -168,6 +192,7 @@ impl CatchUpPackageMaker {
         let cup_type = get_catch_up_package_type(
             self.registry.as_ref(),
             self.replica_config.node_id,
+            self.replica_config.subnet_id,
             &start_block,
         )
         .inspect_err(|err| {
@@ -228,16 +253,25 @@ impl CatchUpPackageMaker {
             return None;
         }
 
-        let state_hash = match self.state_manager.get_state_hash_at(summary_height) {
+        // The height whose (full) state hash the CUP references. For normal and post-split CUPs
+        // this is the summary height; for recovery CUPs it is the height of the checkpoint
+        // created right above the recovery target (see `Finalizer::maybe_deliver_checkpointing_batch`).
+        let is_recovery = matches!(cup_type, CatchUpPackageType::Recovery { .. });
+        let state_height = match cup_type {
+            CatchUpPackageType::Normal | CatchUpPackageType::PostSplit { .. } => summary_height,
+            CatchUpPackageType::Recovery { .. } => self.recovery_state_height(pool)?,
+        };
+
+        let state_hash = match self.state_manager.get_state_hash_at(state_height) {
             Ok(state_hash) => state_hash,
             Err(StateHashError::Transient(StateNotCommittedYet(_))) => {
                 // TODO: Setup a delay before retry
                 debug!(
                     every_n_seconds => 5,
                     self.log,
-                    "Cannot make CUP at height {} because \
+                    "Cannot make CUP with the state at height {} because \
                     state is not committed yet. Will retry",
-                    summary_height
+                    state_height
                 );
                 return None;
             }
@@ -245,9 +279,24 @@ impl CatchUpPackageMaker {
                 debug!(
                     every_n_seconds => 5,
                     self.log,
-                    "Cannot make CUP at height {} because \
+                    "Cannot make CUP with the state at height {} because \
                     state hash is not computed yet. Will retry",
-                    summary_height
+                    state_height
+                );
+                return None;
+            }
+            Err(err @ StateHashError::Permanent(StateRemoved(_) | StateNotFullyCertified(_)))
+                if is_recovery =>
+            {
+                // This node has no checkpoint right above the recovery target — typically
+                // because it delivered batches beyond the target before observing the recovery.
+                // It cannot contribute a recovery CUP share and will state sync to the recovery
+                // CUP once it is aggregated by the nodes which do have the checkpoint.
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Cannot make a recovery CUP share with the state at height {state_height}: \
+                    {err:?}. Relying on the other nodes and state sync",
                 );
                 return None;
             }
@@ -255,14 +304,14 @@ impl CatchUpPackageMaker {
                 // This should never happen as we don't want to remove the state
                 // for CUP before the hash is fetched.
                 panic!(
-                    "State at height {summary_height} had disappeared before \
+                    "State at height {state_height} had disappeared before \
                     we had a chance to make a CUP. \
                     This should not happen.",
                 );
             }
             Err(StateHashError::Permanent(StateNotFullyCertified(_))) => {
                 panic!(
-                    "Height {summary_height} is not a fully certified height. \
+                    "Height {state_height} is not a fully certified height. \
                     This should not happen.",
                 );
             }
@@ -271,13 +320,14 @@ impl CatchUpPackageMaker {
         // Should succeed as we already got the hash above
         let state = self
             .state_manager
-            .get_state_at(summary_height)
+            .get_state_at(state_height)
             .inspect_err(|err| {
                 error!(
                     every_n_seconds => 5,
                     self.log,
-                    "Cannot make CUP at height {summary_height}: `get_state_hash_at` \
-                    succeeded but `get_state_at` failed with {err}. Will retry",
+                    "Cannot make CUP with the state at height {state_height}: \
+                    `get_state_hash_at` succeeded but `get_state_at` failed with {err}. \
+                    Will retry",
                 )
             })
             .ok()?;
@@ -356,17 +406,55 @@ impl CatchUpPackageMaker {
         })
     }
 
+    /// Returns the height of the checkpoint referenced by a recovery CUP: one above the recovery
+    /// target, i.e. the height at which the `Checkpointing` batch created a checkpoint (see
+    /// `Finalizer::maybe_deliver_checkpointing_batch`).
+    fn recovery_state_height(&self, pool: &PoolReader<'_>) -> Option<Height> {
+        let nodes = self
+            .membership
+            .get_nodes(pool.get_catch_up_height())
+            .map_err(|err| {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Couldn't determine the subnet members to compute the recovery target: \
+                    {err:?}",
+                )
+            })
+            .ok()?;
+
+        let target = recovery_target(
+            &*self.certification_pool.read().unwrap(),
+            get_faults_tolerated(nodes.len()),
+        )?;
+
+        if target.ambiguous {
+            warn!(
+                every_n_seconds => 30,
+                self.log,
+                "Multiple state hashes are supported by f + 1 certification shares at the \
+                recovery target height {}; the recovery may not converge",
+                target.height,
+            );
+        }
+
+        Some(target.height.increment())
+    }
+
     fn get_cup_height(&self, summary_block: &Block, cup_type: CatchUpPackageType) -> Height {
         // IMPORTANT: keep this in sync with the height of the block returned by `get_cup_block`.
+        let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
         match cup_type {
             CatchUpPackageType::Normal => summary_block.height(),
             // During subnet splitting we skip one DKG interval
-            CatchUpPackageType::PostSplit { .. } => summary_block
-                .payload
-                .as_ref()
-                .as_summary()
-                .dkg
-                .get_next_start_height(),
+            CatchUpPackageType::PostSplit { .. } => dkg_summary.get_next_start_height(),
+            // During a recovery we skip the rest of the current DKG interval plus one entire
+            // interval
+            CatchUpPackageType::Recovery { .. } => {
+                dkg_summary.get_next_start_height()
+                    + dkg_summary.next_interval_length
+                    + Height::from(1)
+            }
         }
     }
 
@@ -386,6 +474,13 @@ impl CatchUpPackageMaker {
                 self.registry.as_ref(),
             )
             .map_err(|err| format!("Failed to create a post split block: {err}"))?,
+            CatchUpPackageType::Recovery { scheduled_at } => create_recovery_summary_block(
+                &summary_block,
+                scheduled_at,
+                self.replica_config.subnet_id,
+                self.registry.as_ref(),
+            )
+            .map_err(|err| format!("Failed to create a recovery block: {err}"))?,
         };
 
         #[cfg(debug_assertions)]
@@ -408,9 +503,12 @@ impl CatchUpPackageMaker {
             CatchUpPackageType::Normal => pool
                 .get_random_beacon(cup_block.height())
                 .ok_or_else(|| format!("No random beacon found at height {}", cup_block.height())),
-            // During subnet splitting we create a dummy, unsigned random beacon, because at the
-            // height at which we are building a CUP, we won't have a random beacon.
-            CatchUpPackageType::PostSplit { .. } => create_post_split_random_beacon(cup_block),
+            // During subnet splitting and recovery we create a dummy, unsigned random beacon,
+            // because at the height at which we are building a CUP, we won't have a random
+            // beacon.
+            CatchUpPackageType::PostSplit { .. } | CatchUpPackageType::Recovery { .. } => {
+                create_synthetic_random_beacon(cup_block)
+            }
         }
     }
 }
@@ -418,22 +516,34 @@ impl CatchUpPackageMaker {
 pub(crate) fn get_catch_up_package_type(
     registry: &dyn RegistryClient,
     node_id: NodeId,
+    subnet_id: SubnetId,
     summary_block: &Block,
 ) -> Result<CatchUpPackageType, String> {
-    let Some(splitting_args) = subnet_splitting::is_split_scheduled(summary_block) else {
-        return Ok(CatchUpPackageType::Normal);
-    };
+    // Subnet splitting takes precedence over an automated recovery.
+    if let Some(splitting_args) = subnet_splitting::is_split_scheduled(summary_block) {
+        return subnet_splitting::get_post_split_subnet_assignment(
+            node_id,
+            summary_block,
+            registry,
+            splitting_args,
+        )
+        .map(|assignment| CatchUpPackageType::PostSplit {
+            new_subnet_id: assignment.new_subnet_id,
+        })
+        .map_err(|err| format!("Failed to get the new subnet assignment: {err}"));
+    }
 
-    subnet_splitting::get_post_split_subnet_assignment(
-        node_id,
-        summary_block,
-        registry,
-        splitting_args,
-    )
-    .map(|assignment| CatchUpPackageType::PostSplit {
-        new_subnet_id: assignment.new_subnet_id,
-    })
-    .map_err(|err| format!("Failed to get the new subnet assignment: {err}"))
+    // The summary block's registry version is the watermark: once the recovery CUP (which adopts
+    // `scheduled_at` as its registry version) replaces the chain, the flag is at or below the
+    // watermark and the recovery is disarmed until a fresh registry mutation.
+    match get_recovery_status(registry, subnet_id, summary_block.context.registry_version)
+        .map_err(|err| format!("Failed to get the recovery status: {err}"))?
+    {
+        RecoveryStatus::NotScheduled => Ok(CatchUpPackageType::Normal),
+        RecoveryStatus::Scheduled { scheduled_at } => {
+            Ok(CatchUpPackageType::Recovery { scheduled_at })
+        }
+    }
 }
 
 pub(crate) fn create_post_split_summary_block(
@@ -469,13 +579,55 @@ pub(crate) fn create_post_split_summary_block(
     })
 }
 
-// During subnet splitting we create a dummy, unsigned random beacon, because at the
+/// Creates the summary block of a recovery CUP: a synthetic block at the recovery height with a
+/// fake parent, whose DKG summary reuses the transcripts of the last summary block, and whose
+/// validation context adopts the registry version at which the recovery was requested — which is
+/// how the recovery triggers an upgrade if the same registry mutation also changed the subnet's
+/// replica version.
+///
+/// All inputs are derived from the last summary block and `scheduled_at`, so every node (in
+/// particular the share aggregator and the validator) recreates the exact same block.
+pub(crate) fn create_recovery_summary_block(
+    last_summary_block: &Block,
+    scheduled_at: RegistryVersion,
+    subnet_id: SubnetId,
+    registry: &dyn RegistryClient,
+) -> Result<Block, String> {
+    let recovery_dkg_summary =
+        get_recovery_dkg_summary(subnet_id, registry, last_summary_block, scheduled_at)
+            .map_err(|err| format!("Failed to get the recovery DKG summary: {err}"))?;
+
+    let recovery_height = recovery_dkg_summary.height;
+    Ok(Block {
+        version: last_summary_block.version.clone(),
+        // Fake parent
+        parent: CryptoHashOf::from(CryptoHash(vec![])),
+        payload: Payload::new(
+            crypto_hash,
+            BlockPayload::Summary(SummaryPayload {
+                dkg: recovery_dkg_summary,
+                // Recovering the chain-key state is not supported by this proof of concept
+                idkg: None,
+            }),
+        ),
+        height: recovery_height,
+        rank: Rank(0),
+        context: ValidationContext {
+            registry_version: scheduled_at,
+            certified_height: recovery_height,
+            // time needs to be strictly increasing
+            time: last_summary_block.context.time + std::time::Duration::from_millis(1),
+        },
+    })
+}
+
+// During subnet splitting and recovery we create a dummy, unsigned random beacon, because at the
 // height at which we are building a CUP, we won't have a random beacon.
-pub(crate) fn create_post_split_random_beacon(cup_block: &Block) -> Result<RandomBeacon, String> {
+pub(crate) fn create_synthetic_random_beacon(cup_block: &Block) -> Result<RandomBeacon, String> {
     let transcript = get_current_transcript_from_summary_block(cup_block, &NiDkgTag::LowThreshold)
         .ok_or_else(|| {
             format!(
-                "Couldn't find post-split transcript at height {}",
+                "Couldn't find the low threshold transcript at height {}",
                 cup_block.height(),
             )
         })?;
@@ -494,7 +646,7 @@ pub(crate) fn create_post_split_random_beacon(cup_block: &Block) -> Result<Rando
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     //! CatchUpPackageMaker unit tests
     use super::*;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
@@ -516,7 +668,7 @@ mod tests {
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, insert_initial_dkg_transcript};
-    use ic_test_utilities_types::ids::{subnet_test_id, test_platform_version};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_platform_version};
     use ic_types::{
         CryptoHashOfState, Height, NodeId, RegistryVersion,
         consensus::{
@@ -552,10 +704,46 @@ mod tests {
         );
     }
 
+    pub(crate) fn test_certification_pool(
+        node_id: NodeId,
+        pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
+    ) -> Arc<RwLock<ic_artifact_pool::certification_pool::CertificationPoolImpl>> {
+        Arc::new(RwLock::new(
+            ic_artifact_pool::certification_pool::CertificationPoolImpl::new(
+                node_id,
+                pool_config,
+                no_op_logger(),
+                ic_metrics::MetricsRegistry::new(),
+            ),
+        ))
+    }
+
+    /// A validated certification share by `node_id` at `height`, on a fixed state hash.
+    pub(crate) fn fake_certification_share(
+        height: u64,
+        node_id: NodeId,
+    ) -> ic_types::consensus::certification::CertificationMessage {
+        use ic_test_utilities_consensus::fake::FakeSigner;
+        use ic_types::consensus::certification::{
+            CertificationContent, CertificationMessage, CertificationShare,
+        };
+
+        CertificationMessage::CertificationShare(CertificationShare {
+            height: Height::from(height),
+            height_witness: ic_crypto_tree_hash::Witness::new_for_testing_with_height(),
+            signed: Signed {
+                content: CertificationContent::new(ic_types::CryptoHashOfPartialState::from(
+                    CryptoHash(vec![42]),
+                )),
+                signature: ic_types::signature::ThresholdSignatureShare::fake(node_id),
+            },
+        })
+    }
+
     fn with_cup_maker_setup<T>(run: impl FnOnce(CatchUpPackageMaker, u64, Dependencies) -> T) -> T {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 5;
-            let mut deps = DependenciesBuilder::new(pool_config, 4)
+            let mut deps = DependenciesBuilder::new(pool_config.clone(), 4)
                 .with_dkg_interval_length(dkg_interval_length)
                 .build();
 
@@ -583,6 +771,7 @@ mod tests {
                 deps.state_manager.clone(),
                 message_routing,
                 deps.registry.clone(),
+                test_certification_pool(deps.replica_config.node_id, pool_config),
                 no_op_logger(),
             );
 
@@ -608,6 +797,7 @@ mod tests {
             let cup_type = get_catch_up_package_type(
                 cup_maker.registry.as_ref(),
                 cup_maker.replica_config.node_id,
+                cup_maker.replica_config.subnet_id,
                 block,
             )
             .expect("Failed to get CUP type");
@@ -831,7 +1021,7 @@ mod tests {
                 registry,
                 state_manager,
                 ..
-            } = DependenciesBuilder::new(pool_config, 4)
+            } = DependenciesBuilder::new(pool_config.clone(), 4)
                 .with_dkg_interval_length(interval_length)
                 .without_state_manager_expectations()
                 .build();
@@ -857,12 +1047,13 @@ mod tests {
             let message_routing = Arc::new(message_routing);
 
             let cup_maker = CatchUpPackageMaker::new(
-                replica_config,
+                replica_config.clone(),
                 membership,
                 crypto,
                 state_manager.clone(),
                 message_routing,
                 registry,
+                test_certification_pool(replica_config.node_id, pool_config.clone()),
                 no_op_logger(),
             );
 
@@ -921,7 +1112,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = DependenciesBuilder::new(pool_config, 5)
+            } = DependenciesBuilder::new(pool_config.clone(), 5)
                 .with_dkg_interval_length(interval_length)
                 .build();
 
@@ -947,12 +1138,13 @@ mod tests {
             let message_routing = Arc::new(message_routing);
 
             let cup_maker = CatchUpPackageMaker::new(
-                replica_config,
+                replica_config.clone(),
                 membership,
                 crypto,
                 state_manager,
                 message_routing,
                 registry,
+                test_certification_pool(replica_config.node_id, pool_config.clone()),
                 no_op_logger(),
             );
 
@@ -974,7 +1166,7 @@ mod tests {
                 state_manager,
                 registry,
                 ..
-            } = DependenciesBuilder::new(pool_config, 5)
+            } = DependenciesBuilder::new(pool_config.clone(), 5)
                 .with_dkg_interval_length(interval_length)
                 .build();
 
@@ -985,12 +1177,13 @@ mod tests {
 
             let message_routing = Arc::new(FakeMessageRouting::new());
             let cup_maker = CatchUpPackageMaker::new(
-                replica_config,
+                replica_config.clone(),
                 membership,
                 crypto,
                 state_manager.clone(),
                 message_routing,
                 registry,
+                test_certification_pool(replica_config.node_id, pool_config.clone()),
                 no_op_logger(),
             );
 
@@ -1072,7 +1265,7 @@ mod tests {
                     replica_config,
                     ..
                 } = DependenciesBuilder::multiple_subnets(
-                    pool_config,
+                    pool_config.clone(),
                     vec![
                         (
                             INITIAL_REGISTRY_VERSION.get(),
@@ -1133,6 +1326,7 @@ mod tests {
                     state_manager,
                     message_routing,
                     registry.clone(),
+                    test_certification_pool(replica_config.node_id, pool_config.clone()),
                     log,
                 );
 
@@ -1159,9 +1353,13 @@ mod tests {
 
                 // Consistency-check between `get_catch_up_package_type`, get_cup_height` and `get_cup_block`
                 let block = proposal.content.as_ref();
-                let cup_type =
-                    get_catch_up_package_type(registry.as_ref(), replica_config.node_id, block)
-                        .expect("Failed to get CUP type");
+                let cup_type = get_catch_up_package_type(
+                    registry.as_ref(),
+                    replica_config.node_id,
+                    replica_config.subnet_id,
+                    block,
+                )
+                .expect("Failed to get CUP type");
                 assert_eq!(
                     cup_type,
                     CatchUpPackageType::PostSplit {
@@ -1307,7 +1505,7 @@ mod tests {
                     state_manager,
                     replica_config,
                     ..
-                } = DependenciesBuilder::multiple_subnets(pool_config, records)
+                } = DependenciesBuilder::multiple_subnets(pool_config.clone(), records)
                     .with_replica_config(ReplicaConfig {
                         node_id: NODE_5,
                         subnet_id: SOURCE_SUBNET_ID,
@@ -1332,6 +1530,7 @@ mod tests {
                     state_manager,
                     message_routing,
                     registry.clone(),
+                    test_certification_pool(replica_config.node_id, pool_config.clone()),
                     log,
                 );
 
@@ -1360,6 +1559,7 @@ mod tests {
                     get_catch_up_package_type(
                         registry.as_ref(),
                         replica_config.node_id,
+                        replica_config.subnet_id,
                         proposal.content.as_ref()
                     )
                     .expect_err("Expected error for node outside of both subnets")
@@ -1379,6 +1579,209 @@ mod tests {
                     None,
                     "A node outside of both subnets should not create a CUP share"
                 );
+            })
+        })
+    }
+
+    /// During an automated recovery, the CUP maker creates a CUP share at a height skipping the
+    /// rest of the current DKG interval plus one entire interval, referencing the state right
+    /// above the recovery target (the highest height with `f + 1` certification shares on the
+    /// same hash) and adopting the registry version at which the recovery flag was set.
+    #[test]
+    fn test_create_recovery_cup_share() {
+        with_test_replica_logger(|log| {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let interval_length = 5;
+                let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let subnet_record = || {
+                    SubnetRecordBuilder::from(&committee).with_dkg_interval_length(interval_length)
+                };
+
+                let Dependencies {
+                    mut pool,
+                    membership,
+                    registry,
+                    registry_data_provider,
+                    crypto,
+                    state_manager,
+                    replica_config,
+                    ..
+                } = DependenciesBuilder::single_subnet(
+                    pool_config.clone(),
+                    subnet_test_id(0),
+                    vec![(1, subnet_record().build())],
+                )
+                .build();
+                let subnet_id = replica_config.subnet_id;
+
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(fake_state_hash.clone()));
+
+                let message_routing = FakeMessageRouting::new();
+                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+                let message_routing = Arc::new(message_routing);
+
+                let certification_pool =
+                    test_certification_pool(replica_config.node_id, pool_config.clone());
+
+                let cup_maker = CatchUpPackageMaker::new(
+                    replica_config.clone(),
+                    membership,
+                    crypto,
+                    state_manager,
+                    message_routing,
+                    registry.clone(),
+                    certification_pool.clone(),
+                    log,
+                );
+
+                // Advance a few rounds into the first DKG interval (whose summary is the genesis
+                // block at height 0).
+                pool.advance_round_normal_operation_n(3);
+
+                // No recovery scheduled, and a CUP already exists at the last summary height:
+                // no share is created.
+                assert_eq!(cup_maker.on_state_change(&PoolReader::new(&pool)), None);
+
+                // Set the recovery flag at a fresh registry version.
+                ic_test_utilities_registry::add_subnet_record(
+                    &registry_data_provider,
+                    /*version=*/ 2,
+                    subnet_id,
+                    subnet_record().with_is_in_recovery_mode(true).build(),
+                );
+                registry.reload();
+
+                // A recovery is scheduled, but there is no state supported by f + 1 (= 2)
+                // certification shares yet: no share is created.
+                assert_eq!(cup_maker.on_state_change(&PoolReader::new(&pool)), None);
+
+                // Insert f + 1 validated certification shares on the same hash at height 2.
+                for node in [1, 2] {
+                    certification_pool
+                        .read()
+                        .unwrap()
+                        .validated
+                        .insert(fake_certification_share(2, node_test_id(node)));
+                }
+
+                let share = cup_maker
+                    .on_state_change(&PoolReader::new(&pool))
+                    .expect("Should create a recovery CUP share");
+                assert!(share.check_integrity());
+
+                // The CUP height skips the rest of the current interval plus one entire interval.
+                let expected_cup_height = Height::from(2 * (interval_length + 1));
+                assert_eq!(share.height(), expected_cup_height);
+
+                // The share references the same synthetic block that the aggregator and the
+                // validator rebuild, which adopts the registry version at which the recovery was
+                // scheduled.
+                let last_summary_block =
+                    PoolReader::new(&pool).get_highest_finalized_summary_block();
+                let recovery_block = create_recovery_summary_block(
+                    &last_summary_block,
+                    RegistryVersion::from(2),
+                    subnet_id,
+                    registry.as_ref(),
+                )
+                .expect("Should be able to create a recovery summary block");
+                assert_eq!(recovery_block.height(), expected_cup_height);
+                assert_eq!(
+                    recovery_block.context.registry_version,
+                    RegistryVersion::from(2)
+                );
+                assert_eq!(
+                    share.content.block,
+                    ic_types::crypto::crypto_hash(&recovery_block)
+                );
+                assert_eq!(share.content.state_hash, fake_state_hash);
+
+                // Once the share is in the pool, no new share is created.
+                pool.insert_validated(share);
+                assert_eq!(cup_maker.on_state_change(&PoolReader::new(&pool)), None);
+            })
+        })
+    }
+
+    /// A node which has no checkpoint right above the recovery target (e.g. because it delivered
+    /// batches beyond the target before observing the recovery) does not create a recovery CUP
+    /// share.
+    #[test]
+    fn test_no_recovery_cup_share_without_checkpoint() {
+        with_test_replica_logger(|log| {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let interval_length = 5;
+                let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let subnet_record = || {
+                    SubnetRecordBuilder::from(&committee).with_dkg_interval_length(interval_length)
+                };
+
+                let Dependencies {
+                    mut pool,
+                    membership,
+                    registry,
+                    registry_data_provider,
+                    crypto,
+                    state_manager,
+                    replica_config,
+                    ..
+                } = DependenciesBuilder::single_subnet(
+                    pool_config.clone(),
+                    subnet_test_id(0),
+                    vec![(1, subnet_record().build())],
+                )
+                .build();
+                let subnet_id = replica_config.subnet_id;
+
+                // There is no checkpoint right above the recovery target on this node.
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Err(StateHashError::Permanent(StateNotFullyCertified(
+                        Height::from(3),
+                    ))));
+
+                let message_routing = FakeMessageRouting::new();
+                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+                let message_routing = Arc::new(message_routing);
+
+                let certification_pool =
+                    test_certification_pool(replica_config.node_id, pool_config.clone());
+
+                let cup_maker = CatchUpPackageMaker::new(
+                    replica_config,
+                    membership,
+                    crypto,
+                    state_manager,
+                    message_routing,
+                    registry.clone(),
+                    certification_pool.clone(),
+                    log,
+                );
+
+                pool.advance_round_normal_operation_n(3);
+
+                ic_test_utilities_registry::add_subnet_record(
+                    &registry_data_provider,
+                    /*version=*/ 2,
+                    subnet_id,
+                    subnet_record().with_is_in_recovery_mode(true).build(),
+                );
+                registry.reload();
+
+                for node in [1, 2] {
+                    certification_pool
+                        .read()
+                        .unwrap()
+                        .validated
+                        .insert(fake_certification_share(2, node_test_id(node)));
+                }
+
+                assert_eq!(cup_maker.on_state_change(&PoolReader::new(&pool)), None);
             })
         })
     }

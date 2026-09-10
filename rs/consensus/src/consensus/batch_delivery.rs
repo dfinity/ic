@@ -66,6 +66,7 @@ pub fn deliver_batches_for_ic_replay(
         /*maybe_node_id=*/ None,
         subnet_id,
         max_batch_height_to_deliver,
+        /*deliver_while_halting=*/ false,
         /*result_processor=*/ |_, _, _| {},
     )
 }
@@ -83,6 +84,14 @@ pub(crate) fn deliver_batches_for_finalizer(
     log: &ReplicaLogger,
     node_id: NodeId,
     subnet_id: SubnetId,
+    // If set to `None`, we will deliver all batches until the finalized height.
+    // If set to `Some(h)`, we will deliver all batches up to the height `min(h, finalized_height)`.
+    // Only used during automated recoveries, to cap the delivery at the recovery target.
+    max_batch_height_to_deliver: Option<Height>,
+    // During an automated recovery, batches up to the recovery target must still be delivered
+    // even though the subnet is `Halting`/`Halted` (the recovery itself halts the subnet). This
+    // is particularly important for the replay of already-finalized heights after a restart.
+    deliver_while_halting: bool,
     result_processor: impl FnMut(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
 ) -> Result<Height, MessageRoutingError> {
     deliver_batches(
@@ -93,7 +102,8 @@ pub(crate) fn deliver_batches_for_finalizer(
         log,
         Some(node_id),
         subnet_id,
-        /*max_batch_height_to_deliver=*/ None,
+        max_batch_height_to_deliver,
+        deliver_while_halting,
         result_processor,
     )
 }
@@ -110,6 +120,7 @@ fn deliver_batches(
     maybe_node_id: Option<NodeId>,
     subnet_id: SubnetId,
     max_batch_height_to_deliver: Option<Height>,
+    deliver_while_halting: bool,
     mut result_processor: impl FnMut(&Result<(), MessageRoutingError>, BlockStats, BatchStats),
 ) -> Result<Height, MessageRoutingError> {
     let finalized_height = pool.get_finalized_height();
@@ -174,7 +185,7 @@ fn deliver_batches(
         };
         let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
 
-        if !block.payload.is_summary() {
+        if !block.payload.is_summary() && !deliver_while_halting {
             // When delivering a data block, we must check if the subnet is halted.
             match status::get_status(
                 height,
@@ -949,6 +960,8 @@ mod tests {
                 &no_op_logger(),
                 replica_config.node_id,
                 replica_config.subnet_id,
+                /*max_batch_height_to_deliver=*/ None,
+                /*deliver_while_halting=*/ false,
                 |_, _, _| {},
             );
 

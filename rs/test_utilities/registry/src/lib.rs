@@ -319,6 +319,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         is_halted: false,
         halt_at_cup_height: false,
         cooling_down: false,
+        is_in_recovery_mode: false,
         features: Some(Default::default()),
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
@@ -400,6 +401,11 @@ impl SubnetRecordBuilder {
 
     pub fn with_halt_at_cup_height(mut self, halt_at_cup_height: bool) -> Self {
         self.record.halt_at_cup_height = halt_at_cup_height;
+        self
+    }
+
+    pub fn with_is_in_recovery_mode(mut self, is_in_recovery_mode: bool) -> Self {
+        self.record.is_in_recovery_mode = is_in_recovery_mode;
         self
     }
 
