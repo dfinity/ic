@@ -16,11 +16,6 @@ use ic_types::{
 /// upgrade, a scheduled subnet split, and the subnet record's `halt_at_cup_height`. Each of them
 /// takes effect from a summary height on, so a subnet halted this way stops with a final
 /// checkpoint at a CUP height.
-///
-/// The subnet record's other halt, `is_halted`, is not one of these and never produces a
-/// [`Status::Halted`]: it stops a subnet wherever it happens to be, and
-/// `ConsensusImpl::on_state_change` acts on it before reaching any of the callers of
-/// [`get_status`].
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) enum Status {
     /// The Consensus is running normally.

@@ -30,10 +30,7 @@ const RANKS_TO_RECORD: [&str; 6] = ["0", "1", "2", "3", "4", "5"];
 /// [`Status`], plus `unknown` for a status that could not be computed at all.
 ///
 /// [`Status::Halted`] is reported as `halted_at_cup_height` rather than
-/// `halted`: it is the halt that ends a subnet on a CUP, which is the only halt
-/// the delivery path can see. The subnet record's `is_halted` stops a subnet
-/// wherever it happens to be, above the finalizer, and reads as
-/// `halted_at_cup_height=0` here like a subnet that is not halting at all.
+/// `halted`, after the halt it stands for: the one that ends a subnet on a CUP.
 const STATUS_LABEL: &str = "status";
 const STATUS_RUNNING: &str = "running";
 const STATUS_HALTING: &str = "halting";
