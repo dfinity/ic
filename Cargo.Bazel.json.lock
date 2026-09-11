@@ -3,7 +3,7 @@
     "ic-gateway 0.2.0",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "81ab82372176069cff7eeebc03182116ca598a441712a1218fe3aa498bbf3863",
+  "checksum": "f6e0b6c10f125bca65ce44c9f33781356060bd989d410e72948246b19dc06667",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -861,8 +861,6 @@
           "compress-brotli",
           "compress-gzip",
           "compress-zstd",
-          "cookies",
-          "default",
           "http2",
           "macros",
           "unicode"
@@ -911,10 +909,6 @@
           {
             "id": "cfg-if 1.0.0",
             "target": "cfg_if"
-          },
-          {
-            "id": "cookie 0.16.2",
-            "target": "cookie"
           },
           {
             "id": "encoding_rs 0.8.32",
@@ -13224,66 +13218,6 @@
       ],
       "version": "0.6.0"
     },
-    "cookie 0.16.2": {
-      "build_script_attrs": {
-        "deps": [
-          {
-            "id": "version_check 0.9.4",
-            "target": "version_check"
-          }
-        ]
-      },
-      "common_attrs": {
-        "crate_features": [
-          "percent-encode",
-          "percent-encoding"
-        ],
-        "deps": [
-          {
-            "id": "percent-encoding 2.3.1",
-            "target": "percent_encoding"
-          },
-          {
-            "id": "time 0.3.47",
-            "target": "time"
-          }
-        ],
-        "edition": "2018",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "cookie",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "cookie",
-      "package_url": "https://github.com/SergioBenitez/cookie-rs",
-      "repository": {
-        "Http": {
-          "sha256": "e859cd57d0710d9e06c381b550c06e76992472a8c6d527aecd2fc673dcc231fb",
-          "url": "https://static.crates.io/crates/cookie/0.16.2/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "cookie",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.16.2"
-    },
     "core-foundation 0.10.0": {
       "common_attrs": {
         "crate_features": [
@@ -14521,66 +14455,6 @@
       ],
       "version": "1.2.0"
     },
-    "crossbeam 0.8.4": {
-      "common_attrs": {
-        "crate_features": [
-          "alloc",
-          "crossbeam-channel",
-          "crossbeam-deque",
-          "crossbeam-epoch",
-          "crossbeam-queue",
-          "default",
-          "std"
-        ],
-        "deps": [
-          {
-            "id": "crossbeam-channel 0.5.15",
-            "target": "crossbeam_channel"
-          },
-          {
-            "id": "crossbeam-deque 0.8.5",
-            "target": "crossbeam_deque"
-          },
-          {
-            "id": "crossbeam-epoch 0.9.18",
-            "target": "crossbeam_epoch"
-          },
-          {
-            "id": "crossbeam-queue 0.3.11",
-            "target": "crossbeam_queue"
-          },
-          {
-            "id": "crossbeam-utils 0.8.21",
-            "target": "crossbeam_utils"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "crossbeam",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "crossbeam",
-      "package_url": "https://github.com/crossbeam-rs/crossbeam",
-      "repository": {
-        "Http": {
-          "sha256": "1137cd7e7fc0fb5d3c5a8678be38ec56e819125d8d7907411fe24ccb943faca8",
-          "url": "https://static.crates.io/crates/crossbeam/0.8.4/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "crossbeam",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.8.4"
-    },
     "crossbeam-channel 0.5.15": {
       "common_attrs": {
         "crate_features": [
@@ -14702,45 +14576,6 @@
         }
       ],
       "version": "0.9.18"
-    },
-    "crossbeam-queue 0.3.11": {
-      "common_attrs": {
-        "crate_features": [
-          "alloc",
-          "std"
-        ],
-        "deps": [
-          {
-            "id": "crossbeam-utils 0.8.21",
-            "target": "crossbeam_utils"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "crossbeam_queue",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "crossbeam-queue",
-      "package_url": "https://github.com/crossbeam-rs/crossbeam",
-      "repository": {
-        "Http": {
-          "sha256": "df0346b5d5e76ac2fe4e327c5fd1118d6be7c51dfb18f9b7922923f287471e35",
-          "url": "https://static.crates.io/crates/crossbeam-queue/0.3.11/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "crossbeam_queue",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.3.11"
     },
     "crossbeam-utils 0.8.21": {
       "build_script_attrs": {},
@@ -17711,12 +17546,12 @@
             "target": "criterion"
           },
           {
-            "id": "crossbeam 0.8.4",
-            "target": "crossbeam"
-          },
-          {
             "id": "crossbeam-channel 0.5.15",
             "target": "crossbeam_channel"
+          },
+          {
+            "id": "crossbeam-utils 0.8.21",
+            "target": "crossbeam_utils"
           },
           {
             "id": "csv 1.2.2",
@@ -18102,10 +17937,6 @@
           {
             "id": "itertools 0.12.0",
             "target": "itertools"
-          },
-          {
-            "id": "json-patch 0.2.7",
-            "target": "json_patch"
           },
           {
             "id": "json5 0.4.1",
@@ -22135,45 +21966,6 @@
       ],
       "version": "1.1.5"
     },
-    "float-cmp 0.9.0": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "num-traits",
-          "ratio"
-        ],
-        "deps": [
-          {
-            "id": "num-traits 0.2.19",
-            "target": "num_traits"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "float_cmp",
-      "license": "MIT",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "MIT"
-      ],
-      "name": "float-cmp",
-      "package_url": "https://github.com/mikedilger/float-cmp",
-      "repository": {
-        "Http": {
-          "sha256": "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4",
-          "url": "https://static.crates.io/crates/float-cmp/0.9.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "float_cmp",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.9.0"
-    },
     "fluent-uri 0.4.1": {
       "common_attrs": {
         "crate_features": [
@@ -23508,45 +23300,6 @@
         }
       ],
       "version": "0.4.0"
-    },
-    "getopts 0.2.24": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "unicode"
-        ],
-        "deps": [
-          {
-            "id": "unicode-width 0.2.0",
-            "target": "unicode_width"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "getopts",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "getopts",
-      "package_url": "https://github.com/rust-lang/getopts",
-      "repository": {
-        "Http": {
-          "sha256": "cfe4fbac503b8d1f88e6676011885f34b7174f46e59956bba534ba83abded4df",
-          "url": "https://static.crates.io/crates/getopts/0.2.24/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "getopts",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.2.24"
     },
     "getrandom 0.2.10": {
       "additive_build_file_content": "load(\"@rules_rust//rust:defs.bzl\", \"rust_library\")\n\nrust_library(\n    name = \"getrandom_no_wasm_bindgen\",\n    srcs = glob(\n        allow_empty = True,\n        include = [\"**/*.rs\"],\n    ),\n    compile_data = glob(\n        allow_empty = True,\n        include = [\"**\"],\n        exclude = [\n            \"**/* *\",\n            \".tmp_git_root/**/*\",\n            \"BUILD\",\n            \"BUILD.bazel\",\n            \"WORKSPACE\",\n            \"WORKSPACE.bazel\",\n        ],\n    ),\n    crate_features = [\"custom\", \"std\"],\n    crate_name = \"getrandom\",\n    crate_root = \"src/lib.rs\",\n    deps = [\n        \"@crate_index__cfg-if-1.0.0//:cfg_if\",\n    ] + select({\n        \"@rules_rust//rust/platform:aarch64-apple-darwin\": [\"@crate_index__libc-0.2.186//:libc\"],\n        \"@rules_rust//rust/platform:aarch64-unknown-linux-gnu\": [\"@crate_index__libc-0.2.186//:libc\"],\n        \"@rules_rust//rust/platform:wasm32-unknown-unknown\": [],\n        \"@rules_rust//rust/platform:x86_64-apple-darwin\": [\"@crate_index__libc-0.2.186//:libc\"],\n        \"@rules_rust//rust/platform:x86_64-unknown-linux-gnu\": [\"@crate_index__libc-0.2.186//:libc\"],\n        \"//conditions:default\": [],\n    }),\n    edition = \"2018\",\n    rustc_env_files = [\":cargo_toml_env_vars\"],\n    rustc_flags = [\"--cap-lints=allow\"],\n    tags = [\"cargo-bazel\", \"crate-name=getrandom\", \"manual\", \"noclippy\", \"norustfmt\"],\n    target_compatible_with = select({\n        \"@rules_rust//rust/platform:aarch64-apple-darwin\": [],\n        \"@rules_rust//rust/platform:aarch64-unknown-linux-gnu\": [],\n        \"@rules_rust//rust/platform:wasm32-unknown-unknown\": [],\n        \"@rules_rust//rust/platform:x86_64-apple-darwin\": [],\n        \"@rules_rust//rust/platform:x86_64-unknown-linux-gnu\": [],\n        \"//conditions:default\": [\"@platforms//:incompatible\"],\n    }),\n    version = \"0.2.10\",\n    visibility = [\"//visibility:public\"],\n)\n",
@@ -32917,54 +32670,6 @@
       ],
       "version": "0.3.103"
     },
-    "json-patch 0.2.7": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "diff",
-          "treediff"
-        ],
-        "deps": [
-          {
-            "id": "serde 1.0.228",
-            "target": "serde"
-          },
-          {
-            "id": "serde_json 1.0.145",
-            "target": "serde_json"
-          },
-          {
-            "id": "treediff 3.0.2",
-            "target": "treediff"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "json_patch",
-      "license": "MIT/Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "json-patch",
-      "package_url": "https://github.com/idubrov/json-patch",
-      "repository": {
-        "Http": {
-          "sha256": "eb3fa5a61630976fc4c353c70297f2e93f1930e3ccee574d59d618ccbd5154ce",
-          "url": "https://static.crates.io/crates/json-patch/0.2.7/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "json_patch",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.2.7"
-    },
     "json5 0.4.1": {
       "common_attrs": {
         "deps": [
@@ -38523,34 +38228,6 @@
       ],
       "version": "0.3.0"
     },
-    "normalize-line-endings 0.3.0": {
-      "common_attrs": {
-        "edition": "2015"
-      },
-      "library_target_name": "normalize_line_endings",
-      "license": "Apache-2.0",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "name": "normalize-line-endings",
-      "package_url": "https://github.com/derekdreery/normalize-line-endings",
-      "repository": {
-        "Http": {
-          "sha256": "61807f77802ff30975e01f4f071c8ba10c022052f98b3294119f3e615d13e5be",
-          "url": "https://static.crates.io/crates/normalize-line-endings/0.3.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "normalize_line_endings",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.3.0"
-    },
     "ntapi 0.4.1": {
       "build_script_attrs": {},
       "common_attrs": {
@@ -43567,12 +43244,7 @@
     "predicates 3.1.2": {
       "common_attrs": {
         "crate_features": [
-          "color",
-          "default",
-          "diff",
-          "float-cmp",
-          "normalize-line-endings",
-          "regex"
+          "diff"
         ],
         "deps": [
           {
@@ -43584,20 +43256,8 @@
             "target": "difflib"
           },
           {
-            "id": "float-cmp 0.9.0",
-            "target": "float_cmp"
-          },
-          {
-            "id": "normalize-line-endings 0.3.0",
-            "target": "normalize_line_endings"
-          },
-          {
             "id": "predicates-core 1.0.6",
             "target": "predicates_core"
-          },
-          {
-            "id": "regex 1.13.1",
-            "target": "regex"
           }
         ],
         "edition": "2021"
@@ -51158,12 +50818,6 @@
     },
     "scraper 0.24.0": {
       "common_attrs": {
-        "crate_features": [
-          "default",
-          "errors",
-          "getopts",
-          "main"
-        ],
         "deps": [
           {
             "id": "cssparser 0.35.0",
@@ -51172,10 +50826,6 @@
           {
             "id": "ego-tree 0.10.0",
             "target": "ego_tree"
-          },
-          {
-            "id": "getopts 0.2.24",
-            "target": "getopts"
           },
           {
             "id": "html5ever 0.35.0",
@@ -61425,44 +61075,6 @@
       ],
       "version": "0.3.23"
     },
-    "treediff 3.0.2": {
-      "common_attrs": {
-        "crate_features": [
-          "serde_json",
-          "with-serde-json"
-        ],
-        "deps": [
-          {
-            "id": "serde_json 1.0.145",
-            "target": "serde_json"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "treediff",
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "treediff",
-      "package_url": "https://github.com/Byron/treediff-rs",
-      "repository": {
-        "Http": {
-          "sha256": "761e8d5ad7ce14bb82b7e61ccc0ca961005a275a060b9644a2431aa11553c2ff",
-          "url": "https://static.crates.io/crates/treediff/3.0.2/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "treediff",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "3.0.2"
-    },
     "triomphe 0.1.15": {
       "common_attrs": {
         "crate_features": [
@@ -70771,8 +70383,8 @@
     "convert_case 0.6.0",
     "crc32fast 1.3.2",
     "criterion 0.5.1",
-    "crossbeam 0.8.4",
     "crossbeam-channel 0.5.15",
+    "crossbeam-utils 0.8.21",
     "csv 1.2.2",
     "ctrlc 3.4.5",
     "curve25519-dalek 4.1.3",
@@ -70873,7 +70485,6 @@
     "ipnet 2.10.1",
     "isocountry 0.3.2",
     "itertools 0.12.0",
-    "json-patch 0.2.7",
     "json5 0.4.1",
     "jsonrpc 0.20.1",
     "k256 0.13.4",
