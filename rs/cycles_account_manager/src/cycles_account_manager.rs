@@ -890,12 +890,14 @@ impl CyclesAccountManager {
     /// it ends up with exactly the prepayment that the cost schedule in effect at
     /// response time requires.
     ///
-    /// The withdrawal is performed before the refund so that a failing withdrawal
-    /// leaves the canister state unchanged, as the callers expect.
+    /// A failing adjustment must leave the canister state unchanged: neither the
+    /// balance nor the consumed cycles metrics may move. The withdrawal is therefore
+    /// performed before the refund, which cannot fail.
     ///
     /// Returns the prepayment matching the cycles required for executing the response
     /// in the given Wasm execution mode, or a `CanisterOutOfCyclesError` if the
-    /// canister's balance does not cover the additional prepayment.
+    /// canister's balance does not cover the additional prepayment, in which case
+    /// the canister state is left unchanged.
     pub fn adjust_prepayment_for_response_execution(
         &self,
         system_state: &mut SystemState,

@@ -555,19 +555,9 @@ fn response_execution_cycles_match_response_execution_setting() {
 }
 
 /// If the canister's balance does not cover the cycles missing from the
-/// prepayment, then the adjustment fails and leaves the canister state unchanged.
-///
-/// Both of its call sites in `rs/execution_environment/src/execution/response.rs`
-/// rely on that, since both go on to settle the *unadjusted* prepayment: the
-/// `ResponseHelper` method wrapping the adjustment records the adjusted prepayment
-/// only on success, so what a failure leaves to be settled is the prepayment
-/// recorded in the callback. `execute_response` rejects the response without
-/// executing the callback, settling that prepayment in
-/// `settle_prepayment_for_unexecuted_response`; `ResponseHelper::resume` turns the
-/// failure of replaying the adjustment on the clean canister state into a Wasm
-/// execution error, which ends up settling it in `refund_unused_execution_cycles`.
-/// Either way, an excess that a failed adjustment had already refunded would be
-/// refunded a second time.
+/// prepayment, then the adjustment fails and leaves the canister state unchanged:
+/// neither the balance nor the consumed cycles metrics move. That is a requirement
+/// of `adjust_prepayment_for_response_execution` which its callers rely on.
 ///
 /// In the second setting below the prepayment falls short of the requirement in
 /// the real part while exceeding it in the nominal one, so that the excess to be
