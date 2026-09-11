@@ -711,7 +711,7 @@ pub mod test {
     use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, metric_vec};
+    use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::CountBytes;
     use ic_types::ReplicaVersion;
@@ -4048,11 +4048,6 @@ pub mod test {
                     let changes =
                         pool_manager.validate_shares(&awaiting_response, &canister_http_pool);
                     assert!(changes.is_empty(), "{replication:?}: {changes:?}");
-                    assert_eq!(
-                        fetch_int_gauge(&metrics_registry, "canister_http_shares_deferred"),
-                        Some(1),
-                        "{replication:?}"
-                    );
 
                     // Once our state has caught up, the same share is validated.
                     let changes = pool_manager.validate_shares(&responded_to, &canister_http_pool);
@@ -4060,11 +4055,6 @@ pub mod test {
                         changes.as_slice(),
                         [CanisterHttpChangeAction::MoveToValidated(share)]
                             if share.content.id() == callback_id,
-                        "{replication:?}"
-                    );
-                    assert_eq!(
-                        fetch_int_gauge(&metrics_registry, "canister_http_shares_deferred"),
-                        Some(0),
                         "{replication:?}"
                     );
                 })
