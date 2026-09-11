@@ -1177,7 +1177,10 @@ lets Phase 2 accept ETH at the same address; only a sender that hard-codes the
 **Transaction 3 — later sweeps need no authorization (type `0x02`).** The
 designator persists, so a subsequent deposit is swept by an ordinary EIP-1559
 transaction — same `to = SweeperContract`, same `sweepErc20Batch` data, just no
-authorization list — cheaper (no tuple cost). And since sweeping is
+authorization list — cheaper (no tuple cost). The minter only sends such a sweep
+once it reads the designator from the chain (row 2 of
+[Changing the sweeper delegate](#changing-the-sweeper-delegate-delegate-rotation));
+until then every sweep carries a tuple the protocol skips at full price. And since sweeping is
 permissionless, *anyone* may sweep a delegated EOA (through the batch entry
 point or by calling `sweepErc20` on `Deposit` directly), only donating gas: the
 attested account fixes where the deposit is credited and funds only move
@@ -1198,8 +1201,15 @@ against 98'075 for a batch of one. Batching pays once for the 21'000 base, the c
 `Token` and the first (zero→nonzero) write to `MainAddress`' token balance slot,
 while each extra address adds only its 25'000 authorization, a warm inner call
 and a transfer that earns the slot-clearing refund. Operational notes: a
-tuple skipped by the protocol (e.g. stale nonce) makes the corresponding inner
-call hit a code-less address, which reverts the *whole* batch — atomic, funds
+tuple skipped by the protocol (stale nonce) covers two different situations. Most
+often the address is *already delegated*, to the previous delegate (the rotation
+race of
+[Changing the sweeper delegate](#changing-the-sweeper-delegate-delegate-rotation)):
+the inner call runs the old code, which is harmless for `sweepErc20` — every
+delegate version implements it identically — and a revert for `sweepEth`, which
+an older one may not have at all. Only a *cleared* delegation, or a delegation
+read the minter got wrong, leaves the inner call hitting a code-less address,
+which reverts as well. Either revert takes the *whole* batch with it — atomic, funds
 safe, gas wasted; the minter does not retry a reverted sweep but drops its
 deposits from the queue, and they are picked up again once their pair is
 re-armed (step 5); mixed batches are fine (tuples only for
