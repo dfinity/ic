@@ -9,7 +9,8 @@
 
 use assert_matches::assert_matches;
 use ic_cketh_minter::balance_scan::batcher::{
-    BalanceOfCall, decode_balance_batch, encode_balance_batch,
+    BalanceOfCall, MAX_CALLS_PER_BATCH, decode_balance_batch, encode_balance_batch,
+    encode_eth_balance_batch,
 };
 use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::DepositStatus;
@@ -124,6 +125,118 @@ fn should_read_many_balances_in_a_single_call() {
 
     let expected: Vec<Erc20Value> = (0..N)
         .map(|i| Erc20Value::from((i as u128 + 1) * 1_000))
+        .collect();
+    assert_eq!(balances, expected);
+}
+
+#[test]
+fn should_scan_a_full_batch_in_a_single_call() {
+    let anvil = Anvil::start();
+    let dev = address_from_hex(DEV_ACCOUNT);
+    let token = deploy_mock_erc20(&anvil, &dev);
+
+    let batch_of = |num_calls: usize| -> Vec<BalanceOfCall> {
+        (0..num_calls as u64)
+            .map(|index| BalanceOfCall {
+                token,
+                holder: DepositAddress::new(holder_at(index)),
+            })
+            .collect()
+    };
+
+    const LAST_HOLDER_BALANCE: u128 = 123_456;
+    let last_holder = holder_at((MAX_CALLS_PER_BATCH - 1) as u64);
+    anvil.fund(&token, &dev, &last_holder, LAST_HOLDER_BALANCE);
+
+    let full_batch = batch_of(MAX_CALLS_PER_BATCH);
+    let out = anvil
+        .eth_call_create(&dev, &encode_balance_batch(&full_batch))
+        .expect(
+            "a batch of MAX_CALLS_PER_BATCH calls must stay within the EIP-3860 initcode limit",
+        );
+    let mut expected_balances = vec![Erc20Value::ZERO; MAX_CALLS_PER_BATCH];
+    *expected_balances.last_mut().unwrap() = Erc20Value::from(LAST_HOLDER_BALANCE);
+    assert_eq!(
+        decode_balance_batch(&out, full_batch.len()).expect("decode failed"),
+        expected_balances
+    );
+
+    let one_call_too_many = batch_of(MAX_CALLS_PER_BATCH + 1);
+    let error = anvil
+        .eth_call_create(&dev, &encode_balance_batch(&one_call_too_many))
+        .expect_err("a batch above MAX_CALLS_PER_BATCH must exceed the EIP-3860 initcode limit");
+    assert!(
+        error.to_lowercase().contains("initcode"),
+        "expected an EIP-3860 initcode limit error, got: {error}"
+    );
+}
+
+#[test]
+fn should_read_eth_balances_across_holders() {
+    let anvil = Anvil::start();
+    let dev = address_from_hex(DEV_ACCOUNT);
+
+    let h1 = Address::new([0x11; 20]);
+    let h2 = Address::new([0x22; 20]);
+    let never_funded = Address::new([0x33; 20]);
+
+    anvil.send_eth(&dev, &h1, 5_000_000_000_000_000);
+    anvil.send_eth(&dev, &h2, 1_234_567_890_123_456_789);
+
+    let holders = vec![
+        DepositAddress::new(h1),
+        DepositAddress::new(h2),
+        DepositAddress::new(never_funded),
+    ];
+    let out = anvil
+        .eth_call_create(&dev, &encode_eth_balance_batch(&holders))
+        .expect("the ETH balance batch must not revert");
+    let balances = decode_balance_batch(&out, holders.len()).expect("decode failed");
+
+    assert_eq!(
+        balances,
+        vec![
+            Erc20Value::new(5_000_000_000_000_000),
+            Erc20Value::new(1_234_567_890_123_456_789),
+            Erc20Value::new(0),
+        ]
+    );
+
+    // The batcher must agree with anvil's own view of every balance.
+    for holder in &holders {
+        let expected = anvil.balance(holder.as_address());
+        let single = anvil
+            .eth_call_create(
+                &dev,
+                &encode_eth_balance_batch(std::slice::from_ref(holder)),
+            )
+            .expect("single-holder batch reverted");
+        assert_eq!(
+            decode_balance_batch(&single, 1).unwrap()[0],
+            Erc20Value::new(expected)
+        );
+    }
+}
+
+#[test]
+fn should_read_many_eth_balances_in_a_single_call() {
+    let anvil = Anvil::start();
+    let dev = address_from_hex(DEV_ACCOUNT);
+
+    const N: u64 = 32;
+    let holders: Vec<Address> = (0..N).map(holder_at).collect();
+    for (i, holder) in holders.iter().enumerate() {
+        anvil.send_eth(&dev, holder, (i as u128 + 1) * 1_000);
+    }
+
+    let batch: Vec<DepositAddress> = holders.iter().copied().map(DepositAddress::new).collect();
+    let out = anvil
+        .eth_call_create(&dev, &encode_eth_balance_batch(&batch))
+        .expect("the ETH balance batch must not revert");
+    let balances = decode_balance_batch(&out, batch.len()).expect("decode failed");
+
+    let expected: Vec<Erc20Value> = (0..N)
+        .map(|i| Erc20Value::new((i as u128 + 1) * 1_000))
         .collect();
     assert_eq!(balances, expected);
 }

@@ -12,6 +12,7 @@ use ic_management_canister_types_private::{
 use ic_registry_resource_limits::ResourceLimits;
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
+use ic_test_utilities_metrics::fetch_histogram_stats;
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
@@ -646,6 +647,64 @@ fn queries_to_frozen_canisters_are_rejected() {
     // Canister B is not frozen, so queries succeed.
     let result = test.non_replicated_query(canister_b, "query", wasm().reply().build());
     assert!(result.is_ok());
+}
+
+/// Tests that the query handler rejects all query calls with
+/// `ErrorCode::SubnetCoolingDown` while the subnet is cooling down, but still
+/// executes system queries (i.e. the `transform` functions of HTTP outcalls).
+#[test]
+fn query_calls_to_cooling_down_subnet_are_rejected() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let fetch_canister_logs = FetchCanisterLogsRequest::new(canister).encode();
+
+    // Sanity check: query calls are executed while the subnet is not cooling down.
+    test.non_replicated_query(canister, "query", wasm().reply().build())
+        .unwrap();
+    test.non_replicated_query(
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        fetch_canister_logs.clone(),
+    )
+    .unwrap();
+    test.system_query(canister, "query", wasm().reply().build())
+        .unwrap();
+
+    test.set_cooling_down(true);
+
+    let queries_handled = |test: &ExecutionTest| {
+        fetch_histogram_stats(test.metrics_registry(), "execution_query_duration_seconds")
+            .unwrap()
+            .count
+    };
+    let queries_handled_before = queries_handled(&test);
+
+    // Both canister-addressed and subnet-addressed query calls are now rejected.
+    let expected_err = UserError::new(
+        ErrorCode::SubnetCoolingDown,
+        format!("Subnet {own_subnet_id} is cooling down and does not accept query calls"),
+    );
+    assert_eq!(
+        Err(expected_err.clone()),
+        test.non_replicated_query(canister, "query", wasm().reply().build())
+    );
+    assert_eq!(
+        Err(expected_err),
+        test.non_replicated_query(
+            CanisterId::ic_00(),
+            "fetch_canister_logs",
+            fetch_canister_logs
+        )
+    );
+
+    // But system queries, i.e. the `transform` functions of HTTP outcalls, are
+    // still executed.
+    test.system_query(canister, "query", wasm().reply().build())
+        .unwrap();
+
+    // All 3 queries above were observed by the query handler metrics.
+    assert_eq!(queries_handled_before + 3, queries_handled(&test));
 }
 
 const COMPOSITE_QUERY_WAT: &str = r#"

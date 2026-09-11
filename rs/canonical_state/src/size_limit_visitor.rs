@@ -27,8 +27,8 @@ impl Matcher {
 }
 
 /// Visitor that limits the byte size of blob leaves matching a given pattern by
-/// skipping all leaves after at least one leaf was visited and the size limit
-/// has been reached.
+/// skipping all leaves after the size limit has been reached and, optionally,
+/// at least one leaf was visited (iff `include_one` is set).
 ///
 /// Skips whole leaves (label and value), by caching the label and invoking the
 /// wrapped visitor on both iff the inclusion of the blob size would not exceed
@@ -51,7 +51,7 @@ pub struct SizeLimitVisitor<V> {
     /// Accumulator of visited leaf sizes.
     size: usize,
     /// If set, one matching node must be included when present, even if
-    /// `size_limit` is exceeded.
+    /// `size_limit` is exceeded. Cleared after one node has been included.
     include_one: bool,
 
     /// Label of most recently visited matching node.
@@ -62,7 +62,10 @@ impl<V> SizeLimitVisitor<V>
 where
     V: Visitor,
 {
-    pub fn new(pattern: Vec<Matcher>, size_limit: usize, visitor: V) -> Self {
+    /// Creates a visitor limiting matching leaves to `size_limit` bytes. Unless
+    /// `include_one` is set, in which case the first matching leaf is included
+    /// regardless of its size.
+    pub fn new(pattern: Vec<Matcher>, size_limit: usize, include_one: bool, visitor: V) -> Self {
         assert!(!pattern.is_empty());
 
         Self {
@@ -72,7 +75,7 @@ where
 
             path_match: vec![],
             size: 0,
-            include_one: true,
+            include_one,
 
             leaf_label: None,
         }

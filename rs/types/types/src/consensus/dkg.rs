@@ -42,15 +42,26 @@ impl PbArtifact for Message {
 /// Identifier of a DKG message.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct DkgMessageId {
-    pub hash: CryptoHashOf<Message>,
     pub height: Height,
+    pub hash: CryptoHashOf<Message>,
+}
+
+impl DkgMessageId {
+    /// Returns the lexicographically-smallest DkgMessageId at the given height.
+    pub fn smallest_at_height(height: Height) -> Self {
+        Self {
+            height,
+            // The lexicographically-smallest possible hash is an empty vector
+            hash: CryptoHashOf::from(CryptoHash(vec![])),
+        }
+    }
 }
 
 impl From<&Message> for DkgMessageId {
     fn from(msg: &Message) -> Self {
         Self {
-            hash: crypto_hash(msg),
             height: msg.content.dkg_id.start_block_height,
+            hash: crypto_hash(msg),
         }
     }
 }
@@ -58,8 +69,8 @@ impl From<&Message> for DkgMessageId {
 impl From<DkgMessageId> for pb::DkgMessageId {
     fn from(id: DkgMessageId) -> Self {
         Self {
-            hash: id.hash.clone().get().0,
             height: id.height.get(),
+            hash: id.hash.clone().get().0,
         }
     }
 }
@@ -69,8 +80,8 @@ impl TryFrom<pb::DkgMessageId> for DkgMessageId {
 
     fn try_from(id: pb::DkgMessageId) -> Result<Self, Self::Error> {
         Ok(Self {
-            hash: CryptoHash(id.hash.clone()).into(),
             height: Height::from(id.height),
+            hash: CryptoHash(id.hash.clone()).into(),
         })
     }
 }
@@ -929,5 +940,49 @@ mod tests {
         assert_eq!(get_faults_tolerated(7), 2);
         assert_eq!(get_faults_tolerated(28), 9);
         assert_eq!(get_faults_tolerated(64), 21);
+    }
+
+    #[test]
+    fn test_dkg_message_id_less_than_height() {
+        const TEST_HASHES: [&[u8]; 4] = [&[], &[0], &[42; 32], &[u8::MAX; 32]];
+
+        fn message_id(height: u64, hash: &[u8]) -> DkgMessageId {
+            DkgMessageId {
+                height: Height::from(height),
+                hash: CryptoHashOf::from(CryptoHash(hash.to_vec())),
+            }
+        }
+
+        let smallest_at_height = DkgMessageId::smallest_at_height(Height::from(10));
+        for height in [0, 1, 9] {
+            for hash in TEST_HASHES {
+                let id = message_id(height, hash);
+                assert!(
+                    id < smallest_at_height,
+                    "expected {id:?} to be less than smallest_at_height"
+                );
+            }
+        }
+        for height in [10, 11, u64::MAX] {
+            for hash in TEST_HASHES {
+                let id = message_id(height, hash);
+                assert!(
+                    smallest_at_height <= id,
+                    "expected {id:?} to be greater than or equal to smallest_at_height"
+                );
+            }
+        }
+
+        // Edge-case: height is 0
+        let smallest_at_height = DkgMessageId::smallest_at_height(Height::from(0));
+        for height in [0, 1, u64::MAX] {
+            for hash in TEST_HASHES {
+                let id = message_id(height, hash);
+                assert!(
+                    smallest_at_height <= id,
+                    "expected {id:?} to be greater than or equal to smallest_at_height"
+                );
+            }
+        }
     }
 }

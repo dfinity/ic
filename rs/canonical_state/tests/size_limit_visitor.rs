@@ -91,6 +91,7 @@ fn size_limit_proptest(#[strategy(arb_fixture(10))] fixture: Fixture) {
     let visitor = SizeLimitVisitor::new(
         pattern,
         size_limit,
+        true,
         SubtreeVisitor::new(&subtree_pattern, MessageSpyVisitor::default()),
     );
     let (actual_size, actual_begin, actual_end) = traverse(&state, Height::new(0), visitor);

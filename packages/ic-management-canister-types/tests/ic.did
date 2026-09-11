@@ -124,6 +124,34 @@ type http_request_result = record {
     body : blob;
 };
 
+type http_request_resource_report = record {
+    raw_response_bytes : opt variant { used : nat64; exceeded : reserved };
+    http_roundtrip_time_ms : opt variant { used : nat64; exceeded : reserved };
+    transform_instructions : opt variant { used : nat64; exceeded : reserved };
+    transformed_response_bytes : opt variant { used : nat64; exceeded : reserved };
+    cycles : opt variant { used : nat; exceeded : reserved };
+};
+
+type flexible_http_request_err = record {
+    global_error : opt variant {
+        timeout : reserved;
+        out_of_cycles : reserved;
+        responses_too_large : reserved;
+        too_many_rejects : reserved;
+    };
+    node_details : vec record {
+        node_id : principal;
+        report : http_request_resource_report;
+        error : opt record { code : text; message : text };
+    };
+    message : text;
+};
+
+type flexible_http_request_result = variant {
+    ok : vec http_request_result;
+    err : flexible_http_request_err;
+};
+
 type ecdsa_curve = variant {
     secp256k1;
 };
@@ -365,6 +393,24 @@ type http_request_args = record {
         context : blob;
     };
     is_replicated : opt bool;
+    pricing_version : opt nat32;
+};
+
+type flexible_http_request_args = record {
+    url : text;
+    max_response_bytes : opt nat64;
+    method : variant { get; head; post; put; delete; patch };
+    headers : vec http_header;
+    body : opt blob;
+    transform : opt record {
+        function : func(record { response : http_request_result; context : blob }) -> (http_request_result) query;
+        context : blob;
+    };
+    replication : opt record {
+        min_responses : nat32;
+        max_responses : nat32;
+        total_requests : nat32;
+    };
 };
 
 type ecdsa_public_key_args = record {
@@ -715,6 +761,7 @@ service ic : {
     deposit_cycles : (deposit_cycles_args) -> ();
     raw_rand : () -> (raw_rand_result);
     http_request : (http_request_args) -> (http_request_result);
+    flexible_http_request : (flexible_http_request_args) -> (flexible_http_request_result);
 
     // Public canister data
     canister_info : (canister_info_args) -> (canister_info_result) query;
