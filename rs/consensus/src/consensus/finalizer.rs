@@ -128,9 +128,11 @@ impl Finalizer {
     /// therefore also the last one whose batch it delivers, so asking about
     /// that height reports the halt from the round it begins.
     ///
-    /// A delivery that failed leaves no height to ask about and no way to tell
-    /// whether the subnet is halting, so it is reported as unknown rather than
-    /// as though everything had gone well.
+    /// A delivery that failed returns an error rather than the height it got
+    /// to, leaving nothing to ask about, so the status is reported as unknown
+    /// rather than as though everything had gone well. So is a height with no
+    /// summary block, and one whose status [`status::get_status`] could not
+    /// compute.
     fn get_status(
         &self,
         pool: &PoolReader<'_>,
