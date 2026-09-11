@@ -147,8 +147,8 @@ pub fn automatic_deposit() -> AutomaticDeposit {
 /// An [`AutomaticDeposits`] whose sweep queue holds exactly these funded pairs, all taken by the
 /// one sweep [`create_pending_sweeper_requests`] enqueued for them, returned along with that
 /// request.
-pub async fn deposits_with_enqueued_sweep(
-    pairs: &[(Account, Address)],
+pub async fn deposits_with_enqueued_sweep<A: Into<Asset> + Copy>(
+    pairs: &[(Account, A)],
 ) -> (AutomaticDeposits, SweepRequest) {
     let (state, request) = state_with_enqueued_sweep(pairs).await;
     (state.automatic_deposits, request)
@@ -206,7 +206,9 @@ pub fn prepay_sweep_gas(state: &mut State) {
 /// [`create_pending_sweeper_requests`] enqueued for them, returned along with that request. The
 /// deposits, attestations and authorizations the enqueue pairs up arrive through the event log, so
 /// the sweep is assembled by the production path without the runtime signing anything.
-pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, SweepRequest) {
+pub async fn state_with_enqueued_sweep<A: Into<Asset> + Copy>(
+    pairs: &[(Account, A)],
+) -> (State, SweepRequest) {
     const SWEEP_DECIDED_AT: u64 = 1_620_328_630_000_000_000;
 
     let mut state = state_with_deposit_helper(deposit_helper());
@@ -214,21 +216,21 @@ pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, 
     state.sweeper_contract_address = Some(sweeper_contract());
     state.last_transaction_price_estimate = Some((SWEEP_DECIDED_AT, gas_fee_estimate()));
     let chain_id = state.ethereum_network.chain_id();
-    for (account, token) in pairs {
+    for (account, asset) in pairs {
         apply_state_transition(
             &mut state,
             &EventType::AutomaticDepositReceived(AutomaticDeposit {
                 owner: account.owner,
                 subaccount: account.subaccount,
                 address: deposit_address(account),
-                asset: Asset::Erc20(*token),
+                asset: (*asset).into(),
                 ..automatic_deposit()
             }),
         );
     }
     for account in pairs
         .iter()
-        .map(|(account, _token)| *account)
+        .map(|(account, _asset)| *account)
         .collect::<BTreeSet<_>>()
     {
         apply_state_transition(
