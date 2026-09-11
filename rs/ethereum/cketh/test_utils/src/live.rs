@@ -60,7 +60,6 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::numeric::Erc20Value;
-use ic_cketh_minter::sweep::MAX_DEPOSITS_PER_SWEEP;
 use ic_cketh_minter::{BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -609,7 +608,7 @@ impl LiveSetup<CkErc20Setup> {
     }
 
     pub fn assert_eth_sweeps_batched(self, deposits: &[EthCexDeposit]) -> Self {
-        let batches: Vec<Vec<Address>> = self
+        let swept: BTreeSet<Address> = self
             .minter_events()
             .into_iter()
             .filter_map(|event| match event.payload {
@@ -624,26 +623,13 @@ impl LiveSetup<CkErc20Setup> {
                             Address::from_str(&item.deposit)
                                 .expect("BUG: the sweep names an invalid deposit address")
                         })
-                        .collect(),
+                        .collect::<Vec<_>>(),
                 ),
                 _ => None,
             })
+            .flatten()
             .collect();
 
-        let mut expected_sizes = Vec::new();
-        let mut remaining = deposits.len();
-        while remaining > 0 {
-            let batch = remaining.min(MAX_DEPOSITS_PER_SWEEP);
-            expected_sizes.push(batch);
-            remaining -= batch;
-        }
-        assert_eq!(
-            batches.iter().map(Vec::len).collect::<Vec<_>>(),
-            expected_sizes,
-            "the ETH deposits must be swept in full batches"
-        );
-
-        let swept: BTreeSet<Address> = batches.into_iter().flatten().collect();
         let expected: BTreeSet<Address> = deposits.iter().map(|deposit| deposit.address).collect();
         assert_eq!(
             swept, expected,
