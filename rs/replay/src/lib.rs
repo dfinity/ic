@@ -109,9 +109,12 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
         );
         if let Some(h) = target_height {
             if replays_blocks {
-                let question = format!("The checkpoint of the state replayed up to height {h} ")
-                    + "cannot be used for deterministic state computation if it is not a CUP height.\n"
-                    + "Continue?";
+                let question = format!(
+                    "Unless it is a CUP height, the checkpoint of the state replayed up to height {h} \
+                    will be slightly different from the in-memory state of the replica at that height \
+                    because of serialization constraints imposed by checkpoints.\n\
+                    Continue?"
+                );
                 if !args.skip_prompts && !consent_given(&question) {
                     return;
                 }
