@@ -3,7 +3,7 @@
     "ic-gateway 0.2.0",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "c268a235286b6dfa8f0ff462e7fd46bd904b554c3c4912c26498b3d3e66e8133",
+  "checksum": "87431fdf9363f300b8b5c59a2b7a915e6dccbe7cdffcd4dace1b982713dfcd03",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
