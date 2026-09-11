@@ -477,6 +477,39 @@ async fn should_skip_the_tick_when_the_sweeper_contract_changed_since_the_read()
     );
 }
 
+#[tokio::test]
+async fn should_skip_the_tick_when_the_sweeper_contract_changed_since_a_tuple_less_read() {
+    init_state(state_ready_to_sign(&[(account(), usdc())]));
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    runtime
+        .expect_ecdsa_public_key()
+        .returning(|_, _| Ok(master_public_key()));
+    runtime
+        .expect_sign_with_ecdsa()
+        .returning(|key_name, derivation_path, message_hash| {
+            mutate_state(|s| s.sweeper_contract_address = Some(ANOTHER_SWEEPER_CONTRACT));
+            sign_digest_with_derived_key(key_name, derivation_path, message_hash)
+        });
+
+    enqueue(
+        &runtime,
+        &[(account(), Delegation::Delegated(SWEEPER_CONTRACT))],
+    )
+    .await;
+
+    assert_eq!(
+        pending_sweeps(),
+        vec![],
+        "an address read as delegated to the contract the sweep no longer calls must not be swept without a tuple"
+    );
+    assert_eq!(
+        read_state(|s| s.automatic_deposits.sweep_len()),
+        1,
+        "the deposit stays queued for a tick reading against the new contract"
+    );
+}
+
 fn pending_sweeps() -> Vec<SweepRequest> {
     read_state(|s| s.automatic_deposits.sweep_requests_batch(usize::MAX))
 }
