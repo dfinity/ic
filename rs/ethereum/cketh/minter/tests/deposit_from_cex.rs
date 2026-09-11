@@ -519,9 +519,10 @@ fn should_credit_twenty_eth_deposits_through_ten_deposit_sweeps() {
         .expect_deposit_balances_on_anvil()
         .expect_each_awaiting_sweep();
 
-    let (setup, _sweeps) = setup
+    let (setup, sweeps) = setup
         .await_sweeps(&sweeper, 2)
         .expect_all_delegating_sweeps();
+    assert_eth_sweep_gas_near_demo(&sweeps, 10);
 
     let setup = setup
         .assert_eth_sweeps_batched(&[10, 10])
@@ -734,6 +735,28 @@ fn should_sweep_a_second_erc20_deposit_despite_resending_a_stale_authorization()
         .filter(|event| matches!(event.payload, EventPayload::MintedCkErc20 { .. }))
         .count();
     assert_eq!(mints, 2, "each deposit flow must be credited exactly once");
+}
+
+fn assert_eth_sweep_gas_near_demo(sweeps: &[SentTransaction], deposits_per_sweep: u64) {
+    const ETH_SCENARIOS_DEMO_TEN_DEPOSITS_EIP7702_GAS: u64 = 413_076;
+    const GAS_BAND_PERCENT: u64 = 10;
+
+    assert_eq!(
+        deposits_per_sweep, 10,
+        "the demo baseline is measured for ten-deposit sweeps"
+    );
+    for sweep in sweeps {
+        assert!(
+            sweep
+                .gas_used
+                .abs_diff(ETH_SCENARIOS_DEMO_TEN_DEPOSITS_EIP7702_GAS)
+                * 100
+                <= ETH_SCENARIOS_DEMO_TEN_DEPOSITS_EIP7702_GAS * GAS_BAND_PERCENT,
+            "a ten-deposit ETH sweep used {} gas, more than {GAS_BAND_PERCENT}% away from the \
+             demo-measured {ETH_SCENARIOS_DEMO_TEN_DEPOSITS_EIP7702_GAS}: {sweep:?}",
+            sweep.gas_used,
+        );
+    }
 }
 
 fn assert_sweep_gas_near_demo(sweeps: &[SentTransaction], deposits_per_sweep: u64) {
