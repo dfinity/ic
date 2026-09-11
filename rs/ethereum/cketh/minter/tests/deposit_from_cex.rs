@@ -279,6 +279,16 @@ fn should_read_delegations_across_addresses() {
         ],
         "decoding is positional: the argument order decides, not the shape of the accounts"
     );
+    assert_eq!(
+        read(&[delegated, bare, contract]),
+        vec![
+            Delegation::Delegated(delegate),
+            Delegation::NotDelegated,
+            Delegation::Other,
+        ],
+        "a designator first must not make the returned blob look like code starting with 0xef, \
+         which EIP-3541 forbids a create-style call to return"
+    );
 }
 
 #[test]
@@ -293,7 +303,9 @@ fn should_read_a_full_batch_of_delegations_in_a_single_call() {
     };
 
     let delegate = Address::new([0xcd; 20]);
+    let first = holder_at(0);
     let last = holder_at((MAX_CALLS_PER_BATCH - 1) as u64);
+    anvil.set_code(&first, &delegation_designator(&delegate));
     anvil.set_code(&last, &delegation_designator(&delegate));
 
     let full_batch = batch_of(MAX_CALLS_PER_BATCH);
@@ -301,6 +313,7 @@ fn should_read_a_full_batch_of_delegations_in_a_single_call() {
         .eth_call_create(&dev, &encode_delegation_batch(&full_batch))
         .expect("a batch of MAX_CALLS_PER_BATCH addresses must stay within the node limits");
     let mut expected = vec![Delegation::NotDelegated; MAX_CALLS_PER_BATCH];
+    *expected.first_mut().unwrap() = Delegation::Delegated(delegate);
     *expected.last_mut().unwrap() = Delegation::Delegated(delegate);
     assert_eq!(
         decode_delegation_batch(&out, full_batch.len()).expect("decode failed"),
@@ -309,8 +322,9 @@ fn should_read_a_full_batch_of_delegations_in_a_single_call() {
 
     const EIP_170_MAX_CODE_SIZE: usize = 24_576;
     const RETURNED_BYTES_PER_ADDRESS: usize = 32;
+    const LEADING_ZERO_WORDS: usize = 1;
     const ONE_ADDRESS_PAST_THE_RETURNED_BLOB_CEILING: usize =
-        EIP_170_MAX_CODE_SIZE / RETURNED_BYTES_PER_ADDRESS + 1;
+        EIP_170_MAX_CODE_SIZE / RETURNED_BYTES_PER_ADDRESS - LEADING_ZERO_WORDS + 1;
     let error = anvil
         .eth_call_create(
             &dev,
@@ -318,7 +332,8 @@ fn should_read_a_full_batch_of_delegations_in_a_single_call() {
         )
         .expect_err(
             "with one argument word per address the EIP-3860 initcode limit never binds; the \
-             returned blob (one word per address) hits EIP-170 first, well above MAX_CALLS_PER_BATCH",
+             returned blob (one leading word, then one per address) hits EIP-170 first, well \
+             above MAX_CALLS_PER_BATCH",
         );
     assert!(
         error.to_lowercase().contains("contractsizelimit"),
