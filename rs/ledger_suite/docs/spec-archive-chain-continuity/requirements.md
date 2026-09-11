@@ -47,15 +47,13 @@ canister performs no such check, so it attributes transactions to whichever
 accounts a wrongly-placed block names, and serves plausible but incorrect account
 histories. Neither can repair the archive.
 
-A related failure compounds it: a ledger whose archiving keeps failing retries on
-every transaction, with no spacing, so a single persistent cause turns into
-continuous wasted work — and the failure that prompted this work, a refused memory
-growth, was persistent for about four and a half hours.
-
-Switching archiving back on re-exposes all of the above, which is why the contract
-comes first. Note also that the two failures compound in one direction: a ledger
-that cannot archive accumulates blocks, and a ledger holding more blocks has more to
-send when archiving resumes.
+A second failure compounds the first, and in one direction: a ledger whose archiving
+keeps failing retries on every transaction with no spacing, so a single persistent
+cause becomes continuous wasted work — the failure that prompted this work, a
+refused memory growth, was persistent for about four and a half hours — while the
+blocks it could not archive accumulate, so there is more to send once archiving
+resumes. Switching archiving back on re-exposes both, which is why the contract
+comes first.
 
 ## Glossary
 
