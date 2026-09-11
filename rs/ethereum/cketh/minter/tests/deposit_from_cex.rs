@@ -278,6 +278,16 @@ fn should_read_delegations_across_addresses() {
         ],
         "decoding is positional: the argument order decides, not the shape of the accounts"
     );
+    assert_eq!(
+        read(&[delegated, bare, contract]),
+        vec![
+            Delegation::Delegated(delegate),
+            Delegation::NotDelegated,
+            Delegation::Other,
+        ],
+        "a designator first must not make the returned blob look like code starting with 0xef, \
+         which EIP-3541 forbids a create-style call to return"
+    );
 }
 
 #[test]
