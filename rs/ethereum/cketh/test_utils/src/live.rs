@@ -50,6 +50,7 @@
 
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
+use ic_cketh_minter::asset::Asset;
 use ic_cketh_minter::endpoints::events::{
     Asset as EventAsset, Event, EventPayload, TransactionStatus,
 };
@@ -261,36 +262,38 @@ impl LiveSetup<CkErc20Setup> {
         self.fixture.supported_erc20_tokens.clone()
     }
 
-    pub fn minimum_deposit_amount(&self, token: &Erc20Token) -> u128 {
-        let minimum = self
-            .get_minter_info()
-            .minimum_deposit_amounts
-            .expect("BUG: the minter reports no minimum deposit amounts")
-            .into_iter()
-            .find(|minimum| {
-                Address::from_str(&minimum.erc20_contract_address)
-                    .expect("BUG: the minter reported an invalid token address")
-                    == contract_address(token)
-            })
-            .unwrap_or_else(|| {
-                panic!(
-                    "BUG: the minter reports no minimum deposit amount for {}",
-                    token.contract.address
-                )
-            });
-        let no_minimum_sentinel: Nat = Erc20Value::MAX.into();
-        assert_ne!(
-            minimum.minimum_deposit_amount, no_minimum_sentinel,
-            "the minter reports no real minimum deposit amount for {}",
-            token.contract.address
-        );
-        nat_to_u128(minimum.minimum_deposit_amount)
-    }
-
-    /// The ETH minimum as `deposit_eth` reports it. Read through `caller`'s own registration,
-    /// which `deposit_eth` makes idempotently, so pass an account the test deposits for anyway.
-    pub fn minimum_eth_deposit_amount(&self, caller: Principal, subaccount: [u8; 32]) -> u128 {
-        nat_to_u128(self.deposit_eth(caller, subaccount).minimum_deposit_amount)
+    /// The minimum balance `asset`'s deposit address must hold for the balance scan to flag it,
+    /// as `get_minter_info` reports it.
+    pub fn minimum_deposit_amount(&self, asset: impl Into<Asset>) -> u128 {
+        let info = self.get_minter_info();
+        let minimum = match asset.into() {
+            Asset::Eth => info
+                .minimum_eth_deposit_amount
+                .expect("BUG: the minter reports no ETH minimum deposit amount"),
+            Asset::Erc20(token_address) => {
+                let minimum = info
+                    .minimum_deposit_amounts
+                    .expect("BUG: the minter reports no minimum deposit amounts")
+                    .into_iter()
+                    .find(|minimum| {
+                        Address::from_str(&minimum.erc20_contract_address)
+                            .expect("BUG: the minter reported an invalid token address")
+                            == token_address
+                    })
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "BUG: the minter reports no minimum deposit amount for {token_address}"
+                        )
+                    });
+                let no_minimum_sentinel: Nat = Erc20Value::MAX.into();
+                assert_ne!(
+                    minimum.minimum_deposit_amount, no_minimum_sentinel,
+                    "the minter reports no real minimum deposit amount for {token_address}"
+                );
+                minimum.minimum_deposit_amount
+            }
+        };
+        nat_to_u128(minimum)
     }
 
     /// Calls `deposit_eth` as `caller`, which registers (idempotently) that user's

@@ -2365,6 +2365,7 @@ fn should_retrieve_minter_info() {
         .collect();
 
     const USD_STABLECOIN_MINIMUM_DEPOSIT: u64 = 10_000_000;
+    const MINIMUM_ETH_DEPOSIT_WEI: u64 = 5_000_000_000_000_000;
     let minimum_deposit_amounts = supported_ckerc20_tokens
         .iter()
         .map(|token| Erc20MinimumDeposit {
@@ -2398,6 +2399,7 @@ fn should_retrieve_minter_info() {
             last_gas_fee_estimate: None,
             erc20_balances: Some(erc20_balances),
             minimum_deposit_amounts: Some(minimum_deposit_amounts),
+            minimum_eth_deposit_amount: Some(Nat::from(MINIMUM_ETH_DEPOSIT_WEI)),
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_deposit_with_subaccount_scraped_block_number: Some(
