@@ -243,6 +243,12 @@ impl Anvil {
         self.send_transaction_with_value(from, to, data, 0)
     }
 
+    /// A plain ETH transfer of `value` wei, mined before returning.
+    pub fn send_eth(&self, from: &Address, to: &Address, value: u128) {
+        let tx = self.send_transaction_with_value(from, Some(to), &[], value);
+        assert!(status_ok(&self.await_receipt(&tx)), "ETH transfer failed");
+    }
+
     fn send_transaction_with_value(
         &self,
         from: &Address,

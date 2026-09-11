@@ -295,7 +295,7 @@ async fn should_detect_a_funded_pair_from_pre_scan_targets_even_after_eviction()
 
     // The funded pair is still detected: scan_balances works off the captured targets alone, so the
     // detection is never lost to a mid-scan eviction.
-    let outcomes = scan_balances(&targets, latest, stub_client(vec![ok_balances(&[min])])).await;
+    let outcomes = scan_balances(&targets, latest, &stub_client(vec![ok_balances(&[min])])).await;
 
     assert_eq!(
         outcomes,
@@ -321,7 +321,7 @@ async fn should_yield_nothing_found_for_a_below_minimum_pair() {
     seed_state(Some(latest), token, &[holder], now);
 
     let targets = due_targets(now, latest);
-    let outcomes = scan_balances(&targets, latest, stub_client(vec![ok_balances(&[below])])).await;
+    let outcomes = scan_balances(&targets, latest, &stub_client(vec![ok_balances(&[below])])).await;
 
     assert_eq!(
         outcomes,
@@ -343,19 +343,15 @@ async fn should_yield_no_outcome_for_a_pair_whose_chunk_failed() {
     let outcomes = scan_balances(
         &targets,
         latest,
-        stub_client(vec![Err(IcError::CallPerformFailed)]),
+        &stub_client(vec![Err(IcError::CallPerformFailed)]),
     )
     .await;
 
     assert!(outcomes.is_empty(), "a failed chunk must yield no outcome");
 }
 
-fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<ScanTarget> {
-    read_state(|s| {
-        s.automatic_deposits
-            .scan_targets_iter(now, latest)
-            .collect()
-    })
+fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<ScanTarget<Erc20Asset>> {
+    read_state(|s| s.automatic_deposits.due_scan_targets(now, latest).erc20)
 }
 
 #[tokio::test]
