@@ -2725,9 +2725,6 @@ pub mod testing {
             deadline: CoarseTime,
         ) -> (CallbackId, Arc<Callback>);
 
-        /// Testing only: Registers the given callback and returns its ID.
-        fn with_raw_callback(&mut self, callback: Callback) -> CallbackId;
-
         /// Testing only: Zeroes the `prepayment_for_call_transmission` of the given
         /// callback, e.g. to simulate a callback created before April 2026.
         fn reset_prepayment_for_call_transmission(&mut self, callback_id: CallbackId);
@@ -2774,12 +2771,6 @@ pub mod testing {
 
         fn pop_input(&mut self) -> Option<CanisterMessage> {
             self.pop_input()
-        }
-
-        fn with_raw_callback(&mut self, callback: Callback) -> CallbackId {
-            call_context_manager_mut(&mut self.status)
-                .unwrap()
-                .register_callback(callback)
         }
 
         fn reset_prepayment_for_call_transmission(&mut self, callback_id: CallbackId) {

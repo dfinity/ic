@@ -2196,15 +2196,26 @@ fn migrate_consumed_cycles_to_monotonic(
         // state, i.e. the canister has a paused execution, whose prepayment is only
         // held in memory. Unreachable when called as documented.
         let Some(outstanding) = canister.system_state.outstanding_prepayments() else {
+            // Describe the task without `Debug`-formatting it: a paused ingress
+            // execution embeds the whole method payload in its `Debug` output.
+            let task = match canister.system_state.task_queue.paused_or_aborted_task() {
+                Some(ExecutionTask::PausedExecution { input, .. }) => {
+                    format!("paused execution of {input}")
+                }
+                Some(ExecutionTask::PausedInstallCode(_)) => "paused install_code".to_string(),
+                // Unreachable: `outstanding_prepayments()` is `None` only for the two
+                // paused tasks above.
+                Some(_) | None => "no paused task".to_string(),
+            };
             debug_assert_or_critical_error!(
                 false,
                 metrics.consumed_cycles_invariant_broken,
                 log,
                 "{}: Canister {}: cannot derive the monotonic consumed cycles, \
-                 unexpected task {:?}",
+                 unexpected {}",
                 CONSUMED_CYCLES_INVARIANT_BROKEN,
                 canister.canister_id(),
-                canister.system_state.task_queue.paused_or_aborted_task(),
+                task,
             );
             return;
         };
