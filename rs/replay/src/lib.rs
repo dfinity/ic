@@ -111,10 +111,13 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
         if let Some(h) = target_height {
             if replays_blocks {
                 let question = format!(
-                    "Unless it is a CUP height, the checkpoint of the state replayed up to height {h} \
+                    r#"Unless it is a CUP height, the checkpoint of the state replayed up to height {h} \
                     will be slightly different from the in-memory state of the replica at that height \
-                    because of serialization constraints imposed by checkpoints.\n\
-                    Continue?"
+                    because of serialization constraints imposed by checkpoints.\n\n\
+                    WARNING: The checkpoint will be created at a height higher than {h}, so replaying \
+                    a second time with the same pool is almost guaranteed to be a bad idea because \
+                    some heights higher than {h} will be "shadowed" by the created checkpoint. \
+                    Continue?"#
                 );
                 if !args.skip_prompts && !consent_given(&question) {
                     return;
