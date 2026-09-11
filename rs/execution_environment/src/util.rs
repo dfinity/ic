@@ -21,18 +21,21 @@ pub(crate) const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(17);
 ///
 /// ```ignore
 /// if !(a > b) {
-///     debug_assert!(a > b);
+///     debug_assert!(a > b, "{} > {}", a, b);
 ///     metric.inc();
 ///     error!(logger, "{} > {}", a, b)
 /// }
 /// ```
+///
+/// The message is passed to the `debug_assert!`, too, so that a test covering one
+/// of these can pin down which one it expects to trip.
 macro_rules! debug_assert_or_critical_error {
     // debug_assert_or_critical_error!(a > b, metric, logger, "{} > {}", a, b);
-    ($cond:expr_2021, $metric:expr_2021, $($arg:tt)*) => {{
+    ($cond:expr_2021, $metric:expr_2021, $logger:expr_2021, $($arg:tt)*) => {{
         if !($cond) {
-            debug_assert!($cond);
+            debug_assert!($cond, $($arg)*);
             $metric.inc();
-            error!($($arg)*);
+            error!($logger, $($arg)*);
         }
     }};
 }
