@@ -14,7 +14,7 @@ use ic_test_utilities_metrics::{HistogramStats, metric_vec};
 use ic_test_utilities_state::arb_stream_slice;
 use ic_test_utilities_types::xnet::StreamSliceBuilder;
 use ic_types::messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT;
-use ic_types::xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice};
+use ic_types::xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex, StreamSlice};
 use ic_types::{CountBytes, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{
     CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, InvalidAppend, InvalidSlice,
@@ -649,6 +649,10 @@ fn slice_stats(
     subnet_id: SubnetId,
 ) -> (Option<ExpectedIndices>, Option<StreamIndex>, usize, usize) {
     pool.lock().unwrap().slice_stats(subnet_id)
+}
+
+fn peer_header(pool: &Mutex<CertifiedSlicePool>, subnet_id: SubnetId) -> Option<StreamHeader> {
+    pool.lock().unwrap().peer_header(subnet_id).cloned()
 }
 
 fn peers(pool: &Mutex<CertifiedSlicePool>) -> Vec<SubnetId> {
@@ -1399,7 +1403,7 @@ fn pool_append_invalid_slice_to_empty(
 fn pool_take_slice_respects_signal_limit(
     #[strategy(arb_stream_slice(
         MAX_SIGNALS, // min_size
-        2 * MAX_SIGNALS, // max_size
+        MAX_SIGNALS + 100, // max_size
         0, // min_signal_count
         0, // max_signal_count
         CURRENT_CERTIFICATION_VERSION,
@@ -1741,6 +1745,62 @@ fn pool_put_more_useful_slice_only(
             ]),
             fixture.fetch_pool_put_count()
         );
+    });
+}
+
+/// Tests that a peer's header is recorded on every incoming slice, whether or
+/// not the slice is pooled; and that it never regresses.
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
+fn pool_peer_header(
+    #[strategy(arb_stream_slice(
+        2, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+) {
+    let (mut stream, from, msg_count) = test_slice;
+
+    with_test_replica_logger(|log| {
+        let header = stream.header();
+        let fixture =
+            StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
+        let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
+
+        // A single message slice, from a later certified state with one extra signal.
+        stream.push_accept_signal();
+        let newer_header = stream.header();
+        let fixture = fixture.with_stream(DST_SUBNET, stream);
+        let newer_prefix_slice = fixture.get_slice(DST_SUBNET, from, 1);
+
+        let mut store = MockCertifiedStreamStore::new();
+        // Actual return value does not matter as long as it's `Ok(_)`.
+        store
+            .expect_decode_certified_stream_slice()
+            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
+        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
+
+        // Nothing on record for a peer we have heard nothing from.
+        assert_eq!(None, peer_header(&pool, SRC_SUBNET));
+
+        put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap();
+        assert_eq!(Some(header), peer_header(&pool, SRC_SUBNET));
+
+        // The single message slice is not pooled, but its header is still recorded.
+        put(&pool, SRC_SUBNET, newer_prefix_slice, &store, &log).unwrap();
+        assert_matches!(slice_stats(&pool, SRC_SUBNET), (_, _, count, _) if count == msg_count);
+        assert_eq!(Some(newer_header.clone()), peer_header(&pool, SRC_SUBNET));
+
+        // And an earlier certified header does not replace it.
+        put(&pool, SRC_SUBNET, slice, &store, &log).unwrap();
+        assert_eq!(Some(newer_header.clone()), peer_header(&pool, SRC_SUBNET));
+
+        // And taking the slice leaves the header in place.
+        take_slice(&pool, SRC_SUBNET, None, None, None);
+        assert_eq!(slice_stats(&pool, SRC_SUBNET), (None, None, 0, 0));
+        assert_eq!(Some(newer_header), peer_header(&pool, SRC_SUBNET));
     });
 }
 
