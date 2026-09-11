@@ -13,6 +13,17 @@ readable without it.*
 
 ## Introduction
 
+**Archiving is switched off today.** On the ckBTC and ckDOGE ledgers
+`trigger_threshold` is set beyond any reachable block count, as a mitigation after
+an archiving failure corrupted nothing only by luck, and blocks are accumulating in
+the ledgers instead. This document is the contract archiving must satisfy before it
+is switched back on. Four things have to hold: an archive must be able to tell where
+an incoming batch belongs and refuse one that does not fit; it must report its own
+extent, so a ledger never has to infer it; a ledger must not stop serving a block
+until an archive has confirmed holding it; and a ledger must space its attempts
+while archiving is failing. The rest of this section is why each of those is
+needed.
+
 A ledger keeps only its most recent blocks and moves older ones to archive
 canisters. Because an archive is a separate canister, moving blocks means an
 inter-canister call, and the two halves of that call commit independently: the
@@ -41,21 +52,22 @@ every transaction, with no spacing, so a single persistent cause turns into
 continuous wasted work — and the failure that prompted this work, a refused memory
 growth, was persistent for about four and a half hours.
 
-Archiving is currently switched off by configuration on the ckBTC and ckDOGE
-ledgers as a mitigation, and blocks are accumulating in the ledgers instead. This
-specification is the contract archiving must satisfy before it is switched back
-on: an archive must be able to tell where an incoming batch belongs and refuse one
-that does not fit, it must report its own extent so a ledger never has to infer
-it, a ledger must not discard a block until an archive has confirmed holding it,
-and a ledger must space its attempts while archiving is failing.
+Switching archiving back on re-exposes all of the above, which is why the contract
+comes first. Note also that the two failures compound in one direction: a ledger
+that cannot archive accumulates blocks, and a ledger holding more blocks has more to
+send when archiving resumes.
 
 ## Glossary
 
 - **Tail_Archive**: the archive a ledger currently appends to — the most recently
   created one. Earlier archives are full and are never written to again.
 - **Archive_Range**: the contiguous span of global block indices an archive holds,
-  from `block_index_offset` up to but excluding `next_index`. Reported by
-  `archives()` on the ICRC ledger and by `icrc3_get_archives`.
+  from its `block_index_offset` up to but excluding its Archive_Position, **as the
+  archive itself reports it** (Req 3). It is observed, not inferred.
+- **Published_Range**: the span a ledger publishes for an archive through
+  `archives()`. It is the ledger's own record, derived from what archives have
+  reported, so it is not evidence about an archive on its own — Req 7.2 constrains
+  what it may say.
 - **Archive_Position**: the next global block index an archive expects, i.e. the
   index one past the last block it holds. Reported as `next_index`.
 - **Declared_Index**: the global index an append states its first block belongs
@@ -176,6 +188,11 @@ history I compute is correct.
 8. WHEN blocks are retrieved by index from an archive after any sequence of
    appends permitted by 2.1 through 2.7, THE Archive SHALL return, for each index,
    the block whose position in the chain is that index.
+9. WHEN every block of an Indexed_Append is at an index the archive already holds,
+   THE Archive SHALL compare the last such block against the block it holds at that
+   index and SHALL refuse the append if they differ, because a ledger whose chain
+   has forked would otherwise be told its re-send succeeded and learn nothing until
+   it reached the archive's position.
 
 ### Requirement 3: An Append Reports The Archive's Range
 
@@ -219,8 +236,8 @@ makes progress under storage pressure instead of repeating work it cannot finish
    by creating another archive when creating one needs the same resource that was
    just refused.
 5. IF THE Archive reports `at_capacity` as true, THEN THE Ledger SHALL create a new
-   archive for the remaining blocks rather than offering them to the same archive
-   again.
+   archive on a later Archiving_Round for the remaining blocks, rather than offering
+   them to the same archive again.
 6. IF THE Archive reports `at_capacity` as false and stopped short, THEN THE Ledger
    SHALL offer the remaining blocks to the same archive on a later attempt.
 
@@ -258,12 +275,15 @@ violation from a capacity problem without access to canister logs.
 2. THE Archive SHALL NOT fail the call for any outcome counted under 6.1 when the
    append carried a Declared_Index, because failing the call discards the
    count along with everything else the call changed, leaving the cause invisible.
-3. THE Archive SHALL preserve each count in 6.1 across the outcome it counts, so
-   that the count is readable afterwards.
+3. WHEN an append carried a Declared_Index, THE Archive SHALL preserve each count
+   in 6.1 across the outcome it counts, so that the count is readable afterwards.
 4. WHEN THE Archive cannot decode a block it was sent, THE Archive SHALL make that
    outcome distinguishable from a refusal per 1.1, because the two call for
    different operator responses and a chain mismatch means an invariant has been
    violated.
+5. THE Archive SHALL NOT count an append carrying no blocks under any count in 6.1,
+   because such an append is how a ledger asks where an archive stands per 3.5 and
+   counting it would raise an operator alarm for an ordinary question.
 
 ### Requirement 7: A New Archive Continues The Previous Archive's Range
 
@@ -276,13 +296,17 @@ no special cases.
 1. WHEN THE Ledger creates an archive, THE Ledger SHALL set its
    `block_index_offset` to one past the last index the previously created archive
    reported holding.
-2. THE Ledger SHALL report, through `archives()`, ranges that are contiguous and
-   non-overlapping across all of its archives.
+2. THE Ledger SHALL publish, through `archives()`, a Published_Range per archive
+   such that the ranges are contiguous and non-overlapping across all of them.
 3. THE Ledger SHALL derive the offset in 7.1 only from an extent an archive has
    reported, never from a count of blocks it has sent.
-4. WHILE an archive exists whose reported range does not begin where the previous
-   archive's range ends, THE Ledger SHALL NOT store further blocks in it and SHALL
-   expose a distinct non-zero metric.
+4. WHILE an archive exists whose reported Archive_Range does not begin where the
+   previous archive's Archive_Range ends, THE Ledger SHALL NOT store further blocks
+   in it and SHALL expose a distinct non-zero metric.
+5. THE ICP Ledger SHALL derive a new archive's `block_index_offset` from its own
+   record instead, and SHALL NOT be held to 7.1, 7.3 or 7.4, because its archives
+   report no Archive_Range and it would otherwise be unable to create an archive at
+   all (per 10.5).
 
 ### Requirement 8: No Block Index Ever Becomes Unretrievable
 
@@ -310,6 +334,10 @@ a hole.
    every index it served before that round.
 6. THE Ledger SHALL NOT rely on its own record of what it sent when deciding what
    to stop serving, only on what an archive has reported holding.
+7. THE ICP Ledger SHALL rely on its own record instead, and SHALL NOT be held to
+   8.1, 8.2, 8.3, 8.4 or 8.6, because its archives report no Archive_Range and it
+   would otherwise be unable to stop serving any block (per 10.5) — the exposure the
+   corresponding non-goal accepts.
 
 ### Requirement 9: Archiving Attempts Are Bounded While Archiving Fails
 

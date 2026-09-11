@@ -111,8 +111,8 @@ this design:
 | allocation | already committed | consequence |
 |---|---|---|
 | `create_canister` reply | canister exists, cycles gone | orphan; `Req 11` detects it and halts |
-| `install_code` reply | + wasm installed | same |
-| `update_settings` reply | + controllers replaced | same |
+| `install_code` reply, or a graceful `Err` from it | + wasm installed | same — and note this arrives as an ordinary `Err`, not only as a trap |
+| `update_settings` reply, or a graceful `Err` from it | + controllers replaced | same |
 | `remaining_capacity` reply, existing node | the transaction | round skipped, spaced by `Req 9` |
 | `remaining_capacity` reply, new node | + node recorded | round skipped; next round finds it |
 | `append_blocks` reply | the archive holds the blocks | `Req 2.4` makes the re-send a no-op |
@@ -128,7 +128,7 @@ split — see Delivery.
 
 **The ICP archive is a separate crate and decodes appends by hand.**
 `Decode!(&msg_arg_data(), Vec<EncodedBlock>)` (`icp/archive/src/main.rs:291`), and
-candid's `done()` (`candid-0.10.34`, `de.rs`) absorbs an extra trailing value as
+candid's `done()` (`candid-0.10.35`, `de.rs`) absorbs an extra trailing value as
 `Reserved`, so it tolerates the new argument and its empty reply decodes as absent.
 Its `post_upgrade` already takes `Option<ArchiveUpgradeArgument>` (`:383`).
 
@@ -183,7 +183,7 @@ unsigned:
     // reached only where offset <= i <= offset + log_length
     k = min(offset + log_length - i, blocks.len())   // leading blocks to skip
     append blocks.iter().skip(k)                     // saturating
-    report offset + log_length                       // re-read AFTER the append
+    report offset + log_length                       // re-read AFTER the append (Req 3.2)
 
 The upper clamp is reachable through a varying batch size alone — 1000 blocks stored,
 the reconciliation lost, then a smaller message — and without it the slice panics.
@@ -219,9 +219,19 @@ then at most one batch.
 ### D7 — The ICP archive is not changed here
 
 The consequence of the corresponding non-goal. `Req 2` and `Req 3` are implemented in
-`ic-icrc1-archive` only, so the ICP ledger gains D1, D2, D6, the allocation work and
+`ic-icrc1-archive` only, so the ICP ledger gains D1, D2, the allocation work and
 `Req 12` but not addressed appends, and stays on the incremental path under
-`Req 10.5`. There is no cheap partial: porting the chain check alone catches the
+`Req 10.5`.
+
+**D6 does not reach ICP either**, which is easy to miss because it is ledger-side
+code. D6 serves `Req 8.1`, `8.2` and `8.6`, and all three require an archive to have
+reported an extent. An ICP archive reports none, so the ICP ledger is exempt from
+`Req 7.1`, `7.3`, `7.4` and from `Req 8.1`-`8.4` and `8.6` (`Req 7.5`, `Req 8.7`) and
+keeps deriving both the offset and the archived prefix from its own record. Without
+those exemptions the requirements would forbid it from creating an archive or
+discarding a block at all, contradicting `Req 10.5`.
+
+There is no cheap partial: porting the chain check alone catches the
 variant where a new node already has a tip, but the silent variant is the *empty*
 node, which has none — closing that needs the offset check, hence the index, hence the
 interface change.
@@ -264,33 +274,58 @@ the computed value.
 ### `ic-icrc1-archive` — `append_blocks`
 
     type append_result = variant {
-      Ok  : record { start_index : nat64; next_index : nat64; at_capacity : bool };
+      Ok  : record { block_index_offset : nat64; next_index : nat64; at_capacity : bool };
       Gap : record { expected : nat64; got : nat64 };
     };
 
     append_blocks : (vec blob, opt nat64) -> (opt append_result);
 
 Both arguments and the result are optional, which is what makes the archive
-releasable alone. Order of work, per D4 and D5:
+releasable alone. The reply's first field is named `block_index_offset`, matching
+the published `init` argument it reports, rather than `start_index` — the request's
+second argument is the index the *batch* starts at, and one word cannot mean both.
+
+Order of work, per D4 and D5:
 
 1. Caller check, unchanged.
-2. If the index is absent: today's behaviour exactly — trap on refusal, empty reply
-   (`Req 5`). Nothing below applies.
-3. Place the index against `block_index_offset` and `offset + log_length`
-   (`Req 2.1`, `2.2`, `2.6`), returning without appending in the refusing cases.
-4. Compute `k` and the suffix per D4.
-5. Chain-check `blocks[k]` against the tip (`Req 1.1`, `1.3`, `1.4`, `1.5`).
-6. Append the suffix, stopping short where it must (`Req 4.1`, `4.2`). Distinguish
-   the archive's own limit from a platform growth refusal for `at_capacity`
-   (`Req 4.3`, `4.4`): the existing up-front check against `max_memory_size_bytes` is
-   that test.
-7. Re-read `log_length` and reply (`Req 3.1`–`3.4`).
+2. If the batch is empty: reply per `Req 3.1`-`3.4` and stop. No placement, no
+   chain check, no counter (`Req 3.5`, `Req 6.5`). This is the capability probe of
+   `Req 10.3`, and short-circuiting is what keeps a probe sent at an index above
+   the archive's position from being counted as a gap.
+3. If the index is absent, skip **steps 4 and 5 only** — there is no index to place,
+   so the batch is treated as continuing the tip, `k = 0`. Steps 6 onward still
+   apply, and any refusal fails the call instead of returning a description of it
+   (`Req 5.1`, `5.2`).
+4. Place the index against `block_index_offset` and `block_index_offset +
+   log_length` (`Req 2.1`, `2.2`, `2.6`), returning without appending in the
+   refusing cases.
+5. Compute `k` and the suffix per D4. If the batch is wholly covered, compare its
+   last block against the stored block at that index and refuse on a mismatch
+   (`Req 2.9`).
+6. Chain-check `blocks[k]` against the tip (`Req 1.1`, `1.3`, `1.4`, `1.5`).
+7. Append the suffix, stopping short where it must (`Req 4.1`, `4.2`).
+8. Re-read `log_length` and reply (`Req 3.1`-`3.4`), or fail the call if step 3
+   applied.
 
-An empty batch takes the same path and stores nothing (`Req 3.5`), which is what the
-capability probe uses. A block that fails to decode is counted distinctly
-(`Req 6.4`).
+**Step 3 is the whole of what PR 1 delivers, so read it carefully.** PR 1 ships the
+archive alone, which means an index-less append is the *only* shape it sees in
+production. If the chain check were skipped along with placement, PR 1 would be a
+no-op against the corruption it exists to stop: an un-upgraded ledger re-sending a
+batch would have it stored a second time. The chain check must run for an index-less
+append, and its refusal must fail the call, which is what `Req 5.2` and `Req 1`
+together require.
 
-Replaces the two `trap("no space left")` sites in the current implementation.
+**Step 7 is a restructuring, not a reuse.** The current check is whole-batch and
+traps: it sums every block's size and compares against `max_memory_size_bytes`
+(`icrc1/archive/src/main.rs:242`), then traps inside the append loop if a grow
+fails. `Req 4.1` needs a fitting *prefix* instead — append while the next block
+still fits — and `Req 4.2` forbids unwinding what fitted. The distinction
+`at_capacity` reports (`Req 4.3` versus `Req 4.4`) is then whichever stopped the
+loop: the archive's own limit, computed per block, or a failed grow. Keeping the
+all-or-nothing form would satisfy neither criterion.
+
+A block that fails to decode is counted distinctly (`Req 6.4`). Both
+`trap("no space left")` sites are replaced.
 
 ### `ic-icrc1-archive` — `archive.did`
 
@@ -307,7 +342,7 @@ All commit, because D5 removed the traps.
 
 Both loops go (`Req 12.1`, `12.2`): pick a node, send what the round selected, one
 call, reconcile, return. Reconcile `nodes_block_ranges` from the reported
-`start_index` and `next_index` rather than incrementing (`Req 7.3`, `Req 8.6`).
+`block_index_offset` and `next_index` rather than incrementing (`Req 7.3`, `Req 8.6`).
 
 The coverage check (`Req 8.2`, `8.3`) and the backwards check (`Req 8.4`) live here,
 since this is where the ranges are; per D6 they report upward rather than acting. The
@@ -315,18 +350,39 @@ return type widens to carry the count `archive_blocks` should remove, which may
 include blocks an archive already held.
 
 An absent reply routes by `Wasm::INDEXED_APPENDS` (D3): halt and count for an ICRC
-ledger (`Req 10.1`), incremental path and count for ICP (`Req 10.5`).
+ledger (`Req 10.1`), incremental path and count for ICP (`Req 10.5`). The
+determination itself is the empty append of `Req 10.3`, issued here and exempt from
+the round's append budget (`Req 12.5`).
+
+Reconciliation also maintains what `archives()` publishes, so a Published_Range only
+ever widens to what an archive has reported (`Req 7.2`) — the ledger's published view
+and its internal record are the same data, which is why `Req 8.6` has to be about the
+*source* of that data rather than about which field it is read from.
 
 ### `ledger_canister_core::archive` — `Archive` state
 
 `#[serde(skip)]` fields per D2: last-attempt timestamp and consecutive-failure count
 (`Req 9`), in-flight creation counter (`Req 11`), cached capability answer (`Req 10.4`).
 
-The creation counter is `+1` before `create_canister`, `-1` on a graceful `Err` from
-any creation step (`Req 11.3`), and `-1` when `nodes.push` succeeds. A trap skips the
-decrement, so a non-zero value means a creation was begun and never accounted for
-(`Req 11.1`, `11.2`), and it is per-epoch so it needs no baseline. It does not
-self-clear (`Req 11.4`).
+The creation counter is `+1` before `create_canister` and `-1` when `nodes.push`
+succeeds. It is per-epoch, so it needs no baseline, and it does not self-clear
+(`Req 11.4`).
+
+**The decrement is scoped to failures observed before the canister exists**, which
+is narrower than "any creation step" and the distinction matters.
+`create_and_initialize_node_canister` runs `create_canister` → `install_code` →
+`update_settings` → `nodes.push`, each with `?`
+(`archive.rs:129, 135-153, 163-179, 182`). A graceful `Err` from `install_code` or
+`update_settings` therefore returns with **the canister already created** and its id
+dropped on the stack — an orphan by any definition, and two of the three windows the
+Constraints table lists. Decrementing there would hand those windows back to
+`Req 9`'s backoff and defeat `Req 11.1`'s halt entirely.
+
+So `Req 11.3`'s "a failure THE Ledger observes" is a failure of `create_canister`
+itself; anything after it leaves the counter non-zero and halts. Making
+`update_settings` a bounded call (below) makes this sharper rather than looser: an
+unknown outcome there arrives as an `Err` on a call that may well have succeeded, and
+it must halt for exactly the same reason.
 
 ### `ledger_canister_core::archive` — `node_and_capacity`
 
@@ -414,12 +470,12 @@ test is baseline-independent.
 |---|---|---|---|
 | 1 | archive | append a valid range, re-append it, assert nothing stored and every index still resolves to its own block | `Req 2.4`, `2.7`, `2.8` |
 | 2 | archive | append a batch whose first block does not continue the tip; assert refusal and unchanged extent | `Req 1.1`, `1.2` |
-| 3 | archive | install with `block_index_offset = N+1000`, append at `N`; assert nothing stored and `start_index = N+1000`. Repeat on a non-empty node and assert `next_index = N+2000`, so the two fields are distinguishable | `Req 2.6`, `Req 3.1`, `3.3` |
+| 3 | archive | install with `block_index_offset = N+1000`, append at `N`; assert nothing stored and `block_index_offset = N+1000` reported. Then append `N+1000..N+1999` so the node is non-empty, re-send at `N`, and assert the reply still reports offset `N+1000` but `next_index = N+2000` — the two fields are indistinguishable on an empty node and must not be conflated | `Req 2.6`, `Req 3.1`, `3.3` |
 | 4 | archive | append `N..N+499`, then `N..N+999`; assert the extent becomes 1000 not 1500, every index resolves, and the chain check did not refuse on the covered prefix | `Req 2.3`, `Req 1.3` |
 | 5 | archive | append 1000 blocks, then re-append the first 600; assert success, nothing stored, extent unchanged — the case a plausible implementation panics on | `Req 2.5` |
 | 6 | archive | append at an index above the position; assert a gap and nothing stored | `Req 2.2` |
 | 7 | archive | size `max_memory_size_bytes` so a batch only partly fits; assert a short `next_index`, `at_capacity = true`, and that the blocks that fit are readable | `Req 4.1`, `4.2`, `4.3` |
-| 8 | archive | empty append; assert nothing stored, no capacity consumed, and a reported extent | `Req 3.5` |
+| 8 | archive | **partly written**: `test_empty_append_blocks_is_accepted_and_stores_nothing` already asserts an empty append stores nothing and consumes no capacity, on both the one-argument and null-index shapes. Extend it against the new implementation to assert a reported extent, and that an empty append at an index above the archive's position is neither refused nor counted | `Req 3.5`, `Req 6.5` |
 | 9 | archive | genesis into an empty archive with offset 0 | `Req 1.5` |
 | 10 | archive | **written**: `test_append_blocks_ignores_an_extra_optional_start_index` — the current one-argument archive stores the blocks, ignores the extra argument, and its empty reply reads as absent; a wrong-typed payload is rejected as a negative control | the rollout premise |
 | 11 | archive | against the new implementation: one argument only; assert blocks stored, empty reply, and that a chain mismatch traps rather than returning a refusal | `Req 5.1`, `5.2`, `5.3`, `5.4` |
@@ -433,12 +489,25 @@ test is baseline-independent.
 | 19 | integration | make the tail archive not answer; assert the round ends within `ARCHIVE_CALL_TIMEOUT` and is retried, and that a subsequent round does not store any block twice | `Req 13.1`, `13.2`, `13.4` |
 | 20 | integration | count `append_blocks` per round against a configuration that is multi-chunk today; assert one, and that the effective per-round metric matches | `Req 12.1`, `12.3`, `12.4` |
 | 21 | measurement | ledger memory across an archive-creation round, as `routine_archiving_does_not_grow_the_ledger` does for a routine one; assert growth below a bound | D2's allocation work |
-| 22 | matrix | both token variants for 1-9, 11, 13 | — |
+| 22 | archive | append a range, then re-send it whole with one block replaced by a different block at the same index; assert the append is refused and nothing stored — a fork detected without waiting for the boundary | `Req 2.9` |
+| 23 | unit, `ledger_canister_core` | create an archive after a round whose reported extent ends at `N`; assert its `block_index_offset` is `N+1` and that `archives()` tiles with no gap or overlap. Then present a node whose reported range starts elsewhere and assert no blocks are stored in it and the metric rises | `Req 7.1`, `7.2`, `7.3`, `7.4` |
+| 24 | integration | on a ledger whose archives report no extent, assert an archive is still created and blocks are still discarded — the exemptions, which a literal reading of Req 7 and Req 8 would forbid | `Req 7.5`, `Req 8.7` |
+| 25 | integration | fail `install_code` gracefully after `create_canister` succeeded; assert the creation counter stays non-zero and archiving halts, and that a failure of `create_canister` itself does not halt | `Req 11.1`, `11.3` |
+| 26 | archive | constrain growth so an append stops short for a reason other than the archive's own limit — a low `reserved_cycles_limit` on the archive, or a subnet memory cap if the harness allows it — and assert `at_capacity` is reported false and the blocks that fit are readable | `Req 4.4` |
+| 27 | matrix | both token variants for 1-9, 10, 11, 13, 22 | — |
 
 **Seams the design owes.** `Req 9` is observable only through the attempt spacing, so
 the failure counter and last-attempt timestamp must be exposed as metrics; `Req 12.1`
 needs a per-round append count; `Req 13` needs an unknown-outcome counter. All three
 are metrics rather than test-only hooks, so they are also what an operator reads.
+
+**At risk.** Row 26 depends on the harness being able to induce a growth refusal
+that is not the archive's own limit — a `reserved_cycles_limit` low enough to trip
+`IC0534`, or a constrained subnet memory. If neither is controllable, `Req 4.4` moves
+to Not attempted below and the distinction rests on review of the branch that sets
+the flag. That would be unsatisfying, because getting `Req 4.4` backwards is what
+makes a ledger spawn archives during storage exhaustion — the original incident — so
+try the reserved-cycles route before giving up on it.
 
 **Not attempted.** Inducing a trap in the append continuation end-to-end: routine
 rounds grow ledger memory by zero bytes, which is why DEFI-2967 records "I could not
@@ -490,7 +559,9 @@ corruption path open while removing the symptom that reveals it.
 
 **PR 3 — ledger, bookkeeping.** Reconciliation from the reported extent, the coverage
 and backwards checks, offset derivation, the capability probe and the seam.
-*Acceptance:* `Req 4` (4.5, 4.6), `Req 7`, `Req 8`, `Req 10`.
+*Acceptance:* `Req 4` (4.5, 4.6), `Req 7`, `Req 8`, `Req 10`. On the ICP ledger the
+acceptance is `Req 7.5`, `Req 8.7` and `Req 10.5` — the exemptions — rather than the
+criteria they except, since its archives report nothing to reconcile against.
 
 **PR 4 — ledger, round shape and retries.** Byte-based selection, one append per
 round, the backoff, the creation counter, the bounded calls, the allocation work and
