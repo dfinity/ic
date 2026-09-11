@@ -3,7 +3,7 @@
     "ic-gateway 0.2.0",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "d40c25e5abb29fb2343b3c13a48c3cd4124fbf52f5b30d2f737c0eeff36e2825",
+  "checksum": "81ab82372176069cff7eeebc03182116ca598a441712a1218fe3aa498bbf3863",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -49917,12 +49917,6 @@
       "package_url": "https://github.com/bytecodealliance/rustix",
       "repository": {
         "Http": {
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:rustix.patch"
-          ],
           "sha256": "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190",
           "url": "https://static.crates.io/crates/rustix/1.1.4/download"
         }
