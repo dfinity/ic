@@ -122,7 +122,7 @@ impl AuthorizationRequest {
 }
 
 /// An unsigned EIP-7702 authorization signed over by an authority to delegate its code.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct Authorization {
     pub chain_id: u64,
     pub delegate: Address,

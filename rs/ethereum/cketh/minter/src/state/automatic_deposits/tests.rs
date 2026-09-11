@@ -1063,13 +1063,6 @@ async fn should_not_mark_a_tuple_whose_nonce_the_account_has_already_spent() {
     finalize_sweep_carrying(&mut deposits, SweepId(1), authorization);
 
     assert_eq!(
-        applied_by(
-            &deposits,
-            &authorization_request(account(0), sweeper_contract(), TransactionNonce::ZERO)
-        ),
-        Some(first.id)
-    );
-    assert_eq!(
         deposits.delegation(&account(0)),
         Some(Delegation {
             delegate: sweeper_contract(),
@@ -1093,8 +1086,10 @@ fn should_apply_only_the_first_of_two_sweeps_carrying_the_same_nonce() {
     finalize_sweep_carrying(&mut deposits, SweepId(0), Some(signed(&incumbent)));
     finalize_sweep_carrying(&mut deposits, SweepId(1), Some(signed(&rotated)));
 
-    assert_eq!(applied_by(&deposits, &incumbent), Some(SweepId(0)));
-    assert_eq!(applied_by(&deposits, &rotated), None);
+    assert!(
+        deposits.authorization(&rotated).is_none(),
+        "applying the incumbent tuple spent the nonce the rotated one was signed for"
+    );
     assert_eq!(
         deposits.delegation(&account(0)),
         Some(Delegation {
@@ -1113,7 +1108,6 @@ fn should_not_mark_a_tuple_signed_for_a_nonce_the_account_has_not_reached() {
 
     finalize_sweep_carrying(&mut deposits, SweepId(0), Some(signed(&ahead)));
 
-    assert_eq!(applied_by(&deposits, &ahead), None);
     assert_eq!(deposits.delegation(&account(0)), None);
     assert_eq!(deposits.applied_authorizations_len(), 0);
 }
@@ -1134,7 +1128,7 @@ async fn should_report_the_delegate_of_the_highest_applied_authorization() {
             nonce: TransactionNonce::new(2),
         })
     );
-    assert_eq!(deposits.applied_authorizations_len(), 2);
+    assert_eq!(deposits.applied_authorizations_len(), 1);
 }
 
 #[tokio::test]
@@ -1164,16 +1158,6 @@ async fn should_rebuild_the_applied_marks_by_replaying_the_event_log() {
             .automatic_deposits
             .is_equivalent_to(&live.automatic_deposits),
         Ok(())
-    );
-
-    let mut unmarked = replayed.automatic_deposits.clone();
-    for stored in unmarked.authorizations.values_mut() {
-        stored.applied_by = None;
-    }
-    assert_ne!(
-        unmarked.is_equivalent_to(&live.automatic_deposits),
-        Ok(()),
-        "equivalence must notice which authorizations were applied"
     );
 }
 
@@ -1254,13 +1238,6 @@ fn authorization_request(
         delegate,
         nonce,
     )
-}
-
-fn applied_by(deposits: &AutomaticDeposits, request: &AuthorizationRequest) -> Option<SweepId> {
-    deposits
-        .authorizations
-        .get(request)
-        .and_then(|stored| stored.applied_by)
 }
 
 /// Drives the already-recorded `request` through the sweeper pipeline to a receipt of `status`.

@@ -1370,7 +1370,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 w.encode_gauge(
                     "cketh_minter_applied_authorizations",
                     s.automatic_deposits.applied_authorizations_len() as f64,
-                    "Number of stored delegation authorizations a finalized sweep applied on chain.",
+                    "Number of deposit addresses whose delegation a finalized sweep installed on chain.",
                 )?;
 
                 w.encode_counter(

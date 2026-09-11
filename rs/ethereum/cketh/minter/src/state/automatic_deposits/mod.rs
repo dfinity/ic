@@ -1,5 +1,8 @@
+mod authorizations;
 #[cfg(test)]
 mod tests;
+
+pub use authorizations::Delegation;
 
 use crate::asset::{Asset, Erc20Asset, EthAsset};
 use crate::attestation::AttestationRequest;
@@ -8,6 +11,7 @@ use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::logs::INFO;
 use crate::numeric::{BlockNumber, Erc20Value, TransactionCount, TransactionNonce};
+use crate::state::automatic_deposits::authorizations::AuthorizationStore;
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
 use crate::state::transactions::{
     ResubmitTransactionError, SweepId, SweepRequest, SweeperTransactionPipeline,
@@ -76,15 +80,9 @@ pub struct AutomaticDeposits {
     /// entries naming a retired helper stay behind forever. [`Self::attestations_len`] is exported
     /// as a metric so that growth is visible before it needs bounding.
     attestations: BTreeMap<AttestationRequest, TransactionSignature>,
-    /// Delegation authorizations the minter has signed, keyed by exactly what each one signed, each
-    /// recording whether a sweep has applied it on chain. A signature only delegates the chain, the
-    /// sweeper contract and the nonce its request names, so re-pointing the minter at another
-    /// sweeper contract misses this map rather than reusing a tuple that delegates the old one.
-    ///
-    /// Nothing prunes this map: it grows with the number of accounts that have ever been swept, and
-    /// entries naming a retired helper stay behind forever. [`Self::authorizations_len`] is exported
-    /// as a metric so that growth is visible before it needs bounding.
-    authorizations: BTreeMap<AuthorizationRequest, StoredAuthorization>,
+    /// Delegation authorizations the minter has signed and the delegations applying them
+    /// installed, per deposit-address account (see [`AuthorizationStore`]).
+    authorizations: AuthorizationStore,
     /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
     /// its own nonce sequence, independent of the main-address withdrawal pipeline.
     sweeper_transactions: SweeperTransactionPipeline,
@@ -234,7 +232,7 @@ impl AutomaticDeposits {
         }
 
         for authorization in authorizations {
-            self.record_applied_authorization(authorization, id);
+            self.authorizations.record_applied(authorization, id);
         }
         finalized
     }
@@ -273,12 +271,10 @@ impl AutomaticDeposits {
         self.attestations.insert(request, signature);
     }
 
-    /// The authorization already stored for `account`, if any: signing another would cost a
+    /// The authorization already stored for `request`, if any: signing another would cost a
     /// threshold-ECDSA signature for the same tuple.
     pub fn authorization(&self, request: &AuthorizationRequest) -> Option<&TransactionSignature> {
-        self.authorizations
-            .get(request)
-            .map(|stored| &stored.signature)
+        self.authorizations.signature(request)
     }
 
     pub fn record_authorization(
@@ -286,67 +282,12 @@ impl AutomaticDeposits {
         request: AuthorizationRequest,
         signature: TransactionSignature,
     ) {
-        self.authorizations.insert(
-            request,
-            StoredAuthorization {
-                signature,
-                applied_by: None,
-            },
-        );
+        self.authorizations.record_signed(request, signature);
     }
 
-    /// The delegation `account`'s deposit address carries on chain, as the authorizations applied
-    /// to it say: the delegate the highest applied nonce names, and the nonce the address has
-    /// reached. `None` while none of the minter's authorizations for the address has been applied,
-    /// which for a deposit address means it holds no delegation at all: only the minter ever
-    /// authorizes one.
+    /// The delegation `account`'s deposit address carries on chain, if any.
     pub fn delegation(&self, account: &Account) -> Option<Delegation> {
-        self.authorizations_of(account)
-            .filter(|(_request, stored)| stored.applied_by.is_some())
-            .map(|(request, _stored)| request)
-            .max_by_key(|request| request.nonce())
-            .map(|request| Delegation {
-                delegate: request.delegate(),
-                nonce: request
-                    .nonce()
-                    .checked_increment()
-                    .expect("BUG: authorization nonce space exhausted"),
-            })
-    }
-
-    /// The authorizations signed for `account`, in key order. An [`AuthorizationRequest`] orders by
-    /// its account first, so one account's authorizations are a contiguous range: reaching them
-    /// costs the account's own entries rather than a scan of every account ever swept, which
-    /// matters on replay, where every finalized sweep consults them.
-    fn authorizations_of(
-        &self,
-        account: &Account,
-    ) -> impl Iterator<Item = (&AuthorizationRequest, &StoredAuthorization)> {
-        let first =
-            AuthorizationRequest::new(*account, u64::MIN, Address::ZERO, TransactionNonce::ZERO);
-        self.authorizations
-            .range(first..)
-            .take_while(move |(request, _stored)| request.account() == *account)
-    }
-
-    /// The nonce `account`'s deposit address is at, and therefore the only nonce a further
-    /// authorization of it can be signed for.
-    fn next_authorization_nonce(&self, account: &Account) -> TransactionNonce {
-        self.delegation(account)
-            .map_or(TransactionNonce::ZERO, |delegation| delegation.nonce)
-    }
-
-    /// Record that `sweep_id` applied `request`'s authorization on chain, unless the protocol
-    /// skipped it: a tuple applies only at the authority's current nonce, and applying one spends
-    /// that nonce, so a tuple signed for any other leaves the address as it was.
-    fn record_applied_authorization(&mut self, request: AuthorizationRequest, sweep_id: SweepId) {
-        if request.nonce() != self.next_authorization_nonce(&request.account()) {
-            return;
-        }
-        self.authorizations
-            .get_mut(&request)
-            .expect("BUG: a sweep carried an authorization the minter never signed")
-            .applied_by = Some(sweep_id);
+        self.authorizations.delegation(account)
     }
 
     /// Arm the `(account, asset)` pair, whose deposit `address` is derived for `account`.
@@ -593,14 +534,11 @@ impl AutomaticDeposits {
     }
 
     pub fn authorizations_len(&self) -> usize {
-        self.authorizations.len()
+        self.authorizations.stored_len()
     }
 
     pub fn applied_authorizations_len(&self) -> usize {
-        self.authorizations
-            .values()
-            .filter(|stored| stored.applied_by.is_some())
-            .count()
+        self.authorizations.applied_len()
     }
 
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
@@ -683,7 +621,7 @@ impl Default for AutomaticDeposits {
             watchlist: TimedSizedMap::new(DEPOSIT_ADDRESS_SCAN_WINDOW, MAX_ACTIVE_DEPOSITS),
             sweep: BTreeMap::new(),
             attestations: BTreeMap::new(),
-            authorizations: BTreeMap::new(),
+            authorizations: AuthorizationStore::default(),
             sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
         }
     }
@@ -798,25 +736,6 @@ impl ScanTarget<Erc20Asset> {
     pub fn token(&self) -> Address {
         self.asset.contract_address()
     }
-}
-
-/// An EIP-7702 authorization the minter has signed, and the sweep that applied it on chain if one
-/// has. Signing a tuple only makes it available to a sweep: the delegation it authorizes exists on
-/// chain only once a sweep carrying the tuple has finalized with the authority at its nonce.
-#[derive(Clone, PartialEq, Debug)]
-struct StoredAuthorization {
-    signature: TransactionSignature,
-    applied_by: Option<SweepId>,
-}
-
-/// The delegation a deposit address carries on chain.
-#[derive(Clone, Copy, Eq, PartialEq, Debug)]
-pub struct Delegation {
-    /// The contract the address' code points at.
-    pub delegate: Address,
-    /// The nonce the address has reached, one past the nonce of the authorization that installed
-    /// the delegation.
-    pub nonce: TransactionNonce,
 }
 
 /// A funded token awaiting sweeping at a [`DepositRequest`]'s deposit address.
