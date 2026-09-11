@@ -14,6 +14,13 @@ mod tests;
 
 use crate::asset::Asset;
 use crate::attestation::{AttestationRequest, sign_attestation};
+use crate::balance_scan::batcher::{
+    Delegation, MAX_CALLS_PER_BATCH, decode_delegation_batch, encode_delegation_batch,
+};
+use crate::balance_scan::call_args;
+use crate::deposit_address::DepositAddress;
+use crate::eth_rpc_client::{MIN_ATTACHED_CYCLES, NoReduction, ToReducedWithStrategy, rpc_client};
+use crate::numeric::BlockNumber;
 use crate::sweeper_contract::SweepItem;
 use crate::{
     deposit_address::AddressSchema,
@@ -24,7 +31,7 @@ use crate::{
     state::{
         State, TaskType,
         audit::{EventType, process_event},
-        automatic_deposits::SweepTarget,
+        automatic_deposits::DelegatedSweepBatch,
         mutate_state, read_state,
         transactions::{
             AuthorizedSweepItem, CreateSweepTransactionError, PipelineRequest, SweepRequest,
@@ -38,10 +45,12 @@ use crate::{
         send_signed_transactions,
     },
 };
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
 use futures::future::join_all;
 use ic_canister_log::log;
+use ic_canister_runtime::Runtime;
 use ic_ethereum_types::Address;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 const SWEEP_REQUESTS_BATCH_SIZE: usize = 5;
 const SWEEP_TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
@@ -70,6 +79,14 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         return;
     }
 
+    let client = read_state(rpc_client);
+    enqueue_pending_sweeps(runtime, &client).await;
+}
+
+pub(crate) async fn enqueue_pending_sweeps<R: CanisterRuntime, Rt: Runtime>(
+    runtime: &R,
+    client: &EvmRpcClient<Rt, CandidResponseConverter, DoubleCycles>,
+) {
     let batch_per_asset =
         read_state(|s| s.automatic_deposits.requests_batch(MAX_DEPOSITS_PER_SWEEP));
     if batch_per_asset.is_empty() {
@@ -84,26 +101,82 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         return;
     };
 
+    let Some(latest_block) = read_state(|s| s.latest_block_height) else {
+        log!(
+            DEBUG,
+            "[create_pending_sweeper_requests]: SKIPPING: latest block height unknown"
+        );
+        return;
+    };
+    let addresses: Vec<DepositAddress> = batch_per_asset
+        .values()
+        .flatten()
+        .map(|target| target.address())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let delegations = read_delegations(&addresses, latest_block, client).await;
+
     for (asset, targets) in batch_per_asset {
-        let Some(attestation_requests) = read_state(|s| s.attestation_requests(&targets)) else {
-            log!(
-                DEBUG,
-                "[create_pending_sweeper_requests]: SKIPPING: no deposit helper with subaccount is configured"
-            );
-            return;
-        };
-        let Some(authorization_requests) = read_state(|s| s.authorization_requests(&targets))
-        else {
+        let Some(batch) = read_state(|s| s.sweep_delegations(&targets, &delegations)) else {
             log!(
                 DEBUG,
                 "[create_pending_sweeper_requests]: SKIPPING: the sweeper contract address was cleared while enqueueing"
             );
             return;
         };
+        let Some(attestation_requests) = read_state(|s| s.attestation_requests(&batch.targets))
+        else {
+            log!(
+                DEBUG,
+                "[create_pending_sweeper_requests]: SKIPPING: no deposit helper with subaccount is configured"
+            );
+            return;
+        };
+        let authorization_requests = batch
+            .targets
+            .iter()
+            .filter_map(|delegated| delegated.authorization.clone())
+            .collect();
         sign_attestations_batch(attestation_requests, runtime).await;
         sign_authorizations_batch(authorization_requests, runtime).await;
-        enqueue_sweep(asset, &targets, &gas_fee_estimate, runtime);
+        enqueue_sweep(asset, &batch, &gas_fee_estimate, runtime);
     }
+}
+
+/// Reads on chain, at `latest_block`, which delegation each of `addresses` holds, so a sweep
+/// carries a tuple only for the addresses that still need one.
+///
+/// An address whose chunk failed to be read or decoded is simply absent from the result, which
+/// leaves its deposits queued for a later tick rather than sweeping on an unknown delegation.
+async fn read_delegations<Rt: Runtime>(
+    addresses: &[DepositAddress],
+    latest_block: BlockNumber,
+    client: &EvmRpcClient<Rt, CandidResponseConverter, DoubleCycles>,
+) -> BTreeMap<DepositAddress, Delegation> {
+    let mut delegations = BTreeMap::new();
+    for chunk in addresses.chunks(MAX_CALLS_PER_BATCH) {
+        match client
+            .call(call_args(encode_delegation_batch(chunk), latest_block))
+            .with_cycles(MIN_ATTACHED_CYCLES)
+            .try_send()
+            .await
+            .reduce_with_strategy(NoReduction)
+        {
+            Ok(hex) => match decode_delegation_batch(hex.as_ref(), chunk.len()) {
+                Ok(read) => delegations.extend(chunk.iter().copied().zip(read)),
+                Err(e) => log!(
+                    INFO,
+                    "[create_pending_sweeper_requests]: delegation read decode error: {e:?}"
+                ),
+            },
+            Err(e) => log!(
+                INFO,
+                "[create_pending_sweeper_requests]: delegation read eth_call error: {e:?}"
+            ),
+        }
+    }
+    delegations
 }
 
 /// Enqueues one sweep of `asset` from the targets both signing passes covered, so the pipeline can
@@ -111,39 +184,51 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
 ///
 /// A target whose attestation or authorization is missing is left out rather than swept: its
 /// signing failed, so the sweep has nothing to prove the address credits the account, or nothing to
-/// delegate it with. It stays queued, and the next tick tries it again.
+/// delegate it with. It stays queued, and the next tick tries it again. A target already delegated
+/// to the sweeper contract carries no authorization at all, and is swept without one.
 fn enqueue_sweep<R: CanisterRuntime>(
     asset: Asset,
-    targets: &[SweepTarget],
+    batch: &DelegatedSweepBatch,
     gas_fee_estimate: &GasFeeEstimate,
     runtime: &R,
 ) {
     mutate_state(|s| {
-        let (Some(attestation_requests), Some(authorization_requests), Some(destination)) = (
-            s.attestation_requests(targets),
-            s.authorization_requests(targets),
+        let (Some(attestation_requests), Some(destination)) = (
+            s.attestation_requests(&batch.targets),
             s.sweeper_contract_address,
         ) else {
             return;
         };
 
-        assert_eq!(targets.len(), attestation_requests.len());
-        assert_eq!(targets.len(), authorization_requests.len());
+        assert_eq!(batch.targets.len(), attestation_requests.len());
 
-        let items: Vec<_> = targets
+        if batch.delegate != destination {
+            log!(
+                INFO,
+                "[create_pending_sweeper_requests]: SKIPPING {asset}: the sweeper contract changed since its deposits' delegations were read"
+            );
+            return;
+        }
+
+        let items: Vec<_> = batch
+            .targets
             .iter()
             .zip(attestation_requests)
-            .zip(authorization_requests)
-            .filter_map(|((target, attestation_request), authorization_request)| {
+            .filter_map(|(delegated, attestation_request)| {
                 let attestation = s.automatic_deposits.attestation(&attestation_request)?;
-                let authorization = s.automatic_deposits.authorization(&authorization_request)?;
+                let authorization = match &delegated.authorization {
+                    Some(request) => Some(
+                        request.signed_with(s.automatic_deposits.authorization(request)?.clone()),
+                    ),
+                    None => None,
+                };
                 Some(AuthorizedSweepItem {
                     item: SweepItem {
-                        deposit: target.address(),
-                        account: target.account(),
+                        deposit: delegated.target.address(),
+                        account: delegated.target.account(),
                         attestation: attestation.clone(),
                     },
-                    authorization: Some(authorization_request.signed_with(authorization.clone())),
+                    authorization,
                 })
             })
             .collect();
