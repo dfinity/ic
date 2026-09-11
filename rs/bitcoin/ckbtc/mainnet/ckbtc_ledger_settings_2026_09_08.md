@@ -4,7 +4,7 @@ Target canister: `mxzaz-hqaaa-aaaar-qaada-cai`
 
 New memory allocation: `1_073_741_824`
 
-Previous ckBTC ledger proposal: https://dashboard.internetcomputer.org/proposal/143757
+Previous ckBTC ledger proposal: https://dashboard.internetcomputer.org/proposal/143834
 
 ---
 

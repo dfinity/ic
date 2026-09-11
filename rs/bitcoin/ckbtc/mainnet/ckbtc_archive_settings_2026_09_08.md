@@ -4,7 +4,7 @@ Target canister: `nbsys-saaaa-aaaar-qaaga-cai`
 
 New memory allocation: `1_073_741_824`
 
-Previous ckBTC archive proposal: https://dashboard.internetcomputer.org/proposal/140950
+Previous ckBTC archive proposal: https://dashboard.internetcomputer.org/proposal/143835
 
 ---
 

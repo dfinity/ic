@@ -4,7 +4,7 @@ Target canister: `mqygn-kiaaa-aaaar-qaadq-cai`
 
 New memory allocation: `1_073_741_824`
 
-Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/141772
+Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/143837
 
 ---
 

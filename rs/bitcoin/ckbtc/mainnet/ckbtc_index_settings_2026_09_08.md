@@ -4,7 +4,7 @@ Target canister: `n5wcd-faaaa-aaaar-qaaea-cai`
 
 New memory allocation: `4_294_967_296`
 
-Previous ckBTC index proposal: https://dashboard.internetcomputer.org/proposal/143762
+Previous ckBTC index proposal: https://dashboard.internetcomputer.org/proposal/143836
 
 ---
 
