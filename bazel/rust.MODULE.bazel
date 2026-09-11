@@ -156,9 +156,12 @@ crate.spec(
     version = "^0.8.4",
 )
 crate.spec(
-    features = ["typed-header"],
+    features = [
+        "middleware",
+        "typed-header",
+    ],
     package = "axum-extra",
-    version = "^0.10.1",
+    version = "^0.12",
 )
 crate.spec(
     package = "axum-otel-metrics",
@@ -1020,7 +1023,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "lru",
-    version = "^0.7.8",
+    version = "^0.12",
 )
 crate.spec(
     features = [
@@ -1066,6 +1069,7 @@ crate.spec(
     version = "^0.15.0",
 )
 crate.spec(
+    default_features = False,
     package = "mockito",
     version = "^1.6.1",
 )

@@ -8,7 +8,9 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::json;
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 use strum::IntoEnumIterator;
 
@@ -75,12 +77,25 @@ impl FromStr for JsonRpcRequest {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+/// How a [`JsonRpcRequestMatcher`] decides whether a request's JSON-RPC `params` match.
+/// [`serde_json::Value`] implements it as exact equality; callers plug in their own filters
+/// for anything protocol-specific.
+pub trait MatchRequestParams: Debug {
+    fn matches(&self, params: &serde_json::Value) -> bool;
+}
+
+impl MatchRequestParams for serde_json::Value {
+    fn matches(&self, params: &serde_json::Value) -> bool {
+        self == params
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct JsonRpcRequestMatcher {
     http_method: CanisterHttpMethod,
     provider: JsonRpcProvider,
     json_rpc_method: JsonRpcMethod,
-    match_request_params: Option<serde_json::Value>,
+    match_request_params: Option<Arc<dyn MatchRequestParams>>,
     max_response_bytes: Option<u64>,
 }
 
@@ -101,7 +116,7 @@ impl JsonRpcRequestMatcher {
             .collect()
     }
 
-    pub fn with_request_params(mut self, params: Option<serde_json::Value>) -> Self {
+    pub fn with_request_params(mut self, params: Option<Arc<dyn MatchRequestParams>>) -> Self {
         self.match_request_params = params;
         self
     }
@@ -156,12 +171,12 @@ impl Matcher for JsonRpcRequestMatcher {
             && self
                 .match_request_params
                 .as_ref()
-                .map(|expected_params| expected_params == &json_rpc_request.params)
+                .map(|params| params.matches(&json_rpc_request.params))
                 .unwrap_or(true)
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 struct StubOnce {
     matcher: JsonRpcRequestMatcher,
     response_result: serde_json::Value,
@@ -262,14 +277,18 @@ impl MockJsonRpcProviders {
 
 pub struct MockJsonRpcProvidersBuilder {
     json_rpc_method: JsonRpcMethod,
-    json_rpc_params: Option<serde_json::Value>,
+    json_rpc_params: Option<Arc<dyn MatchRequestParams>>,
     max_response_bytes: Option<u64>,
     responses: BTreeMap<JsonRpcProvider, serde_json::Value>,
 }
 
 impl MockJsonRpcProvidersBuilder {
-    pub fn with_request_params(mut self, params: serde_json::Value) -> Self {
-        self.json_rpc_params = Some(params);
+    pub fn with_request_params(self, params: serde_json::Value) -> Self {
+        self.with_request_params_filter(params)
+    }
+
+    pub fn with_request_params_filter(mut self, filter: impl MatchRequestParams + 'static) -> Self {
+        self.json_rpc_params = Some(Arc::new(filter));
         self
     }
 
