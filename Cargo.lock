@@ -1591,29 +1591,6 @@ dependencies = [
 
 [[package]]
 name = "axum-extra"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9963ff19f40c6102c76756ef0a46004c0d58957d87259fc9208ff8441c12ab96"
-dependencies = [
- "axum",
- "axum-core",
- "bytes",
- "futures-util",
- "headers",
- "http 1.4.0",
- "http-body",
- "http-body-util",
- "mime",
- "pin-project-lite",
- "rustversion",
- "serde_core",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "axum-extra"
 version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be44683b41ccb9ab2d23a5230015c9c3c55be97a25e4428366de8873103f7970"
@@ -1623,6 +1600,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
+ "headers",
  "http 1.4.0",
  "http-body",
  "http-body-util",
@@ -2937,15 +2915,6 @@ checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
  "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "colored"
-version = "3.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
-dependencies = [
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4540,7 +4509,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e64e461c3f1e69d99372620640b3fd5f0309eeda2e26e4af69f6760c0e1df845"
 dependencies = [
- "colored 2.2.0",
+ "colored",
  "fnv",
 ]
 
@@ -5710,6 +5679,8 @@ dependencies = [
  "anyhow",
  "attestation",
  "clap",
+ "config_tool",
+ "config_types",
  "hex",
  "ic-sys",
  "ic_device",
@@ -5825,6 +5796,7 @@ dependencies = [
  "ic-types",
  "rand 0.8.6",
  "rustls",
+ "sev",
  "sev_guest",
  "sev_guest_testing",
  "tempfile",
@@ -6897,7 +6869,7 @@ dependencies = [
  "async-channel 2.5.0",
  "async-trait",
  "axum",
- "axum-extra 0.12.6",
+ "axum-extra",
  "base64 0.23.1",
  "bytes",
  "candid",
@@ -6985,7 +6957,7 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "axum",
- "axum-extra 0.10.3",
+ "axum-extra",
  "bytes",
  "candid",
  "clap",
@@ -9917,7 +9889,7 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "axum",
- "axum-extra 0.12.6",
+ "axum-extra",
  "bytes",
  "candid",
  "clap",
@@ -12140,7 +12112,7 @@ name = "ic-neurons-fund-audit"
 version = "0.9.0"
 dependencies = [
  "candid",
- "colored 2.2.0",
+ "colored",
  "ic-agent",
  "ic-neurons-fund",
  "ic-sns-governance",
@@ -14104,7 +14076,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
- "colored 2.2.0",
+ "colored",
  "csv",
  "ic-agent",
  "ic-base-types",
@@ -15812,7 +15784,7 @@ version = "0.9.0"
 dependencies = [
  "ic-heap-bytes",
  "ic-types",
- "lru 0.7.8",
+ "lru",
  "proptest",
 ]
 
@@ -15820,7 +15792,7 @@ dependencies = [
 name = "ic-utils-mem-lru"
 version = "0.9.0"
 dependencies = [
- "lru 0.7.8",
+ "lru",
 ]
 
 [[package]]
@@ -17968,12 +17940,6 @@ dependencies = [
 
 [[package]]
 name = "lru"
-version = "0.7.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e999beba7b6e8345721bd280141ed958096a2e4abdf74f67ff4ce49b4b54e47a"
-
-[[package]]
-name = "lru"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
@@ -18444,7 +18410,6 @@ checksum = "90820618712cab19cfc46b274c6c22546a82affcb3c3bdf0f29e3db8e1bb92c0"
 dependencies = [
  "assert-json-diff",
  "bytes",
- "colored 3.1.1",
  "futures-core",
  "http 1.4.0",
  "http-body",
@@ -20082,7 +20047,7 @@ dependencies = [
  "askama",
  "async-trait",
  "axum",
- "axum-extra 0.10.3",
+ "axum-extra",
  "axum-server",
  "backon",
  "base64 0.22.1",
@@ -20990,7 +20955,7 @@ dependencies = [
  "indoc",
  "instability",
  "itertools 0.13.0",
- "lru 0.12.5",
+ "lru",
  "paste",
  "strum 0.26.3",
  "unicode-segmentation",
@@ -21433,7 +21398,7 @@ dependencies = [
  "candid",
  "chrono",
  "clap",
- "colored 2.2.0",
+ "colored",
  "futures",
  "ic-agent",
  "ic-base-types",
@@ -22888,6 +22853,7 @@ dependencies = [
 name = "sev_guest_testing"
 version = "0.0.0"
 dependencies = [
+ "attestation",
  "attestation_testing",
  "sev",
  "sev_guest_firmware",
@@ -23139,7 +23105,7 @@ version = "4.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e7e46c8c90251d47d08b28b8a419ffb4aede0f87c2eea95e17d1d5bacbf3ef1"
 dependencies = [
- "colored 2.2.0",
+ "colored",
  "log",
  "time",
  "windows-sys 0.48.0",
@@ -23762,7 +23728,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
- "colored 2.2.0",
+ "colored",
  "futures",
  "ic-agent",
  "ic-base-types",
