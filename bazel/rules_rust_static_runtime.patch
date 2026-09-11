@@ -9,11 +9,7 @@
 # unable to load the orchestrator's firewall rules.
 #
 # This patch prefers the static runtime for shared libraries too, falling back
-# to the dynamic one for toolchains that ship no static runtime (the local
-# toolchains' system libstdc++.so). The policy lives in the helper,
-# `cc_runtime_libs`, shared by the three sites that pick a runtime: the action
-# inputs (`collect_inputs`), the rustc link flags (`_add_native_link_flags`)
-# and rustdoc's doc-test link flags.
+# to the dynamic one for toolchains that ship no static runtime.
 diff --git a/rust/private/rustc.bzl b/rust/private/rustc.bzl
 index d447c9730..2e576db84 100644
 --- a/rust/private/rustc.bzl
@@ -23,6 +19,38 @@ index d447c9730..2e576db84 100644
      return crate_info.type in ("rlib", "lib")
 
 +def cc_runtime_libs(cc_toolchain, feature_configuration, crate_type):
++    """Returns the cc_toolchain's C++ runtime libraries to link a crate against.
++
++    For every crate type but `dylib`/`cdylib` this is the static runtime
++    (e.g. libstdc++.a or libc++.a), like linking a `cc_binary` would.
++
++    For shared libraries rules_rust links the *dynamic* runtime (e.g.
++    libstdc++.so or libc++.so), but we prefer the static one whenever the
++    toolchain provides it: hermetic toolchains like hermetic-llvm only usably
++    ship a static runtime, and its libunwind is the sole provider of the
++    `_Unwind_*` symbols rust std needs since the toolchain links with
++    `--unwindlib=none`. Their dynamic runtime consists of versioned library
++    files (libunwind.so.1) that a `-l` flag never matches, so linking it
++    silently produces a shared library with undefined `_Unwind_*` symbols that
++    only fails at runtime, because shared-library links don't fail on
++    undefined symbols: dlopen of e.g. libnss_icos.so fails, leaving GuestOS
++    unable to resolve "hostos" and nft unable to load the orchestrator's
++    firewall rules.
++
++    Falls back to the dynamic runtime when the toolchain provides no static
++    one, which is the case for the local toolchains that only offer the
++    system libstdc++.so.
++
++    Args:
++        cc_toolchain (CcToolchainInfo): The cc_toolchain to query, not None.
++        feature_configuration (FeatureConfiguration): Feature configuration to be queried.
++        crate_type (str): The crate type of the crate being linked.
++
++    Returns:
++        A tuple of the runtime libraries (depset[File]) and whether they are
++        the static runtime (bool), which callers need to tell `-lstatic=` from
++        `-ldylib=`.
++    """
 +    static_runtime_libs = cc_toolchain.static_runtime_lib(feature_configuration = feature_configuration)
 +    if crate_type in ["dylib", "cdylib"] and not static_runtime_libs.to_list():
 +        return cc_toolchain.dynamic_runtime_lib(feature_configuration = feature_configuration), False
