@@ -6,6 +6,7 @@ mod chain_key;
 mod execution_environment;
 mod ingress;
 mod self_validating;
+mod upgrade;
 mod xnet;
 
 pub use self::{
@@ -24,8 +25,10 @@ pub use self::{
     },
     ingress::{IngressPayload, IngressPayloadError},
     self_validating::{MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload},
+    upgrade::{bytes_to_upgrade_payload, upgrade_payload_to_bytes},
     xnet::XNetPayload,
 };
+use crate::consensus::upgrade::UpgradePermitAction;
 use crate::{
     Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
@@ -177,6 +180,7 @@ pub struct BatchPayload {
     pub canister_http: Vec<u8>,
     pub query_stats: Vec<u8>,
     pub chain_key: Vec<u8>,
+    pub upgrade: Vec<u8>,
 }
 
 /// Batch properties collected form the last DKG summary block.
@@ -202,6 +206,7 @@ pub struct BatchMessages {
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
     pub query_stats: Option<QueryStatsPayload>,
+    pub upgrade: Vec<UpgradePermitAction>,
 }
 
 /// Error type that can occur during an `BatchPayload::into_messages` call
@@ -209,6 +214,7 @@ pub struct BatchMessages {
 pub enum IntoMessagesError {
     IngressPayloadError(IngressPayloadError),
     QueryStatsPayloadError(ProxyDecodeError),
+    UpgradePayloadError(ProxyDecodeError),
 }
 
 impl BatchPayload {
@@ -226,6 +232,12 @@ impl BatchPayload {
             bitcoin_adapter_responses: self.self_validating.0,
             query_stats: QueryStatsPayload::deserialize(&self.query_stats)
                 .map_err(IntoMessagesError::QueryStatsPayloadError)?,
+            upgrade: if self.upgrade.is_empty() {
+                Vec::new()
+            } else {
+                bytes_to_upgrade_payload(&self.upgrade)
+                    .map_err(IntoMessagesError::UpgradePayloadError)?
+            },
         })
     }
 
@@ -237,6 +249,7 @@ impl BatchPayload {
             canister_http,
             query_stats,
             chain_key,
+            upgrade,
         } = &self;
 
         ingress.is_empty()
@@ -245,6 +258,7 @@ impl BatchPayload {
             && canister_http.is_empty()
             && query_stats.is_empty()
             && chain_key.is_empty()
+            && upgrade.is_empty()
     }
 }
 
@@ -405,6 +419,7 @@ mod tests {
             canister_http,
             query_stats,
             chain_key,
+            upgrade: _,
         } = BatchPayload::default();
 
         assert_eq!(ingress.total_ids_size_estimate(), NumBytes::new(0));
@@ -429,6 +444,7 @@ mod tests {
             canister_http,
             query_stats,
             chain_key,
+            upgrade,
         } = &payload;
 
         assert!(ingress.is_empty());
@@ -437,6 +453,7 @@ mod tests {
         assert!(canister_http.is_empty());
         assert!(query_stats.is_empty());
         assert!(chain_key.is_empty());
+        assert!(upgrade.is_empty());
     }
 
     #[test]

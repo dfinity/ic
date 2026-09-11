@@ -66,6 +66,7 @@ members = [
     "rs/consensus/idkg",
     "rs/consensus/mocks",
     "rs/consensus/utils",
+    "rs/consensus/upgrade",
     "rs/consensus/chain_key",
     "rs/criterion_time",
     "rs/cross-chain/blob_store",

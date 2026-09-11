@@ -2,6 +2,7 @@
 
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl, dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
+    upgrade_permit_auth_pool::UpgradePermitAuthPoolImpl,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::membership::Membership;
@@ -114,6 +115,7 @@ pub struct Dependencies {
     pub dkg_pool: Arc<RwLock<DkgPoolImpl>>,
     pub idkg_pool: Arc<RwLock<IDkgPoolImpl>>,
     pub canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
+    pub upgrade_permit_auth_pool: Arc<RwLock<UpgradePermitAuthPoolImpl>>,
 }
 
 pub struct DependenciesBuilder {
@@ -282,6 +284,10 @@ impl DependenciesBuilder {
         )));
         let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
             ic_metrics::MetricsRegistry::new(),
+            log.clone(),
+        )));
+        let upgrade_permit_auth_pool = Arc::new(RwLock::new(UpgradePermitAuthPoolImpl::new(
+            ic_metrics::MetricsRegistry::new(),
             log,
         )));
         let pool = TestConsensusPool::new(
@@ -325,6 +331,7 @@ impl DependenciesBuilder {
             dkg_pool,
             idkg_pool,
             canister_http_pool,
+            upgrade_permit_auth_pool,
         }
     }
 }

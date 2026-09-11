@@ -11,6 +11,7 @@ mod metrics;
 mod pool_common;
 #[cfg(test)]
 mod test_utils;
+pub mod upgrade_permit_auth_pool;
 
 pub mod backup;
 mod lmdb_iterator;

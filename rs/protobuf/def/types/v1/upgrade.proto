@@ -1,0 +1,39 @@
+// Protocol buffers for the Phase-2 upgrade permit protocol: permit requests
+// in block payloads and gossiped authorization shares.
+
+syntax = "proto3";
+package types.v1;
+
+import "types/v1/signature.proto";
+import "types/v1/types.proto";
+
+message UpgradeAction {
+  oneof action {
+    RequestUpgradePermit request_permit = 1;
+    AuthorizeUpgradePermit authorize_permit = 2;
+    ReturnUpgradePermit return_permit = 3;
+  }
+}
+
+message UpgradePermitRequest {
+  types.v1.NodeId requestor = 1;
+  uint64 request_height = 2;
+}
+
+message RequestUpgradePermit {
+  UpgradePermitRequest request = 1;
+}
+
+message AuthorizeUpgradePermit {
+  UpgradePermitRequest request = 1;
+  repeated types.v1.BasicSignature signatures = 2;
+}
+
+message ReturnUpgradePermit {
+  types.v1.NodeId node = 1;
+}
+
+message UpgradePermitAuthorizationShare {
+  UpgradePermitRequest request = 1;
+  types.v1.BasicSignature signature = 2;
+}
