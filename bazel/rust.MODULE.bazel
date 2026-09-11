@@ -2,15 +2,11 @@
 # Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file
 # to regenerate Cargo Bazel lockfiles.
 
-bazel_dep(name = "rules_rust", version = "0.71.3")
-archive_override(
+bazel_dep(name = "rules_rust", version = "0.74.0")
+single_version_override(
     module_name = "rules_rust",
-    integrity = "sha256-5GXwZtp5VlNxMI+dolYYxhyhG5f5ReZ5qz30gAbPsrg=",
     patch_strip = 1,
     patches = ["//bazel:rules_rust_static_runtime.patch"],
-    strip_prefix = "rules_rust-f8f382c7e351a797242ce4a92262342f8994e265",
-    type = "tar.gz",
-    urls = ["https://codeload.github.com/dfinity/rules_rust/tar.gz/f8f382c7e351a797242ce4a92262342f8994e265"],
 )
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
@@ -2291,16 +2287,6 @@ crate.annotation(
         "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
     },
     crate = "ring",
-)
-crate.annotation(
-    crate = "rustix",
-    # Patch for determinism issues: rustix's build script leaves a
-    # non-deterministic compiler-probe artifact (`rustix_test_can_compile`) in
-    # `OUT_DIR`, which rules_rust captures as a cacheable build output. This is
-    # the upstream fix: https://github.com/bytecodealliance/rustix/pull/1628
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:rustix.patch"],
-    version = "1.1.4",
 )
 crate.annotation(
     crate = "ic-wasm",
