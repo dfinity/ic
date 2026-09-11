@@ -446,7 +446,7 @@ fn should_credit_mixed_erc20_and_eth_deposits_through_one_sweep_per_asset() {
 
     let setup = setup
         .assert_sweeps_batched_per_token(&erc20_deposits)
-        .assert_eth_sweeps_batched(&[2])
+        .assert_eth_sweeps_batched(&eth_deposits)
         .assert_addresses_swept_empty(&erc20_deposits)
         .assert_eth_addresses_swept_empty(&eth_deposits)
         .assert_minter_holds_swept_totals(&erc20_deposits)
@@ -632,7 +632,7 @@ fn should_credit_twenty_eth_deposits_through_ten_deposit_sweeps() {
     assert_eth_sweep_gas_near_demo(&sweeps, 10);
 
     let setup = setup
-        .assert_eth_sweeps_batched(&[10, 10])
+        .assert_eth_sweeps_batched(&deposits)
         .assert_eth_addresses_swept_empty(&deposits)
         .assert_minter_received_swept_eth_total(&deposits, minter_eth_before)
         .assert_eth_delegations_installed(&deposits, &delegate)
