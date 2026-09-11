@@ -160,6 +160,7 @@ use registry_canister::mutations::{
         add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
         remove_firewall_rules_compute_entries, update_firewall_rules_compute_entries,
     },
+    merge_subnets::MergeSubnetsPayload,
     node_management::do_remove_nodes::RemoveNodesPayload,
     prepare_canister_migration::PrepareCanisterMigrationPayload,
     reroute_canister_ranges::RerouteCanisterRangesPayload,
@@ -477,6 +478,10 @@ enum SubCommand {
 
     // Submits a proposal to add custom upgrade path entries
     ProposeToInsertSnsWasmUpgradePathEntries(ProposeToInsertSnsWasmUpgradePathEntriesCmd),
+
+    /// Submits a proposal to merge a subnet into another one, i.e. to reroute
+    /// the canister ID ranges of the source subnet to the destination subnet.
+    ProposeToMergeSubnets(ProposeToMergeSubnetsCmd),
 
     /// Propose additions or updates to `canister_migrations`. Step 1 of canister migration.
     ProposeToPrepareCanisterMigration(ProposeToPrepareCanisterMigrationCmd),
@@ -1120,6 +1125,45 @@ impl ProposalPayload<DeleteSubnetPayload> for ProposeToDeleteSubnetCmd {
     async fn payload(&self, _: &Agent) -> DeleteSubnetPayload {
         DeleteSubnetPayload {
             subnet_id: Principal::from(self.subnet_id),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to merge a subnet into another one.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToMergeSubnetsCmd {
+    /// The subnet whose canister ID ranges are merged into those of the
+    /// destination subnet. It hosts no canister ID range after the merge and is
+    /// expected to be deleted afterwards.
+    #[clap(long)]
+    pub source_subnet: PrincipalId,
+
+    /// The subnet that hosts the canister ID ranges of the source subnet after
+    /// the merge.
+    #[clap(long)]
+    pub destination_subnet: PrincipalId,
+}
+
+impl ProposalTitle for ProposeToMergeSubnetsCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Merge subnet {} into subnet {}",
+                shortened_pid_string(&self.source_subnet),
+                shortened_pid_string(&self.destination_subnet),
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<MergeSubnetsPayload> for ProposeToMergeSubnetsCmd {
+    async fn payload(&self, _: &Agent) -> MergeSubnetsPayload {
+        MergeSubnetsPayload {
+            source_subnet: SubnetId::from(self.source_subnet),
+            destination_subnet: SubnetId::from(self.destination_subnet),
         }
     }
 }
@@ -4750,6 +4794,7 @@ async fn main() {
             SubCommand::ProposeToDeployHostosToSomeNodes(_) => (),
             SubCommand::ProposeToHardResetNnsRootToVersion(_) => (),
             SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(_) => (),
+            SubCommand::ProposeToMergeSubnets(_) => (),
             SubCommand::ProposeToPrepareCanisterMigration(_) => (),
             SubCommand::ProposeToRemoveApiBoundaryNodes(_) => (),
             SubCommand::ProposeToRemoveFirewallRules(_) => (),
@@ -5190,6 +5235,21 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::DeleteSubnet,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToMergeSubnets(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::MergeSubnets,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,

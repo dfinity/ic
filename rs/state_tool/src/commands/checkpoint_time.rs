@@ -6,10 +6,10 @@ use std::path::PathBuf;
 
 const HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED: Height = Height::new(0);
 
-/// Prints the batch time of the checkpoint rooted at `path`, in nanoseconds
+/// Returns the batch time of the checkpoint rooted at `path`, in nanoseconds
 /// since the Epoch, i.e. the IC time the subnet had reached when it wrote the
 /// checkpoint.
-pub fn do_print_checkpoint_time(path: PathBuf) -> Result<(), String> {
+pub fn batch_time_nanos(path: PathBuf) -> Result<u64, String> {
     let checkpoint_layout =
         CompleteCheckpointLayout::new_untracked(path, HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED)
             .map_err(|err| format!("Failed to create CheckpointLayout: {err:?}"))?;
@@ -18,7 +18,13 @@ pub fn do_print_checkpoint_time(path: PathBuf) -> Result<(), String> {
         .deserialize()
         .map_err(|err| format!("Failed to read the system metadata: {err:?}"))?;
 
-    println!("{}", system_metadata.batch_time_nanos);
+    Ok(system_metadata.batch_time_nanos)
+}
+
+/// Prints the batch time of the checkpoint rooted at `path`, in nanoseconds
+/// since the Epoch.
+pub fn do_print_checkpoint_time(path: PathBuf) -> Result<(), String> {
+    println!("{}", batch_time_nanos(path)?);
 
     Ok(())
 }

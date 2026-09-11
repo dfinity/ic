@@ -328,6 +328,7 @@ impl SubnetSplitting {
             /*registry_params=*/ None,
             /*initial_dkg_subnet_id=*/ None,
             /*chain_key_subnet_id=*/ None,
+            /*time=*/ None,
         )
     }
 

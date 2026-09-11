@@ -1,0 +1,44 @@
+[package]
+name = "ic-subnet-merging"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../types/base_types/" }
+ic-crypto-utils-threshold-sig = { path = "../../crypto/utils/threshold_sig" }
+ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
+ic-cup-explorer = { path = "../../cup_explorer" }
+ic-protobuf = { path = "../../protobuf" }
+ic-recovery = { path = "../" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-registry-routing-table = { path = "../../registry/routing_table" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-state-layout = { path = "../../state_layout" }
+ic-state-manager = { path = "../../state_manager" }
+ic-state-tool = { path = "../../state_tool" }
+ic-types = { path = "../../types/types" }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+
+strum = { workspace = true }
+strum_macros = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+ic-test-utilities-tmpdir = { path = "../../test_utilities/tmpdir" }
+
+[[bin]]
+name = "subnet-merging-tool"
+path = "src/main.rs"

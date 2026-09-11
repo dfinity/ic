@@ -14974,6 +14974,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-subnet-merging"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "futures",
+ "hex",
+ "ic-agent",
+ "ic-base-types",
+ "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-cup-explorer",
+ "ic-protobuf",
+ "ic-recovery",
+ "ic-registry-client-helpers",
+ "ic-registry-routing-table",
+ "ic-registry-subnet-type",
+ "ic-state-layout",
+ "ic-state-manager",
+ "ic-state-tool",
+ "ic-test-utilities-tmpdir",
+ "ic-types",
+ "reqwest",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+ "slog",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ic-subnet-splitting"
 version = "0.9.0"
 dependencies = [
@@ -18238,6 +18272,7 @@ dependencies = [
  "ic-recovery",
  "ic-registry-subnet-type",
  "ic-state-layout",
+ "ic-subnet-merging",
  "ic-system-test-driver",
  "ic-types",
  "ic-universal-canister",

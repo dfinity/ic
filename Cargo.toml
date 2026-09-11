@@ -341,6 +341,7 @@ members = [
     "rs/protobuf/generator",
     "rs/query_stats",
     "rs/recovery",
+    "rs/recovery/subnet_merging",
     "rs/recovery/subnet_splitting",
     "rs/registry/admin",
     "rs/registry/admin-derive",

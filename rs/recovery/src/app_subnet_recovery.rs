@@ -608,6 +608,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     None,
                     self.params.initial_dkg_subnet_id,
                     self.params.chain_key_subnet_id,
+                    /*time=*/ None,
                 )?))
             }
 
