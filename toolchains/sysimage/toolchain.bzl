@@ -612,6 +612,11 @@ def _upgrade_image_impl(ctx):
     ])
     inputs.extend(ctx.files.boot_partition + ctx.files.root_partition + ctx.files.version_file)
 
+    # Optional overlay image (ext4 .tzst) for the fast upgrade
+    if ctx.files.upgrade_overlay:
+        args.extend(["--overlay", ctx.files.upgrade_overlay[0].path])
+        inputs.extend(ctx.files.upgrade_overlay)
+
     _run_with_icos_wrapper(
         ctx,
         executable = ctx.executable._tool.path,
@@ -637,6 +642,10 @@ upgrade_image = _icos_build_rule(
         "version_file": attr.label(
             allow_single_file = True,
             mandatory = True,
+        ),
+        "upgrade_overlay": attr.label(
+            allow_single_file = True,
+            mandatory = False,
         ),
         "_tool": attr.label(
             default = "//toolchains/sysimage:build_upgrade_image",

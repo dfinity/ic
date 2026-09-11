@@ -111,17 +111,18 @@ def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extrac
     if in_file:
         # Untar files to the base dir.
         commands += f"""tar xf {in_file} --numeric-owner -C "{fs_basedir}" "{dir_to_extract}";\n"""
-
-        # Copy extra files to the base dir and set permissions.
-        for path_target in extra_files or []:
-            (path, target, mod) = path_target.split(":")
-            target_in_basedir = os.path.join(fs_basedir, dir_to_extract, target.lstrip("/"))
-            commands += f"""cp "{path}" "{target_in_basedir}";\n"""
-            # Force a chown to be picked up by fakeroot
-            commands += f"""chown --reference="{target_in_basedir}" "{target_in_basedir}";\n"""
-            commands += f"""chmod "{mod}" "{target_in_basedir}";\n"""
     else:
         commands += f"""chown root:root "{fs_basedir}";\n"""
+
+    # Copy extra files to the base dir and set permissions.
+    for path_target in extra_files or []:
+        (path, target, mod) = path_target.split(":")
+        target_in_basedir = os.path.join(fs_basedir, dir_to_extract, target.lstrip("/"))
+        commands += f"""mkdir -p $(dirname "{target_in_basedir}");\n"""
+        commands += f"""cp "{path}" "{target_in_basedir}";\n"""
+        # Force a chown to be picked up by fakeroot
+        commands += f"""chown --reference="{target_in_basedir}" "{target_in_basedir}";\n"""
+        commands += f"""chmod "{mod}" "{target_in_basedir}";\n"""
 
     subprocess.run(["fakeroot", "-s", fakeroot_statefile, "bash"], input=commands.encode(), check=True)
 
