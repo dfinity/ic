@@ -13,8 +13,8 @@ use ic_cketh_minter::balance_scan::batcher::{
     encode_eth_balance_batch,
 };
 use ic_cketh_minter::deposit_address::DepositAddress;
-use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::endpoints::events::EventPayload;
+use ic_cketh_minter::endpoints::{DepositEthStatus, DepositStatus};
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{
     Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
@@ -22,6 +22,8 @@ use ic_cketh_test_utils::anvil::{
 use ic_cketh_test_utils::ckerc20::{CkErc20Setup, Erc20Token};
 use ic_cketh_test_utils::live::{CexDeposit, DepositPlan, EthDepositPlan, LiveSetup};
 use ic_cketh_test_utils::{CkEthSetup, SWEEPER_ADDRESS};
+
+const MINIMUM_ETH_DEPOSIT_WEI: u128 = 5_000_000_000_000_000;
 use ic_ethereum_types::Address;
 
 #[test]
@@ -294,7 +296,7 @@ fn should_revert_the_whole_call_when_a_token_is_not_a_contract() {
 /// tokens and must apply the per-token minimum to each. Only the two at-or-above-minimum deposits
 /// are flagged as candidates; the below-minimum deposit is scanned but not flagged.
 #[test]
-fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
+fn should_flag_only_erc20_deposits_at_or_above_the_per_token_minimum() {
     const DEPOSIT_SUBACCOUNT: [u8; 32] = [42; 32];
 
     let setup = LiveSetup::<CkErc20Setup>::new();
@@ -344,6 +346,52 @@ fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
     assert_matches!(
         setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, &usdt).status,
         DepositStatus::Scanning { scan_count, last_scanned_block, .. }
+            if scan_count >= 1 && last_scanned_block.is_some()
+    );
+}
+
+#[test]
+fn should_flag_only_eth_deposits_at_or_above_the_minimum() {
+    const DEPOSIT_SUBACCOUNT: [u8; 32] = [42; 32];
+
+    let setup = LiveSetup::<CkErc20Setup>::new();
+    let above_minimum = 2 * MINIMUM_ETH_DEPOSIT_WEI;
+    let at_minimum = MINIMUM_ETH_DEPOSIT_WEI;
+    let below_minimum = MINIMUM_ETH_DEPOSIT_WEI / 10;
+    let plans = [
+        (setup.depositor(1), above_minimum),
+        (setup.depositor(2), at_minimum),
+        (setup.depositor(3), below_minimum),
+    ]
+    .map(|(owner, amount)| EthDepositPlan {
+        owner,
+        subaccount: DEPOSIT_SUBACCOUNT,
+        amount,
+    });
+
+    let (setup, deposits) = setup
+        .call_minter_deposit_eth(plans)
+        .expect_deposit_responses();
+    let setup = setup
+        .credit_eth_deposits_from_cex(&deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+
+    assert_matches!(
+        setup.await_eth_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT).status,
+        DepositEthStatus::AwaitingSweep(detected)
+            if detected.scanned_balance == above_minimum
+                && detected.detected_at_block > 0_u8
+    );
+    assert_matches!(
+        setup.await_eth_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT).status,
+        DepositEthStatus::AwaitingSweep(detected)
+            if detected.scanned_balance == at_minimum
+                && detected.detected_at_block > 0_u8
+    );
+    assert_matches!(
+        setup.await_eth_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT).status,
+        DepositEthStatus::Scanning { scan_count, last_scanned_block, .. }
             if scan_count >= 1 && last_scanned_block.is_some()
     );
 }
@@ -437,7 +485,6 @@ fn should_credit_twenty_erc20_deposits_through_one_sweep_per_token() {
 #[test]
 fn should_credit_twenty_eth_deposits_through_ten_deposit_sweeps() {
     const DEPOSITORS: u64 = 20;
-    const MINIMUM_ETH_DEPOSIT_WEI: u128 = 5_000_000_000_000_000;
 
     let setup = LiveSetup::<CkErc20Setup>::new()
         .fund_fee_account()
