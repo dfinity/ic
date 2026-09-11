@@ -44,7 +44,9 @@ def _zstd_compress(ctx):
 
     ctx.actions.run(
         executable = ctx.file._zstd,
-        arguments = ["-q", "--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
+        # Higher --long setting produces compressed files that most zstd decompressors (e.g. zstd, tar or mc) won't
+        # decompress unless additional args are specified.
+        arguments = ["-q", "--threads=0", "--long=27", "-8", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
         inputs = ctx.files.srcs,
         outputs = [out],
         env = {"ZSTDMT_NBWORKERS_MAX": str(_COMPRESS_CONCURRENCY)},

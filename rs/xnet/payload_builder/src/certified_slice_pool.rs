@@ -26,7 +26,7 @@ use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom, TryInto};
-use std::sync::Arc;
+use std::sync::Mutex;
 
 const LABEL_STREAMS: &[u8] = b"streams";
 const LABEL_HEADER: &[u8] = b"header";
@@ -71,7 +71,7 @@ impl CertifiedSlicePoolMetrics {
             ),
             put_count: metrics_registry.int_counter_vec(
                 METRIC_PUT_COUNT,
-                "Count of XNet slice pool puts and appends, by status.",
+                "Count of valid XNet slice pool puts and appends, by status. Errors are instrumented separately, as failed pull attempts.",
                 &[LABEL_STATUS]
             ),
             take_count: metrics_registry.int_counter_vec(
@@ -278,16 +278,15 @@ mod messages {
             let postfix = self.messages.split_off(to);
             let prefix = self.messages;
 
-            // Update the estimated size and put back the postfix if not empty.
-            self.count_bytes = byte_size(&postfix)?;
-
             if prefix.is_empty() {
+                // Nothing taken, restore the messages.
                 self.messages = postfix;
                 Ok((None, Some(self)))
             } else if postfix.is_empty() {
+                // Return all messages, drop `self`.
                 Ok((Some(prefix), None))
             } else {
-                // Both prefix and postfix are non-empty.
+                // Both prefix and postfix are non-empty. Retain the postfix.
                 Ok((Some(prefix), Some(Self::new(postfix)?)))
             }
         }
@@ -862,20 +861,30 @@ impl UnpackedStreamSlice {
 
     /// Garbage collects the slice: drops all messages before
     /// `cutoff.message_index` and updates the witness. If all messages were
-    /// dropped and `cutoff.signal_index` is beyond `signals_end`, the slice is
-    /// dropped altogether.
+    /// dropped; and `cutoff.signal_index` is beyond `signals_end` (no new signals);
+    /// and `begin` is before `cutoff.min_useful_header_begin` or the latter is
+    /// `None` (no newly GC-ed messages); the slice is dropped altogether.
     ///
-    /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
-    /// `self.payload` is malformed.
+    /// Returns:
+    ///  * `Ok(Some(pruned_self))` if the slice was partly pruned;
+    ///  * `Ok(None)` if the slice should be dropped altogether;
+    ///  * `Err(InvalidPayload)` if `self.payload` is malformed;
+    ///  * `Err(WitnessPruningFailed)` if `self.merkle_proof` is malformed or does
+    ///    not match the payload.
     pub fn garbage_collect(
         mut self,
         cutoff: &ExpectedIndices,
     ) -> CertifiedSliceResult<Option<Self>> {
         let pruned_tree = self.payload.garbage_collect(cutoff.message_index)?;
-        if cutoff.signal_index >= self.payload.header.signals_end()
-            && self.payload.messages.is_none()
+        if self.payload.messages.is_none()
+            && cutoff.signal_index >= self.payload.header.signals_end()
+            && cutoff
+                .min_useful_header_begin
+                .is_none_or(|min_useful_header_begin| {
+                    self.payload.header.begin() < min_useful_header_begin
+                })
         {
-            // All signals and messages were garbage collected.
+            // No messages, no new signals, and no newly GC-ed messages. Drop the slice.
             return Ok(None);
         }
 
@@ -1113,23 +1122,16 @@ pub struct CertifiedSlicePool {
     /// advanced to the end of the slice returned by a `take_slice()` call.
     stream_positions: BTreeMap<SubnetId, ExpectedIndices>,
 
-    /// Used for validating incoming slices.
-    certified_stream_store: Arc<dyn CertifiedStreamStore>,
-
     metrics: CertifiedSlicePoolMetrics,
 }
 
 impl CertifiedSlicePool {
     /// Creates a new pool instance using the given `MetricsRegistry` for
     /// instrumentation.
-    pub fn new(
-        certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        metrics_registry: &MetricsRegistry,
-    ) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             slices: Default::default(),
             stream_positions: Default::default(),
-            certified_stream_store,
             metrics: CertifiedSlicePoolMetrics::new(metrics_registry),
         }
     }
@@ -1229,6 +1231,7 @@ impl CertifiedSlicePool {
         self.metrics
             .observe_take_messages_gced(original_message_count - prefix_message_count);
         let signals_end = slice.payload.header.signals_end();
+        let header_begin = slice.payload.header.begin();
 
         let (prefix, slice) = slice.take_prefix(msg_limit, byte_limit)?;
 
@@ -1243,6 +1246,12 @@ impl CertifiedSlicePool {
             if let Some(stream_indices) = self.stream_positions.get_mut(&subnet_id) {
                 stream_indices.message_index += StreamIndex::from(prefix_message_count as u64);
                 stream_indices.signal_index = stream_indices.signal_index.max(signals_end);
+                // Inducting the returned prefix GCs all reject signals before its
+                // `header.begin()`, so advance `min_useful_header_begin` just past it, as we
+                // don't know where the next reject signal is.
+                stream_indices.min_useful_header_begin = stream_indices
+                    .min_useful_header_begin
+                    .map(|b| b.max(header_begin.increment()));
             }
             Ok(Some(prefix))
         } else {
@@ -1337,39 +1346,35 @@ impl CertifiedSlicePool {
     }
 
     /// Places the provided slice into the pool, after trimming off any prefix
-    /// before the corresponding `self.stream_positions` entry.
+    /// before the corresponding `stream_positions` entry.
+    ///
+    /// Decoding, unpacking and validating the slice (requiring an expensive BLS
+    /// signature verification) is done without holding the pool lock. The lock is
+    /// only taken to insert the slice.
     ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
     /// `slice` is malformed. Returns `Err(DecodeStreamError)` if the slice could
     /// not be decoded or its certification was invalid.
     pub fn put(
-        &mut self,
+        pool: &Mutex<Self>,
         subnet_id: SubnetId,
         slice: CertifiedStreamSlice,
-        registry_version: RegistryVersion,
-        log: ReplicaLogger,
-    ) -> CertifiedSliceResult<()> {
-        self.put_impl(subnet_id, slice, registry_version, log)
-            .inspect_err(|e| self.metrics.observe_put(e.to_label_value()))
-    }
-
-    /// Helper function to allow easy instrumentation of `put` results.
-    fn put_impl(
-        &mut self,
-        subnet_id: SubnetId,
-        slice: CertifiedStreamSlice,
+        certified_stream_store: &dyn CertifiedStreamStore,
         registry_version: RegistryVersion,
         log: ReplicaLogger,
     ) -> CertifiedSliceResult<()> {
         validate_slice(
             &slice,
             subnet_id,
-            self.certified_stream_store.as_ref(),
+            certified_stream_store,
             registry_version,
             log,
         )?;
+        let unpacked = slice.try_into()?;
 
-        self.pool_slice(subnet_id, slice.try_into()?)
+        let result = pool.lock().unwrap().pool_slice(subnet_id, unpacked);
+        // `pool_slice` returned any displaced slice. Drop it outside the pool lock.
+        result.map(|_| ())
     }
 
     /// Appends a partial slice to the corresponding pool entry, trimming
@@ -1381,40 +1386,33 @@ impl CertifiedSlicePool {
     /// ones already in the pool and its `signals_end` must not regress. Its
     /// witness must cover the stream header and the concatenated messages.
     ///
+    /// Merging, packing and validating the merged slice (requiring an expensive
+    /// BLS signature verification) is done without holding the pool lock. The lock
+    /// is only taken to clone the pooled slice and to install the merged one.
+    ///
     /// Returns `Err(DecodeFailed)` if `partial` could not be deserialized.
     /// Returns `Err(InvalidPayload)`,  `Err(InvalidWitness)` or
-    /// `Err(WitnessPruningFailed)` if `self` or `partial` are malformed.
-    /// Returns `Err(InvalidAppend)` if the two slices do not match.
+    /// `Err(WitnessPruningFailed)` if the pooled slice or `partial` are
+    /// malformed. Returns `Err(InvalidAppend)` if the two slices do not match.
     /// Returns `Err(DecodeStreamError)` if the partial slice could not be decoded
     /// or the certification was invalid for the merged slice.
     pub fn append(
-        &mut self,
+        pool: &Mutex<Self>,
         subnet_id: SubnetId,
         partial: CertifiedStreamSlice,
-        registry_version: RegistryVersion,
-        log: ReplicaLogger,
-    ) -> CertifiedSliceResult<()> {
-        self.append_impl(subnet_id, partial, registry_version, log)
-            .inspect_err(|e| self.metrics.observe_put(e.to_label_value()))
-    }
-
-    /// Helper function to allow easy instrumentation of `append` results.
-    fn append_impl(
-        &mut self,
-        subnet_id: SubnetId,
-        partial: CertifiedStreamSlice,
+        certified_stream_store: &dyn CertifiedStreamStore,
         registry_version: RegistryVersion,
         log: ReplicaLogger,
     ) -> CertifiedSliceResult<()> {
         let partial: UnpackedStreamSlice = partial.try_into()?;
 
-        // Query the pool for an existing slice, without removing it. This way, if
-        // unpacking or validation fail, we can simply bail out without mutating the
-        // pool.
-        let slice = match self.slices.get(&subnet_id) {
+        // Clone the pooled slice, if any, instead of removing it: this way the
+        // payload builder can make use of it while we validate; and if the merge
+        // or the validation fail, we bail out without having mutated the pool.
+        let pooled = pool.lock().unwrap().slices.get(&subnet_id).cloned();
+        let slice = match pooled {
             // We have a pooled slice, try appending to it.
-            Some(pooled) => {
-                let mut pooled = pooled.clone();
+            Some(mut pooled) => {
                 pooled.append(partial)?;
                 pooled
             }
@@ -1431,33 +1429,37 @@ impl CertifiedSlicePool {
         validate_slice(
             &slice.clone().into(),
             subnet_id,
-            self.certified_stream_store.as_ref(),
+            certified_stream_store,
             registry_version,
             log,
         )?;
 
-        self.pool_slice(subnet_id, slice)
+        let result = pool.lock().unwrap().pool_slice(subnet_id, slice);
+        // `pool_slice` returned any displaced slice. Drop it outside the pool lock.
+        result.map(|_| ())
     }
 
     /// Garbage collects the provided slice and pools the rest, iff more useful than
     /// the already pooled slice (see `compare_usefulness()`).
     ///
+    /// Returns the displaced slice if any, to be dropped outside the pool lock.
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
     /// `unpacked` is malformed.
     fn pool_slice(
         &mut self,
         subnet_id: SubnetId,
         mut unpacked: UnpackedStreamSlice,
-    ) -> CertifiedSliceResult<()> {
+    ) -> CertifiedSliceResult<Option<UnpackedStreamSlice>> {
         // Trim off everything before the cached stream position.
         let stream_position = self.stream_positions.get(&subnet_id);
         if let Some(stream_position) = stream_position {
             unpacked = match unpacked.garbage_collect(stream_position)? {
                 Some(unpacked) => unpacked,
+
                 // Bail out if nothing left.
                 None => {
                     self.metrics.observe_put(STATUS_NONE);
-                    return Ok(());
+                    return Ok(None);
                 }
             };
         }
@@ -1468,12 +1470,11 @@ impl CertifiedSlicePool {
             && compare_usefulness(pooled, &unpacked, stream_position).is_ge()
         {
             self.metrics.observe_put(STATUS_LESS_USEFUL);
+            Ok(Some(unpacked))
         } else {
-            self.slices.insert(subnet_id, unpacked);
             self.metrics.observe_put(STATUS_SUCCESS);
+            Ok(self.slices.insert(subnet_id, unpacked))
         }
-
-        Ok(())
     }
 
     /// Observes the total size of all pooled slices.

@@ -197,7 +197,6 @@ fn induct_loopback_stream_reject_response() {
             // Expecting an empty loopback stream with begin advanced.
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 22,
-                signals_begin: 22,
                 signals_end: 22,
                 ..StreamConfig::default()
             });
@@ -277,7 +276,6 @@ fn induct_loopback_stream_reroute_response() {
             // The loopback stream is expected to be empty, with signals advanced.
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 25,
-                signals_begin: 25,
                 signals_end: 25,
                 ..StreamConfig::default()
             });
@@ -345,7 +343,6 @@ fn induct_loopback_stream_success() {
             // The loopback stream should be empty with `begin` and `signals_end` advanced.
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 23,
-                signals_begin: 23,
                 signals_end: 23,
                 ..StreamConfig::default()
             });
@@ -452,7 +449,6 @@ fn induct_loopback_stream_with_memory_limit_impl(maximum_state_delta: Option<Num
             // ...and an empty loopback stream with indices advanced.
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 23,
-                signals_begin: 23,
                 signals_end: 23,
                 ..StreamConfig::default()
             });
@@ -503,7 +499,6 @@ fn induct_loopback_stream_ignores_memory_limit_impl(maximum_state_delta: Option<
             // ...and an empty loopback stream with begin indices advanced.
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 23,
-                signals_begin: 23,
                 signals_end: 23,
                 ..StreamConfig::default()
             });
@@ -686,7 +681,6 @@ fn garbage_collect_signals_success() {
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 23,
                 messages: vec![message_in_stream(streams.get(&REMOTE_SUBNET), 23).clone()],
-                signals_begin: 142,
                 signals_end: 153,
                 reject_signals: vec![
                     RejectSignal::new(OutOfMemory, 142.into()),
@@ -1001,7 +995,6 @@ fn garbage_collect_local_state_success() {
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 33,
                 messages: vec![message_in_stream(outgoing_stream, 33).clone()],
-                signals_begin: 43,
                 signals_end: 43,
                 flags: StreamFlags {
                     deprecated_responses_only: true,
@@ -1079,7 +1072,6 @@ fn garbage_collect_local_state_with_reject_signals_for_response_success_impl(
             let pruned_stream = stream_from_config(StreamConfig {
                 begin: 34,
                 messages: vec![message_in_stream(outgoing_stream, 34).clone()],
-                signals_begin: 43,
                 signals_end: 43,
                 ..StreamConfig::default()
             });
@@ -1941,7 +1933,6 @@ fn duplicate_best_effort_response_is_dropped() {
             // ...and an empty loopback stream with begin advanced.
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 23,
-                signals_begin: 23,
                 signals_end: 23,
                 ..StreamConfig::default()
             });
@@ -1994,7 +1985,6 @@ fn failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
             // ...and an empty loopback stream with begin advanced.
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 22,
-                signals_begin: 22,
                 signals_end: 22,
                 ..StreamConfig::default()
             });
@@ -2924,7 +2914,6 @@ fn process_stream_slices_with_reject_signals_partial_success() {
             // The expected loopback stream is gc'ed.
             let expected_loopback_stream = stream_from_config(StreamConfig {
                 begin: 24,
-                signals_begin: 24,
                 signals_end: 24,
                 ..StreamConfig::default()
             });
@@ -2932,7 +2921,6 @@ fn process_stream_slices_with_reject_signals_partial_success() {
             let expected_outgoing_stream = stream_from_config(StreamConfig {
                 begin: 34,
                 messages: vec![message_in_stream(state.get_stream(&REMOTE_SUBNET), 34).clone()],
-                signals_begin: 142,
                 signals_end: 155,
                 reject_signals: vec![
                     RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
@@ -3126,7 +3114,6 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
             // The expected loopback stream has all initial messages gc'ed...
             let expected_loopback_stream = stream_from_config(StreamConfig {
                 begin: 28,
-                signals_begin: 28,
                 signals_end: 28,
                 ..StreamConfig::default()
             });
@@ -3139,7 +3126,6 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
                     // ...one message @34 not gc'ed...
                     message_in_stream(state.get_stream(&REMOTE_SUBNET), 34).clone(),
                 ],
-                signals_begin: 142,
                 signals_end: 158,
                 reject_signals: vec![
                     RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
@@ -3882,7 +3868,6 @@ fn with_test_setup_and_config(
             let stream = stream_from_config(StreamConfig {
                 begin: stream_config.begin,
                 messages: messages_from_builders(stream_config.messages),
-                signals_begin: stream_config.signals_begin,
                 signals_end: stream_config.signals_end,
                 reject_signals: stream_config.reject_signals,
                 flags: stream_config.flags,
@@ -3964,7 +3949,6 @@ fn with_local_test_setup_and_config(
 struct StreamConfig<C: IntoIterator + Default> {
     begin: u64,
     messages: C,
-    signals_begin: u64,
     signals_end: u64,
     reject_signals: Vec<RejectSignal>,
     flags: StreamFlags,
@@ -3978,7 +3962,6 @@ fn stream_from_config(config: StreamConfig<Vec<StreamMessage>>) -> Stream {
     }
     let mut stream = Stream::with_signals(
         queue,
-        config.signals_begin.into(),
         config.signals_end.into(),
         config.reject_signals.into(),
     );

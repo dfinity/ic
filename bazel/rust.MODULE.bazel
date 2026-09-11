@@ -2,15 +2,11 @@
 # Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file
 # to regenerate Cargo Bazel lockfiles.
 
-bazel_dep(name = "rules_rust", version = "0.71.3")
-archive_override(
+bazel_dep(name = "rules_rust", version = "0.74.0")
+single_version_override(
     module_name = "rules_rust",
-    integrity = "sha256-5GXwZtp5VlNxMI+dolYYxhyhG5f5ReZ5qz30gAbPsrg=",
     patch_strip = 1,
     patches = ["//bazel:rules_rust_static_runtime.patch"],
-    strip_prefix = "rules_rust-f8f382c7e351a797242ce4a92262342f8994e265",
-    type = "tar.gz",
-    urls = ["https://codeload.github.com/dfinity/rules_rust/tar.gz/f8f382c7e351a797242ce4a92262342f8994e265"],
 )
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
@@ -160,9 +156,12 @@ crate.spec(
     version = "^0.8.4",
 )
 crate.spec(
-    features = ["typed-header"],
+    features = [
+        "middleware",
+        "typed-header",
+    ],
     package = "axum-extra",
-    version = "^0.10.1",
+    version = "^0.12",
 )
 crate.spec(
     package = "axum-otel-metrics",
@@ -190,7 +189,7 @@ crate.spec(
 )
 crate.spec(
     package = "base64",
-    version = "^0.13.1",
+    version = "^0.22",
 )
 crate.spec(
     package = "bech32",
@@ -923,7 +922,7 @@ crate.spec(
 )
 crate.spec(
     package = "jsonrpc",
-    version = "^0.18.0",
+    version = "^0.20.1",
 )
 crate.spec(
     package = "json-patch",
@@ -1024,7 +1023,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "lru",
-    version = "^0.7.8",
+    version = "^0.12",
 )
 crate.spec(
     features = [
@@ -1070,6 +1069,7 @@ crate.spec(
     version = "^0.15.0",
 )
 crate.spec(
+    default_features = False,
     package = "mockito",
     version = "^1.6.1",
 )
@@ -1134,10 +1134,6 @@ crate.spec(
 crate.spec(
     package = "once_cell",
     version = "^1.8",
-)
-crate.spec(
-    package = "openssh-keys",
-    version = "^0.5.0",
 )
 crate.spec(
     features = [
@@ -1568,7 +1564,7 @@ crate.spec(
 )
 crate.spec(
     package = "serde-bytes-repr",
-    version = "^0.1.5",
+    version = "^0.3.0",
 )
 crate.spec(
     package = "serde_bytes",
@@ -2291,16 +2287,6 @@ crate.annotation(
         "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
     },
     crate = "ring",
-)
-crate.annotation(
-    crate = "rustix",
-    # Patch for determinism issues: rustix's build script leaves a
-    # non-deterministic compiler-probe artifact (`rustix_test_can_compile`) in
-    # `OUT_DIR`, which rules_rust captures as a cacheable build output. This is
-    # the upstream fix: https://github.com/bytecodealliance/rustix/pull/1628
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:rustix.patch"],
-    version = "1.1.4",
 )
 crate.annotation(
     crate = "ic-wasm",

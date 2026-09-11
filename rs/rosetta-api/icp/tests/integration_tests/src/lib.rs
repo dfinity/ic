@@ -34,7 +34,7 @@ impl Drop for KillOnDrop {
     fn drop(&mut self) {
         match self.0.kill() {
             Ok(_) => println!("Rosetta has been successfully stopped"),
-            Err(err) => println!("Rosetta was NOT sucessfully stopped: {err:?}"),
+            Err(err) => println!("Rosetta was NOT successfully stopped: {err:?}"),
         }
     }
 }
