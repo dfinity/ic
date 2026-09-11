@@ -60,6 +60,7 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::numeric::Erc20Value;
+use ic_cketh_minter::sweep::MAX_DEPOSITS_PER_SWEEP;
 use ic_cketh_minter::{BALANCE_SCAN_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -607,8 +608,8 @@ impl LiveSetup<CkErc20Setup> {
         self
     }
 
-    pub fn assert_eth_sweeps_batched(self, expected_item_counts: &[usize]) -> Self {
-        let batched: Vec<usize> = self
+    pub fn assert_eth_sweeps_batched(self, deposits: &[EthCexDeposit]) -> Self {
+        let batches: Vec<Vec<Address>> = self
             .minter_events()
             .into_iter()
             .filter_map(|event| match event.payload {
@@ -616,13 +617,37 @@ impl LiveSetup<CkErc20Setup> {
                     asset: EventAsset::Eth,
                     items,
                     ..
-                } => Some(items.len()),
+                } => Some(
+                    items
+                        .iter()
+                        .map(|item| {
+                            Address::from_str(&item.deposit)
+                                .expect("BUG: the sweep names an invalid deposit address")
+                        })
+                        .collect(),
+                ),
                 _ => None,
             })
             .collect();
+
+        let mut expected_sizes = Vec::new();
+        let mut remaining = deposits.len();
+        while remaining > 0 {
+            let batch = remaining.min(MAX_DEPOSITS_PER_SWEEP);
+            expected_sizes.push(batch);
+            remaining -= batch;
+        }
         assert_eq!(
-            batched, expected_item_counts,
-            "the ETH deposits must be swept in full batches, oldest first"
+            batches.iter().map(Vec::len).collect::<Vec<_>>(),
+            expected_sizes,
+            "the ETH deposits must be swept in full batches"
+        );
+
+        let swept: BTreeSet<Address> = batches.into_iter().flatten().collect();
+        let expected: BTreeSet<Address> = deposits.iter().map(|deposit| deposit.address).collect();
+        assert_eq!(
+            swept, expected,
+            "every ETH deposit address must appear in exactly one sweep"
         );
         self
     }
