@@ -1,4 +1,3 @@
-use crate::consensus::status::Status;
 use ic_consensus_dkg::metrics::DkgPayloadStats;
 use ic_consensus_idkg::{
     metrics::{CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL, key_id_label},
@@ -25,13 +24,6 @@ use std::sync::RwLock;
 // Since we can only record limited number of them, the follow is
 // the range of ranks that are permitted to show up in metrics.
 const RANKS_TO_RECORD: [&str; 6] = ["0", "1", "2", "3", "4", "5"];
-
-/// The label of `consensus_status`, whose values are the statuses of
-/// [`Status`], lowercased.
-const STATUS_LABEL: &str = "status";
-const STATUS_RUNNING: &str = "running";
-const STATUS_HALTING: &str = "halting";
-const STATUS_HALTED: &str = "halted";
 
 pub(crate) const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "consensus_payload_too_large";
 pub(crate) const CRITICAL_ERROR_VALIDATION_NOT_PASSED: &str = "consensus_validation_not_passed";
@@ -174,7 +166,6 @@ impl BatchStats {
 pub(crate) struct FinalizerMetrics {
     pub batches_delivered: IntCounterVec,
     pub batch_height: IntGauge,
-    pub consensus_status: IntGaugeVec,
     pub batch_delivery_interval: Histogram,
     pub batch_delivery_latency: Histogram,
     pub ingress_messages_delivered: Histogram,
@@ -214,13 +205,6 @@ impl FinalizerMetrics {
             batch_height: metrics_registry.int_gauge(
                 "consensus_batch_height",
                 "The height of batches sent to Message Routing",
-            ),
-            consensus_status: metrics_registry.int_gauge_vec(
-                "consensus_status",
-                "Whether consensus is running, halting (producing empty blocks but delivering \
-                 no batches) or halted (producing no blocks either), as of the last time batch \
-                 delivery looked. 1 for the status that held then, 0 for the other two.",
-                &[STATUS_LABEL],
             ),
             batch_delivery_interval: metrics_registry.histogram(
                 "consensus_batch_delivery_interval_seconds",
@@ -341,27 +325,6 @@ impl FinalizerMetrics {
                 // up to 5 * 10^6 ~= 5MB
                 decimal_buckets_with_zero(2, 6),
             ),
-        }
-    }
-
-    /// Records `status` as the status consensus is in, and the other two as ones
-    /// it is not.
-    ///
-    /// Reported as a gauge per status rather than a single number, so that a
-    /// dashboard can select the status it asks about by name. Only the batch
-    /// delivery path computes the status, and only when it has a block to
-    /// consider, so this says what that path saw the last time it looked: a
-    /// subnet that stopped producing blocks altogether keeps reporting the
-    /// status that made it stop.
-    pub fn observe_status(&self, status: Status) {
-        for (label, value) in [
-            (STATUS_RUNNING, Status::Running),
-            (STATUS_HALTING, Status::Halting),
-            (STATUS_HALTED, Status::Halted),
-        ] {
-            self.consensus_status
-                .with_label_values(&[label])
-                .set((value == status) as i64);
         }
     }
 

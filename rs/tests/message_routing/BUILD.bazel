@@ -157,6 +157,7 @@ system_test_nns(
         "//rs/registry/canister",
         "//rs/registry/subnet_type",
         "//rs/state_layout",
+        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "//rs/universal_canister/lib",

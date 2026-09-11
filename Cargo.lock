@@ -18242,6 +18242,7 @@ dependencies = [
  "ic-types",
  "ic-universal-canister",
  "ic-utils 0.49.1",
+ "ic_consensus_system_test_utils",
  "itertools 0.12.1",
  "rand 0.8.6",
  "rand_chacha 0.3.1",

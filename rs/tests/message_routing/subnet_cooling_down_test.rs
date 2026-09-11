@@ -84,10 +84,10 @@ Runbook::
    skipped canister execution in stands in for it.
 12. Submit (and adopt) `UpdateConfigOfSubnet` NNS proposals setting the
    `halt_at_cup_height` flag of both `M` and `R`, and wait until the node of each
-   that the state is taken from reports `consensus_status{status="halted"}`, i.e.
-   it produces no block and delivers no batch anymore. Record the heights of the
-   checkpoints they halted at, which are the heights of the manifests they
-   computed last.
+   that the state is taken from holds the CUP its subnet halts at, i.e. the first
+   one whose summary is created at the registry version carrying that flag.
+   Record the heights of those CUPs, which are the heights of the checkpoints
+   holding the states the two subnets stopped in.
 13. Stop the replicas of both subnets and download the states they halted at.
    Assemble the merged state locally, as a checkpoint at the next multiple of the
    DKG interval after the height `R` halted at: the canisters and canister
@@ -140,6 +140,7 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::{CandidType, Principal};
 use ic_agent::{Agent, RequestId, agent::RequestStatusResponse};
+use ic_consensus_system_test_utils::get_cup_from_node;
 use ic_management_canister_types::{SnapshotId, TakeCanisterSnapshotArgs};
 use ic_nns_governance_api::NnsFunction;
 use ic_recovery::registry_helper::RegistryPollingStrategy;
@@ -168,6 +169,7 @@ use ic_system_test_driver::util::{
     MetricsFetcher, UniversalCanister, assert_create_agent, block_on, create_canister,
     runtime_from_url, set_controller,
 };
+use ic_types::consensus::HasHeight;
 use ic_types::{Height, SubnetId};
 use ic_universal_canister::management::InstallMode;
 use ic_universal_canister::{
@@ -197,13 +199,9 @@ const METRIC_SUBNET_CALL_CONTEXTS: &str = "replicated_state_subnet_call_contexts
 const METRIC_PENDING_REFUNDS_CYCLES: &str = "replicated_state_pending_refunds_cycles";
 const METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION: &str =
     "round_skipped_canister_execution_due_to_cooling_down";
-const METRIC_CONSENSUS_STATUS: &str = "consensus_status";
-const METRIC_LAST_COMPUTED_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
+const METRIC_CERTIFICATION_HEIGHT: &str = r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"#;
 
-/// The series of `METRIC_CONSENSUS_STATUS` that is 1 while consensus is halted,
-/// i.e. produces no block and delivers no batch.
-const LABEL_STATUS_HALTED: &str = "status=\"halted\"";
-/// Timeout for a subnet to halt at its next CUP, which is up to a full DKG
+/// Timeout for a subnet to reach the CUP it halts at, which is up to a full DKG
 /// interval away.
 const HALT_TIMEOUT: Duration = Duration::from_secs(900);
 /// Backoff between two checks of whether a subnet has halted.
@@ -783,15 +781,17 @@ async fn run(env: TestEnv) {
         logger,
         "Step 12: Halting subnets M and R at their next checkpoint"
     );
+    let mut halt_versions = BTreeMap::new();
     for (subnet, name) in [(&m_subnet, "M"), (&r_subnet, "R")] {
         let version = halt_subnet_at_cup_height(&env, subnet.subnet_id, &logger).await;
         info!(
             logger,
             "Step 12: subnet {name} is set to halt at its next CUP as of registry version {version}"
         );
+        halt_versions.insert(name, version);
     }
-    let m_height = await_halted_at_checkpoint(&m_node, "M", &logger).await;
-    let r_height = await_halted_at_checkpoint(&r_node, "R", &logger).await;
+    let m_height = await_halting_cup(&m_node, "M", halt_versions["M"], &logger).await;
+    let r_height = await_halting_cup(&r_node, "R", halt_versions["R"], &logger).await;
     info!(
         logger,
         "Step 12 done: M halted at checkpoint {m_height}, R halted at checkpoint {r_height}"
@@ -1992,78 +1992,102 @@ fn median_across_replicas(
 // Merging subnet M into subnet R.
 // ---------------------------------------------------------------------------
 
-/// Waits until `node`'s subnet is halted, and returns the height of the
-/// checkpoint it halted at, i.e. of the state it stopped in.
+/// Waits until `node` holds the CUP its subnet halts at, and returns its
+/// height, i.e. the height of the checkpoint holding the state the subnet
+/// stopped in.
 ///
-/// Whether the subnet halted is read off the node's journal, which is where a
-/// halted replica says that it stops delivering batches. Waiting for the
-/// *checkpoint* height to stop advancing instead would not do: while the subnet
-/// is running, its state runs ahead of its latest checkpoint by up to a whole DKG
-/// interval, which is minutes of wall clock time, so the checkpoint height looks
-/// stable long before the subnet halts. The state of that checkpoint is then
-/// hundreds of rounds behind the state the merge readiness of step 9 was
-/// established on, and may hold, say, an `install_code` that was aborted at the
-/// checkpoint and only completed afterwards.
+/// A CUP whose summary block was created at `halt_registry_version` or later is
+/// one the subnet halts at: the `halt_at_cup_height` flag is read at the
+/// registry version of the summary block active at a height, and that version
+/// only changes at a summary, so batch delivery stops exactly when the summary
+/// carrying the flag becomes active. As checkpoints are written at CUP heights,
+/// the height of that CUP is the height of the last checkpoint the subnet
+/// wrote.
 ///
-/// The batch heights of a subnet halting because of `halt_at_cup_height` stop at
-/// a CUP height: the flag is read at the registry version of the summary block
-/// active at a height, and that version only changes at a summary, so batch
-/// delivery stops exactly when the summary carrying it becomes active. As
-/// checkpoints are written at CUP heights, the latest checkpoint of a halted
-/// subnet holds precisely the state it stopped in.
-async fn await_halted_at_checkpoint(node: &IcNodeSnapshot, name: &str, logger: &Logger) -> u64 {
-    info!(logger, "Waiting until subnet {name} is halted");
-    // `node`'s own metrics, not the subnet's: the state that is downloaded below
-    // is this node's, so this node is the one that has to have stopped, and the
-    // replicas of a subnet observe the halt in different rounds.
-    //
-    // Halted and not merely halting: a halting subnet still produces (empty)
-    // blocks, so its consensus pool keeps moving, while a halted one produces
-    // none and its latest checkpoint is final.
-    retry_with_msg_async!(
-        format!("waiting until subnet {name} reports that it is halted"),
+/// Waiting for the CUP rather than for the subnet to report that it is halted:
+/// the CUP is what names the state the subnet came to rest in, and it exists
+/// only once that state has been certified and its hash agreed upon, which is
+/// what the recovery proposal of step 14 compares its state hash against. A
+/// subnet that has just stopped delivering batches, on the other hand, may not
+/// have finished hashing the checkpoint it stopped at, and reading its latest
+/// checkpoint height then yields the previous one, a whole DKG interval before
+/// the state the merge is supposed to be assembled from.
+///
+/// `node`'s own CUP and metrics, not the subnet's: the state that is downloaded
+/// below is this node's, so this node is the one that has to have reached the
+/// CUP.
+async fn await_halting_cup(
+    node: &IcNodeSnapshot,
+    name: &str,
+    halt_registry_version: u64,
+    logger: &Logger,
+) -> u64 {
+    info!(
+        logger,
+        "Waiting until subnet {name} reaches the CUP it halts at"
+    );
+    let height = retry_with_msg_async!(
+        format!("waiting until subnet {name} reaches the CUP it halts at"),
         logger,
         HALT_TIMEOUT,
         HALT_BACKOFF,
         || async {
-            let metrics = fetch_node_metrics(node, &[METRIC_CONSENSUS_STATUS]).await?;
-            match median_across_replicas(&metrics, METRIC_CONSENSUS_STATUS, |labels| {
-                labels.contains(LABEL_STATUS_HALTED)
-            }) {
-                Some(1.0) => Ok(()),
-                Some(_) => bail!("subnet {name} is not halted yet"),
-                // Only the batch delivery path reports the status, and only once
-                // it has looked at a block, so the series is missing until then.
-                None => bail!("subnet {name} has not reported a consensus status yet"),
+            let cup = get_cup_from_node(node, logger).await?;
+            let cup_height = cup.height().get();
+            let cup_registry_version = cup
+                .content
+                .block
+                .get_value()
+                .payload
+                .as_ref()
+                .as_summary()
+                .dkg
+                .registry_version
+                .get();
+            if cup_registry_version < halt_registry_version {
+                bail!(
+                    "subnet {name} is at the CUP at height {cup_height}, whose registry \
+                     version {cup_registry_version} precedes the version \
+                     {halt_registry_version} it is instructed to halt at"
+                );
             }
+
+            // The node has to have caught up with the CUP itself: it is its
+            // state that is downloaded below, and a node can hold a CUP that
+            // the rest of the subnet assembled before it got there.
+            let certification_height = certification_height(node).await?;
+            assert!(
+                certification_height <= cup_height,
+                "subnet {name} certified height {certification_height}, past the CUP at \
+                 height {cup_height} it should have halted at",
+            );
+            if certification_height < cup_height {
+                bail!(
+                    "subnet {name} holds the CUP at height {cup_height} but has only \
+                     certified up to height {certification_height}"
+                );
+            }
+
+            Ok(cup_height)
         }
     )
     .await
-    .unwrap_or_else(|e| panic!("subnet {name} did not report that it is halted: {e}"));
+    .unwrap_or_else(|e| panic!("subnet {name} did not reach the CUP it halts at: {e}"));
 
-    let height = halted_checkpoint_height(node)
-        .await
-        .unwrap_or_else(|e| panic!("failed to read the checkpoint height of subnet {name}: {e}"));
     assert_eq!(
         height % CHECKPOINT_INTERVAL,
         0,
-        "subnet {name} halted at checkpoint {height}, which is not a CUP height",
+        "subnet {name} halted at height {height}, which is not a checkpoint height",
     );
     height
 }
 
-/// The height of the checkpoint `node` came to rest at, taken from the manifest
-/// it computed last.
-///
-/// The manifest, rather than the checkpoint directory: the state is downloaded
-/// and its manifest recomputed to compare against the one a recovery proposal
-/// carries, and a checkpoint whose manifest this node has not finished computing
-/// is one whose CUP does not exist yet. Nothing is delivered after the halt, so
-/// no later checkpoint follows the one this names.
-async fn halted_checkpoint_height(node: &IcNodeSnapshot) -> Result<u64> {
-    let metrics = fetch_node_metrics(node, &[METRIC_LAST_COMPUTED_MANIFEST_HEIGHT]).await?;
-    let height = median_across_replicas(&metrics, METRIC_LAST_COMPUTED_MANIFEST_HEIGHT, |_| true)
-        .ok_or_else(|| anyhow!("no manifest has been computed yet"))?;
+/// The height of the highest certification `node` holds, i.e. how far its state
+/// is certified.
+async fn certification_height(node: &IcNodeSnapshot) -> Result<u64> {
+    let metrics = fetch_node_metrics(node, &[METRIC_CERTIFICATION_HEIGHT]).await?;
+    let height = median_across_replicas(&metrics, METRIC_CERTIFICATION_HEIGHT, |_| true)
+        .ok_or_else(|| anyhow!("no certification height has been reported yet"))?;
     Ok(height as u64)
 }
 
