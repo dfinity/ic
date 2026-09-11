@@ -158,7 +158,7 @@ fn enqueue_sweep<R: CanisterRuntime>(
 
         let max_transaction_fee = gas_fee_estimate
             .clone()
-            .to_price(sweep_gas_limit(&items))
+            .to_price(sweep_gas_limit(asset, &items))
             .max_transaction_fee();
         let sweeper_gas = s.sweeper_funding.sweeper_balance_lower_bound();
         if max_transaction_fee > sweeper_gas {

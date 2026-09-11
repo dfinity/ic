@@ -303,7 +303,14 @@ const SWEEP_GAS_PER_TRANSFER: GasAmount = GasAmount::new(110_000);
 /// had to declare, leaving 25'000 the figure to budget either way. Rounded up as its siblings are.
 const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
 
-pub fn sweep_gas_limit(items: &[AuthorizedSweepItem]) -> GasAmount {
+/// Gas one address of an ETH sweep costs beyond its authorization: the per-address dispatch
+/// (calldata, `ecrecover`, the delegated call), one warm `address(this).balance` read and the
+/// helper's `depositEth`, a value transfer and one log. `sweepEth` walks no token array, so unlike
+/// an ERC-20 address there is no balance check or transfer to budget per pair. Measured at ~14'000
+/// on top of the tuple's 25'000 for a ten-deposit batch, rounded up as its siblings are.
+const SWEEP_GAS_PER_ETH_DEPOSIT: GasAmount = GasAmount::new(40_000);
+
+pub fn sweep_gas_limit(asset: Asset, items: &[AuthorizedSweepItem]) -> GasAmount {
     let addresses = u64::try_from(
         items
             .iter()
@@ -312,26 +319,30 @@ pub fn sweep_gas_limit(items: &[AuthorizedSweepItem]) -> GasAmount {
             .len(),
     )
     .unwrap_or(u64::MAX);
-    [
-        SWEEP_GAS_PER_BALANCE_CHECK,
-        SWEEP_GAS_PER_TRANSFER,
-        SWEEP_GAS_PER_AUTHORIZATION,
-    ]
-    .into_iter()
-    .fold(SWEEP_BASE_GAS, |total, gas_per_address| {
-        total
-            .checked_add(
-                gas_per_address
-                    .checked_mul(addresses)
-                    .unwrap_or(GasAmount::MAX),
-            )
-            .unwrap_or(GasAmount::MAX)
-    })
+    let gas_per_address: &[GasAmount] = match asset {
+        Asset::Eth => &[SWEEP_GAS_PER_ETH_DEPOSIT, SWEEP_GAS_PER_AUTHORIZATION],
+        Asset::Erc20(_) => &[
+            SWEEP_GAS_PER_BALANCE_CHECK,
+            SWEEP_GAS_PER_TRANSFER,
+            SWEEP_GAS_PER_AUTHORIZATION,
+        ],
+    };
+    gas_per_address
+        .iter()
+        .fold(SWEEP_BASE_GAS, |total, gas_per_address| {
+            total
+                .checked_add(
+                    gas_per_address
+                        .checked_mul(addresses)
+                        .unwrap_or(GasAmount::MAX),
+                )
+                .unwrap_or(GasAmount::MAX)
+        })
 }
 
 impl SweepRequest {
     pub fn gas_limit(&self) -> GasAmount {
-        sweep_gas_limit(&self.items)
+        sweep_gas_limit(self.asset, &self.items)
     }
 
     /// The delegate's batch call, naming every deposit address this sweep walks and the single
