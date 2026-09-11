@@ -10,58 +10,19 @@
 #
 # This patch prefers the static runtime for shared libraries too, falling back
 # to the dynamic one for toolchains that ship no static runtime (the local
-# toolchains' system libstdc++.so). The policy lives in one new helper,
+# toolchains' system libstdc++.so). The policy lives in the helper,
 # `cc_runtime_libs`, shared by the three sites that pick a runtime: the action
 # inputs (`collect_inputs`), the rustc link flags (`_add_native_link_flags`)
 # and rustdoc's doc-test link flags.
-#
-# The `rust_doc_test` half of this fix — doc tests dropping the runtime libs'
-# `-l` flags and `-Lnative=` roots entirely — is upstream as of 0.74.0
-# (commit ed7afd2fc,
-# https://github.com/bazelbuild/rules_rust/pull/4220), so this patch no
-# longer carries it. Upstream's version is a superset: it also guards against
-# an empty lib root, which would emit `--strip_substring=/`.
 diff --git a/rust/private/rustc.bzl b/rust/private/rustc.bzl
 index d447c9730..2e576db84 100644
 --- a/rust/private/rustc.bzl
 +++ b/rust/private/rustc.bzl
 @@ -667,6 +667,44 @@ def _depend_on_metadata(crate_info, force_depend_on_objects):
- 
+
      return crate_info.type in ("rlib", "lib")
- 
+
 +def cc_runtime_libs(cc_toolchain, feature_configuration, crate_type):
-+    """Returns the cc_toolchain's C++ runtime libraries to link a crate against.
-+
-+    For every crate type but `dylib`/`cdylib` this is the static runtime
-+    (e.g. libstdc++.a or libc++.a), like linking a `cc_binary` would.
-+
-+    For shared libraries rules_rust links the *dynamic* runtime (e.g.
-+    libstdc++.so or libc++.so), but we prefer the static one whenever the
-+    toolchain provides it: hermetic toolchains like hermetic-llvm only usably
-+    ship a static runtime, and its libunwind is the sole provider of the
-+    `_Unwind_*` symbols rust std needs since the toolchain links with
-+    `--unwindlib=none`. Their dynamic runtime consists of versioned library
-+    files (libunwind.so.1) that a `-l` flag never matches, so linking it
-+    silently produces a shared library with undefined `_Unwind_*` symbols that
-+    only fails at runtime, because shared-library links don't fail on
-+    undefined symbols: dlopen of e.g. libnss_icos.so fails, leaving GuestOS
-+    unable to resolve "hostos" and nft unable to load the orchestrator's
-+    firewall rules.
-+
-+    Falls back to the dynamic runtime when the toolchain provides no static
-+    one, which is the case for the local toolchains that only offer the
-+    system libstdc++.so.
-+
-+    Args:
-+        cc_toolchain (CcToolchainInfo): The cc_toolchain to query, not None.
-+        feature_configuration (FeatureConfiguration): Feature configuration to be queried.
-+        crate_type (str): The crate type of the crate being linked.
-+
-+    Returns:
-+        A tuple of the runtime libraries (depset[File]) and whether they are
-+        the static runtime (bool), which callers need to tell `-lstatic=` from
-+        `-ldylib=`.
-+    """
 +    static_runtime_libs = cc_toolchain.static_runtime_lib(feature_configuration = feature_configuration)
 +    if crate_type in ["dylib", "cdylib"] and not static_runtime_libs.to_list():
 +        return cc_toolchain.dynamic_runtime_lib(feature_configuration = feature_configuration), False
@@ -71,7 +32,7 @@ index d447c9730..2e576db84 100644
          ctx,
          file,
 @@ -784,12 +822,8 @@ def collect_inputs(
- 
+
      if not cc_toolchain:
          runtime_libs = depset()
 -    elif crate_info.type in ["dylib", "cdylib"]:
@@ -81,12 +42,12 @@ index d447c9730..2e576db84 100644
      else:
 -        runtime_libs = cc_toolchain.static_runtime_lib(feature_configuration = feature_configuration)
 +        runtime_libs, _ = cc_runtime_libs(cc_toolchain, feature_configuration, crate_info.type)
- 
+
      nolinkstamp_compile_inputs = depset(
          nolinkstamp_compile_direct_inputs +
 @@ -3053,34 +3087,18 @@ def _add_native_link_flags(
      args.add_all(linkstamp_outs, format_each = "-Clink-args=%s")
- 
+
      if cc_toolchain:
 -        if crate_type in ["dylib", "cdylib"]:
 -            # For shared libraries we want to link C++ runtime library dynamically
@@ -126,7 +87,7 @@ index d447c9730..2e576db84 100644
 -                    map_each = get_lib_name,
 -                    format_each = "-lstatic=%s",
 -                )
- 
+
  def _get_out_dir_path(file):
      """Return the path suitable for `--out-dir=<value>`.
 diff --git a/rust/private/rustdoc.bzl b/rust/private/rustdoc.bzl
