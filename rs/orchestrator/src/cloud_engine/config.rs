@@ -58,10 +58,10 @@ pub(super) fn validate_engine_config(
         .dns_api_urls
         .filter(|urls| !urls.is_empty())
         .ok_or(CloudEngineError::Incomplete("dns_api_urls"))?
+        // The IC-DNS-LB client appends a path to each of these, so it rejects
+        // anything it cannot use as a base.
         .iter()
         .map(|url| match Url::parse(url) {
-            // The IC-DNS-LB client appends a path to each of these URLs and
-            // rejects anything it cannot use as a base.
             Ok(parsed) if parsed.cannot_be_a_base() => Err(CloudEngineError::failed(format!(
                 "{url} cannot be used as a base URL"
             ))),
@@ -152,19 +152,14 @@ impl EngineConfig {
     }
 }
 
-/// Redacts the credentials, so that a `EngineConfig` is safe to log.
+/// Redacts the credentials, so that an [`EngineConfig`] is safe to log.
 impl fmt::Debug for EngineConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let dns_api_urls: Vec<&str> = self.dns_api_urls.iter().map(Url::as_str).collect();
+
         f.debug_struct("EngineConfig")
             .field("base_domains", &self.base_domains)
-            .field(
-                "dns_api_urls",
-                &self
-                    .dns_api_urls
-                    .iter()
-                    .map(Url::as_str)
-                    .collect::<Vec<_>>(),
-            )
+            .field("dns_api_urls", &dns_api_urls)
             .field("dns_api_key", &"<redacted>")
             .field("acme_account", &"<redacted>")
             .finish()

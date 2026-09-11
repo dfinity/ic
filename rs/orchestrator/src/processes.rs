@@ -406,9 +406,8 @@ impl IcGatewayManager {
         }
     }
 
-    /// `current_config` is the configuration a previous call would have
-    /// applied, which decides whether this manager considers `ic-gateway` to be
-    /// running with an up-to-date environment.
+    /// `current_config` is what a previous call would have applied, i.e. the
+    /// environment this manager believes `ic-gateway` is running with.
     #[cfg(test)]
     pub(crate) fn new_for_test(
         inner: ProcessManager<IcGatewayProcess>,

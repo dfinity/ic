@@ -124,11 +124,8 @@ impl NodeSender {
         // Reading the public keys is an RPC to the CSP vault that uses Tokio's
         // `block_on` internally, which panics in an async context without this.
         #[allow(clippy::disallowed_methods)]
-        let public_keys = tokio::task::block_in_place({
-            let crypto = Arc::clone(&crypto);
-            move || crypto.current_node_public_keys()
-        })
-        .map_err(|err| format!("Failed to retrieve current node public keys: {err}"))?;
+        let public_keys = tokio::task::block_in_place(|| crypto.current_node_public_keys())
+            .map_err(|err| format!("Failed to retrieve current node public keys: {err}"))?;
         let public_key = public_keys
             .node_signing_public_key
             .ok_or("Missing node signing key.")?;

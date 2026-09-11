@@ -181,15 +181,14 @@ impl Discovery {
     }
 }
 
+/// Lets the tests of the parent module observe whether a resolved operator id
+/// survives an outcome.
 #[cfg(test)]
 impl Discovery {
-    /// The operator id currently remembered, if any.
     pub(super) fn remembered(&self) -> Option<CanisterId> {
         self.resolved
     }
 
-    /// Pretends `operator` was resolved, so that a test can observe whether it
-    /// survives.
     pub(super) fn remember(&mut self, operator: CanisterId) {
         self.resolved = Some(operator);
     }

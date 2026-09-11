@@ -32,28 +32,25 @@ const OUTCOME_INCOMPLETE: &str = "incomplete";
 const OUTCOME_NOT_READY: &str = "not_ready";
 const OUTCOME_ERROR: &str = "error";
 
-/// How many consecutive `NotReady` answers to tolerate before re-resolving the
-/// operator. An operator that has not read this subnet's node list yet picks it
-/// up with its next registry refetch, so a genuinely fresh operator recovers
-/// well within this budget; an operator that keeps not recognizing this node
-/// more likely is not (or no longer) our operator at all. At one check every 10
+/// How many consecutive [`CloudEngineError::NotReady`] answers to tolerate
+/// before resolving the operator again. A fresh operator recovers with its next
+/// registry refetch, well within this budget; one that keeps not recognizing
+/// this node more likely is not (or no longer) ours. At one check every 10
 /// seconds this is about 5 minutes.
 const MAX_CONSECUTIVE_NOT_READY: u32 = 30;
 
 pub(crate) struct CloudEngineManager {
     registry: Arc<RegistryHelper>,
-    /// The assignment the upgrade loop determined, shared with the other tasks
-    /// that need to know which subnet this node serves.
+    /// Which subnet this node serves, as the upgrade loop determined it.
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     crypto: Arc<dyn NodeRegistrationCrypto>,
     replica_url: Url,
-    /// The agent that signs as this node, built on first use and then reused:
-    /// everything it depends on is stable.
+    /// Built on first use and then reused: everything it depends on is stable.
     operator_agent: Option<Agent>,
     discovery: Discovery,
-    /// The last config that passed validation, shared with the process manager
-    /// that runs `ic-gateway`. Only ever replaced by another valid one, never
-    /// cleared: a failed fetch must not take a running `ic-gateway` down.
+    /// The last configuration that passed validation, shared with the process
+    /// manager that runs `ic-gateway`. Only ever replaced by another valid one,
+    /// never cleared: a failed fetch must not take a running `ic-gateway` down.
     current_config: Arc<RwLock<Option<EngineConfig>>>,
     consecutive_not_ready: u32,
     metrics: Arc<OrchestratorMetrics>,
@@ -97,46 +94,39 @@ impl CloudEngineManager {
     pub(crate) async fn check(&mut self) {
         let subnet_id = match *self.subnet_assignment.read().unwrap() {
             SubnetAssignment::Assigned(subnet_id) => subnet_id,
-            // Unassigned nodes are not part of an engine, and while the
-            // assignment is unknown there is nothing to go on: the upgrade
-            // loop determines it on its first run.
+            // The upgrade loop determines the assignment on its first run.
             SubnetAssignment::Unassigned | SubnetAssignment::Unknown => return,
         };
         let version = self.registry.get_latest_version();
-        // Only all-in-one nodes have an engine operator to ask.
-        match self.registry.is_cloud_engine_subnet(subnet_id, version) {
-            Ok(true) => {}
-            Ok(false) => return,
-            // On an engine node a registry error would otherwise be invisible:
-            // it must not be conflated with "not a cloud engine".
-            Err(err) => {
-                self.metrics
-                    .cloud_engine_config_fetches
-                    .with_label_values(&[OUTCOME_ERROR])
-                    .inc();
-                warn!(
-                    every_n_seconds => 60,
-                    self.logger, "Could not determine the type of subnet {}: {}", subnet_id, err
-                );
-                return;
-            }
-        }
 
-        let outcome = self.fetch(subnet_id, version).await;
+        let outcome = match self.registry.is_cloud_engine_subnet(subnet_id, version) {
+            Ok(true) => self.fetch(subnet_id, version).await,
+            // Only all-in-one nodes have an engine operator to ask.
+            Ok(false) => return,
+            // Not the same as "not a cloud engine": treating it as such would
+            // hide the error on the very nodes where it matters.
+            Err(err) => Err(CloudEngineError::failed(format!(
+                "could not determine the type of subnet {subnet_id}: {err}"
+            ))),
+        };
+
         self.apply(outcome);
     }
 
-    /// Records what a fetch produced: publishes a new configuration, and keeps
-    /// the operator lookup honest by discarding it when the operator stops
-    /// answering usefully.
+    /// Records what a fetch produced: publishes a new configuration, and
+    /// discards the resolved operator once it stops answering usefully.
     fn apply(&mut self, outcome: CloudEngineResult<EngineConfig>) {
+        self.metrics
+            .cloud_engine_config_fetches
+            .with_label_values(&[outcome_label(&outcome)])
+            .inc();
+        // Only *consecutive* unrecognized answers spend the budget below.
+        if !matches!(outcome, Err(CloudEngineError::NotReady)) {
+            self.consecutive_not_ready = 0;
+        }
+
         match outcome {
             Ok(new_config) => {
-                self.consecutive_not_ready = 0;
-                self.metrics
-                    .cloud_engine_config_fetches
-                    .with_label_values(&[OUTCOME_OK])
-                    .inc();
                 self.metrics
                     .cloud_engine_config_last_success
                     .set(current_time().as_secs_since_unix_epoch() as i64);
@@ -147,26 +137,14 @@ impl CloudEngineManager {
                     *current_config = Some(new_config);
                 }
             }
-            Err(CloudEngineError::Incomplete(field)) => {
-                self.consecutive_not_ready = 0;
-                self.metrics
-                    .cloud_engine_config_fetches
-                    .with_label_values(&[OUTCOME_INCOMPLETE])
-                    .inc();
-                warn!(
-                    every_n_seconds => 60,
-                    self.logger, "The engine is not fully configured yet: {} is not set", field
-                );
-            }
+            Err(CloudEngineError::Incomplete(field)) => warn!(
+                every_n_seconds => 60,
+                self.logger, "The engine is not fully configured yet: {} is not set", field
+            ),
             Err(CloudEngineError::NotReady) => {
-                self.metrics
-                    .cloud_engine_config_fetches
-                    .with_label_values(&[OUTCOME_NOT_READY])
-                    .inc();
                 warn!(
                     every_n_seconds => 60,
-                    self.logger,
-                    "The engine operator does not recognize this node yet; retrying"
+                    self.logger, "The engine operator does not recognize this node yet; retrying"
                 );
 
                 self.consecutive_not_ready += 1;
@@ -182,19 +160,12 @@ impl CloudEngineManager {
                 }
             }
             Err(CloudEngineError::Failed(err)) => {
-                self.consecutive_not_ready = 0;
-                self.metrics
-                    .cloud_engine_config_fetches
-                    .with_label_values(&[OUTCOME_ERROR])
-                    .inc();
                 warn!(
                     every_n_seconds => 60,
                     self.logger, "Could not read the engine configuration: {}", err
                 );
-                // An operator that answers with anything but "not ready" may
-                // not be our operator at all, so look it up again next time.
-                // A failure before the operator was even reached has nothing
-                // remembered to discard.
+                // Anything but "not ready" suggests we resolved the wrong
+                // canister, so look the operator up again next time.
                 self.discovery.invalidate();
             }
         }
@@ -234,6 +205,16 @@ impl CloudEngineManager {
     }
 }
 
+/// The `outcome` label to count this result under.
+fn outcome_label(outcome: &CloudEngineResult<EngineConfig>) -> &'static str {
+    match outcome {
+        Ok(_) => OUTCOME_OK,
+        Err(CloudEngineError::Incomplete(_)) => OUTCOME_INCOMPLETE,
+        Err(CloudEngineError::NotReady) => OUTCOME_NOT_READY,
+        Err(CloudEngineError::Failed(_)) => OUTCOME_ERROR,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -247,6 +228,11 @@ mod tests {
     /// The operator this node has resolved before the outcome under test.
     fn operator() -> CanisterId {
         CanisterId::from_u64(3)
+    }
+
+    /// The configuration a successful fetch produces.
+    fn config() -> EngineConfig {
+        EngineConfig::for_test("engine.example.com")
     }
 
     /// A manager that has already resolved [`operator`]. It never reaches the
@@ -287,12 +273,9 @@ mod tests {
     fn a_new_configuration_is_published() {
         let mut manager = manager_for_test();
 
-        manager.apply(Ok(EngineConfig::for_test("engine.example.com")));
+        manager.apply(Ok(config()));
 
-        assert_eq!(
-            *manager.current_config.read().unwrap(),
-            Some(EngineConfig::for_test("engine.example.com"))
-        );
+        assert_eq!(*manager.current_config.read().unwrap(), Some(config()));
         assert_eq!(fetches(&manager, OUTCOME_OK), 1);
         // A configuration was served, so the operator stays resolved.
         assert_eq!(manager.discovery.remembered(), Some(operator()));
@@ -301,16 +284,13 @@ mod tests {
     #[test]
     fn an_incomplete_configuration_keeps_the_previous_one() {
         let mut manager = manager_for_test();
-        manager.apply(Ok(EngineConfig::for_test("engine.example.com")));
+        manager.apply(Ok(config()));
 
         manager.apply(Err(CloudEngineError::Incomplete("dns_api_urls")));
 
         // An engine that is being configured must not take `ic-gateway` down,
         // and it is the operator we expect, so it stays resolved.
-        assert_eq!(
-            *manager.current_config.read().unwrap(),
-            Some(EngineConfig::for_test("engine.example.com"))
-        );
+        assert_eq!(*manager.current_config.read().unwrap(), Some(config()));
         assert_eq!(fetches(&manager, OUTCOME_INCOMPLETE), 1);
         assert_eq!(manager.discovery.remembered(), Some(operator()));
     }
@@ -318,14 +298,11 @@ mod tests {
     #[test]
     fn a_failure_keeps_the_configuration_but_re_resolves_the_operator() {
         let mut manager = manager_for_test();
-        manager.apply(Ok(EngineConfig::for_test("engine.example.com")));
+        manager.apply(Ok(config()));
 
         manager.apply(Err(CloudEngineError::failed("the operator is on fire")));
 
-        assert_eq!(
-            *manager.current_config.read().unwrap(),
-            Some(EngineConfig::for_test("engine.example.com"))
-        );
+        assert_eq!(*manager.current_config.read().unwrap(), Some(config()));
         assert_eq!(fetches(&manager, OUTCOME_ERROR), 1);
         assert_eq!(manager.discovery.remembered(), None);
     }
@@ -363,7 +340,7 @@ mod tests {
             manager.apply(Err(CloudEngineError::NotReady));
         }
 
-        manager.apply(Ok(EngineConfig::for_test("engine.example.com")));
+        manager.apply(Ok(config()));
 
         assert_eq!(manager.consecutive_not_ready, 0);
 
