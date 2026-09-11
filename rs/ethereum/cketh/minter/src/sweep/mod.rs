@@ -31,7 +31,7 @@ use crate::{
     state::{
         State, TaskType,
         audit::{EventType, process_event},
-        automatic_deposits::DelegatedSweepTarget,
+        automatic_deposits::DelegatedSweepBatch,
         mutate_state, read_state,
         transactions::{
             AuthorizedSweepItem, CreateSweepTransactionError, PipelineRequest, SweepRequest,
@@ -118,15 +118,14 @@ pub(crate) async fn enqueue_pending_sweeps<R: CanisterRuntime, Rt: Runtime>(
     let delegations = read_delegations(&addresses, latest_block, client).await;
 
     for (asset, targets) in batch_per_asset {
-        let Some(delegated_targets) = read_state(|s| s.sweep_delegations(&targets, &delegations))
-        else {
+        let Some(batch) = read_state(|s| s.sweep_delegations(&targets, &delegations)) else {
             log!(
                 DEBUG,
                 "[create_pending_sweeper_requests]: SKIPPING: the sweeper contract address was cleared while enqueueing"
             );
             return;
         };
-        let Some(attestation_requests) = read_state(|s| s.attestation_requests(&delegated_targets))
+        let Some(attestation_requests) = read_state(|s| s.attestation_requests(&batch.targets))
         else {
             log!(
                 DEBUG,
@@ -134,13 +133,14 @@ pub(crate) async fn enqueue_pending_sweeps<R: CanisterRuntime, Rt: Runtime>(
             );
             return;
         };
-        let authorization_requests = delegated_targets
+        let authorization_requests = batch
+            .targets
             .iter()
             .filter_map(|delegated| delegated.authorization.clone())
             .collect();
         sign_attestations_batch(attestation_requests, runtime).await;
         sign_authorizations_batch(authorization_requests, runtime).await;
-        enqueue_sweep(asset, &delegated_targets, &gas_fee_estimate, runtime);
+        enqueue_sweep(asset, &batch, &gas_fee_estimate, runtime);
     }
 }
 
@@ -188,25 +188,21 @@ async fn read_delegations<Rt: Runtime>(
 /// to the sweeper contract carries no authorization at all, and is swept without one.
 fn enqueue_sweep<R: CanisterRuntime>(
     asset: Asset,
-    targets: &[DelegatedSweepTarget],
+    batch: &DelegatedSweepBatch,
     gas_fee_estimate: &GasFeeEstimate,
     runtime: &R,
 ) {
     mutate_state(|s| {
-        let (Some(attestation_requests), Some(destination)) =
-            (s.attestation_requests(targets), s.sweeper_contract_address)
-        else {
+        let (Some(attestation_requests), Some(destination)) = (
+            s.attestation_requests(&batch.targets),
+            s.sweeper_contract_address,
+        ) else {
             return;
         };
 
-        assert_eq!(targets.len(), attestation_requests.len());
+        assert_eq!(batch.targets.len(), attestation_requests.len());
 
-        if targets.iter().any(|delegated| {
-            delegated
-                .authorization
-                .as_ref()
-                .is_some_and(|request| request.delegate() != destination)
-        }) {
+        if batch.delegate != destination {
             log!(
                 INFO,
                 "[create_pending_sweeper_requests]: SKIPPING {asset}: the sweeper contract changed since its deposits' delegations were read"
@@ -214,7 +210,8 @@ fn enqueue_sweep<R: CanisterRuntime>(
             return;
         }
 
-        let items: Vec<_> = targets
+        let items: Vec<_> = batch
+            .targets
             .iter()
             .zip(attestation_requests)
             .filter_map(|(delegated, attestation_request)| {
