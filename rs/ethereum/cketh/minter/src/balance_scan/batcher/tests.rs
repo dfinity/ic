@@ -119,6 +119,193 @@ fn eth_initcode_matches_readable_assembly() {
 }
 
 #[test]
+fn delegation_initcode_matches_readable_assembly() {
+    use Op::*;
+
+    // The byte-for-byte source of truth for DELEGATION_BATCHER_INITCODE, as a commented EVM
+    // assembly listing. A create-style `eth_call` runs this as init code; it reads its args
+    // appended right after the code (`[n][ address x n ]`, from code offset ARGS_START) and
+    // RETURNs the first 32 bytes of each address' code, copied with EXTCODECOPY and zero-padded
+    // beyond the code size. No sub-calls, so like the ETH batcher the program has no revert path.
+    //
+    // Memory layout (all offsets in bytes):
+    //   [0x00] n    [0x20] loop counter i    [0x40] address (rewritten per iteration)
+    //   [OUTPUT..]  returned code prefixes (n x 32 bytes)
+    const ARGS_START: u16 = 0x51; // == DELEGATION_BATCHER_INITCODE.len(): the `n` word sits right after the code
+    const FIRST_ADDRESS: u16 = 0x71; // == ARGS_START + WORD: first address word
+    const OUTPUT: u8 = 0x60; // start of the returned code prefixes in memory
+    const LOOP: u16 = 0x0d; // JUMPDEST at the top of the per-address loop
+    const DONE: u16 = 0x47; // JUMPDEST for the RETURN path
+
+    #[rustfmt::skip]
+    let program = assemble(&[
+        // mem[0x00] = n  (one word copied from code[ARGS_START])
+        Push1(0x20), Push2(ARGS_START), Push1(0x00), Codecopy,
+        // mem[0x20] = i = 0
+        Push1(0x00), Push1(0x20), Mstore,
+        Jumpdest, // LOOP
+        // if !(i < n) goto DONE
+        Push1(0x00), Mload, Push1(0x20), Mload, Lt, IsZero, Push2(DONE), Jumpi,
+        // mem[0x40] = address = code[FIRST_ADDRESS + i * 0x20]
+        Push1(0x20), Push1(0x20), Mload, Push1(0x20), Mul, Push2(FIRST_ADDRESS), Add,
+        Push1(0x40), Codecopy,
+        // EXTCODECOPY(address, dest = OUTPUT + i * 0x20, offset = 0, size = 0x20)
+        Push1(0x20), Push1(0x00),
+        Push1(0x20), Mload, Push1(0x20), Mul, Push1(OUTPUT), Add,
+        Push1(0x40), Mload, ExtCodeCopy,
+        // i += 1; goto LOOP
+        Push1(0x20), Mload, Push1(0x01), Add, Push1(0x20), Mstore, Push2(LOOP), Jump,
+        Jumpdest, // DONE: RETURN(OUTPUT, n * 0x20)
+        Push1(0x00), Mload, Push1(0x20), Mul, Push1(OUTPUT), Return,
+    ]);
+
+    assert_eq!(program, DELEGATION_BATCHER_INITCODE);
+    // Offsets baked into the code must match the actual layout.
+    assert_eq!(ARGS_START as usize, DELEGATION_BATCHER_INITCODE.len());
+    assert_eq!(FIRST_ADDRESS, ARGS_START + WORD as u16);
+}
+
+#[test]
+fn encode_delegation_single_address_golden_vector() {
+    let encoded = encode_delegation_batch(&[HOLDER0]);
+
+    assert_eq!(encoded.len(), DELEGATION_BATCHER_INITCODE.len() + 2 * WORD);
+    assert_eq!(
+        &encoded[..DELEGATION_BATCHER_INITCODE.len()],
+        &DELEGATION_BATCHER_INITCODE
+    );
+    let args = &encoded[DELEGATION_BATCHER_INITCODE.len()..];
+    assert_eq!(&args[0..32], &word(1)); // n
+    assert_eq!(&args[32..64], &left_padded_address(HOLDER0.as_address()));
+}
+
+#[test]
+fn encode_delegation_two_addresses_layout() {
+    let encoded = encode_delegation_batch(&[HOLDER0, HOLDER1]);
+
+    assert_eq!(
+        encoded.len(),
+        DELEGATION_BATCHER_INITCODE.len() + WORD * (1 + 2)
+    );
+    let args = &encoded[DELEGATION_BATCHER_INITCODE.len()..];
+    assert_eq!(&args[0..32], &word(2));
+    assert_eq!(&args[32..64], &left_padded_address(HOLDER0.as_address()));
+    assert_eq!(&args[64..96], &left_padded_address(HOLDER1.as_address()));
+}
+
+#[test]
+fn full_batch_of_delegation_reads_fits_both_node_limits() {
+    let addresses: Vec<DepositAddress> = (0..MAX_CALLS_PER_BATCH)
+        .map(|index| DepositAddress::new(Address::new([index as u8; 20])))
+        .collect();
+
+    let returned_blob_size = addresses.len() * WORD;
+
+    assert!(encode_delegation_batch(&addresses).len() <= MAX_INITCODE_SIZE);
+    assert!(returned_blob_size <= MAX_CODE_SIZE);
+}
+
+#[test]
+fn decode_delegation_empty_word_is_not_delegated() {
+    assert_eq!(
+        decode_delegation_batch(&[0_u8; WORD], 1).unwrap(),
+        vec![Delegation::NotDelegated]
+    );
+}
+
+#[test]
+fn decode_delegation_designator_is_delegated() {
+    let delegate = Address::new([0x77; 20]);
+
+    assert_eq!(
+        decode_delegation_batch(&designator_word(&delegate), 1).unwrap(),
+        vec![Delegation::Delegated(delegate)]
+    );
+}
+
+#[test]
+fn decode_delegation_designator_with_a_dirty_tail_is_other() {
+    let mut word = designator_word(&Address::new([0x77; 20]));
+    *word.last_mut().unwrap() = 0x01;
+
+    assert_eq!(
+        decode_delegation_batch(&word, 1).unwrap(),
+        vec![Delegation::Other]
+    );
+}
+
+#[test]
+fn decode_delegation_eof_code_is_other() {
+    let mut word = [0_u8; WORD];
+    word[..2].copy_from_slice(&[0xef, 0x00]);
+
+    assert_eq!(
+        decode_delegation_batch(&word, 1).unwrap(),
+        vec![Delegation::Other]
+    );
+}
+
+#[test]
+fn decode_delegation_contract_code_is_other() {
+    let word = [0x60_u8; WORD];
+
+    assert_eq!(
+        decode_delegation_batch(&word, 1).unwrap(),
+        vec![Delegation::Other]
+    );
+}
+
+#[test]
+fn decode_delegation_batch_keeps_the_call_order() {
+    let delegate = Address::new([0x88; 20]);
+    let mut ret = Vec::new();
+    ret.extend_from_slice(&[0_u8; WORD]);
+    ret.extend_from_slice(&designator_word(&delegate));
+    ret.extend_from_slice(&[0xfe_u8; WORD]);
+
+    assert_eq!(
+        decode_delegation_batch(&ret, 3).unwrap(),
+        vec![
+            Delegation::NotDelegated,
+            Delegation::Delegated(delegate),
+            Delegation::Other,
+        ]
+    );
+}
+
+#[test]
+fn decode_delegation_empty_batch_is_ok() {
+    assert_eq!(
+        decode_delegation_batch(&[], 0).unwrap(),
+        Vec::<Delegation>::new()
+    );
+    assert_eq!(
+        encode_delegation_batch(&[]).len(),
+        DELEGATION_BATCHER_INITCODE.len() + WORD
+    );
+}
+
+#[test]
+fn decode_delegation_wrong_length_is_err() {
+    let ret = vec![0_u8; WORD + 1];
+
+    assert_eq!(
+        decode_delegation_batch(&ret, 2),
+        Err(BatcherDecodeError::WrongLength {
+            expected: 2 * WORD,
+            got: WORD + 1,
+        })
+    );
+}
+
+fn designator_word(delegate: &Address) -> [u8; WORD] {
+    let mut word = [0_u8; WORD];
+    word[..3].copy_from_slice(&[0xef, 0x01, 0x00]);
+    word[3..23].copy_from_slice(delegate.as_ref());
+    word
+}
+
+#[test]
 fn encode_eth_single_holder_golden_vector() {
     let encoded = encode_eth_balance_batch(&[HOLDER0]);
 
@@ -258,6 +445,7 @@ enum Op {
     Eq,
     IsZero,
     Codecopy,
+    ExtCodeCopy,
     Gas,
     Mload,
     Mstore,
@@ -291,6 +479,7 @@ fn assemble(ops: &[Op]) -> Vec<u8> {
             Op::IsZero => out.push(0x15),
             Op::Balance => out.push(0x31),
             Op::Codecopy => out.push(0x39),
+            Op::ExtCodeCopy => out.push(0x3c),
             Op::Gas => out.push(0x5a),
             Op::Mload => out.push(0x51),
             Op::Mstore => out.push(0x52),
