@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-10
+
+### Added
+
+- Types for `subnet_metrics`:
+  - Added the types `SubnetMetricsArgs` and `SubnetMetricsResult`.
+- Added the `pricing_version` field to `HttpRequestArgs`, selecting the pricing mechanism for a canister HTTPS outcall: `1` ("legacy", the default, deprecated) or `2` ("pay-as-you-go").
+- Types for `flexible_http_request`, a variant of `http_request` in which a committee of nodes return their individual HTTP responses instead of the subnet reaching consensus on one:
+  - Added the types `FlexibleHttpRequestArgs`, `ReplicationCounts`, `FlexibleHttpRequestResult`, `FlexibleHttpRequestErr`, `FlexibleHttpGlobalError`, `FlexibleHttpNodeDetail`, `HttpRequestResourceReport`, `ResourceUsage` and `FlexibleHttpNodeError`.
+
 ## [0.9.0] - 2026-08-13
 
 ### Added

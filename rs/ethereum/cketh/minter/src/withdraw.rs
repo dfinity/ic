@@ -9,6 +9,7 @@ use crate::{
     guard::TimerGuard,
     logs::{DEBUG, INFO},
     numeric::{GasAmount, LedgerMintIndex, TransactionCount},
+    runtime::CanisterRuntime,
     state::{
         State, TaskType,
         audit::{EventType, process_event},
@@ -18,6 +19,7 @@ use crate::{
             ReimbursementRequest, WithdrawalRequest,
         },
     },
+    time::TimeProvider,
     tx::{GasFeeEstimate, SignableTransaction, Signed, lazy_refresh_gas_fee_estimate},
 };
 use candid::Nat;
@@ -46,7 +48,7 @@ const TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
 pub const CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
 pub const CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(65_000);
 
-pub async fn process_reimbursement() {
+pub async fn process_reimbursement<T: TimeProvider>(time_provider: &T) {
     let _guard = match TimerGuard::new(TaskType::Reimbursement) {
         Ok(guard) => guard,
         Err(e) => {
@@ -71,7 +73,13 @@ pub async fn process_reimbursement() {
         // Ensure that even if we were to panic in the callback, after having contacted the ledger to mint the tokens,
         // this reimbursement request will not be processed again.
         let prevent_double_minting_guard = scopeguard::guard(index.clone(), |index| {
-            mutate_state(|s| process_event(s, EventType::QuarantinedReimbursement { index }));
+            mutate_state(|s| {
+                process_event(
+                    s,
+                    EventType::QuarantinedReimbursement { index },
+                    time_provider,
+                )
+            });
         });
         let ledger_canister_id = match index {
             ReimbursementIndex::CkEth { .. } => read_state(|s| s.cketh_ledger_id),
@@ -138,7 +146,7 @@ pub async fn process_reimbursement() {
                 reimbursed,
             },
         };
-        mutate_state(|s| process_event(s, event));
+        mutate_state(|s| process_event(s, event, time_provider));
         // minting succeeded, defuse guard
         ScopeGuard::into_inner(prevent_double_minting_guard);
     }
@@ -150,7 +158,7 @@ pub async fn process_reimbursement() {
     }
 }
 
-pub async fn process_retrieve_eth_requests() {
+pub async fn process_retrieve_eth_requests<R: CanisterRuntime>(runtime: R) {
     let _guard = match TimerGuard::new(TaskType::RetrieveEth) {
         Ok(guard) => guard,
         Err(e) => {
@@ -166,7 +174,7 @@ pub async fn process_retrieve_eth_requests() {
         return;
     }
 
-    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate().await {
+    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate(&runtime).await {
         Some(gas_fee_estimate) => gas_fee_estimate,
         None => {
             log!(
@@ -177,18 +185,18 @@ pub async fn process_retrieve_eth_requests() {
         }
     };
 
-    let sender = minter_address().await;
+    let sender = minter_address(&runtime).await;
     let latest_transaction_count = latest_transaction_count(sender).await;
-    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate).await;
-    create_transactions_batch(gas_fee_estimate);
-    sign_transactions_batch().await;
+    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate, &runtime).await;
+    create_transactions_batch(gas_fee_estimate, &runtime);
+    sign_transactions_batch(&runtime).await;
     send_transactions_batch(sender, latest_transaction_count).await;
-    finalize_transactions_batch(sender).await;
+    finalize_transactions_batch(sender, &runtime).await;
 
     if read_state(|s| s.withdrawal_transactions.has_pending_requests()) {
         ic_cdk_timers::set_timer(
             crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
-            async { process_retrieve_eth_requests().await },
+            async move { process_retrieve_eth_requests(runtime).await },
         );
     }
 }
@@ -214,9 +222,10 @@ pub(crate) async fn latest_transaction_count(sender: Address) -> Option<Transact
         }
     }
 }
-async fn resubmit_transactions_batch(
+async fn resubmit_transactions_batch<T: TimeProvider>(
     latest_transaction_count: Option<TransactionCount>,
     gas_fee_estimate: &GasFeeEstimate,
+    time_provider: &T,
 ) {
     if read_state(|s| s.withdrawal_transactions.is_sent_tx_empty()) {
         return;
@@ -245,6 +254,7 @@ async fn resubmit_transactions_batch(
                             withdrawal_id,
                             transaction,
                         },
+                        time_provider,
                     )
                 });
             }
@@ -255,7 +265,7 @@ async fn resubmit_transactions_batch(
     }
 }
 
-fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
+fn create_transactions_batch<T: TimeProvider>(gas_fee_estimate: GasFeeEstimate, time_provider: &T) {
     for request in read_state(|s| {
         s.withdrawal_transactions
             .requests_batch(WITHDRAWAL_REQUESTS_BATCH_SIZE)
@@ -283,6 +293,7 @@ fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
                             withdrawal_id: request.cketh_ledger_burn_index(),
                             transaction,
                         },
+                        time_provider,
                     );
                 });
             }
@@ -313,7 +324,7 @@ pub fn estimate_gas_limit(withdrawal_request: &WithdrawalRequest) -> GasAmount {
     }
 }
 
-async fn sign_transactions_batch() {
+async fn sign_transactions_batch<R: CanisterRuntime>(runtime: &R) {
     let transactions_batch: Vec<_> = read_state(|s| {
         s.withdrawal_transactions
             .transactions_to_sign_batch(TRANSACTIONS_TO_SIGN_BATCH_SIZE)
@@ -325,7 +336,7 @@ async fn sign_transactions_batch() {
             .map(|(withdrawal_id, tx)| async move {
                 (
                     withdrawal_id,
-                    crate::tx::sign(tx, MAIN_DERIVATION_PATH).await,
+                    crate::tx::sign(tx, MAIN_DERIVATION_PATH, runtime).await,
                 )
             }),
     )
@@ -340,6 +351,7 @@ async fn sign_transactions_batch() {
                         withdrawal_id,
                         transaction,
                     },
+                    runtime,
                 )
             }),
             Err(e) => errors.push(e),
@@ -416,7 +428,7 @@ pub(crate) async fn send_signed_transactions<T: SignableTransaction + std::fmt::
     }
 }
 
-async fn finalize_transactions_batch(sender: Address) {
+async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_provider: &T) {
     if read_state(|s| s.withdrawal_transactions.is_sent_tx_empty()) {
         return;
     }
@@ -436,6 +448,7 @@ async fn finalize_transactions_batch(sender: Address) {
                                 withdrawal_id,
                                 transaction_receipt: transaction_receipt.into(),
                             },
+                            time_provider,
                         );
                     });
                 }

@@ -51,9 +51,13 @@ pub struct OrchestratorArgs {
     #[clap(long)]
     pub(crate) enable_provisional_registration: bool,
 
-    /// The path to the version file.
+    /// The path to the replica version file.
     #[clap(long)]
-    pub(crate) version_file: PathBuf,
+    pub(crate) replica_version_file: PathBuf,
+
+    /// The path to the GuestOS version file.
+    #[clap(long)]
+    pub(crate) guestos_version_file: PathBuf,
 
     /// Print the replica's current node ID.
     #[clap(long)]
@@ -143,7 +147,8 @@ mod tests {
             ic_binary_directory: data_directory.clone(),
             metrics_listen_addr: None,
             enable_provisional_registration: false,
-            version_file: data_directory.join("version.txt"),
+            replica_version_file: data_directory.join("version.txt"),
+            guestos_version_file: data_directory.join("guestos_version.txt"),
             node_id: false,
             dc_id: false,
             orchestrator_data_directory: data_directory,

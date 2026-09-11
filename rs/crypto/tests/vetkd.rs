@@ -9,6 +9,7 @@ use ic_crypto_test_utils_vetkd::VetKdArgsOwned;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_interfaces::crypto::{LoadTranscriptResult, NiDkgAlgorithm};
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
+use ic_types::consensus::idkg::common::RequestId;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTranscript};
@@ -19,8 +20,9 @@ use ic_types::crypto::vetkd::VetKdKeyShareCombinationError;
 use ic_types::crypto::vetkd::VetKdKeyShareCreationError;
 use ic_types::crypto::vetkd::VetKdKeyShareVerificationError;
 use ic_types::crypto::vetkd::VetKdKeyVerificationError;
-use ic_types::{CanisterId, NodeId};
-use ic_types_test_utils::ids::canister_test_id;
+use ic_types::messages::CallbackId;
+use ic_types::{CanisterId, Height, NodeId};
+use ic_types_test_utils::ids::{canister_test_id, node_test_id};
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use slog::Level;
@@ -137,6 +139,7 @@ impl VetKDTestServer {
 }
 
 struct VetKDTestClient {
+    request_id: RequestId,
     caller: CanisterId,
     context: Vec<u8>,
     input: Vec<u8>,
@@ -159,6 +162,10 @@ impl VetKDTestClient {
         let tpk = tsk.public_key();
 
         Self {
+            request_id: RequestId {
+                callback_id: CallbackId::from(rng.r#gen::<u64>()),
+                height: Height::new(rng.r#gen::<u64>()),
+            },
             caller,
             context,
             input,
@@ -171,6 +178,7 @@ impl VetKDTestClient {
     fn create_args(&self, dkg_id: &NiDkgId) -> VetKdArgsOwned {
         VetKdArgsOwned {
             ni_dkg_id: dkg_id.clone(),
+            request_id: self.request_id,
             caller: self.caller.get(),
             context: self.context.clone(),
             input: self.input.clone(),
@@ -341,6 +349,38 @@ mod verify_key_share {
     }
 
     #[test]
+    fn should_err_if_request_id_altered() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
+
+        let shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        for altered in [
+            RequestId {
+                callback_id: CallbackId::from(vetkd_args.request_id.callback_id.get() ^ 1),
+                height: vetkd_args.request_id.height,
+            },
+            RequestId {
+                callback_id: vetkd_args.request_id.callback_id,
+                height: Height::new(vetkd_args.request_id.height.get() ^ 1),
+            },
+        ] {
+            let mut altered_args = vetkd_args.clone();
+            altered_args.request_id = altered;
+
+            match server.verify_key_shares(&shares, &altered_args, &mut rng) {
+                Err(VetKdKeyShareVerificationError::VerificationError(_)) => { /* expected */ }
+                Ok(()) => panic!("Shares accepted under request id {altered:?}"),
+                Err(e) => panic!("Unexpected error {:?}", e),
+            }
+        }
+    }
+
+    #[test]
     fn should_err_with_verificationerror_if_share_signature_is_invalid() {
         let mut rng = reproducible_rng();
         let server = VetKDTestServer::new(&mut rng);
@@ -478,7 +518,99 @@ mod combine_shares {
     }
 
     #[test]
-    fn should_err_if_some_encrypted_key_share_is_invalid() {
+    fn should_skip_malformed_shares_and_still_combine() {
+        let mut rng = reproducible_rng();
+        let mut server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
+
+        let mut shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        let to_corrupt = shares.len() - server.config.threshold().get().get() as usize;
+        modify_n_random_shares(to_corrupt, &mut shares, &mut rng, |share, _rng| {
+            share.encrypted_key_share.0.truncate(1);
+        });
+
+        let (combiner, encrypted_key) = server
+            .combine_key_shares(&shares, &vetkd_args, &mut rng)
+            .expect("Combination unexpectedly failed");
+
+        // Decryption verifies the key against the derived public key, so it succeeding
+        // proves that skipping the malformed shares still produced the correct key.
+        client
+            .decrypt_key(&encrypted_key)
+            .expect("Failed to decrypt key");
+
+        let logs = server
+            .env
+            .loggers
+            .remove(&combiner)
+            .expect("Missing loggers")
+            .drain_logs();
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(&Level::Warning, "is malformed: skipping it");
+    }
+
+    #[test]
+    fn should_combine_when_some_shares_are_malformed_and_others_are_invalid() {
+        let mut rng = reproducible_rng();
+        let mut server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
+
+        let mut shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        // One share is skipped because it is malformed, another one is discarded by
+        // `combine_valid_shares` because it is well-formed but invalid. Both mechanisms
+        // must work together, so we need two shares to spare.
+        let threshold = server.config.threshold().get().get() as usize;
+        assert!(shares.len() >= threshold + 2);
+        let victims = shares.keys().copied().choose_multiple(&mut rng, 2);
+        let [malformed, invalid] = victims.as_slice() else {
+            panic!("Missing shares");
+        };
+        shares
+            .get_mut(malformed)
+            .expect("Missing share")
+            .encrypted_key_share
+            .0
+            .truncate(1);
+        swap_share_c1c3(
+            &mut shares
+                .get_mut(invalid)
+                .expect("Missing share")
+                .encrypted_key_share,
+        );
+
+        let (combiner, encrypted_key) = server
+            .combine_key_shares(&shares, &vetkd_args, &mut rng)
+            .expect("Combination unexpectedly failed");
+
+        client
+            .decrypt_key(&encrypted_key)
+            .expect("Failed to decrypt key");
+
+        let logs = server
+            .env
+            .loggers
+            .remove(&combiner)
+            .expect("Missing loggers")
+            .drain_logs();
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(&Level::Warning, "is malformed: skipping it")
+            .has_only_one_message_containing(
+                &Level::Info,
+                "EncryptedKey::combine_all failed with InvalidShares, \
+                falling back to EncryptedKey::combine_valid_shares",
+            );
+    }
+
+    #[test]
+    fn should_tolerate_corrupted_shares_up_to_the_reconstruction_threshold() {
         let mut rng = reproducible_rng();
         let server = VetKDTestServer::new(&mut rng);
         let client = VetKDTestClient::new(&mut rng, &server);
@@ -488,16 +620,86 @@ mod combine_shares {
             .create_key_shares(&vetkd_args, &mut rng)
             .expect("Share creation unexpectedly failed");
 
-        modify_random_share(&mut shares, &mut rng, |share, rng| {
+        let to_corrupt = shares.len() - server.config.threshold().get().get() as usize;
+        modify_n_random_shares(to_corrupt, &mut shares, &mut rng, |share, rng| {
             corrupt_share_contents(share, rng)
         });
 
+        let encrypted_key = server
+            .combine_key_shares(&shares, &vetkd_args, &mut rng)
+            .expect("Combination unexpectedly failed")
+            .1;
+
+        client
+            .decrypt_key(&encrypted_key)
+            .expect("Failed to decrypt key");
+    }
+
+    #[test]
+    fn should_err_if_too_few_shares_remain_after_skipping_invalid_ones() {
+        let mut rng = reproducible_rng();
+        let server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
+
+        let mut shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        let threshold = server.config.threshold().get().get() as usize;
+        let to_corrupt = shares.len() - threshold + 1;
+        modify_n_random_shares(to_corrupt, &mut shares, &mut rng, |share, _rng| {
+            share.encrypted_key_share.0.truncate(1);
+        });
+
         match server.combine_key_shares(&shares, &vetkd_args, &mut rng) {
-            Err(VetKdKeyShareCombinationError::InvalidArgumentEncryptedKeyShare) => { /* expected */
+            Err(VetKdKeyShareCombinationError::CombinationError(msg)) => {
+                // Only the shares that were not skipped are counted as usable.
+                let expected = format!(
+                    "only {} of {} encrypted key shares were usable, fewer than the \
+                reconstruction threshold of {threshold}",
+                    threshold - 1,
+                    shares.len()
+                );
+                assert!(msg.contains(&expected), "unexpected message: {msg}");
             }
             Ok(_) => panic!("Unexpected success"),
             Err(e) => panic!("Unexpected error {:?}", e),
         }
+    }
+
+    #[test]
+    fn should_skip_shares_of_nodes_that_are_not_receivers_and_still_combine() {
+        let mut rng = reproducible_rng();
+        let mut server = VetKDTestServer::new(&mut rng);
+        let client = VetKDTestClient::new(&mut rng, &server);
+        let vetkd_args = client.create_args(&server.dkg_id);
+
+        let mut shares = server
+            .create_key_shares(&vetkd_args, &mut rng)
+            .expect("Share creation unexpectedly failed");
+
+        let some_share = shares.values().next().expect("No shares").clone();
+        let stranger = node_test_id(u64::MAX);
+        assert!(!server.config.receivers().get().contains(&stranger));
+        shares.insert(stranger, some_share);
+
+        let (combiner, encrypted_key) = server
+            .combine_key_shares(&shares, &vetkd_args, &mut rng)
+            .expect("Combination unexpectedly failed");
+
+        client
+            .decrypt_key(&encrypted_key)
+            .expect("Failed to decrypt key");
+
+        let logs = server
+            .env
+            .loggers
+            .remove(&combiner)
+            .expect("Missing loggers")
+            .drain_logs();
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(&Level::Warning, "skipping its encrypted key share");
     }
 
     #[test]
@@ -512,11 +714,12 @@ mod combine_shares {
             .expect("Share creation unexpectedly failed");
 
         /*
-         * If any of the shares fails to deserialize then the combination step fails
-         * immediately. We avoid this by using the structure of the share; it is c1/c2/c3
-         * where c1 and c3 are in G1 and c2 is G2, and all the values are just concatenated.
-         * So by swapping the first and last 48 bytes we get a valid share encoding which is
-         * still invalid.
+         * Shares that fail to deserialize are skipped before combination, which would
+         * leave too few usable shares and fail with the "usable" CombinationError instead
+         * of exercising the `combine_valid_shares` fallback we want to test here. We avoid
+         * that by using the structure of the share; it is c1/c2/c3 where c1 and c3 are in
+         * G1 and c2 is G2, and all the values are just concatenated. So by swapping the
+         * first and last 48 bytes we get a valid share encoding which is still invalid.
          */
 
         let to_corrupt = shares.len() - server.config.threshold().get().get() as usize + 1;
@@ -614,7 +817,10 @@ mod verify_encrypted_key {
             .expect("Share combination failed")
             .1;
 
-        flip_random_bit(&mut vetkd_args.transport_public_key, &mut rng);
+        // Set the infinity bit which causes the point to become an invalid encoding.
+        // Flipping a random bit instead would not do: the y-sign bit merely negates the
+        // point, which still deserializes and thus fails with a VerificationError.
+        vetkd_args.transport_public_key[0] ^= 0x40;
 
         match server.verify_encrypted_key(&ek, &vetkd_args, &mut rng) {
             Ok(_) => panic!("Unexpected success"),

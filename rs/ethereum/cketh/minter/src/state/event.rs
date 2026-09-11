@@ -1,3 +1,4 @@
+use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::erc20::CkErc20Token;
@@ -11,8 +12,8 @@ use crate::state::transactions::{
 };
 use crate::timed_sized_map::Timestamp;
 use crate::tx::{
-    Eip1559TransactionRequest, SignedEip1559TransactionRequest, SignedSweepTransaction,
-    SweepTransaction, TransactionSignature,
+    AuthorizationRequest, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
+    SignedSweepTransaction, SweepTransaction, TransactionSignature,
 };
 use candid::Principal;
 use ic_ethereum_types::Address;
@@ -237,6 +238,18 @@ pub enum EventType {
         #[n(1)]
         signature: TransactionSignature,
     },
+    /// A deposit address authorized the sweeper contract to run as its code. Signing costs a
+    /// threshold-ECDSA signature, so the tuple is recorded and every later sweep of the same
+    /// address reuses it rather than signing another.
+    #[n(34)]
+    AuthorizedDepositAddress {
+        /// What was signed, which is also what replay keys the authorization by: a signature is
+        /// only usable for the chain, the delegate and the nonce named here.
+        #[n(0)]
+        request: AuthorizationRequest,
+        #[n(1)]
+        signature: TransactionSignature,
+    },
 }
 
 /// Full snapshot of the ckERC20 deposit address registry. Carries the limits in
@@ -269,12 +282,12 @@ pub struct AutomaticDeposit {
     #[n(2)]
     pub address: DepositAddress,
     #[n(3)]
-    pub erc20_contract_address: Address,
+    pub asset: Asset,
     #[n(4)]
     pub last_scanned_block: BlockNumber,
     #[n(5)]
     pub scan_count: u32,
-    /// The balance detected for `erc20_contract_address` at `last_scanned_block`.
+    /// The balance detected for `asset` at `last_scanned_block`.
     #[n(6)]
     pub scanned_balance: Erc20Value,
 }
@@ -289,7 +302,7 @@ pub struct DepositAddressRegistration {
     #[n(2)]
     pub address: DepositAddress,
     #[n(3)]
-    pub erc20_contract_address: Address,
+    pub asset: Asset,
     #[n(4)]
     pub expires_at_nanos: Timestamp,
     /// Latest block number at which this pair's balance was scanned; `None` if

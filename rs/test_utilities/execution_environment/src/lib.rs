@@ -376,6 +376,20 @@ impl ExecutionTest {
         self.sender_info = None;
     }
 
+    /// Sets whether this subnet is cooling down.
+    pub fn set_cooling_down(&mut self, cooling_down: bool) {
+        let own_subnet_id = self.state().metadata.own_subnet_id;
+        self.state_mut()
+            .metadata
+            .modify_network_topology(|network_topology| {
+                network_topology
+                    .subnets_mut()
+                    .get_mut(&own_subnet_id)
+                    .unwrap()
+                    .cooling_down = cooling_down;
+            });
+    }
+
     pub fn state(&self) -> &ReplicatedState {
         self.state.as_ref().unwrap()
     }
@@ -2716,6 +2730,11 @@ impl ExecutionTestBuilder {
 
     pub fn with_flexible_http_requests_enabled(mut self) -> Self {
         self.execution_config.flexible_http_requests = FlagStatus::Enabled;
+        self
+    }
+
+    pub fn with_flexible_http_requests_disabled(mut self) -> Self {
+        self.execution_config.flexible_http_requests = FlagStatus::Disabled;
         self
     }
 

@@ -61,6 +61,7 @@ fn resolve_xnet_endpoint(remote_node_index: u64, log: ReplicaLogger) -> Endpoint
         mock_gen_range_low(remote_node_index, 3),
         LOCAL_NODE,
         registry.clone(),
+        Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics)),
         &metrics,
         log.clone(),
     ));
@@ -391,7 +392,11 @@ async fn validate_broken_count_bytes_fn() {
         let fixture = PayloadBuilderTestFixture::with_xnet_state(0);
         let xnet_payload_builder = fixture
             .new_xnet_payload_builder_impl(log)
-            .with_count_bytes_fn(|_| Err(CertifiedSliceError::TakeBeforeSliceBegin));
+            .with_count_bytes_fn(|_| {
+                Err(CertifiedSliceError::DecodeFailed(
+                    ProxyDecodeError::MissingField("test"),
+                ))
+            });
 
         // Validate newest `XNetPayload` in `payloads` against previous ones + state.
         let payloads = fixture.past_payloads();

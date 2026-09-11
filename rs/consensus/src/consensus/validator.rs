@@ -40,7 +40,7 @@ use ic_types::{
         EquivocationProof, FinalizationContent, HasBlockHash, HasCommittee, HasHash, HasHeight,
         HasRank, HasVersion, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare,
         RandomTape, RandomTapeShare, Rank,
-        catchup::CatchUpPackageType,
+        catchup::{CatchUpPackageParam, CatchUpPackageType},
         dkg::{
             DkgPayloadValidationFailure, InvalidDkgPayloadReason, PostSplitArgs,
             SubnetSplittingStatus,
@@ -123,6 +123,10 @@ enum InvalidArtifactReason {
     CannotVerifyBlockHeightZero,
     NonEmptyPayloadWhileHalting,
     NonStrictlyIncreasingValidationContext,
+    CatchUpPackageParamNotStrictlyIncreasing {
+        current: CatchUpPackageParam,
+        received: CatchUpPackageParam,
+    },
     MismatchedBlockInCatchUpPackageShare,
     DataPayloadBlockInCatchUpPackageShare,
     MismatchedOldestRegistryVersionInCatchUpPackageShare,
@@ -863,7 +867,7 @@ impl Validator {
         artifact: &S,
     ) -> ValidationResult<ValidatorError> {
         let version = artifact.version();
-        let expected_version = &self.replica_config.replica_version;
+        let expected_version = self.replica_config.replica_version();
         if version != expected_version {
             return Err(InvalidArtifactReason::ReplicaVersionMismatch.into());
         }
@@ -984,7 +988,7 @@ impl Validator {
         T: NotaryIssued + HasVersion,
     {
         let version = notary_issued.content.version();
-        let expected_version = &self.replica_config.replica_version;
+        let expected_version = self.replica_config.replica_version();
         if version != expected_version {
             return Some(ChangeAction::RemoveFromUnvalidated(
                 notary_issued.into_message(),
@@ -1294,7 +1298,7 @@ impl Validator {
             self.registry_client.as_ref(),
             self.replica_config.subnet_id,
             pool_reader,
-            &self.replica_config.replica_version,
+            self.replica_config.replica_version(),
             &self.log,
         ) else {
             return Err(ValidationFailure::FailedToGetConsensusStatus.into());
@@ -1697,7 +1701,8 @@ impl Validator {
 
     /// Return a `Mutations` of `CatchUpPackage` artifacts.
     /// The validity of a CatchUpPackage only depends on its signature
-    /// and signer, which must match a known threshold key.
+    /// and signer, which must match the threshold key of the subnet at the
+    /// CUP's registry version.
     fn validate_catch_up_packages(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let catch_up_height = pool_reader.get_catch_up_height();
         let max_height = match pool_reader
@@ -1728,7 +1733,8 @@ impl Validator {
                     ));
                 }
                 let verification = self
-                    .verify_artifact(pool_reader, &catch_up_package)
+                    .validate_catch_up_package(pool_reader, &catch_up_package)
+                    .and_then(|_| self.verify_artifact(pool_reader, &catch_up_package))
                     .and_then(|_| self.maybe_hold_back_cup(&catch_up_package, pool_reader));
 
                 self.compute_action_from_artifact_verification(
@@ -1738,6 +1744,36 @@ impl Validator {
                 )
             })
             .collect()
+    }
+
+    /// Validate a `CatchUpPackage`. This validation should be quite light since the CUP is signed
+    /// by the subnet and drives catch-up.  The only validation we do is to check that the CUP's
+    /// height and registry version are strictly higher than the highest CUP we currently have. We
+    /// compare registry versions to avoid validating a CUP that was signed on an old subnet
+    /// threshold key.
+    fn validate_catch_up_package(
+        &self,
+        pool_reader: &PoolReader<'_>,
+        catch_up_package: &CatchUpPackage,
+    ) -> ValidationResult<ValidatorError> {
+        let max_height_cup = pool_reader.get_highest_catch_up_package();
+        let current_cup_param = CatchUpPackageParam::from(&max_height_cup);
+        let cup_param = CatchUpPackageParam::from(catch_up_package);
+
+        // Note that `CatchUpPackageParam` is only a partial order: params with a higher
+        // height but a lower registry version are incomparable. Such params must be
+        // rejected too, so this must not be relaxed to `cup_param <= current_cup_param`.
+        if !cup_param.gt(&current_cup_param) {
+            return Err(
+                InvalidArtifactReason::CatchUpPackageParamNotStrictlyIncreasing {
+                    current: current_cup_param,
+                    received: cup_param,
+                }
+                .into(),
+            );
+        }
+
+        Ok(())
     }
 
     /// Return a `Mutations` of `CatchUpPackageShare` artifacts.  This consists
@@ -1771,38 +1807,25 @@ impl Validator {
                         "CatchUpPackageShare integrity check failed".to_string(),
                     ));
                 }
-                match self.validate_catch_up_share_content(pool_reader, &share.content) {
-                    Ok(block) => {
-                        let verification = self.verify_artifact(
-                            pool_reader,
-                            &Signed {
-                                content: CatchUpContent::from_share_content(
-                                    share.content.clone(),
-                                    block,
-                                ),
-                                signature: share.signature.clone(),
-                            },
-                        );
-                        self.compute_action_from_artifact_verification(
-                            pool_reader,
-                            verification,
-                            share.into_message(),
-                        )
-                    }
-                    Err(ValidationError::InvalidArtifact(err)) => Some(
-                        ChangeAction::HandleInvalid(share.into_message(), format!("{err:?}")),
-                    ),
-                    Err(ValidationError::ValidationFailed(err)) => {
-                        if self.unvalidated_for_too_long(pool_reader, &share.get_id()) {
-                            warn!(
-                                every_n_seconds => LOG_EVERY_N_SECONDS,
-                                self.log,
-                                "Couldn't validate the catch-up package share: {:?}", err
-                            );
-                        }
-                        None
-                    }
-                }
+
+                let verification = self
+                    .validate_catch_up_share_content(pool_reader, &share.content)
+                    .and_then(|block| {
+                        let catch_up_content_share = Signed {
+                            content: CatchUpContent::from_share_content(
+                                share.content.clone(),
+                                block,
+                            ),
+                            signature: share.signature.clone(),
+                        };
+                        self.verify_artifact(pool_reader, &catch_up_content_share)
+                    });
+
+                self.compute_action_from_artifact_verification(
+                    pool_reader,
+                    verification,
+                    share.into_message(),
+                )
             })
             .collect()
     }
@@ -2137,12 +2160,12 @@ impl Validator {
 pub mod test {
     use super::*;
     use crate::consensus::{
-        MAX_CONSENSUS_THREADS, block_maker::get_block_maker_delay, build_thread_pool,
-        catchup_package_maker::CatchUpPackageMaker,
+        block_maker::get_block_maker_delay, catchup_package_maker::CatchUpPackageMaker,
     };
     use assert_matches::assert_matches;
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder, RefMockPayloadBuilder};
+    use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool};
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::{
         messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
@@ -2181,7 +2204,7 @@ pub mod test {
     };
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
-        ids::{node_test_id, subnet_test_id, test_replica_version},
+        ids::{node_test_id, subnet_test_id, test_platform_version},
         messages::SignedIngressBuilder,
     };
     use ic_types::{
@@ -2800,7 +2823,7 @@ pub mod test {
             // validated
             let tape_1 = RandomTape::fake(RandomTapeContent::new(
                 Height::from(1),
-                replica_config.replica_version.clone(),
+                replica_config.replica_version().clone(),
             ));
             pool.insert_validated(tape_1);
 
@@ -2831,7 +2854,7 @@ pub mod test {
 
             // Insert random tape at height 4, check if it is ignored
             let content =
-                RandomTapeContent::new(Height::from(4), replica_config.replica_version.clone());
+                RandomTapeContent::new(Height::from(4), replica_config.replica_version().clone());
             let signature = ThresholdSignature::fake();
             let tape_4 = RandomTape { content, signature };
             pool.insert_unvalidated(tape_4.clone());
@@ -2854,7 +2877,8 @@ pub mod test {
             pool.apply(changeset);
 
             // Set expected batch height to height 4, check if tape_3 is ignored
-            let content = RandomTapeContent::new(Height::from(3), replica_config.replica_version);
+            let content =
+                RandomTapeContent::new(Height::from(3), replica_config.replica_version().clone());
             let signature = ThresholdSignature::fake();
             let tape_3 = RandomTape { content, signature };
             pool.insert_unvalidated(tape_3);
@@ -3094,7 +3118,7 @@ pub mod test {
                     registry.as_ref(),
                     replica_config.subnet_id,
                     &PoolReader::new(&pool),
-                    &replica_config.replica_version,
+                    replica_config.replica_version(),
                     &no_op_logger()
                 ),
                 Some(Status::Halting | Status::Halted)
@@ -3687,7 +3711,7 @@ pub mod test {
                     registry.as_ref(),
                     replica_config.subnet_id,
                     &PoolReader::new(&pool),
-                    &replica_config.replica_version,
+                    replica_config.replica_version(),
                     &no_op_logger(),
                 ),
                 Some(Status::Halting | Status::Halted)
@@ -4220,10 +4244,10 @@ pub mod test {
                     certified_height: Height::from(42),
                     time: ic_types::time::UNIX_EPOCH,
                 },
-                replica_config.replica_version.clone(),
+                replica_config.replica_version().clone(),
             );
             let fake_beacon = RandomBeacon::fake(RandomBeaconContent {
-                version: replica_config.replica_version,
+                version: replica_config.replica_version().clone(),
                 height: cup_height,
                 parent: CryptoHashOf::from(CryptoHash(vec![])),
             });
@@ -4307,6 +4331,73 @@ pub mod test {
                     ConsensusMessage::CatchUpPackage(catch_up_package)
                 ))
             );
+        })
+    }
+
+    /// Tests the check that a CUP is only validated if its params (height, registry
+    /// version) are strictly higher than the params of the highest CUP we already have.
+    ///
+    /// The subnet starts at registry version 1, so the params of the highest CUP we have
+    /// (the genesis CUP) are (height 0, registry version 1). The unvalidated CUP is
+    /// inserted at a higher height, so the outcome depends on the registry version
+    /// recorded in its DKG summary: a lower registry version makes the params
+    /// incomparable, i.e. not "higher" in the sense of `CatchUpPackageParam`, and the
+    /// CUP must be handled as invalid; an equal or higher registry version makes the
+    /// params strictly higher and the CUP validates.
+    #[rstest]
+    #[case::lower_registry_version(RegistryVersion::from(0), false)]
+    #[case::equal_registry_version(RegistryVersion::from(1), true)]
+    #[case::higher_registry_version(RegistryVersion::from(2), true)]
+    fn test_catch_up_package_param_must_be_strictly_increasing(
+        #[case] registry_version: RegistryVersion,
+        #[case] expect_valid: bool,
+    ) {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let ValidatorAndDependencies {
+                validator,
+                state_manager,
+                mut pool,
+                ..
+            } = ValidatorAndDependenciesBuilder::new(pool_config, 4).build();
+
+            pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
+            // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
+            pool.prepare_round().dont_add_catch_up_package().advance();
+
+            let finalization = pool.validated().finalization().get_highest().unwrap();
+            let mut catch_up_package = pool.make_catch_up_package(finalization.height());
+            let mut block = catch_up_package.content.block.as_ref().clone();
+            let mut payload = block.payload.as_ref().clone();
+            match payload {
+                BlockPayload::Summary(ref mut summary) => {
+                    summary.dkg.registry_version = registry_version
+                }
+                BlockPayload::Data(_) => panic!("A CatchUpPackage should contain a summary block"),
+            }
+            block.payload = Payload::new(ic_types::crypto::crypto_hash, payload);
+            catch_up_package.content.block = HashedBlock::new(ic_types::crypto::crypto_hash, block);
+            assert!(catch_up_package.check_integrity());
+            pool.insert_unvalidated(catch_up_package);
+
+            state_manager
+                .get_mut()
+                .expect_latest_state_height()
+                .return_const(Height::new(1));
+
+            let changeset = validator.validate_catch_up_packages(&PoolReader::new(&pool));
+            assert_eq!(changeset.len(), 1);
+            if expect_valid {
+                assert_matches!(
+                    &changeset[0],
+                    ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackage(_))
+                );
+            } else {
+                assert_matches!(
+                    &changeset[0],
+                    ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackage(_), reason)
+                        if reason.contains("CatchUpPackageParamNotStrictlyIncreasing")
+                );
+            }
         })
     }
 
@@ -4483,7 +4574,7 @@ pub mod test {
             let content = NotarizationContent::new(
                 block.height(),
                 ic_types::crypto::crypto_hash(block.as_ref()),
-                replica_config.replica_version,
+                replica_config.replica_version().clone(),
             );
             let mut notarization = Notarization::fake(content);
             notarization.signature.signers =
@@ -4724,7 +4815,7 @@ pub mod test {
             let mut notarization = Notarization::fake(NotarizationContent::new(
                 block.height(),
                 block.content.get_hash().clone(),
-                replica_config.replica_version,
+                replica_config.replica_version().clone(),
             ));
             notarization.signature.signers =
                 vec![node_test_id(1), node_test_id(2), node_test_id(3)];
@@ -5180,7 +5271,7 @@ pub mod test {
                         let content = NotarizationContent::new(
                             block.height(),
                             block.content.get_hash().clone(),
-                            replica_config.replica_version.clone(),
+                            replica_config.replica_version().clone(),
                         );
                         let mut notarization = Notarization::fake(content);
                         let random_beacon = PoolReader::new(&pool).get_random_beacon_tip();
@@ -5347,7 +5438,7 @@ pub mod test {
                 .with_replica_config(ReplicaConfig {
                     node_id: validator_node_id,
                     subnet_id: SOURCE_SUBNET_ID,
-                    replica_version: test_replica_version(),
+                    platform_version: test_platform_version(),
                 })
                 .build();
                 // Manually insert DKG transcripts at the splitting version to simulate what the
@@ -5377,7 +5468,7 @@ pub mod test {
                     ReplicaConfig {
                         node_id: cup_share_node_id,
                         subnet_id: SOURCE_SUBNET_ID,
-                        replica_version: test_replica_version(),
+                        platform_version: test_platform_version(),
                     },
                     membership,
                     crypto,
@@ -5606,7 +5697,7 @@ pub mod test {
             .with_replica_config(ReplicaConfig {
                 node_id: validator_node_id,
                 subnet_id: SOURCE_SUBNET_ID,
-                replica_version: test_replica_version(),
+                platform_version: test_platform_version(),
             })
             .build();
 
