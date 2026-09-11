@@ -26,6 +26,7 @@ pub struct SchedulerMetrics {
     pub(super) executed_canisters_per_round: Histogram,
     pub(super) expired_ingress_messages_count: IntCounter,
     pub(super) round_skipped_due_to_current_heap_delta_above_limit: IntCounter,
+    pub(super) round_skipped_canister_execution_due_to_cooling_down: IntCounter,
     pub(super) execute_round_called: IntCounter,
     pub(super) inner_loop_processed_non_zero_inputs_count: IntCounter,
     pub(super) inner_round_loop_consumed_max_instructions: IntCounter,
@@ -134,6 +135,11 @@ impl SchedulerMetrics {
                 "round_skipped_due_to_current_heap_delta_above_limit",
                 "The number of rounds that were skipped because the current \
                       heap delta size exceeded the allowed max",
+            ),
+            round_skipped_canister_execution_due_to_cooling_down: metrics_registry.int_counter(
+                "round_skipped_canister_execution_due_to_cooling_down",
+                "The number of rounds in which no canister messages were executed \
+                      because the subnet was cooling down",
             ),
             execute_round_called: metrics_registry.int_counter(
                 "execute_round_called",

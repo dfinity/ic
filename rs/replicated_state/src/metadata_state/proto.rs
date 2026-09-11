@@ -276,8 +276,8 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
                     cycles: Some((&cycles).into()),
                 })
                 .collect(),
-            consumed_cycles_by_use_case_as_counters: item
-                .consumed_cycles_by_use_case_as_counters
+            consumed_cycles_by_use_case_monotonic: item
+                .consumed_cycles_by_use_case_monotonic
                 .clone()
                 .into_iter()
                 .map(|(use_case, cycles)| ConsumedCyclesByUseCase {
@@ -308,9 +308,9 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             );
         }
 
-        let mut consumed_cycles_by_use_case_as_counters = BTreeMap::new();
-        for x in item.consumed_cycles_by_use_case_as_counters.into_iter() {
-            consumed_cycles_by_use_case_as_counters.insert(
+        let mut consumed_cycles_by_use_case_monotonic = BTreeMap::new();
+        for x in item.consumed_cycles_by_use_case_monotonic.into_iter() {
+            consumed_cycles_by_use_case_monotonic.insert(
                 CyclesUseCase::try_from(pbCyclesUseCase::try_from(x.use_case).map_err(|_| {
                     ProxyDecodeError::ValueOutOfRange {
                         typ: "CyclesUseCase",
@@ -349,7 +349,7 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             .unwrap_or_else(|_| NominalCycles::zero()),
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
-            consumed_cycles_by_use_case_as_counters,
+            consumed_cycles_by_use_case_monotonic,
             // Transient, with no corresponding proto field:
             // `ReplicatedState::new_from_checkpoint` derives it from the canisters
             // it loads.
@@ -644,7 +644,6 @@ impl From<&Stream> for pb_queues::Stream {
                 .iter()
                 .map(|(_, message)| message.into())
                 .collect(),
-            signals_begin: item.signals_begin().get(),
             signals_end: item.signals_end.get(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
@@ -666,7 +665,6 @@ impl TryFrom<pb_queues::Stream> for Stream {
         let messages_size_bytes = Self::calculate_size_bytes(&messages);
         let refund_count = Self::calculate_refund_count(&messages);
 
-        let signals_begin = item.signals_begin.into();
         let signals_end = item.signals_end.into();
         let reject_signals = item
             .reject_signals
@@ -694,23 +692,8 @@ impl TryFrom<pb_queues::Stream> for Stream {
             }
         }
 
-        // Check that `signals_begin` is before `signals_end` and all reject signals.
-        if signals_begin > signals_end {
-            return Err(ProxyDecodeError::Other(format!(
-                "signals_begin {signals_begin:?} after signals_end {signals_end:?}",
-            )));
-        }
-        if let Some(first_reject_signal) = reject_signals.front()
-            && first_reject_signal.index < signals_begin
-        {
-            return Err(ProxyDecodeError::Other(format!(
-                "first reject signal {first_reject_signal:?} before signals_begin {signals_begin:?}",
-            )));
-        }
-
         Ok(Self {
             messages,
-            signals_begin,
             signals_end,
             reject_signals,
             messages_size_bytes,

@@ -48,6 +48,10 @@ pub struct ReplayToolArgs {
     /// Whether or not to skip prompts for user input.
     pub skip_prompts: bool,
 
+    #[clap(long)]
+    /// The GuestOS version the validator uses; defaults to the replica version.
+    pub guestos_version: Option<ReplicaVersion>,
+
     /// The replica version under which the extra messages of the subcommand are executed. Required
     /// if no consensus pool is available, otherwise the version is taken from its finalized tip and
     /// this argument is ignored.

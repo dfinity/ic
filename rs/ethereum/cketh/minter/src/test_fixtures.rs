@@ -1,9 +1,14 @@
 use crate::EVM_RPC_ID_STAGING;
+use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::eth_logs::LedgerSubaccount;
+use crate::eth_rpc::Hash;
+use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
-use crate::numeric::{BlockNumber, Erc20Value, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas};
+use crate::numeric::{
+    BlockNumber, Erc20Value, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
+};
 use crate::state::audit::{EventType, apply_state_transition};
 use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::LogScrapingId;
@@ -11,7 +16,10 @@ use crate::state::event::AutomaticDeposit;
 use crate::state::transactions::{EthWithdrawalRequest, SweepRequest};
 use crate::state::{State, read_state};
 use crate::sweep::create_pending_sweeper_requests;
-use crate::tx::{AuthorizationRequest, GasFeeEstimate, TransactionSignature};
+use crate::tx::{
+    AccessList, AuthorizationRequest, Eip1559TransactionRequest, FinalizedEip1559Transaction,
+    GasFeeEstimate, Signed, TransactionSignature,
+};
 use candid::{Nat, Principal};
 use ethnum::u256;
 use ic_ethereum_types::Address;
@@ -129,7 +137,7 @@ pub fn automatic_deposit() -> AutomaticDeposit {
         owner: account().owner,
         subaccount: account().subaccount,
         address: DepositAddress::new(Address::new([0xa1; 20])),
-        erc20_contract_address: Address::new([0x22; 20]),
+        asset: Asset::Erc20(Address::new([0x22; 20])),
         last_scanned_block: BlockNumber::new(1_000),
         scan_count: 1,
         scanned_balance: Erc20Value::from(1_000_000_u64),
@@ -148,11 +156,50 @@ pub async fn deposits_with_enqueued_sweep(
 
 pub const PREPAID_SWEEP_GAS: Wei = Wei::new(1_000_000_000_000_000_000);
 
+/// A finalized funding transaction that carried `amount` and paid `transaction_fee` for gas: one
+/// unit of gas priced at the whole fee, so the receipt reports exactly that fee.
+pub fn finalized_funding(
+    amount: Wei,
+    transaction_fee: Wei,
+    status: TransactionStatus,
+) -> FinalizedEip1559Transaction {
+    let effective_gas_price: WeiPerGas = transaction_fee.change_units();
+    let signed = Signed::from((
+        Eip1559TransactionRequest {
+            chain_id: 1,
+            nonce: TransactionNonce::ZERO,
+            max_priority_fee_per_gas: WeiPerGas::ZERO,
+            max_fee_per_gas: effective_gas_price,
+            gas_limit: GasAmount::ONE,
+            destination: Address::new([0x5e; 20]),
+            amount,
+            data: Vec::new(),
+            access_list: AccessList::new(),
+        },
+        transaction_signature(),
+    ));
+    let receipt = TransactionReceipt {
+        block_hash: Hash([0x11; 32]),
+        block_number: BlockNumber::new(4_190_269),
+        effective_gas_price,
+        gas_used: GasAmount::ONE,
+        status,
+        transaction_hash: signed.hash(),
+    };
+    signed
+        .try_finalize(receipt)
+        .expect("test setup: the receipt matches the signed transaction")
+}
+
 pub fn prepay_sweep_gas(state: &mut State) {
     state.sweeper_funding.record_burn(PREPAID_SWEEP_GAS);
     state
         .sweeper_funding
-        .record_finalized_funding(PREPAID_SWEEP_GAS, Wei::ZERO);
+        .record_finalized_funding(&finalized_funding(
+            PREPAID_SWEEP_GAS,
+            Wei::ZERO,
+            TransactionStatus::Success,
+        ));
 }
 
 /// A [`State`] whose sweep queue holds exactly these funded pairs, all taken by the one sweep
@@ -174,7 +221,7 @@ pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, 
                 owner: account.owner,
                 subaccount: account.subaccount,
                 address: deposit_address(account),
-                erc20_contract_address: *token,
+                asset: Asset::Erc20(*token),
                 ..automatic_deposit()
             }),
         );
@@ -306,6 +353,7 @@ pub mod mock {
 }
 
 pub mod arb {
+    use crate::asset::Asset;
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_logs::LedgerSubaccount;
     use crate::eth_rpc::Hash;
@@ -316,6 +364,8 @@ pub mod arb {
         array::{uniform20, uniform32},
         collection::vec,
         prelude::{Strategy, any},
+        prop_oneof,
+        strategy::Just,
     };
 
     pub fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
@@ -339,6 +389,10 @@ pub mod arb {
 
     pub fn arb_address() -> impl Strategy<Value = Address> {
         uniform20(any::<u8>()).prop_map(Address::new)
+    }
+
+    pub fn arb_asset() -> impl Strategy<Value = Asset> {
+        prop_oneof![Just(Asset::Eth), arb_address().prop_map(Asset::Erc20),]
     }
 
     pub fn arb_hash() -> impl Strategy<Value = Hash> {

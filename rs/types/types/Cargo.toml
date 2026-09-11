@@ -23,6 +23,7 @@ ic-management-canister-types-private = { path = "../management_canister_types" }
 ic-protobuf = { path = "../../protobuf" }
 ic-types-cycles = { path = "../cycles" }
 ic-utils = { path = "../../utils" }
+ic-utils-thousands = { path = "../../utils/thousands" }
 ic-validate-eq = { path = "../../utils/validate_eq" }
 ic-validate-eq-derive = { path = "../../utils/validate_eq_derive" }
 maplit = { workspace = true }
@@ -39,7 +40,6 @@ serde_with = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
-thousands = { workspace = true }
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 chrono = { workspace = true }

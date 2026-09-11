@@ -2749,6 +2749,7 @@ pub struct CanisterSettings {
     pub snapshot_visibility: Option<i32>,
     pub wasm_memory_limit: Option<u64>,
     pub wasm_memory_threshold: Option<u64>,
+    pub reserved_cycles_limit: Option<u64>,
 }
 
 /// Nested message and enum types in `CanisterSettings`.
@@ -4334,6 +4335,9 @@ pub enum NnsFunction {
     /// `SetupInitialDKG` requests without an explicit subnet id are routed to the
     /// calling subnet (NNS).
     SetDefaultInitialDkgSubnet = 58,
+    /// Merge a subnet into another subnet: in the routing table, reassigns all
+    /// canister ranges hosted by the source subnet to the destination subnet.
+    MergeSubnets = 59,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4422,6 +4426,7 @@ impl NnsFunction {
             NnsFunction::SetDefaultInitialDkgSubnet => {
                 "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET"
             }
+            NnsFunction::MergeSubnets => "NNS_FUNCTION_MERGE_SUBNETS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4505,6 +4510,7 @@ impl NnsFunction {
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
             "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
             "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET" => Some(Self::SetDefaultInitialDkgSubnet),
+            "NNS_FUNCTION_MERGE_SUBNETS" => Some(Self::MergeSubnets),
             _ => None,
         }
     }

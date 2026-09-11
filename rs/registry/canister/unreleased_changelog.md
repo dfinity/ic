@@ -9,11 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* `cooling_down` field in `SubnetRecord`, settable via `UpdateSubnetRecord` proposals. See
-  `ic_replicated_state::SubnetTopology::cooling_down` for the exact semantics. The field must not
-  be set on mainnet before the replica version rejecting ingress messages to cooling down subnets
-  has been rolled out to all subnets.
-
 * A subnet-split request will now fail if a concurrent call modified the `StandardEngineReplicaVersionRecord`
   while the fresh key material was being generated for the splitting subnet.
 
@@ -26,7 +21,16 @@ on the process that this file is part of, see
   `HostosVersion` accept, so until now, it was possible to elect a version that consumers could not read
   back out of the Registry.
 
+* `merge_subnets` endpoint, callable through a `MergeSubnets` proposal. It merges a subnet into
+  another subnet: in the routing table, reassigns all canister ranges hosted by the source subnet
+  to the destination subnet. Only the routing table is updated: neither subnet record is modified
+  and the source subnet is not deleted.
+
 ## Changed
+
+* `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
+  fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward
+  (`deployment_progress == 1.0`).
 
 ## Deprecated
 
