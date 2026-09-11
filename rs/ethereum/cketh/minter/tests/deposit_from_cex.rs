@@ -20,7 +20,9 @@ use ic_cketh_test_utils::anvil::{
     Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
 };
 use ic_cketh_test_utils::ckerc20::{CkErc20Setup, Erc20Token};
-use ic_cketh_test_utils::live::{CexDeposit, DepositPlan, EthDepositPlan, LiveSetup};
+use ic_cketh_test_utils::live::{
+    CexDeposit, DepositPlan, EthCexDeposit, EthDepositPlan, LiveSetup,
+};
 use ic_cketh_test_utils::{CkEthSetup, SWEEPER_ADDRESS};
 
 const MINIMUM_ETH_DEPOSIT_WEI: u128 = 5_000_000_000_000_000;
@@ -537,7 +539,112 @@ fn should_credit_twenty_eth_deposits_through_ten_deposit_sweeps() {
 }
 
 #[test]
-fn should_sweep_a_second_deposit_despite_resending_a_stale_authorization() {
+fn should_sweep_a_second_eth_deposit_despite_resending_a_stale_authorization() {
+    const DEPOSIT_SUBACCOUNT: [u8; 32] = [7; 32];
+
+    let setup = LiveSetup::<CkErc20Setup>::new()
+        .fund_fee_account()
+        .expect_fee_account_credited()
+        .upgrade_minter()
+        .expect_sweeper_address_derived()
+        .expect_eth_received()
+        .expect_funding_finalized();
+
+    let sweeper = setup.await_sweeper_address();
+    let delegate = setup.sweep_contracts().delegate;
+    let minter_eth_before = setup.minter_eth_balance();
+    // The fee-account funding above minted ckETH too, so the deposit mints are counted
+    // against this baseline.
+    let mints_before = count_cketh_mints(&setup);
+    let owner = setup.depositor(1);
+
+    let (setup, first_deposits) = setup
+        .call_minter_deposit_eth([EthDepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            amount: 3 * MINIMUM_ETH_DEPOSIT_WEI,
+        }])
+        .expect_deposit_responses();
+    let setup = setup
+        .credit_eth_deposits_from_cex(&first_deposits)
+        .expect_deposit_balances_on_anvil()
+        .expect_each_awaiting_sweep();
+    let (setup, _first_sweeps) = setup
+        .await_sweeps(&sweeper, 1)
+        .expect_all_delegating_sweeps();
+    let setup = setup
+        .expect_sweeps_finalized(1)
+        .expect_cketh_mints(&first_deposits);
+    let address = first_deposits[0].address;
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        1,
+        "applying the first sweep's authorization must spend the deposit address' nonce 0"
+    );
+
+    let second_deposits = [EthCexDeposit {
+        amount: 2 * MINIMUM_ETH_DEPOSIT_WEI,
+        ..first_deposits[0].clone()
+    }];
+    let setup = setup
+        .credit_eth_deposits_from_cex(&second_deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+    let (setup, second_registrations) = setup
+        .call_minter_deposit_eth([EthDepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            amount: second_deposits[0].amount,
+        }])
+        .expect_deposit_responses();
+    assert_eq!(
+        second_registrations[0].address, address,
+        "re-registering the pair must yield the same deposit address"
+    );
+    assert_matches!(
+        setup.await_eth_detection(owner, DEPOSIT_SUBACCOUNT).status,
+        DepositEthStatus::AwaitingSweep(detected)
+            if detected.scanned_balance == second_deposits[0].amount
+    );
+
+    let (setup, sweeps) = setup
+        .await_sweeps(&sweeper, 2)
+        .expect_all_delegating_sweeps();
+    let second_sweep = &sweeps[1];
+    assert_eq!(
+        setup.anvil().authorization_nonces(&second_sweep.hash),
+        vec![0],
+        "the re-sent authorization still names nonce 0, stale now that the address is at nonce 1"
+    );
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        1,
+        "a skipped stale authorization must not advance the deposit address' nonce"
+    );
+
+    let all_deposits = [first_deposits[0].clone(), second_deposits[0].clone()];
+    let setup = setup
+        .assert_eth_delegations_installed(&all_deposits, &delegate)
+        .assert_eth_addresses_swept_empty(&second_deposits)
+        .assert_minter_received_swept_eth_total(&all_deposits, minter_eth_before)
+        .expect_cketh_mints(&all_deposits);
+    assert_eq!(
+        count_cketh_mints(&setup) - mints_before,
+        2,
+        "each deposit flow must be credited exactly once"
+    );
+}
+
+fn count_cketh_mints(setup: &LiveSetup<CkErc20Setup>) -> usize {
+    setup
+        .minter_events()
+        .into_iter()
+        .filter(|event| matches!(event.payload, EventPayload::MintedCkEth { .. }))
+        .count()
+}
+
+#[test]
+fn should_sweep_a_second_erc20_deposit_despite_resending_a_stale_authorization() {
     const DEPOSIT_SUBACCOUNT: [u8; 32] = [7; 32];
 
     let setup = LiveSetup::<CkErc20Setup>::new()
