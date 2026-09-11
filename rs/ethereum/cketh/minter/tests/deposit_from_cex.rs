@@ -366,7 +366,7 @@ fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
 }
 
 #[test]
-fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
+fn should_credit_twenty_erc20_deposits_through_one_sweep_per_token() {
     /// Ten depositors per token, so each sweep is a ten-deposit single-token batch — directly
     /// comparable with `deposit_from_cex_demo`'s measured scenarios.
     const DEPOSITORS_PER_TOKEN: u64 = 10;
@@ -435,9 +435,9 @@ fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
 }
 
 #[test]
-fn should_credit_an_eth_cex_deposit_through_a_sweep() {
-    const DEPOSIT_SUBACCOUNT: [u8; 32] = [11; 32];
-    const DEPOSIT_WEI: u128 = 20_000_000_000_000_000;
+fn should_credit_twenty_eth_deposits_through_ten_deposit_sweeps() {
+    const DEPOSITORS: u64 = 20;
+    const MINIMUM_ETH_DEPOSIT_WEI: u128 = 5_000_000_000_000_000;
 
     let setup = LiveSetup::<CkErc20Setup>::new()
         .fund_fee_account()
@@ -446,29 +446,47 @@ fn should_credit_an_eth_cex_deposit_through_a_sweep() {
         .expect_sweeper_address_derived()
         .expect_eth_received()
         .expect_funding_finalized();
+
     let sweeper = setup.await_sweeper_address();
-    let owner = setup.depositor(1);
+    let funded_gas = setup.anvil_eth_balance(&sweeper);
+    let delegate = setup.sweep_contracts().delegate;
+    let minter_eth_before = setup.minter_eth_balance();
+
+    // Every depositor gets a distinct principal and a distinct subaccount, so no two share a
+    // deposit address, and a distinct amount, so a positional mixup in the batch cannot cancel
+    // out in the totals.
+    let plans: Vec<EthDepositPlan> = (0..DEPOSITORS)
+        .map(|index| EthDepositPlan {
+            owner: setup.depositor(index),
+            subaccount: [u8::try_from(index).unwrap(); 32],
+            amount: (u128::from(index) + 2) * MINIMUM_ETH_DEPOSIT_WEI,
+        })
+        .collect();
 
     let (setup, deposits) = setup
-        .call_minter_deposit_eth([EthDepositPlan {
-            owner,
-            subaccount: DEPOSIT_SUBACCOUNT,
-            amount: DEPOSIT_WEI,
-        }])
+        .call_minter_deposit_eth(plans)
         .expect_deposit_responses();
+    let setup = setup.assert_eth_deposit_addresses_bare(&deposits);
 
+    // The CEX withdrawals: a plain ETH transfer to each address, carrying no calldata.
     let setup = setup
         .credit_eth_deposits_from_cex(&deposits)
         .expect_deposit_balances_on_anvil()
         .expect_each_awaiting_sweep();
 
+    // Two full ten-deposit sweeps, and nothing more.
     let (setup, _sweeps) = setup
-        .await_sweeps(&sweeper, 1)
+        .await_sweeps(&sweeper, 2)
         .expect_all_delegating_sweeps();
 
-    setup
+    let setup = setup
+        .assert_eth_sweeps_batched(&[10, 10])
         .assert_eth_addresses_swept_empty(&deposits)
-        .expect_cketh_mints(&deposits);
+        .assert_minter_received_swept_eth_total(&deposits, minter_eth_before)
+        .assert_eth_delegations_installed(&deposits, &delegate)
+        .assert_sweeper_spent_gas(&sweeper, funded_gas);
+
+    setup.expect_cketh_mints(&deposits);
 }
 
 #[test]
