@@ -457,7 +457,10 @@ fn cycles_correct_if_response_fails() {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
@@ -507,7 +510,10 @@ fn cycles_correct_if_cleanup_fails() {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
@@ -1188,7 +1194,10 @@ fn response_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
 
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
@@ -1237,7 +1246,10 @@ fn cleanup_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
 
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
@@ -2025,7 +2037,10 @@ fn reserve_instructions_for_cleanup_callback_scenario(
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
 
     // Assert that the response failed with exceeding instructions limit.
     let ingress_status = test.ingress_status(&ingress_id);
