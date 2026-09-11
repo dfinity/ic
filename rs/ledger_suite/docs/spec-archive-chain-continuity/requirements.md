@@ -124,11 +124,20 @@ comes first.
   detected and that archiving stops, because continuing past it is what turns one
   abandoned canister into many; reclaiming its cycles needs an administrative path
   that does not exist and is accepted as a loss.
-- **Continuing to archive through subnet storage exhaustion.** When the platform
-  refuses to grow an archive's memory, no archive can accept blocks and the ledger
-  cannot grow to hold them either. Req 4 requires the failure be clean, reported,
-  and that blocks which did fit are kept — it does not make archiving proceed. The
-  answer to exhaustion is capacity, not protocol.
+- **Surviving a storage refusal that terminates the archive's execution.** Not all
+  refusals return control: two of them end the call outright, so the archive cannot
+  keep a partial result or report a cause, and every block it stored earlier in that
+  call is discarded with it. Those are the cycle-reservation refusals, and they are
+  the cause of the failure that prompted this work — so Req 4's reporting covers the
+  refusals that *do* return control, and this class is out of reach of any protocol
+  change (Req 4.7).
+
+  The answer to it is to reserve the storage before writing rather than at the write:
+  a canister with a reserved memory allocation is charged when the allocation is
+  made, so growth inside it requires no further reservation and cannot be refused on
+  reservation grounds. That is a configuration change per archive, i.e. the drafted
+  `memory_allocation` proposals, and it is why they are not optional extras to this
+  work.
 - **Restoring a ledger from a canister snapshot as a recovery path.** A ledger
   restored alone resumes issuing block indices its archives already hold with
   different content, so its chain forks from the archived prefix and balances
@@ -258,17 +267,22 @@ makes progress under storage pressure instead of repeating work it cannot finish
 
 #### Acceptance Criteria
 
-1. WHEN THE Archive cannot store every block of an Indexed_Append, THE Archive
-   SHALL store as many as it can and SHALL report the Archive_Position it reached.
-2. THE Archive SHALL NOT discard blocks it has already stored in order to refuse an
-   append, because under a persistent cause each attempt would then make no
-   progress at all.
+1. WHEN THE Archive is refused the storage for a block of an Indexed_Append in a
+   way it can observe, THE Archive SHALL store the blocks before it and SHALL report
+   the Archive_Position it reached.
+2. THE Archive SHALL NOT itself discard blocks it has already stored in order to
+   refuse an append, because under a persistent cause each attempt would then make
+   no progress at all.
 3. WHEN THE Archive stops short because it has reached its own configured storage
    limit, THE Archive SHALL report `at_capacity` as true.
-4. WHEN THE Archive stops short because the platform refused it more memory, THE
-   Archive SHALL report `at_capacity` as false, because a ledger must not respond
-   by creating another archive when creating one needs the same resource that was
-   just refused.
+4. WHEN THE Archive stops short because it was observably refused more memory, THE
+   Archive SHALL report `at_capacity` as false, because a ledger must not respond by
+   creating another archive when creating one needs the same resource that was just
+   refused.
+7. THE Archive SHALL NOT be held to 4.1, 4.2 or 4.4 for a storage refusal that
+   terminates its execution rather than returning to it, because it regains no
+   control and can neither keep a partial result nor report anything — the exposure
+   the corresponding non-goal accepts.
 5. IF THE Archive reports `at_capacity` as true, THEN THE Ledger SHALL create a new
    archive on a later Archiving_Round for the remaining blocks, rather than offering
    them to the same archive again.

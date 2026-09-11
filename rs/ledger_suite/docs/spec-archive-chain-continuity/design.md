@@ -64,6 +64,29 @@ and cannot be inferred by the ledger. Note the read path already enforces this
 boundary, rejecting a `start` below the offset (`:274-277`); only the write path
 lacks it.
 
+**Two storage refusals never reach the archive's code.**
+`try_grow_stable_memory` maps most failures to `-1`, which
+`ic-stable-structures` surfaces as an `Err` the archive can handle — including the
+subnet being out of memory. But `InsufficientCyclesInMemoryGrow` and
+`ReservedCyclesLimitExceededInMemoryGrow` are returned as `HypervisorError` and
+therefore **trap**, deliberately, so that an operator can tell a cycles problem from
+an out-of-memory one (`embedders/src/wasmtime_embedder/system_api.rs:3605-3617`,
+which carries the comment saying so; the trap reaches the wasm boundary at
+`linker.rs:1089-1101`).
+
+This bounds `Req 4` sharply, and in the direction that matters: the cause of the
+2026-09-01 failure was `IC0534`, a reservation refusal, so it is on the trapping
+side. For that cause the archive keeps nothing and reports nothing, and blocks it
+appended earlier in the same call are discarded with the trap. `Req 4.1`'s partial
+progress is therefore real for an out-of-memory subnet and unavailable for a
+reservation refusal — which is what `Req 4.7` says and why the non-goal points at
+`memory_allocation` rather than at anything in this design. Growth inside a reserved
+allocation computes zero newly-allocated bytes (`system_api.rs:1051-1070`), so it
+charges no reservation and cannot be refused on those grounds.
+
+The ledger needs nothing new either way: the trap arrives as a reject, `Rt::call`
+returns `Err`, and the round takes the graceful path under `Req 9`.
+
 **A trap discards its message's state changes, counters included.** This is what
 makes `Req 6.2` necessary rather than stylistic: a cause that traps cannot appear in
 `/metrics`, and the archive's canister log is a bounded ring buffer that is
@@ -317,6 +340,10 @@ Order of work, per D4 and D5:
    cannot heal — if the last covered block matches, every block below it does.
 6. Chain-check `blocks[k]` against the tip (`Req 1.1`, `1.3`, `1.4`, `1.5`).
 7. Append the suffix, stopping short where it must (`Req 4.1`, `4.2`).
+   `StableLog::append` returns a `Result`, so the current `unwrap_or_else(|_|
+   trap("no space left"))` is the archive's own choice and can simply be handled —
+   but only for the refusals that reach it, which is the whole of `Req 4.7`; see the
+   Constraint below.
 8. Re-read `log_length` and reply (`Req 3.1`-`3.4`), or fail the call if step 3
    applied.
 
@@ -517,7 +544,8 @@ test is baseline-independent.
 | 23 | unit, `ledger_canister_core` | create an archive after a round whose reported extent ends at `N`; assert its `block_index_offset` is `N+1` and that `archives()` tiles with no gap or overlap. Then present a node whose reported range starts elsewhere and assert no blocks are stored in it and the metric rises | `Req 7.1`, `7.2`, `7.3`, `7.4` |
 | 24 | integration | on a ledger whose archives report no extent, assert an archive is still created and blocks are still discarded — the exemptions, which a literal reading of Req 7 and Req 8 would forbid | `Req 7.5`, `Req 8.7` |
 | 25 | integration | fail `install_code` gracefully after `create_canister` succeeded; assert the creation counter stays non-zero and archiving halts, and that a failure of `create_canister` itself does not halt | `Req 11.1`, `11.3` |
-| 26 | archive | constrain growth so an append stops short for a reason other than the archive's own limit — a low `reserved_cycles_limit` on the archive, or a subnet memory cap if the harness allows it — and assert `at_capacity` is reported false and the blocks that fit are readable | `Req 4.4` |
+| 26 | archive | constrain growth so an append stops short for a reason other than the archive's own limit, using a route that **returns** control — the wasm's declared stable maximum, or a subnet memory cap — and assert `at_capacity` is reported false and the blocks that fit are readable | `Req 4.4` |
+| 26b | archive | induce a reservation refusal with a low `reserved_cycles_limit`; assert the call is rejected, that nothing was stored, and that the ledger takes the graceful path — the negative case that fixes what `Req 4.7` gives up | `Req 4.7` |
 | 27 | matrix | both token variants for 1-9, 10, 11, 13, 22 | — |
 
 **Seams the design owes.** `Req 9` is observable only through the attempt spacing, so
@@ -525,13 +553,13 @@ the failure counter and last-attempt timestamp must be exposed as metrics; `Req 
 needs a per-round append count; `Req 13` needs an unknown-outcome counter. All three
 are metrics rather than test-only hooks, so they are also what an operator reads.
 
-**At risk.** Row 26 depends on the harness being able to induce a growth refusal
-that is not the archive's own limit — a `reserved_cycles_limit` low enough to trip
-`IC0534`, or a constrained subnet memory. If neither is controllable, `Req 4.4` moves
-to Not attempted below and the distinction rests on review of the branch that sets
-the flag. That would be unsatisfying, because getting `Req 4.4` backwards is what
-makes a ledger spawn archives during storage exhaustion — the original incident — so
-try the reserved-cycles route before giving up on it.
+**At risk.** Row 26 needs a growth refusal that is neither the archive's own limit
+nor a reservation refusal, since the latter traps. The wasm's declared stable maximum
+is the most controllable route; a subnet memory cap works if the harness exposes one.
+Note that `reserved_cycles_limit` is **not** usable for row 26 — it produces the
+trapping case, which is row 26b's subject. If no returning route is controllable,
+`Req 4.4` moves to Not attempted and the distinction rests on review of the branch
+that sets the flag.
 
 **Not attempted.** Inducing a trap in the append continuation end-to-end: routine
 rounds grow ledger memory by zero bytes, which is why DEFI-2967 records "I could not
