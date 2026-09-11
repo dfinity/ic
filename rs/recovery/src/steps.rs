@@ -474,9 +474,11 @@ impl Step for ReplayStep {
             .join("consensus");
         // Without a consensus pool, `ic-replay` replays no blocks: it only executes the
         // subcommand's extra batch, if any, on top of the latest local checkpoint. That
-        // is legitimate when no node could be reached over SSH to download the pool, but
-        // it also looks exactly like a state download gone wrong, so warn about it and
-        // let the operator decide.
+        // is legitimate when no node could be reached over SSH to download the pool, and
+        // that we are confident there are no blocks to replay (maybe because we stalled
+        // at a CUP height for which we already have the manifest). Though it also looks
+        // exactly like a state download gone wrong, so warn about it and let the
+        // operator decide.
         if !consensus_store_path.exists() {
             warn!(
                 self.logger,
