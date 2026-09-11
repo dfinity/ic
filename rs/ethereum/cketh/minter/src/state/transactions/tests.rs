@@ -2958,7 +2958,7 @@ mod sweep_lane {
 
     const SWEEP_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
     use crate::asset::Asset;
-    use crate::sweeper_contract::SweepItem;
+    use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch, encode_sweep_eth_batch};
     use crate::tx::{
         DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate,
         SignableTransaction, SignedAuthorization, SweepTransaction, TransactionSignature,
@@ -3098,6 +3098,31 @@ mod sweep_lane {
             sweep_gas_limit(erc20, &one_address_ten_times),
             sweep_gas_limit(erc20, &items_for(1))
         );
+    }
+
+    #[test]
+    fn should_encode_the_batch_call_of_the_asset_the_sweep_moves() {
+        let token = Address::new([0xc0; 20]);
+        let items: Vec<SweepItem> = sweep_request(0)
+            .items
+            .iter()
+            .map(|authorized| authorized.item.clone())
+            .collect();
+        let erc20_sweep = SweepRequest {
+            asset: Asset::Erc20(token),
+            ..sweep_request(0)
+        };
+        let eth_sweep = SweepRequest {
+            asset: Asset::Eth,
+            ..sweep_request(0)
+        };
+
+        assert_eq!(
+            erc20_sweep.call_data(),
+            encode_sweep_erc20_batch(&items, &[token])
+        );
+        assert_eq!(eth_sweep.call_data(), encode_sweep_eth_batch(&items));
+        assert_ne!(eth_sweep.call_data(), erc20_sweep.call_data());
     }
 
     #[test]
