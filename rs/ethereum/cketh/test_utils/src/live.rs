@@ -571,6 +571,47 @@ impl LiveSetup<CkErc20Setup> {
         self
     }
 
+    pub fn assert_eth_sweeps_batched(self, expected_item_counts: &[usize]) -> Self {
+        let batched: Vec<usize> = self
+            .minter_events()
+            .into_iter()
+            .filter_map(|event| match event.payload {
+                EventPayload::AcceptedSweepRequest {
+                    asset: EventAsset::Eth,
+                    items,
+                    ..
+                } => Some(items.len()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            batched, expected_item_counts,
+            "the ETH deposits must be swept in full batches, oldest first"
+        );
+        self
+    }
+
+    /// The minter's main address ETH balance, as a baseline for
+    /// [`Self::assert_minter_received_swept_eth_total`]: the address also holds the residue of
+    /// the funding deposit, so only the delta attributes the swept ETH.
+    pub fn minter_eth_balance(&self) -> u128 {
+        self.anvil.balance(&self.minter_address)
+    }
+
+    pub fn assert_minter_received_swept_eth_total(
+        self,
+        deposits: &[EthCexDeposit],
+        balance_before: u128,
+    ) -> Self {
+        let total: u128 = deposits.iter().map(|deposit| deposit.amount).sum();
+        assert_eq!(
+            self.anvil.balance(&self.minter_address),
+            balance_before + total,
+            "the minter's main address should have received all swept ETH"
+        );
+        self
+    }
+
     pub fn assert_eth_addresses_swept_empty(self, deposits: &[EthCexDeposit]) -> Self {
         for deposit in deposits {
             assert_eq!(
@@ -600,13 +641,21 @@ impl LiveSetup<CkErc20Setup> {
     }
 
     pub fn assert_deposit_addresses_bare(self, deposits: &[CexDeposit]) -> Self {
-        for deposit in deposits {
+        self.assert_addresses_bare(deposits.iter().map(|deposit| deposit.address))
+    }
+
+    pub fn assert_eth_deposit_addresses_bare(self, deposits: &[EthCexDeposit]) -> Self {
+        self.assert_addresses_bare(deposits.iter().map(|deposit| deposit.address))
+    }
+
+    fn assert_addresses_bare(self, addresses: impl IntoIterator<Item = Address>) -> Self {
+        for address in addresses {
             assert!(
-                self.anvil.code(&deposit.address).is_empty(),
+                self.anvil.code(&address).is_empty(),
                 "a deposit address starts with no code"
             );
             assert_eq!(
-                self.anvil.balance(&deposit.address),
+                self.anvil.balance(&address),
                 0,
                 "a deposit address never needs ETH of its own"
             );
@@ -673,10 +722,26 @@ impl LiveSetup<CkErc20Setup> {
     }
 
     pub fn assert_delegations_installed(self, deposits: &[CexDeposit], delegate: &Address) -> Self {
+        self.assert_delegations_installed_at(deposits.iter().map(|d| d.address), delegate)
+    }
+
+    pub fn assert_eth_delegations_installed(
+        self,
+        deposits: &[EthCexDeposit],
+        delegate: &Address,
+    ) -> Self {
+        self.assert_delegations_installed_at(deposits.iter().map(|d| d.address), delegate)
+    }
+
+    fn assert_delegations_installed_at(
+        self,
+        addresses: impl IntoIterator<Item = Address>,
+        delegate: &Address,
+    ) -> Self {
         let designator = delegation_designator(delegate);
-        for deposit in deposits {
+        for address in addresses {
             assert_eq!(
-                self.anvil.code(&deposit.address),
+                self.anvil.code(&address),
                 designator,
                 "the sweep should have installed the delegation"
             );
@@ -1310,6 +1375,16 @@ impl DepositEthCalls {
                 }
             })
             .collect();
+        let accounts: BTreeSet<(Principal, [u8; 32])> = deposits
+            .iter()
+            .map(|deposit| (deposit.owner, deposit.subaccount))
+            .collect();
+        let addresses: BTreeSet<Address> = deposits.iter().map(|deposit| deposit.address).collect();
+        assert_eq!(
+            addresses.len(),
+            accounts.len(),
+            "every account must get its own deposit address"
+        );
         (self.setup, deposits)
     }
 }
