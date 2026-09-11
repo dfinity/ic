@@ -1,10 +1,8 @@
 use crate::{
-    agent_helper::AgentHelper,
     layout::{CUP_FILE_NAME, Layout},
-    readiness, state_tool_helper,
+    readiness,
     target_subnet::TargetSubnet,
-    utils::{MergedStateParams, first_registry_version_where, get_cup, get_state_hash},
-    validation::validate_artifacts,
+    utils::{MergedStateParams, first_registry_version_where},
 };
 
 use ic_base_types::SubnetId;
@@ -19,6 +17,12 @@ use ic_recovery::{
 };
 use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 use ic_registry_routing_table::RoutingTable;
+use ic_subnet_tools::{
+    agent_helper::AgentHelper,
+    state_tool_helper,
+    utils::{get_cup, get_state_hash},
+    validation::validate_artifacts,
+};
 use ic_types::{Height, consensus::CatchUpPackage, consensus::HasHeight};
 use slog::{Logger, info, warn};
 use url::Url;

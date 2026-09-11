@@ -2,10 +2,8 @@ use anyhow::Context;
 use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_recovery::{NeuronArgs, RecoveryArgs, cli, util};
-use ic_subnet_merging::{
-    subnet_merging::{SubnetMerging, SubnetMergingArgs},
-    validation::validate_artifacts,
-};
+use ic_subnet_merging::subnet_merging::{SubnetMerging, SubnetMergingArgs};
+use ic_subnet_tools::validation::validate_artifacts;
 use ic_types::ReplicaVersion;
 use slog::{Logger, info, warn};
 use url::Url;

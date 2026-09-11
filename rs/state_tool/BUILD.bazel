@@ -9,10 +9,7 @@ rust_library(
     ),
     crate_name = "ic_state_tool",
     version = "0.1.0",
-    visibility = [
-        "//rs/recovery/subnet_merging:__subpackages__",
-        "//rs/recovery/subnet_splitting:__subpackages__",
-    ],
+    visibility = ["//rs/recovery:__subpackages__"],
     deps = [
         # Keep sorted.
         "//rs/config",

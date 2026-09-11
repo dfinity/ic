@@ -23,14 +23,14 @@ type StorageType = Vec<u8>;
 ///
 /// Note: the state tree is pruned to include only the information (public key and canister ranges)
 /// of a single subnet.
-pub(crate) struct StateTree {
+pub struct StateTree {
     certificate: Certificate,
     subnet_id: SubnetId,
 }
 
 impl StateTree {
     /// Saves the raw state tree to the disk, in CBOR format.
-    pub(crate) fn save_to_file(&self, path: &Path) -> RecoveryResult<()> {
+    pub fn save_to_file(&self, path: &Path) -> RecoveryResult<()> {
         serde_cbor::to_vec(&self.certificate)
             .map_err(|err| agent_error("Failed to serialize the state tree", err))
             .and_then(|bytes| write_bytes(path, bytes))
@@ -38,7 +38,7 @@ impl StateTree {
     }
 
     /// Reads the raw state tree from the disk.
-    pub(crate) fn read_from_file(path: &Path, subnet_id: SubnetId) -> RecoveryResult<Self> {
+    pub fn read_from_file(path: &Path, subnet_id: SubnetId) -> RecoveryResult<Self> {
         let serialized_state_tree = read_bytes(path)
             .map_err(|err| agent_error("Failed to read the state tree from the disk", err))?;
 
@@ -52,13 +52,13 @@ impl StateTree {
     }
 
     /// Extracts the public key from the raw state tree and saves it to the disk.
-    pub(crate) fn save_public_key_to_file(&self, path: &Path) -> RecoveryResult<()> {
+    pub fn save_public_key_to_file(&self, path: &Path) -> RecoveryResult<()> {
         self.lookup_public_key()
             .and_then(|public_key| write_public_key_to_file(public_key, path))
             .map_err(|err| agent_error("Failed to write the public key to disk", err))
     }
 
-    pub(crate) fn lookup_public_key(&self) -> RecoveryResult<&[u8]> {
+    pub fn lookup_public_key(&self) -> RecoveryResult<&[u8]> {
         lookup_value(
             &self.certificate,
             create_path(self.subnet_id, PUBLIC_KEY_LABEL),
@@ -68,7 +68,7 @@ impl StateTree {
 }
 
 /// Wrapper around [Agent]  with some utility functions.
-pub(crate) struct AgentHelper {
+pub struct AgentHelper {
     agent: Agent,
     nns_registry: Principal,
     logger: Logger,
@@ -82,7 +82,7 @@ impl AgentHelper {
     ///
     /// Returns an error when the underlying [Agent] fails to build or when there is something
     /// wrong with the provided NNS public key.
-    pub(crate) fn new(
+    pub fn new(
         nns_url: &Url,
         nns_public_key_path: Option<&Path>,
         logger: Logger,
@@ -124,7 +124,7 @@ impl AgentHelper {
     ///
     /// See: https://internetcomputer.org/docs/current/references/ic-interface-spec#state-tree-subnet
     /// for more information
-    pub(crate) fn read_subnet_data(&self, subnet_id: SubnetId) -> RecoveryResult<StateTree> {
+    pub fn read_subnet_data(&self, subnet_id: SubnetId) -> RecoveryResult<StateTree> {
         let certificate = block_on(self.agent.read_subnet_state_raw(
             vec![
                 create_path(subnet_id, PUBLIC_KEY_LABEL),
@@ -146,7 +146,7 @@ impl AgentHelper {
     }
 
     /// Validates the state tree.
-    pub(crate) fn validate_state_tree(&self, state_tree: &StateTree) -> RecoveryResult<()> {
+    pub fn validate_state_tree(&self, state_tree: &StateTree) -> RecoveryResult<()> {
         self.agent
             .verify(&state_tree.certificate, self.nns_registry)
             .map_err(|err| agent_error("Failed to verify the state tree", err))

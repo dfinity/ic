@@ -1,7 +1,7 @@
 use crate::{
     admin_helper::{
-        get_halt_subnet_at_cup_height_command, get_propose_to_cool_down_subnet_command,
-        get_propose_to_delete_subnet_command, get_propose_to_merge_subnets_command,
+        get_propose_to_cool_down_subnet_command, get_propose_to_delete_subnet_command,
+        get_propose_to_merge_subnets_command,
     },
     layout::Layout,
     steps::{
@@ -18,7 +18,7 @@ use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
     CUPS_DIR, NeuronArgs, Recovery, RecoveryArgs,
-    cli::{consent_given, read_optional, wait_for_confirmation},
+    cli::{consent_given, read_optional},
     error::{RecoveryError, RecoveryResult},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
@@ -28,12 +28,14 @@ use ic_recovery::{
     util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser},
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_subnet_tools::{
+    admin_helper::get_halt_subnet_at_cup_height_command, cli::print_url_and_ask_for_confirmation,
+};
 use ic_types::Height;
 use serde::{Deserialize, Serialize};
-use slog::{Logger, error, info, warn};
+use slog::{Logger, info, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
-use url::Url;
 
 use std::{
     iter::Peekable,
@@ -733,22 +735,5 @@ impl HasRecoveryState for SubnetMerging {
             neuron_args: self.neuron_args.clone(),
             subcommand_args: self.params.clone(),
         })
-    }
-}
-
-fn print_url_and_ask_for_confirmation(
-    logger: &Logger,
-    url: String,
-    text_to_display: impl std::fmt::Display,
-) {
-    match Url::parse(&url) {
-        Ok(url) => {
-            warn!(logger, "{}", text_to_display);
-            warn!(logger, "{}", url);
-            wait_for_confirmation(logger);
-        }
-        Err(err) => {
-            error!(logger, "Failed to parse url {}: {}", url, err);
-        }
     }
 }

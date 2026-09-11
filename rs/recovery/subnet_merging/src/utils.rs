@@ -1,16 +1,13 @@
 use ic_base_types::RegistryVersion;
-use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     RECOVERY_DIRECTORY_NAME,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{read_file, write_file},
     registry_helper::RegistryHelper,
 };
-use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
-use ic_types::consensus::CatchUpPackage;
 use serde::{Deserialize, Serialize};
 
-use std::{fmt::Display, path::Path};
+use std::path::Path;
 
 /// Everything the recovery of the destination subnet needs to know about the
 /// merged state, as computed by the step that assembles it.
@@ -120,33 +117,6 @@ pub fn read_cooling_down_registry_version(dir: &Path) -> RecoveryResult<u64> {
         &dir.join(RECOVERY_DIRECTORY_NAME)
             .join(COOLING_DOWN_REGISTRY_VERSION_FILE),
     )
-}
-
-pub(crate) fn get_cup(cup_path: &Path) -> RecoveryResult<CatchUpPackage> {
-    let cup_proto = pb::CatchUpPackage::read_from_file(cup_path)
-        .map_err(|err| cup_error("Failed to decode the CUP file", cup_path, err))?;
-
-    CatchUpPackage::try_from(&cup_proto)
-        .map_err(|err| cup_error("Failed to deserialize the CUP file", cup_path, err))
-}
-
-fn cup_error(message: impl Display, cup_path: &Path, error: impl Display) -> RecoveryError {
-    RecoveryError::UnexpectedError(format!("{} ({}): {}", message, cup_path.display(), error))
-}
-
-/// Computes the state hash of the given checkpoint.
-pub(crate) fn get_state_hash(checkpoint_dir: impl AsRef<Path>) -> RecoveryResult<String> {
-    let manifest = manifest_from_path(checkpoint_dir.as_ref()).map_err(|e| {
-        RecoveryError::CheckpointError(
-            format!(
-                "Failed to read the manifest from path {}",
-                checkpoint_dir.as_ref().display()
-            ),
-            e,
-        )
-    })?;
-
-    Ok(hex::encode(manifest_hash(&manifest)))
 }
 
 #[cfg(test)]
