@@ -8,6 +8,7 @@
 //!    principal and subaccount.
 
 use assert_matches::assert_matches;
+use ic_cketh_minter::asset::Asset;
 use ic_cketh_minter::balance_scan::batcher::{
     BalanceOfCall, Delegation, MAX_CALLS_PER_BATCH, decode_balance_batch, decode_delegation_batch,
     encode_balance_batch, encode_delegation_batch, encode_eth_balance_batch,
@@ -21,7 +22,7 @@ use ic_cketh_test_utils::anvil::{
 };
 use ic_cketh_test_utils::ckerc20::{CkErc20Setup, Erc20Token};
 use ic_cketh_test_utils::live::{
-    CexDeposit, DepositPlan, EthCexDeposit, EthDepositPlan, LiveSetup,
+    CexDeposit, DepositPlan, EthCexDeposit, EthDepositPlan, LiveSetup, contract_address,
 };
 use ic_cketh_test_utils::{CkEthSetup, SWEEPER_ADDRESS};
 use ic_ethereum_types::Address;
@@ -402,9 +403,9 @@ fn should_flag_only_erc20_deposits_at_or_above_the_per_token_minimum() {
         .supported_erc20_tokens_owned()
         .try_into()
         .expect("expected exactly 2 supported tokens");
-    let usdt_minimum = setup.minimum_deposit_amount(&usdt);
+    let usdt_minimum = setup.minimum_deposit_amount(contract_address(&usdt));
     let usdt_above_minimum = 2 * usdt_minimum;
-    let usdc_at_minimum = setup.minimum_deposit_amount(&usdc);
+    let usdc_at_minimum = setup.minimum_deposit_amount(contract_address(&usdc));
     let usdt_below_minimum = usdt_minimum / 10;
     let plans = [
         (setup.depositor(1), usdt.clone(), usdt_above_minimum),
@@ -469,9 +470,9 @@ fn should_credit_mixed_erc20_and_eth_deposits_through_one_sweep_per_asset() {
     let erc20_only = (setup.depositor(1), [1_u8; 32]);
     let both_assets = (setup.depositor(2), [2_u8; 32]);
     let eth_only = (setup.depositor(3), [3_u8; 32]);
-    let usdc_amount = 3 * setup.minimum_deposit_amount(&usdc);
-    let usdt_amount = 5 * setup.minimum_deposit_amount(&usdt);
-    let eth_minimum = setup.minimum_eth_deposit_amount(both_assets.0, both_assets.1);
+    let usdc_amount = 3 * setup.minimum_deposit_amount(contract_address(&usdc));
+    let usdt_amount = 5 * setup.minimum_deposit_amount(contract_address(&usdt));
+    let eth_minimum = setup.minimum_deposit_amount(Asset::Eth);
     let both_eth_amount = 4 * eth_minimum;
     let eth_only_amount = 7 * eth_minimum;
 
@@ -560,7 +561,7 @@ fn should_flag_only_eth_deposits_at_or_above_the_minimum() {
     const DEPOSIT_SUBACCOUNT: [u8; 32] = [42; 32];
 
     let setup = LiveSetup::<CkErc20Setup>::new();
-    let minimum = setup.minimum_eth_deposit_amount(setup.depositor(1), DEPOSIT_SUBACCOUNT);
+    let minimum = setup.minimum_deposit_amount(Asset::Eth);
     let above_minimum = 2 * minimum;
     let at_minimum = minimum;
     let below_minimum = minimum / 10;
@@ -640,8 +641,8 @@ fn should_credit_twenty_erc20_deposits_through_one_sweep_per_token() {
         .supported_erc20_tokens_owned()
         .try_into()
         .expect("expected exactly 2 supported tokens");
-    let usdc_deposit = 10 * setup.minimum_deposit_amount(&usdc);
-    let usdt_deposit = 15 * setup.minimum_deposit_amount(&usdt);
+    let usdc_deposit = 10 * setup.minimum_deposit_amount(contract_address(&usdc));
+    let usdt_deposit = 15 * setup.minimum_deposit_amount(contract_address(&usdt));
 
     // Every depositor gets a distinct principal and a distinct subaccount, so no two share a
     // deposit address and each attestation binds a different account.
@@ -704,7 +705,7 @@ fn should_credit_twenty_eth_deposits_through_ten_deposit_sweeps() {
     let funded_gas = setup.anvil_eth_balance(&sweeper);
     let delegate = setup.sweep_contracts().delegate;
     let minter_eth_before = setup.minter_eth_balance();
-    let eth_minimum = setup.minimum_eth_deposit_amount(setup.depositor(0), [0; 32]);
+    let eth_minimum = setup.minimum_deposit_amount(Asset::Eth);
 
     let plans: Vec<EthDepositPlan> = (0..DEPOSITORS)
         .map(|index| EthDepositPlan {
@@ -757,7 +758,7 @@ fn should_sweep_a_second_eth_deposit_despite_resending_a_stale_authorization() {
     let mints_before = setup
         .minter_count_events(|event| matches!(event.payload, EventPayload::MintedCkEth { .. }));
     let owner = setup.depositor(1);
-    let eth_minimum = setup.minimum_eth_deposit_amount(owner, DEPOSIT_SUBACCOUNT);
+    let eth_minimum = setup.minimum_deposit_amount(Asset::Eth);
 
     let (setup, first_deposits) = setup
         .call_minter_deposit_eth([EthDepositPlan {
@@ -856,7 +857,7 @@ fn should_sweep_a_second_erc20_deposit_despite_resending_a_stale_authorization()
         .supported_erc20_tokens_owned()
         .try_into()
         .expect("expected exactly 2 supported tokens");
-    let usdc_minimum = setup.minimum_deposit_amount(&usdc);
+    let usdc_minimum = setup.minimum_deposit_amount(contract_address(&usdc));
     let owner = setup.depositor(1);
 
     let (setup, first_deposits) = setup
