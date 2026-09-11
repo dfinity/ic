@@ -6,6 +6,7 @@ use crate::consensus::{
     metrics::ValidatorMetrics,
     status::{self, Status},
 };
+use ic_consensus_cup_utils::{CatchUpPackageVerificationError, verify_catch_up_package};
 use ic_consensus_dkg as dkg;
 use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
@@ -396,14 +397,20 @@ impl SignatureVerify for CatchUpPackage {
             }
         };
 
-        crypto
-            .verify_combined_threshold_sig_by_public_key(
-                &self.signature.signature,
-                &self.content,
-                subnet_id_to_validate_against,
-                cup_registry_version,
-            )
-            .map_err(ValidatorError::from)
+        verify_catch_up_package(crypto, subnet_id_to_validate_against, self).map_err(
+            |err| match err {
+                CatchUpPackageVerificationError::HighThresholdTranscriptNotFound => {
+                    ValidationFailure::TranscriptNotFound(self.height(), NiDkgTag::HighThreshold)
+                        .into()
+                }
+                CatchUpPackageVerificationError::InappropriateDkgId { signer_dkg_id, .. } => {
+                    InvalidArtifactReason::InappropriateDkgId(signer_dkg_id).into()
+                }
+                CatchUpPackageVerificationError::SignatureVerificationFailed(err) => {
+                    ValidatorError::from(err)
+                }
+            },
+        )
     }
 }
 
@@ -4259,7 +4266,7 @@ pub mod test {
             let beacon = pool_reader
                 .get_random_beacon(cup_height)
                 .unwrap_or(fake_beacon);
-            let catch_up_package = CatchUpPackage::fake(CatchUpContent::new(
+            let catch_up_package = fake_catch_up_package(CatchUpContent::new(
                 HashedBlock::new(ic_types::crypto::crypto_hash, block),
                 HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon),
                 CryptoHashOf::from(CryptoHash(vec![])),
@@ -4330,6 +4337,43 @@ pub mod test {
                 Some(ChangeAction::RemoveFromUnvalidated(
                     ConsensusMessage::CatchUpPackage(catch_up_package)
                 ))
+            );
+        })
+    }
+
+    /// A CUP whose signer is not the high-threshold DKG id of its DKG summary must be handled as
+    /// invalid, even if the signature itself verifies (the fake crypto accepts every signature).
+    #[test]
+    fn test_should_not_validate_catch_up_package_with_inappropriate_signer() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let ValidatorAndDependencies {
+                validator,
+                state_manager,
+                mut pool,
+                ..
+            } = ValidatorAndDependenciesBuilder::new(pool_config, 4).build();
+
+            pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
+            // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
+            pool.prepare_round().dont_add_catch_up_package().advance();
+
+            let finalization = pool.validated().finalization().get_highest().unwrap();
+            let mut catch_up_package = pool.make_catch_up_package(finalization.height());
+            catch_up_package.signature.signer.dealer_subnet = subnet_test_id(1337);
+            assert!(catch_up_package.check_integrity());
+            pool.insert_unvalidated(catch_up_package);
+
+            state_manager
+                .get_mut()
+                .expect_latest_state_height()
+                .return_const(Height::new(1));
+
+            let changeset = validator.validate_catch_up_packages(&PoolReader::new(&pool));
+            assert_eq!(changeset.len(), 1);
+            assert_matches!(
+                &changeset[0],
+                ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackage(_), reason)
+                    if reason.contains("InappropriateDkgId")
             );
         })
     }

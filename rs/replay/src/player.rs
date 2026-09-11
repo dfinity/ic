@@ -13,6 +13,7 @@ use ic_artifact_pool::{
 use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
 use ic_consensus::consensus::batch_delivery::deliver_batches_for_ic_replay;
 use ic_consensus_certification::VerifierImpl;
+use ic_consensus_cup_utils::verify_catch_up_package_proto;
 use ic_consensus_utils::{lookup_replica_version, membership::Membership, pool_reader::PoolReader};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_crypto_tree_hash::{Digest, Witness};
@@ -57,7 +58,7 @@ use ic_types::{
     Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
     batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics},
     consensus::{
-        CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
+        CatchUpPackage, HasHeight, HasVersion,
         certification::{Certification, CertificationContent, CertificationShare},
     },
     crypto::{
@@ -1140,16 +1141,10 @@ impl Player {
         }
 
         // Verify the CUP signature.
-        if let Err(err) = self.crypto.verify_combined_threshold_sig_by_public_key(
-            &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
-            &CatchUpContentProtobufBytes::from(&protobuf),
-            self.subnet_id,
-            last_cup.content.block.get_value().context.registry_version,
-        ) {
-            error!(
-                self.log,
-                "Verification of the signature on the CUP failed: {:?}", err
-            );
+        if let Err(err) =
+            verify_catch_up_package_proto(self.crypto.as_ref(), self.subnet_id, &protobuf)
+        {
+            error!(self.log, "Verification of the CUP failed: {}", err);
             return Err(ReplayError::CUPVerificationFailed(last_cup.height()));
         }
 

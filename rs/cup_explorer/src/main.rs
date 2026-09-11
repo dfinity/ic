@@ -59,12 +59,13 @@ struct CupExplorerArgs {
 async fn main() {
     let args = CupExplorerArgs::parse();
 
-    match &args.subcmd {
+    match args.subcmd {
         SubCommand::Explore(explore_args) => {
             explore(
                 args.nns_url,
+                args.nns_pem,
                 explore_args.subnet_id,
-                explore_args.download_path.clone(),
+                explore_args.download_path,
             )
             .await;
         }

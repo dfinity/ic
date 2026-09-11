@@ -377,18 +377,12 @@ impl TestConsensusPool {
             .get_by_height(height)
             .next()
             .unwrap();
-        CatchUpPackage {
-            content: CatchUpContent::new(
-                HashedBlock::new(ic_types::crypto::crypto_hash, block),
-                HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon.clone()),
-                CryptoHashOf::from(CryptoHash(Vec::new())),
-                None,
-            ),
-            signature: ThresholdSignature {
-                signer: random_beacon.signature.signer,
-                signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-            },
-        }
+        fake_catch_up_package(CatchUpContent::new(
+            HashedBlock::new(ic_types::crypto::crypto_hash, block),
+            HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon),
+            CryptoHashOf::from(CryptoHash(Vec::new())),
+            None,
+        ))
     }
 
     pub fn latest_notarized_blocks(&self) -> Box<dyn Iterator<Item = Block>> {

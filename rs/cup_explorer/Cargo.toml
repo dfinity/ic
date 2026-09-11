@@ -13,10 +13,10 @@ clap = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../types/base_types/" }
 ic-canister-client = { path = "../canister_client" }
+ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }

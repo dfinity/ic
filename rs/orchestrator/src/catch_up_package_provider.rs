@@ -39,6 +39,7 @@ use http_body_util::{BodyExt, Full, Limited};
 use hyper::{Method, Request, StatusCode, body::Bytes};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
+use ic_consensus_cup_utils::verify_catch_up_package_proto;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_limits::MAX_MESSAGE_SIZE_BYTES;
@@ -51,7 +52,6 @@ use ic_types::{
         HasHeight, HasVersion,
         catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
     },
-    crypto::*,
 };
 use prost::Message;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc, time::Duration};
@@ -260,7 +260,7 @@ impl CatchUpPackageProvider {
     // given CUP. This avoids unnecessary CUP downloads and hence reduces
     // network bandwidth requirements.
     //
-    // Also checks the signature of the downloaded catch up package.
+    // Also checks the signer and the signature of the downloaded catch up package.
     async fn fetch_and_verify_catch_up_package(
         &mut self,
         node_id: &NodeId,
@@ -285,17 +285,10 @@ impl CatchUpPackageProvider {
         else {
             return Ok(None);
         };
-        let cup = CatchUpPackage::try_from(&protobuf)
-            .map_err(|e| format!("Failed to read CUP from peer at url {uri}: {e:?}"))?;
-
-        self.crypto
-            .verify_combined_threshold_sig_by_public_key(
-                &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
-                &CatchUpContentProtobufBytes::from(&protobuf),
-                subnet_id,
-                cup.content.registry_version(),
-            )
-            .map_err(|e| format!("Failed to verify CUP signature at: {uri:?} with: {e:?}"))?;
+        // Verify the CUP over the original protobuf bytes, as the peer may run a different replica
+        // version whose encoding of the CUP content differs from ours.
+        let cup = verify_catch_up_package_proto(self.crypto.as_ref(), subnet_id, &protobuf)
+            .map_err(|e| format!("Failed to verify CUP from peer at url {uri}: {e}"))?;
 
         Ok(Some((protobuf, cup)))
     }
@@ -540,7 +533,7 @@ pub(crate) mod tests {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_node_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities_consensus::fake::{Fake, FakeContent};
+    use ic_test_utilities_consensus::fake::{Fake, FakeContent, fake_catch_up_package};
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_single_subnet_record};
     use ic_test_utilities_types::ids::{SUBNET_0, node_test_id};
     use ic_types::{
@@ -550,6 +543,7 @@ pub(crate) mod tests {
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload, dkg::DkgSummary,
         },
+        crypto::*,
         time::UNIX_EPOCH,
     };
     use rcgen::{CertificateParams, KeyPair};
@@ -697,7 +691,7 @@ pub(crate) mod tests {
             parent: CryptoHashOf::from(CryptoHash(vec![])),
         });
 
-        let cup = CatchUpPackage::fake(CatchUpContent::new(
+        let cup = fake_catch_up_package(CatchUpContent::new(
             HashedBlock::new(crypto_hash, block),
             HashedRandomBeacon::new(crypto_hash, random_beacon),
             CryptoHashOf::from(CryptoHash(vec![])),
@@ -749,6 +743,54 @@ pub(crate) mod tests {
         assert_eq!(
             CatchUpPackageParam::from(&cup),
             CatchUpPackageParam::from(&CatchUpPackage::try_from(&cup_proto).unwrap()),
+        );
+    }
+
+    /// The signer of a CUP is not covered by its signature, so a peer CUP whose signer does not
+    /// match the high-threshold DKG id of its DKG summary must be rejected before the signature is
+    /// even verified.
+    #[tokio::test]
+    async fn test_peer_cup_with_inappropriate_signer_is_rejected() {
+        let mut cup_proto =
+            cup_with_distinct_registry_versions(RegistryVersion::from(3), RegistryVersion::from(7));
+        let mut signer = cup_proto.signer.take().expect("the CUP has a signer");
+        signer.dkg_tag = pb::NiDkgTag::LowThreshold as i32;
+        cup_proto.signer = Some(signer);
+
+        let server_addr =
+            start_server(TestService::SendCup(Arc::new(cup_proto.encode_to_vec()))).await;
+        let node_id = node_test_id(1);
+        let node_record = NodeRecord {
+            http: Some(ConnectionEndpoint {
+                ip_addr: server_addr.ip().to_string(),
+                port: server_addr.port() as u32,
+            }),
+            ..Default::default()
+        };
+
+        let crypto = Arc::new(RegistryVersionRecordingCrypto::default());
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let mut cup_provider = make_cup_provider_with_crypto(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            setup_registry(),
+            crypto.clone(),
+        );
+
+        let err = cup_provider
+            .fetch_and_verify_catch_up_package(&node_id, &node_record, None, SUBNET_0)
+            .await
+            .expect_err("a CUP with an inappropriate signer must be rejected");
+
+        assert!(
+            err.contains("is not the high-threshold DKG id"),
+            "unexpected error: {err}"
+        );
+        assert_eq!(
+            *crypto.verified_at.lock().unwrap(),
+            None,
+            "the signature must not be verified if the signer is wrong"
         );
     }
 
