@@ -32,6 +32,10 @@ on the process that this file is part of, see
   fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward
   (`deployment_progress == 1.0`).
 
+* `UpdateSubnet` can now enable SEV on an existing subnet, not only at subnet creation. Disabling SEV
+  is still rejected, and enabling it only succeeds if the subnet's nodes all have a chip ID and its
+  GuestOS version has launch measurements, as the SEV invariants demand.
+
 ## Deprecated
 
 ## Removed
