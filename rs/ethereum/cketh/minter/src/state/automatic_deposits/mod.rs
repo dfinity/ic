@@ -85,6 +85,14 @@ pub struct AutomaticDeposits {
     /// entries naming a retired helper stay behind forever. [`Self::authorizations_len`] is exported
     /// as a metric so that growth is visible before it needs bounding.
     authorizations: BTreeMap<AuthorizationRequest, TransactionSignature>,
+    /// The nonce each deposit address' next authorization tuple must spend, for the addresses a
+    /// sweep has already delegated. Absent means zero: an address no tuple of the minter's has ever
+    /// applied to is still at the nonce it was derived with.
+    ///
+    /// This tracks the address' own transaction nonce, which only an applied tuple can move: the
+    /// minter alone holds the key to a deposit address, it only ever signs authorizations for it,
+    /// and it learns from the receipt of every sweep it sends whether the tuples it carried applied.
+    delegation_nonces: BTreeMap<DepositAddress, TransactionNonce>,
     /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
     /// its own nonce sequence, independent of the main-address withdrawal pipeline.
     sweeper_transactions: SweeperTransactionPipeline,
@@ -189,6 +197,11 @@ impl AutomaticDeposits {
     /// leave the queue on success because the funds moved, and on failure because the minter does
     /// not retry them.
     ///
+    /// Each tuple the sweep carried at the nonce its address had reached applied, so that address
+    /// advances by one — whatever the receipt says, since a tuple applies before the call it rides
+    /// with and survives its revert. A tuple carried at any other nonce was skipped and moves
+    /// nothing, which is what makes re-sending one harmless.
+    ///
     /// # Panics
     ///
     /// If the sweep has no processed request, or a deposit it named is not queued or is held by
@@ -207,6 +220,24 @@ impl AutomaticDeposits {
             .expect("BUG: missing sweep request");
         let asset = request.asset;
         let accounts: Vec<_> = request.items.iter().map(|item| item.item.account).collect();
+        let applied_tuples: Vec<_> = request
+            .items
+            .iter()
+            .filter_map(|item| {
+                let spent = item.authorization.as_ref()?.nonce;
+                (spent == self.delegation_nonce(&item.item.deposit))
+                    .then_some((item.item.deposit, spent))
+            })
+            .collect();
+
+        for (address, spent) in applied_tuples {
+            self.delegation_nonces.insert(
+                address,
+                spent
+                    .checked_increment()
+                    .expect("BUG: a deposit address cannot spend its last nonce"),
+            );
+        }
 
         for account in accounts {
             let request = DepositRequest::new(account, asset);
@@ -241,6 +272,7 @@ impl AutomaticDeposits {
             sweep,
             attestations,
             authorizations,
+            delegation_nonces,
             sweeper_transactions,
         } = self;
 
@@ -248,6 +280,7 @@ impl AutomaticDeposits {
         ensure_eq!(sweep, &other.sweep);
         ensure_eq!(attestations, &other.attestations);
         ensure_eq!(authorizations, &other.authorizations);
+        ensure_eq!(delegation_nonces, &other.delegation_nonces);
         sweeper_transactions.is_equivalent_to(&other.sweeper_transactions)
     }
 
@@ -277,6 +310,16 @@ impl AutomaticDeposits {
         signature: TransactionSignature,
     ) {
         self.authorizations.insert(request, signature);
+    }
+
+    /// The nonce the next authorization tuple of `address` must be signed for, which is the nonce
+    /// the address has reached on chain: zero until a sweep has delegated it, and one more per
+    /// tuple of the minter's that applied to it since.
+    pub fn delegation_nonce(&self, address: &DepositAddress) -> TransactionNonce {
+        self.delegation_nonces
+            .get(address)
+            .copied()
+            .unwrap_or(TransactionNonce::ZERO)
     }
 
     /// Arm the `(account, asset)` pair, whose deposit `address` is derived for `account`.
@@ -526,6 +569,10 @@ impl AutomaticDeposits {
         self.authorizations.len()
     }
 
+    pub fn delegation_nonces_len(&self) -> usize {
+        self.delegation_nonces.len()
+    }
+
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
     /// funds queued for sweeping (so it must be registered). Reports
     /// [`DepositStage::AwaitingSweep`] once funds have been detected and queued, otherwise
@@ -607,6 +654,7 @@ impl Default for AutomaticDeposits {
             sweep: BTreeMap::new(),
             attestations: BTreeMap::new(),
             authorizations: BTreeMap::new(),
+            delegation_nonces: BTreeMap::new(),
             sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
         }
     }
