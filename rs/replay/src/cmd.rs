@@ -39,9 +39,9 @@ pub struct ReplayToolArgs {
     pub data_root: Option<PathBuf>,
 
     #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint at the next height by delivering
-    /// an extra batch, unless this is a CUP height, where the checkpoint is already made at the
-    /// height itself.
+    /// The replay will stop at this height, deliver potential extra batches and finally deliver one
+    /// final extra batch to make a checkpoint. If this is a CUP height and there no extra batches
+    /// to deliver, the checkpoint will be made at the height itself.
     pub replay_until_height: Option<u64>,
 
     #[clap(long)]

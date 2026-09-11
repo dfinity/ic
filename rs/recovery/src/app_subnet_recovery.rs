@@ -62,7 +62,10 @@ pub enum StepType {
     /// a "target replay height" in this step. This target height should be chosen such that it is
     /// below the height causing the panic, but above or equal to the height of the last certification
     /// (share). Specifying this parameter will instruct ic-replay to stop at the given height and
-    /// create a checkpoint, which will then be used to propose the recovery CUP.
+    /// create a checkpoint, which will then be used to propose the recovery CUP. This checkpoint
+    /// requires an additional batch and will thus be created one height above the specified target
+    /// height, unless the target height is a CUP height, in which case the checkpoint should
+    /// already exist.
     ICReplay,
     /// Now we want to verify that the height of the locally obtained execution state matches the
     /// highest finalized height, which was agreed upon by the subnet.
