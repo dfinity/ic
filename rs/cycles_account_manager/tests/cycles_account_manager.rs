@@ -33,7 +33,7 @@ use ic_types_cycles::{
     NominalCycles, NominalCyclesTesting, Uninstall,
 };
 use prometheus::IntCounter;
-use std::{convert::TryFrom, time::Duration};
+use std::{cmp::Ordering, convert::TryFrom, time::Duration};
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
@@ -595,6 +595,111 @@ fn adjust_prepayment_for_response_execution_leaves_state_unchanged_on_failure() 
         assert_eq!(
             consumed_cycles_for_instructions(&system_state),
             consumed_before,
+            "unexpected consumed cycles for {context}"
+        );
+    }
+}
+
+/// The mirror image of the test above: a requirement that does not exceed the
+/// prepayment in the real part withdraws nothing, so the adjustment cannot fail,
+/// not even for a canister that spent its whole balance on the prepayment. The
+/// adjustment relies on that, since it withdraws `required - prepaid`
+/// unconditionally, i.e. an amount whose real part saturates at zero here.
+///
+/// `adjust_prepayment_for_response_execution_matches_response_execution_setting`
+/// covers the two settings below as well, but it leaves the canister cycles to
+/// spare, so a withdrawal attempted here would succeed there and go unnoticed.
+/// What this test pins down is that none is attempted in the first place.
+///
+/// Both settings have the requirement below the prepayment in the real part, but
+/// they differ in the nominal one: the second one has the nominal part topped up
+/// while nothing real is withdrawn.
+#[test]
+fn adjust_prepayment_for_response_execution_cannot_fail_without_a_real_shortfall() {
+    // The third component is the direction of the nominal part of the prepayment
+    // relative to the nominal part of the requirement.
+    const SETTINGS: [(ResponseExecutionSetting, ResponseExecutionSetting, Ordering); 2] = [
+        // Prepaid in the more expensive Wasm execution mode, so that the prepayment
+        // exceeds the requirement in both parts, by the same amount.
+        (
+            ResponseExecutionSetting {
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
+                wasm_execution_mode: WasmExecutionMode::Wasm64,
+            },
+            ResponseExecutionSetting {
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
+                wasm_execution_mode: WasmExecutionMode::Wasm32,
+            },
+            Ordering::Greater,
+        ),
+        // Prepaid under the normal cost schedule while the response is executed
+        // under the free one, so that the whole real prepayment is in excess; and
+        // prepaid in the cheaper Wasm execution mode, so that the nominal part of
+        // the prepayment falls short of the requirement and is topped up, all while
+        // nothing real is withdrawn.
+        (
+            ResponseExecutionSetting {
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
+                wasm_execution_mode: WasmExecutionMode::Wasm32,
+            },
+            ResponseExecutionSetting {
+                cost_schedule: CanisterCyclesCostSchedule::Free,
+                wasm_execution_mode: WasmExecutionMode::Wasm64,
+            },
+            Ordering::Less,
+        ),
+    ];
+
+    for (at_call, at_response, nominal_direction) in SETTINGS {
+        let cycles_account_manager = cycles_account_manager();
+        let config_at_call = subnet_cycles_config(at_call.cost_schedule);
+        let config_at_response = subnet_cycles_config(at_response.cost_schedule);
+        let context = format!("{at_call:?} at call, {at_response:?} at response");
+
+        let prepaid = cycles_account_manager
+            .prepayment_for_response_execution(config_at_call, at_call.wasm_execution_mode);
+        let required = cycles_account_manager
+            .prepayment_for_response_execution(config_at_response, at_response.wasm_execution_mode);
+        assert!(
+            required.real() < prepaid.real(),
+            "nothing in excess in the real part for {context}"
+        );
+        assert_eq!(
+            prepaid.nominal().cmp(&required.nominal()),
+            nominal_direction,
+            "unexpected direction of the nominal part for {context}"
+        );
+
+        // The canister spent its whole balance on the prepayment, i.e. any
+        // withdrawal at all would fail below.
+        let mut system_state = SystemStateBuilder::new()
+            .initial_cycles(prepaid.real())
+            .build();
+        system_state.consume_cycles(prepaid);
+        assert_eq!(system_state.balance(), Cycles::zero());
+
+        let adjusted = cycles_account_manager
+            .adjust_prepayment_for_response_execution(
+                &mut system_state,
+                prepaid,
+                config_at_response,
+                at_response.wasm_execution_mode,
+                false,
+            )
+            .unwrap_or_else(|err| panic!("adjustment failed for {context}: {err}"));
+
+        assert_eq!(adjusted, required, "unexpected prepayment for {context}");
+        // The excess is refunded to the balance in the real part and taken off the
+        // consumed cycles gauge in the nominal one.
+        assert_eq!(
+            system_state.balance(),
+            prepaid.real() - required.real(),
+            "unexpected balance for {context}"
+        );
+        let (gauge, counter) = consumed_cycles_for_instructions(&system_state);
+        assert_eq!(
+            (gauge, counter),
+            (required.nominal(), NominalCycles::zero()),
             "unexpected consumed cycles for {context}"
         );
     }
