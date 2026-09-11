@@ -174,11 +174,11 @@ lost track of what it sent cannot corrupt the archive by sending them again.
 2. WHEN THE Archive refuses an append per 1.1, THE Archive SHALL leave the number
    of blocks it holds unchanged, because a refusal that stored a prefix would
    leave the chain in the state the refusal exists to prevent.
-3. THE Archive SHALL apply 1.1 to that earliest not-already-held block rather than
-   to the append's first block, which may be one the archive already holds and whose
-   parent is therefore an earlier block of its own rather than its last. Which block
-   that is follows from Req 2 for an Indexed_Append, and is the append's first block
-   for an Index_Less_Append.
+3. THE Archive SHALL apply 1.1 to that earliest not-already-held block — which
+   follows from Req 2 for an Indexed_Append and is the first block for an
+   Index_Less_Append — rather than to the append's first block, which may be one the
+   archive already holds and whose parent is therefore an earlier block of its own
+   rather than its last.
 4. WHILE an archive holds no blocks, THE Archive SHALL NOT refuse an Index_Less_Append
    on the grounds of 1.1, because it has no last block to compare against and an
    Index_Less_Append carries nothing else that says where its blocks belong.
@@ -304,8 +304,13 @@ violation from a capacity problem without access to canister logs.
 #### Acceptance Criteria
 
 1. THE Archive SHALL expose, over its metrics endpoint, a separate count for each
-   of: a refusal per 1.1, a gap per 2.2, a stop at its own limit per 4.3, and a
-   platform-refused growth per 4.4.
+   of: a refusal per 1.1, a refusal per 2.9, a gap per 2.2, a stop at its own limit
+   per 4.3, and a platform-refused growth per 4.4.
+6. THE Archive SHALL count a refusal per 2.9 separately from one per 1.1, because
+   the two localise the divergence differently — 1.1 means the blocks offered do not
+   continue the archive's last block, while 2.9 means a range the archive already
+   holds was re-sent with different content, which points at a ledger that has been
+   rolled back.
 2. THE Archive SHALL NOT fail the call for any outcome counted under 6.1 when the
    append carried a Declared_Index, because failing the call discards the
    count along with everything else the call changed, leaving the cause invisible.
@@ -399,6 +404,10 @@ per interval rather than work per transaction.
    have had archiving succeeded.
 6. WHEN an Archiving_Round fails, THE Ledger SHALL NOT prevent a later
    Archiving_Round from being attempted.
+7. WHEN an archive refuses an append per 1.1, 2.2 or 2.9, THE Ledger SHALL make no
+   further archiving attempt and SHALL expose a distinct non-zero metric, rather
+   than spacing further attempts per 9.1, because no retry can resolve a mismatch of
+   chain or position and backing off would probe an unrecoverable state forever.
 
 ### Requirement 10: A Ledger Will Not Archive Against An Archive That Cannot Report Its Range
 

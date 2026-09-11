@@ -202,6 +202,9 @@ to make invisible. The cost is that atomicity becomes ordering-plus-test rather 
 platform-enforced — the check runs before any append and `Req 1.2` pins it. An
 index-less append still traps, per `Req 5.2`.
 
+This is why `append_result` has a `ChainMismatch` arm: the decision not to trap is
+only realisable if there is something to return. `Req 2.9`'s refusal shares it.
+
 ### D6 — Accept the re-send; do not redraw the module boundary
 
 Serves `Req 8.1`, `Req 8.2`, `Req 8.6`. Giving `send_blocks_to_archive` ledger access
@@ -274,8 +277,9 @@ the computed value.
 ### `ic-icrc1-archive` — `append_blocks`
 
     type append_result = variant {
-      Ok  : record { block_index_offset : nat64; next_index : nat64; at_capacity : bool };
-      Gap : record { expected : nat64; got : nat64 };
+      Ok            : record { block_index_offset : nat64; next_index : nat64; at_capacity : bool };
+      Gap           : record { expected : nat64; got : nat64 };
+      ChainMismatch : record { at_index : nat64 };
     };
 
     append_blocks : (vec blob, opt nat64) -> (opt append_result);
@@ -284,6 +288,13 @@ Both arguments and the result are optional, which is what makes the archive
 releasable alone. The reply's first field is named `block_index_offset`, matching
 the published `init` argument it reports, rather than `start_index` — the request's
 second argument is the index the *batch* starts at, and one word cannot mean both.
+
+`ChainMismatch` carries the index at which the divergence was found, and serves both
+`Req 1.1` (at the archive's tip) and `Req 2.9` (inside a range it already holds). One
+arm rather than two, because the ledger's response is the same for both — halt per
+`Req 9.7` — while `Req 6.1`'s separate counters give the operator the distinction
+that matters to them. That is the same division of labour as D5: type what the ledger
+acts on, count what an operator diagnoses.
 
 Order of work, per D4 and D5:
 
@@ -300,8 +311,10 @@ Order of work, per D4 and D5:
    log_length` (`Req 2.1`, `2.2`, `2.6`), returning without appending in the
    refusing cases.
 5. Compute `k` and the suffix per D4. If the batch is wholly covered, compare its
-   last block against the stored block at that index and refuse on a mismatch
-   (`Req 2.9`).
+   last block against the stored block at that index and return `ChainMismatch` on a
+   difference (`Req 2.9`). One comparison suffices rather than sampling: blocks are
+   hash-chained, so a divergence at or below that index propagates forward to it and
+   cannot heal — if the last covered block matches, every block below it does.
 6. Chain-check `blocks[k]` against the tip (`Req 1.1`, `1.3`, `1.4`, `1.5`).
 7. Append the suffix, stopping short where it must (`Req 4.1`, `4.2`).
 8. Re-read `log_length` and reply (`Req 3.1`-`3.4`), or fail the call if step 3
@@ -336,7 +349,8 @@ rather than by inspection.
 ### `ic-icrc1-archive` — `encode_metrics`
 
 One counter per cause in `Req 6.1`, plus the decode-failure counter (`Req 6.4`) and
-a counter for an unverifiable first append (`Req 1.6`). All commit, because D5
+a counter for an unverifiable first append (`Req 1.6`) and separate counters for a
+tip mismatch and a covered-range mismatch (`Req 6.6`). All commit, because D5
 removed the traps — and `Req 1.6`'s counts a *success*, so it is separate from the
 refusal counters rather than one of them. An empty append is counted by none of
 them (`Req 6.5`).
@@ -498,7 +512,8 @@ test is baseline-independent.
 | 19 | integration | make the tail archive not answer; assert the round ends within `ARCHIVE_CALL_TIMEOUT` and is retried, and that a subsequent round does not store any block twice | `Req 13.1`, `13.2`, `13.4` |
 | 20 | integration | count `append_blocks` per round against a configuration that is multi-chunk today; assert one, and that the effective per-round metric matches | `Req 12.1`, `12.3`, `12.4` |
 | 21 | measurement | ledger memory across an archive-creation round, as `routine_archiving_does_not_grow_the_ledger` does for a routine one; assert growth below a bound | D2's allocation work |
-| 22 | archive | append a range, then re-send it whole with one block replaced by a different block at the same index; assert the append is refused and nothing stored — a fork detected without waiting for the boundary | `Req 2.9` |
+| 22 | archive | append `0..999`; then re-send `500..999` from a chain that diverges at 701, and assert `ChainMismatch` is returned, nothing is stored, and the covered-range counter rises while the tip-mismatch counter does not. Then re-send a range that does *not* diverge and assert success — so the check is not simply refusing every re-send | `Req 2.9`, `Req 6.6` |
+| 22b | integration | drive the ledger into a refusal per 1.1, 2.2 and 2.9 in turn; assert it stops attempting rather than backing off, and exposes the distinct metric | `Req 9.7` |
 | 23 | unit, `ledger_canister_core` | create an archive after a round whose reported extent ends at `N`; assert its `block_index_offset` is `N+1` and that `archives()` tiles with no gap or overlap. Then present a node whose reported range starts elsewhere and assert no blocks are stored in it and the metric rises | `Req 7.1`, `7.2`, `7.3`, `7.4` |
 | 24 | integration | on a ledger whose archives report no extent, assert an archive is still created and blocks are still discarded — the exemptions, which a literal reading of Req 7 and Req 8 would forbid | `Req 7.5`, `Req 8.7` |
 | 25 | integration | fail `install_code` gracefully after `create_canister` succeeded; assert the creation counter stays non-zero and archiving halts, and that a failure of `create_canister` itself does not halt | `Req 11.1`, `11.3` |
