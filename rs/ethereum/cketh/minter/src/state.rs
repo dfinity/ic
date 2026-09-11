@@ -323,11 +323,12 @@ impl State {
     /// left out rather than swept: no tuple can be applied to the first, and the second is unknown
     /// ground. Both stay queued for a later tick.
     ///
-    /// The nonce of a tuple is zero, the nonce of an address that has never been delegated —
-    /// applying an authorization spends it — so a tuple this sweep carries either installs the
-    /// delegation or is skipped, and both are correct in any order the sweeps carrying them land.
-    /// An address delegated to another contract therefore keeps that delegate: its tuple is
-    /// skipped, until the minter learns to rotate a delegation.
+    /// A tuple is signed for the nonce the minter tracks for the address, which is the nonce the
+    /// address has reached on chain: zero until a sweep has delegated it, one more per tuple of the
+    /// minter's that has applied since. That is what rotates an address delegated to another
+    /// contract onto the configured one — the protocol applies a tuple only at the authority's
+    /// current nonce, so a rotation signed for zero would be skipped forever. Two sweeps carrying
+    /// the same tuple stay correct in any order they land: the second one is skipped.
     pub fn sweep_delegations(
         &self,
         targets: &[SweepTarget],
@@ -347,10 +348,10 @@ impl State {
             .filter_map(|target| {
                 let authorization = match delegations.get(&target.address()) {
                     Some(Delegation::Delegated(installed)) if *installed == delegate => None,
-                    Some(Delegation::NotDelegated) => authorize(target, TransactionNonce::ZERO),
-                    Some(Delegation::Delegated(_another_delegate)) => {
-                        authorize(target, TransactionNonce::ZERO)
-                    }
+                    Some(Delegation::NotDelegated) | Some(Delegation::Delegated(_)) => authorize(
+                        target,
+                        self.automatic_deposits.delegation_nonce(&target.address()),
+                    ),
                     Some(Delegation::Other) | None => {
                         log!(
                             INFO,

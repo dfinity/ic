@@ -8,9 +8,9 @@ use crate::deposit_address::DepositAddress;
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
-use crate::numeric::{BlockNumber, Erc20Value};
+use crate::numeric::{BlockNumber, Erc20Value, TransactionNonce};
 use crate::state::event::{AutomaticDeposit, DepositAddressRegistration, DepositAddressRegistry};
-use crate::state::transactions::{PipelineRequest, SweepId, SweepRequest};
+use crate::state::transactions::{AuthorizedSweepItem, PipelineRequest, SweepId, SweepRequest};
 use crate::test_fixtures::{
     deposit_address, deposits_with_enqueued_sweep, gas_fee_estimate, usdc, usdt,
 };
@@ -1028,6 +1028,116 @@ async fn should_refuse_to_finalize_a_sweep_whose_deposit_left_the_queue() {
     deposits.record_sweep_request(request.clone());
 
     finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+}
+
+#[tokio::test]
+async fn should_advance_the_delegation_nonce_when_a_finalized_sweep_applied_its_tuple() {
+    for status in [TransactionStatus::Success, TransactionStatus::Failure] {
+        let (mut deposits, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+        assert_eq!(
+            deposits.delegation_nonce(&deposit_address(&account(0))),
+            TransactionNonce::ZERO
+        );
+
+        finalize_sweep(&mut deposits, request, status);
+
+        assert_eq!(
+            deposits.delegation_nonce(&deposit_address(&account(0))),
+            TransactionNonce::ONE,
+            "a tuple applies before the call it rides with, so the sweep spends its address' \
+             nonce whichever way the call went"
+        );
+        assert_eq!(deposits.delegation_nonces_len(), 1);
+    }
+}
+
+#[tokio::test]
+async fn should_not_advance_the_delegation_nonce_for_a_stale_tuple() {
+    let (mut deposits, first) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+    finalize_sweep(&mut deposits, first.clone(), TransactionStatus::Success);
+
+    let stale = SweepRequest {
+        id: SweepId(1),
+        ..first
+    };
+    hand_to_sweep(&mut deposits, &stale);
+    finalize_sweep(&mut deposits, stale, TransactionStatus::Success);
+
+    assert_eq!(
+        deposits.delegation_nonce(&deposit_address(&account(0))),
+        TransactionNonce::ONE,
+        "a tuple signed for a nonce the address has left behind is skipped and spends nothing"
+    );
+}
+
+#[tokio::test]
+async fn should_not_advance_the_delegation_nonce_for_an_item_without_a_tuple() {
+    let (_, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+    let tuple_less = SweepRequest {
+        items: request
+            .items
+            .iter()
+            .map(|item| AuthorizedSweepItem {
+                authorization: None,
+                ..item.clone()
+            })
+            .collect(),
+        ..request
+    };
+    let mut deposits = AutomaticDeposits::default();
+    hand_to_sweep(&mut deposits, &tuple_less);
+
+    finalize_sweep(&mut deposits, tuple_less, TransactionStatus::Success);
+
+    assert_eq!(
+        deposits.delegation_nonce(&deposit_address(&account(0))),
+        TransactionNonce::ZERO,
+        "a sweep carrying no tuple delegates nothing, so it spends no nonce"
+    );
+    assert_eq!(deposits.delegation_nonces_len(), 0);
+}
+
+#[tokio::test]
+async fn should_advance_the_delegation_nonce_once_for_two_sweeps_carrying_the_same_tuple() {
+    for order in [[0, 1], [1, 0]] {
+        let (mut deposits, erc20_sweep) =
+            deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+        let eth_sweep = SweepRequest {
+            id: SweepId(1),
+            asset: Asset::Eth,
+            ..erc20_sweep.clone()
+        };
+        hand_to_sweep(&mut deposits, &eth_sweep);
+        let sweeps = [erc20_sweep, eth_sweep];
+
+        for index in order {
+            finalize_sweep(
+                &mut deposits,
+                sweeps[index].clone(),
+                TransactionStatus::Success,
+            );
+        }
+
+        assert_eq!(
+            deposits.delegation_nonce(&deposit_address(&account(0))),
+            TransactionNonce::ONE,
+            "only one of two tuples signed for the same nonce can apply, in whichever order the \
+             sweeps carrying them land"
+        );
+    }
+}
+
+/// Queues the deposits `request` names and hands them to it, as an enqueue does, so that the sweep
+/// can be driven to a receipt.
+fn hand_to_sweep(deposits: &mut AutomaticDeposits, request: &SweepRequest) {
+    let accounts: Vec<_> = request.items.iter().map(|item| item.item.account).collect();
+    let pairs: Vec<_> = accounts
+        .iter()
+        .map(|account| (*account, request.asset))
+        .collect();
+    queue(deposits, &pairs);
+    deposits.record_sweep_request(request.clone());
+    deposits.record_sweep_scheduled(request.id, request.asset, accounts);
 }
 
 /// Drives the already-recorded `request` through the sweeper pipeline to a receipt of `status`.
