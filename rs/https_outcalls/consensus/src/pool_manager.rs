@@ -618,7 +618,12 @@ impl CanisterHttpPoolManagerImpl {
                     // Update the set of existing signed requests.
                     existing_signed_requests.insert(key_from_share(share));
                     self.metrics.shares_validated.inc();
-                    Some(CanisterHttpChangeAction::MoveToValidated(share.clone()))
+                    // The response of an already answered request is dropped rather than
+                    // passed on to peers that pull the artifact.
+                    Some(CanisterHttpChangeAction::MoveToValidated {
+                        share: share.clone(),
+                        retain_response: !is_delivered,
+                    })
                 }
             })
             .collect()
@@ -1819,7 +1824,13 @@ pub mod test {
                     let changes = pool_manager
                         .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
-                    assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::MoveToValidated {
+                            retain_response: true,
+                            ..
+                        }
+                    );
                 }
             })
         });
@@ -1926,7 +1937,10 @@ pub mod test {
 
                 // 5. ASSERT: The artifact should be successfully validated and moved to the validated pool.
                 assert_eq!(changes.len(), 1);
-                assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
+                assert_matches!(
+                    &changes[0],
+                    CanisterHttpChangeAction::MoveToValidated { .. }
+                );
             })
         });
     }
@@ -2344,7 +2358,10 @@ pub mod test {
                 let changes =
                     pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
-                assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
+                assert_matches!(
+                    &changes[0],
+                    CanisterHttpChangeAction::MoveToValidated { .. }
+                );
             })
         });
     }
@@ -3412,7 +3429,13 @@ pub mod test {
                     let changes = pool_manager
                         .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
-                    assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::MoveToValidated {
+                            retain_response: true,
+                            ..
+                        }
+                    );
                 }
             })
         });
@@ -3720,7 +3743,7 @@ pub mod test {
                 assert_eq!(changes.len(), 1);
                 assert_matches!(
                     &changes[0],
-                    CanisterHttpChangeAction::MoveToValidated(_),
+                    CanisterHttpChangeAction::MoveToValidated { .. },
                     "free-subnet share was wrongly rejected: {:?}",
                     changes[0]
                 );
@@ -3958,8 +3981,8 @@ pub mod test {
 
                     assert_matches!(
                         changes.as_slice(),
-                        [CanisterHttpChangeAction::MoveToValidated(share)]
-                            if share.content.id() == callback_id,
+                        [CanisterHttpChangeAction::MoveToValidated { share, retain_response }]
+                            if share.content.id() == callback_id && !retain_response,
                         "{replication:?}, response attached: {attach_response}"
                     );
                 })
@@ -4053,8 +4076,8 @@ pub mod test {
                     let changes = pool_manager.validate_shares(&responded_to, &canister_http_pool);
                     assert_matches!(
                         changes.as_slice(),
-                        [CanisterHttpChangeAction::MoveToValidated(share)]
-                            if share.content.id() == callback_id,
+                        [CanisterHttpChangeAction::MoveToValidated { share, retain_response }]
+                            if share.content.id() == callback_id && !retain_response,
                         "{replication:?}"
                     );
                 })

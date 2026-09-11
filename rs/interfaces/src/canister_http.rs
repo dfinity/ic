@@ -208,9 +208,14 @@ pub type CanisterHttpPayloadValidationError =
 
 #[derive(Debug)]
 pub enum CanisterHttpChangeAction {
+    // The response is `None` for an outcall that has already been answered.
     AddToValidated(CanisterHttpResponseShare, Option<CanisterHttpResponse>),
     AddToValidatedAndGossipResponse(CanisterHttpResponseShare, CanisterHttpResponse),
-    MoveToValidated(CanisterHttpResponseShare),
+    MoveToValidated {
+        share: CanisterHttpResponseShare,
+        // `false` for an outcall that has already been answered.
+        retain_response: bool,
+    },
     RemoveValidated(CanisterHttpResponseId),
     RemoveUnvalidated(CanisterHttpResponseId),
     RemoveContent(CryptoHashOf<CanisterHttpResponse>),
