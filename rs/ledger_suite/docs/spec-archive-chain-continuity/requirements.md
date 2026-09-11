@@ -267,9 +267,12 @@ makes progress under storage pressure instead of repeating work it cannot finish
 
 #### Acceptance Criteria
 
-1. WHEN THE Archive is refused the storage for a block of an Indexed_Append in a
-   way it can observe, THE Archive SHALL store the blocks before it and SHALL report
-   the Archive_Position it reached.
+1. WHEN the next block of an Indexed_Append would take THE Archive past its own
+   configured storage limit, THE Archive SHALL store the blocks before it and SHALL
+   report the Archive_Position it reached, which it can always do because it decides
+   this from its own configuration and its own usage without asking for memory.
+8. WHEN THE Archive is instead refused memory it asked for, and the refusal returns
+   control to it, THE Archive SHALL behave as in 4.1.
 2. THE Archive SHALL NOT itself discard blocks it has already stored in order to
    refuse an append, because under a persistent cause each attempt would then make
    no progress at all.
@@ -279,10 +282,11 @@ makes progress under storage pressure instead of repeating work it cannot finish
    Archive SHALL report `at_capacity` as false, because a ledger must not respond by
    creating another archive when creating one needs the same resource that was just
    refused.
-7. THE Archive SHALL NOT be held to 4.1, 4.2 or 4.4 for a storage refusal that
+7. THE Archive SHALL NOT be held to 4.2, 4.4 or 4.8 for a storage refusal that
    terminates its execution rather than returning to it, because it regains no
    control and can neither keep a partial result nor report anything — the exposure
-   the corresponding non-goal accepts.
+   the corresponding non-goal accepts, and one 4.1 is untouched by, since reaching a
+   configured limit asks for no memory and so cannot be refused.
 5. IF THE Archive reports `at_capacity` as true, THEN THE Ledger SHALL create a new
    archive on a later Archiving_Round for the remaining blocks, rather than offering
    them to the same archive again.

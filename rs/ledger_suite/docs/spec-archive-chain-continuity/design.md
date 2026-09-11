@@ -77,10 +77,11 @@ which carries the comment saying so; the trap reaches the wasm boundary at
 This bounds `Req 4` sharply, and in the direction that matters: the cause of the
 2026-09-01 failure was `IC0534`, a reservation refusal, so it is on the trapping
 side. For that cause the archive keeps nothing and reports nothing, and blocks it
-appended earlier in the same call are discarded with the trap. `Req 4.1`'s partial
-progress is therefore real for an out-of-memory subnet and unavailable for a
-reservation refusal — which is what `Req 4.7` says and why the non-goal points at
-`memory_allocation` rather than at anything in this design. Growth inside a reserved
+appended earlier in the same call are discarded with the trap. `Req 4.8`'s partial progress is
+therefore real for an out-of-memory subnet and unavailable for a reservation
+refusal — which is what `Req 4.7` says and why the non-goal points at
+`memory_allocation` rather than at anything in this design. `Req 4.1` is untouched
+by all of this, because reaching a configured limit asks for nothing. Growth inside a reserved
 allocation computes zero newly-allocated bytes (`system_api.rs:1051-1070`), so it
 charges no reservation and cannot be refused on those grounds.
 
@@ -339,11 +340,15 @@ Order of work, per D4 and D5:
    hash-chained, so a divergence at or below that index propagates forward to it and
    cannot heal — if the last covered block matches, every block below it does.
 6. Chain-check `blocks[k]` against the tip (`Req 1.1`, `1.3`, `1.4`, `1.5`).
-7. Append the suffix, stopping short where it must (`Req 4.1`, `4.2`).
-   `StableLog::append` returns a `Result`, so the current `unwrap_or_else(|_|
-   trap("no space left"))` is the archive's own choice and can simply be handled —
-   but only for the refusals that reach it, which is the whole of `Req 4.7`; see the
-   Constraint below.
+7. Append the suffix, stopping short where it must (`Req 4.1`, `4.2`, `4.8`). Two
+   different stops, and only one of them depends on the platform. `Req 4.1` is the
+   archive comparing the next block's size against its own configured limit and its
+   own usage, so it stops *before* asking for memory and cannot be refused — this is
+   the routine case, reached once per archive fill and, under F2, on every fill.
+   `Req 4.8` is a grow the archive did ask for and was refused; `StableLog::append`
+   returns a `Result`, so the current `unwrap_or_else(|_| trap("no space left"))` is
+   the archive's own choice and can be handled — but only for the refusals that
+   reach it, which is what `Req 4.7` bounds; see the Constraint below.
 8. Re-read `log_length` and reply (`Req 3.1`-`3.4`), or fail the call if step 3
    applied.
 
