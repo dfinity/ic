@@ -11,6 +11,14 @@ contract**: what the system must do, stated so that each statement can be tested
 against the public interface. It is written before the design and must stay
 readable without it.*
 
+> **Read the requirements as a set.** The criteria interlock, and several are
+> deliberately permissive on their own because a sibling constrains the case they
+> leave open — `Req 1.4` allows what `Req 2.1` forbids once an index is present,
+> and `Req 8.1` looks absolute until `Req 8.7` excepts the ICP ledger. A criterion
+> read in isolation will therefore look either too weak or too strong more often
+> than not. Where that is load-bearing the criterion says "per N.M"; where it is not
+> stated, assume a sibling is carrying it and check before concluding a gap.
+
 ## Introduction
 
 **Archiving is switched off today.** On the ckBTC and ckDOGE ledgers
@@ -127,12 +135,30 @@ comes first.
   rewind. Req 8 and Req 1 require that such a fork is detected rather than
   extended into the archives; they do not make the restore safe. The only coherent
   rollback is the whole suite to a common point, accepting the loss after it.
+- **Verifying the first append to a freshly created archive from a ledger that
+  sends no index.** Such an append is unverifiable in principle: the archive has no
+  last block to chain against and the call carries nothing saying where its blocks
+  belong, so it is taken on trust (`Req 1.4`). This is the one window the
+  archive-only release does not close, and it is the exact shape of the original
+  failure — a node created for one index, then handed blocks from a lower one.
+  Refusing instead is not available, because a ledger that sends no index does the
+  same thing on the ordinary path at every node roll-over, so refusing would halt
+  archiving rather than only the bad case. `Req 1.6` makes the window countable so
+  it is visible while it lasts and demonstrably shut once ledgers send an index.
+
 - **Making the archive's canister logs readable.** Some obligations here are
   satisfiable only through a metric because a canister's log is not readable by
   default. Changing that is a governance proposal, not a code change, and is out
   of scope.
 
 ## Requirements
+
+*Grouped by behaviour, not by delivery order. Several requirements depend on each
+other — Req 1's check needs Req 2's placement to know which block it applies to, and
+Req 8 needs Req 3's report to have something to trust — so implementing them one
+requirement at a time would mean redoing work. The build order is `design.md`'s
+**Delivery / PR sequence**, where each PR covers a set of criteria; this document is
+what a PR is checked against.*
 
 ### Requirement 1: Chain Continuity Is Enforced On Every Stored Block
 
@@ -142,18 +168,28 @@ lost track of what it sent cannot corrupt the archive by sending them again.
 
 #### Acceptance Criteria
 
-1. WHEN an append would store a first block whose parent hash is not the hash of
-   the archive's last stored block, THE Archive SHALL refuse the append.
+1. WHEN the earliest block of an append that THE Archive does not already hold
+   carries a parent hash that is not the hash of the archive's last stored block,
+   THE Archive SHALL refuse the append.
 2. WHEN THE Archive refuses an append per 1.1, THE Archive SHALL leave the number
    of blocks it holds unchanged, because a refusal that stored a prefix would
    leave the chain in the state the refusal exists to prevent.
-3. THE Archive SHALL apply the check in 1.1 to the first block it will actually
-   store, not to the first block of the append, so that leading blocks the archive
-   already holds do not cause a refusal.
-4. WHILE an archive holds no blocks, THE Archive SHALL NOT refuse an append on the
-   grounds of 1.1, because it has no last block to compare against.
-5. WHEN an append's first stored block has no parent hash and the archive holds no
-   blocks and its `block_index_offset` is zero, THE Archive SHALL store it.
+3. THE Archive SHALL apply 1.1 to that earliest not-already-held block rather than
+   to the append's first block, which may be one the archive already holds and whose
+   parent is therefore an earlier block of its own rather than its last. Which block
+   that is follows from Req 2 for an Indexed_Append, and is the append's first block
+   for an Index_Less_Append.
+4. WHILE an archive holds no blocks, THE Archive SHALL NOT refuse an Index_Less_Append
+   on the grounds of 1.1, because it has no last block to compare against and an
+   Index_Less_Append carries nothing else that says where its blocks belong.
+5. WHEN the earliest block an append would store carries no parent hash, THE Archive
+   SHALL store it only if it holds no blocks and its `block_index_offset` is zero,
+   because a block without a parent is the genesis block and belongs at index zero
+   or nowhere.
+6. WHEN THE Archive stores an Index_Less_Append while holding no blocks, THE Archive
+   SHALL count it distinctly, because it is the one append whose placement the
+   archive cannot verify by any means and the count reads zero once every ledger
+   sends an index (per Req 2.1).
 
 ### Requirement 2: An Append Is Placed By Its Declared Index
 

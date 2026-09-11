@@ -335,8 +335,11 @@ rather than by inspection.
 
 ### `ic-icrc1-archive` — `encode_metrics`
 
-One counter per cause in `Req 6.1`, plus the decode-failure counter (`Req 6.4`).
-All commit, because D5 removed the traps.
+One counter per cause in `Req 6.1`, plus the decode-failure counter (`Req 6.4`) and
+a counter for an unverifiable first append (`Req 1.6`). All commit, because D5
+removed the traps — and `Req 1.6`'s counts a *success*, so it is separate from the
+refusal counters rather than one of them. An empty append is counted by none of
+them (`Req 6.5`).
 
 ### `ledger_canister_core::archive` — `send_blocks_to_archive`
 
@@ -404,6 +407,11 @@ Cap the selection at `min(num_blocks_to_archive, one message)` in bytes, in
 `blocks_to_archive` (`ledger.rs:460`) — both terms local, per the Constraint that
 selection precedes any await (`Req 12.3`). `take_prefix(remaining_capacity)` still
 trims on the cold-start path. Expose the effective per-round count (`Req 12.4`).
+
+A failed round counts the failure, keeps serving the blocks it did not archive, and
+leaves the triggering transaction's reply untouched (`Req 9.5`, `Req 9.6`) — all of
+which the cleanup callback must achieve if the round trapped rather than returned,
+which is why the Constraints limit it to a bool and a `u64`.
 
 `blocks_to_archive` also carries the skip conditions: the backoff (`Req 9.1`), the
 creation halt (`Req 11.1`), the capability halt (`Req 10.1`) and the coverage halts
@@ -476,7 +484,8 @@ test is baseline-independent.
 | 6 | archive | append at an index above the position; assert a gap and nothing stored | `Req 2.2` |
 | 7 | archive | size `max_memory_size_bytes` so a batch only partly fits; assert a short `next_index`, `at_capacity = true`, and that the blocks that fit are readable | `Req 4.1`, `4.2`, `4.3` |
 | 8 | archive | **partly written**: `test_empty_append_blocks_is_accepted_and_stores_nothing` already asserts an empty append stores nothing and consumes no capacity, on both the one-argument and null-index shapes. Extend it against the new implementation to assert a reported extent, and that an empty append at an index above the archive's position is neither refused nor counted | `Req 3.5`, `Req 6.5` |
-| 9 | archive | genesis into an empty archive with offset 0 | `Req 1.5` |
+| 9 | archive | genesis into an empty archive with offset 0; then assert a block with no parent hash is refused by an archive whose offset is non-zero, and by one that already holds blocks | `Req 1.5` |
+| 9b | archive | index-less append into an empty archive; assert it is stored and the unverifiable-first-append counter rises, then assert an indexed append into an empty archive does not raise it | `Req 1.4`, `Req 1.6` |
 | 10 | archive | **written**: `test_append_blocks_ignores_an_extra_optional_start_index` — the current one-argument archive stores the blocks, ignores the extra argument, and its empty reply reads as absent; a wrong-typed payload is rejected as a negative control | the rollout premise |
 | 11 | archive | against the new implementation: one argument only; assert blocks stored, empty reply, and that a chain mismatch traps rather than returning a refusal | `Req 5.1`, `5.2`, `5.3`, `5.4` |
 | 12 | archive | **written**: `should_ignore_an_extra_optional_start_index` (`icp/archive/tests/tests.rs`) — the ICP archive's hand-rolled decode tolerates the extra argument, capacity drops by the block size, and the empty reply reads as absent | D3's tolerance; a **release gate** |
@@ -546,12 +555,24 @@ the chain check on the first stored block, capacity reporting, the counters, and
 why `Req 5` is in this PR and not a later one.
 *Acceptance:* `Req 1`, `Req 2`, `Req 3`, `Req 4` (4.1-4.4), `Req 5`, `Req 6`.
 
-*What this release costs.* An old ledger cannot tell a refusal's cause, so a round
-that dies after a successful append leaves the next round re-sending blocks the archive
-holds; the archive refuses, and the old ledger has no way past it. Archiving halts
-until PR 2, retrying every transaction because the backoff is not in yet. Blocks
-accumulate locally, so it is survivable, and a stall beats silent corruption — but keep
-the window to PR 2 short.
+*What this release costs.* Two things, and the second is a limit rather than a price.
+
+An old ledger cannot tell a refusal's cause, so a round that dies after a successful
+append leaves the next round re-sending blocks the archive holds; the archive
+refuses, and the old ledger has no way past it. Archiving halts until PR 3, retrying
+every transaction because the backoff is not in yet. Blocks accumulate locally, so it
+is survivable, and a stall beats silent corruption — but keep the window short.
+
+And it does not close the window on a **freshly created** archive. An index-less
+append to an empty archive cannot be verified by anything: there is no tip to chain
+against, and the call says nothing about where its blocks belong (`Req 1.4`). That
+is the exact shape of the original failure — a node created for one index, then
+handed blocks from a lower one — so the archive-only release closes the re-send case
+and leaves the roll-over case open until PR 3 makes the ledger send an index.
+Refusing is not an option: an old ledger does the same thing on the ordinary path at
+every roll-over, so refusing would halt archiving rather than only the bad case.
+`Req 1.6` counts it, which is what makes the window visible while it lasts and
+demonstrably shut afterwards.
 
 **PR 2 — DEFI-2967.** Reviewed separately; not part of this spec. Ordered after PR 1
 because spawning makes an archiving trap silent, so landing it first would leave the
