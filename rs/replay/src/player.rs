@@ -153,8 +153,6 @@ pub(crate) struct Player {
     // The target height until which the state will be replayed.
     // None means finalized height.
     replay_target_height: Option<u64>,
-    // Whether to persist the replayed state by creating a checkpoint of it.
-    create_checkpoint: bool,
     runtime: Runtime,
 }
 
@@ -219,9 +217,6 @@ impl Player {
             time_source,
         );
 
-        // Restoring from a backup never delivers an extra batch, so there is no
-        // checkpointing batch to create either.
-        let create_checkpoint = false;
         let mut player = Player::new_with_params(
             cfg,
             registry,
@@ -230,7 +225,6 @@ impl Player {
             Some(backup_dir),
             replica_version,
             replay_target_height,
-            create_checkpoint,
             log,
             _async_log_guard,
         );
@@ -245,7 +239,6 @@ impl Player {
         subnet_id: SubnetId,
         replica_version: Option<ReplicaVersion>,
         replay_target_height: Option<u64>,
-        create_checkpoint: bool,
     ) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::new();
@@ -298,7 +291,6 @@ impl Player {
             None,
             replica_version,
             replay_target_height,
-            create_checkpoint,
             log,
             _async_log_guard,
         )
@@ -313,7 +305,6 @@ impl Player {
         backup_dir: Option<PathBuf>,
         replica_version: ReplicaVersion,
         replay_target_height: Option<u64>,
-        create_checkpoint: bool,
         log: ReplicaLogger,
         _async_log_guard: AsyncGuard,
     ) -> Self {
@@ -425,14 +416,16 @@ impl Player {
             _async_log_guard,
             tmp_dir: None,
             replay_target_height,
-            create_checkpoint,
             runtime,
         }
     }
 
     /// In case a consensus pool was supplied, replay past finalized but
-    /// un-executed blocks by delivering ingress messages for execution,
-    /// and make a full checkpoint of the latest state when they all finish.
+    /// un-executed blocks by delivering ingress messages for execution, and make a
+    /// full checkpoint of the latest state when they all finish. That checkpoint is
+    /// created by an extra batch, one height above the last replayed block, unless
+    /// the state is checkpointed already because the last replayed block was a CUP
+    /// height.
     ///
     /// It takes a function argument, which can be used to make extra ingress
     /// messages for execution, which are delivered after the last finalized
@@ -459,12 +452,11 @@ impl Player {
             Default::default()
         };
 
-        let message_routing = self.message_routing.as_ref();
-        let expected_batch_height_before_extra = message_routing.expected_batch_height();
-        let (latest_context_time, extra_batch_delivery) =
-            self.deliver_extra_batch(message_routing, self.consensus_pool.as_ref(), extra);
-        let extra_batches =
-            (message_routing.expected_batch_height() - expected_batch_height_before_extra).get();
+        let (latest_context_time, extra_batches, extra_batch_delivery) = self.deliver_extra_batch(
+            self.message_routing.as_ref(),
+            self.consensus_pool.as_ref(),
+            extra,
+        );
 
         if let Some((last_batch_height, msgs)) = extra_batch_delivery {
             self.wait_for_state(last_batch_height);
@@ -798,7 +790,7 @@ impl Player {
         message_routing: &dyn MessageRouting,
         pool: Option<&ConsensusPoolImpl>,
         mut extra: F,
-    ) -> (Time, Option<(Height, Vec<IngressWithPrinter>)>) {
+    ) -> (Time, u64, Option<(Height, Vec<IngressWithPrinter>)>) {
         let (registry_version, time, randomness, replica_version) = match pool {
             None => (
                 self.registry.get_latest_version(),
@@ -827,6 +819,7 @@ impl Player {
             }
         };
 
+        let mut nb_extra_delivered_batches = 0;
         let extra_msgs = extra(self, time);
         let no_extra_msgs = extra_msgs.is_empty();
 
@@ -834,9 +827,12 @@ impl Player {
         // target height: that height has to be executed exactly the way the subnet
         // executed it, so that the resulting certified state is identical to the one
         // the subnet certified at that height (see `redeliver_certifications`). The
-        // checkpoint requested with `--create-checkpoint` is therefore created by an
-        // extra `BatchContent::CheckpointingWithoutExecution` batch, whose round
-        // creates it without executing anything.
+        // checkpoint is therefore created by an extra
+        // `BatchContent::CheckpointingWithoutExecution` batch, whose round creates it
+        // without executing anything.
+        //
+        // That batch occupies the height the next block would have been delivered at,
+        // so it may only be delivered where no further block will follow.
         //
         // Nothing needs to be persisted if the state that batch would checkpoint is
         // already checkpointed: no blocks were replayed at all, or the last replayed
@@ -849,17 +845,9 @@ impl Player {
             .state_manager
             .checkpoint_heights()
             .contains(&self.state_manager.latest_state_height());
-        let checkpoint_batch_needed = self.create_checkpoint && !latest_state_checkpointed;
-        if no_extra_msgs && !checkpoint_batch_needed {
-            println!(
-                "No extra batch delivered: {}.",
-                if latest_state_checkpointed {
-                    "the replayed state is already checkpointed"
-                } else {
-                    "the replayed state is not persisted without --create-checkpoint"
-                }
-            );
-            return (time, None);
+        if no_extra_msgs && latest_state_checkpointed {
+            println!("No extra batch delivered: the replayed state is already checkpointed.");
+            return (time, nb_extra_delivered_batches, None);
         }
 
         let extra_ingresses = extra_msgs
@@ -903,6 +891,7 @@ impl Player {
             match message_routing.deliver_batch(extra_batch.clone()) {
                 Ok(()) => {
                     println!("Delivered batch {}", extra_batch.batch_number);
+                    nb_extra_delivered_batches += 1;
                     self.wait_for_state(extra_batch.batch_number);
 
                     // We are done once we delivered the batch creating the checkpoint.
@@ -915,8 +904,7 @@ impl Player {
 
                     // If we have messages that could not be completed, we need to keep delivering
                     // empty batches. If all messages could be completed, we need to deliver one
-                    // more batch triggering checkpoint creation, unless the replayed state is
-                    // not to be persisted.
+                    // more batch triggering checkpoint creation.
                     let msg_status = self.ingress_history_reader.get_latest_status();
                     let have_incomplete_msgs =
                         extra_msgs
@@ -925,13 +913,6 @@ impl Player {
                                 IngressStatus::Unknown => true,
                                 IngressStatus::Known { state, .. } => !state.is_terminal(),
                             });
-                    if !have_incomplete_msgs && !self.create_checkpoint {
-                        println!(
-                            "No checkpoint created: the replayed state is not persisted \
-                            without --create-checkpoint."
-                        );
-                        break;
-                    }
 
                     extra_batch.content = if have_incomplete_msgs {
                         BatchContent::Data {
@@ -956,7 +937,11 @@ impl Player {
                 }
             }
         }
-        (time, Some((extra_batch.batch_number, extra_msgs)))
+        (
+            time,
+            nb_extra_delivered_batches,
+            Some((extra_batch.batch_number, extra_msgs)),
+        )
     }
 
     fn certify_state_with_dummy_certification(&self) {
@@ -1132,26 +1117,16 @@ impl Player {
                 && last_batch_height >= height
             {
                 println!("Target height {height} reached.");
-                let state_params = self.get_latest_state_params(None, invalid_artifacts);
-                // The state at the target height has a full state hash only if the
-                // block at that height is a summary block: `deliver_batches()` never
-                // forces a checkpoint at the delivery bound and, unlike `replay()`
-                // with `--create-checkpoint`, restoring from a backup delivers no
-                // extra batch to create one. Otherwise that state is in-memory only
-                // and `get_latest_state_params()` falls back to the latest CUP, i.e.
-                // the latest checkpoint at or below the target height.
-                if state_params.height < last_batch_height {
-                    println!(
-                        "No checkpoint was created at the target height because it is not \
-                        a CUP height; the reported state corresponds to the latest \
-                        checkpoint at height {}.",
-                        state_params.height
-                    );
-                }
+                // Reaching the target height ends the restore, so this is where we should deliver
+                // an extra batch to checkpoint the state.
+                let (_, extra_batches, _) = self.deliver_extra_batch(
+                    self.message_routing.as_ref(),
+                    self.consensus_pool.as_ref(),
+                    |_, _| Vec::new(),
+                );
                 return Ok(ReplayOutput {
-                    state_params,
-                    // Restoring from a backup delivers no extra batches.
-                    extra_batches: 0,
+                    state_params: self.get_latest_state_params(None, invalid_artifacts),
+                    extra_batches,
                 });
             }
 
@@ -1209,7 +1184,8 @@ impl Player {
                     );
                     return Ok(ReplayOutput {
                         state_params: self.get_latest_state_params(None, invalid_artifacts),
-                        // Restoring from a backup delivers no extra batches.
+                        // Without a target height to stop at, the restore checkpoints
+                        // nothing on top of the replayed blocks.
                         extra_batches: 0,
                     });
                 }

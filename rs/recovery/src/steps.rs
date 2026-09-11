@@ -447,8 +447,7 @@ impl Step for ReplayStep {
     fn descr(&self) -> String {
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
         let mut base = format!(
-            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}{}{} \
-            --create-checkpoint",
+            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}{}{}",
             checkpoint_path.display(),
             self.config.display(),
             self.subnet_id,
@@ -513,8 +512,6 @@ impl Step for ReplayStep {
             Height::from(0)
         };
 
-        // The recovery uploads the checkpoint of the replayed state, so persist it.
-        let create_checkpoint = true;
         let state_params = block_on(replay_helper::replay(
             self.subnet_id,
             self.config.clone(),
@@ -524,7 +521,6 @@ impl Step for ReplayStep {
             self.replay_until_height,
             self.result.clone(),
             self.skip_prompts,
-            create_checkpoint,
             self.replica_version.clone(),
         ))?
         .state_params;
@@ -855,8 +851,6 @@ impl Step for UpdateLocalStoreStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        // Only the registry local store is of interest, the state is left as is.
-        let create_checkpoint = false;
         block_on(replay_helper::replay(
             self.subnet_id,
             self.work_dir.join("ic.json5"),
@@ -866,7 +860,6 @@ impl Step for UpdateLocalStoreStep {
             None,
             self.work_dir.join("update_local_store.txt"),
             self.skip_prompts,
-            create_checkpoint,
             self.replica_version.clone(),
         ))?;
         Ok(())
@@ -898,8 +891,6 @@ impl Step for GetRecoveryCUPStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        // The CUP is derived from the state replayed before, which is not changed.
-        let create_checkpoint = false;
         block_on(replay_helper::replay(
             self.subnet_id,
             self.config.clone(),
@@ -913,7 +904,6 @@ impl Step for GetRecoveryCUPStep {
             None,
             self.result.clone(),
             self.skip_prompts,
-            create_checkpoint,
             self.replica_version.clone(),
         ))?;
         Ok(())

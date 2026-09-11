@@ -136,7 +136,8 @@ pub struct AppSubnetRecoveryArgs {
     pub replacement_nodes: Option<Vec<NodeId>>,
 
     #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
+    /// The replay will stop at this height and checkpoint the state replayed up to
+    /// it. That checkpoint sits one height above, unless this is a CUP height.
     pub replay_until_height: Option<u64>,
 
     /// Public ssh key to be deployed to the subnet for read only access

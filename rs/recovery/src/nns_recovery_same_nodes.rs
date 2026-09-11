@@ -139,7 +139,8 @@ pub struct NNSRecoverySameNodesArgs {
     pub add_upgrade_version: Option<bool>,
 
     #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
+    /// The replay will stop at this height and checkpoint the state replayed up to
+    /// it. That checkpoint sits one height above, unless this is a CUP height.
     pub replay_until_height: Option<u64>,
 
     /// IP address of the node to download the consensus pool from.
