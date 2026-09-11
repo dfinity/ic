@@ -242,16 +242,22 @@ pub fn encode_delegation_batch(addresses: &[DepositAddress]) -> Vec<u8> {
 /// Decode the flat `n x 32`-byte return blob of [`DELEGATION_BATCHER_INITCODE`] into `n`
 /// delegations, in call order.
 ///
-/// Each word is the first 32 bytes of an account's code, zero-padded beyond its size, which
-/// classifies the account unambiguously:
-/// * an all-zero word means no code at all, since [EIP-3541] forbids deploying code starting
-///   with `0xef` and a shorter non-empty code would still carry a non-zero first byte;
+/// Each word is the first 32 bytes of an account's code, zero-padded beyond its size. The
+/// accounts read are [`DepositAddress`]es, whose address is the hash of a public key the minter
+/// derives, never the hash of a deployer and nonce or of `CREATE2` inputs, so no contract can be
+/// deployed at one and the only code such an account can ever hold is a delegation designator.
+/// That classifies each word unambiguously:
+/// * an all-zero word means no code at all, hence no delegation;
 /// * `0xef0100 || delegate || 9 zero bytes` is a code of exactly 23 bytes whose only possible
-///   origin is an applied [EIP-7702] authorization tuple — again because EIP-3541 keeps every
-///   deployed contract out of the `0xef` space;
+///   origin is an applied [EIP-7702] authorization tuple, since [EIP-3541] keeps every deployed
+///   contract out of the `0xef` space;
 /// * anything else is deployed contract code.
 ///
 /// Returns `Err` if the blob length is not exactly `n` words; never panics.
+///
+/// The first classification rests on the account being a deposit address and does not generalize:
+/// [EIP-3541] reserves only the `0xef` prefix, so a contract whose runtime code starts with 32
+/// zero bytes — `STOP` padded out, say — would read as [`Delegation::NotDelegated`] here.
 ///
 /// [EIP-3541]: https://eips.ethereum.org/EIPS/eip-3541
 /// [EIP-7702]: https://eips.ethereum.org/EIPS/eip-7702
