@@ -406,12 +406,9 @@ mod deposit_erc20 {
 
     /// Number of `AutomaticDepositReceived` events currently in the minter's audit log.
     fn count_automatic_deposits_received(ckerc20: &CkErc20Setup) -> usize {
-        ckerc20
-            .cketh
-            .get_all_events()
-            .into_iter()
-            .filter(|event| matches!(event.payload, EventPayload::AutomaticDepositReceived { .. }))
-            .count()
+        ckerc20.cketh.minter_count_events(|event| {
+            matches!(event.payload, EventPayload::AutomaticDepositReceived { .. })
+        })
     }
 
     /// EIP-55 address string of the first supported ckERC20 token.

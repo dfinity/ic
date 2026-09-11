@@ -549,7 +549,8 @@ fn should_sweep_a_second_eth_deposit_despite_resending_a_stale_authorization() {
     let sweeper = setup.await_sweeper_address();
     let delegate = setup.sweep_contracts().delegate;
     let minter_eth_before = setup.minter_eth_balance();
-    let mints_before = count_cketh_mints(&setup);
+    let mints_before = setup
+        .minter_count_events(|event| matches!(event.payload, EventPayload::MintedCkEth { .. }));
     let owner = setup.depositor(1);
 
     let (setup, first_deposits) = setup
@@ -623,18 +624,12 @@ fn should_sweep_a_second_eth_deposit_despite_resending_a_stale_authorization() {
         .assert_minter_received_swept_eth_total(&all_deposits, minter_eth_before)
         .expect_cketh_mints(&all_deposits);
     assert_eq!(
-        count_cketh_mints(&setup) - mints_before,
+        setup
+            .minter_count_events(|event| matches!(event.payload, EventPayload::MintedCkEth { .. }))
+            - mints_before,
         2,
         "each deposit flow must be credited exactly once"
     );
-}
-
-fn count_cketh_mints(setup: &LiveSetup<CkErc20Setup>) -> usize {
-    setup
-        .minter_events()
-        .into_iter()
-        .filter(|event| matches!(event.payload, EventPayload::MintedCkEth { .. }))
-        .count()
 }
 
 #[test]
@@ -730,10 +725,7 @@ fn should_sweep_a_second_erc20_deposit_despite_resending_a_stale_authorization()
         .assert_minter_holds_swept_totals(&all_deposits)
         .expect_mints(&all_deposits);
     let mints = setup
-        .minter_events()
-        .into_iter()
-        .filter(|event| matches!(event.payload, EventPayload::MintedCkErc20 { .. }))
-        .count();
+        .minter_count_events(|event| matches!(event.payload, EventPayload::MintedCkErc20 { .. }));
     assert_eq!(mints, 2, "each deposit flow must be credited exactly once");
 }
 
