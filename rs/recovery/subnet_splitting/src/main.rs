@@ -7,8 +7,8 @@ use ic_subnet_splitting::{
     post_split_estimations,
     subnet_splitting::{SubnetSplitting, SubnetSplittingArgs},
     utils::canister_id_ranges_to_strings,
-    validation::validate_artifacts,
 };
+use ic_subnet_tools::validation::validate_artifacts;
 use ic_types::ReplicaVersion;
 use slog::{Logger, info, warn};
 use url::Url;
