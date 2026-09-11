@@ -859,19 +859,20 @@ jobs:
       commit-sha: ${{ github.sha }}
 
   test-container-run:
-    name: Test Container Run ${{ matrix.name }}
+    name: Test Container Run (${{ matrix.runtime }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
-        include:
-          - name: TestCase 1
-            command: ""
-          - name: TestCase 2
-            command: "--image ic-build bash"
+        runtime: [podman, docker]
     steps:
       - *checkout
       - name: Workaround for actions/runner-images#14473 (crun pinning)
+        # podman only: container-run.sh forwards PODMAN_RUN_USR_ARGS to
+        # `docker run` too, and `--runtime /usr/local/bin/crun` is not a
+        # docker runtime.
+        if: matrix.runtime == 'podman'
         run: |
           # Workaround for actions/runner-images#14473:
           # Podman 5.x on ubuntu-24.04/22.04 picks /usr/bin/crun (1.14.1) over
@@ -894,6 +895,7 @@ jobs:
           ref: ${{ inputs.commit-sha }}
           filters: |
             container-run:
+              - '.github/workflows/ci-main.yml'
               - '.github/workflows/ci-pr-only.yml'
               - '.github/workflows/container-autobuild.yml'
               - 'ci/container/**'
@@ -903,5 +905,6 @@ jobs:
           env.BRANCH_NAME == 'master' ||
           startsWith(env.BRANCH_NAME, 'rc--') ||
           startsWith(env.BRANCH_NAME, 'hotfix-')
-        run: |
-          ./ci/container/container-run.sh ${{ matrix.command }}
+        env:
+          CONTAINER_RUNTIME: ${{ matrix.runtime }}
+        run: ./ci/container/test-container-run.sh

@@ -191,7 +191,11 @@ RUNTIME_RUN_ARGS=(
     --rm              # remove container after it ran
     --log-driver=none # by default podman logs all of stdout to the journal which is resource-consuming and wasteful
 
-    --user "$CTR_USER:$CTR_USER" # user, assuming it has a corresponding group
+    # By name only: with an explicit user:group both runtimes drop the user's
+    # supplementary groups, and buildifier needs its `ubuntu` group membership
+    # to read /home/ubuntu/.ic-build-container (mode 750), which build-ic.sh
+    # tests to detect that it already runs inside the container.
+    --user "$CTR_USER"
 
     # metadata used by system tests for logging
     -e HOSTUSER="$(whoami)"
