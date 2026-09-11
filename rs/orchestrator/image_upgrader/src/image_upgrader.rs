@@ -70,10 +70,10 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 ///     ...
 ///
 ///     /// Called by `prepare_upgrade()` to download the image.
-///     fn get_release_package_url_and_hash(
+///     fn get_release_package_urls_and_hash(
 ///         &self,
 ///         version: &Version,
-///     ) -> UpgradeResult<(Vec<String>, Option<String>)> {
+///     ) -> UpgradeResult<(Vec<String>, String)> {
 ///         // Collect and return release package information, i.e. from registry.
 ///         ...
 ///     }
@@ -131,12 +131,12 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     }
     /// Return the logger to be passed to the upgrade functions.
     fn log(&self) -> &ReplicaLogger;
-    /// Return the release package url and optional SHA256 hex string for the given version.
+    /// Return the release package url and SHA256 hex string for the given version.
     /// Used to download the release package during `prepare_upgrade()`.
     fn get_release_package_urls_and_hash(
         &self,
         version: &V,
-    ) -> UpgradeResult<(Vec<String>, Option<String>)>;
+    ) -> UpgradeResult<(Vec<String>, String)>;
 
     /// Runs the disk encryption key exchange process for the target version if SEV is active.
     /// NOOP otherwise.
@@ -188,7 +188,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
                 FileDownloader::new_with_timeout(Some(self.log().clone()), Duration::from_secs(60));
             let start_time = std::time::Instant::now();
             let download_result = file_downloader
-                .download_file(release_package_url, self.image_path(), hash.clone())
+                .download_file(release_package_url, self.image_path(), Some(hash.clone()))
                 .await;
             let duration = start_time.elapsed();
 
