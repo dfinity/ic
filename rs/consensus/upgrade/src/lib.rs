@@ -108,14 +108,6 @@ mod tests {
         }
     }
 
-    fn verifying_crypto() -> MockCrypto {
-        let mut crypto = MockCrypto::new();
-        crypto
-            .expect_verify_basic_sig_upgrade_permit_auth()
-            .returning(|_, _, _, _| Ok(()));
-        crypto
-    }
-
     #[test]
     fn test_rejects_requestor_mismatch() {
         let share = share(2, 3, 10);
