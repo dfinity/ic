@@ -17,14 +17,15 @@ use ic_metrics::{
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_types::{
-    CountBytes, RegistryVersion, SubnetId,
+    CountBytes, Height, RegistryVersion, SubnetId,
     consensus::certification::Certification,
-    xnet::{CertifiedStreamSlice, StreamIndex},
+    xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex},
 };
 use messages::Messages;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use std::convert::{From, TryFrom, TryInto};
 use std::sync::Mutex;
 
@@ -158,6 +159,10 @@ mod header {
 
         pub(super) fn signals_end(&self) -> StreamIndex {
             self.decoded.signals_end()
+        }
+
+        pub(super) fn decoded(&self) -> &StreamHeader {
+            &self.decoded
         }
     }
 
@@ -1122,7 +1127,20 @@ pub struct CertifiedSlicePool {
     /// advanced to the end of the slice returned by a `take_slice()` call.
     stream_positions: BTreeMap<SubnetId, ExpectedIndices>,
 
+    /// The furthest-advanced certified header seen from each peer subnet. Unlike
+    /// a pooled slice, which is dropped once consumed, this is retained: it is
+    /// the only record of how far the peer has seen our signals (its `begin`)
+    /// and of what it has on offer (its `end` and `signals_end`).
+    peer_headers: BTreeMap<SubnetId, PeerHeader>,
+
     metrics: CertifiedSlicePoolMetrics,
+}
+
+/// A peer subnet's high-water-mark header, along with the height of the
+/// certification it was taken from, which orders the headers received.
+struct PeerHeader {
+    certification_height: Height,
+    header: StreamHeader,
 }
 
 impl CertifiedSlicePool {
@@ -1132,6 +1150,7 @@ impl CertifiedSlicePool {
         Self {
             slices: Default::default(),
             stream_positions: Default::default(),
+            peer_headers: Default::default(),
             metrics: CertifiedSlicePoolMetrics::new(metrics_registry),
         }
     }
@@ -1450,6 +1469,8 @@ impl CertifiedSlicePool {
         subnet_id: SubnetId,
         mut unpacked: UnpackedStreamSlice,
     ) -> CertifiedSliceResult<Option<UnpackedStreamSlice>> {
+        self.maybe_set_peer_header(subnet_id, &unpacked);
+
         // Trim off everything before the cached stream position.
         let stream_position = self.stream_positions.get(&subnet_id);
         if let Some(stream_position) = stream_position {
@@ -1474,6 +1495,42 @@ impl CertifiedSlicePool {
         } else {
             self.metrics.observe_put(STATUS_SUCCESS);
             Ok(self.slices.insert(subnet_id, unpacked))
+        }
+    }
+
+    /// Returns the given peer subnet's high-water-mark header, if any.
+    pub fn peer_header(&self, subnet_id: SubnetId) -> Option<&StreamHeader> {
+        self.peer_headers
+            .get(&subnet_id)
+            .map(|peer_header| &peer_header.header)
+    }
+
+    /// Records the slice header as the peer's high-water-mark header, unless one
+    /// with a greater certified height is already on record.
+    fn maybe_set_peer_header(&mut self, subnet_id: SubnetId, slice: &UnpackedStreamSlice) {
+        let certification_height = slice.certification.height;
+        let header = slice.payload.header.decoded();
+
+        match self.peer_headers.entry(subnet_id) {
+            Entry::Vacant(vacant) => {
+                vacant.insert(PeerHeader {
+                    certification_height,
+                    header: header.clone(),
+                });
+            }
+
+            Entry::Occupied(mut recorded) => {
+                if recorded.get().certification_height < certification_height {
+                    // Higher certified height implies >= header indices.
+                    debug_assert!(recorded.get().header.begin() <= header.begin());
+                    debug_assert!(recorded.get().header.end() <= header.end());
+                    debug_assert!(recorded.get().header.signals_end() <= header.signals_end());
+                    recorded.insert(PeerHeader {
+                        certification_height,
+                        header: header.clone(),
+                    });
+                }
+            }
         }
     }
 
