@@ -1027,7 +1027,7 @@ async fn should_mark_the_authorizations_a_finalized_sweep_carried_as_applied() {
                 deposits.delegation(&account),
                 Some(Delegation {
                     delegate: sweeper_contract(),
-                    nonce: TransactionNonce::ONE,
+                    nonce: TransactionNonce::ZERO,
                 }),
                 "a {status:?} sweep installs the delegations it carried"
             );
@@ -1066,7 +1066,7 @@ async fn should_not_mark_a_tuple_whose_nonce_the_account_has_already_spent() {
         deposits.delegation(&account(0)),
         Some(Delegation {
             delegate: sweeper_contract(),
-            nonce: TransactionNonce::ONE,
+            nonce: TransactionNonce::ZERO,
         })
     );
     assert_eq!(deposits.applied_authorizations_len(), 1);
@@ -1094,7 +1094,7 @@ fn should_apply_only_the_first_of_two_sweeps_carrying_the_same_nonce() {
         deposits.delegation(&account(0)),
         Some(Delegation {
             delegate: sweeper_contract(),
-            nonce: TransactionNonce::ONE,
+            nonce: TransactionNonce::ZERO,
         })
     );
     assert_eq!(deposits.applied_authorizations_len(), 1);
@@ -1125,7 +1125,7 @@ async fn should_report_the_delegate_of_the_highest_applied_authorization() {
         deposits.delegation(&account(0)),
         Some(Delegation {
             delegate: ANOTHER_DELEGATE,
-            nonce: TransactionNonce::new(2),
+            nonce: TransactionNonce::ONE,
         })
     );
     assert_eq!(deposits.applied_authorizations_len(), 1);
@@ -1150,7 +1150,7 @@ async fn should_rebuild_the_applied_marks_by_replaying_the_event_log() {
         replayed.automatic_deposits.delegation(&account(0)),
         Some(Delegation {
             delegate: sweeper_contract(),
-            nonce: TransactionNonce::ONE,
+            nonce: TransactionNonce::ZERO,
         })
     );
     assert_eq!(

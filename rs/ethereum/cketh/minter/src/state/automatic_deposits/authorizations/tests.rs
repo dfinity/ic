@@ -35,7 +35,7 @@ fn should_apply_a_tuple_at_the_account_nonce() {
         store.delegation(&account()),
         Some(Delegation {
             delegate: DELEGATE,
-            nonce: TransactionNonce::ONE,
+            nonce: TransactionNonce::ZERO,
         })
     );
     assert_eq!(applied_by(&store), Some(SweepId(0)));
@@ -94,7 +94,7 @@ fn should_drop_the_rival_tuple_the_applied_nonce_invalidated() {
         store.delegation(&account()),
         Some(Delegation {
             delegate: DELEGATE,
-            nonce: TransactionNonce::ONE,
+            nonce: TransactionNonce::ZERO,
         })
     );
 }
@@ -127,7 +127,7 @@ fn should_report_the_delegate_of_the_highest_applied_nonce() {
         store.delegation(&account()),
         Some(Delegation {
             delegate: ANOTHER_DELEGATE,
-            nonce: TransactionNonce::new(2),
+            nonce: TransactionNonce::ONE,
         })
     );
     assert_eq!(applied_by(&store), Some(SweepId(1)));

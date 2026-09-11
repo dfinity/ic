@@ -111,8 +111,9 @@ impl AuthorizationStore {
     }
 
     fn next_nonce(&self, account: &Account) -> TransactionNonce {
-        self.delegation(account)
-            .map_or(TransactionNonce::ZERO, |delegation| delegation.nonce)
+        self.accounts
+            .get(account)
+            .map_or(TransactionNonce::ZERO, Authorizations::next_nonce)
     }
 }
 
@@ -137,6 +138,18 @@ impl Authorizations {
     fn is_delegated(&self) -> bool {
         self.delegation.is_some()
     }
+
+    fn next_nonce(&self) -> TransactionNonce {
+        self.delegation
+            .as_ref()
+            .map_or(TransactionNonce::ZERO, |applied| {
+                applied
+                    .authorization
+                    .nonce
+                    .checked_increment()
+                    .expect("BUG: authorization nonce space exhausted")
+            })
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -150,11 +163,7 @@ impl AppliedDelegation {
     fn delegation(&self) -> Delegation {
         Delegation {
             delegate: self.authorization.delegate,
-            nonce: self
-                .authorization
-                .nonce
-                .checked_increment()
-                .expect("BUG: authorization nonce space exhausted"),
+            nonce: self.authorization.nonce,
         }
     }
 }
@@ -164,7 +173,6 @@ impl AppliedDelegation {
 pub struct Delegation {
     /// The contract the address' code points at.
     pub delegate: Address,
-    /// The nonce the address has reached, one past the nonce of the authorization that installed
-    /// the delegation.
+    /// The nonce of the authorization that installed the delegation, spent by applying it.
     pub nonce: TransactionNonce,
 }
