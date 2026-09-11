@@ -136,6 +136,14 @@ const CREDIT_TICKS: u32 = 6;
 
 const FUNDING_TICKS: u32 = 6;
 
+/// The EIP-2718 type of a sweep that still installs a delegation, and so carries an EIP-7702
+/// authorization list.
+pub const DELEGATING_SWEEP_TRANSACTION_TYPE: u64 = 4;
+
+/// The EIP-2718 type of a sweep of addresses all delegated already, which carries no authorization
+/// and so is a plain EIP-1559 transaction.
+pub const PLAIN_SWEEP_TRANSACTION_TYPE: u64 = 2;
+
 pub struct DepositPlan {
     pub owner: Principal,
     pub subaccount: [u8; 32],
@@ -1545,12 +1553,30 @@ pub struct SweepsSent {
 }
 
 impl SweepsSent {
+    /// Asserts every sweep succeeded riding a type-4 transaction, as a sweep still installing a
+    /// delegation must.
     pub fn expect_all_delegating_sweeps(self) -> (LiveSetup<CkErc20Setup>, Vec<SentTransaction>) {
-        for sweep in &self.sweeps {
+        let delegating = vec![DELEGATING_SWEEP_TRANSACTION_TYPE; self.sweeps.len()];
+        self.expect_sweeps_of_types(&delegating)
+    }
+
+    /// Asserts every sweep succeeded riding the transaction type its position in `expected` names:
+    /// type 4 while it still delegates an address it sweeps, type 2 once they are all delegated.
+    pub fn expect_sweeps_of_types(
+        self,
+        expected: &[u64],
+    ) -> (LiveSetup<CkErc20Setup>, Vec<SentTransaction>) {
+        assert_eq!(
+            self.sweeps.len(),
+            expected.len(),
+            "expected {} sweeps, got {:?}",
+            expected.len(),
+            self.sweeps
+        );
+        for (sweep, expected_type) in self.sweeps.iter().zip(expected) {
             assert_eq!(
-                sweep.transaction_type, 4,
-                "a sweep here always carries its EIP-7702 authorizations, installed or re-sent, \
-                 so it must be a type-4 transaction: {sweep:?}"
+                sweep.transaction_type, *expected_type,
+                "the sweep did not ride the expected transaction type: {sweep:?}"
             );
             assert!(sweep.succeeded, "the sweep reverted: {sweep:?}");
         }
