@@ -19,6 +19,7 @@
 use crate::consensus::{
     batch_delivery::deliver_batches_for_finalizer,
     metrics::{BatchStats, BlockStats, FinalizerMetrics},
+    status::{self, Status},
 };
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
@@ -95,7 +96,7 @@ impl Finalizer {
         }
 
         // Try to deliver finalized batches to messaging
-        let _ = deliver_batches_for_finalizer(
+        let last_delivered_batch_height = deliver_batches_for_finalizer(
             &*self.message_routing,
             &self.membership,
             pool,
@@ -106,14 +107,47 @@ impl Finalizer {
             |result, block_stats, batch_stats| {
                 self.process_batch_delivery_result(result, block_stats, batch_stats)
             },
-            |status| self.metrics.observe_status(status),
         );
+        self.metrics
+            .observe_status(self.get_status(pool, last_delivered_batch_height));
 
         // Try to finalize rounds from finalized_height + 1 up to (and including)
         // notarized_height
         (finalized_height.increment().get()..=notarized_height.get())
             .filter_map(|h| self.finalize_height(pool, Height::from(h)))
             .collect()
+    }
+
+    /// The consensus status as of the last batch delivery, or [`None`] if it
+    /// could not be computed.
+    ///
+    /// It is the status of the last height whose batch was delivered, which is
+    /// the height to ask about: the halts this status covers take effect from a
+    /// summary height on, and the batch at that height is delivered whatever
+    /// the status is. The first height at which a subnet is halting is
+    /// therefore also the last one whose batch it delivers, so asking about
+    /// that height reports the halt from the round it begins.
+    ///
+    /// A delivery that failed leaves no height to ask about and no way to tell
+    /// whether the subnet is halting, so it is reported as unknown rather than
+    /// as though everything had gone well.
+    fn get_status(
+        &self,
+        pool: &PoolReader<'_>,
+        last_delivered_batch_height: Result<Height, MessageRoutingError>,
+    ) -> Option<Status> {
+        let height = last_delivered_batch_height.ok()?;
+        let summary_block = pool.dkg_summary_block_for_finalized_height(height)?;
+
+        status::get_status(
+            height,
+            &summary_block,
+            self.registry_client.as_ref(),
+            self.replica_config.subnet_id,
+            pool,
+            self.replica_config.replica_version(),
+            &self.log,
+        )
     }
 
     /// Write logs, report metrics depending on the batch deliver result.
@@ -257,16 +291,123 @@ mod tests {
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_test_artifact_pool::consensus_pool::Round;
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
         RegistryVersion,
         consensus::{HasHeight, HashedBlock},
     };
+    use rstest::rstest;
     use std::sync::Arc;
+
+    /// The `consensus_status` labels whose gauge reads 1. Exactly one of them
+    /// does once the finalizer has computed a status.
+    fn observed_statuses(metrics_registry: &MetricsRegistry) -> Vec<String> {
+        metrics_registry
+            .prometheus_registry()
+            .gather()
+            .into_iter()
+            .filter(|family| family.name() == "consensus_status")
+            .flat_map(|family| family.get_metric().to_vec())
+            .filter(|metric| metric.get_gauge().value() == 1.0)
+            .map(|metric| metric.get_label()[0].value().to_string())
+            .collect()
+    }
+
+    /// The finalizer reports the consensus status of the height whose batch was
+    /// delivered last. For a subnet halting at a CUP height that is the CUP
+    /// height itself: its batch is delivered whatever the status is, so the
+    /// first height at which the subnet halts is also the last one it delivers.
+    #[rstest]
+    #[case::running(
+        /* halt_at_cup_height= */ false,
+        /* certified_up_to_cup_height= */ false,
+        "running"
+    )]
+    #[case::halting(
+        /* halt_at_cup_height= */ true,
+        /* certified_up_to_cup_height= */ false,
+        "halting"
+    )]
+    #[case::halted(
+        /* halt_at_cup_height= */ true,
+        /* certified_up_to_cup_height= */ true,
+        "halted_at_cup_height"
+    )]
+    fn test_finalizer_observes_status(
+        #[case] halt_at_cup_height: bool,
+        #[case] certified_up_to_cup_height: bool,
+        #[case] expected_status: &str,
+    ) {
+        const INTERVAL_LENGTH: u64 = 3;
+        const HALT_REGISTRY_VERSION: u64 = 10;
+        // A summary block, and hence a CUP, every `INTERVAL_LENGTH + 1` heights.
+        const CUP_HEIGHT: Height = Height::new(2 * (INTERVAL_LENGTH + 1));
+
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            // The same replica version throughout, so that the subnet record is
+            // the only thing that can halt the subnet.
+            let record = || {
+                SubnetRecordBuilder::from(&[node_test_id(0)])
+                    .with_dkg_interval_length(INTERVAL_LENGTH)
+                    .with_replica_version(test_replica_version().as_ref())
+            };
+            let Dependencies {
+                mut pool,
+                replica_config,
+                membership,
+                registry,
+                crypto,
+                ..
+            } = DependenciesBuilder::single_subnet(
+                pool_config,
+                subnet_test_id(0),
+                vec![
+                    (1, record().build()),
+                    (
+                        HALT_REGISTRY_VERSION,
+                        record().with_halt_at_cup_height(halt_at_cup_height).build(),
+                    ),
+                ],
+            )
+            .build();
+
+            pool.advance_round_normal_operation_n(CUP_HEIGHT.get());
+            let batch_height = if certified_up_to_cup_height {
+                // One round more, so that the certified height of the finalized
+                // tip reaches the CUP height. That is what tells a subnet that
+                // is halted from one that is only halting towards that height.
+                Round::new(&mut pool)
+                    .with_certified_height(CUP_HEIGHT)
+                    .advance();
+                CUP_HEIGHT.increment()
+            } else {
+                CUP_HEIGHT
+            };
+
+            let metrics_registry = MetricsRegistry::new();
+            let message_routing = Arc::new(FakeMessageRouting::new());
+            *message_routing.next_batch_height.write().unwrap() = batch_height;
+            let finalizer = Finalizer::new(
+                replica_config,
+                registry,
+                membership,
+                crypto,
+                message_routing,
+                Arc::new(FakeIngressSelector::new()),
+                no_op_logger(),
+                metrics_registry.clone(),
+            );
+
+            let _ = finalizer.on_state_change(&PoolReader::new(&pool));
+
+            assert_eq!(observed_statuses(&metrics_registry), vec![expected_status]);
+        })
+    }
 
     /// Given a single block, just finalize it
     #[test]

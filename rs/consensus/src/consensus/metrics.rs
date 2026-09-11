@@ -38,7 +38,7 @@ const STATUS_HALTED_AT_CUP_HEIGHT: &str = "halted_at_cup_height";
 const STATUS_UNKNOWN: &str = "unknown";
 
 /// The label value `consensus_status` reports each status under. [`None`] is
-/// the status the delivery path failed to compute, rather than a status of its
+/// the status the finalizer failed to compute, rather than a status of its
 /// own, so that a subnet whose registry cannot be read is not mistaken for one
 /// that is running.
 const CONSENSUS_STATUSES: [(&str, Option<Status>); 4] = [
@@ -220,30 +220,6 @@ pub(crate) struct FinalizerMetrics {
 
 impl FinalizerMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        let consensus_status = metrics_registry.int_gauge_vec(
-            "consensus_status",
-            "Whether consensus is running, halting towards a CUP height (producing empty \
-             blocks and delivering no batch but the one at that height), halted at a CUP \
-             height (producing no blocks either) or unknown (the status could not be \
-             computed), as of the last time batch delivery looked. 1 for the status that \
-             held then, 0 for the other three. All four are 0 until batch delivery computes \
-             a status for the first time, so a sum of 0 over the four is a replica that has \
-             not looked yet rather than a status of its own. A subnet halted by the `is_halted` flag of its subnet record \
-             rather than at a CUP height has no status of its own here: consensus acts on \
-             that flag before batch delivery runs, so this metric goes on reporting whatever \
-             it last did, or all four zeros on a replica that started while the subnet was \
-             already halted.",
-            &[STATUS_LABEL],
-        );
-        // Report every status from the start. A gauge vector reports only the
-        // label values it has been given, so until the delivery path computes a
-        // status for the first time the scrape would carry no `consensus_status`
-        // at all. Created here, all four read 0 until it does, as the help text
-        // says.
-        for (label, _) in CONSENSUS_STATUSES {
-            consensus_status.with_label_values(&[label]).set(0);
-        }
-
         Self {
             batches_delivered: metrics_registry.int_counter_vec(
                 "consensus_batches_delivered",
@@ -254,7 +230,19 @@ impl FinalizerMetrics {
                 "consensus_batch_height",
                 "The height of batches sent to Message Routing",
             ),
-            consensus_status,
+            consensus_status: metrics_registry.int_gauge_vec(
+                "consensus_status",
+                "Whether consensus is running, halting towards a CUP height (producing \
+                 empty blocks and delivering no batch but the one at that height), halted \
+                 at a CUP height (producing no blocks either) or unknown (the status could \
+                 not be computed), as of the height whose batch was delivered last. 1 for \
+                 the status that held then, 0 for the other three. Reported from the first \
+                 time the finalizer computes a status, and absent before that -- including \
+                 on a replica that started while its subnet record's `is_halted` flag was \
+                 set, as consensus acts on that flag before the finalizer runs. That halt \
+                 has no status of its own here.",
+                &[STATUS_LABEL],
+            ),
             batch_delivery_interval: metrics_registry.histogram(
                 "consensus_batch_delivery_interval_seconds",
                 "Time elapsed since the delivery of the previous batch, in seconds",
@@ -379,13 +367,11 @@ impl FinalizerMetrics {
 
     /// Records `status` as the status consensus is in, and the other three as
     /// ones it is not. [`None`] is recorded as `unknown`, the status the
-    /// delivery path failed to compute, and [`Status::Halted`] as
-    /// `halted_at_cup_height`, the only halt this path sees.
+    /// finalizer failed to compute, and [`Status::Halted`] as
+    /// `halted_at_cup_height`, the only halt the finalizer sees.
     ///
     /// Reported as a gauge per status rather than a single number, so that a
-    /// dashboard can select the status it asks about by name. Only the batch
-    /// delivery path computes the status, so this says what that path saw the
-    /// last time it looked.
+    /// dashboard can select the status it asks about by name.
     pub fn observe_status(&self, status: Option<Status>) {
         for (label, value) in CONSENSUS_STATUSES {
             self.consensus_status
@@ -772,30 +758,15 @@ mod tests {
             .collect()
     }
 
-    /// The statuses are reported, as zero, from the moment the metrics are
-    /// built, rather than from the first time one of them is observed. A gauge
-    /// vector reports only the label values it has been given, and one that has
-    /// been given none is left out of the scrape altogether.
-    ///
-    /// Observing a status sets that one to one and the other three back to zero.
+    /// Observing a status reports that one as one and the other three as zero,
+    /// so that a status the subnet has left does not go on being reported
+    /// alongside the one it is in.
     #[test]
-    fn test_consensus_status_is_reported_before_it_is_observed() {
+    fn test_observe_status_reports_one_status() {
         let metrics_registry = MetricsRegistry::new();
         let metrics = FinalizerMetrics::new(metrics_registry.clone());
 
-        // Every status reported, and zero: batch delivery has not computed one
-        // yet. Asserted over the whole map, as a sum of zero would also be what
-        // an empty one adds up to, which is what this is here to catch.
-        assert_eq!(
-            consensus_status(&metrics_registry),
-            BTreeMap::from([
-                (STATUS_RUNNING.into(), 0),
-                (STATUS_HALTING.into(), 0),
-                (STATUS_HALTED_AT_CUP_HEIGHT.into(), 0),
-                (STATUS_UNKNOWN.into(), 0),
-            ]),
-        );
-
+        metrics.observe_status(Some(Status::Halting));
         metrics.observe_status(Some(Status::Halted));
 
         assert_eq!(
