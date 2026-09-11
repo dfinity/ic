@@ -636,14 +636,23 @@ pub fn deploy_sweep_contracts(anvil: &Anvil, minter: &Address) -> SweepContracts
         minter,
         "the helper should pay out to the minter's main address"
     );
-    let delegate = anvil.deploy(
-        &deployer,
+    SweepContracts {
+        helper,
+        delegate: deploy_sweeper_delegate(anvil, &helper),
+    }
+}
+
+/// Compiles and deploys the attested sweeper delegate, wired to `helper` as the deposit helper its
+/// sweeps transfer through. Deploying it a second time yields a distinct delegate of the very code
+/// the minter already runs against, which is what a test rotating the sweeper contract needs.
+pub fn deploy_sweeper_delegate(anvil: &Anvil, helper: &Address) -> Address {
+    anvil.deploy(
+        &address_from_hex(DEV_ACCOUNT),
         &deploy_code(
             &compile("CKSWEEPER_ATTESTED_SOL", "CkSweeperAttested"),
-            &alloy_address(&helper).abi_encode(),
+            &alloy_address(helper).abi_encode(),
         ),
-    );
-    SweepContracts { helper, delegate }
+    )
 }
 
 fn decode_address(data: &[u8]) -> Address {

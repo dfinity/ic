@@ -1086,6 +1086,16 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
             .expect("starting the minter must succeed");
     }
 
+    /// Points the minter at `delegate`, as an operator replacing the sweeper contract does. The
+    /// addresses already delegated to the old one are re-delegated lazily, by the sweeps that
+    /// happen anyway.
+    pub fn rotate_delegate_to(&self, delegate: &Address) {
+        self.upgrade_minter_with(UpgradeArg {
+            ethereum_sweeper_contract_address: Some(delegate.to_string()),
+            ..Default::default()
+        });
+    }
+
     /// Gives the minter [`TICK_SETTLE`] of *real* time to carry out whatever the last tick started,
     /// mining meanwhile so `finalized` keeps advancing, and returns as soon as `observe` reports
     /// what it watches for has happened.
