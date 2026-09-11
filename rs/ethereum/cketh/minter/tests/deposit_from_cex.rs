@@ -579,7 +579,7 @@ fn should_credit_twenty_erc20_deposits_through_one_sweep_per_token() {
     let (setup, sweeps) = setup
         .await_sweeps(&sweeper, 2)
         .expect_all_delegating_sweeps();
-    assert_sweep_gas_near_demo(&sweeps, DEPOSITORS_PER_TOKEN);
+    assert_ten_deposit_sweep_gas_near_demo(&sweeps, DEMO_TEN_ERC20_DEPOSITS_GAS);
 
     let setup = setup
         .assert_sweeps_batched_per_token(&deposits)
@@ -630,7 +630,7 @@ fn should_credit_twenty_eth_deposits_through_ten_deposit_sweeps() {
     let (setup, sweeps) = setup
         .await_sweeps(&sweeper, 2)
         .expect_all_delegating_sweeps();
-    assert_eth_sweep_gas_near_demo(&sweeps, 10);
+    assert_ten_deposit_sweep_gas_near_demo(&sweeps, DEMO_TEN_ETH_DEPOSITS_GAS);
 
     let setup = setup
         .assert_eth_sweeps_batched(&deposits)
@@ -838,53 +838,26 @@ fn should_sweep_a_second_erc20_deposit_despite_resending_a_stale_authorization()
     assert_eq!(mints, 2, "each deposit flow must be credited exactly once");
 }
 
-fn assert_eth_sweep_gas_near_demo(sweeps: &[SentTransaction], deposits_per_sweep: u64) {
-    const ETH_SCENARIOS_DEMO_TEN_DEPOSITS_EIP7702_GAS: u64 = 413_076;
+/// The EIP-7702 (first sweep) column of the ten-deposit scenarios in deposit_from_cex_demo.rs.
+const DEMO_TEN_ERC20_DEPOSITS_GAS: u64 = 609_750;
+const DEMO_TEN_ETH_DEPOSITS_GAS: u64 = 413_076;
+
+fn assert_ten_deposit_sweep_gas_near_demo(sweeps: &[SentTransaction], demo_gas: u64) {
+    const DEPOSITS_PER_SWEEP: u64 = 10;
     const GAS_BAND_PERCENT: u64 = 10;
 
-    assert_eq!(
-        deposits_per_sweep, 10,
-        "the demo baseline is measured for ten-deposit sweeps"
-    );
     for sweep in sweeps {
-        assert!(
-            sweep
-                .gas_used
-                .abs_diff(ETH_SCENARIOS_DEMO_TEN_DEPOSITS_EIP7702_GAS)
-                * 100
-                <= ETH_SCENARIOS_DEMO_TEN_DEPOSITS_EIP7702_GAS * GAS_BAND_PERCENT,
-            "a ten-deposit ETH sweep used {} gas, more than {GAS_BAND_PERCENT}% away from the \
-             demo-measured {ETH_SCENARIOS_DEMO_TEN_DEPOSITS_EIP7702_GAS}: {sweep:?}",
-            sweep.gas_used,
-        );
-    }
-}
-
-fn assert_sweep_gas_near_demo(sweeps: &[SentTransaction], deposits_per_sweep: u64) {
-    // `ATTESTED_SCENARIOS` in deposit_from_cex_demo.rs, EIP-7702 (first sweep) column.
-    const DEMO_ONE_DEPOSIT: u64 = 98_075;
-    const DEMO_TEN_DEPOSITS: u64 = 609_750;
-    const GAS_BAND_PERCENT: u64 = 10;
-
-    assert_eq!(
-        deposits_per_sweep, 10,
-        "the demo baseline is measured for ten-deposit sweeps"
-    );
-    for sweep in sweeps {
-        let per_deposit = sweep.gas_used / deposits_per_sweep;
         println!(
-            "[gas] {} deposits: {} total, {} per deposit \
-             (demo: {DEMO_TEN_DEPOSITS} total, {} per deposit for ten; {DEMO_ONE_DEPOSIT} for one)",
-            deposits_per_sweep,
+            "[gas] {DEPOSITS_PER_SWEEP} deposits: {} total, {} per deposit \
+             (demo: {demo_gas} total, {} per deposit)",
             sweep.gas_used,
-            per_deposit,
-            DEMO_TEN_DEPOSITS / 10,
+            sweep.gas_used / DEPOSITS_PER_SWEEP,
+            demo_gas / DEPOSITS_PER_SWEEP,
         );
         assert!(
-            sweep.gas_used.abs_diff(DEMO_TEN_DEPOSITS) * 100
-                <= DEMO_TEN_DEPOSITS * GAS_BAND_PERCENT,
+            sweep.gas_used.abs_diff(demo_gas) * 100 <= demo_gas * GAS_BAND_PERCENT,
             "a ten-deposit sweep used {} gas, more than {GAS_BAND_PERCENT}% away from the \
-             demo-measured {DEMO_TEN_DEPOSITS}: {sweep:?}",
+             demo-measured {demo_gas}: {sweep:?}",
             sweep.gas_used,
         );
     }
