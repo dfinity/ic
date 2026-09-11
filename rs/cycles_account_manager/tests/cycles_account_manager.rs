@@ -556,9 +556,18 @@ fn response_execution_cycles_match_response_execution_setting() {
 
 /// If the canister's balance does not cover the cycles missing from the
 /// prepayment, then the adjustment fails and leaves the canister state unchanged.
-/// Its callers rely on that: one replays the adjustment on a clean canister state
-/// once a paused DTS execution is resumed, the other settles the unchanged
-/// prepayment for a response that is not executed at all.
+///
+/// Both of its call sites in `rs/execution_environment/src/execution/response.rs`
+/// rely on that, since both go on to settle the *unadjusted* prepayment: the
+/// `ResponseHelper` method wrapping the adjustment records the adjusted prepayment
+/// only on success, so what a failure leaves to be settled is the prepayment
+/// recorded in the callback. `execute_response` rejects the response without
+/// executing the callback, settling that prepayment in
+/// `settle_prepayment_for_unexecuted_response`; `ResponseHelper::resume` turns the
+/// failure of replaying the adjustment on the clean canister state into a Wasm
+/// execution error, which ends up settling it in `refund_unused_execution_cycles`.
+/// Either way, an excess that a failed adjustment had already refunded would be
+/// refunded a second time.
 ///
 /// In the second setting below the prepayment falls short of the requirement in
 /// the real part while exceeding it in the nominal one, so that the excess to be
@@ -644,9 +653,13 @@ fn adjust_prepayment_for_response_execution_leaves_state_unchanged_on_failure() 
 
 /// The mirror image of the test above: a requirement that does not exceed the
 /// prepayment in the real part withdraws nothing, so the adjustment cannot fail,
-/// not even for a canister that spent its whole balance on the prepayment. The
-/// adjustment relies on that, since it withdraws `required - prepaid`
-/// unconditionally, i.e. an amount whose real part saturates at zero here.
+/// not even for a canister that spent its whole balance on the prepayment.
+///
+/// The adjustment withdraws `required - prepaid` without comparing the two first.
+/// Subtracting two `CompoundCycles` saturates part by part, so in the settings
+/// below, where the requirement is below the prepayment in the real part, that
+/// difference has a zero real part; and withdrawing zero cycles against a zero
+/// freezing threshold cannot fail, whatever the balance is.
 ///
 /// `response_execution_cycles_match_response_execution_setting` covers the two
 /// settings below as well, but it leaves the canister cycles to spare, so a
