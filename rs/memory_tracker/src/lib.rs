@@ -72,13 +72,17 @@ pub(crate) mod checksum {
     }
 }
 
-pub use deterministic::DeterministicMemoryTracker;
+pub use deterministic::{AbortReason, DeterministicMemoryTracker};
 
 /// Memory limits for the deterministic memory tracker.
 #[derive(Clone, Copy, Default)]
 pub struct MemoryLimits {
     pub max_memory_size: NumBytes,
+    // Currently not enforced, because we limit accesses. Dirty pages are a subset of that.
     pub max_dirty_pages: NumOsPages,
+    /// Maximum number of pages a single message execution may access (read or write).
+    /// Exceeding it aborts the execution.
+    pub max_accessed_pages: NumOsPages,
 }
 
 /// Specifies whether the currently running message execution needs to know

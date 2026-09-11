@@ -1,6 +1,6 @@
 use candid::{CandidType, DecoderConfig, decode_one_with_config};
 use ic_base_types::{InternalAddress, PrincipalIdBlobParseError};
-use ic_config::embedders::{Config as EmbeddersConfig, StableMemoryPageLimit};
+use ic_config::embedders::{Config as EmbeddersConfig, MemoryPageLimit};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
@@ -1936,7 +1936,7 @@ impl SystemApiImpl {
 
     /// Based on the page limit object, returns the page limit for the current
     /// system API type. Can be called with the limit for dirty pages or accessed pages.
-    pub fn get_page_limit(&self, page_limit: &StableMemoryPageLimit) -> NumOsPages {
+    pub fn get_page_limit(&self, page_limit: &MemoryPageLimit) -> NumOsPages {
         match &self.api_type {
             // Longer-running messages make use of a different, possibly higher limit.
             ApiType::Init { .. } | ApiType::PreUpgrade { .. } => page_limit.upgrade,

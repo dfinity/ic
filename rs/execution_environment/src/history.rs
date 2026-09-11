@@ -408,8 +408,8 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         }
 
         CanisterMemoryAccessLimitExceeded => {
-            "Canister exceeded the limit for the number of modified stable memory pages \
-                for a single message execution"
+            "Canister exceeded the limit for the number of accessed or modified \
+                heap or stable memory pages for a single message execution"
         }
         QueryCallGraphTooDeep => "Query call graph contains too many nested calls",
         QueryCallGraphTotalInstructionLimitExceeded => {
