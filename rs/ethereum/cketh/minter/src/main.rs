@@ -411,6 +411,7 @@ async fn get_minter_info() -> MinterInfo {
             ),
             erc20_balances,
             minimum_deposit_amounts,
+            minimum_eth_deposit_amount: Some(min_deposit(&Asset::Eth).into()),
             last_eth_scraped_block_number,
             last_erc20_scraped_block_number,
             last_deposit_with_subaccount_scraped_block_number,
