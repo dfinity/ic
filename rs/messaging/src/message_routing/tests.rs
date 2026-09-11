@@ -2473,7 +2473,7 @@ fn process_batch_resets_merge_marker() {
             randomness: Randomness::new([123; 32]),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(1),
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
             replica_version: test_replica_version(),
         });
 
