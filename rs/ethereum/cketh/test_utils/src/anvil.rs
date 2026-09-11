@@ -385,15 +385,19 @@ impl Anvil {
             .unwrap_or_else(|e| panic!("not a u64 transaction count {count}: {e}"))
     }
 
+    /// The nonces of the EIP-7702 tuples `tx_hash` carries, in the order it lists them. Empty for a
+    /// transaction carrying no authorization list at all, which is what a sweep of addresses that
+    /// are all delegated already is.
     pub fn authorization_nonces(&self, tx_hash: &str) -> Vec<u64> {
         let transaction = self.rpc("eth_getTransactionByHash", serde_json::json!([tx_hash]));
         assert!(
             !transaction.is_null(),
             "no transaction {tx_hash} on the chain"
         );
-        transaction["authorizationList"]
-            .as_array()
-            .unwrap_or_else(|| panic!("transaction {tx_hash} carries no authorization list"))
+        let Some(tuples) = transaction["authorizationList"].as_array() else {
+            return Vec::new();
+        };
+        tuples
             .iter()
             .map(|tuple| {
                 let nonce = tuple["nonce"].as_str().unwrap_or_else(|| {
