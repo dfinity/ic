@@ -2968,6 +2968,7 @@ mod sweep_lane {
     use ethnum::u256;
     use ic_ethereum_types::Address;
     use icrc_ledger_types::icrc1::account::Account;
+    use std::slice::from_ref;
 
     const EIP1559_TX_ID: u8 = 2;
     const SET_CODE_TX_ID: u8 = 4;
@@ -3061,7 +3062,9 @@ mod sweep_lane {
         let erc20 = Asset::Erc20(Address::new([0xc0; 20]));
 
         let items_for = |addresses: u8| -> Vec<AuthorizedSweepItem> {
-            (1..=addresses).map(|seed| sweep_item(seed, None)).collect()
+            (1..=addresses)
+                .map(|seed| sweep_item(seed, Some(authorization(seed))))
+                .collect()
         };
 
         assert_eq!(
@@ -3093,10 +3096,39 @@ mod sweep_lane {
             sweep_gas_limit(Asset::Eth, &items_for(10)) < sweep_gas_limit(erc20, &items_for(10))
         );
 
-        let one_address_ten_times: Vec<_> = (0..10).map(|_| sweep_item(1, None)).collect();
+        let one_address_ten_times: Vec<_> = (0..10)
+            .map(|_| sweep_item(1, Some(authorization(1))))
+            .collect();
         assert_eq!(
             sweep_gas_limit(erc20, &one_address_ten_times),
-            sweep_gas_limit(erc20, &items_for(1))
+            GasAmount::new(585_000),
+            "the balance check and the transfer collapse onto the one address walked, while every \
+             tuple in the list is charged"
+        );
+    }
+
+    #[test]
+    fn should_charge_authorization_gas_only_for_items_carrying_a_tuple() {
+        let erc20 = Asset::Erc20(Address::new([0xc0; 20]));
+        let delegated = sweep_item(1, None);
+        let to_delegate = sweep_item(2, Some(authorization(2)));
+
+        assert_eq!(
+            sweep_gas_limit(erc20, from_ref(&delegated)),
+            GasAmount::new(185_000),
+            "an address swept without a tuple costs its balance check and its transfer only"
+        );
+        assert_eq!(
+            sweep_gas_limit(erc20, &[delegated.clone(), to_delegate.clone()]),
+            GasAmount::new(350_000)
+        );
+        assert_eq!(
+            sweep_gas_limit(Asset::Eth, from_ref(&delegated)),
+            GasAmount::new(100_000)
+        );
+        assert_eq!(
+            sweep_gas_limit(Asset::Eth, &[delegated, to_delegate]),
+            GasAmount::new(180_000)
         );
     }
 

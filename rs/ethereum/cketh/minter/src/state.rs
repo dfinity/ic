@@ -1,6 +1,7 @@
 use crate::address::ecdsa_public_key_to_address;
 use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
+use crate::balance_scan::batcher::Delegation;
 use crate::deposit_address::{DepositAddress, deposit_address, sweeper_address};
 use crate::endpoints::CandidBlockTag;
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
@@ -8,13 +9,15 @@ use crate::eth_logs::{EventSource, ReceivedEvent};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
 use crate::lifecycle::upgrade::UpgradeArg;
-use crate::logs::DEBUG;
+use crate::logs::{DEBUG, INFO};
 use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
 use crate::runtime::CanisterRuntime;
-use crate::state::automatic_deposits::{AutomaticDeposits, RegisterDepositError, ScanProgress};
+use crate::state::automatic_deposits::{
+    AutomaticDeposits, DelegatedSweepTarget, RegisterDepositError, ScanProgress, SweepTarget,
+};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
 use crate::state::transactions::{
@@ -308,31 +311,58 @@ impl State {
         )
     }
 
-    /// What every deposit address in `accounts` authorizes to let the configured sweeper contract
-    /// sweep it: the tuple naming this minter's chain, that contract, and nonce zero. `None` while
-    /// no sweeper contract is configured.
+    /// What each of `targets` needs from this sweep to let the configured sweeper contract sweep
+    /// it, decided from the delegation `delegations` read on chain for its address: no tuple at
+    /// all once the address is delegated to that contract, otherwise the tuple naming this
+    /// minter's chain, that contract, and the nonce the tuple must spend. `None` while no sweeper
+    /// contract is configured.
     ///
-    /// The nonce is always zero, whatever the address actually holds. A deposit address is at
-    /// nonce zero exactly while it has never been delegated — applying an authorization spends it
-    /// — so the tuple either installs the delegation or is skipped, and both are correct in any
-    /// order the sweeps carrying them land. That is what lets a sweep authorize every address it
-    /// touches without tracking which ones are already delegated, at the price of the intrinsic
-    /// gas a skipped tuple still costs.
-    pub fn authorization_requests<T: AsRef<Account>>(
+    /// A target whose address holds contract code, or whose delegation the read did not yield, is
+    /// left out rather than swept: no tuple can be applied to the first, and the second is unknown
+    /// ground. Both stay queued for a later tick.
+    ///
+    /// The nonce of a tuple is zero, the nonce of an address that has never been delegated —
+    /// applying an authorization spends it — so a tuple this sweep carries either installs the
+    /// delegation or is skipped, and both are correct in any order the sweeps carrying them land.
+    /// An address delegated to another contract therefore keeps that delegate: its tuple is
+    /// skipped, until the minter learns to rotate a delegation.
+    pub fn sweep_delegations(
         &self,
-        accounts: &[T],
-    ) -> Option<Vec<AuthorizationRequest>> {
+        targets: &[SweepTarget],
+        delegations: &BTreeMap<DepositAddress, Delegation>,
+    ) -> Option<Vec<DelegatedSweepTarget>> {
         let delegate = self.sweeper_contract_address?;
+        let authorize = |target: &SweepTarget, nonce| {
+            Some(AuthorizationRequest::new(
+                target.account(),
+                self.ethereum_network.chain_id(),
+                delegate,
+                nonce,
+            ))
+        };
         Some(
-            accounts
+            targets
                 .iter()
-                .map(|account| {
-                    AuthorizationRequest::new(
-                        *account.as_ref(),
-                        self.ethereum_network.chain_id(),
-                        delegate,
-                        TransactionNonce::ZERO,
-                    )
+                .filter_map(|target| {
+                    let authorization = match delegations.get(&target.address()) {
+                        Some(Delegation::Delegated(installed)) if *installed == delegate => None,
+                        Some(Delegation::NotDelegated) => authorize(target, TransactionNonce::ZERO),
+                        Some(Delegation::Delegated(_another_delegate)) => {
+                            authorize(target, TransactionNonce::ZERO)
+                        }
+                        Some(Delegation::Other) | None => {
+                            log!(
+                                INFO,
+                                "[sweep_delegations]: LEAVING OUT {}: its delegation is unknown or it holds contract code",
+                                target.address().as_address()
+                            );
+                            return None;
+                        }
+                    };
+                    Some(DelegatedSweepTarget {
+                        target: *target,
+                        authorization,
+                    })
                 })
                 .collect(),
         )

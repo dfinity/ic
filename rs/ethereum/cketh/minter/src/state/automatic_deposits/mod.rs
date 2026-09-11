@@ -791,3 +791,17 @@ impl AsRef<Account> for SweepTarget {
         &self.account
     }
 }
+
+/// A [`SweepTarget`] and the EIP-7702 authorization the sweep must carry for it, `None` once its
+/// address is already delegated to the sweeper contract the sweep calls.
+#[derive(Clone, Debug)]
+pub struct DelegatedSweepTarget {
+    pub target: SweepTarget,
+    pub authorization: Option<AuthorizationRequest>,
+}
+
+impl AsRef<Account> for DelegatedSweepTarget {
+    fn as_ref(&self) -> &Account {
+        self.target.as_ref()
+    }
+}
