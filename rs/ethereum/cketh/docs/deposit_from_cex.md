@@ -1208,8 +1208,7 @@ the minter can `sign_with_ecdsa` for it under the same `path`. The paths are
 master key (+ root chain code)
 ├── []                            → minter main address      (MAIN_DERIVATION_PATH; withdrawals, R6 destination)
 ├── [1, principal, subaccount]    → deposit address, one per IC account (ERC-20 and, Phase 2, ETH)
-├── [2, principal, subaccount]    → reserved (CKETH_DEPOSIT_SCHEMA_TAG; the discarded per-asset ETH address — defined in code, never derived)
-└── [3]                           → dedicated sweeper address (R17; its own schema tag, no account components)
+└── [3]                           → dedicated sweeper address (R17; its own schema tag, no account components; tag 2, once planned for a per-asset ETH address, was never used)
 ```
 
 A deposit EOA is **not** derived beneath the sweeper. Tree position carries no

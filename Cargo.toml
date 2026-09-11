@@ -618,11 +618,11 @@ async-recursion = "1.0.5"
 async-stream = "0.3.6"
 async-trait = "0.1.89"
 axum = { version = "0.8.4", features = ["ws"] }
-axum-extra = { version = "0.10.1", features = ["typed-header"] }
+axum-extra = { version = "0.12", features = ["middleware", "typed-header"] }
 axum-otel-metrics = "0.14.1"
 axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backon = { version = "1.6.0", default-features = false, features = ["std"] }
-base64 = { version = "0.13.1" }
+base64 = { version = "0.22" }
 bech32 = "^0.9.0"
 bincode = "1.3.3"
 bip32 = "0.5.0"
@@ -766,7 +766,7 @@ inotify = { version = "0.11.2", default-features = false, features = [
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
 json5 = "^0.4.1"
-jsonrpc = "0.18.0"
+jsonrpc = "0.20.1"
 k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
     "ecdsa",
@@ -789,7 +789,7 @@ lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789f
 lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
 local-ip-address = "0.6.13"
 loopdev-3 = "0.5"
-lru = { version = "0.7.8", default-features = false }
+lru = { version = "0.12", default-features = false }
 lzma-sys = { version = "0.1.20", features = ["static"] }
 macaddr = "1.0"
 maplit = "^1.0.2"
@@ -798,7 +798,7 @@ memmap2 = "0.9.5"
 minicbor = { version = "0.22.0", features = ["alloc", "derive"] }
 minicbor-derive = "0.14.0"
 mockall = "0.15.0"
-mockito = "1.6.1"
+mockito = { version = "1.6.1", default-features = false }
 more-asserts = "0.3.1"
 nftables = "0.4"
 nix = { version = "0.31.3", features = [
