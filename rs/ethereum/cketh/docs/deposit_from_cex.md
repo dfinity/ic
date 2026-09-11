@@ -657,12 +657,20 @@ watchlist into a **balance-sweep queue** (one entry per funded `(account, token)
 key) handed to the sweeper, and is no longer re-scanned; the pair's siblings —
 other tokens at the same address — keep scanning, and the rest cost nothing
 further this tick. A balance is only ever a trigger, never a source of truth (see
-the screening discussion below). For native ETH (Phase 2), the batcher reads the
-address' ETH balance in the same latest-block call: an `(address, ETH)` pair is
-appended to the calldata like a token pair, with the zero address in the token
-slot, and the program answers it with the `BALANCE` opcode on the holder instead
-of a `balanceOf` sub-call — the same 32-byte slot in the flat result, so the
-decoder is unchanged. The balance delta is only the sweep trigger (`R11`) —
+the screening discussion below). For native ETH (Phase 2), the ETH balances are
+read by a **sibling program**: a separate, much smaller (78-byte) init-code blob
+run by its own create-style `eth_call`, pinned to the same latest block as the
+ERC-20 one. Its calldata carries one holder word per `(address, ETH)` pair — no
+token word — and it reads each balance with the `BALANCE` opcode, so it makes no
+sub-calls and has no failure path at all. It returns the same flat
+32-bytes-per-entry blob, so the decoder is shared, as is the per-call cap (derived
+from the tighter ERC-20 encoding, which the ETH program stays far below).
+Overloading the ERC-20 program instead — the zero address in the token slot
+standing for native ETH — was rejected: a zero token word is today an impossible
+value that reverts the whole call loudly, and giving it a meaning would turn that
+alarm into a valid instruction; keeping the two programs apart also leaves the
+ERC-20 init-code bytes, validated byte-identical across all four providers,
+untouched. The balance delta is only the sweep trigger (`R11`) —
 there are no logs to confirm against, and the mint follows the sweep's
 finalized helper event like any other deposit (step 4).
 
@@ -988,7 +996,7 @@ sequenceDiagram
     User->>CEX: withdraw ETH to the deposit address
     CEX->>D: plain ETH send — 21'000 gas while code-less, 21'095 into the<br/>delegate's minimal receive() once delegated (R12)
     loop while the (address, ETH) pair is armed
-        Minter->>D: latest-block ETH balance, read in the same<br/>deployless-batcher call as the ERC-20 scans
+        Minter->>D: latest-block ETH balance, read by the sibling ETH<br/>deployless batcher at the same block as the ERC-20 scans
     end
     Note over Minter: balance delta detected (R11): queue the ETH sweep.<br/>No Transfer log exists, so sender screening is weaker (step 3)
     Sw->>S: sweep tx on the sweeper's own nonce lane (R17), R14-prepaid gas:<br/>type 0x04 if the address is not yet delegated, else 0x02:<br/>sweepEthBatch([(deposit address, principal, subaccount, attestation)])
@@ -1689,8 +1697,8 @@ exercised by the anvil-backed integration tests.
    the read shows another delegate, the nonce advanced from finalized sweeps and
    rebuilt on replay; anvil rotation test against a second deployment of the
    delegate. AC: `R8`, `R18`.
-8. **Phase 2: ckETH** (`deposit_eth` on the shared delegated address, the ETH
-   pair in the balance batcher, an `ETH | ERC-20` asset in the per-pair state
+8. **Phase 2: ckETH** (`deposit_eth` on the shared delegated address, the sibling
+   ETH balance batcher, an `ETH | ERC-20` asset in the per-pair state
    and sweep queue, `sweepEthBatch` encoding, compliance sign-off).
    AC: `R11`, `R12`.
 
