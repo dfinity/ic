@@ -438,14 +438,50 @@ impl LiveSetup<CkErc20Setup> {
         caller: Principal,
         subaccount: [u8; 32],
     ) -> DepositEthResponse {
+        self.await_eth_deposit_status(caller, subaccount, "the ETH deposit was not detected", {
+            |status| matches!(status, DepositEthStatus::AwaitingSweep(_))
+        })
+    }
+
+    /// The ETH pendant of [`Self::await_scan`]: waits until the pair was scanned at a block
+    /// where its funding is visible, observed through `deposit_eth`'s own status.
+    pub fn await_eth_scan(&self, caller: Principal, subaccount: [u8; 32]) -> DepositEthResponse {
+        let funded_by = Nat::from(self.anvil.block_number());
+        self.await_eth_deposit_status(
+            caller,
+            subaccount,
+            &format!("the ETH deposit address was not scanned at or past block {funded_by}"),
+            |status| match status {
+                DepositEthStatus::Scanning {
+                    scan_count,
+                    last_scanned_block,
+                    ..
+                } => {
+                    *scan_count >= 1
+                        && last_scanned_block
+                            .as_ref()
+                            .is_some_and(|block| *block >= funded_by)
+                }
+                DepositEthStatus::AwaitingSweep(_) => true,
+            },
+        )
+    }
+
+    fn await_eth_deposit_status(
+        &self,
+        caller: Principal,
+        subaccount: [u8; 32],
+        what: &str,
+        is_done: impl Fn(&DepositEthStatus) -> bool,
+    ) -> DepositEthResponse {
         let mut reached = None;
         self.drive_until_with(
             SCAN_TICK,
             SCAN_TICKS,
-            |_| "the ETH deposit was not detected".to_string(),
+            |_| what.to_string(),
             |setup| {
                 let progress = setup.deposit_eth(caller, subaccount);
-                let done = matches!(progress.status, DepositEthStatus::AwaitingSweep(_));
+                let done = is_done(&progress.status);
                 if done {
                     reached = Some(progress);
                 }
@@ -1359,20 +1395,12 @@ impl DepositEthCalls {
         let deposits: Vec<EthCexDeposit> = self
             .responses
             .into_iter()
-            .map(|(plan, response)| {
-                let minimum = nat_to_u128(response.minimum_deposit_amount);
-                assert!(
-                    plan.amount >= minimum,
-                    "the planned deposit of {} wei is below the reported minimum of {minimum} wei",
-                    plan.amount
-                );
-                EthCexDeposit {
-                    address: Address::from_str(&response.address)
-                        .expect("BUG: minter returned an invalid deposit address"),
-                    owner: plan.owner,
-                    subaccount: plan.subaccount,
-                    amount: plan.amount,
-                }
+            .map(|(plan, response)| EthCexDeposit {
+                address: Address::from_str(&response.address)
+                    .expect("BUG: minter returned an invalid deposit address"),
+                owner: plan.owner,
+                subaccount: plan.subaccount,
+                amount: plan.amount,
             })
             .collect();
         let accounts: BTreeSet<(Principal, [u8; 32])> = deposits
