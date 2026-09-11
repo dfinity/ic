@@ -353,6 +353,113 @@ fn should_flag_only_erc20_deposits_at_or_above_the_per_token_minimum() {
 }
 
 #[test]
+fn should_credit_mixed_erc20_and_eth_deposits_through_one_sweep_per_asset() {
+    let setup = LiveSetup::<CkErc20Setup>::new()
+        .fund_fee_account()
+        .expect_fee_account_credited()
+        .upgrade_minter()
+        .expect_sweeper_address_derived()
+        .expect_eth_received()
+        .expect_funding_finalized();
+
+    let sweeper = setup.await_sweeper_address();
+    let funded_gas = setup.anvil_eth_balance(&sweeper);
+    let delegate = setup.sweep_contracts().delegate;
+    let minter_eth_before = setup.minter_eth_balance();
+    let [usdc, usdt]: [Erc20Token; 2] = setup
+        .supported_erc20_tokens_owned()
+        .try_into()
+        .expect("expected exactly 2 supported tokens");
+
+    let erc20_only = (setup.depositor(1), [1_u8; 32]);
+    let both_assets = (setup.depositor(2), [2_u8; 32]);
+    let eth_only = (setup.depositor(3), [3_u8; 32]);
+    let usdc_amount = 3 * setup.minimum_deposit_amount(&usdc);
+    let usdt_amount = 5 * setup.minimum_deposit_amount(&usdt);
+    let both_eth_amount = 4 * MINIMUM_ETH_DEPOSIT_WEI;
+    let eth_only_amount = 7 * MINIMUM_ETH_DEPOSIT_WEI;
+
+    let (setup, erc20_deposits) = setup
+        .call_minter_deposit_erc20([
+            DepositPlan {
+                owner: erc20_only.0,
+                subaccount: erc20_only.1,
+                token: usdc.clone(),
+                amount: usdc_amount,
+            },
+            DepositPlan {
+                owner: both_assets.0,
+                subaccount: both_assets.1,
+                token: usdt.clone(),
+                amount: usdt_amount,
+            },
+        ])
+        .expect_deposit_responses();
+    let (setup, eth_deposits) = setup
+        .call_minter_deposit_eth([
+            EthDepositPlan {
+                owner: both_assets.0,
+                subaccount: both_assets.1,
+                amount: both_eth_amount,
+            },
+            EthDepositPlan {
+                owner: eth_only.0,
+                subaccount: eth_only.1,
+                amount: eth_only_amount,
+            },
+        ])
+        .expect_deposit_responses();
+    assert_eq!(
+        erc20_deposits[1].address, eth_deposits[0].address,
+        "one account deposits both assets at one address"
+    );
+
+    let setup = setup
+        .credit_deposits_from_cex(&erc20_deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+    let setup = setup
+        .credit_eth_deposits_from_cex(&eth_deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+
+    assert_matches!(
+        setup.await_detection(erc20_only.0, erc20_only.1, &usdc).status,
+        DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == usdc_amount
+    );
+    assert_matches!(
+        setup.await_detection(both_assets.0, both_assets.1, &usdt).status,
+        DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == usdt_amount
+    );
+    assert_matches!(
+        setup.await_eth_detection(both_assets.0, both_assets.1).status,
+        DepositEthStatus::AwaitingSweep(detected) if detected.scanned_balance == both_eth_amount
+    );
+    assert_matches!(
+        setup.await_eth_detection(eth_only.0, eth_only.1).status,
+        DepositEthStatus::AwaitingSweep(detected) if detected.scanned_balance == eth_only_amount
+    );
+
+    let (setup, _sweeps) = setup
+        .await_sweeps(&sweeper, 3)
+        .expect_all_delegating_sweeps();
+
+    let setup = setup
+        .assert_sweeps_batched_per_token(&erc20_deposits)
+        .assert_eth_sweeps_batched(&[2])
+        .assert_addresses_swept_empty(&erc20_deposits)
+        .assert_eth_addresses_swept_empty(&eth_deposits)
+        .assert_minter_holds_swept_totals(&erc20_deposits)
+        .assert_minter_received_swept_eth_total(&eth_deposits, minter_eth_before)
+        .assert_delegations_installed(&erc20_deposits, &delegate)
+        .assert_eth_delegations_installed(&eth_deposits, &delegate)
+        .assert_sweeper_spent_gas(&sweeper, funded_gas);
+
+    let setup = setup.expect_mints(&erc20_deposits);
+    setup.expect_cketh_mints(&eth_deposits);
+}
+
+#[test]
 fn should_flag_only_eth_deposits_at_or_above_the_minimum() {
     const DEPOSIT_SUBACCOUNT: [u8; 32] = [42; 32];
 
