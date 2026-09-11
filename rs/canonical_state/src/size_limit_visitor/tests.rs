@@ -73,6 +73,7 @@ fn multiple_subtrees() {
     let visitor = SizeLimitVisitor::new(
         pattern,
         4 * MESSAGE_SIZE - 1,
+        true,
         TracingVisitor::new(NoopVisitor),
     );
 
@@ -143,9 +144,11 @@ fn stacked_visitors() {
     let visitor = SizeLimitVisitor::new(
         msg_pattern,
         3 * MESSAGE_SIZE,
+        true,
         SizeLimitVisitor::new(
             header_pattern,
             HEADER_SIZE,
+            true,
             TracingVisitor::new(NoopVisitor),
         ),
     );

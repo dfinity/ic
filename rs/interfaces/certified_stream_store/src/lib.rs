@@ -87,6 +87,10 @@ pub trait CertifiedStreamStore: Send + Sync {
     /// and messages beginning at `msg_begin` and containing at most `msg_limit`
     /// messages totaling at most `byte_limit` bytes.
     ///
+    /// `byte_limit` is enforced strictly for partial slices (`witness_begin <
+    /// msg_begin`). For full slices, the first message ignores `byte_limit`, to
+    /// avoid streams stalling indefinitely behind a large message.
+    ///
     /// Precondition: `witness_begin.is_none() && msg_begin.is_none() ||
     /// witness_begin.unwrap() <= msg_begin.unwrap()`.
     fn encode_certified_stream_slice(

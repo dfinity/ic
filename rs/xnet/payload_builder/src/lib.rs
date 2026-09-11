@@ -43,6 +43,7 @@ use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetListRegistry}
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, replicated_state::ReplicatedStateMessageRouting};
 use ic_types::batch::{ValidationContext, XNetPayload};
+use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
 use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex};
@@ -138,6 +139,8 @@ pub struct XNetPayloadBuilderMetrics {
     pub validate_payload_duration: HistogramVec,
     /// Track outstanding background query tasks
     pub outstanding_queries: IntGauge,
+    /// Count of pulled slices larger than the requested size.
+    pub pull_size_too_large: IntCounter,
     /// Critical error: failed `count_bytes()` on valid slice.
     pub critical_error_slice_count_bytes_failed: IntCounter,
     /// Critical error: mismatch between the byte sizes computed by `take_slice()`,
@@ -212,6 +215,10 @@ impl XNetPayloadBuilderMetrics {
             outstanding_queries: metrics_registry.int_gauge(
                 METRIC_OUTSTANDING_XNET_QUERIES,
                 "Number of xnet queries that have not finished",
+            ),
+            pull_size_too_large: metrics_registry.int_counter(
+                "xnet_builder_pull_size_too_large_count",
+                "Count of pulled slices larger than the requested size",
             ),
             critical_error_slice_count_bytes_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED),
@@ -1413,8 +1420,8 @@ pub fn adjusted_byte_limit(slice_byte_size: usize) -> usize {
     slice_byte_size.saturating_sub(350) * 98 / 100
 }
 
-/// Computes `RefillStreamSliceIndices` for every subnet whose stream slices should be refilled
-/// in the given certified slice pool owned by the given subnet.
+/// Computes `RefillStreamSliceIndices` for every subnet with a cached stream
+/// position in the given certified slice pool owned by the given subnet.
 pub fn refill_stream_slice_indices(
     pool_lock: Arc<Mutex<CertifiedSlicePool>>,
     own_subnet_id: SubnetId,
@@ -1467,11 +1474,10 @@ pub fn refill_stream_slice_indices(
             ),
         };
 
-        if slice_byte_limit < SLICE_BYTE_SIZE_MIN {
-            // No more space left in the pool for this slice, skip it.
-            continue;
-        }
-
+        // Poll every subnet regardless of how low `slice_byte_limit` is:
+        //  * A header-only suffix may usefully replace the pooled slice's.
+        //  * A complete slice will always include the first message, if any. We rely on
+        //    this to avoid stalling streams indefinitely behind large messages.
         result.insert(
             subnet_id,
             RefillStreamSliceIndices {
@@ -1575,9 +1581,26 @@ impl PoolRefillTask {
                 match query_result {
                     Ok(slice) => {
                         let logger = log.clone();
+                        let pull_size_too_large = metrics.pull_size_too_large.clone();
                         let res = tokio::task::spawn_blocking(move || {
+                            // Helper to log and instrument pulled slices above the requested byte limit.
+                            // For now, only track such occurrences. In the future, we may drop them.
+                            let observe_pull_size_too_large = |limit: usize, actual: usize| {
+                                warn!(
+                                    log,
+                                    "Stream from {subnet_id}: pulled payload size ({actual}) exceeds byte limit ({limit})",
+                                );
+                                pull_size_too_large.inc();
+                            };
+
                             if indices.witness_begin != indices.msg_begin {
-                                // Pulled a stream suffix, append to pooled slice.
+                                // Slice suffix, append to pooled slice.
+
+                                if slice.payload.len() > indices.byte_limit * 11 / 10 + 1024 {
+                                    // Payload is larger than what we requested, only bump an error metric for now.
+                                    observe_pull_size_too_large(indices.byte_limit, slice.payload.len());
+                                }
+
                                 CertifiedSlicePool::append(
                                     &pool,
                                     subnet_id,
@@ -1587,7 +1610,14 @@ impl PoolRefillTask {
                                     log,
                                 )
                             } else {
-                                // Pulled a complete stream, put it into the pool.
+                                // Complete slice, put it into the pool.
+
+                                let byte_limit = indices.byte_limit.max(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get() as usize);
+                                if slice.payload.len() > byte_limit * 11 / 10 + 1024 {
+                                    // Payload is larger than what we requested, only bump an error metric for now.
+                                    observe_pull_size_too_large(byte_limit, slice.payload.len());
+                                }
+
                                 CertifiedSlicePool::put(
                                     &pool,
                                     subnet_id,

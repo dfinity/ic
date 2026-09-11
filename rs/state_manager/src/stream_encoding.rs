@@ -40,7 +40,8 @@ fn find_path<'a>(
 
 /// Encodes a stream slice for the specified `subnet`, consisting of available
 /// messages beginning at `from` and ending before `to`, of total size at most
-/// `byte_limit`, using canonical tree form.
+/// `byte_limit` (but at least one, if `include_one` is set), using canonical
+/// tree form.
 ///
 /// Returns the encoded slice and the actual end index (which may be different
 /// from `to` if `byte_limit` is reached).
@@ -77,6 +78,7 @@ pub fn encode_stream_slice(
     from: StreamIndex,
     to: StreamIndex,
     byte_limit: Option<usize>,
+    include_one: bool,
 ) -> (LabeledTree<Vec<u8>>, StreamIndex) {
     use Matcher as M;
     use Pattern as P;
@@ -91,6 +93,7 @@ pub fn encode_stream_slice(
     let visitor = SizeLimitVisitor::new(
         size_limit_pattern,
         byte_limit,
+        include_one,
         LabeledTreeVisitor::default(),
     );
 
