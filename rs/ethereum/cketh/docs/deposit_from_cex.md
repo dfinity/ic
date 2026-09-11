@@ -838,8 +838,10 @@ Sweeping is two background tasks feeding one transaction pipeline:
   `balanceOf` on every `(address, token)` cross-product pair — most of them
   holding nothing. Up to 10 deposits ride one transaction
   (`MAX_DEPOSITS_PER_SWEEP`, gas-bound). Per deposit the task signs the account
-  attestation and the EIP-7702 authorization if it holds no recorded one yet —
-  both are signed once per address, recorded, and reused by every later sweep.
+  attestation and, when the address' on-chain delegation calls for one (see
+  [Changing the sweeper delegate](#changing-the-sweeper-delegate-delegate-rotation)),
+  an EIP-7702 authorization — both are signed once per address, recorded, and
+  reused by every later sweep.
   A sweep that still installs delegations is a type-`0x04`
   transaction, any other a plain type-`0x02` — and the transaction's `to` is
   always the deployed delegate instance `SweeperContract`, whose batch entry
@@ -1012,7 +1014,7 @@ sequenceDiagram
   from a dedicated sweeper address instead.
 * All Ethereum interaction goes through the EVM-RPC canister with multi-provider
   threshold consensus (`src/eth_rpc_client/`); every new call (`eth_getLogs` per
-  deposit address, `eth_getBalance`, `eth_getTransactionCount` for deposit EOAs) must
+  deposit address, the batched balance and delegation `eth_call`s) must
   use the same reduction strategies.
 * Each EVM-RPC call today is one HTTPS outcall *per provider* and each outcall burns
   cycles. The bulk balance scans of step 3 collapse to a single create-style
@@ -1216,11 +1218,10 @@ control, which is the recovery story of step 1.
   the deposit address' derivation path; `chain_id` is set explicitly (never 0) to
   prevent cross-chain replay; recovery-id determination reuses the existing
   `Eip1559Signature` machinery.
-* Deposit-EOA nonces: never read from the chain in the steady state. Every
-  first authorization is signed for nonce 0, and the minter derives each
-  address' delegation (delegate and nonce) from its own finalized sweeps;
-  `eth_getTransactionCount` is read only to repair that record after a
-  reverted sweep (see
+* Deposit-EOA nonces: never read from the chain. Every first authorization is
+  signed for nonce 0; which delegate an address runs is read from its on-chain
+  code before the sweep, and the nonce a rotation tuple pins is a per-address
+  counter the minter advances from its own finalized sweeps (see
   [Changing the sweeper delegate](#changing-the-sweeper-delegate-delegate-rotation)).
   Deposit EOAs never send transactions themselves, so only the minter's own
   authorizations ever advance their nonces.
@@ -1287,8 +1288,8 @@ the on-chain account, not to key derivation, so each sibling has its own lane:
   nonce 1 is already delegated), at the cost of the full 25'000-gas tuple
   charge: EIP-7702 checks the nonce *before* it grants the existing-account
   refund, and a failing check ends the tuple's processing, so a skipped tuple
-  earns no refund at all. Tracking each address' delegation from the minter's
-  own finalized sweeps — what
+  earns no refund at all. Reading each address' delegation from the
+  chain before the sweep — what
   [Changing the sweeper delegate](#changing-the-sweeper-delegate-delegate-rotation)
   introduces — is what lets later sweeps drop the tuple (type `0x02`) and, when
   the delegate changes, sign the re-delegation at the right nonce.
@@ -1490,103 +1491,85 @@ locked (`R12`), but ETH deposits to it are impossible until it is rotated.
 
 **Design.** Rotation is lazy, per address, and rides the sweeps that would
 happen anyway — an address that never receives another deposit is never
-rotated, costs nothing (`R13`) and is harmless on the old delegate.
+rotated, costs nothing (`R13`) and is harmless on the old delegate. Which
+delegate an address runs is not inferred, it is **read from the chain**.
 
-1. **Delegation record.** The minter already stores every authorization it
-   signed, keyed by what was signed (`(account, chain, delegate, nonce)` →
-   signature). Signed is not applied: a signed tuple may sit in a sweep that is
-   still in flight, or in one that was never sent. The record adds only the
-   missing bit — **which stored authorizations were applied, and by which
-   sweep** — derived from the minter's own `FinalizedSweeperTransaction`
-   events, whatever their status: walking the mined transaction's
-   authorization list, a tuple whose nonce equals the address' current nonce
-   (the number of its tuples applied so far, 0 initially) is marked applied,
-   any other was skipped. An address' delegation then follows without a
-   second structure: its applied tuple with the highest nonce names the
-   current delegate, and its nonce is one above it; an address with no applied
-   tuple is not delegated. Replaying those events rebuilds the marks on upgrade
-   (`R8`). Sweep ids do not follow chain order — a sweep whose prepaid gas no
-   longer covers the fee is moved back in the queue, so a lower `SweepId` can
-   carry a higher sweeper nonce — which is why the minter finalizes the
-   receipts of a batch in the order the chain executed them (block number,
-   then transaction index) and emits the events in that order: the log, and
-   so the replay, walk the tuples as the chain applied them. The marks would
-   in fact come out the same in any order, since every tuple in flight for a
-   given address at any one time is the *same* tuple (see 5), but keeping the
-   log in chain order is what makes the nonce arithmetic plainly right rather
-   than right by that argument. The dashboard shows the resulting delegation
-   per address (`R9`).
-2. **Which tuple a sweep carries** is decided per item at enqueue time from the
-   record and the configured delegate:
+1. **The delegation read.** Before enqueueing a sweep, the minter reads the
+   code of every candidate deposit address in a single batched, create-style
+   `eth_call` — a third deployless program next to the balance batchers of
+   step 3, with the addresses appended as calldata and one `EXTCODECOPY(addr,
+   0, 32)` per address, so the flat result is one 32-byte word each and the
+   decode stays fixed-width. The word is read as: all zeros → no code; the
+   23-byte designator `0xef0100 ‖ delegate`, zero-padded → delegated to that
+   delegate, because EIP-3541 forbids deployed code from starting with `0xef`,
+   so a designator can never be confused with a contract; anything else → code
+   the minter did not install. The call is chunked by the same per-batch cap
+   as the balance scan, uses the same provider consensus, and runs at the same
+   **pinned latest block height** the balance scan reads — sweeps are sent
+   against `latest` too, and the scan that queued the deposit observed
+   `latest`. A chunk whose call fails drops its addresses from this tick only;
+   their queue entries stay and the next tick retries them.
+2. **Which tuple a sweep carries** follows from that word and the configured
+   delegate, per item:
 
-   | Record | Tuple in the sweep | Transaction type |
+   | Code at the deposit address | Tuple in the sweep | Transaction type |
    |---|---|---|
    | none | `(current delegate, 0)` — today's first sweep | `0x04` |
-   | `{ current delegate, n }` | none: the designator persists | `0x02` if no item needs a tuple |
-   | `{ other delegate, n }` | `(current delegate, n)` — the rotation, signed once and recorded like any other authorization — unless a tuple for `(address, n)` is already signed for another delegate, see 5 | `0x04` |
+   | designator naming the current delegate | none: the designator persists | `0x02` when no item of the sweep carries a tuple |
+   | designator naming another delegate | `(current delegate, n)` — the rotation, `n` the address' tracked delegation nonce | `0x04` |
 
-   The second row is new behavior too: an already-delegated address no longer
-   pays the full 25'000 gas of a skipped tuple on every sweep (the
+   Any other code at a deposit address is an anomaly the minter cannot
+   explain: the address is left out of sweeps and logged, rather than swept on
+   a guess. The second row is new behavior: an already-delegated address
+   no longer pays the full 25'000 gas of a skipped tuple on every sweep (the
    existing-account refund is only granted to tuples that pass the nonce
    check), which is the type-`0x02` "Transaction 3" of the
-   [primer](#eip-7702-primer-the-sweep-one-transaction-at-a-time).
-3. **The record is the source of truth.** The minter alone holds the deposit
-   keys, so a deposit address' nonce advances only when one of the minter's
-   own tuples is applied, and every tuple the minter signs and every sweep it
-   sends is recorded and finalized by receipt — the record therefore equals
-   the chain, and the rotation tuple is signed at the *recorded* nonce with no
-   chain read. The record can drift only through an operational error that
-   makes the minter skip a mined sweep's receipt (e.g. a manual
-   `next_sweeper_transaction_nonce` override past a sent, unfinalized sweep).
-   Drift is not silent: the mistimed tuple is skipped and the ETH sweep it
-   rides reverts. That revert is the **repair trigger**: a reverted sweep
-   invalidates the record of every address it touched, and before any of them
-   is swept again the minter re-reads `eth_getTransactionCount(address,
-   finalized)` with the usual consensus (the `finalized_transaction_count`
-   helper already used for the sweeper's own nonce) and re-anchors the record
-   on it — at `finalized`, not `latest`, so the observation agrees with the
-   finalized receipts every other mark comes from and cannot be reorged out.
-   An observation the record cannot explain (a nonce beyond every tuple the
-   minter signed, or two unapplied tuples at one nonce, possible only in
-   state that predates the one-tuple-per-nonce invariant) is not applied: the
-   address stays excluded from sweeps, is not re-read, and is surfaced by a
-   metric for manual repair.
-   The chain nonce identifies the current delegate without `eth_getCode`: the
-   recorded tuple at `nonce − 1` is the one that installed it. Sweeping,
-   rotation included, makes no per-address chain read on the happy path.
-4. **Entry-point gating.** A sweep item is only enqueued if the delegate its
-   address will be running *when the call executes* has the entry point: for
-   `sweepErc20Batch` any delegate version qualifies (the ABI is stable across
-   versions, rule below); for `sweepEthBatch` the item needs either a record
-   naming the current delegate or a rotation tuple in the same transaction —
-   tuples apply before execution, so one transaction both rotates and sweeps.
-5. **Concurrency: one signed tuple per `(address, nonce)`, whatever the
-   delegate.** The signing step enforces this invariant by looking the store
-   up by `(address, nonce)` across delegates before signing. The case that
-   needs it: a sweep carrying `(old delegate, n)` is in flight when the
-   `UpgradeArg` switches the delegate, and another asset of the same address
-   is queued. Signing `(new delegate, n)` now would let sender-nonce order
-   apply the old tuple and skip the new one, and an ETH sweep riding the new
-   tuple would then call `sweepEth` on the old code and revert. So while a
-   tuple for `(address, n)` naming another delegate exists and is not yet
-   marked applied, it is still the one that will apply: an ERC-20 item
-   **re-carries that tuple** (both delegates serve `sweepErc20`, and the
-   tuple is idempotent — whichever sweep mines first applies it, the other
-   skips it), while an ETH item **waits** in the queue until that tuple's
-   sweep is finalized; the rotation is then signed at `n + 1`. Two in-flight
-   sweeps carrying the same tuple are always safe, in whichever order their
-   receipts are processed: the first marks the tuple applied (`n → n + 1`),
-   the second finds `n ≠ n + 1` and marks it skipped. No ordering can
-   therefore point an address anywhere the minter did not sign for, and no
-   rotation-dependent call ever runs on the old code.
+   [primer](#eip-7702-primer-the-sweep-one-transaction-at-a-time); the sweep's
+   gas budget charges the per-tuple cost only for the items that actually
+   carry one.
+3. **The delegation nonce.** The chain says *which* delegate an address runs;
+   what a rotation tuple still needs is the nonce to pin it at, and that the
+   minter tracks itself — a per-address counter, no `eth_getTransactionCount`
+   on deposit EOAs. The counter equals the address' chain nonce: incoming CEX
+   transfers never advance a nonce, the minter alone holds the deposit keys,
+   so only its own applied tuples do, and every sweep it sends is finalized by
+   receipt — the same pipeline discipline the withdrawal lane has always
+   relied on. The counter therefore advances when a
+   *finalized* sweep carried a tuple whose nonce equals the counter, **whatever
+   the receipt status**: tuples are processed before the call phase and persist
+   on revert, so a reverted sweep still delegated. Two sweeps carrying the same
+   tuple advance it once, in either finalization order. Nothing new is
+   persisted for this: the counter is rebuilt on upgrade by replaying the
+   existing sweep events (`R8`).
+
+   Because the read is at `latest`, it can show a delegation whose sweep the
+   minter has not finalized yet. The rotation tuple is then signed one nonce
+   low, the protocol skips it, and the sweep after that finalization rotates
+   correctly.
+4. **Entry-point gating** stays with the Phase 2 ETH work; what makes it
+   possible is that tuples apply before execution, so a rotation tuple in the
+   same transaction is what lets an ETH sweep run on the new code.
+
+**Operational note: switch the delegate when no sweep is in flight.** One race
+stays open. A sweep carrying `(old delegate, n)` is in flight when an upgrade
+switches the configured delegate, and a later tick enqueues the address' other
+asset: the read still shows the old delegate, so the second sweep carries the
+rotation tuple `(new delegate, n)` — the same nonce the in-flight one pins.
+The in-flight sweep sits earlier in the sweeper's nonce lane, so its tuple
+applies and the rotation tuple is skipped. If the second sweep is an ETH one,
+it then calls `sweepEth` on the old code and reverts as a whole batch; its
+deposits leave the queue and are swept once their pair is re-armed (`R5`), the
+funds stay at the address throughout (`R12`), and the next sweep of that
+address rotates correctly. The window is the operator's upgrade, so the remedy
+is operational: switch the delegate when no sweep is in flight.
 
 **Rules for the next delegate version**, so that a mixed population keeps
 working while rotation is lazy:
 
 * Keep the selectors and semantics of the existing entry points
   (`sweepErc20`, `sweepErc20Batch`, `sweepEth`, `sweepEthBatch`) unchanged;
-  a version that must break one of them makes every sweep through it a
-  rotating sweep (row 3 above) until the population has moved.
+  a version that must break one of them makes every sweep of a not-yet-rotated
+  address a rotating sweep (row 3 above) until the population has moved.
 * Keep the delegate storage-less: rotation then leaves nothing behind at the
   address, and `SELF`-style guards keep working per instance.
 * A new delegate wired to the **same helper** needs no new attestations: the
@@ -1600,7 +1583,7 @@ working while rotation is lazy:
   for `address(0)`, the kill switch should a delegate turn out to be unsafe)
   are the same mechanism with a different target; clearing all addresses is
   an eager operation that the lazy design does not need to provide.
-* Eager rotation — signing the tuples of every recorded address up front and
+* Eager rotation — signing the tuples of every registered address up front and
   sending tuple-only type-`0x04` transactions (an empty batch call carrying an
   authorization list, ≈ 25'000 gas per tuple before refunds) — is an
   operational shortcut for small populations, not part of the minter: it
@@ -1641,12 +1624,14 @@ Unit tests (in `tests.rs` files per module, helpers in `test_fixtures.rs`):
   amount plus the funding fee, the sweeper balance reconciles on-chain, and the
   surplus is neither re-minted nor offset against the next funding's burn.
 * Event replay: state reconstructed from audit events equals live state (`R8`).
-* Delegation record: built from finalized sweeps (applied and skipped tuples,
-  reverted sweeps), replay-equivalent; tuple selection per record row (none /
-  current delegate / other delegate) and the `0x02`/`0x04` type that follows;
-  a reverted sweep invalidates its addresses and the next sweep re-anchors
-  them on the chain nonce; ETH items gated on the delegate they will run on
-  (`R18`).
+* Delegation read: the `EXTCODECOPY` batcher's calldata encoding and its
+  decode of an empty word, of a designator and of other code; tuple selection
+  per decoded row (no code / current delegate / another delegate) and the
+  `0x02`/`0x04` type that follows; the per-address delegation nonce (advanced
+  by a finalized sweep carrying a tuple at the counter, whatever the receipt
+  status, once for two sweeps carrying the same tuple) and its replay
+  equivalence; the sweep gas budget charging a tuple only for the items that
+  carry one (`R18`).
 
 Integration tests (state-machine tests in `rs/ethereum/cketh/minter/tests` with the
 mocked EVM-RPC canister, extending the existing fixtures):
@@ -1662,14 +1647,13 @@ mocked EVM-RPC canister, extending the existing fixtures):
 * Solidity: tests for the delegate (a permissionless sweep only ever credits the
   attested account and funds only reach the minter, USDT-style token,
   delegated-EOA execution against a Prague-enabled local node) (`R6`, `R12`).
-* Delegate rotation on anvil, against the archived pre-`#11449` delegate source
-  kept as a test fixture next to the demo contracts: install the minter with
-  the previous delegate, sweep an ERC-20 deposit (nonce 0 → 1), upgrade the
-  minter to the current delegate; a plain ETH send must still bounce at the
-  sender; an ERC-20 deposit then sweeps with a `(current, 1)` tuple and the
-  designator flips (nonce 2); a following ETH deposit lands and sweeps through
-  `sweepEthBatch`; an address already on the current delegate is swept by a
-  type-`0x02` transaction (`R18`).
+* Delegate rotation on anvil, against a second deployment of the same delegate
+  source at another address (no archived contract is needed — what rotation
+  turns on is the delegate *address*, not its code): sweep an ERC-20 deposit
+  (nonce 0 → 1), then upgrade the minter to the second instance; the next
+  sweep of that address carries a `(current, 1)` tuple and flips the designator
+  to the second instance (nonce 2), and the sweep after that carries no tuple
+  at all (type `0x02`) (`R18`).
 * Phase 2 end-to-end: `deposit_eth` → plain send to the (delegated) address →
   balance-delta detection → `sweepEthBatch` → helper event → ckETH mint
   (`R11`, `R12`).
@@ -1696,15 +1680,15 @@ exercised by the anvil-backed integration tests.
 5. **Phase 1 launch on Sepolia**, then mainnet via NNS upgrade proposal; frontend
    (OISY) integration of `deposit_erc20` (single call — no polling
    required, `R15`).
-6. **Delegation record and tuple-less sweeps**: per-address delegation derived
-   from finalized sweeps, replayed on upgrade, on the dashboard; sweeps of
-   delegated addresses drop their tuples (type `0x02`). AC: `R8`, `R9`,
-   record-derived tuple selection.
-7. **Delegate rotation**: rotation tuples at the recorded nonce when the
-   configured delegate differs from the recorded one, record invalidation on
-   reverted sweeps with a chain re-read before the next sweep, ETH entry-point
-   gating; anvil rotation test against the archived previous delegate.
-   AC: `R18`.
+6. **On-chain delegation read and tuple-less sweeps**: the batched
+   `EXTCODECOPY` read before enqueueing, on the dashboard; sweeps of addresses
+   already running the current delegate drop their tuples (type `0x02`) and the
+   gas budget charges a tuple only per tuple carried. AC: `R9`, tuple selection
+   from the read.
+7. **Delegate rotation**: rotation tuples at the tracked per-address nonce when
+   the read shows another delegate, the nonce advanced from finalized sweeps and
+   rebuilt on replay; anvil rotation test against a second deployment of the
+   delegate. AC: `R8`, `R18`.
 8. **Phase 2: ckETH** (`deposit_eth` on the shared delegated address, the ETH
    pair in the balance batcher, an `ETH | ERC-20` asset in the per-pair state
    and sweep queue, `sweepEthBatch` encoding, compliance sign-off).
@@ -1912,7 +1896,7 @@ nonce, see [Changing the sweeper delegate](#changing-the-sweeper-delegate-delega
 
 | Variant | Pros | Cons |
 |---|---|---|
-| **Lazy re-delegation** (chosen): the next sweep of an address on an old delegate carries a tuple for the current one, signed at the nonce the minter's own record holds | No new trust assumption on Ethereum; nothing changes for the user; cost only for addresses that receive deposits again (`R13`); the same mechanism clears delegations (`address(0)`) | One extra signature and ≈ 25'000 gas per rotated address; the minter must track delegation and nonces per address; entry points absent from the old delegate need gating until rotation |
+| **Lazy re-delegation** (chosen): the next sweep of an address whose on-chain code names an old delegate carries a tuple for the current one, signed at the nonce the minter tracks | No new trust assumption on Ethereum; nothing changes for the user; cost only for addresses that receive deposits again (`R13`); the same mechanism clears delegations (`address(0)`) | One extra signature and ≈ 25'000 gas per rotated address; one batched delegation read per enqueue tick, and a per-address nonce to track; entry points absent from the old delegate need gating until rotation |
 | **Upgradeable delegate** (beacon proxy: the delegate `DELEGATECALL`s an implementation read from an owner-controlled beacon) | No per-address rotation ever; one on-chain transaction upgrades everyone | Adds an admin key on Ethereum that can redirect every deposit address' code at once — exactly the trust the tECDSA design avoids; a delegate running in the EOA's context would `DELEGATECALL` twice; the beacon is mutable state the delegate must read on every sweep |
 | **Address rotation** (a new schema tag, so every account gets a fresh, never-delegated address) | No nonce management at all | Changes every user's deposit address — the wrong-address UX problem this design exists to avoid; the old addresses still need sweeping or recovery |
 
