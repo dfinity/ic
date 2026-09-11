@@ -501,9 +501,6 @@ fn should_credit_twenty_eth_deposits_through_ten_deposit_sweeps() {
     let delegate = setup.sweep_contracts().delegate;
     let minter_eth_before = setup.minter_eth_balance();
 
-    // Every depositor gets a distinct principal and a distinct subaccount, so no two share a
-    // deposit address, and a distinct amount, so a positional mixup in the batch cannot cancel
-    // out in the totals.
     let plans: Vec<EthDepositPlan> = (0..DEPOSITORS)
         .map(|index| EthDepositPlan {
             owner: setup.depositor(index),
@@ -517,13 +514,11 @@ fn should_credit_twenty_eth_deposits_through_ten_deposit_sweeps() {
         .expect_deposit_responses();
     let setup = setup.assert_eth_deposit_addresses_bare(&deposits);
 
-    // The CEX withdrawals: a plain ETH transfer to each address, carrying no calldata.
     let setup = setup
         .credit_eth_deposits_from_cex(&deposits)
         .expect_deposit_balances_on_anvil()
         .expect_each_awaiting_sweep();
 
-    // Two full ten-deposit sweeps, and nothing more.
     let (setup, _sweeps) = setup
         .await_sweeps(&sweeper, 2)
         .expect_all_delegating_sweeps();
@@ -553,8 +548,6 @@ fn should_sweep_a_second_eth_deposit_despite_resending_a_stale_authorization() {
     let sweeper = setup.await_sweeper_address();
     let delegate = setup.sweep_contracts().delegate;
     let minter_eth_before = setup.minter_eth_balance();
-    // The fee-account funding above minted ckETH too, so the deposit mints are counted
-    // against this baseline.
     let mints_before = count_cketh_mints(&setup);
     let owner = setup.depositor(1);
 
