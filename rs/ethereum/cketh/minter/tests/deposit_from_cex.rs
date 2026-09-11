@@ -24,8 +24,6 @@ use ic_cketh_test_utils::live::{
     CexDeposit, DepositPlan, EthCexDeposit, EthDepositPlan, LiveSetup,
 };
 use ic_cketh_test_utils::{CkEthSetup, SWEEPER_ADDRESS};
-
-const MINIMUM_ETH_DEPOSIT_WEI: u128 = 5_000_000_000_000_000;
 use ic_ethereum_types::Address;
 
 #[test]
@@ -376,8 +374,9 @@ fn should_credit_mixed_erc20_and_eth_deposits_through_one_sweep_per_asset() {
     let eth_only = (setup.depositor(3), [3_u8; 32]);
     let usdc_amount = 3 * setup.minimum_deposit_amount(&usdc);
     let usdt_amount = 5 * setup.minimum_deposit_amount(&usdt);
-    let both_eth_amount = 4 * MINIMUM_ETH_DEPOSIT_WEI;
-    let eth_only_amount = 7 * MINIMUM_ETH_DEPOSIT_WEI;
+    let eth_minimum = setup.minimum_eth_deposit_amount(both_assets.0, both_assets.1);
+    let both_eth_amount = 4 * eth_minimum;
+    let eth_only_amount = 7 * eth_minimum;
 
     let (setup, erc20_deposits) = setup
         .call_minter_deposit_erc20([
@@ -464,9 +463,10 @@ fn should_flag_only_eth_deposits_at_or_above_the_minimum() {
     const DEPOSIT_SUBACCOUNT: [u8; 32] = [42; 32];
 
     let setup = LiveSetup::<CkErc20Setup>::new();
-    let above_minimum = 2 * MINIMUM_ETH_DEPOSIT_WEI;
-    let at_minimum = MINIMUM_ETH_DEPOSIT_WEI;
-    let below_minimum = MINIMUM_ETH_DEPOSIT_WEI / 10;
+    let minimum = setup.minimum_eth_deposit_amount(setup.depositor(1), DEPOSIT_SUBACCOUNT);
+    let above_minimum = 2 * minimum;
+    let at_minimum = minimum;
+    let below_minimum = minimum / 10;
     let plans = [
         (setup.depositor(1), above_minimum),
         (setup.depositor(2), at_minimum),
@@ -607,12 +607,13 @@ fn should_credit_twenty_eth_deposits_through_ten_deposit_sweeps() {
     let funded_gas = setup.anvil_eth_balance(&sweeper);
     let delegate = setup.sweep_contracts().delegate;
     let minter_eth_before = setup.minter_eth_balance();
+    let eth_minimum = setup.minimum_eth_deposit_amount(setup.depositor(0), [0; 32]);
 
     let plans: Vec<EthDepositPlan> = (0..DEPOSITORS)
         .map(|index| EthDepositPlan {
             owner: setup.depositor(index),
             subaccount: [u8::try_from(index).unwrap(); 32],
-            amount: (u128::from(index) + 2) * MINIMUM_ETH_DEPOSIT_WEI,
+            amount: (u128::from(index) + 2) * eth_minimum,
         })
         .collect();
 
@@ -659,12 +660,13 @@ fn should_sweep_a_second_eth_deposit_despite_resending_a_stale_authorization() {
     let mints_before = setup
         .minter_count_events(|event| matches!(event.payload, EventPayload::MintedCkEth { .. }));
     let owner = setup.depositor(1);
+    let eth_minimum = setup.minimum_eth_deposit_amount(owner, DEPOSIT_SUBACCOUNT);
 
     let (setup, first_deposits) = setup
         .call_minter_deposit_eth([EthDepositPlan {
             owner,
             subaccount: DEPOSIT_SUBACCOUNT,
-            amount: 3 * MINIMUM_ETH_DEPOSIT_WEI,
+            amount: 3 * eth_minimum,
         }])
         .expect_deposit_responses();
     let setup = setup
@@ -685,7 +687,7 @@ fn should_sweep_a_second_eth_deposit_despite_resending_a_stale_authorization() {
     );
 
     let second_deposits = [EthCexDeposit {
-        amount: 2 * MINIMUM_ETH_DEPOSIT_WEI,
+        amount: 2 * eth_minimum,
         ..first_deposits[0].clone()
     }];
     let setup = setup

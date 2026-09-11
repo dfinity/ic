@@ -279,6 +279,12 @@ impl LiveSetup<CkErc20Setup> {
         nat_to_u128(minimum.minimum_deposit_amount)
     }
 
+    /// The ETH minimum as `deposit_eth` reports it. Read through `caller`'s own registration,
+    /// which `deposit_eth` makes idempotently, so pass an account the test deposits for anyway.
+    pub fn minimum_eth_deposit_amount(&self, caller: Principal, subaccount: [u8; 32]) -> u128 {
+        nat_to_u128(self.deposit_eth(caller, subaccount).minimum_deposit_amount)
+    }
+
     /// Calls `deposit_eth` as `caller`, which registers (idempotently) that user's
     /// `(address, ETH)` pair for balance scanning and reports its scan progress.
     fn deposit_eth(&self, caller: Principal, subaccount: [u8; 32]) -> DepositEthResponse {
