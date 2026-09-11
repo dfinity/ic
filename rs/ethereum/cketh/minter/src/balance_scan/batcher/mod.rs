@@ -53,7 +53,7 @@ const MAX_CODE_SIZE: usize = 24_576;
 /// [EIP-3860]: https://eips.ethereum.org/EIPS/eip-3860
 const MAX_INITCODE_SIZE: usize = 2 * MAX_CODE_SIZE;
 
-/// Maximum number of `balanceOf` sub-calls in a single deployless-batcher `eth_call`.
+/// Maximum number of balance reads in a single deployless-batcher `eth_call`, for both batchers.
 ///
 /// A create-style `eth_call` is bounded at both ends: the initcode it carries is rejected beyond
 /// [`MAX_INITCODE_SIZE`] (EIP-3860), and the blob the program `RETURN`s is rejected beyond
@@ -73,6 +73,12 @@ const MAX_INITCODE_SIZE: usize = 2 * MAX_CODE_SIZE;
 /// registered pairs into chunks of this size and advances each chunk all-or-nothing, so a
 /// whole-call failure re-does that chunk on the next tick — and a chunk that always exceeds a
 /// provider limit fails *every* time, permanently stalling its pairs.
+///
+/// The value is derived from the ERC-20 encoding, yet it caps [`ETH_BATCHER_INITCODE`] batches
+/// too, with margin on both ends. The returned-blob term is shared — both programs return one
+/// word per entry — so the cap can never exceed `MAX_CODE_SIZE / WORD`; and the ETH initcode
+/// side is far looser than the ERC-20 one (one word per entry after a 78-byte program, so 1532
+/// reads) and never binds. `full_batch_of_eth_balance_reads_fits_both_node_limits` pins this.
 pub const MAX_CALLS_PER_BATCH: usize = {
     let by_initcode_size = (MAX_INITCODE_SIZE - BATCHER_INITCODE.len() - WORD) / (2 * WORD);
     let by_returned_code_size = MAX_CODE_SIZE / WORD;
@@ -82,6 +88,26 @@ pub const MAX_CALLS_PER_BATCH: usize = {
         by_returned_code_size
     }
 };
+
+/// Deployless ETH balance-batcher creation bytecode.
+///
+/// The native-ETH sibling of [`BATCHER_INITCODE`], executed the same way (create-style
+/// `eth_call`, `to` omitted). It reads its inputs from the calldata appended right after this
+/// bytecode (`[n][ holder x n ]`, one 32-byte word each) and, for each holder, reads its ETH
+/// balance with the `BALANCE` opcode — no sub-calls, so unlike the ERC-20 batcher nothing here
+/// can fail and the program has no revert path. On success it returns the balances as a flat
+/// `n x 32`-byte array (no ABI array header), decoded positionally by [`decode_balance_batch`].
+///
+/// The program is fixed regardless of `n` (only the appended args grow). It was assembled from
+/// the opcode listing in `eth_initcode_matches_readable_assembly` and validated against a live
+/// anvil node; see `rs/ethereum/cketh/minter/tests/deposit_from_cex.rs`.
+pub const ETH_BATCHER_INITCODE: [u8; 78] = [
+    0x60, 0x20, 0x61, 0x00, 0x4e, 0x60, 0x00, 0x39, 0x60, 0x00, 0x60, 0x20, 0x52, 0x5b, 0x60, 0x00,
+    0x51, 0x60, 0x20, 0x51, 0x10, 0x15, 0x61, 0x00, 0x44, 0x57, 0x60, 0x20, 0x60, 0x20, 0x51, 0x60,
+    0x20, 0x02, 0x61, 0x00, 0x6e, 0x01, 0x60, 0x40, 0x39, 0x60, 0x40, 0x51, 0x31, 0x60, 0x20, 0x51,
+    0x60, 0x20, 0x02, 0x60, 0x60, 0x01, 0x52, 0x60, 0x20, 0x51, 0x60, 0x01, 0x01, 0x60, 0x20, 0x52,
+    0x61, 0x00, 0x0d, 0x56, 0x5b, 0x60, 0x00, 0x51, 0x60, 0x20, 0x02, 0x60, 0x60, 0xf3,
+];
 
 /// Function selector for `balanceOf(address)`, i.e. `keccak256("balanceOf(address)")[..4]`.
 /// Embedded in [`BATCHER_INITCODE`] right after its leading `PUSH32` opcode; asserted by tests.
@@ -115,13 +141,26 @@ pub fn encode_balance_batch(calls: &[BalanceOfCall]) -> Vec<u8> {
     out
 }
 
-/// Decode the flat `n x 32`-byte return blob into `n` balances, in call order.
+/// Build the create-call `input` for a batch of ETH balance reads:
+/// `ETH_BATCHER_INITCODE ++ [n] ++ [ holder x n ]`, every value a 32-byte word.
+pub fn encode_eth_balance_batch(holders: &[DepositAddress]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(ETH_BATCHER_INITCODE.len() + WORD * (1 + holders.len()));
+    out.extend_from_slice(&ETH_BATCHER_INITCODE);
+    out.extend_from_slice(&word_from_usize(holders.len()));
+    for holder in holders {
+        out.extend_from_slice(&left_padded_address(holder.as_address()));
+    }
+    out
+}
+
+/// Decode the flat `n x 32`-byte return blob of either batcher into `n` balances, in call order.
 ///
-/// Every entry is a genuine `balanceOf` result: the batcher reverts the whole
-/// call if any sub-call fails, so a successful return means all `n` balances are
-/// present (a failed batch surfaces as an `eth_call` error upstream, never as a
-/// `0` here). Returns `Err` if the blob length is not exactly `n` words; never
-/// panics.
+/// Every entry is a genuine balance, never a `0` standing in for a failure, because neither
+/// program can return a partial result: [`BATCHER_INITCODE`] reverts the whole call if any
+/// `balanceOf` sub-call fails, and [`ETH_BATCHER_INITCODE`] has no failure path at all — the
+/// `BALANCE` opcode makes no sub-calls. A failed batch therefore surfaces as an `eth_call` error
+/// upstream, never as a `0` here. Returns `Err` if the blob length is not exactly `n` words;
+/// never panics.
 pub fn decode_balance_batch(ret: &[u8], n: usize) -> Result<Vec<Erc20Value>, BatcherDecodeError> {
     let expected = n * WORD;
     if ret.len() != expected {

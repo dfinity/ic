@@ -31,6 +31,37 @@ impl From<Address> for Asset {
     }
 }
 
+/// The ETH asset, as a type: code generic over the asset kind uses this and [`Erc20Asset`]
+/// where mixing the kinds up must not compile, and [`Asset`] where both are handled alike.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub struct EthAsset;
+
+/// An ERC-20 token, as a type: the compile-time counterpart of [`Asset::Erc20`].
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub struct Erc20Asset(Address);
+
+impl Erc20Asset {
+    pub fn new(contract_address: Address) -> Self {
+        Self(contract_address)
+    }
+
+    pub fn contract_address(&self) -> Address {
+        self.0
+    }
+}
+
+impl From<EthAsset> for Asset {
+    fn from(_: EthAsset) -> Self {
+        Asset::Eth
+    }
+}
+
+impl From<Erc20Asset> for Asset {
+    fn from(token: Erc20Asset) -> Self {
+        Asset::Erc20(token.contract_address())
+    }
+}
+
 impl Display for Asset {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
