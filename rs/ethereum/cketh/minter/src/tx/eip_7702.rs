@@ -89,6 +89,11 @@ impl AuthorizationRequest {
         self.account
     }
 
+    /// The contract this request delegates the account's code to.
+    pub fn delegate(&self) -> Address {
+        self.delegate
+    }
+
     pub fn derivation_path(&self) -> Vec<ByteBuf> {
         AddressSchema::Deposit(self.account).derivation_path()
     }
