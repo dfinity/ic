@@ -32,6 +32,23 @@ use std::hash::{Hash, Hasher};
 /// 2. When the change is deployed to all replicas, we can switch the type to
 ///    `BackwardsCompatible<T, true>` and the field can begin to be populated.
 /// 3. When the change is deployed to all replicas, we can replace the type with `T`.
+///
+/// Lifecycle of removing an existing field in a backwards compatible way, i.e. the above in
+/// reverse:
+/// 1. Replace the field's type `T` with `BackwardsCompatible<T, true>`, keeping it populated. This
+///    step is hash neutral, because `Some(v)` hashes like `v`.
+/// 2. When the change is deployed to all replicas, switch the type to
+///    `BackwardsCompatible<T, false>`, so that the field is no longer populated.
+/// 3. When the change is deployed to all replicas, remove the field.
+///
+/// Step 2 is only hash neutral if every replica version derives the same `Option` from the same
+/// protobuf. That holds when the protobuf can tell an absent field from a present one, which is
+/// where the `None` of a newly added field comes from in the first place. A `repeated` field cannot:
+/// empty and absent are the same bytes on the wire, and an empty collection is not hash invisible
+/// the way `None` is, since `<[T]>::hash` writes a length prefix even for an empty slice. Removing a
+/// collection field therefore needs an explicit presence marker on the wire, introduced in step 1
+/// and only set from step 2 onwards, so that both versions read the presence from the bytes rather
+/// than deciding it by version.
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct BackwardsCompatible<T, const SETTABLE: bool>(Option<T>);
 
@@ -90,8 +107,17 @@ impl<T, const SETTABLE: bool> BackwardsCompatible<T, SETTABLE> {
     pub fn try_from_proto<Proto: TryInto<T, Error = ProxyDecodeError>>(
         proto: Option<Proto>,
     ) -> Result<Self, ProxyDecodeError> {
+        Self::try_from_proto_with(proto, |p| p.try_into())
+    }
+
+    /// Like [`try_from_proto`](Self::try_from_proto), for protobuf values whose conversion is not
+    /// expressed as a `TryFrom` impl.
+    pub fn try_from_proto_with<Proto>(
+        proto: Option<Proto>,
+        convert: impl FnOnce(Proto) -> Result<T, ProxyDecodeError>,
+    ) -> Result<Self, ProxyDecodeError> {
         match proto {
-            Some(value) => Ok(Self(Some(value.try_into()?))),
+            Some(value) => Ok(Self(Some(convert(value)?))),
             None => Ok(Self(None)),
         }
     }

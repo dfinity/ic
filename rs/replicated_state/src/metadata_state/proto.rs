@@ -52,20 +52,6 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                     }
                 })
                 .collect(),
-            full_topology: item
-                .full_topology
-                .as_ref()
-                .map(|ft| pb_metadata::FullTopology {
-                    subnets: ft
-                        .subnets
-                        .iter()
-                        .map(|(subnet_id, subnet_topology)| pb_metadata::SubnetsEntry {
-                            subnet_id: Some(subnet_id_into_protobuf(*subnet_id)),
-                            subnet_topology: Some(subnet_topology.into()),
-                        })
-                        .collect(),
-                    routing_table: Some(ft.routing_table.as_ref().into()),
-                }),
             default_initial_dkg_subnet_id: item
                 .default_initial_dkg_subnet_id
                 .map(subnet_id_into_protobuf),
@@ -158,28 +144,6 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
-            full_topology: match item.full_topology {
-                None => None,
-                Some(ft) => {
-                    let mut ft_subnets = BTreeMap::new();
-                    for entry in ft.subnets {
-                        ft_subnets.insert(
-                            subnet_id_try_from_option(entry.subnet_id, "FullTopology::subnets::K")?,
-                            try_from_option_field(
-                                entry.subnet_topology,
-                                "FullTopology::subnets::V",
-                            )?,
-                        );
-                    }
-                    let ft_routing_table: Arc<RoutingTable> =
-                        try_from_option_field(ft.routing_table, "FullTopology::routing_table")
-                            .map(Arc::new)?;
-                    Some(FullTopology {
-                        subnets: ft_subnets,
-                        routing_table: ft_routing_table,
-                    })
-                }
-            },
             default_initial_dkg_subnet_id,
             api_boundary_nodes,
         })
@@ -312,8 +276,8 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
                     cycles: Some((&cycles).into()),
                 })
                 .collect(),
-            consumed_cycles_by_use_case_as_counters: item
-                .consumed_cycles_by_use_case_as_counters
+            consumed_cycles_by_use_case_monotonic: item
+                .consumed_cycles_by_use_case_monotonic
                 .clone()
                 .into_iter()
                 .map(|(use_case, cycles)| ConsumedCyclesByUseCase {
@@ -344,9 +308,9 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             );
         }
 
-        let mut consumed_cycles_by_use_case_as_counters = BTreeMap::new();
-        for x in item.consumed_cycles_by_use_case_as_counters.into_iter() {
-            consumed_cycles_by_use_case_as_counters.insert(
+        let mut consumed_cycles_by_use_case_monotonic = BTreeMap::new();
+        for x in item.consumed_cycles_by_use_case_monotonic.into_iter() {
+            consumed_cycles_by_use_case_monotonic.insert(
                 CyclesUseCase::try_from(pbCyclesUseCase::try_from(x.use_case).map_err(|_| {
                     ProxyDecodeError::ValueOutOfRange {
                         typ: "CyclesUseCase",
@@ -385,7 +349,11 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             .unwrap_or_else(|_| NominalCycles::zero()),
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
-            consumed_cycles_by_use_case_as_counters,
+            consumed_cycles_by_use_case_monotonic,
+            // Transient, with no corresponding proto field:
+            // `ReplicatedState::new_from_checkpoint` derives it from the canisters
+            // it loads.
+            consumed_cycles_total_including_canisters: NominalCycles::zero(),
             num_canisters: try_from_option_field(
                 item.num_canisters,
                 "SubnetMetrics::num_canisters",
@@ -676,7 +644,6 @@ impl From<&Stream> for pb_queues::Stream {
                 .iter()
                 .map(|(_, message)| message.into())
                 .collect(),
-            signals_begin: item.signals_begin().get(),
             signals_end: item.signals_end.get(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
@@ -698,7 +665,6 @@ impl TryFrom<pb_queues::Stream> for Stream {
         let messages_size_bytes = Self::calculate_size_bytes(&messages);
         let refund_count = Self::calculate_refund_count(&messages);
 
-        let signals_begin = item.signals_begin.into();
         let signals_end = item.signals_end.into();
         let reject_signals = item
             .reject_signals
@@ -726,23 +692,8 @@ impl TryFrom<pb_queues::Stream> for Stream {
             }
         }
 
-        // Check that `signals_begin` is before `signals_end` and all reject signals.
-        if signals_begin > signals_end {
-            return Err(ProxyDecodeError::Other(format!(
-                "signals_begin {signals_begin:?} after signals_end {signals_end:?}",
-            )));
-        }
-        if let Some(first_reject_signal) = reject_signals.front()
-            && first_reject_signal.index < signals_begin
-        {
-            return Err(ProxyDecodeError::Other(format!(
-                "first reject signal {first_reject_signal:?} before signals_begin {signals_begin:?}",
-            )));
-        }
-
         Ok(Self {
             messages,
-            signals_begin,
             signals_end,
             reject_signals,
             messages_size_bytes,
@@ -776,12 +727,8 @@ impl From<&IngressHistoryState> for pb_ingress::IngressHistoryState {
             .collect();
 
         debug_assert_eq!(
-            IngressHistoryState::compute_memory_usage(&item.statuses),
-            item.memory_usage
-        );
-        debug_assert_eq!(
-            IngressHistoryState::compute_state_counts(&item.statuses),
-            item.state_counts
+            IngressHistoryState::compute_stats(&item.statuses),
+            item.stats
         );
 
         pb_ingress::IngressHistoryState {
@@ -816,15 +763,13 @@ impl TryFrom<pb_ingress::IngressHistoryState> for IngressHistoryState {
             pruning_times.insert(time, messages);
         }
 
-        let memory_usage = IngressHistoryState::compute_memory_usage(&statuses);
-        let state_counts = IngressHistoryState::compute_state_counts(&statuses);
+        let stats = IngressHistoryState::compute_stats(&statuses);
 
         Ok(IngressHistoryState {
             statuses: Arc::new(statuses),
             pruning_times: Arc::new(pruning_times),
             next_terminal_time: Time::from_nanos_since_unix_epoch(item.next_terminal_time),
-            memory_usage,
-            state_counts,
+            stats,
         })
     }
 }

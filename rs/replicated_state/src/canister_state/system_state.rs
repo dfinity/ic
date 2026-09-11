@@ -279,8 +279,9 @@ pub struct CanisterMetrics {
     instructions_executed: NumInstructions,
     load_metrics: LoadMetrics,
     consumed_cycles: NominalCycles,
+    consumed_cycles_monotonic: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
-    consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
+    consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
 impl CanisterMetrics {
@@ -290,8 +291,9 @@ impl CanisterMetrics {
         executed: u64,
         interrupted_during_execution: u64,
         consumed_cycles: NominalCycles,
+        consumed_cycles_monotonic: NominalCycles,
         consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
-        consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
+        consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
         instructions_executed: NumInstructions,
         load_metrics: LoadMetrics,
     ) -> Self {
@@ -301,8 +303,9 @@ impl CanisterMetrics {
             executed,
             interrupted_during_execution,
             consumed_cycles,
+            consumed_cycles_monotonic,
             consumed_cycles_by_use_cases,
-            consumed_cycles_by_use_cases_as_counters,
+            consumed_cycles_by_use_cases_monotonic,
             instructions_executed,
             load_metrics,
         }
@@ -332,14 +335,29 @@ impl CanisterMetrics {
         self.consumed_cycles
     }
 
+    /// The monotonic counterpart of [`Self::consumed_cycles`]: it is only ever
+    /// increased, by the actually consumed amount (prepayment minus refund) once the
+    /// refund is known; or right away, for a direct charge made without a prepayment
+    /// (e.g. for memory usage). The gauge above, in contrast, is raised by the
+    /// prepayment and lowered again by the refund.
+    ///
+    /// Exactly the scalar equivalent of
+    /// [`Self::consumed_cycles_by_use_cases_monotonic`], summed over the use cases
+    /// that [`Self::consumed_cycles`] covers, i.e. everything except HTTPS outcalls,
+    /// which are only tracked at the subnet level (and, for the canister, in the
+    /// by-use-case map).
+    pub fn consumed_cycles_monotonic(&self) -> NominalCycles {
+        self.consumed_cycles_monotonic
+    }
+
     pub fn consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_cases
     }
 
-    pub fn consumed_cycles_by_use_cases_as_counters(
+    pub fn consumed_cycles_by_use_cases_monotonic(
         &self,
     ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
-        &self.consumed_cycles_by_use_cases_as_counters
+        &self.consumed_cycles_by_use_cases_monotonic
     }
 
     pub fn observe_round_scheduled(&mut self) {
@@ -1042,8 +1060,11 @@ impl SystemState {
                 // some of the postponed charges free.
             }
         }
+        // Charge only the part of the debit that the balance can cover. The remaining
+        // debit is dropped, so it must not be reported as consumed either.
+        let charged_debit = self.ingress_induction_cycles_debit - remaining_debit;
         self.consume_cycles(CompoundCycles::<IngressInduction>::new(
-            self.ingress_induction_cycles_debit,
+            charged_debit,
             cost_schedule,
         ));
         self.ingress_induction_cycles_debit = Cycles::zero();
@@ -1649,11 +1670,14 @@ impl SystemState {
     /// executing on one subnet, but for which a response may only be produced by
     /// another subnet.
     pub fn drop_in_progress_management_calls_after_split(&mut self) {
-        // Remove aborted install code task.
+        // Remove aborted install code task and fully refund the prepaid execution
+        // cycles.
         //
         // Note that this cannot be a paused install code task, because we abort all
         // paused tasks before triggering the split.
-        self.task_queue.remove_aborted_install_code_task();
+        if let Some(prepaid_execution_cycles) = self.task_queue.remove_aborted_install_code_task() {
+            self.refund_cycles(prepaid_execution_cycles, prepaid_execution_cycles);
+        }
 
         // Roll back `Stopping` canister states to `Running` and drop all their stop
         // contexts (the calls corresponding to the dropped stop contexts will be
@@ -2044,6 +2068,11 @@ impl SystemState {
     /// the consumed amount. Should be used either for cases where a prepayment
     /// needs to be made (that will be refunded later with `refund_cycles`) or
     /// a direct charge happens without a prepayment (e.g. when paying for memory).
+    ///
+    /// Callers are expected to cover the requested amount out of the balances, or
+    /// to cap the requested amount at what the balances cover. As defense in depth
+    /// against a caller that does neither, any part that the balances cannot cover
+    /// is neither charged nor reported as consumed.
     pub fn consume_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
         let requested_real = requested_amount.real();
         let use_case = T::cycles_use_case();
@@ -2065,9 +2094,16 @@ impl SystemState {
             | CyclesUseCase::BurnedCycles
             | CyclesUseCase::DroppedMessages => requested_real,
         };
+        // Should the balance not cover the whole amount, the subtraction below
+        // saturates at zero and the uncovered part is never actually charged. Report
+        // only the part that the balance could cover as consumed, so that the consumed
+        // cycles metrics never exceed the cycles removed from the balance. This is
+        // defense in depth: the balance is expected to cover the whole amount.
+        let uncharged_amount = remaining_amount - self.cycles_balance;
         self.cycles_balance -= remaining_amount;
+        let charged_amount = requested_amount.minus_uncharged(uncharged_amount);
         self.observe_consumed_cycles_with_use_case(
-            requested_amount.nominal(),
+            charged_amount.nominal(),
             NominalCycles::zero(),
             use_case,
             ConsumingCycles::Prepayment,
@@ -2128,7 +2164,7 @@ impl SystemState {
     pub fn observe_consumed_cycles_for_https_outcall(&mut self, amount: NominalCycles) {
         *self
             .canister_metrics
-            .consumed_cycles_by_use_cases_as_counters
+            .consumed_cycles_by_use_cases_monotonic
             .entry(CyclesUseCase::HTTPOutcalls)
             .or_insert_with(NominalCycles::zero) += amount;
     }
@@ -2162,18 +2198,19 @@ impl SystemState {
             ConsumingCycles::Refund => {}
         }
 
-        // Skip if the consumed cycles are zero and no metric updates are needed.
-        if prepayment - refund == NominalCycles::zero() {
+        // Skip only if there is nothing to record at all. Note that a refund equal to
+        // its prepayment still has to lower the gauge by the refunded amount, even
+        // though it contributes nothing to the monotonic amounts.
+        if prepayment == NominalCycles::zero() && refund == NominalCycles::zero() {
             return;
         }
 
         let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
             &mut self.canister_metrics.consumed_cycles_by_use_cases;
         let use_case_consumption = metric.entry(use_case).or_insert_with(NominalCycles::zero);
-        let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> = &mut self
-            .canister_metrics
-            .consumed_cycles_by_use_cases_as_counters;
-        let use_case_consumption_as_counter =
+        let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
+            &mut self.canister_metrics.consumed_cycles_by_use_cases_monotonic;
+        let use_case_consumption_monotonic =
             metric.entry(use_case).or_insert_with(NominalCycles::zero);
 
         match consuming_cycles {
@@ -2183,7 +2220,7 @@ impl SystemState {
                 match use_case {
                     CyclesUseCase::Instructions | CyclesUseCase::RequestAndResponseTransmission => {
                         // These use cases are accounted for during refund
-                        // for the counter metrics.
+                        // for the monotonic metrics.
                     }
                     CyclesUseCase::Memory
                     | CyclesUseCase::ComputeAllocation
@@ -2191,7 +2228,8 @@ impl SystemState {
                     | CyclesUseCase::IngressInduction
                     | CyclesUseCase::CanisterCreation
                     | CyclesUseCase::BurnedCycles => {
-                        *use_case_consumption_as_counter += prepayment;
+                        *use_case_consumption_monotonic += prepayment;
+                        self.canister_metrics.consumed_cycles_monotonic += prepayment;
                     }
 
                     CyclesUseCase::ECDSAOutcalls
@@ -2207,7 +2245,8 @@ impl SystemState {
             ConsumingCycles::Refund => {
                 *use_case_consumption -= refund;
                 self.canister_metrics.consumed_cycles -= refund;
-                *use_case_consumption_as_counter += prepayment - refund;
+                *use_case_consumption_monotonic += prepayment - refund;
+                self.canister_metrics.consumed_cycles_monotonic += prepayment - refund;
             }
         }
     }

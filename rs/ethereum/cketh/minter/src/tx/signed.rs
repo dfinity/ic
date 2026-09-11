@@ -1,13 +1,14 @@
-use super::{TransactionPrice, compute_recovery_id, encode_u256, split_in_two};
+use super::{AccessList, TransactionPrice, encode_u256};
 use crate::{
     eth_rpc::Hash,
-    numeric::{GasAmount, TransactionNonce, WeiPerGas},
-    state::read_state,
+    numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas},
+    runtime::CanisterRuntime,
 };
 use ethnum::u256;
-use ic_management_canister_types_private::DerivationPath;
+use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
+use serde_bytes::ByteBuf;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Decode, Encode)]
 pub struct TransactionSignature {
@@ -36,6 +37,8 @@ pub trait SignableTransaction: rlp::Encodable {
     /// RLP-encode the transaction payload, i.e. without the type prefix nor the signature.
     fn rlp_inner(&self, rlp: &mut RlpStream);
 
+    fn chain_id(&self) -> u64;
+
     fn nonce(&self) -> TransactionNonce;
 
     fn gas_limit(&self) -> GasAmount;
@@ -43,6 +46,24 @@ pub trait SignableTransaction: rlp::Encodable {
     fn max_fee_per_gas(&self) -> WeiPerGas;
 
     fn max_priority_fee_per_gas(&self) -> WeiPerGas;
+
+    /// Address the transaction is sent to.
+    fn destination(&self) -> &Address;
+
+    /// ETH value moved by the transaction.
+    fn amount(&self) -> &Wei;
+
+    /// The transaction's call data.
+    fn data(&self) -> &[u8];
+
+    /// Addresses and storage keys the transaction pre-declares access to.
+    fn access_list(&self) -> &AccessList;
+
+    /// The same transaction at a different price and amount, e.g. to bump the fee of a
+    /// transaction that is not being mined.
+    fn with_price_and_amount(&self, price: TransactionPrice, amount: Wei) -> Self
+    where
+        Self: Sized;
 
     /// The signing digest `keccak256(transaction_type || rlp([..payload fields..]))`,
     /// i.e. the hash signed over to authorize the transaction, where `||` denotes string
@@ -179,6 +200,10 @@ impl<T: SignableTransaction> Signed<T> {
         &self.inner.transaction
     }
 
+    pub fn signature(&self) -> &TransactionSignature {
+        &self.inner.signature
+    }
+
     pub fn nonce(&self) -> TransactionNonce {
         self.inner.transaction.nonce()
     }
@@ -186,24 +211,12 @@ impl<T: SignableTransaction> Signed<T> {
 
 /// Sign `transaction` with the minter's ECDSA key at `derivation_path` and wrap it into a
 /// [`Signed`] transaction.
-pub async fn sign<T: SignableTransaction>(
+pub async fn sign<T: SignableTransaction, R: CanisterRuntime>(
     transaction: T,
-    derivation_path: DerivationPath,
+    derivation_path: Vec<ByteBuf>,
+    runtime: &R,
 ) -> Result<Signed<T>, String> {
     let hash = transaction.hash();
-    let key_name = read_state(|s| s.ecdsa_key_name.clone());
-    let signature = crate::management::sign_with_ecdsa(key_name, derivation_path, hash.0)
-        .await
-        .map_err(|e| format!("failed to sign tx: {e}"))?;
-    let recid = compute_recovery_id(&hash, &signature).await;
-    if recid.is_x_reduced() {
-        return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
-    }
-    let (r_bytes, s_bytes) = split_in_two(signature);
-    let signature = TransactionSignature {
-        signature_y_parity: recid.is_y_odd(),
-        r: u256::from_be_bytes(r_bytes),
-        s: u256::from_be_bytes(s_bytes),
-    };
+    let signature = super::sign_digest(&hash, &derivation_path, runtime).await?;
     Ok(Signed::new(transaction, signature))
 }

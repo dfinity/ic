@@ -63,9 +63,16 @@ pub struct Erc20Balance {
     pub balance: Nat,
 }
 
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
+pub struct Erc20MinimumDeposit {
+    pub erc20_contract_address: String,
+    pub minimum_deposit_amount: Nat,
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct MinterInfo {
     pub minter_address: Option<String>,
+    pub sweeper_address: Option<String>,
     #[deprecated(note = "use eth_helper_contract_address instead")]
     pub smart_contract_address: Option<String>,
     pub eth_helper_contract_address: Option<String>,
@@ -79,6 +86,7 @@ pub struct MinterInfo {
     pub eth_balance: Option<Nat>,
     pub last_gas_fee_estimate: Option<GasFeeEstimate>,
     pub erc20_balances: Option<Vec<Erc20Balance>>,
+    pub minimum_deposit_amounts: Option<Vec<Erc20MinimumDeposit>>,
     pub last_eth_scraped_block_number: Option<Nat>,
     pub last_erc20_scraped_block_number: Option<Nat>,
     pub last_deposit_with_subaccount_scraped_block_number: Option<Nat>,
@@ -222,7 +230,7 @@ pub struct DepositErc20Arg {
     pub mode: DepositMode,
 }
 
-/// How the fee for a ckERC20 deposit address registration is settled.
+/// How the fee for a deposit address registration is settled.
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum DepositMode {
     /// The registration fee is deducted from the deposited amount. The deposit
@@ -236,11 +244,61 @@ pub enum DepositMode {
     // },
 }
 
+/// Response of the `deposit_eth` endpoint.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct DepositEthResponse {
+    /// The Ethereum deposit address derived for the caller. It is the same address as the one
+    /// derived by the `deposit_erc20` endpoint for the same account, whatever the ERC-20 token.
+    pub address: String,
+    /// Minimum balance, in wei, that the deposit address must hold for the balance scan to
+    /// detect it. The scan reads the address' whole ETH balance, so several smaller transfers
+    /// count together; the funds stay undetected only while their total is below this.
+    pub minimum_deposit_amount: Nat,
+    /// Where the deposit stands in the detect-and-sweep pipeline.
+    pub status: DepositEthStatus,
+}
+
+/// The stage an ETH deposit address is at.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub enum DepositEthStatus {
+    /// Armed and being scanned; no deposit at or above the minimum detected yet.
+    Scanning {
+        /// Timestamp in nanoseconds since the Unix epoch until which a deposit
+        /// sent to the address is guaranteed to be noticed by the minter.
+        valid_until: u64,
+        /// The latest Ethereum block at which the address' ETH balance was scanned,
+        /// or `None` if it has not been scanned yet.
+        last_scanned_block: Option<Nat>,
+        /// How many times the address' ETH balance has been scanned so far.
+        scan_count: u64,
+    },
+    /// Funds were detected at or above the minimum and queued for sweeping.
+    AwaitingSweep(DetectedEthDeposit),
+}
+
+/// A funded ETH balance detected at a deposit address and queued for sweeping.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct DetectedEthDeposit {
+    /// The ETH balance scanned, in wei; may change before the sweep.
+    pub scanned_balance: Nat,
+    /// The Ethereum block at which the balance was detected.
+    pub detected_at_block: Nat,
+}
+
 /// Response of the `deposit_erc20` endpoint.
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct DepositErc20Response {
-    /// The Ethereum deposit address derived for the caller.
+    /// The Ethereum deposit address derived for the caller, the same one whatever the asset.
     pub address: String,
+    /// Minimum balance, in the token's own units, that the deposit address must hold for the
+    /// balance scan to detect it. The scan reads the address' whole balance for the token, so
+    /// several smaller transfers count together; the funds stay undetected only while their
+    /// total is below this.
+    ///
+    /// A supported token with no configured minimum reports `2^256 - 1`, which no real balance
+    /// can reach: a deposit of that token would never be detected. Treat such a value as
+    /// "deposits unavailable for this token" rather than as an amount to display.
+    pub minimum_deposit_amount: Nat,
     /// Where the deposit stands in the detect-and-sweep pipeline.
     pub status: DepositStatus,
 }
@@ -273,6 +331,113 @@ pub struct DetectedDeposit {
     pub scanned_balance: Nat,
     /// The Ethereum block at which the balance was detected.
     pub detected_at_block: Nat,
+}
+
+/// Argument for the `deposit_eth` endpoint.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct DepositEthArg {
+    pub mode: DepositMode,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub enum DepositEthError {
+    /// The account already has the maximum number of assets armed.
+    TooManyTokensForAccount,
+    /// The maximum number of concurrently armed deposits (`(account, asset)` pairs) has been
+    /// reached.
+    TooManyActiveDeposits,
+    /// The minter is temporarily unavailable, retry the request.
+    TemporarilyUnavailable(String),
+}
+
+impl DepositErc20Response {
+    pub fn new(
+        info: crate::state::automatic_deposits::DepositStatusInfo,
+        token: ic_ethereum_types::Address,
+        minimum_deposit_amount: crate::numeric::Erc20Value,
+    ) -> Self {
+        use crate::state::automatic_deposits::DepositStage;
+        Self {
+            address: info.address.to_string(),
+            minimum_deposit_amount: minimum_deposit_amount.into(),
+            status: match info.stage {
+                DepositStage::Scanning {
+                    valid_until,
+                    last_scanned_block,
+                    scan_count,
+                } => DepositStatus::Scanning {
+                    valid_until: valid_until.as_nanos(),
+                    last_scanned_block: last_scanned_block.map(Into::into),
+                    scan_count: scan_count as u64,
+                },
+                DepositStage::AwaitingSweep {
+                    scanned_balance,
+                    detected_at_block,
+                } => DepositStatus::AwaitingSweep(DetectedDeposit {
+                    erc20_contract_address: token.to_string(),
+                    scanned_balance: scanned_balance.into(),
+                    detected_at_block: detected_at_block.into(),
+                }),
+            },
+        }
+    }
+}
+
+impl DepositEthResponse {
+    pub fn new(
+        info: crate::state::automatic_deposits::DepositStatusInfo,
+        minimum_deposit_amount: crate::numeric::Erc20Value,
+    ) -> Self {
+        use crate::state::automatic_deposits::DepositStage;
+        Self {
+            address: info.address.to_string(),
+            minimum_deposit_amount: minimum_deposit_amount.into(),
+            status: match info.stage {
+                DepositStage::Scanning {
+                    valid_until,
+                    last_scanned_block,
+                    scan_count,
+                } => DepositEthStatus::Scanning {
+                    valid_until: valid_until.as_nanos(),
+                    last_scanned_block: last_scanned_block.map(Into::into),
+                    scan_count: scan_count as u64,
+                },
+                DepositStage::AwaitingSweep {
+                    scanned_balance,
+                    detected_at_block,
+                } => DepositEthStatus::AwaitingSweep(DetectedEthDeposit {
+                    scanned_balance: scanned_balance.into(),
+                    detected_at_block: detected_at_block.into(),
+                }),
+            },
+        }
+    }
+}
+
+impl From<crate::state::automatic_deposits::RegisterDepositError> for DepositEthError {
+    fn from(error: crate::state::automatic_deposits::RegisterDepositError) -> Self {
+        use crate::state::automatic_deposits::RegisterDepositError;
+        match error {
+            RegisterDepositError::TooManyAssetsForAccount => Self::TooManyTokensForAccount,
+            RegisterDepositError::TooManyActiveDeposits => Self::TooManyActiveDeposits,
+            RegisterDepositError::KeyNotInitialized => Self::TemporarilyUnavailable(
+                "Minter's ECDSA public key not yet initialized".to_string(),
+            ),
+        }
+    }
+}
+
+impl From<crate::state::automatic_deposits::RegisterDepositError> for DepositErc20Error {
+    fn from(error: crate::state::automatic_deposits::RegisterDepositError) -> Self {
+        use crate::state::automatic_deposits::RegisterDepositError;
+        match error {
+            RegisterDepositError::TooManyAssetsForAccount => Self::TooManyTokensForAccount,
+            RegisterDepositError::TooManyActiveDeposits => Self::TooManyActiveDeposits,
+            RegisterDepositError::KeyNotInitialized => Self::TemporarilyUnavailable(
+                "Minter's ECDSA public key not yet initialized".to_string(),
+            ),
+        }
+    }
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
@@ -378,6 +543,34 @@ pub mod events {
     use candid::{CandidType, Deserialize, Nat, Principal};
     use serde_bytes::ByteBuf;
 
+    /// An asset a deposit pipeline event names: ETH, or an ERC-20 token by its contract
+    /// address in EIP-55 format.
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub enum Asset {
+        Eth,
+        Erc20(String),
+    }
+
+    impl From<crate::asset::Asset> for Asset {
+        fn from(asset: crate::asset::Asset) -> Self {
+            match asset {
+                crate::asset::Asset::Eth => Asset::Eth,
+                crate::asset::Asset::Erc20(address) => Asset::Erc20(address.to_string()),
+            }
+        }
+    }
+
+    impl TryFrom<Asset> for crate::asset::Asset {
+        type Error = String;
+
+        fn try_from(asset: Asset) -> Result<Self, Self::Error> {
+            match asset {
+                Asset::Eth => Ok(crate::asset::Asset::Eth),
+                Asset::Erc20(address) => address.parse().map(crate::asset::Asset::Erc20),
+            }
+        }
+    }
+
     #[derive(Clone, Debug, CandidType, Deserialize)]
     pub struct GetEventsArg {
         pub start: u64,
@@ -431,6 +624,49 @@ pub mod events {
         pub value: Nat,
         pub data: ByteBuf,
         pub access_list: Vec<AccessListItem>,
+    }
+
+    /// A secp256k1 signature: the two 32-byte components and the parity recovering the signing
+    /// key from them.
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub struct TransactionSignature {
+        pub y_parity: bool,
+        /// 32-byte signature component.
+        pub r: ByteBuf,
+        /// 32-byte signature component.
+        pub s: ByteBuf,
+    }
+
+    /// An [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) authorization tuple: a deposit
+    /// address' signed consent to delegate its code to `delegate`, signed by the address itself.
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub struct SignedAuthorization {
+        pub chain_id: Nat,
+        pub delegate: String,
+        pub nonce: Nat,
+        pub signature: TransactionSignature,
+    }
+
+    /// One deposit a sweep moves: the address the funds sit at, the account they are credited to,
+    /// the attestation binding the two, and the delegation letting the sweeper's code run there.
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub struct AuthorizedSweepItem {
+        pub deposit: String,
+        pub owner: Principal,
+        pub subaccount: Option<ByteBuf>,
+        /// The attestation signed by the deposit address itself.
+        pub attestation: TransactionSignature,
+        /// The delegation installed on the way, absent if the address is already delegated.
+        pub authorization: Option<SignedAuthorization>,
+    }
+
+    /// A sweep transaction the minter has created but not yet signed: a transaction, plus the
+    /// delegations it installs on the way. With none it is sent as a plain EIP-1559 (`0x02`)
+    /// transaction, and otherwise as an EIP-7702 (`0x04`) one.
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub struct UnsignedSweeperTransaction {
+        pub transaction: UnsignedTransaction,
+        pub authorization_list: Vec<SignedAuthorization>,
     }
 
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -497,6 +733,14 @@ pub mod events {
             from_subaccount: Option<[u8; 32]>,
             created_at: Option<u64>,
         },
+        AcceptedSweeperFundingRequest {
+            withdrawal_amount: Nat,
+            destination: String,
+            ledger_burn_index: Nat,
+            from: Principal,
+            from_subaccount: Option<[u8; 32]>,
+            created_at: Option<u64>,
+        },
         CreatedTransaction {
             withdrawal_id: Nat,
             transaction: UnsignedTransaction,
@@ -511,6 +755,46 @@ pub mod events {
         },
         FinalizedTransaction {
             withdrawal_id: Nat,
+            transaction_receipt: TransactionReceipt,
+        },
+        AttestedDepositAddress {
+            chain_id: Nat,
+            /// The deposit helper the attestation names; it is only valid against this deployment.
+            deposit_helper: String,
+            owner: Principal,
+            subaccount: Option<ByteBuf>,
+            /// The attestation signed by the deposit address itself.
+            attestation: TransactionSignature,
+        },
+        AuthorizedDepositAddress {
+            owner: Principal,
+            subaccount: Option<ByteBuf>,
+            authorization: SignedAuthorization,
+        },
+        AcceptedSweepRequest {
+            sweep_id: Nat,
+            destination: String,
+            /// The single asset this sweep moves.
+            asset: Asset,
+            /// The deposits the sweep moves, one per account.
+            items: Vec<AuthorizedSweepItem>,
+            max_transaction_fee: Nat,
+            created_at: u64,
+        },
+        CreatedSweeperTransaction {
+            sweep_id: Nat,
+            transaction: UnsignedSweeperTransaction,
+        },
+        SignedSweeperTransaction {
+            sweep_id: Nat,
+            raw_transaction: String,
+        },
+        ReplacedSweeperTransaction {
+            sweep_id: Nat,
+            transaction: UnsignedSweeperTransaction,
+        },
+        FinalizedSweeperTransaction {
+            sweep_id: Nat,
             transaction_receipt: TransactionReceipt,
         },
         ReimbursedEthWithdrawal {
@@ -576,7 +860,7 @@ pub mod events {
             owner: Principal,
             subaccount: Option<[u8; 32]>,
             address: String,
-            erc20_contract_address: String,
+            asset: Asset,
             last_scanned_block: Nat,
             scan_count: u64,
             scanned_balance: Nat,
@@ -587,7 +871,7 @@ pub mod events {
     pub struct DepositAddressRegistration {
         pub owner: Principal,
         pub subaccount: Option<[u8; 32]>,
-        pub erc20_contract_address: String,
+        pub asset: Asset,
         pub address: String,
         pub expires_at_nanos: u64,
         pub last_scanned_block: Option<Nat>,

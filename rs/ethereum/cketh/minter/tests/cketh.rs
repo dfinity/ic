@@ -1,3 +1,5 @@
+use alloy_consensus::TxEip1559;
+use alloy_primitives::U256;
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
@@ -31,7 +33,7 @@ use ic_cketh_test_utils::{
     DEFAULT_USER_SUBACCOUNT, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
     DEFAULT_WITHDRAWAL_TRANSACTION, DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE,
     ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, GAS_USED, JsonRpcProvider,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, SWEEPER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use ic_management_canister_types::CanisterStatusType;
@@ -413,20 +415,20 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
         .retrieve_fee_history(move |mock| {
             mock.modify_response(
                 JsonRpcProvider::Provider1,
-                &mut |response: &mut ethers_core::types::FeeHistory| {
-                    response.oldest_block = 0x17740742_u64.into()
+                &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                    response.oldest_block = 0x17740742_u64
                 },
             )
             .modify_response(
                 JsonRpcProvider::Provider2,
-                &mut |response: &mut ethers_core::types::FeeHistory| {
-                    response.oldest_block = 0x17740743_u64.into()
+                &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                    response.oldest_block = 0x17740743_u64
                 },
             )
             .modify_response(
                 JsonRpcProvider::Provider3,
-                &mut |response: &mut ethers_core::types::FeeHistory| {
-                    response.oldest_block = 0x17740744_u64.into()
+                &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                    response.oldest_block = 0x17740744_u64
                 },
             )
         })
@@ -509,7 +511,7 @@ fn should_reimburse() {
         .0
         .to_u128()
         .unwrap()
-        .checked_sub(tx.value.unwrap().as_u128())
+        .checked_sub(tx.value.to::<u128>())
         .unwrap();
     assert_eq!(cost_of_failed_transaction, 693_077_873_418_000);
 
@@ -519,7 +521,7 @@ fn should_reimburse() {
         balance_before_withdrawal.clone() - cost_of_failed_transaction
     );
 
-    let reimbursed_amount = Nat::from(tx.value.unwrap().as_u128());
+    let reimbursed_amount = Nat::from(tx.value.to::<u128>());
     let reimbursed_in_block = withdrawal_id.clone() + Nat::from(1_u8);
     let failed_tx_hash = DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string();
     assert_eq!(
@@ -628,15 +630,17 @@ fn should_resubmit_new_transaction_when_price_increased() {
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
     let first_tx_hash = hash_transaction(expected_tx.clone(), expected_sig);
     let resubmitted_sent_tx = "0x02f873018084625900808507b81d70e382520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cc412e75c2de80c001a0a50a97743db2c45bfafaa668abb848ea6a15818d7c704b06c8957827fa68c6e8a04175e5fa7fbda1bb84e254f31acafd0fdf95f094127b0520b4e447e80d1afe37";
-    let (resubmitted_tx, resubmitted_tx_sig) = decode_transaction(resubmitted_sent_tx);
-    let resubmitted_tx_hash = hash_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
+    let resubmitted = decode_transaction(resubmitted_sent_tx);
+    let (resubmitted_tx, resubmitted_tx_sig) = (resubmitted.tx().clone(), *resubmitted.signature());
+    let resubmitted_tx_hash = *resubmitted.hash();
     assert_eq!(
         resubmitted_tx,
-        expected_tx
-            .clone()
-            .value(99_303_772_126_560_990_u64)
-            .max_priority_fee_per_gas(1_650_000_000_u64)
-            .max_fee_per_gas(33_153_708_259_u64)
+        TxEip1559 {
+            value: U256::from(99_303_772_126_560_990_u64),
+            max_priority_fee_per_gas: 1_650_000_000,
+            max_fee_per_gas: 33_153_708_259,
+            ..expected_tx.clone()
+        }
     );
     assert_ne!(first_tx_hash, resubmitted_tx_hash);
 
@@ -668,13 +672,11 @@ fn should_resubmit_new_transaction_when_price_increased() {
                 transaction: UnsignedTransaction {
                     chain_id: Nat::from(1_u8),
                     nonce: Nat::from(0_u8),
-                    max_priority_fee_per_gas: Nat::from(
-                        resubmitted_tx.max_priority_fee_per_gas.unwrap().as_u128(),
-                    ),
-                    max_fee_per_gas: Nat::from(resubmitted_tx.max_fee_per_gas.unwrap().as_u128()),
+                    max_priority_fee_per_gas: Nat::from(resubmitted_tx.max_priority_fee_per_gas),
+                    max_fee_per_gas: Nat::from(resubmitted_tx.max_fee_per_gas),
                     gas_limit: Nat::from(21_000_u32),
                     destination: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
-                    value: Nat::from(resubmitted_tx.value.unwrap().as_u128()),
+                    value: Nat::from(resubmitted_tx.value.to::<u128>()),
                     data: Default::default(),
                     access_list: vec![],
                 },
@@ -1200,9 +1202,10 @@ fn should_retrieve_minter_info() {
     assert_eq!(
         info_at_start,
         MinterInfo {
-            // The minter derives its address from a timer scheduled at install, so a
-            // fixture that has executed no round has not derived it yet.
+            // The minter derives its addresses from a timer scheduled at install, so a
+            // fixture that has executed no round has not derived them yet.
             minter_address: None,
+            sweeper_address: None,
             smart_contract_address: Some(format_ethereum_address_to_eip_55(
                 ETH_HELPER_CONTRACT_ADDRESS
             )),
@@ -1219,6 +1222,7 @@ fn should_retrieve_minter_info() {
             eth_balance: Some(Nat::from(0_u8)),
             last_gas_fee_estimate: None,
             erc20_balances: None,
+            minimum_deposit_amounts: None,
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_deposit_with_subaccount_scraped_block_number: Some(
@@ -1237,6 +1241,7 @@ fn should_retrieve_minter_info() {
         info_after_deposit,
         MinterInfo {
             minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            sweeper_address: Some(format_ethereum_address_to_eip_55(SWEEPER_ADDRESS)),
             last_observed_block_number: Some(Nat::from(new_eth_scraped_block_number)),
             eth_balance: Some(Nat::from(EXPECTED_BALANCE)),
             last_eth_scraped_block_number: Some(new_eth_scraped_block_number.into()),
@@ -1335,6 +1340,35 @@ fn decode_ledger_memo_smoke() {
         Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
         if msg.contains("Error decoding MintMemo")
     );
+}
+
+#[test]
+fn should_export_the_sweeper_funding_metrics() {
+    CkEthSetup::default()
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_cketh_burned_total 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_eth_spent_total 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeper_funding_finalized_total\{status="success"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeper_funding_finalized_total\{status="failure"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_burned_not_yet_spent 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_gas_balance 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_low_water_mark \d+ \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_target \d+ \d+")
+        .assert_contains_metric_matching(
+            r"cketh_minter_sweeper_funding_in_flight_age_seconds 0 \d+",
+        );
+}
+
+#[test]
+fn should_export_the_stored_attestation_and_authorization_metrics() {
+    CkEthSetup::default()
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_stored_attestations 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_stored_authorizations 0 \d+");
 }
 
 /// Tests with the EVM RPC canister

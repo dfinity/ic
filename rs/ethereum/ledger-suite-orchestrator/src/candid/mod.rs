@@ -1,6 +1,7 @@
 use crate::scheduler::Erc20Token;
 use crate::state::{Canister, Canisters};
 use candid::{CandidType, Deserialize, Nat, Principal};
+use ic_icrc1_ledger::ChangeArchiveOptions;
 use std::fmt::{Display, Formatter};
 
 #[allow(clippy::large_enum_variant)]
@@ -26,6 +27,7 @@ pub struct UpgradeArg {
     pub archive_compressed_wasm_hash: Option<String>,
     pub cycles_management: Option<UpdateCyclesManagement>,
     pub manage_ledger_suites: Option<Vec<InstalledLedgerSuite>>,
+    pub ledger_upgrade_arg: Option<LedgerUpgradeArg>,
 }
 
 impl UpgradeArg {
@@ -33,6 +35,23 @@ impl UpgradeArg {
         self.ledger_compressed_wasm_hash.is_some()
             || self.index_compressed_wasm_hash.is_some()
             || self.archive_compressed_wasm_hash.is_some()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct LedgerUpgradeArg {
+    pub change_archive_options: Option<ChangeArchiveOptions>,
+}
+
+impl From<LedgerUpgradeArg> for ic_icrc1_ledger::UpgradeArgs {
+    fn from(arg: LedgerUpgradeArg) -> Self {
+        let LedgerUpgradeArg {
+            change_archive_options,
+        } = arg;
+        ic_icrc1_ledger::UpgradeArgs {
+            change_archive_options,
+            ..ic_icrc1_ledger::UpgradeArgs::default()
+        }
     }
 }
 

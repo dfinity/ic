@@ -1,7 +1,8 @@
 use ic_types::{
-    CanisterId, NodeId, PrincipalId, SubnetId, UserId,
+    CanisterId, NodeId, PlatformVersion, PrincipalId, ReplicaVersion, SubnetId, UserId,
     messages::{CallContextId, EXPECTED_MESSAGE_ID_LENGTH, MessageId},
 };
+use std::str::FromStr;
 
 pub const NODE_1: NodeId = NodeId::new(PrincipalId::new(
     10,
@@ -151,6 +152,21 @@ pub fn canister_test_id(i: u64) -> CanisterId {
 /// Returns a [`NodeId`] that can be used in tests.
 pub fn node_test_id(i: u64) -> NodeId {
     NodeId::from(PrincipalId::new_node_test_id(i))
+}
+
+pub fn test_replica_version() -> ReplicaVersion {
+    ReplicaVersion::from_str("cafebabecafebabecafebabecafebabecafebabe").unwrap()
+}
+
+pub fn test_guestos_version() -> ReplicaVersion {
+    ReplicaVersion::from_str("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef").unwrap()
+}
+
+pub fn test_platform_version() -> PlatformVersion {
+    PlatformVersion {
+        guestos_version: test_guestos_version(),
+        replica_version: test_replica_version(),
+    }
 }
 
 /// Converts a [`NodeId`] to a [`u64`].

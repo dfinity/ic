@@ -253,14 +253,18 @@ fn compile_inner(
     let code_section_size = wasm_validation_details.code_section_size;
     let max_num_locals = wasm_validation_details.max_num_locals;
 
-    let is_wasm64 = module
-        .get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME)
-        .is_some_and(|export| export.memory().is_some_and(|mem| mem.is_64()));
+    // Instrumentation exports the Wasm memory under this name if and only if
+    // the module declares one.
+    let wasm_memory = module.get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME);
+    let declares_wasm_memory = wasm_memory.is_some();
+    let is_wasm64 =
+        wasm_memory.is_some_and(|export| export.memory().is_some_and(|mem| mem.is_64()));
 
     let serialized_module = SerializedModule::new(
         &module,
         instrumentation_output,
         wasm_validation_details,
+        declares_wasm_memory,
         is_wasm64,
     )?;
     Ok((

@@ -776,7 +776,7 @@ mod tests {
             prop_assert_eq!(operations.clone(), parsed.operations);
 
             // metadata must always be present
-            prop_assert!(parsed.metadata.is_some(), "Metatada should always be returned");
+            prop_assert!(parsed.metadata.is_some(), "Metadata should always be returned");
 
             check_metadata(metadata, parsed.metadata.unwrap()).unwrap()
         });
@@ -826,7 +826,7 @@ mod tests {
             prop_assert_eq!(operations.clone(), parsed.operations);
 
             // metadata must always be present
-            prop_assert!(parsed.metadata.is_some(), "Metatada should always be returned");
+            prop_assert!(parsed.metadata.is_some(), "Metadata should always be returned");
 
             check_metadata(metadata, parsed.metadata.unwrap()).unwrap()
         });

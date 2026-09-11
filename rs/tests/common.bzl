@@ -15,6 +15,58 @@ MAINNET_ENV = {
     "MAINNET_APP_GUESTOS_REVISION_ENV": MAINNET_APP["version"],
 }
 
+def mainnet_binaries_runtime_deps(repo, prefix, binaries):
+    """Runtime dependencies on binaries published for a mainnet revision.
+
+    Only depend on the binaries a test actually uses: every runtime dependency ends
+    up in the test's runfiles (and, for colocated tests, in the tarball copied to
+    the driver's UVM), so an unused one costs both disk and time.
+
+    Args:
+      repo: the repository holding the binaries, e.g. "mainnet_nns_binaries".
+      prefix: env var prefix identifying the revision, e.g. "MAINNET_NNS".
+      binaries: names of the binaries to depend on.
+
+    Returns:
+      A dict from env var name (e.g. "MAINNET_NNS_IC_REPLAY_PATH") to label.
+    """
+    return {
+        "{}_{}_PATH".format(prefix, name.upper().replace("-", "_")): "@{}//:{}".format(repo, name)
+        for name in binaries
+    }
+
+MAINNET_NNS_REPLAY_RUNTIME_DEPS = mainnet_binaries_runtime_deps(
+    "mainnet_nns_binaries",
+    "MAINNET_NNS",
+    [
+        "canister_sandbox",
+        "compiler_sandbox",
+        "ic-replay",
+        "sandbox_launcher",
+    ],
+)
+
+MAINNET_TYPES_TEST_RUNTIME_DEPS = mainnet_binaries_runtime_deps(
+    "mainnet_nns_binaries",
+    "MAINNET_NNS",
+    ["types-test"],
+) | mainnet_binaries_runtime_deps(
+    "mainnet_app_binaries",
+    "MAINNET_APP",
+    ["types-test"],
+)
+
+# Used by //rs/tests/message_routing:queues_compatibility_test.
+MAINNET_QUEUES_COMPATIBILITY_RUNTIME_DEPS = mainnet_binaries_runtime_deps(
+    "mainnet_nns_binaries",
+    "MAINNET_NNS",
+    ["replicated-state-test", "state-layout-test"],
+) | mainnet_binaries_runtime_deps(
+    "mainnet_app_binaries",
+    "MAINNET_APP",
+    ["replicated-state-test", "state-layout-test"],
+)
+
 NNS_CANISTER_WASM_PROVIDERS = {
     "registry-canister_test": {
         "tip-of-branch": "//rs/registry/canister:registry-canister-test",

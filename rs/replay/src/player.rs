@@ -11,7 +11,7 @@ use ic_artifact_pool::{
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
 use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
-use ic_consensus::consensus::batch_delivery::deliver_batches;
+use ic_consensus::consensus::batch_delivery::deliver_batches_for_ic_replay;
 use ic_consensus_certification::VerifierImpl;
 use ic_consensus_utils::{lookup_replica_version, membership::Membership, pool_reader::PoolReader};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
@@ -53,8 +53,8 @@ use ic_registry_transport::{
 use ic_replicated_state::metrics::ReplicatedStateInvariants;
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
-    CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
-    RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
+    CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PlatformVersion, PrincipalId,
+    Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
     batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics},
     consensus::{
         CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
@@ -146,7 +146,7 @@ impl Player {
     /// restoring states from backups.
     pub(crate) fn new_for_backup(
         mut cfg: Config,
-        replica_version: ReplicaVersion,
+        platform_version: PlatformVersion,
         backup_spool_path: &Path,
         registry_local_store_path: &Path,
         subnet_id: SubnetId,
@@ -176,7 +176,7 @@ impl Player {
         let artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
         let backup_dir = backup_spool_path
             .join(subnet_id.to_string())
-            .join(replica_version.to_string());
+            .join(platform_version.replica_version.as_ref());
         // Extract the genesis CUP and instantiate a new pool.
         let cup_file = backup::cup_file_name(&backup_dir, Height::from(start_height));
         let initial_cup_proto = backup::read_cup_proto_file(&cup_file)
@@ -185,6 +185,7 @@ impl Player {
         let pool = ConsensusPoolImpl::new(
             NodeId::from(PrincipalId::new_anonymous()),
             subnet_id,
+            &platform_version.replica_version,
             // Note: it's important to pass the original proto which came from the command line (as
             // opposed to, for example, a proto which was first deserialized and then serialized
             // again). Since the proto file could have been produced and signed by nodes running a
@@ -206,7 +207,7 @@ impl Player {
             subnet_id,
             Some(pool),
             Some(backup_dir),
-            replica_version,
+            platform_version,
             log,
             _async_log_guard,
         );
@@ -216,7 +217,12 @@ impl Player {
 
     /// Create and return a `Player` from a replica configuration object for
     /// subnet recovery.
-    pub(crate) fn new(cfg: Config, subnet_id: SubnetId) -> Self {
+    pub(crate) fn new(
+        cfg: Config,
+        subnet_id: SubnetId,
+        replica_version: Option<ReplicaVersion>,
+        guestos_version: Option<ReplicaVersion>,
+    ) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::new();
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
@@ -243,7 +249,19 @@ impl Player {
             // Use the replica version from the finalized tip in the pool.
             PoolReader::new(pool).get_finalized_tip().version().clone()
         } else {
-            Default::default()
+            // Without a consensus pool, the replica version must be given.
+            replica_version.unwrap_or_else(|| {
+                panic!(
+                    "No consensus pool found at {:?} and no replica version was given; \
+                     one of the two is required.",
+                    cfg.artifact_pool.consensus_pool_path
+                )
+            })
+        };
+
+        let platform_version = PlatformVersion {
+            guestos_version: guestos_version.unwrap_or_else(|| replica_version.clone()),
+            replica_version,
         };
 
         Player::new_with_params(
@@ -252,7 +270,7 @@ impl Player {
             subnet_id,
             consensus_pool,
             None,
-            replica_version,
+            platform_version,
             log,
             _async_log_guard,
         )
@@ -265,15 +283,10 @@ impl Player {
         subnet_id: SubnetId,
         consensus_pool: Option<ConsensusPoolImpl>,
         backup_dir: Option<PathBuf>,
-        replica_version: ReplicaVersion,
+        platform_version: PlatformVersion,
         log: ReplicaLogger,
         _async_log_guard: AsyncGuard,
     ) -> Self {
-        println!("Setting default replica version {replica_version}");
-        if ReplicaVersion::set_default_version(replica_version.clone()).is_err() {
-            println!("Failed to set default replica version");
-        }
-
         let registry_version = registry.get_latest_version();
         let subnet_type = match registry.get_subnet_record(subnet_id, registry_version) {
             Ok(Some(record)) => {
@@ -342,6 +355,7 @@ impl Player {
             ReplayValidator::new(
                 cfg,
                 subnet_id,
+                platform_version.clone(),
                 crypto.clone(),
                 crypto.clone(),
                 verifier,
@@ -375,7 +389,7 @@ impl Player {
             registry,
             local_store_path,
             subnet_id,
-            replica_version,
+            replica_version: platform_version.replica_version,
             backup_dir,
             log,
             _async_log_guard,
@@ -704,13 +718,13 @@ impl Player {
     ) -> Height {
         let expected_batch_height = message_routing.expected_batch_height();
         let last_batch_height = loop {
-            match deliver_batches(
+            match deliver_batches_for_ic_replay(
                 message_routing,
                 membership,
                 pool,
                 &*self.registry,
-                self.subnet_id,
                 &self.log,
+                self.subnet_id,
                 replay_target_height,
             ) {
                 Ok(h) => break h,
@@ -742,7 +756,7 @@ impl Player {
                 self.registry.get_latest_version(),
                 ic_types::time::current_time(),
                 Randomness::from([0; 32]),
-                ReplicaVersion::default(),
+                self.replica_version.clone(),
             ),
             Some(pool) => {
                 let pool = PoolReader::new(pool);

@@ -1,5 +1,5 @@
 //! Defines the [`ReplicaConfig`].
-use crate::{NodeId, PrincipalId, SubnetId};
+use crate::{NodeId, PlatformVersion, ReplicaVersion, SubnetId};
 use serde::{Deserialize, Serialize};
 
 pub const NODE_INDEX_DEFAULT: u64 = 0;
@@ -10,19 +10,15 @@ pub const SUBNET_ID_DEFAULT: u64 = 0;
 pub struct ReplicaConfig {
     pub node_id: NodeId,
     pub subnet_id: SubnetId,
+    pub platform_version: PlatformVersion,
 }
 
 impl ReplicaConfig {
-    pub fn new(node_id: NodeId, subnet_id: SubnetId) -> ReplicaConfig {
-        Self { node_id, subnet_id }
+    pub fn replica_version(&self) -> &ReplicaVersion {
+        &self.platform_version.replica_version
     }
-}
 
-impl Default for ReplicaConfig {
-    fn default() -> Self {
-        ReplicaConfig::new(
-            NodeId::from(PrincipalId::new_node_test_id(NODE_INDEX_DEFAULT)),
-            SubnetId::from(PrincipalId::new_subnet_test_id(SUBNET_ID_DEFAULT)),
-        )
+    pub fn guestos_version(&self) -> &ReplicaVersion {
+        &self.platform_version.guestos_version
     }
 }

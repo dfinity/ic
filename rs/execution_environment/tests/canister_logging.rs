@@ -1,7 +1,7 @@
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::{Config as ExecutionConfig, TEST_DEFAULT_LOG_MEMORY_USAGE};
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::subnet_config::{DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE, SubnetConfig};
 use ic_execution_environment::units::{KIB, MIB};
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
@@ -2255,6 +2255,57 @@ fn test_canister_resize_down_preserves_logs() {
 }
 
 #[test]
+fn test_canister_resize_down_below_record_size_truncates_logs() {
+    let log_memory_limit = TEST_DEFAULT_LOG_MEMORY_LIMIT as u64;
+    // The largest log content that still fits a log memory store of that size.
+    let max_content_len = log_memory_limit as usize - LogMemoryStore::estimate_record_size(0);
+
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(64 * KIB)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+
+    // Store records that do not fit the smallest accepted log memory limit.
+    let message = [b'a'; MAX_LOG_MESSAGE_LEN];
+    for _ in 0..2 {
+        let _ = env.execute_ingress(
+            canister_id,
+            "update",
+            wasm().debug_print(&message).reply().build(),
+        );
+    }
+    let logs_before = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs_before.len(), 2);
+    assert_gt!(logs_before[0].content.len(), max_content_len);
+
+    // Shrinking the limit below a single stored record makes `LogMemoryStore::resize_impl`
+    // migrate the records into a buffer they no longer fit. They must be truncated.
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(log_memory_limit)
+            .build(),
+    );
+
+    // The records must be truncated to fit the smaller buffer, not dropped.
+    let logs_after = fetch_log_records(&env, controller, canister_id);
+    assert!(
+        !logs_after.is_empty(),
+        "records were dropped instead of truncated"
+    );
+    for record in &logs_after {
+        assert_le!(record.content.len(), max_content_len);
+    }
+}
+
+#[test]
 fn test_canister_log_resize_deducts_cycles() {
     let log_memory_limit = 2 * MIB;
 
@@ -2292,8 +2343,7 @@ fn test_canister_log_resize_deducts_cycles() {
 
     // The resize cost is proportional to bytes_used. With a full 2 MiB buffer,
     // expect at least 1.5 MiB * cost_per_byte (allowing slack for partial fill).
-    // Must match LOG_RESIZE_COST_PER_BYTE in canister_manager.rs.
-    let log_resize_cost_per_byte: u64 = 32;
+    let log_resize_cost_per_byte = DEFAULT_CANISTER_LOG_RESIZE_INSTRUCTIONS_PER_BYTE.get();
     let cycles_deducted = balance_before - balance_after;
     let min_expected = 3 * MIB / 2 * log_resize_cost_per_byte;
     assert_gt!(

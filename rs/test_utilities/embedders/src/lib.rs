@@ -3,7 +3,6 @@ use std::{convert::TryFrom, rc::Rc};
 
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
-use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::SandboxSafeSystemState;
@@ -129,17 +128,8 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
-    pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
-        self.config.feature_flags.deterministic_memory_tracker = if enabled {
-            FlagStatus::Enabled
-        } else {
-            FlagStatus::Disabled
-        };
-        self
-    }
-
-    pub fn with_dirty_page_overhead(mut self, dirty_page_overhead: NumInstructions) -> Self {
-        self.config.dirty_page_overhead = dirty_page_overhead;
+    pub fn with_page_overhead(mut self, page_overhead: NumInstructions) -> Self {
+        self.config.page_overhead = page_overhead;
         self
     }
 

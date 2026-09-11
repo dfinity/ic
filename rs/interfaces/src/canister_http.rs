@@ -100,13 +100,6 @@ pub enum InvalidCanisterHttpPayloadReason {
         per_replica_allowance: Cycles,
         num_replicas: usize,
     },
-    /// Some of the signatures in the canister http proof were not members of
-    /// the canister http committee.
-    SignersNotMembers {
-        committee: Vec<NodeId>,
-        invalid_signers: Vec<NodeId>,
-        valid_signers: Vec<NodeId>,
-    },
     /// There were not enough signers in the canister http response proof
     NotEnoughSigners {
         committee: Vec<NodeId>,
@@ -117,11 +110,6 @@ pub enum InvalidCanisterHttpPayloadReason {
     DuplicateResponse(CallbackId),
     DivergenceProofContainsMultipleCallbackIds,
     DivergenceProofDoesNotMeetDivergenceCriteria,
-    /// A divergence proof contains more than one share from the same signer.
-    DivergenceDuplicateSigner {
-        callback_id: CallbackId,
-        signer: NodeId,
-    },
     /// The callback_id a share or response is signed for does not match the one of
     /// the payload section it appears in.
     ShareCallbackIdMismatch {

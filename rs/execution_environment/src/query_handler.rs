@@ -19,7 +19,7 @@ use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_error_types::UserError;
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     QueryExecutionError, QueryExecutionInput, QueryExecutionResponse, QueryExecutionService,
     TransformExecutionInput, TransformExecutionService,
@@ -36,7 +36,7 @@ use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
     CanisterId, NumInstructions,
     ingress::WasmResult,
-    messages::{Blob, Certificate, CertificateDelegation, Query},
+    messages::{Blob, Certificate, CertificateDelegation, Query, QuerySource},
 };
 use prometheus::{Histogram, histogram_opts, labels};
 use serde::Serialize;
@@ -180,6 +180,22 @@ impl InternalHttpQueryHandler {
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
+        // While the subnet is cooling down it rejects all query calls, the ones
+        // addressed to the management canister included. System queries, i.e. the
+        // `transform` functions of HTTP outcalls, are still executed, because subnet
+        // messages are still executed by a cooling down subnet.
+        if matches!(query.source, QuerySource::User { .. })
+            && state.get_ref().metadata.is_cooling_down()
+        {
+            return Err(UserError::new(
+                ErrorCode::SubnetCoolingDown,
+                format!(
+                    "Subnet {} is cooling down and does not accept query calls",
+                    state.get_ref().metadata.own_subnet_id
+                ),
+            ));
+        }
+
         // Serve the query locally if it is addressed to the management canister.
         if query.receiver == CanisterId::ic_00() {
             let method = subnet_query::parse_query_method(&query.method_name)?;
@@ -246,12 +262,16 @@ impl InternalHttpQueryHandler {
                 data_certificate_with_delegation_metadata.data_certificate
             },
         );
-        // The subnet's registry-configured `maximum_query_instructions` (`ResourceLimits`) overrides
-        // both the per-query and the composite-query-graph instruction limits; each falls back to
-        // its own replica default when unset.
+        // The subnet's registry-configured `ResourceLimits` override the query limits:
+        // `maximum_query_instructions` bounds both the per-query and the composite-query-graph
+        // instruction limits, and `maximum_query_walltime_seconds` bounds the composite-query
+        // call-graph wall-clock time (the only query wall-clock limit; a single query is bounded
+        // by instructions). Each falls back to its own replica default when unset.
         let resource_limits = state.get_ref().resource_limits();
         let max_query_call_graph_instructions = resource_limits
             .maximum_query_instructions_or(self.config.max_query_call_graph_instructions);
+        let max_query_call_walltime =
+            resource_limits.maximum_query_walltime_seconds_or(self.config.max_query_call_walltime);
         let max_instructions_per_query = match max_instructions {
             // A caller-provided limit (currently only the HTTP outcalls transform budget) is
             // authoritative for that call.
@@ -277,7 +297,7 @@ impl InternalHttpQueryHandler {
             max_instructions_per_query,
             self.config.max_query_call_graph_depth,
             max_query_call_graph_instructions,
-            self.config.max_query_call_walltime,
+            max_query_call_walltime,
             self.config.instruction_overhead_per_query_call,
             self.config.composite_queries,
             query.receiver,

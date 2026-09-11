@@ -90,3 +90,7 @@ path = "cycles_cost_schedule_test.rs"
 [[bin]]
 name = "canister_migration_test"
 path = "canister_migration_test.rs"
+
+[[bin]]
+name = "subnet_metrics_test"
+path = "subnet_metrics_test.rs"

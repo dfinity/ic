@@ -36,7 +36,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-pub fn serialize_arc<T: Serialize, S: Serializer>(
+pub fn serialize_arc<T: Serialize + ?Sized, S: Serializer>(
     data: &Arc<T>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
@@ -47,4 +47,11 @@ pub fn deserialize_arc<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Arc<T>, D::Error> {
     T::deserialize(deserializer).map(Arc::new)
+}
+
+pub fn deserialize_arc_str<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Arc<str>, D::Error> {
+    let s = String::deserialize(deserializer)?;
+    Ok(Arc::from(s))
 }

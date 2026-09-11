@@ -1,7 +1,13 @@
 use crate::deserialize_registry_value;
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
-use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
-use ic_registry_keys::{REPLICA_VERSION_KEY_PREFIX, make_replica_version_key};
+use ic_protobuf::registry::{
+    replica_version::v1::ReplicaVersionRecord,
+    standard_engine_replica_version::v1::StandardEngineReplicaVersionRecord,
+};
+use ic_registry_keys::{
+    REPLICA_VERSION_KEY_PREFIX, make_replica_version_key,
+    make_standard_engine_replica_version_record_key,
+};
 use ic_types::registry::RegistryClientError;
 pub use ic_types::replica_version::ReplicaVersion;
 pub use ic_types::{NodeId, RegistryVersion, SubnetId};
@@ -17,6 +23,11 @@ pub trait ReplicaVersionRegistry {
         replica_version_id: &ReplicaVersion,
         version: RegistryVersion,
     ) -> RegistryClientResult<ReplicaVersionRecord>;
+
+    fn get_standard_engine_replica_version_record(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<StandardEngineReplicaVersionRecord>;
 
     /// Returns all guest launch measurements from all replica versions.
     ///
@@ -61,6 +72,14 @@ impl<T: RegistryClient + ?Sized> ReplicaVersionRegistry for T {
     ) -> RegistryClientResult<ReplicaVersionRecord> {
         let bytes = self.get_value(&make_replica_version_key(replica_version_id), version);
         deserialize_registry_value::<ReplicaVersionRecord>(bytes)
+    }
+
+    fn get_standard_engine_replica_version_record(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<StandardEngineReplicaVersionRecord> {
+        let bytes = self.get_value(&make_standard_engine_replica_version_record_key(), version);
+        deserialize_registry_value::<StandardEngineReplicaVersionRecord>(bytes)
     }
 
     fn get_guest_launch_measurements(

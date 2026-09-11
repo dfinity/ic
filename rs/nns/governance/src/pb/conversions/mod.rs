@@ -2918,6 +2918,7 @@ impl From<pb::CanisterSettings> for api::CanisterSettings {
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
             snapshot_visibility: item.snapshot_visibility,
+            reserved_cycles_limit: item.reserved_cycles_limit,
         }
     }
 }
@@ -2933,6 +2934,7 @@ impl From<api::CanisterSettings> for pb::CanisterSettings {
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
             snapshot_visibility: item.snapshot_visibility,
+            reserved_cycles_limit: item.reserved_cycles_limit,
         }
     }
 }
@@ -3940,6 +3942,7 @@ impl From<pb::NnsFunction> for api::NnsFunction {
                 api::NnsFunction::SetSubnetOperationalLevel
             }
             pb::NnsFunction::SplitSubnet => api::NnsFunction::SplitSubnet,
+            pb::NnsFunction::MergeSubnets => api::NnsFunction::MergeSubnets,
             pb::NnsFunction::DeleteSubnet => api::NnsFunction::DeleteSubnet,
             pb::NnsFunction::SetDefaultInitialDkgSubnet => {
                 api::NnsFunction::SetDefaultInitialDkgSubnet
@@ -4040,6 +4043,7 @@ impl From<api::NnsFunction> for pb::NnsFunction {
                 pb::NnsFunction::SetSubnetOperationalLevel
             }
             api::NnsFunction::SplitSubnet => pb::NnsFunction::SplitSubnet,
+            api::NnsFunction::MergeSubnets => pb::NnsFunction::MergeSubnets,
             api::NnsFunction::DeleteSubnet => pb::NnsFunction::DeleteSubnet,
             api::NnsFunction::SetDefaultInitialDkgSubnet => {
                 pb::NnsFunction::SetDefaultInitialDkgSubnet

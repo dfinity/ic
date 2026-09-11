@@ -72,11 +72,37 @@ impl LedgerClient {
         amount: A,
         memo: BurnMemo,
     ) -> Result<LedgerBurnIndex, LedgerBurnError> {
+        self.burn_from_with_spender(from, None, amount, memo).await
+    }
+
+    /// Needs no approval: passing `subaccount` as the spender subaccount too makes the spender
+    /// account equal `from`, and the ledger skips the allowance check for such a transfer.
+    pub async fn burn_from_own_subaccount<A: Into<Nat>>(
+        &self,
+        subaccount: [u8; 32],
+        amount: A,
+        memo: BurnMemo,
+    ) -> Result<LedgerBurnIndex, LedgerBurnError> {
+        let from = Account {
+            owner: ic_cdk::api::canister_self(),
+            subaccount: Some(subaccount),
+        };
+        self.burn_from_with_spender(from, Some(subaccount), amount, memo)
+            .await
+    }
+
+    async fn burn_from_with_spender<A: Into<Nat>>(
+        &self,
+        from: Account,
+        spender_subaccount: Option<[u8; 32]>,
+        amount: A,
+        memo: BurnMemo,
+    ) -> Result<LedgerBurnIndex, LedgerBurnError> {
         let amount = amount.into();
         match self
             .client
             .transfer_from(TransferFromArgs {
-                spender_subaccount: None,
+                spender_subaccount,
                 from,
                 to: ic_cdk::api::canister_self().into(),
                 amount: amount.clone(),

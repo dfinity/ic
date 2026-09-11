@@ -14,7 +14,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:631b89b4b353889b5ab845fe0305cfed185091efe16bf6c79029cf083db4e42c
+      image: ghcr.io/dfinity/ic-build@sha256:0b6a915e614105c632a0c7a0f6e530ed506decfbd0316b297b28e9c555c532a2
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 720 # 12 hours
@@ -66,6 +66,7 @@ jobs:
       - uses: ./.github/actions/netrc
       - *backup-pod-access
       - name: Run NNS Recovery Test with Mainnet State
+        if: false # this test will fail until this PR is merged: https://github.com/dfinity/ic/pull/11203
         uses: ./.github/actions/bazel
         with:
           run: |
@@ -75,6 +76,14 @@ jobs:
               //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state_colocate \
               --keep_going --test_timeout=7200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: true # we keep reminding the team to fix the test
+        with:
+          channel-id: eng-consensus-test-failures
+          slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
 
   nns-tests-nightly:
     name: Bazel Test NNS Nightly

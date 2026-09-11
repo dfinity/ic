@@ -98,6 +98,11 @@ fn http_request(_: HttpRequestArgs) -> HttpRequestResult {
 }
 
 #[candid_method(update)]
+fn flexible_http_request(_: FlexibleHttpRequestArgs) -> FlexibleHttpRequestResult {
+    unimplemented!()
+}
+
+#[candid_method(update)]
 fn ecdsa_public_key(_: EcdsaPublicKeyArgs) -> EcdsaPublicKeyResult {
     unimplemented!()
 }
@@ -129,6 +134,11 @@ fn vetkd_derive_key(_: VetKDDeriveKeyArgs) -> VetKDDeriveKeyResult {
 
 #[candid_method(update)]
 fn node_metrics_history(_: NodeMetricsHistoryArgs) -> NodeMetricsHistoryResult {
+    unimplemented!()
+}
+
+#[candid_method(update)]
+fn subnet_metrics(_: SubnetMetricsArgs) -> SubnetMetricsResult {
     unimplemented!()
 }
 

@@ -81,6 +81,7 @@ pub struct DashboardWithdrawalRequest {
     pub value: Nat,
     pub token_symbol: CkTokenSymbol,
     pub created_at: Option<u64>,
+    pub is_sweeper_funding: bool,
 }
 
 #[derive(Clone)]
@@ -296,6 +297,26 @@ pub struct DashboardTemplate {
     pub eth_balance: EthBalance,
     pub skipped_blocks: BTreeMap<String, BTreeSet<BlockNumber>>,
     pub supported_ckerc20_tokens: Vec<DashboardCkErc20Token>,
+    pub sweeper_funding: DashboardSweeperFunding,
+}
+
+#[derive(Clone)]
+pub struct DashboardSweeperFunding {
+    pub sweeper_address: Option<Address>,
+    pub cketh_burned: Wei,
+    pub eth_spent: Wei,
+    pub burned_not_yet_spent: Wei,
+    pub prepaid_gas_lower_bound: Wei,
+    pub low_water_mark: Wei,
+    pub target: Wei,
+    pub in_flight: Option<DashboardInFlightFunding>,
+}
+
+#[derive(Clone)]
+pub struct DashboardInFlightFunding {
+    pub ledger_burn_index: LedgerBurnIndex,
+    pub amount: Wei,
+    pub created_at: Option<u64>,
 }
 
 impl DashboardTemplate {
@@ -337,17 +358,21 @@ impl DashboardTemplate {
             .collect();
 
         let mut withdrawal_requests: Vec<_> = state
-            .eth_transactions
-            .withdrawal_requests_iter()
+            .withdrawal_transactions
+            .requests_iter()
             .cloned()
             .map(|request| match request {
-                WithdrawalRequest::CkEth(req) => DashboardWithdrawalRequest {
-                    cketh_ledger_burn_index: req.ledger_burn_index,
-                    destination: req.destination,
-                    value: req.withdrawal_amount.into(),
-                    token_symbol: CkTokenSymbol::cketh_symbol_from_state(state),
-                    created_at: req.created_at,
-                },
+                WithdrawalRequest::CkEth(ref req) | WithdrawalRequest::SweeperFunding(ref req) => {
+                    let req = req.clone();
+                    DashboardWithdrawalRequest {
+                        cketh_ledger_burn_index: req.ledger_burn_index,
+                        destination: req.destination,
+                        value: req.withdrawal_amount.into(),
+                        token_symbol: CkTokenSymbol::cketh_symbol_from_state(state),
+                        created_at: req.created_at,
+                        is_sweeper_funding: matches!(request, WithdrawalRequest::SweeperFunding(_)),
+                    }
+                }
                 WithdrawalRequest::CkErc20(req) => {
                     let erc20_contract_address = &req.erc20_contract_address;
                     DashboardWithdrawalRequest {
@@ -360,6 +385,7 @@ impl DashboardTemplate {
                             .expect("BUG: unknown ERC-20 token")
                             .clone(),
                         created_at: Some(req.created_at),
+                        is_sweeper_funding: false,
                     }
                 }
             })
@@ -367,7 +393,7 @@ impl DashboardTemplate {
         withdrawal_requests.sort_unstable_by_key(|req| Reverse(req.cketh_ledger_burn_index));
 
         let mut pending_transactions: Vec<_> = state
-            .eth_transactions
+            .withdrawal_transactions
             .transactions_to_sign_iter()
             .map(|(_nonce, ledger_burn_index, tx)| {
                 let (destination, value, token_symbol) = to_dashboard_transaction(tx, state);
@@ -380,25 +406,29 @@ impl DashboardTemplate {
                 }
             })
             .collect();
-        pending_transactions.extend(state.eth_transactions.sent_transactions_iter().flat_map(
-            |(_nonce, ledger_burn_index, txs)| {
-                txs.into_iter().map(|tx| {
-                    let (destination, value, token_symbol) = to_dashboard_transaction(tx, state);
-                    DashboardPendingTransaction {
-                        ledger_burn_index: *ledger_burn_index,
-                        destination,
-                        value,
-                        token_symbol,
-                        status: RetrieveEthStatus::TxSent(EthTransaction::from(tx)),
-                    }
-                })
-            },
-        ));
+        pending_transactions.extend(
+            state
+                .withdrawal_transactions
+                .sent_transactions_iter()
+                .flat_map(|(_nonce, ledger_burn_index, txs)| {
+                    txs.into_iter().map(|tx| {
+                        let (destination, value, token_symbol) =
+                            to_dashboard_transaction(tx, state);
+                        DashboardPendingTransaction {
+                            ledger_burn_index: *ledger_burn_index,
+                            destination,
+                            value,
+                            token_symbol,
+                            status: RetrieveEthStatus::TxSent(EthTransaction::from(tx)),
+                        }
+                    })
+                }),
+        );
         pending_transactions
             .sort_unstable_by_key(|pending_tx| Reverse(pending_tx.ledger_burn_index));
 
         let mut finalized_transactions: Vec<_> = state
-            .eth_transactions
+            .withdrawal_transactions
             .finalized_transactions_iter()
             .map(|(_tx_nonce, index, tx)| {
                 let (destination, value, token_symbol) = to_dashboard_transaction(tx, state);
@@ -426,7 +456,7 @@ impl DashboardTemplate {
         );
 
         let mut reimbursed_transactions: Vec<_> = state
-            .eth_transactions
+            .withdrawal_transactions
             .reimbursed_transactions_iter()
             .map(|(index, result)| {
                 let (cketh_ledger_burn_index, token_symbol) = match index {
@@ -476,6 +506,7 @@ impl DashboardTemplate {
             "reimbursed_transactions_start",
         );
 
+        let funding_config = state.sweeper_funding_config();
         DashboardTemplate {
             ethereum_network: state.ethereum_network,
             ecdsa_key_name: state.ecdsa_key_name.clone(),
@@ -486,7 +517,7 @@ impl DashboardTemplate {
             sweeper_contract_address: state.sweeper_contract_address,
             log_scrapings: state.log_scrapings.clone(),
             cketh_ledger_id: state.cketh_ledger_id,
-            next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),
+            next_transaction_nonce: state.withdrawal_transactions.next_transaction_nonce(),
             minimum_withdrawal_amount: state.cketh_minimum_withdrawal_amount,
             first_synced_block: state.first_scraped_block_number,
             last_observed_block: state.last_observed_block_number,
@@ -504,6 +535,23 @@ impl DashboardTemplate {
                 .map(|(contract_address, blocks)| (contract_address.to_string(), blocks.clone()))
                 .collect(),
             supported_ckerc20_tokens,
+            sweeper_funding: DashboardSweeperFunding {
+                sweeper_address: state.sweeper_address(),
+                cketh_burned: state.sweeper_funding.cumulative_burned(),
+                eth_spent: state.sweeper_funding.cumulative_spent(),
+                burned_not_yet_spent: state.sweeper_funding.burned_not_yet_spent(),
+                prepaid_gas_lower_bound: state.sweeper_funding.sweeper_balance_lower_bound(),
+                low_water_mark: funding_config.low_water_mark,
+                target: funding_config.target,
+                in_flight: state
+                    .withdrawal_transactions
+                    .outstanding_sweeper_funding()
+                    .map(|funding| DashboardInFlightFunding {
+                        ledger_burn_index: funding.ledger_burn_index,
+                        amount: funding.withdrawal_amount,
+                        created_at: funding.created_at,
+                    }),
+            },
         }
     }
 }

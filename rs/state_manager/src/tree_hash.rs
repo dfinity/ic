@@ -374,6 +374,7 @@ mod tests {
             });
             subnet_metrics.threshold_signature_agreements =
                 BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
+            subnet_metrics.refresh_consumed_cycles(NominalCycles::zero());
 
             state.metadata.subnet_metrics = subnet_metrics;
 

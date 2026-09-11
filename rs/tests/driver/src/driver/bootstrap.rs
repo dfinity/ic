@@ -1,5 +1,6 @@
 use crate::driver::ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, Playnet};
 use crate::driver::ic_images::try_get_setupos_img_version;
+use crate::driver::local_backend::LocalBackend;
 use crate::driver::nested::NestedVm;
 use crate::driver::resource::{BootImage, DiskImage};
 use crate::driver::test_env_api::{
@@ -11,7 +12,7 @@ use crate::driver::{
     constants::SSH_USERNAME,
     driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
     farm::{AttachImageSpec, Farm, FarmResult, FileId},
-    ic::{InternetComputer, Node},
+    ic::{InternetComputer, LocalApiBoundaryNodesPlaynet, Node},
     nested::{HasNestedVms, NESTED_CONFIG_IMAGE_PATH, UnassignedRecordConfig},
     node_software_version::NodeSoftwareVersion,
     port_allocator::AddrType,
@@ -23,7 +24,7 @@ use crate::driver::{
         get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
         get_setupos_img_sha256, get_setupos_img_url, try_get_guestos_img_version,
     },
-    test_setup::SystemTestBackend,
+    test_setup::{GroupSetup, SystemTestBackend},
 };
 use anyhow::{Context, Result, bail};
 use bare_metal_deployment::SshAuthMethod;
@@ -50,6 +51,7 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
+use itertools::Itertools;
 use slog::{Logger, debug, info, warn};
 use std::{
     collections::BTreeMap,
@@ -74,6 +76,13 @@ const BITCOIND_ADDR_PATH: &str = "bitcoind_addr";
 const DOGECOIND_ADDR_PATH: &str = "dogecoind_addr";
 const JAEGER_ADDR_PATH: &str = "jaeger_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
+
+/// The ports the Local backend whitelists for the test driver on every node,
+/// mirroring the ports the firewall template's `default_rules` open to Farm's
+/// management prefixes. `ic-prep` always adds 8080 on top of these.
+const LOCAL_WHITELISTED_PORTS: &[u32] = &[
+    22, 2497, 4100, 7070, 9090, 9091, 9100, 9324, 19100, 19523, 19531,
+];
 
 fn mk_compressed_img_path() -> std::string::String {
     format!("{CONF_IMG_FNAME}.zst")
@@ -220,16 +229,30 @@ pub fn init_ic(
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
-    // On the Local backend the test driver reaches the nodes over the group's
-    // IPv6 ULA bridge (`fd00::/8`). Unlike Farm — whose management prefixes are
-    // covered by the firewall template's built-in `default_rules` — these ULA
-    // source addresses are not whitelisted by default. Once the orchestrator
-    // applies its nftables ruleset (whose presence several tests assert on), the
-    // driver would otherwise be locked out of the replica endpoints it needs
-    // (`:8080`, SSH, metrics, ...). Whitelist the ULA range on the same ports
-    // the Farm `default_rules` cover so the firewall can be fully active while
-    // keeping the nodes reachable from the driver. Port 8080 is always included
-    // by `ic-prep`.
+    // On the Local backend the test driver reaches the nodes from addresses
+    // that lie outside their `/64` (see `LocalBackend::group_driver_ipv6s`).
+    // Unlike Farm — whose management prefixes are covered by the firewall
+    // template's built-in `default_rules` — those source addresses are not
+    // whitelisted by default. Once the orchestrator applies its nftables ruleset
+    // (whose presence several tests assert on), the driver would otherwise be
+    // locked out of the replica endpoints it needs (`:8080`, SSH, metrics, ...).
+    // Whitelist the driver's own addresses on the same ports the Farm
+    // `default_rules` cover, so the firewall can be fully active while keeping
+    // the nodes reachable from the driver. Port 8080 is always added by
+    // `ic-prep`.
+    //
+    // Only the driver is whitelisted, not the group's whole range (`GROUP_PREFIX`)
+    // that every VM — the nodes included — is addressed out of. Whitelisting
+    // that range would open these ports, 8080 among them, between all nodes, so
+    // node↔node traffic would no longer be governed by the registry's
+    // node-whitelisting rules alone as it is on Farm — which is exactly what
+    // `firewall_correctness_test` asserts. Nothing in the IC needs the wider
+    // range: non-cloud-engine nodes reach the NNS on `:8080` through those same
+    // whitelisting rules, and cloud engine nodes reach it through an API
+    // boundary node's `:443` (see `get_node_api_urls` in
+    // `rs/orchestrator/registry_replicator/src/internal_state.rs`). A test that
+    // has one of its *other* VMs talk to a node widens the whitelist explicitly
+    // with `InternetComputer::with_extra_firewall_whitelist`.
     //
     // Note: injecting this global registry rule makes the orchestrator use the
     // registry firewall rules *instead of* the config-file `default_rules` (see
@@ -242,10 +265,24 @@ pub fn init_ic(
         SystemTestBackend::read_attribute(test_env),
         SystemTestBackend::Local
     ) {
-        ic_config.set_whitelisted_prefixes(Some("fd00::/8".to_string()));
-        ic_config.set_whitelisted_ports(Some(
-            "22,2497,4100,7070,9090,9091,9100,9324,19100,19523,19531".to_string(),
-        ));
+        let group_name = GroupSetup::read_attribute(test_env).infra_group_name;
+        // Deduplicated: these become anonymous nftables sets
+        // (`ip6 saddr { ... }`), and `nft` rejects a set with a repeated
+        // element, taking the whole ruleset down with it. A test can introduce
+        // one easily enough — calling `with_extra_firewall_whitelist` twice, or
+        // passing a port that is already in `LOCAL_WHITELISTED_PORTS`.
+        let prefixes = LocalBackend::group_driver_ipv6_prefixes(&group_name)
+            .into_iter()
+            .chain(ic.extra_firewall_whitelist_prefixes.iter().cloned())
+            .unique()
+            .join(",");
+        let ports = LOCAL_WHITELISTED_PORTS
+            .iter()
+            .chain(ic.extra_firewall_whitelist_ports.iter())
+            .unique()
+            .join(",");
+        ic_config.set_whitelisted_prefixes(Some(prefixes));
+        ic_config.set_whitelisted_ports(Some(ports));
     }
 
     for dc_record in &ic.data_centers {
@@ -290,16 +327,35 @@ pub fn setup_and_start_vms(
     for node in initialized_ic.api_boundary_nodes.values() {
         nodes.push(node.clone());
     }
-    let api_bn_tls_cert: Option<IcBoundaryTlsCert> = if ic.api_bn_use_playnet {
-        let playnet = Playnet::read_attribute(env);
-        let cert = &playnet.playnet_cert.cert;
-        Some(IcBoundaryTlsCert {
-            cert_pem: format!("{}{}", cert.cert_pem, cert.chain_pem),
-            key_pem: cert.priv_key_pem.clone(),
-        })
-    } else {
-        None
-    };
+    // The API boundary nodes' TLS certificate, and — when it was issued by a CA
+    // the nodes do not already trust — that CA, which every node in the group
+    // then gets as an extra trust anchor. Farm's playnet certificate is publicly
+    // trusted, so only the local backend needs the second half. See
+    // `InternetComputer::setup_api_bn_local_playnet`.
+    let (api_bn_tls_cert, api_bn_trust_anchors_pem): (Option<IcBoundaryTlsCert>, Option<String>) =
+        match (
+            ic.api_bn_use_playnet,
+            SystemTestBackend::read_attribute(env),
+        ) {
+            (false, _) => (None, None),
+            (true, SystemTestBackend::Farm) => {
+                let playnet = Playnet::read_attribute(env);
+                let cert = &playnet.playnet_cert.cert;
+                let tls_cert = IcBoundaryTlsCert {
+                    cert_pem: format!("{}{}", cert.cert_pem, cert.chain_pem),
+                    key_pem: cert.priv_key_pem.clone(),
+                };
+                (Some(tls_cert), None)
+            }
+            (true, SystemTestBackend::Local) => {
+                let playnet = LocalApiBoundaryNodesPlaynet::read_attribute(env);
+                let tls_cert = IcBoundaryTlsCert {
+                    cert_pem: format!("{}{}", playnet.cert_pem, playnet.ca_pem),
+                    key_pem: playnet.key_pem.clone(),
+                };
+                (Some(tls_cert), Some(playnet.ca_pem))
+            }
+        };
     let api_bn_node_ids: Vec<NodeId> = initialized_ic
         .api_boundary_nodes
         .values()
@@ -324,6 +380,10 @@ pub fn setup_and_start_vms(
         } else {
             None
         };
+        // Given to every node, not just the API boundary nodes: it is the
+        // *clients* of an API boundary node — the cloud engine replicas fetching
+        // their NNS delegation — that need to trust its certificate.
+        let api_bn_trust_anchors_pem = api_bn_trust_anchors_pem.clone();
         nodes_info.insert(node.node_id, malicious_behavior.clone());
         join_handles.push(thread::spawn(move || {
             create_config_disk_image(
@@ -335,6 +395,7 @@ pub fn setup_and_start_vms(
                 domain,
                 recovery_hash,
                 ic_boundary_tls_cert,
+                api_bn_trust_anchors_pem,
                 &t_env,
             )?;
 
@@ -424,25 +485,43 @@ pub fn setup_and_start_nested_vms(
             )?;
 
             if node.get_vm()?.bare_metal {
-                setup_baremetal_instance(&t_env, &node, &config_image)
-                    .context("Setting up baremetal instance failed")
-            } else {
-                let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
-                    &t_group_name,
-                    &config_image,
-                    NESTED_CONFIG_IMAGE_PATH,
-                )?);
-                let setupos_image =
-                    AttachImageSpec::via_url(get_setupos_img_url(&t_env), get_setupos_img_sha256());
-                t_farm.attach_disk_images(
-                    &t_group_name,
-                    &vm_name,
-                    "usb-storage",
-                    vec![setupos_image, config_image_spec],
-                )?;
-                t_farm.start_vm(&t_group_name, &vm_name)?;
-                Ok(())
+                return setup_baremetal_instance(&t_env, &node, &config_image)
+                    .context("Setting up baremetal instance failed");
             }
+
+            match SystemTestBackend::read_attribute(&t_env) {
+                SystemTestBackend::Farm => {
+                    let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
+                        &t_group_name,
+                        &config_image,
+                        NESTED_CONFIG_IMAGE_PATH,
+                    )?);
+                    let setupos_image = AttachImageSpec::via_url(
+                        get_setupos_img_url(&t_env),
+                        get_setupos_img_sha256(),
+                    );
+                    t_farm.attach_disk_images(
+                        &t_group_name,
+                        &vm_name,
+                        "usb-storage",
+                        vec![setupos_image, config_image_spec],
+                    )?;
+                    t_farm.start_vm(&t_group_name, &vm_name)?;
+                }
+                SystemTestBackend::Local => {
+                    let backend = LocalBackend::from_test_env(&t_env)?;
+                    // The image is already on disk here, so take its path
+                    // directly rather than the content-addressed URL the Farm arm
+                    // hands to the Farm host; `attach_disk_images` extracts it.
+                    let var = "ENV_DEPS__SETUPOS_DISK_IMG_PATH";
+                    let setupos_image = PathBuf::from(
+                        std::env::var(var).with_context(|| format!("Failed to read '{var}'"))?,
+                    );
+                    backend.attach_disk_images(&vm_name, &[setupos_image, config_image])?;
+                    backend.start_vm(&t_group_name, &vm_name)?;
+                }
+            }
+            Ok(())
         }));
     }
 
@@ -516,6 +595,7 @@ fn create_config_disk_image(
     domain_name: Option<String>,
     recovery_hash: Option<String>,
     ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
+    api_bn_trust_anchors_pem: Option<String>,
     test_env: &TestEnv,
 ) -> anyhow::Result<()> {
     let mut bootstrap_options = BootstrapOptions {
@@ -538,6 +618,7 @@ fn create_config_disk_image(
         domain_name,
         recovery_hash,
         ic_boundary_tls_cert,
+        api_bn_trust_anchors_pem,
         test_env,
         ic_name,
     )?;
@@ -582,6 +663,7 @@ fn create_guestos_config_for_node(
     domain_name: Option<String>,
     recovery_hash: Option<String>,
     ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
+    api_bn_trust_anchors_pem: Option<String>,
     test_env: &TestEnv,
     ic_name: &str,
 ) -> anyhow::Result<GuestOSConfig> {
@@ -676,6 +758,7 @@ fn create_guestos_config_for_node(
         hostname: Some(node.node_id.to_string()),
         generate_ic_boundary_tls_cert: node.node_config.domain.clone(),
         ic_boundary_tls_cert,
+        extra_api_boundary_node_trust_anchors_pem: api_bn_trust_anchors_pem,
         nns_pub_key_override,
     };
 

@@ -56,7 +56,7 @@ pub struct ReplicatedStateMetrics {
     available_canister_ids: IntGauge,
     consumed_cycles: Gauge,
     consumed_cycles_by_use_case: GaugeVec,
-    consumed_cycles_by_use_case_as_counters: CounterVec,
+    consumed_cycles_by_use_case_monotonic: CounterVec,
     input_queue_messages: IntGaugeVec,
     input_queues_size_bytes: IntGaugeVec,
     subnet_input_queue_messages: IntGaugeVec,
@@ -171,7 +171,7 @@ impl ReplicatedStateMetrics {
                 "Number of cycles consumed by use cases.",
                 &["use_case"],
             ),
-            consumed_cycles_by_use_case_as_counters: metrics_registry.counter_vec(
+            consumed_cycles_by_use_case_monotonic: metrics_registry.counter_vec(
                 "replicated_state_consumed_cycles_from_replica_start_as_counters",
                 "Number of cycles consumed by use cases.",
                 &["use_case"],
@@ -319,7 +319,7 @@ impl ReplicatedStateMetrics {
             "replicated_state_consumed_cycles_by_use_case",
         );
         metrics_registry.register_alias(
-            &metrics.consumed_cycles_by_use_case_as_counters,
+            &metrics.consumed_cycles_by_use_case_monotonic,
             "replicated_state_consumed_cycles_by_use_case_as_counters",
         );
 
@@ -337,15 +337,15 @@ impl ReplicatedStateMetrics {
         }
     }
 
-    fn observe_consumed_cycles_by_use_case_as_counters(
+    fn observe_consumed_cycles_by_use_case_monotonic(
         &self,
-        consumed_cycles_by_use_case_as_counters: &BTreeMap<CyclesUseCase, NominalCycles>,
+        consumed_cycles_by_use_case_monotonic: &BTreeMap<CyclesUseCase, NominalCycles>,
     ) {
-        for (use_case, cycles) in consumed_cycles_by_use_case_as_counters.iter() {
-            self.consumed_cycles_by_use_case_as_counters
+        for (use_case, cycles) in consumed_cycles_by_use_case_monotonic.iter() {
+            self.consumed_cycles_by_use_case_monotonic
                 .with_label_values(&[use_case.as_str()])
                 .reset();
-            self.consumed_cycles_by_use_case_as_counters
+            self.consumed_cycles_by_use_case_monotonic
                 .with_label_values(&[use_case.as_str()])
                 .inc_by(cycles.get() as f64);
         }
@@ -414,9 +414,8 @@ impl ReplicatedStateMetrics {
         let mut num_paused_install = 0;
         let mut num_aborted_install = 0;
 
-        let mut consumed_cycles_total = NominalCycles::zero();
         let mut consumed_cycles_total_by_use_case = BTreeMap::new();
-        let mut consumed_cycles_total_by_use_case_as_counters = BTreeMap::new();
+        let mut consumed_cycles_total_by_use_case_monotonic = BTreeMap::new();
 
         let mut ingress_queue_message_count = 0;
         let mut ingress_queue_size_bytes = 0;
@@ -474,7 +473,6 @@ impl ReplicatedStateMetrics {
                 | Some(ExecutionTask::OnLowWasmMemory)
                 | None => {}
             }
-            consumed_cycles_total += canister.system_state.canister_metrics().consumed_cycles();
             join_consumed_cycles_by_use_case(
                 &mut consumed_cycles_total_by_use_case,
                 canister
@@ -489,11 +487,11 @@ impl ReplicatedStateMetrics {
             let mut counter_metrics_map = canister
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases_as_counters()
+                .consumed_cycles_by_use_cases_monotonic()
                 .clone();
             counter_metrics_map.remove(&CyclesUseCase::HTTPOutcalls);
             join_consumed_cycles_by_use_case(
-                &mut consumed_cycles_total_by_use_case_as_counters,
+                &mut consumed_cycles_total_by_use_case_monotonic,
                 &counter_metrics_map,
             );
             let queues = canister.system_state.queues();
@@ -557,12 +555,6 @@ impl ReplicatedStateMetrics {
         self.current_heap_delta
             .set(state.metadata.heap_delta_estimate.get() as i64);
 
-        // Add the consumed cycles by canisters that were deleted.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_by_deleted_canisters();
-
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
             state
@@ -571,40 +563,27 @@ impl ReplicatedStateMetrics {
                 .get_consumed_cycles_by_use_case(),
         );
         join_consumed_cycles_by_use_case(
-            &mut consumed_cycles_total_by_use_case_as_counters,
+            &mut consumed_cycles_total_by_use_case_monotonic,
             state
                 .metadata
                 .subnet_metrics
                 .get_consumed_cycles_by_use_case(),
         );
 
-        // Add the subnet-level use cases; their getters all read the
-        // by-use-case map. The canister-level use cases in that map originate
-        // from deleted canisters and are already covered by
-        // `get_consumed_cycles_by_deleted_canisters()`.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_ecdsa_outcalls();
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_http_outcalls();
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_schnorr_outcalls();
-        consumed_cycles_total += state.metadata.subnet_metrics.get_consumed_cycles_vetkd();
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_dropped_messages();
-
-        self.consumed_cycles.set(consumed_cycles_total.get() as f64);
+        // Read from the shared definition rather than re-folding, so the gauge cannot
+        // drift from the certified state tree. The per-use-case breakdowns below do
+        // still fold over the canisters, as no aggregate holds them.
+        self.consumed_cycles.set(
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters()
+                .get() as f64,
+        );
 
         self.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
-        self.observe_consumed_cycles_by_use_case_as_counters(
-            &consumed_cycles_total_by_use_case_as_counters,
+        self.observe_consumed_cycles_by_use_case_monotonic(
+            &consumed_cycles_total_by_use_case_monotonic,
         );
 
         for (key_id, count) in &state.metadata.subnet_metrics.threshold_signature_agreements {
@@ -676,7 +655,7 @@ impl ReplicatedStateMetrics {
 
         self.ingress_history_length
             .set(state.metadata.ingress_history.len() as i64);
-        for (ingress_state, count) in state.metadata.ingress_history.state_counts().iter() {
+        for (ingress_state, count) in state.metadata.ingress_history.state_counts() {
             self.ingress_history_length_by_state
                 .with_label_values(&[ingress_state])
                 .set(count as i64);

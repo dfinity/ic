@@ -28,7 +28,7 @@ use ic_replicated_state::{ReplicatedState, metrics::ReplicatedStateInvariants};
 use ic_state_manager::{StateManagerImpl, state_sync::StateSync};
 use ic_tracing::ReloadHandles;
 use ic_types::{
-    Height, NodeId, SubnetId,
+    Height, NodeId, PlatformVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
@@ -67,6 +67,7 @@ pub fn construct_ic_stack(
     config: Config,
     node_id: NodeId,
     subnet_id: SubnetId,
+    platform_version: PlatformVersion,
     registry: Arc<impl RegistryClient + 'static>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
@@ -106,9 +107,13 @@ pub fn construct_ic_stack(
             // This case is only possible if the replica is started without an orchestrator which
             // is currently only possible in the local development mode with `dfx`.
             None => {
-                let registry_cup =
-                    ic_consensus_cup_utils::make_registry_cup(&*registry, subnet_id, log)
-                        .expect("Couldn't create a registry CUP");
+                let registry_cup = ic_consensus_cup_utils::make_registry_cup(
+                    &*registry,
+                    subnet_id,
+                    registry.get_latest_version(),
+                    log,
+                )
+                .expect("Couldn't create a registry CUP");
 
                 info!(
                     log,
@@ -137,11 +142,13 @@ pub fn construct_ic_stack(
     create_consensus_pool_dir(&config);
     ensure_persistent_pool_replica_version_compatibility(
         artifact_pool_config.persistent_pool_db_path(),
+        &platform_version.replica_version,
     );
 
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
         node_id,
         subnet_id,
+        &platform_version.replica_version,
         // Note: it's important to pass the original proto which came from the command line (as
         // opposed to, for example, a proto which was first deserialized and then serialized
         // again). Since the proto file could have been produced and signed by nodes running a
@@ -317,6 +324,7 @@ pub fn construct_ic_stack(
         node_id,
         subnet_id,
         subnet_type,
+        platform_version.clone(),
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::new(state_sync) as Arc<_>,
@@ -354,6 +362,7 @@ pub fn construct_ic_stack(
         Arc::clone(&crypto) as Arc<_>,
         node_id,
         subnet_id,
+        platform_version,
         root_subnet_id,
         log.clone(),
         consensus_pool_cache,

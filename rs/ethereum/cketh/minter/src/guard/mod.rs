@@ -30,7 +30,7 @@ impl RequestsGuardedByPrincipal for PendingWithdrawalRequests {
     }
 
     fn pending_requests_count(state: &State) -> usize {
-        state.eth_transactions.withdrawal_requests_len()
+        state.withdrawal_transactions.requests_len()
     }
 }
 
@@ -96,14 +96,16 @@ pub fn retrieve_withdraw_guard(
     Guard::new(principal)
 }
 
-/// Serializes a principal's `deposit_erc20` calls.
+/// Serializes a principal's deposit registrations (`deposit_erc20` and `deposit_eth`).
 ///
-/// `deposit_erc20` reads a pair's status, awaits the minter's ECDSA public key, and only then arms
+/// A registration reads a pair's status, awaits the minter's ECDSA public key, and only then arms
 /// the pair. Without this guard a second call from the same principal could arm the pair — and a
 /// balance scan move it to the sweep queue — while the first is suspended, so the first would then
 /// re-arm a pair that is already awaiting sweep, leaving it in both the watchlist and the sweep
-/// queue.
-pub fn deposit_erc20_guard(
+/// queue. One guard across both endpoints rather than one per endpoint: they await the same lazy
+/// key fetch (two concurrent `ecdsa_public_key` calls trap), and "one in-flight registration per
+/// principal" is the rule the sponsored mode's per-account fee accounting will rely on.
+pub fn deposit_registration_guard(
     principal: Principal,
 ) -> Result<Guard<PendingDepositRequests>, GuardError> {
     Guard::new(principal)
