@@ -16,7 +16,8 @@ use crate::numeric::{
 };
 use crate::runtime::CanisterRuntime;
 use crate::state::automatic_deposits::{
-    AutomaticDeposits, DelegatedSweepTarget, RegisterDepositError, ScanProgress, SweepTarget,
+    AutomaticDeposits, DelegatedSweepBatch, DelegatedSweepTarget, RegisterDepositError,
+    ScanProgress, SweepTarget,
 };
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
@@ -314,8 +315,9 @@ impl State {
     /// What each of `targets` needs from this sweep to let the configured sweeper contract sweep
     /// it, decided from the delegation `delegations` read on chain for its address: no tuple at
     /// all once the address is delegated to that contract, otherwise the tuple naming this
-    /// minter's chain, that contract, and the nonce the tuple must spend. `None` while no sweeper
-    /// contract is configured.
+    /// minter's chain, that contract, and the nonce the tuple must spend. The batch names the
+    /// contract it decided against, so the sweep can refuse to call any other. `None` while no
+    /// sweeper contract is configured.
     ///
     /// A target whose address holds contract code, or whose delegation the read did not yield, is
     /// left out rather than swept: no tuple can be applied to the first, and the second is unknown
@@ -331,7 +333,7 @@ impl State {
         &self,
         targets: &[SweepTarget],
         delegations: &BTreeMap<DepositAddress, Delegation>,
-    ) -> Option<Vec<DelegatedSweepTarget>> {
+    ) -> Option<DelegatedSweepBatch> {
         let delegate = self.sweeper_contract_address?;
         let authorize = |target: &SweepTarget, nonce| {
             Some(AuthorizationRequest::new(
@@ -341,34 +343,31 @@ impl State {
                 nonce,
             ))
         };
-        Some(
-            targets
-                .iter()
-                .filter_map(|target| {
-                    let authorization = match delegations.get(&target.address()) {
-                        Some(Delegation::Delegated(installed)) if *installed == delegate => None,
-                        Some(Delegation::NotDelegated) | Some(Delegation::Delegated(_)) => {
-                            authorize(
-                                target,
-                                self.automatic_deposits.delegation_nonce(&target.address()),
-                            )
-                        }
-                        Some(Delegation::Other) | None => {
-                            log!(
-                                INFO,
-                                "[sweep_delegations]: LEAVING OUT {}: its delegation is unknown or it holds contract code",
-                                target.address().as_address()
-                            );
-                            return None;
-                        }
-                    };
-                    Some(DelegatedSweepTarget {
-                        target: *target,
-                        authorization,
-                    })
+        let targets = targets
+            .iter()
+            .filter_map(|target| {
+                let authorization = match delegations.get(&target.address()) {
+                    Some(Delegation::Delegated(installed)) if *installed == delegate => None,
+                    Some(Delegation::NotDelegated) | Some(Delegation::Delegated(_)) => authorize(
+                        target,
+                        self.automatic_deposits.delegation_nonce(&target.address()),
+                    ),
+                    Some(Delegation::Other) | None => {
+                        log!(
+                            INFO,
+                            "[sweep_delegations]: LEAVING OUT {}: its delegation is unknown or it holds contract code",
+                            target.address().as_address()
+                        );
+                        return None;
+                    }
+                };
+                Some(DelegatedSweepTarget {
+                    target: *target,
+                    authorization,
                 })
-                .collect(),
-        )
+            })
+            .collect();
+        Some(DelegatedSweepBatch { delegate, targets })
     }
 
     /// The attestation `account`'s ckERC20 deposit address has already signed for the configuration

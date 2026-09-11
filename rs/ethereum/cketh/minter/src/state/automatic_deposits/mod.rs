@@ -853,3 +853,13 @@ impl AsRef<Account> for DelegatedSweepTarget {
         self.target.as_ref()
     }
 }
+
+/// The targets of one sweep, and the sweeper contract their delegations were classified against.
+///
+/// The sweep may only call that contract: a target carrying no authorization was read as already
+/// delegated to it, so a sweep calling anything else would reach code no read ever checked.
+#[derive(Clone, Debug)]
+pub struct DelegatedSweepBatch {
+    pub delegate: Address,
+    pub targets: Vec<DelegatedSweepTarget>,
+}
