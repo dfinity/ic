@@ -946,6 +946,10 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         self.cketh().get_all_events()
     }
 
+    pub fn minter_count_events(&self, filter: impl Fn(&Event) -> bool) -> usize {
+        self.cketh().minter_count_events(filter)
+    }
+
     pub fn get_minter_info(&self) -> MinterInfo {
         self.cketh().get_minter_info()
     }
