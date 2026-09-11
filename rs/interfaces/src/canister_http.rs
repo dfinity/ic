@@ -208,7 +208,7 @@ pub type CanisterHttpPayloadValidationError =
 
 #[derive(Debug)]
 pub enum CanisterHttpChangeAction {
-    AddToValidated(CanisterHttpResponseShare, CanisterHttpResponse),
+    AddToValidated(CanisterHttpResponseShare, Option<CanisterHttpResponse>),
     AddToValidatedAndGossipResponse(CanisterHttpResponseShare, CanisterHttpResponse),
     MoveToValidated(CanisterHttpResponseShare),
     RemoveValidated(CanisterHttpResponseId),

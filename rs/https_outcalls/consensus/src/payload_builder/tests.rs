@@ -1818,7 +1818,7 @@ pub(crate) fn add_own_share_to_pool(
 ) {
     pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
         share.clone(),
-        content.clone(),
+        Some(content.clone()),
     )]);
 }
 

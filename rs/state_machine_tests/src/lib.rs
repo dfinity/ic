@@ -2864,7 +2864,7 @@ impl StateMachine {
                 signature,
             };
             self.canister_http_pool.write().unwrap().apply(vec![
-                CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
+                CanisterHttpChangeAction::AddToValidated(share.clone(), Some(response.clone())),
             ]);
         }
     }
