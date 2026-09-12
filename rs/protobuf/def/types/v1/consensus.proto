@@ -10,6 +10,7 @@ import "registry/subnet/v1/subnet.proto";
 import "types/v1/artifact.proto";
 import "types/v1/dkg.proto";
 import "types/v1/idkg.proto";
+import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
 message CertificationMessage {
@@ -69,6 +70,7 @@ message Block {
   bytes canister_http_payload_bytes = 15;
   bytes query_stats_payload_bytes = 16;
   bytes chain_key_payload_bytes = 17;
+  bytes upgrade_payload_bytes = 18;
   bytes payload_hash = 11;
 }
 

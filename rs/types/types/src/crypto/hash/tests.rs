@@ -551,7 +551,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "764535296841f3db421a928cfadff3460be406d0182da64034eee623a9a97e99",
+            "c20a87578beb94df369dabfefc30c0d47d170c75d68236aae3b16335c0f21c4a",
             "Hash of CatchUpContent changed"
         );
     }
@@ -569,7 +569,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "7f183aaeb495159567a340b5bf61233cf3226141268febaee47de3e4c69cbc4b",
+            "db509a477f3ed01ec251325527e946b2e674f249d013bafc0d061620000a6e0d",
             "Hash of CatchUpShareContent changed"
         );
     }
@@ -617,7 +617,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "31f744bc26627fadbf1d73c66cb54603319a87966a488b6f41c4f0cfc1a30c89",
+            "33c4f3fb79a8520a4c1d6d814aa5bae53e5aa58ad517dfddec45be7dfd930053",
             "Hash of CatchUpPackage changed"
         );
     }
@@ -647,7 +647,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "bff423705e4cb96b7a391c4cccba8ed1ce441dabf2693ed5b9545a2b57d946bd",
+            "47648b17b0b80122fa1adc34a6d6e82ae8fb5af4a92b2495c41c91052ace1a10",
             "Hash of CatchUpPackageShare changed"
         );
     }
@@ -990,7 +990,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "b040378bc7d9d2b7c2e9067215eae6380a65316922369a1bc6d8376f31fe5d0a",
+            "5b8ca671118db0ed4f57939788881d95810b36f8d13a9954ecf2c57067e2b8d9",
             "Hash of Block changed"
         );
     }
@@ -1033,7 +1033,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "d591d695f67c644ddcc5315d96c25f00dede77c725859408ab7f113a18a0bf9a",
+            "9bb9a7c7dacd7513fc58d13b238740e2f8e282c3d6cb66bd3aef520904583ae9",
             "Hash of BlockProposal changed"
         );
     }
@@ -1070,7 +1070,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "c94d927dd7300814fef610a7560ba5a7775a859bb3511796cf23cfb59c038a4f",
+            "f289b64bb469c9aab1710c44b0b2fc778de9e5a552858eb10a566b8bc803d930",
             "Hash of BlockPayload changed"
         );
     }

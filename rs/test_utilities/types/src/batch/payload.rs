@@ -15,6 +15,7 @@ impl Default for PayloadBuilder {
                 canister_http: vec![],
                 query_stats: vec![],
                 chain_key: vec![],
+                upgrade: vec![],
             },
         }
     }
