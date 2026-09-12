@@ -150,7 +150,7 @@ impl WatCanisterBuilder {
         let mut rendered_functions = Vec::new();
 
         // Drain the ASTs to compute rendering
-        let funcs: Vec<WatFunc> = self.functions.drain(..).collect();
+        let funcs: Vec<WatFunc> = std::mem::take(&mut self.functions);
 
         let has_start = funcs.iter().any(|f| f.method == Method::Start);
 
