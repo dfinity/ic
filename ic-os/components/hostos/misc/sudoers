@@ -32,6 +32,9 @@ root	ALL=(ALL:ALL) NOPASSWD:ALL
 # Allow limited-console to run recovery via the secure launcher script
 limited-console ALL=(ALL:ALL) NOPASSWD: /opt/ic/bin/guestos-recovery-launcher.sh
 
+# Allow limited-console to show the GuestOS boot alternative
+limited-console ALL=(ALL:ALL) NOPASSWD: /opt/ic/bin/hostos_tool guestos-alternative show
+
 # Allow limited-console to swap the GuestOS boot alternative
 limited-console ALL=(ALL:ALL) NOPASSWD: /opt/ic/bin/hostos_tool guestos-alternative swap *
 
