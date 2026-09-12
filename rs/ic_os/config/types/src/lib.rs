@@ -353,7 +353,7 @@ pub struct FixedIpv6Config {
     pub gateway: Ipv6Addr,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VmSlot {
     Plain,
     Multi(NonZeroU8),
@@ -372,6 +372,30 @@ impl VmSlot {
             VmSlot::Plain => String::new(),
             VmSlot::Multi(v) => format!("{}", v),
         }
+    }
+
+    /// The slots a node of the given reward type uses: a single GuestOS
+    /// occupies `Plain`, several occupy 1..=count.
+    pub fn all_for_node_reward_type(node_reward_type: Option<&str>) -> Vec<VmSlot> {
+        match guestos_vm_count(node_reward_type) {
+            1 => vec![VmSlot::Plain],
+            count => (1..=count).map(VmSlot::new).collect(),
+        }
+    }
+}
+
+/// How many GuestOS a node of the given reward type runs.
+///
+/// Kept in step with `guestos_vm_count_for_reward_type` in
+/// ic-os/components/misc/guestos-vm-count.sh, which the HostOS shell components
+/// use for the same purpose.
+pub fn guestos_vm_count(node_reward_type: Option<&str>) -> u8 {
+    match node_reward_type {
+        Some("type4.1") => 60,
+        Some("type4.2") => 15,
+        Some("type4.3") => 4,
+        Some("type4.4") => 2,
+        _ => 1,
     }
 }
 

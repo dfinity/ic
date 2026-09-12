@@ -1,0 +1,70 @@
+proxies:
+  - listen_on:
+      url: https://[::]:42372/metrics/hostos_node_exporter
+      certificate_file: /etc/node_exporter/node_exporter.crt
+      key_file: /etc/node_exporter/node_exporter.key
+    connect_to:
+      url: https://[::1]:9100/metrics
+      tolerate_bad_tls: true
+    label_filters:
+      - regex: .*
+        actions:
+          - drop
+      - regex: node_hwmon.*
+        actions:
+          - keep
+      - regex: node_hwmon_temp_celsius
+        actions:
+          - add_absolute_noise:
+              amplitude: 3
+              quantum: 0.25
+          - reduce_time_resolution:
+              resolution: 30s
+      - regex: power.*
+        actions:
+          - keep
+      - regex: node_filesystem_device_error|nvme.*|node_nvme_info
+        actions:
+          - keep
+      - regex: node_filesystem_device_error;tmpfs
+        source_labels:
+          - __name__
+          - fstype
+        actions:
+          - drop
+      - regex: node_cpu.*
+        actions:
+          - keep
+          - reduce_time_resolution:
+              resolution: 30s
+      - regex: node_network_carrier.*|node_network_info|node_network_iface.*|node_network_mtu_bytes|node_network_(receive|transmit)_.*
+        actions:
+          - keep
+      - regex: hostos_version
+        actions:
+          - keep
+    cache_duration: 8s
+{%- for guest_vm in guest_vms %}
+  - listen_on:
+      url: https://[::]:42372/metrics/guestos_replica{{ guest_vm.path_suffix }}
+      certificate_file: /etc/node_exporter/node_exporter.crt
+      key_file: /etc/node_exporter/node_exporter.key
+    connect_to:
+      url: https://[{{ guest_vm.address }}]:42372/metrics/guestos_replica
+      tolerate_bad_tls: true
+    label_filters: []
+    cache_duration: 8s
+  - listen_on:
+      url: https://[::]:42372/metrics/guestos_node_exporter{{ guest_vm.path_suffix }}
+      certificate_file: /etc/node_exporter/node_exporter.crt
+      key_file: /etc/node_exporter/node_exporter.key
+    connect_to:
+      url: https://[{{ guest_vm.address }}]:42372/metrics/guestos_node_exporter
+      tolerate_bad_tls: true
+    label_filters: []
+    cache_duration: 8s
+{%- endfor %}
+metrics:
+  url: https://[::]:19100/metrics
+  certificate_file: /etc/node_exporter/node_exporter.crt
+  key_file: /etc/node_exporter/node_exporter.key

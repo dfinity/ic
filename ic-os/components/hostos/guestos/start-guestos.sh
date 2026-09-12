@@ -4,16 +4,9 @@ set -euo pipefail
 # This script dynamically starts guestos services to create the right number of VMs per node type
 
 source /opt/ic/bin/config.sh
+source /opt/ic/bin/guestos-vm-count.sh
 
-node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
-
-case "${node_reward_type}" in
-    type4.1) COUNT=60 ;;
-    type4.2) COUNT=15 ;;
-    type4.3) COUNT=4 ;;
-    type4.4) COUNT=2 ;;
-    *) COUNT=1 ;;
-esac
+COUNT=$(guestos_vm_count)
 
 # If not a type4 node, fall to the default GuestOS flow
 if ((COUNT == 1)); then
