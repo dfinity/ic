@@ -13,11 +13,19 @@
 //! issuance, HTTP file upload, multi-tenant scheduling); those operations warn
 //! and return dummy values or `bail!`.
 //!
+//! The driver also gives itself a private view of two `/etc` files, in the mount
+//! namespace [`LocalBackend::ensure_administrable_netns`] creates: a
+//! `resolv.conf` naming the group's own `dnsmasq`, and a CA bundle that also
+//! trusts the dev root CA. Together they are what let a driver-side client reach
+//! the group's IC gateway by name over verified HTTPS, exactly as it would on
+//! Farm, with no per-client configuration.
+//!
 //! In the QEMU command line built by [`LocalBackend::start_vm`], each virtio/PCIe
 //! device sits behind its own `pcie-root-port` so the guest's predictable
 //! interface names stay deterministic (primary NIC -> `enp1s0`, IPv4 NIC ->
 //! `enp2s0`).
 
+use crate::driver::dev_root_ca::dev_root_ca_cert_pem;
 use crate::driver::farm::{VMCreateResponse, VmSpec};
 use crate::driver::resource::DiskImage;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
@@ -29,8 +37,10 @@ use network::systemd::IPV6_NAME_SERVERS;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
 use std::collections::HashMap;
+use std::ffi::{CString, OsString};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{IpAddr, Ipv6Addr};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -50,19 +60,54 @@ use std::time::{Duration, Instant};
 const NIP_IO_DOMAIN: &str = "ipv6.nip.io";
 
 /// The domain suffix under which the group's `dnsmasq` answers for names the
-/// driver registers explicitly with [`LocalBackend::add_dns_record`], as opposed
-/// to the addresses it synthesises under [`NIP_IO_DOMAIN`].
+/// driver registers explicitly with [`LocalBackend::add_dns_record`] or
+/// [`LocalBackend::add_wildcard_dns_record`], as opposed to the addresses it
+/// synthesises under [`NIP_IO_DOMAIN`].
 ///
-/// Resolvable only from inside a test group. Used for the API boundary nodes
-/// (`apibn-{idx}.ic.net`, see `InternetComputer::setup_api_bn_local_playnet`) and
-/// for the IC gateway (`<vm name>.ic.net`, see
-/// `IcGatewayVm::load_or_create_local_playnet`). On Farm those names are handed
-/// out without DNS records, or replaced by a playnet FQDN.
+/// Resolvable from inside a test group, and from the driver, which shares the
+/// group's resolver (see [`LocalBackend::install_group_resolv_conf`]). Used for
+/// the API boundary nodes (`apibn-{idx}.ic.net`, see
+/// `InternetComputer::setup_api_bn_local_playnet`) and for the IC gateway
+/// (`<vm name>.ic.net`, see `IcGatewayVm::load_or_create_local_playnet`). On Farm
+/// those names are handed out without DNS records, or replaced by a playnet
+/// FQDN.
 ///
 /// It must not be a `.local` name: both GuestOS and HostOS resolve through
 /// `systemd-resolved`, which routes `*.local` to mDNS and never to the unicast
 /// `DNS=` servers the group's `dnsmasq` answers on.
 pub const IN_GROUP_DOMAIN_SUFFIX: &str = "ic.net";
+
+/// How long [`LocalBackend::stop_dnsmasq`] waits for `dnsmasq` to exit, applied
+/// once after `SIGTERM` and again after the `SIGKILL` that follows if the first
+/// wait runs out. It normally exits within milliseconds; this only bounds the
+/// wait if it wedges. Outlasting the second wait means `SIGKILL` did not take
+/// effect, which no further signal is going to fix.
+const DNSMASQ_STOP_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// How often [`LocalBackend::await_dnsmasq_exit`] re-checks whether `dnsmasq` is
+/// gone. Short enough that a restart is not noticeably delayed by the poll.
+const DNSMASQ_STOP_POLL_INTERVAL: Duration = Duration::from_millis(20);
+
+/// Where the driver's own TLS clients read their root certificates from when the
+/// environment does not say otherwise; see
+/// [`system_ca_bundle`](LocalBackend::system_ca_bundle).
+///
+/// This exact path is load-bearing, through a chain worth spelling out because
+/// nothing type-checks it: `reqwest::ClientBuilder::build` constructs a
+/// `rustls_platform_verifier::Verifier`, whose Unix implementation calls
+/// `rustls_native_certs::load_native_certs`, which — with neither `SSL_CERT_FILE`
+/// nor `SSL_CERT_DIR` set — defers to `openssl_probe::probe()`, and this is the
+/// first candidate in its Linux list. `rs/tests/BUILD.bazel` builds a bundle at the
+/// same path for the colocated driver image, for the same reason.
+///
+/// Being *first* in that list is what makes hard-coding it safe rather than merely
+/// convenient: if this file exists, it is the one `probe()` returns, so the mount
+/// cannot end up on a bundle the verifier ignores. The remaining exposure is a
+/// platform that does not have it at all (RHEL keeps its bundle under
+/// `/etc/pki/...`), where this fails loudly on the read rather than silently — and
+/// `SSL_CERT_FILE` is the supported way out, since
+/// [`system_ca_bundle`](LocalBackend::system_ca_bundle) honours it.
+const DEFAULT_SYSTEM_CA_BUNDLE: &str = "/etc/ssl/certs/ca-certificates.crt";
 
 /// Environment variables holding the runfiles paths of the split OVMF (UEFI)
 /// firmware images, provided by the `@ovmf` Bazel repo (extracted from the
@@ -207,6 +252,12 @@ impl LocalBackend {
     /// Run a short shell `script` via `/bin/sh -c` to completion, returning an
     /// error if it cannot be spawned or exits non-zero (`what` describes the
     /// operation, for error context).
+    ///
+    /// Only for scripts whose every word is a literal or backend-derived
+    /// (interface and bridge names, addresses of the group's own prefixes). Any
+    /// command taking a value a *test* supplies — a VM name, a domain — belongs
+    /// in [`run_command`](Self::run_command) instead, which never lets a shell
+    /// see it.
     fn run_shell(script: &str, what: &str) -> Result<()> {
         let output = Command::new("/bin/sh")
             .arg("-c")
@@ -226,14 +277,58 @@ impl LocalBackend {
         Ok(())
     }
 
+    /// Run `command` to completion, returning an error if it cannot be spawned or
+    /// exits non-zero (`what` describes the operation, for error context).
+    ///
+    /// The argv-passing counterpart of [`run_shell`](Self::run_shell), and the one
+    /// to prefer: the arguments reach the kernel as a vector, so no word-splitting,
+    /// globbing or metacharacter interpretation stands between what the caller
+    /// wrote and what the program receives, and paths need no quoting.
+    fn run_command(command: &mut Command, what: &str) -> Result<()> {
+        let output = command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .output()
+            .with_context(|| format!("spawning the command for {what}"))?;
+        if !output.status.success() {
+            bail!(
+                "operation '{what}' failed with status {}: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        Ok(())
+    }
+
+    /// The single argument `<option><path>`, e.g. `--pid-file=/run/x.pid`.
+    ///
+    /// Built as an [`OsString`] rather than through `Path::display`, which is
+    /// lossy: a path that is not valid UTF-8 reaches the program unchanged instead
+    /// of with U+FFFD substituted into it.
+    fn path_arg(option: &str, path: &Path) -> OsString {
+        let mut arg = OsString::from(option);
+        arg.push(path);
+        arg
+    }
+
     /// Put the driver into a network namespace it fully owns and arrange for its
     /// `ip`/`dnsmasq` operations to run with `CAP_NET_ADMIN`/`CAP_NET_RAW`/
     /// `CAP_NET_BIND_SERVICE` over that namespace — without any *host* capability
     ///
-    /// `unshare(CLONE_NEWUSER | CLONE_NEWNET)` creates a private user namespace,
-    /// in which the caller holds a full capability set (it is the namespace's
-    /// creator), plus a network namespace owned by it — so every RTNETLINK
-    /// operation on the new netns succeeds.
+    /// It also installs the per-group `/etc` overrides that make that namespace
+    /// usable from the driver's own code — a resolver
+    /// ([`install_group_resolv_conf`](Self::install_group_resolv_conf)) and a trust
+    /// store ([`install_dev_root_ca`](Self::install_dev_root_ca)) — so the name is
+    /// narrower than what the function does.
+    ///
+    /// `unshare(CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWNET)` creates a private
+    /// user namespace, in which the caller holds a full capability set (it is the
+    /// namespace's creator), plus a mount and a network namespace owned by it — so
+    /// every RTNETLINK operation on the new netns succeeds, and the driver can
+    /// give itself a resolver for that netns (see
+    /// [`install_group_resolv_conf`](Self::install_group_resolv_conf)) without
+    /// touching anything outside its own process tree.
     /// We keep the caller's uid/gid unchanged (an *identity* mapping) so
     /// files, `/dev/kvm` and `/dev/net/tun` are accessed exactly as before, then
     /// raise the three networking capabilities into the process's *ambient* set
@@ -251,18 +346,23 @@ impl LocalBackend {
     /// run before any thread is spawned — in particular before the group's
     /// async (threaded) logger is built. Running it before the tokio runtime and the task
     /// subprocesses also puts the whole process tree — task subprocesses, QEMU,
-    /// `dnsmasq` — into the same namespaces and lets them inherit the ambient
-    /// capabilities (`unshare`/`fork`/`exec` all preserve both).
+    /// `dnsmasq` — into the same namespaces (so they resolve names through the
+    /// group's `dnsmasq` as well) and lets them inherit the ambient capabilities
+    /// (`unshare`/`fork`/`exec` all preserve both).
     pub fn ensure_administrable_netns() -> Result<()> {
         let uid = nix::unistd::geteuid().as_raw();
         let gid = nix::unistd::getegid().as_raw();
         // SAFETY: `unshare` only affects the calling (single) thread/process; it
-        // touches no user-space state.
-        if unsafe { libc::unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWNET) } != 0 {
+        // touches no user-space state. The kernel creates the user namespace
+        // first, so the mount and network namespaces are both owned by it and the
+        // caller holds `CAP_SYS_ADMIN`/`CAP_NET_ADMIN` over them.
+        if unsafe { libc::unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWNS | libc::CLONE_NEWNET) }
+            != 0
+        {
             return Err(anyhow!(std::io::Error::last_os_error())).context(
-                "unshare(CLONE_NEWUSER | CLONE_NEWNET) failed; the local backend needs \
-                 to create a private user+network namespace to administer its \
-                 networking without host capabilities",
+                "unshare(CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWNET) failed; the local \
+                 backend needs to create a private user+mount+network namespace to \
+                 administer its networking without host capabilities",
             );
         }
         // Map the caller's uid/gid into the new user namespace so it keeps its
@@ -305,6 +405,270 @@ impl LocalBackend {
         // needs `CAP_NET_ADMIN`, so it fails fast (with the `ip` error) if the
         // ambient capabilities did not take effect.
         Self::run_shell("ip link set dev lo up", "bring up lo in the owned netns")?;
+        // Detach the mount namespace's propagation before mounting anything into
+        // it, so neither install below can escape. A host that leaves `/` shared —
+        // the systemd default — would otherwise have the real files replaced for as
+        // long as the mount lived. Done here rather than inside either installer so
+        // that neither depends on the other having run first.
+        Self::mount(
+            None,
+            Path::new("/"),
+            libc::MS_REC | libc::MS_PRIVATE,
+            "making / private in the owned mount namespace",
+        )?;
+        // Finally the two per-group `/etc` overrides, which are what make the
+        // driver resolve and trust the group's own services.
+        Self::install_group_resolv_conf()?;
+        Self::install_dev_root_ca()?;
+        Ok(())
+    }
+
+    /// Path of the generated `resolv.conf`
+    /// [`install_group_resolv_conf`](Self::install_group_resolv_conf) bind-mounts
+    /// over `/etc/resolv.conf`.
+    ///
+    /// It lives in the process's temp dir — under Bazel that is the test's own
+    /// scratch dir, which the runner cleans up — because it is written before the
+    /// group dir exists; see
+    /// [`ensure_administrable_netns`](Self::ensure_administrable_netns) for why
+    /// that has to run so early. The pid keeps concurrent drivers from sharing a
+    /// file, even though each one mounts it only in its own namespace.
+    fn generated_resolv_conf_path() -> PathBuf {
+        std::env::temp_dir().join(format!("system-test-resolv.conf.{}", std::process::id()))
+    }
+
+    /// Point the driver's own name resolution at the group's `dnsmasq`, by
+    /// bind-mounting a generated `resolv.conf` naming [`IPV6_NAME_SERVERS`] over
+    /// `/etc/resolv.conf` in the private mount namespace
+    /// [`ensure_administrable_netns`](Self::ensure_administrable_netns) just
+    /// created.
+    ///
+    /// Without this the driver has no resolver at all: it sits in the group's
+    /// network namespace but reads the *host's* `/etc/resolv.conf`, whose
+    /// nameserver is unreachable from there, so every lookup fails. The group's
+    /// `dnsmasq` binds those very [`IPV6_NAME_SERVERS`] on the group bridge inside
+    /// this netns (see [`create_group`](Self::create_group)), so pointing at them
+    /// makes the driver resolve the in-group names ([`IN_GROUP_DOMAIN_SUFFIX`],
+    /// [`NIP_IO_DOMAIN`]) exactly like the VMs do — which is what lets a
+    /// driver-side client reach the IC gateway by name rather than having to
+    /// resolve the host for itself.
+    ///
+    /// Four details worth knowing:
+    ///
+    /// * `mount(2)` needs `CAP_SYS_ADMIN` over the mount namespace's *user*
+    ///   namespace, which the caller holds as that namespace's creator. Mounting
+    ///   here, in-process, is what keeps `CAP_SYS_ADMIN` out of the ambient set
+    ///   the unprivileged children inherit — they have no business mounting
+    ///   anything.
+    /// * glibc reads at most `MAXNS` (3) nameservers, so the fourth line is
+    ///   ignored. Harmless, since all four addresses are the same `dnsmasq`;
+    ///   writing all four keeps the file identical to what the guests are
+    ///   configured with.
+    /// * `/etc/nsswitch.conf` resolves `hosts` through `files` before `dns`, so
+    ///   `/etc/hosts` — and with it `localhost` — keeps working.
+    /// * Until [`create_group`](Self::create_group) has run, no bridge holds these
+    ///   addresses, so a lookup before that fails fast instead of hanging.
+    ///   Nothing resolves a name that early.
+    fn install_group_resolv_conf() -> Result<()> {
+        let contents: String = IPV6_NAME_SERVERS
+            .iter()
+            .map(|name_server| format!("nameserver {name_server}\n"))
+            .collect();
+        let path = Self::generated_resolv_conf_path();
+        std::fs::write(&path, contents)
+            .with_context(|| format!("writing the generated resolv.conf {}", path.display()))?;
+
+        Self::mount(
+            Some(&path),
+            Path::new("/etc/resolv.conf"),
+            libc::MS_BIND,
+            "bind-mounting the generated resolv.conf over /etc/resolv.conf",
+        )
+    }
+
+    /// Path of the generated CA bundle
+    /// [`install_dev_root_ca`](Self::install_dev_root_ca) bind-mounts over the
+    /// system one ([`system_ca_bundle`](Self::system_ca_bundle)). Same placement,
+    /// and for the same reasons, as
+    /// [`generated_resolv_conf_path`](Self::generated_resolv_conf_path).
+    fn generated_ca_bundle_path() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "system-test-ca-certificates.crt.{}",
+            std::process::id()
+        ))
+    }
+
+    /// The CA bundle `rustls-native-certs` will actually read, which is the file
+    /// [`install_dev_root_ca`](Self::install_dev_root_ca) has to append to.
+    ///
+    /// Mirrors `rustls_native_certs::load_native_certs`: `SSL_CERT_FILE` names the
+    /// bundle whenever it is set, and `openssl_probe`'s first Linux candidate
+    /// ([`DEFAULT_SYSTEM_CA_BUNDLE`]) is used otherwise.
+    ///
+    /// Honouring that variable is not politeness. CI runners set it — Namespace points
+    /// it at its own worker bundle — and an earlier version of this code *refused to
+    /// run* when it was set, which passed locally and failed every `_local` target
+    /// there. Appending to whichever bundle the environment designates works in both
+    /// places, and keeps whatever roots that bundle carries.
+    ///
+    /// `SSL_CERT_DIR` set *without* `SSL_CERT_FILE` is the one shape this cannot
+    /// serve: `rustls-native-certs` then reads only those directories and no bundle at
+    /// all, so there is no file to append to — and a new file cannot be added to a
+    /// directory the driver does not own, for the reasons in
+    /// [`install_dev_root_ca`](Self::install_dev_root_ca). Nothing sets it that way
+    /// today; if something starts to, this fails loudly rather than quietly leaving
+    /// the CA out.
+    fn system_ca_bundle() -> Result<PathBuf> {
+        if let Some(file) = std::env::var_os("SSL_CERT_FILE") {
+            return Ok(PathBuf::from(file));
+        }
+        if let Some(dirs) = std::env::var_os("SSL_CERT_DIR") {
+            bail!(
+                "SSL_CERT_DIR is set ({dirs:?}) without SSL_CERT_FILE, so the driver's \
+                 TLS clients would read only those directories and never a CA bundle, \
+                 leaving nowhere to install the dev root CA"
+            );
+        }
+        Ok(PathBuf::from(DEFAULT_SYSTEM_CA_BUNDLE))
+    }
+
+    /// Put the dev root CA in the driver's own trust store, by bind-mounting a copy
+    /// of the system CA bundle ([`system_ca_bundle`](Self::system_ca_bundle)) with
+    /// that CA appended over the original.
+    ///
+    /// This is what lets a driver-side client verify the local IC gateway's
+    /// certificate without any code of its own: the CA is simply one of the roots
+    /// every TLS client in the process tree already loads. The guests arrive at the
+    /// same place by a different route — `update-ca-certificates` in the `output_dev`
+    /// stage of the IC-OS Dockerfiles, see [`dev_root_ca_cert_pem`] — so the driver
+    /// and the nodes end up trusting the gateway on the same terms.
+    ///
+    /// A bind mount over an *existing* entry is the only option, which is worth
+    /// spelling out because two simpler-looking routes are dead ends. Adding a new
+    /// file beside the bundle fails on `mount(2)`, which will not create a directory
+    /// entry: the target has to exist already, and the driver cannot create one —
+    /// `/etc/ssl/certs` belongs to root, root is not mapped into the driver's user
+    /// namespace, and so the `CAP_DAC_OVERRIDE` it holds there does not apply to it.
+    /// Writing the file for real, the way `update-ca-certificates` does, escapes the
+    /// namespace altogether: it isolates the mount *table*, not file contents.
+    ///
+    /// Shadowing the bundle rather than the whole directory is then the better of
+    /// what is left: the bundle is what `rustls-native-certs` reads for the driver's
+    /// own clients, and what OpenSSL and `curl` read by default on Debian, whose
+    /// default `CAfile` is this same path. It also avoids reproducing the
+    /// directory's ~240 entries.
+    ///
+    /// The limitation that leaves, since it is easy to assume otherwise: a consumer
+    /// using `CApath` *alone* resolves `<subject hash>.0` symlinks and never scans
+    /// the bundle, so it does not see this CA. Nothing in the driver's process tree
+    /// works that way today — and a plainly named file in the directory would not
+    /// have helped it either, since only a hash-named symlink would, which is what
+    /// `update-ca-certificates` generates and what this cannot create.
+    ///
+    /// Appending, never replacing: the original bytes are copied verbatim first, so
+    /// this can only widen the driver's trust, never narrow it. That matters,
+    /// because the driver has clients that need the public roots
+    /// ([`Farm::new`](crate::driver::farm::Farm::new) and the log-upload client in
+    /// `group.rs`), and because `dfx` and every other child inherits this mount too.
+    ///
+    /// What is being trusted deserves saying plainly: a CA whose private key is
+    /// checked into a public repository, valid until 2122, becomes trusted by every
+    /// TLS client in the driver's process tree. That is acceptable only because the
+    /// tree lives in a network namespace with no route off the host (see
+    /// [`ensure_administrable_netns`](Self::ensure_administrable_netns)), so the only
+    /// servers it can reach are the group's own VMs. Giving the local backend
+    /// outbound connectivity would invalidate that reasoning, not just this comment.
+    ///
+    /// This covers the gateway only. Clients that dial an API boundary node directly
+    /// still need `danger_accept_invalid_certs`, for an unrelated reason:
+    /// `IcNodeSnapshot::get_public_url` hands them an IP-literal URL, which no name
+    /// in the node's certificate can match. (Whether that certificate has a CA at
+    /// all depends on the test — under `with_api_boundary_nodes_playnet` it is issued
+    /// by `LocalApiBoundaryNodesPlaynet`'s ephemeral CA, and otherwise the node
+    /// self-signs it via `generate_ic_boundary_tls_cert`.)
+    fn install_dev_root_ca() -> Result<()> {
+        let bundle_path = Self::system_ca_bundle()?;
+        let bundle_path_display = bundle_path.display();
+        let mut bundle = std::fs::read_to_string(&bundle_path).with_context(|| {
+            format!(
+                "reading the system CA bundle {bundle_path_display} (a platform that keeps \
+                 its bundle elsewhere can point SSL_CERT_FILE at it)"
+            )
+        })?;
+        let dev_root_ca_pem = dev_root_ca_cert_pem()?;
+        // Guard the separator rather than trusting the bundle to end in a newline:
+        // `-----END CERTIFICATE----------BEGIN CERTIFICATE-----` parses as neither,
+        // and a PEM that fails to parse is reported by `rustls-platform-verifier`
+        // through `log::warn!` — for which the driver installs no implementation, so
+        // it would go nowhere.
+        if !bundle.ends_with('\n') {
+            bundle.push('\n');
+        }
+        bundle.push_str(&dev_root_ca_pem);
+
+        let path = Self::generated_ca_bundle_path();
+        std::fs::write(&path, &bundle)
+            .with_context(|| format!("writing the generated CA bundle {}", path.display()))?;
+        // `write` honours the umask, and this shadows a world-readable file that
+        // every child in the tree reads.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
+            .with_context(|| format!("making {} world-readable", path.display()))?;
+
+        Self::mount(
+            Some(&path),
+            &bundle_path,
+            libc::MS_BIND,
+            "bind-mounting the generated CA bundle over the system one",
+        )?;
+
+        // Read it back. Every step above can succeed while leaving the CA
+        // unreachable — a mount that did not take, a short write, a stale target —
+        // and none of that surfaces until a TLS handshake fails, six minutes into a
+        // test, in a retry loop. One extra read turns that into an error here.
+        let installed = std::fs::read_to_string(&bundle_path)
+            .with_context(|| format!("reading back {bundle_path_display}"))?;
+        if !installed.contains(&dev_root_ca_pem) {
+            bail!(
+                "the dev root CA is missing from {bundle_path_display} after mounting {} \
+                 over it",
+                path.display()
+            );
+        }
+        Ok(())
+    }
+
+    /// `mount(2)`, which the `nix` crate cannot offer here because the workspace
+    /// builds it without its `mount` feature.
+    ///
+    /// `source` is `None` for a propagation change, which takes none; the
+    /// filesystem type and the mount data are always `NULL`, because every call
+    /// site is either a bind mount or a propagation change and neither uses them.
+    fn mount(source: Option<&Path>, target: &Path, flags: libc::c_ulong, what: &str) -> Result<()> {
+        let source = source
+            .map(|source| CString::new(source.as_os_str().as_bytes()))
+            .transpose()
+            .with_context(|| format!("{what}: the source path contains a NUL byte"))?;
+        let target =
+            CString::new(target.as_os_str().as_bytes()).expect("mount target contains a NUL byte");
+        // SAFETY: both strings are NUL-terminated and outlive the call. A NULL
+        // source is what `mount(2)` expects for a propagation change (the kernel
+        // never looks at it), and a NULL filesystem type and data are what it
+        // expects for a bind mount.
+        let rc = unsafe {
+            libc::mount(
+                source.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()),
+                target.as_ptr(),
+                std::ptr::null(),
+                flags,
+                std::ptr::null(),
+            )
+        };
+        if rc != 0 {
+            return Err(anyhow!(std::io::Error::last_os_error())).context(format!(
+                "{what} failed (mount(2) follows the target symlink, so a target that \
+                 dangles is reported as a missing file rather than as a bad source)"
+            ));
+        }
         Ok(())
     }
 
@@ -696,6 +1060,13 @@ impl LocalBackend {
         );
         Self::run_shell(&create_script, "create group bridge")?;
 
+        // Truncate the two files the group's DNS records live in, both to drop
+        // records an interrupted run left behind and so they exist before
+        // `dnsmasq` starts. They deliberately survive a `dnsmasq` *restart* (see
+        // `add_wildcard_dns_record`), which is why this happens here rather than
+        // in `start_dnsmasq`.
+        self.reset_dns_records(&bridge)?;
+
         // Start `dnsmasq`. Non-IC-node VMs (e.g. universal VMs) SLAAC their
         // global address from its RA; IC GuestOS nodes use a static config instead.
         // The same `dnsmasq` also serves DHCPv4 on the group's IPv4 `/24` for
@@ -722,6 +1093,64 @@ impl LocalBackend {
             .working_dir
             .join("dnsmasq")
             .join(format!("{bridge}.hosts"))
+    }
+
+    /// Path of the file the group's *wildcard* DNS records are accumulated in by
+    /// [`add_wildcard_dns_record`](Self::add_wildcard_dns_record), and turned into
+    /// `--address` options by
+    /// [`dnsmasq_wildcard_args`](Self::dnsmasq_wildcard_args).
+    ///
+    /// Deliberately shaped like the `--addn-hosts` file next to it — one
+    /// `<address> <name>` pair per line — even though `dnsmasq` never reads it
+    /// itself.
+    fn dnsmasq_wildcards_path(&self, bridge: &str) -> PathBuf {
+        self.active_local_backend
+            .working_dir
+            .join("dnsmasq")
+            .join(format!("{bridge}.wildcards"))
+    }
+
+    /// Create the group's `dnsmasq` working dir and truncate both DNS record
+    /// files, so they exist and are empty before `dnsmasq` first starts. Called
+    /// from [`create_group`](Self::create_group); see the comment there for why
+    /// not from [`start_dnsmasq`](Self::start_dnsmasq).
+    fn reset_dns_records(&self, bridge: &str) -> Result<()> {
+        let dnsmasq_dir = self.active_local_backend.working_dir.join("dnsmasq");
+        std::fs::create_dir_all(&dnsmasq_dir).with_context(|| {
+            format!("creating dnsmasq working dir at {}", dnsmasq_dir.display())
+        })?;
+        for path in [
+            self.dnsmasq_hosts_path(bridge),
+            self.dnsmasq_wildcards_path(bridge),
+        ] {
+            std::fs::write(&path, "").with_context(|| format!("truncating {}", path.display()))?;
+        }
+        Ok(())
+    }
+
+    /// The `--address=/<name>/<addr>` options for the wildcard records registered
+    /// for `bridge` so far, read back from
+    /// [`dnsmasq_wildcards_path`](Self::dnsmasq_wildcards_path).
+    fn dnsmasq_wildcard_args(&self, bridge: &str) -> Result<Vec<String>> {
+        let path = self.dnsmasq_wildcards_path(bridge);
+        let contents = match std::fs::read_to_string(&path) {
+            Ok(contents) => contents,
+            // A group that never got as far as `reset_dns_records` has no
+            // wildcards to serve.
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
+            Err(err) => return Err(err).with_context(|| format!("reading {}", path.display())),
+        };
+        contents
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| {
+                let (addr, name) =
+                    line.trim().split_once(char::is_whitespace).ok_or_else(|| {
+                        anyhow!("malformed wildcard record {line:?} in {}", path.display())
+                    })?;
+                Ok(format!("--address=/{}/{addr}", name.trim()))
+            })
+            .collect()
     }
 
     /// Spawn a minimal `dnsmasq` on `bridge` serving three roles:
@@ -752,11 +1181,11 @@ impl LocalBackend {
         let log_path = dnsmasq_dir.join(format!("{bridge}.log"));
         // Remove a stale pid-file from a previous interrupted run.
         let _ = std::fs::remove_file(&pid_path);
-        // Truncate the hosts-file, both to drop any records such a run left and
-        // so it exists before `dnsmasq` starts: a missing `--addn-hosts` file is
-        // tolerated, but relying on it being picked up later is needless risk.
-        std::fs::write(&hosts_path, "")
-            .with_context(|| format!("creating {}", hosts_path.display()))?;
+        // The wildcard records registered so far. Unlike the `--addn-hosts` file,
+        // these are *command-line* options, which is why registering one has to
+        // restart `dnsmasq`; see `add_wildcard_dns_record`. Empty on the first
+        // start, since `create_group` truncates the file it reads.
+        let wildcard_args = self.dnsmasq_wildcard_args(bridge)?;
 
         info!(
             self.logger,
@@ -774,13 +1203,19 @@ impl LocalBackend {
         // (`enp2s0`). `dnsmasq` daemonizes (writing its pid-file) and is
         // signalled via it in teardown.
         //
-        // DNS: `--no-resolv --no-hosts` keeps the resolver hermetic — it neither
-        // reads the driver host's `/etc/resolv.conf` nor its `/etc/hosts`. With
-        // no upstream server left to forward to, anything it cannot answer is
-        // REFUSED rather than leaked. It answers from two sources:
+        // DNS: `--no-resolv --no-hosts` keeps the resolver hermetic — it reads
+        // neither `/etc/resolv.conf` nor `/etc/hosts`. Both matter: with no
+        // upstream server left to forward to, anything it cannot answer is REFUSED
+        // rather than leaked — and `/etc/resolv.conf` in this mount namespace is
+        // the generated file naming *these very addresses*
+        // (`install_group_resolv_conf`), so reading it would make `dnsmasq` forward
+        // to itself. It answers from three sources:
         //
         // * `--addn-hosts` — records tests register through
         //   [`add_dns_record`](Self::add_dns_record).
+        // * `--address` — the wildcard records tests register through
+        //   [`add_wildcard_dns_record`](Self::add_wildcard_dns_record), each
+        //   answering for a name *and every subdomain of it*.
         // * `--synth-domain` — synthesises `<address>.ipv6.nip.io` for the
         //   group's `/64`, with `:` written as `-`, mirroring the public
         //   `nip.io` wildcard service that tests use to name a VM by its
@@ -798,31 +1233,74 @@ impl LocalBackend {
         // gated on `getuid() == 0` and would otherwise `setgroups(2)` — denied in
         // the driver's user namespace — and drop to a user/group id that is
         // unmapped there.
+        //
+        // `dnsmasq` is spawned directly rather than through a shell, so every
+        // argument reaches it as one argv entry. That matters for the `--address`
+        // options above all: their names originate in a test-supplied VM name
+        // (`IcGatewayVm::new`), and a shell would word-split and metacharacter-expand
+        // them on the way. It also drops the quoting question for the paths, which
+        // the working directory could otherwise raise by containing a space.
         let dnsmasq_path = get_dependency_path_from_env("ENV_DEPS__DNSMASQ_PATH");
-        let dnsmasq_script = format!(
-            "exec {dnsmasq_path:?} \
-                 --conf-file=/dev/null \
-                 --pid-file={pid} \
-                 --dhcp-leasefile={lease} \
-                 --log-facility={log} \
-                 --bind-interfaces \
-                 --interface={bridge} \
-                 --except-interface=lo \
-                 --enable-ra \
-                 --dhcp-range={prefix},ra-only \
-                 --dhcp-range={ipv4_prefix}.2,{ipv4_prefix}.254,255.255.255.0,1h \
-                 --ra-param={bridge},10,1800 \
-                 --no-resolv \
-                 --no-hosts \
-                 --addn-hosts={hosts} \
-                 --synth-domain={NIP_IO_DOMAIN},{prefix}/64",
-            pid = pid_path.display(),
-            lease = lease_path.display(),
-            log = log_path.display(),
-            hosts = hosts_path.display(),
-        );
-        Self::run_shell(&dnsmasq_script, "start dnsmasq")?;
+        let mut dnsmasq = Command::new(&dnsmasq_path);
+        dnsmasq
+            .arg("--conf-file=/dev/null")
+            .arg(Self::path_arg("--pid-file=", &pid_path))
+            .arg(Self::path_arg("--dhcp-leasefile=", &lease_path))
+            .arg(Self::path_arg("--log-facility=", &log_path))
+            .arg("--bind-interfaces")
+            .arg(format!("--interface={bridge}"))
+            .arg("--except-interface=lo")
+            .arg("--enable-ra")
+            .arg(format!("--dhcp-range={prefix},ra-only"))
+            .arg(format!(
+                "--dhcp-range={ipv4_prefix}.2,{ipv4_prefix}.254,255.255.255.0,1h"
+            ))
+            .arg(format!("--ra-param={bridge},10,1800"))
+            .arg("--no-resolv")
+            .arg("--no-hosts")
+            .arg(Self::path_arg("--addn-hosts=", &hosts_path))
+            .arg(format!("--synth-domain={NIP_IO_DOMAIN},{prefix}/64"))
+            .args(&wildcard_args);
+        Self::run_command(&mut dnsmasq, "start dnsmasq")?;
 
+        Ok(())
+    }
+
+    /// Reject a `name` that cannot be stored as a DNS record, before
+    /// [`add_dns_record`](Self::add_dns_record) or
+    /// [`add_wildcard_dns_record`](Self::add_wildcard_dns_record) persists it.
+    ///
+    /// Both record files are line-based — one `<address> <name>` pair per line —
+    /// and [`dnsmasq_wildcard_args`](Self::dnsmasq_wildcard_args) splits a line
+    /// back apart on whitespace. So a name containing a space would not fail to
+    /// register, it would register a *different* record, and one containing a
+    /// newline would register a second record nobody asked for. Names reach here
+    /// from test-supplied VM names (`IcGatewayVm::new`) and API BN domains, which
+    /// nothing upstream validates; failing here is the difference between a clear
+    /// error at registration and an unresolvable name six minutes into a test.
+    ///
+    /// Accepted is a plain ASCII hostname: dot-separated non-empty labels of
+    /// letters, digits, `-` and `_`, no label starting or ending with `-`, no
+    /// label over 63 bytes and no name over 253 (RFC 1035 §2.3.4's limits, with
+    /// the leading-digit relaxation of RFC 1123 §2.1 and the `_` that service
+    /// labels use in practice).
+    fn validate_dns_name(name: &str) -> Result<()> {
+        let is_valid_label = |label: &str| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        };
+        if name.is_empty() || name.len() > 253 || !name.split('.').all(is_valid_label) {
+            bail!(
+                "refusing to register {name:?} as a DNS record: expected dot-separated \
+                 ASCII labels of letters, digits, '-' and '_' (none starting or ending \
+                 with '-'), each at most 63 bytes and at most 253 bytes in total"
+            );
+        }
         Ok(())
     }
 
@@ -834,8 +1312,15 @@ impl LocalBackend {
     /// accumulate across calls.
     ///
     /// This is how the local backend replaces Farm's playnet DNS: see
-    /// `InternetComputer::setup_api_bn_local_playnet`.
+    /// `InternetComputer::setup_api_bn_local_playnet`. Use
+    /// [`add_wildcard_dns_record`](Self::add_wildcard_dns_record) when the
+    /// subdomains of `name` have to resolve as well; a hosts file has no
+    /// wildcards.
+    ///
+    /// `name` must be a plain ASCII hostname, per
+    /// [`validate_dns_name`](Self::validate_dns_name).
     pub fn add_dns_record(&self, group_name: &str, name: &str, addr: IpAddr) -> Result<()> {
+        Self::validate_dns_name(name)?;
         let bridge = Self::bridge_name(group_name);
         let hosts_path = self.dnsmasq_hosts_path(&bridge);
 
@@ -872,17 +1357,196 @@ impl LocalBackend {
         Ok(())
     }
 
-    /// Stop the group's `dnsmasq`, if running. It runs as the current user, so
-    /// it is signalled directly via its pid-file. Best-effort and idempotent.
-    fn stop_dnsmasq(&self, bridge: &str) {
+    /// Register a *wildcard* DNS record with the group's `dnsmasq`, so that
+    /// `name` **and every subdomain of it, at any depth** resolve to `addrs` — on
+    /// every VM in the group, and in the driver, which shares their resolver (see
+    /// [`install_group_resolv_conf`](Self::install_group_resolv_conf)).
+    ///
+    /// This is the local replacement for the apex record plus the `*` and `*.raw`
+    /// `CNAME`s Farm's playnet DNS serves for the IC gateway, whose per-canister
+    /// subdomains (`<canister id>.<domain>`, `<canister id>.raw.<domain>`) clients
+    /// are expected to reach; see `IcGatewayVm::configure_dns_records`. Mixing
+    /// address families in `addrs` is fine — `dnsmasq` answers each query type
+    /// from the matching `--address` option — and takes the whole set at once
+    /// because a single record is what costs a restart, not a single address.
+    ///
+    /// It does cost a `dnsmasq` restart, unlike
+    /// [`add_dns_record`](Self::add_dns_record), because a wildcard needs
+    /// `--address`, and nothing re-reads a *command-line* option: `SIGHUP` re-reads
+    /// the hosts-shaped files and `--servers-file`, and a servers-file admits
+    /// nothing but `server` and `rev-server`. Prefer `add_dns_record` when an exact
+    /// name is enough.
+    ///
+    /// `name` must be a plain ASCII hostname, per
+    /// [`validate_dns_name`](Self::validate_dns_name); it is what ends up in an
+    /// `--address` option on `dnsmasq`'s command line.
+    pub fn add_wildcard_dns_record(
+        &self,
+        group_name: &str,
+        name: &str,
+        addrs: &[IpAddr],
+    ) -> Result<()> {
+        Self::validate_dns_name(name)?;
+        if addrs.is_empty() {
+            return Ok(());
+        }
+        let bridge = Self::bridge_name(group_name);
+        let wildcards_path = self.dnsmasq_wildcards_path(&bridge);
+
+        info!(
+            self.logger,
+            "Registering wildcard DNS record {name} (and its subdomains) -> {addrs:?} \
+             with the dnsmasq of group {group_name}"
+        );
+
+        let mut wildcards_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&wildcards_path)
+            .with_context(|| format!("opening {}", wildcards_path.display()))?;
+        for addr in addrs {
+            writeln!(wildcards_file, "{addr} {name}")
+                .with_context(|| format!("appending to {}", wildcards_path.display()))?;
+        }
+        drop(wildcards_file);
+
+        self.restart_dnsmasq(group_name)
+    }
+
+    /// Stop and restart the group's `dnsmasq` so it picks up command-line options
+    /// derived from state that changed since it started — currently only the
+    /// wildcard records of
+    /// [`add_wildcard_dns_record`](Self::add_wildcard_dns_record).
+    ///
+    /// The record files are left alone (they are truncated once, by
+    /// [`create_group`](Self::create_group)), so records registered before the
+    /// restart survive it.
+    ///
+    /// Restarting is safe for VMs that are already up: IC GuestOS nodes are
+    /// statically configured and never consult the RA; a VM that SLAAC'd its
+    /// address holds it for the `--dhcp-range ... ra-only` lifetime, which far
+    /// outlives the gap; DHCPv4 leases live in the lease-file `dnsmasq` re-reads at
+    /// startup; and the only real loss is its DNS cache. A guest that happens to
+    /// query during the gap retries.
+    fn restart_dnsmasq(&self, group_name: &str) -> Result<()> {
+        let bridge = Self::bridge_name(group_name);
+        let prefix = Self::group_ipv6_prefix(group_name);
+        let ipv4_prefix = Self::group_ipv4_prefix(group_name);
+        // Propagate a stop that could not be confirmed rather than starting a
+        // second `dnsmasq`: the one still holding port 53 would make the new one
+        // fail to bind, and `start_dnsmasq`'s error would then point at the wrong
+        // thing.
+        self.stop_dnsmasq(&bridge)?;
+        self.start_dnsmasq(group_name, &bridge, &prefix, &ipv4_prefix)
+    }
+
+    /// Stop the group's `dnsmasq`, if running, and wait for it to exit. It runs as
+    /// the current user, so it is signalled directly via its pid-file. Idempotent,
+    /// and reports whether the exit could be *confirmed*.
+    ///
+    /// The wait is what makes [`restart_dnsmasq`](Self::restart_dnsmasq) sound:
+    /// returning while the old instance still holds UDP port 53 on the name-server
+    /// addresses would make the new one fail to bind. Signals are delivered
+    /// asynchronously, `SIGKILL` included, so each one is followed by its own wait
+    /// and an unconfirmed exit is an error rather than something to start a second
+    /// `dnsmasq` on top of.
+    ///
+    /// The pid-file is removed either way: it names a process we have given up on,
+    /// so keeping it would only mislead the next caller.
+    fn stop_dnsmasq(&self, bridge: &str) -> Result<()> {
         let pid_path = self.dnsmasq_pid_path(bridge);
-        if let Ok(contents) = std::fs::read_to_string(&pid_path)
+        let stopped = if let Ok(contents) = std::fs::read_to_string(&pid_path)
             && let Ok(pid) = contents.trim().parse::<i32>()
+            && Self::dnsmasq_is_alive(pid, &pid_path)
         {
             // SIGTERM lets dnsmasq remove its pid-file on exit.
             let _ = Command::new("kill").arg(pid.to_string()).status();
-        }
+            let terminated = Self::await_dnsmasq_exit(pid, &pid_path);
+            if terminated.is_err() {
+                warn!(
+                    self.logger,
+                    "dnsmasq (pid {pid}) did not exit within {DNSMASQ_STOP_TIMEOUT:?} of \
+                     SIGTERM; sending SIGKILL"
+                );
+                let _ = Command::new("kill")
+                    .args(["-KILL", &pid.to_string()])
+                    .status();
+                Self::await_dnsmasq_exit(pid, &pid_path).context("dnsmasq survived SIGKILL")
+            } else {
+                terminated
+            }
+        } else {
+            // No pid-file, or it names something that is not a `dnsmasq` of ours
+            // any more; either way there is nothing holding the port.
+            Ok(())
+        };
         let _ = std::fs::remove_file(&pid_path);
+        stopped.with_context(|| format!("stopping the dnsmasq of {bridge}"))
+    }
+
+    /// Wait up to [`DNSMASQ_STOP_TIMEOUT`] for `pid` to stop being a `dnsmasq` of
+    /// ours, per [`dnsmasq_is_alive`](Self::dnsmasq_is_alive).
+    ///
+    /// That observes the process's `argv` going away, which the kernel does while
+    /// tearing the process down — a hair *before* it closes its files. So in
+    /// principle a sample could land in between and read an exiting `dnsmasq` as
+    /// gone while its sockets are still open. Two reasons not to chase that: the
+    /// window is microseconds of non-blocking kernel work against a poll every
+    /// [`DNSMASQ_STOP_POLL_INTERVAL`], and the backstop is loud rather than silent —
+    /// `dnsmasq` refuses to start at all when it cannot bind, so `start_dnsmasq`
+    /// surfaces that error instead of leaving a half-working resolver behind.
+    ///
+    /// Waiting for the pid to disappear outright would be worse, not better:
+    /// `dnsmasq` daemonizes, so it lingers as a zombie until whatever it was
+    /// reparented to reaps it, which under a sandbox is not guaranteed to be prompt.
+    fn await_dnsmasq_exit(pid: i32, pid_path: &Path) -> Result<()> {
+        let deadline = Instant::now() + DNSMASQ_STOP_TIMEOUT;
+        while Self::dnsmasq_is_alive(pid, pid_path) {
+            if Instant::now() >= deadline {
+                bail!("dnsmasq (pid {pid}) was still running {DNSMASQ_STOP_TIMEOUT:?} later");
+            }
+            std::thread::sleep(DNSMASQ_STOP_POLL_INTERVAL);
+        }
+        Ok(())
+    }
+
+    /// Whether `pid` is a live `dnsmasq` that this backend started with
+    /// `pid_path`, decided by looking for the `--pid-file=<pid_path>` argument
+    /// [`start_dnsmasq`](Self::start_dnsmasq) passed it in
+    /// `/proc/<pid>/cmdline`.
+    ///
+    /// That one check settles both of the questions
+    /// [`stop_dnsmasq`](Self::stop_dnsmasq) has to answer before it signals:
+    ///
+    /// * **Is it still ours?** The pid comes from a pid-file that a `dnsmasq` which
+    ///   died on its own never got to remove, so it can name a pid the kernel has
+    ///   since handed to something else — and `stop_dnsmasq` escalates to
+    ///   `SIGKILL`, which is not a signal to send to a stranger. The pid-file path
+    ///   is unique per group, so nothing else carries it in its `argv`.
+    /// * **Is it still running?** A zombie's `cmdline` reads back empty, so this
+    ///   answers `false` for one — which is what we want, since a zombie holds no
+    ///   sockets. `dnsmasq` does become one briefly: it daemonizes, so it is not a
+    ///   child of this process and lingers until whoever it was reparented to reaps
+    ///   it.
+    ///
+    /// The process *name* is no help here, which is worth knowing before reaching
+    /// for it: Bazel links the `dnsmasq` runfiles entry under a hashed basename, so
+    /// `/proc/<pid>/comm` holds a 15-character truncation of that hash rather than
+    /// anything resembling `dnsmasq`.
+    fn dnsmasq_is_alive(pid: i32, pid_path: &Path) -> bool {
+        let Ok(cmdline) = std::fs::read(format!("/proc/{pid}/cmdline")) else {
+            return false;
+        };
+        // `cmdline` is NUL-separated, so split it and compare *whole* arguments.
+        // A substring search over the raw bytes would be weaker in a way that
+        // matters here, since a false positive gets something signalled: it would
+        // also accept our argument embedded in a longer one, or our path as the
+        // prefix of a longer path.
+        let mut expected = b"--pid-file=".to_vec();
+        expected.extend_from_slice(pid_path.as_os_str().as_bytes());
+        cmdline
+            .split(|byte| *byte == 0)
+            .any(|arg| arg == expected.as_slice())
     }
 
     /// Path of a VM's QEMU pid-file (written via `-pidfile` in [`start_vm`]).
@@ -967,9 +1631,12 @@ impl LocalBackend {
             self.logger,
             "Deleting local group {group_name} (bridge {bridge})"
         );
+        // Best-effort here, unlike in `restart_dnsmasq`: the bridge and its
+        // addresses are deleted just below, so a `dnsmasq` that outlives its
+        // SIGKILL has nothing left to serve and nothing left to hold.
 
         // Stop `dnsmasq` before removing the bridge it listens on.
-        self.stop_dnsmasq(&bridge);
+        let _ = self.stop_dnsmasq(&bridge);
 
         // Best effort: stop every VM QEMU process started for this group. Each
         // VM records its pid under `working_dir/vms/<vm>/qemu.pid`; killing it
@@ -1883,6 +2550,61 @@ fn has_gpt_header(path: &Path) -> Result<bool> {
         Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
         Err(err) => {
             Err(err).with_context(|| format!("reading the GPT signature of {}", path.display()))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LocalBackend;
+
+    #[test]
+    fn accepts_the_names_the_backend_registers() {
+        for name in [
+            // `IcGatewayVm::load_or_create_local_playnet`.
+            "ic-gateway.ic.net",
+            "ic-gateway-3.ic.net",
+            // `InternetComputer::setup_api_bn_local_playnet`.
+            "apibn-0.ic.net",
+            // Leading digits and `_` labels are legal in practice.
+            "0.example.com",
+            "_acme-challenge.example.com",
+            &format!("{}.example.com", "a".repeat(63)),
+        ] {
+            assert!(
+                LocalBackend::validate_dns_name(name).is_ok(),
+                "expected {name:?} to be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_names_that_would_corrupt_a_record_file_or_a_command_line() {
+        for name in [
+            // Splits the `<address> <name>` line the wrong way when read back.
+            "ic gateway.ic.net",
+            "ic\tgateway.ic.net",
+            // Appends a record nobody asked for.
+            "ic-gateway.ic.net\n2001:db8::1 evil.ic.net",
+            // Shell metacharacters. No shell sees these any more, now that
+            // `start_dnsmasq` passes argv directly — but they are not DNS names
+            // either, so they have no business in a record file.
+            "ic-gateway.ic.net; touch /tmp/pwned",
+            "$(id).ic.net",
+            "`id`.ic.net",
+            // Malformed as a name.
+            "",
+            ".",
+            "ic-gateway..ic.net",
+            "-gateway.ic.net",
+            "gateway-.ic.net",
+            &format!("{}.example.com", "a".repeat(64)),
+            &format!("{}.example.com", vec!["a"; 127].join(".")),
+        ] {
+            assert!(
+                LocalBackend::validate_dns_name(name).is_err(),
+                "expected {name:?} to be rejected"
+            );
         }
     }
 }
