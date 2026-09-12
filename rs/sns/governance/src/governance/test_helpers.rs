@@ -75,6 +75,47 @@ pub(crate) fn basic_governance_proto() -> GovernanceProto {
     }
 }
 
+/// A helper function to execute each proposal.
+pub(crate) fn execute_proposal(governance: &mut Governance, proposal_id: u64) -> ProposalData {
+    governance.process_proposal(proposal_id);
+
+    let now = std::time::Instant::now;
+
+    let start = now();
+    // In practice, the exit condition of the following loop occurs in much
+    // less than 1 s (on my Macbook Pro 2019 Intel). The reason for this
+    // generous limit is twofold: 1. avoid flakes in CI, while at the same
+    // time 2. do not run forever if something goes wrong.
+    let give_up = || now() < start + std::time::Duration::from_secs(30);
+
+    loop {
+        let result = governance
+            .get_proposal(&GetProposal {
+                proposal_id: Some(ProposalId { id: proposal_id }),
+            })
+            .result
+            .unwrap();
+        let proposal_data = match result {
+            get_proposal_response::Result::Proposal(p) => p,
+            _ => panic!("get_proposal result: {result:#?}"),
+        };
+
+        let upgrade_sns_action_id = 7;
+
+        // If the proposal is an SNS upgrade action, it won't move to the "executed" state in
+        // this env (non-canister env), hence return.
+        if proposal_data.status().is_final() || proposal_data.action == upgrade_sns_action_id {
+            break proposal_data;
+        }
+
+        if give_up() {
+            panic!("Proposal took too long to terminate (in the failed state).")
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
 pub(crate) fn canister_status_from_management_canister_for_test(
     module_hash: Vec<u8>,
     status: CanisterStatusType,
