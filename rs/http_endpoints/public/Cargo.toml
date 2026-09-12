@@ -12,7 +12,7 @@ async-trait = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }
 cfg-if = "1.0.0"
-crossbeam = "0.8.4"
+crossbeam-utils = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }

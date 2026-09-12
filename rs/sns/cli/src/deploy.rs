@@ -128,7 +128,7 @@ where
         value
     } else {
         modified_contents = serde_json::from_str(&contents)?;
-        json_patch::merge(&mut modified_contents, value);
+        json_merge_patch(&mut modified_contents, value);
         &modified_contents
     };
     // Truncate the file and write the new contents.
@@ -474,5 +474,28 @@ impl DirectSnsDeployerForTests {
             &wasm.into_os_string().into_string().unwrap(),
             sns_canister_name,
         ]);
+    }
+}
+
+/// Applies a JSON Merge Patch (RFC 7396) `patch` to `doc`.
+///
+/// Objects are merged recursively, `null` values in the patch remove the
+/// corresponding key from the document, and any other value replaces the
+/// document at that position.
+fn json_merge_patch(doc: &mut JsonValue, patch: &JsonValue) {
+    let Some(patch) = patch.as_object() else {
+        *doc = patch.clone();
+        return;
+    };
+    if !doc.is_object() {
+        *doc = JsonValue::Object(Default::default());
+    }
+    let map = doc.as_object_mut().unwrap();
+    for (key, value) in patch {
+        if value.is_null() {
+            map.remove(key.as_str());
+        } else {
+            json_merge_patch(map.entry(key.as_str()).or_insert(JsonValue::Null), value);
+        }
     }
 }

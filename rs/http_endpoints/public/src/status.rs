@@ -2,7 +2,7 @@
 use crate::common::{self, Cbor};
 
 use axum::{Router, extract::State};
-use crossbeam::atomic::AtomicCell;
+use crossbeam_utils::atomic::AtomicCell;
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
