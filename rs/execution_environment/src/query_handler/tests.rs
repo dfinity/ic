@@ -1363,8 +1363,10 @@ fn test_call_context_performance_counter_correctly_reported_on_query() {
 
     let counters = result
         .bytes()
-        .chunks_exact(std::mem::size_of::<u64>())
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<{ std::mem::size_of::<u64>() }>()
+        .0
+        .iter()
+        .map(|c| u64::from_le_bytes(*c))
         .collect::<Vec<_>>();
 
     assert_lt!(counters[0], counters[1]);
@@ -1415,8 +1417,10 @@ fn test_call_context_performance_counter_correctly_reported_on_composite_query()
 
     let counters = result
         .bytes()
-        .chunks_exact(std::mem::size_of::<u64>())
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<{ std::mem::size_of::<u64>() }>()
+        .0
+        .iter()
+        .map(|c| u64::from_le_bytes(*c))
         .collect::<Vec<_>>();
 
     assert_lt!(counters[0], counters[1]);
