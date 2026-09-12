@@ -284,8 +284,7 @@ impl SchedulerTest {
         let wasm_source = system_task
             .map(|x| x.to_string().as_bytes().to_vec())
             .unwrap_or(EMPTY_WASM.to_vec());
-        let time_of_last_allocation_charge =
-            time_of_last_allocation_charge.map_or(UNIX_EPOCH, |time| time);
+        let time_of_last_allocation_charge = time_of_last_allocation_charge.unwrap_or(UNIX_EPOCH);
         let controller = controller.unwrap_or(self.user_id.get());
         let mut builder = CanisterStateBuilder::new()
             .with_canister_id(canister_id)

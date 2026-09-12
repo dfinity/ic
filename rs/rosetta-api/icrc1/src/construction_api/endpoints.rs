@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 use super::{services, types::ConstructionPayloadsRequestMetadata};
 use crate::{
     MultiTokenAppState,

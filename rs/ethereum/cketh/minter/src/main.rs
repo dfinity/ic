@@ -555,6 +555,7 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
 }
 
 #[update]
+#[allow(clippy::result_large_err)]
 async fn withdraw_erc20(
     WithdrawErc20Arg {
         amount,

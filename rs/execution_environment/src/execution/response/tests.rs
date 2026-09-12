@@ -3230,8 +3230,10 @@ fn test_call_context_performance_counter_correctly_reported_on_reply() {
 
     let counters = result
         .bytes()
-        .chunks_exact(std::mem::size_of::<u64>())
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<{ std::mem::size_of::<u64>() }>()
+        .0
+        .iter()
+        .map(|c| u64::from_le_bytes(*c))
         .collect::<Vec<_>>();
 
     assert_lt!(counters[0], counters[1]);
@@ -3280,8 +3282,10 @@ fn test_call_context_performance_counter_correctly_reported_on_reject() {
 
     let counters = result
         .bytes()
-        .chunks_exact(std::mem::size_of::<u64>())
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<{ std::mem::size_of::<u64>() }>()
+        .0
+        .iter()
+        .map(|c| u64::from_le_bytes(*c))
         .collect::<Vec<_>>();
 
     assert_lt!(counters[0], counters[1]);
@@ -3328,8 +3332,10 @@ fn test_call_context_performance_counter_correctly_reported_on_cleanup() {
     let stable_memory = &state.execution_state.as_ref().unwrap().stable_memory;
     let page = stable_memory.page_map.get_page(0.into());
     let counters = page[0..(std::mem::size_of::<u64>() * 3)]
-        .chunks_exact(std::mem::size_of::<u64>())
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<{ std::mem::size_of::<u64>() }>()
+        .0
+        .iter()
+        .map(|c| u64::from_le_bytes(*c))
         .collect::<Vec<_>>();
 
     assert_lt!(counters[0], counters[1]);
