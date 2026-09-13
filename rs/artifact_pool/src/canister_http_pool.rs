@@ -42,8 +42,11 @@ enum ServedResponse {
     /// `CanisterHttpResponse` is produced by only a subset of nodes, so it must
     /// be included with the artifact.
     Include,
-    /// The request is fully replicated: every node recomputes the response
-    /// locally, so it must be excluded from the artifact.
+    /// The response must be excluded from the artifact: either because the
+    /// request is fully replicated, i.e. every node recomputes the response
+    /// locally; or because the request has already been responded to, in which
+    /// case the share is nothing but a receipt and there may be no response in
+    /// the pool at all.
     Exclude,
 }
 
@@ -170,16 +173,22 @@ impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
                     }));
                     // Response content should not be served
                     self.validated.insert(share, ServedResponse::Exclude);
-                    self.content
-                        .insert(ic_types::crypto::crypto_hash(&content), content);
+                    // A share of an already answered outcall comes with no response to
+                    // retain: it can never be put into a block.
+                    if let Some(content) = content {
+                        self.content
+                            .insert(ic_types::crypto::crypto_hash(&content), content);
+                    }
                 }
-                CanisterHttpChangeAction::MoveToValidated(share) => {
+                CanisterHttpChangeAction::MoveToValidated {
+                    share,
+                    retain_response,
+                } => {
                     if let Some(artifact) = self.unvalidated.remove(&share) {
-                        // If there is a response associated with this share, we want to move it to the `content`
-                        // section of the pool, corresponding to valid responses. A validated share carries a
-                        // response exactly for non-fully-replicated requests, whose response must be served
-                        // to peers that pull the artifact.
-                        let served_response = if let Some(content) = artifact.response {
+                        // A response that should not be retained is dropped. This means, it will
+                        // neither be served to other peers nor put into a block by this node.
+                        let content = artifact.response.filter(|_| retain_response);
+                        let served_response = if let Some(content) = content {
                             self.content
                                 .insert(ic_types::crypto::crypto_hash(&content), content);
                             ServedResponse::Include
@@ -360,8 +369,8 @@ mod tests {
         let content_hash = ic_types::crypto::crypto_hash(&response);
 
         let result = pool.apply(vec![
-            CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
-            CanisterHttpChangeAction::AddToValidated(fake_share(456), fake_response(456)),
+            CanisterHttpChangeAction::AddToValidated(share.clone(), Some(response.clone())),
+            CanisterHttpChangeAction::AddToValidated(fake_share(456), Some(fake_response(456))),
         ]);
 
         assert!(
@@ -425,10 +434,43 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_canister_http_pool_add_to_validated_without_a_response_to_retain() {
+        let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        let response = fake_response(123);
+        let share = fake_share_matching(123, &response);
+        let id = share.clone();
+        let content_hash = ic_types::crypto::crypto_hash(&response);
+
+        let result = pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
+            share.clone(),
+            None,
+        )]);
+
+        let expected_artifact = CanisterHttpResponseArtifact {
+            share: share.clone(),
+            response: None,
+        };
+
+        // Only the share is gossiped, ...
+        assert!(
+            matches!(&result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact == expected_artifact)
+        );
+        assert!(result.poll_immediately);
+        assert_eq!(result.transmits.len(), 1);
+        assert_eq!(share, pool.lookup_validated(&id).unwrap());
+        // ... and no response is retained, neither to serve to a peer that pulls the
+        // artifact, nor to put into a block.
+        assert_eq!(pool.get(&id).unwrap(), expected_artifact);
+        assert!(pool.get_response_content_by_hash(&content_hash).is_none());
+        assert_eq!(pool.get_response_content_items().count(), 0);
+    }
+
     /// A peer that *pulls* a validated artifact (via
     /// [`ValidatedPoolReader::get`]) must receive the full response for
-    /// non-fully-replicated requests, and must not receive one for fully
-    /// replicated requests.
+    /// non-fully-replicated requests that are still awaiting one, and must not
+    /// receive one for fully replicated requests, nor for requests that have
+    /// already been responded to.
     #[test]
     fn test_get_serves_response_only_for_non_fully_replicated_shares() {
         let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
@@ -451,7 +493,7 @@ mod tests {
         let id = share.clone();
         pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
             share.clone(),
-            response.clone(),
+            Some(response.clone()),
         )]);
         assert!(pool.get(&id).unwrap().response.is_none());
 
@@ -468,9 +510,10 @@ mod tests {
             peer_id: node_test_id(0),
             timestamp: UNIX_EPOCH,
         });
-        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
-            share.clone(),
-        )]);
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated {
+            share: share.clone(),
+            retain_response: true,
+        }]);
         assert_eq!(pool.get(&id).unwrap().response, Some(response));
 
         // Fully replicated, received from a peer (MoveToValidated without a
@@ -478,9 +521,10 @@ mod tests {
         let share = fake_share(4);
         let id = share.clone();
         pool.insert(to_unvalidated(share.clone()));
-        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
-            share.clone(),
-        )]);
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated {
+            share: share.clone(),
+            retain_response: true,
+        }]);
         assert!(pool.get(&id).unwrap().response.is_none());
 
         // Non-fully-replicated share whose response content is missing: `get`
@@ -499,6 +543,37 @@ mod tests {
         assert!(pool.get(&id).unwrap().response.is_some());
         pool.apply(vec![CanisterHttpChangeAction::RemoveContent(content_hash)]);
         assert!(pool.get(&id).is_none());
+
+        // Already responded to, locally produced (a receipt-only share): no
+        // response is served on pull, as none was retained.
+        let share = fake_share(6);
+        let id = share.clone();
+        pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
+            share.clone(),
+            None,
+        )]);
+        assert!(pool.get(&id).unwrap().response.is_none());
+
+        // Already responded to, received from a peer that still attached a response:
+        // the response is dropped, so it is neither retained nor served on pull.
+        let response = fake_response(7);
+        let share = fake_share_matching(7, &response);
+        let id = share.clone();
+        let content_hash = ic_types::crypto::crypto_hash(&response);
+        pool.insert(UnvalidatedArtifact {
+            message: CanisterHttpResponseArtifact {
+                share: share.clone(),
+                response: Some(response),
+            },
+            peer_id: node_test_id(0),
+            timestamp: UNIX_EPOCH,
+        });
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated {
+            share: share.clone(),
+            retain_response: false,
+        }]);
+        assert!(pool.get(&id).unwrap().response.is_none());
+        assert!(pool.get_response_content_by_hash(&content_hash).is_none());
     }
 
     #[test]
@@ -512,8 +587,14 @@ mod tests {
         pool.insert(to_unvalidated(share1.clone()));
 
         let result = pool.apply(vec![
-            CanisterHttpChangeAction::MoveToValidated(share2.clone()),
-            CanisterHttpChangeAction::MoveToValidated(share1.clone()),
+            CanisterHttpChangeAction::MoveToValidated {
+                share: share2.clone(),
+                retain_response: true,
+            },
+            CanisterHttpChangeAction::MoveToValidated {
+                share: share1.clone(),
+                retain_response: true,
+            },
         ]);
 
         assert!(pool.lookup_validated(&id2).is_none());

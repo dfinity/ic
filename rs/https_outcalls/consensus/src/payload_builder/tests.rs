@@ -1784,9 +1784,10 @@ pub(crate) fn add_received_artifacts_to_pool(
             timestamp: UNIX_EPOCH,
         });
 
-        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
-            artifact.share,
-        )]);
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated {
+            share: artifact.share,
+            retain_response: true,
+        }]);
     }
 }
 
@@ -1804,9 +1805,10 @@ pub(crate) fn add_received_shares_to_pool(
             timestamp: UNIX_EPOCH,
         });
 
-        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
-            artifact.share,
-        )]);
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated {
+            share: artifact.share,
+            retain_response: true,
+        }]);
     }
 }
 
@@ -1818,7 +1820,7 @@ pub(crate) fn add_own_share_to_pool(
 ) {
     pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
         share.clone(),
-        content.clone(),
+        Some(content.clone()),
     )]);
 }
 
