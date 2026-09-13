@@ -17,7 +17,7 @@
 use crate::{
     cmd::{ReplayToolArgs, SubCommand},
     ingress::*,
-    player::{Player, ReplayResult},
+    player::{Player, ReplayOutput, ReplayResult},
 };
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -101,12 +101,29 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             .0;
 
         let target_height = args.replay_until_height;
+
+        // `get-recovery-cup` and `update-registry-local-store` read the state replayed before them,
+        // so they replay no blocks and a target height means nothing to them.
+        let replays_blocks = !matches!(
+            subcmd,
+            Some(SubCommand::GetRecoveryCup(_)) | Some(SubCommand::UpdateRegistryLocalStore)
+        );
         if let Some(h) = target_height {
-            let question = format!("The checkpoint created at height {h} ")
-                + "cannot be used for deterministic state computation if it is not a CUP height.\n"
-                + "Continue?";
-            if !args.skip_prompts && !consent_given(&question) {
-                return;
+            if replays_blocks {
+                let question = format!(
+                    r#"Unless it is a CUP height, the checkpoint of the state replayed up to height {h} \
+                    will be slightly different from the in-memory state of the replica at that height \
+                    because of serialization constraints imposed by checkpoints.\n\n\
+                    WARNING: The checkpoint will be created at a height higher than {h}, so replaying \
+                    a second time with the same pool is almost guaranteed to be a bad idea because \
+                    some heights higher than {h} will be "shadowed" by the created checkpoint. \
+                    Continue?"#
+                );
+                if !args.skip_prompts && !consent_given(&question) {
+                    return;
+                }
+            } else {
+                println!("Ignoring --replay-until-height {h}: this subcommand replays no blocks.");
             }
         }
 
@@ -128,19 +145,35 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 &cmd.registry_local_store_path,
                 subnet_id,
                 cmd.start_height,
-            )
-            .with_replay_target_height(target_height);
+                target_height,
+            );
             *res_clone.borrow_mut() = player.restore_from_backup(cmd.start_height + 1);
             return;
         }
 
         {
             let _enter_guard = rt.enter();
-            let player = Player::new(cfg, subnet_id, args.replica_version, args.guestos_version)
-                .with_replay_target_height(target_height);
+
+            let player = Player::new(
+                cfg,
+                subnet_id,
+                args.replica_version,
+                args.guestos_version,
+                target_height,
+            );
 
             if let Some(SubCommand::GetRecoveryCup(cmd)) = subcmd {
                 cmd_get_recovery_cup(&player, cmd).unwrap();
+                return;
+            }
+
+            if let Some(SubCommand::UpdateRegistryLocalStore) = subcmd {
+                player.update_registry_local_store();
+                *res_clone.borrow_mut() = Ok(ReplayOutput {
+                    state_params: player.get_latest_state_params(None, Vec::new()),
+                    // No blocks are replayed, so nothing is delivered on top of them.
+                    extra_batches: 0,
+                });
                 return;
             }
 
@@ -193,24 +226,17 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                             .map(|ingress| ingress.into())
                             .collect()
                     }
+                    None => Vec::new(),
+                    // All three are handled before `player.replay()` is reached.
                     Some(SubCommand::UpdateRegistryLocalStore)
                     | Some(SubCommand::GetRecoveryCup(_))
-                    | Some(SubCommand::RestoreFromBackup(_))
-                    | None => Vec::new(),
+                    | Some(SubCommand::RestoreFromBackup(_)) => {
+                        unreachable!("this subcommand contributes no extra messages")
+                    }
                 }
             };
 
-            *res_clone.borrow_mut() = match player.replay(extra) {
-                Ok(state_params) => {
-                    if let Some(SubCommand::UpdateRegistryLocalStore) = subcmd {
-                        player.update_registry_local_store();
-                        Ok(player.get_latest_state_params(None, Vec::new()))
-                    } else {
-                        Ok(state_params)
-                    }
-                }
-                err => err,
-            }
+            *res_clone.borrow_mut() = player.replay(extra);
         }
     });
 
