@@ -14959,11 +14959,7 @@ dependencies = [
  "candid",
  "clap",
  "csv",
- "hex",
- "ic-agent",
  "ic-base-types",
- "ic-crypto-utils-threshold-sig",
- "ic-crypto-utils-threshold-sig-der",
  "ic-management-canister-types-private",
  "ic-metrics",
  "ic-protobuf",
@@ -14974,6 +14970,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-state-manager",
  "ic-state-tool",
+ "ic-subnet-tools",
  "ic-test-utilities-logger",
  "ic-test-utilities-tmpdir",
  "ic-test-utilities-types",
@@ -14982,10 +14979,30 @@ dependencies = [
  "ic-universal-canister",
  "proxy_canister",
  "serde",
- "serde_cbor",
  "slog",
  "strum 0.26.3",
  "strum_macros 0.26.4",
+ "url",
+]
+
+[[package]]
+name = "ic-subnet-tools"
+version = "0.9.0"
+dependencies = [
+ "hex",
+ "ic-agent",
+ "ic-base-types",
+ "ic-crypto-utils-threshold-sig",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-protobuf",
+ "ic-recovery",
+ "ic-registry-routing-table",
+ "ic-registry-subnet-type",
+ "ic-state-manager",
+ "ic-state-tool",
+ "ic-types",
+ "serde_cbor",
+ "slog",
  "url",
 ]
 

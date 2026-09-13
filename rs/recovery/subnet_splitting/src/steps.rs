@@ -1,28 +1,27 @@
 use crate::{
-    agent_helper::AgentHelper,
-    layout::Layout,
-    state_tool_helper,
-    target_subnet::TargetSubnet,
-    utils::{find_expected_state_hash_for_subnet_id, get_batch_time_from_cup, get_state_hash},
-    validation::validate_artifacts,
+    layout::Layout, target_subnet::TargetSubnet, utils::find_expected_state_hash_for_subnet_id,
 };
 
 use ic_base_types::SubnetId;
 use ic_metrics::MetricsRegistry;
 use ic_recovery::{
     Recovery,
-    cli::consent_given,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::rsync_includes,
-    registry_helper::VersionedRecoveryResult,
     steps::Step,
     util::parse_hex_str,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::split::resolve_ranges_and_split;
+use ic_subnet_tools::{
+    agent_helper::AgentHelper,
+    state_tool_helper,
+    utils::{get_batch_time_from_cup, get_state_hash},
+    validation::validate_artifacts,
+};
 use ic_types::Height;
-use slog::{Logger, error, info};
+use slog::{Logger, info};
 use url::Url;
 
 use std::{net::IpAddr, path::PathBuf};
@@ -281,36 +280,5 @@ impl Step for WaitForCUPStep {
         let new_cup_height = Recovery::get_recovery_height(Height::from(state_height));
 
         Recovery::wait_for_recovery_cup(&self.logger, self.node_ip, new_cup_height, state_hash)
-    }
-}
-
-pub(crate) struct ReadRegistryStep<T: std::fmt::Debug, F: Fn() -> VersionedRecoveryResult<T>> {
-    pub(crate) logger: Logger,
-    pub(crate) label: String,
-    pub(crate) interactive: bool,
-    pub(crate) querier: F,
-}
-
-impl<T: std::fmt::Debug, F: Fn() -> VersionedRecoveryResult<T>> Step for ReadRegistryStep<T, F> {
-    fn descr(&self) -> String {
-        format!("Read Registry to get the most recent {}", self.label)
-    }
-
-    fn exec(&self) -> RecoveryResult<()> {
-        loop {
-            match (self.querier)() {
-                Ok((registry_version, value)) => info!(
-                    self.logger,
-                    "{} at registry version {}: {:#?}", self.label, registry_version, value,
-                ),
-                Err(err) => error!(self.logger, "Failed getting {}, error: {}", self.label, err),
-            }
-
-            if !self.interactive || !consent_given(&self.logger, "Read registry again?") {
-                break;
-            }
-        }
-
-        Ok(())
     }
 }
