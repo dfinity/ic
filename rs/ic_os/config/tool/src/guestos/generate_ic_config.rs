@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail, ensure};
 use askama::Template;
-use config_types::{GuestOSConfig, Ipv6Config};
+use config_types::{DeploymentEnvironment, GuestOSConfig, Ipv6Config};
 use ipnet::Ipv6Net;
 use serde_json;
 use std::fs::write;
@@ -31,6 +31,7 @@ pub struct IcConfigTemplate {
     pub malicious_behavior: String,
     /// Already JSON-encoded: either `null` or a quoted string.
     pub extra_api_boundary_node_trust_anchors_pem: String,
+    pub engine_management_canister_id: String,
     /// IPv6 address of the peer Guest VM (the Upgrade VM inside the Default VM
     /// and vice versa).
     pub peer_guest_vm_address: Option<Ipv6Addr>,
@@ -203,6 +204,29 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         None => "null".to_string(),
     };
 
+    let engine_management_canister_id = match guestos_config
+        .guestos_settings
+        .engine_management_canister_id
+        .as_deref()
+    {
+        Some(id) => Some(id),
+        // Mainnet's engine management canister is well-known, so mainnet nodes
+        // do not have to configure it explicitly.
+        None if guestos_config.icos_settings.deployment_environment
+            == DeploymentEnvironment::Mainnet =>
+        {
+            Some(ic_config::cloud_engine::MAINNET_ENGINE_MANAGEMENT_CANISTER_ID)
+        }
+        None => None,
+    };
+    // The template interpolates this into JSON5, so a configured id has to be
+    // quoted; an unconfigured one becomes a literal `null`.
+    let engine_management_canister_id = match engine_management_canister_id {
+        Some(id) => serde_json::to_string(id)
+            .context("Failed to encode the engine management canister id")?,
+        None => "null".to_string(),
+    };
+
     Ok(IcConfigTemplate {
         // TODO https://dfinity.atlassian.net/browse/NODE-1909
         ipv6_prefix,
@@ -217,6 +241,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         node_reward_type,
         malicious_behavior: with_default(malicious_behavior, "null"),
         extra_api_boundary_node_trust_anchors_pem,
+        engine_management_canister_id,
         peer_guest_vm_address: guestos_config.upgrade_config.peer_guest_vm_address,
     })
 }

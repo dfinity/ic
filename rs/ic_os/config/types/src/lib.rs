@@ -41,7 +41,7 @@ use std::str::FromStr;
 use strum::{Display, EnumString};
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.16.0";
+pub const CONFIG_VERSION: &str = "1.17.0";
 
 /// List of field paths that have been removed and should not be reused.
 pub static RESERVED_FIELD_PATHS: &[&str] = &[
@@ -218,6 +218,11 @@ pub struct GuestOSUpgradeConfig {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct GuestOSSettings {
     pub guestos_dev_settings: GuestOSDevSettings,
+    /// Only used for all-in-one nodes on Cloud Engines. If not set, the GuestOS
+    /// config tool (`generate_ic_config`) falls back to the default for
+    /// `deployment_environment` when rendering `ic.json5`.
+    #[serde(default)]
+    pub engine_management_canister_id: Option<String>,
 }
 
 /// Pre-generated TLS certificate and key for ic-boundary.
