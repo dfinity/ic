@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/utils/threshold_sig",
+    "//rs/crypto/utils/threshold_sig_der",
+    "//rs/protobuf",
+    "//rs/recovery",
+    "//rs/registry/routing_table",
+    "//rs/registry/subnet_type",
+    "//rs/state_manager",
+    "//rs/state_tool:state_tool_lib",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:hex",
+    "@crate_index//:ic-agent",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:slog",
+    "@crate_index//:url",
+]
+
+rust_library(
+    name = "subnet_tools",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_subnet_tools",
+    version = "0.1.0",
+    visibility = ["//rs/recovery:__subpackages__"],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "subnet_tools_test",
+    crate = "subnet_tools",
+    deps = DEPENDENCIES,
+)

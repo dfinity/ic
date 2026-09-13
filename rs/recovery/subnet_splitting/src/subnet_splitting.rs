@@ -1,16 +1,15 @@
 use crate::{
     admin_helper::{
-        get_halt_subnet_at_cup_height_command, get_propose_to_complete_canister_migration_command,
+        get_propose_to_complete_canister_migration_command,
         get_propose_to_prepare_canister_migration_command,
         get_propose_to_reroute_canister_ranges_command,
     },
     layout::Layout,
     steps::{
-        ComputeExpectedManifestsStep, CopyWorkDirStep, ReadRegistryStep, SplitStateStep,
-        StateSplitStrategy, ValidateCUPStep, WaitForCUPStep,
+        ComputeExpectedManifestsStep, CopyWorkDirStep, SplitStateStep, StateSplitStrategy,
+        ValidateCUPStep, WaitForCUPStep,
     },
     target_subnet::TargetSubnet,
-    utils::get_state_hash,
 };
 
 use clap::Parser;
@@ -18,7 +17,7 @@ use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
     CUPS_DIR, IC_STATE_DIR, NeuronArgs, Recovery, RecoveryArgs,
-    cli::{consent_given, read_optional, wait_for_confirmation},
+    cli::{consent_given, read_optional},
     error::{RecoveryError, RecoveryResult},
     get_available_nodes_heights_from_metrics,
     recovery_iterator::RecoveryIterator,
@@ -30,12 +29,15 @@ use ic_recovery::{
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_subnet_tools::{
+    admin_helper::get_halt_subnet_at_cup_height_command, cli::print_url_and_ask_for_confirmation,
+    steps::ReadRegistryStep, utils::get_state_hash,
+};
 use ic_types::Height;
 use serde::{Deserialize, Serialize};
-use slog::{Logger, error, warn};
+use slog::{Logger, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
-use url::Url;
 
 use std::{collections::HashMap, iter::Peekable, net::IpAddr, path::PathBuf};
 
@@ -328,6 +330,7 @@ impl SubnetSplitting {
             /*registry_params=*/ None,
             /*initial_dkg_subnet_id=*/ None,
             /*chain_key_subnet_id=*/ None,
+            /*time=*/ None,
         )
     }
 
@@ -688,22 +691,5 @@ impl HasRecoveryState for SubnetSplitting {
             neuron_args: self.neuron_args.clone(),
             subcommand_args: self.params.clone(),
         })
-    }
-}
-
-fn print_url_and_ask_for_confirmation(
-    logger: &Logger,
-    url: String,
-    text_to_display: impl std::fmt::Display,
-) {
-    match Url::parse(&url) {
-        Ok(url) => {
-            warn!(logger, "{}", text_to_display);
-            warn!(logger, "{}", url);
-            wait_for_confirmation(logger);
-        }
-        Err(err) => {
-            error!(logger, "Failed to parse url {}: {}", url, err);
-        }
     }
 }

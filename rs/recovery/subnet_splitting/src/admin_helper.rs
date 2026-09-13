@@ -1,16 +1,12 @@
 use crate::utils::canister_id_range_to_string;
 
 use ic_base_types::SubnetId;
-use ic_recovery::admin_helper::{
-    AdminHelper, CommandHelper, IcAdmin, SSH_READONLY_ACCESS_ARG, SUMMARY_ARG, quote,
-};
+use ic_recovery::admin_helper::{AdminHelper, CommandHelper, IcAdmin, SUMMARY_ARG, quote};
 use ic_registry_routing_table::CanisterIdRange;
+use ic_subnet_tools::admin_helper::{DESTINATION_SUBNET_ARG, SOURCE_SUBNET_ARG};
 
-const SOURCE_SUBNET_ARG: &str = "source-subnet";
-const DESTINATION_SUBNET_ARG: &str = "destination-subnet";
 const CANISTER_ID_RANGES_ARG: &str = "canister-id-ranges";
 const MIGRATION_TRACE_ARG: &str = "migration-trace";
-const SUBNET_ARG: &str = "subnet";
 
 /// Propose additions or updates to `canister_migrations`.
 ///
@@ -92,36 +88,6 @@ pub(crate) fn get_propose_to_complete_canister_migration_command(
     ic_admin
 }
 
-/// Propose to make the Subnet halt after reaching the next CUP height.
-///
-/// Optionally adds a ssh-readonly-access key to the Subnet.
-pub(crate) fn get_halt_subnet_at_cup_height_command(
-    admin_helper: &AdminHelper,
-    subnet_id: SubnetId,
-    key: &Option<String>,
-) -> IcAdmin {
-    let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
-
-    ic_admin
-        .add_positional_argument("propose-to-update-subnet")
-        .add_argument(SUBNET_ARG, subnet_id)
-        .add_argument(
-            SUMMARY_ARG,
-            quote(format!(
-                "Halt subnet {subnet_id} at cup height and optionally update ssh readonly access",
-            )),
-        )
-        .add_argument("halt-at-cup-height", true);
-
-    if let Some(key) = key {
-        ic_admin.add_argument(SSH_READONLY_ACCESS_ARG, quote(key));
-    }
-
-    admin_helper.add_proposer_args(&mut ic_admin);
-
-    ic_admin
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -141,29 +107,6 @@ mod tests {
         "53zcu-tiaaa-aaaaa-qaaba-cai:54yea-6qaaa-aaaaa-qaabq-cai",
         "5h5yf-eiaaa-aaaaa-qaada-cai:5a46r-jqaaa-aaaaa-qaadq-cai",
     ];
-    const SSH_KEY: &str = "fake ssh key";
-
-    #[test]
-    fn get_halt_subnet_at_cup_height_command_test() {
-        let result = get_halt_subnet_at_cup_height_command(
-            &fake_admin_helper(),
-            subnet_id_from_str(FAKE_SUBNET_ID_1),
-            &Some(SSH_KEY.to_string()),
-        )
-        .join(" ");
-
-        assert_eq!(
-            result,
-            "/fake/ic/admin/dir/ic-admin \
-            --nns-url \"https://fake_nns_url.com:8080/\" \
-            propose-to-update-subnet \
-            --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
-            --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe at cup height and optionally update ssh readonly access\" \
-            --halt-at-cup-height true \
-            --ssh-readonly-access \"fake ssh key\" \
-            --test-neuron-proposer"
-        );
-    }
 
     #[test]
     fn get_propose_to_prepare_canister_migration_command_test() {

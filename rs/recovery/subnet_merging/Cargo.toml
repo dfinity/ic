@@ -1,5 +1,5 @@
 [package]
-name = "ic-subnet-splitting"
+name = "ic-subnet-merging"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -9,35 +9,30 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-csv = { workspace = true }
+futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
-ic-metrics = { path = "../../monitoring/metrics" }
+ic-cup-explorer = { path = "../../cup_explorer" }
 ic-protobuf = { path = "../../protobuf" }
 ic-recovery = { path = "../" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-state-layout = { path = "../../state_layout" }
-ic-state-manager = { path = "../../state_manager" }
-ic-state-tool = { path = "../../state_tool" }
 ic-subnet-tools = { path = "../subnet_tools" }
-ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
+reqwest = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 slog = { workspace = true }
+
 strum = { workspace = true }
 strum_macros = { workspace = true }
+tokio = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-candid = { workspace = true }
-ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
-ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-tmpdir = { path = "../../test_utilities/tmpdir" }
-ic-test-utilities-types = { path = "../../test_utilities/types" }
-ic-universal-canister = { path = "../../universal_canister/lib" }
-proxy_canister = { path = "../../rust_canisters/proxy_canister" }
 
 [[bin]]
-name = "subnet-splitting-tool"
+name = "subnet-merging-tool"
 path = "src/main.rs"

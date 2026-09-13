@@ -817,6 +817,7 @@ impl Recovery {
         registry_params: Option<RegistryParams>,
         initial_dkg_subnet_id: Option<SubnetId>,
         chain_key_subnet_id: Option<SubnetId>,
+        time: Option<SystemTime>,
     ) -> RecoveryResult<impl Step + use<>> {
         let chain_key_config = chain_key_subnet_id
             .map(|id| match self.registry_helper.get_chain_key_config(id) {
@@ -847,7 +848,11 @@ impl Recovery {
                     chain_key_config,
                     replacement_nodes,
                     registry_params,
-                    SystemTime::now(),
+                    // The block time the recovered subnet starts from. Defaults
+                    // to now, which is what a recovery replaying up to the
+                    // present wants; a subnet merge passes the time it computed
+                    // from the states it merged instead.
+                    time.unwrap_or_else(SystemTime::now),
                 ),
         })
     }
@@ -1209,7 +1214,7 @@ pub fn get_available_nodes_heights_from_metrics(
 }
 
 /// Lookup node IDs and corresponding IP addresses of all members of the given subnet
-fn get_member_node_ids_and_ips(
+pub fn get_member_node_ids_and_ips(
     registry_helper: &RegistryHelper,
     subnet_id: SubnetId,
 ) -> RecoveryResult<BTreeMap<NodeId, IpAddr>> {

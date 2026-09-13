@@ -102,6 +102,29 @@ impl RegistryHelper {
         })
     }
 
+    /// Returns the subnet record of the given subnet as of `registry_version`,
+    /// rather than as of the latest version [Self::get_subnet_record] reads.
+    ///
+    /// Polls the [RegistryReplicator] first, as every other getter does: a
+    /// version that the local store has not caught up with yet is not readable,
+    /// and the caller may well be asking about one that was just created.
+    pub fn get_subnet_record_at_version(
+        &self,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+    ) -> RecoveryResult<Option<SubnetRecord>> {
+        let _ = self.latest_registry_version()?;
+
+        self.registry_client()
+            .get_subnet_record(subnet_id, registry_version)
+            .map_err(|err| {
+                RecoveryError::RegistryError(format!(
+                    "Failed to get the record of subnet {subnet_id} at registry version \
+                     {registry_version}: {err}"
+                ))
+            })
+    }
+
     /// Returns the [SubnetRecord] of the given subnet.
     pub fn get_subnet_record(&self, subnet_id: SubnetId) -> VersionedRecoveryResult<SubnetRecord> {
         self.get(|registry_version, registry_client| {
