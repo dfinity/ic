@@ -60,9 +60,9 @@ fn get_subnet_id(cup: &CatchUpPackage) -> Result<SubnetId, String> {
     // If the DKG key material was signed by the subnet itself — use it.
     match dkg_id.target_subnet {
         NiDkgTargetSubnet::Local => Ok(dkg_id.dealer_subnet),
-        // If we hit this case, then the local CUP is a genesis or recovery CUP of an application
-        // subnet or of the NNS subnet recovered on failover nodes. We cannot derive the subnet id
-        // from it.
+        // If we hit this case, then the local CUP is a genesis, recovery or post-split CUP of an
+        // application subnet or of the NNS subnet recovered on failover nodes. We cannot derive
+        // the subnet id from it.
         NiDkgTargetSubnet::Remote(_) => {
             Err("Registry CUPs cannot be verified with this tool".into())
         }
