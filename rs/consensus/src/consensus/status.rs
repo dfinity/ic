@@ -12,15 +12,30 @@ use ic_types::{
     },
 };
 
+/// The status of the consensus with respect to the halts that end a subnet on a CUP. They take
+/// effect from a summary height on, so a subnet halted this way stops with a final checkpoint at
+/// a CUP height.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) enum Status {
     /// The Consensus is running normally.
     Running,
-    /// The Consensus is halting, meaning we will produce *empty* blocks but no batches will be
-    /// delivered.
+    /// The Consensus is halting towards a CUP height, meaning we will produce *empty* blocks and
+    /// deliver no batch but the one at that CUP height.
     Halting,
-    /// The Consensus is halted, meaning that no blocks are created and no batches are delivered.
+    /// The Consensus is halted at a CUP height, meaning that no blocks are created and no
+    /// batches are delivered. The batch at that CUP height has been delivered by then: the
+    /// status holds only once certification has passed the height.
     Halted,
+}
+
+impl Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Status::Running => write!(f, "running"),
+            Status::Halting => write!(f, "halting towards a CUP height"),
+            Status::Halted => write!(f, "halted at a CUP height"),
+        }
+    }
 }
 
 /// Get the status of the consensus.

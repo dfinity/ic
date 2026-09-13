@@ -180,7 +180,8 @@ fn deliver_batches(
                 "Delivering finalized batch at CUP height of {}", height
             );
         }
-        // When we are not delivering CUP block, we must check if the subnet is halted.
+        // When we are not delivering CUP block, we must check if the subnet is
+        // halting towards, or halted at, a CUP height.
         else {
             match status::get_status(
                 height,
@@ -191,12 +192,13 @@ fn deliver_batches(
                 replica_version,
                 log,
             ) {
-                Some(Status::Halting | Status::Halted) => {
+                Some(status @ (Status::Halting | Status::Halted)) => {
                     info!(
                         every_n_seconds => 5,
                         log,
-                        "Batch of height {} is not delivered because replica is halted",
+                        "Batch of height {} is not delivered because the subnet is {}",
                         height,
+                        status,
                     );
                     return Ok(last_delivered_batch_height);
                 }
@@ -204,7 +206,8 @@ fn deliver_batches(
                 None => {
                     warn!(
                         log,
-                        "Skipping batch delivery because checking if replica is halted failed",
+                        "Skipping batch delivery because the consensus status could not be \
+                         computed",
                     );
                     return Ok(last_delivered_batch_height);
                 }

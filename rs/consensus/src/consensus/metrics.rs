@@ -1,3 +1,4 @@
+use crate::consensus::status::Status;
 use ic_consensus_dkg::metrics::DkgPayloadStats;
 use ic_consensus_idkg::{
     metrics::{CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL, key_id_label},
@@ -24,6 +25,28 @@ use std::sync::RwLock;
 // Since we can only record limited number of them, the follow is
 // the range of ranks that are permitted to show up in metrics.
 const RANKS_TO_RECORD: [&str; 6] = ["0", "1", "2", "3", "4", "5"];
+
+/// The label of `consensus_status`, whose values name the statuses of
+/// [`Status`], plus `unknown` for a status that could not be computed at all.
+///
+/// [`Status::Halted`] is reported as `halted_at_cup_height` rather than
+/// `halted`, after the halt it stands for: the one that ends a subnet on a CUP.
+const STATUS_LABEL: &str = "status";
+const STATUS_RUNNING: &str = "running";
+const STATUS_HALTING: &str = "halting";
+const STATUS_HALTED_AT_CUP_HEIGHT: &str = "halted_at_cup_height";
+const STATUS_UNKNOWN: &str = "unknown";
+
+/// The label value `consensus_status` reports each status under. [`None`] is
+/// the status the finalizer failed to compute, rather than a status of its
+/// own, so that a subnet whose registry cannot be read is not mistaken for one
+/// that is running.
+const CONSENSUS_STATUSES: [(&str, Option<Status>); 4] = [
+    (STATUS_RUNNING, Some(Status::Running)),
+    (STATUS_HALTING, Some(Status::Halting)),
+    (STATUS_HALTED_AT_CUP_HEIGHT, Some(Status::Halted)),
+    (STATUS_UNKNOWN, None),
+];
 
 pub(crate) const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "consensus_payload_too_large";
 pub(crate) const CRITICAL_ERROR_VALIDATION_NOT_PASSED: &str = "consensus_validation_not_passed";
@@ -166,6 +189,7 @@ impl BatchStats {
 pub(crate) struct FinalizerMetrics {
     pub batches_delivered: IntCounterVec,
     pub batch_height: IntGauge,
+    pub consensus_status: IntGaugeVec,
     pub batch_delivery_interval: Histogram,
     pub batch_delivery_latency: Histogram,
     pub ingress_messages_delivered: Histogram,
@@ -205,6 +229,19 @@ impl FinalizerMetrics {
             batch_height: metrics_registry.int_gauge(
                 "consensus_batch_height",
                 "The height of batches sent to Message Routing",
+            ),
+            consensus_status: metrics_registry.int_gauge_vec(
+                "consensus_status",
+                "Whether consensus is running, halting towards a CUP height (producing \
+                 empty blocks and delivering no batch but the one at that height), halted \
+                 at a CUP height (producing no blocks either) or unknown (the status could \
+                 not be computed), as of the height whose batch was delivered last. 1 for \
+                 the status that held then, 0 for the other three. Reported from the first \
+                 time the finalizer computes a status, and absent before that -- including \
+                 on a replica that started while its subnet record's `is_halted` flag was \
+                 set, as consensus acts on that flag before the finalizer runs. That halt \
+                 has no status of its own here.",
+                &[STATUS_LABEL],
             ),
             batch_delivery_interval: metrics_registry.histogram(
                 "consensus_batch_delivery_interval_seconds",
@@ -325,6 +362,21 @@ impl FinalizerMetrics {
                 // up to 5 * 10^6 ~= 5MB
                 decimal_buckets_with_zero(2, 6),
             ),
+        }
+    }
+
+    /// Records `status` as the status consensus is in, and the other three as
+    /// ones it is not. [`None`] is recorded as `unknown`, the status the
+    /// finalizer failed to compute, and [`Status::Halted`] as
+    /// `halted_at_cup_height`, the only halt the finalizer sees.
+    ///
+    /// Reported as a gauge per status rather than a single number, so that a
+    /// dashboard can select the status it asks about by name.
+    pub fn observe_status(&self, status: Option<Status>) {
+        for (label, value) in CONSENSUS_STATUSES {
+            self.consensus_status
+                .with_label_values(&[label])
+                .set((value == status) as i64);
         }
     }
 
@@ -677,5 +729,54 @@ impl PurgerMetrics {
                 "The validated pool exceeded its size bounds",
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    /// The `consensus_status` gauges the registry reports, by label.
+    fn consensus_status(metrics_registry: &MetricsRegistry) -> BTreeMap<String, i64> {
+        metrics_registry
+            .prometheus_registry()
+            .gather()
+            .into_iter()
+            .filter(|family| family.name() == "consensus_status")
+            .flat_map(|family| family.get_metric().to_vec())
+            .map(|metric| {
+                let labels = metric.get_label();
+                assert_eq!(labels.len(), 1);
+                assert_eq!(labels[0].name(), STATUS_LABEL);
+
+                (
+                    labels[0].value().to_string(),
+                    metric.get_gauge().value() as i64,
+                )
+            })
+            .collect()
+    }
+
+    /// Observing a status reports that one as one and the other three as zero,
+    /// so that a status the subnet has left does not go on being reported
+    /// alongside the one it is in.
+    #[test]
+    fn test_observe_status_reports_one_status() {
+        let metrics_registry = MetricsRegistry::new();
+        let metrics = FinalizerMetrics::new(metrics_registry.clone());
+
+        metrics.observe_status(Some(Status::Halting));
+        metrics.observe_status(Some(Status::Halted));
+
+        assert_eq!(
+            consensus_status(&metrics_registry),
+            BTreeMap::from([
+                (STATUS_RUNNING.into(), 0),
+                (STATUS_HALTING.into(), 0),
+                (STATUS_HALTED_AT_CUP_HEIGHT.into(), 1),
+                (STATUS_UNKNOWN.into(), 0),
+            ]),
+        );
     }
 }
