@@ -5,6 +5,7 @@ pub(in crate::state) mod tests;
 
 pub use request::PipelineRequest;
 
+use crate::asset::Asset;
 use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus};
 use crate::eth_logs::LedgerSubaccount;
 use crate::eth_rpc::Hash;
@@ -16,7 +17,7 @@ use crate::numeric::{
     CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
-use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch};
+use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch, encode_sweep_eth_batch};
 use crate::tx::{
     Eip1559TransactionRequest, Finalized, FinalizedEip1559Transaction, GasFeeEstimate,
     Resubmittable, SignableTransaction, Signed, SignedAuthorization,
@@ -229,12 +230,13 @@ pub struct SweepRequest {
     /// sweeps every delegated deposit address the sweep names.
     #[n(1)]
     pub destination: Address,
-    /// The single ERC-20 this sweep moves. One token per sweep: the delegate applies the token
-    /// list to every item it walks, so a sweep mixing tokens would check balances that cannot be
-    /// there. Holding it as one address rather than a list is what makes that an invariant of the
-    /// request instead of a property of how the batch happened to be picked.
+    /// The single asset this sweep moves: one ERC-20 token, or ETH. One asset per sweep: the
+    /// delegate applies the token list to every item it walks, so a sweep mixing tokens would
+    /// check balances that cannot be there. Holding it as one asset rather than a list is what
+    /// makes that an invariant of the request instead of a property of how the batch happened to
+    /// be picked.
     #[n(2)]
-    pub token: Address,
+    pub asset: Asset,
     /// The deposits this sweep moves, one per account. A deposit address is derived per account,
     /// so an account has one address, one attestation and one authorization however many tokens
     /// it has queued.
@@ -301,7 +303,14 @@ const SWEEP_GAS_PER_TRANSFER: GasAmount = GasAmount::new(110_000);
 /// had to declare, leaving 25'000 the figure to budget either way. Rounded up as its siblings are.
 const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
 
-pub fn sweep_gas_limit(items: &[AuthorizedSweepItem]) -> GasAmount {
+/// Gas one address of an ETH sweep costs beyond its authorization: the per-address dispatch
+/// (calldata, `ecrecover`, the delegated call), one warm `address(this).balance` read and the
+/// helper's `depositEth`, a value transfer and one log. `sweepEth` walks no token array, so unlike
+/// an ERC-20 address there is no balance check or transfer to budget per pair. Measured at ~14'000
+/// on top of the tuple's 25'000 for a ten-deposit batch, rounded up as its siblings are.
+const SWEEP_GAS_PER_ETH_DEPOSIT: GasAmount = GasAmount::new(40_000);
+
+pub fn sweep_gas_limit(asset: Asset, items: &[AuthorizedSweepItem]) -> GasAmount {
     let addresses = u64::try_from(
         items
             .iter()
@@ -310,33 +319,40 @@ pub fn sweep_gas_limit(items: &[AuthorizedSweepItem]) -> GasAmount {
             .len(),
     )
     .unwrap_or(u64::MAX);
-    [
-        SWEEP_GAS_PER_BALANCE_CHECK,
-        SWEEP_GAS_PER_TRANSFER,
-        SWEEP_GAS_PER_AUTHORIZATION,
-    ]
-    .into_iter()
-    .fold(SWEEP_BASE_GAS, |total, gas_per_address| {
-        total
-            .checked_add(
-                gas_per_address
-                    .checked_mul(addresses)
-                    .unwrap_or(GasAmount::MAX),
-            )
-            .unwrap_or(GasAmount::MAX)
-    })
+    let gas_per_address: &[GasAmount] = match asset {
+        Asset::Eth => &[SWEEP_GAS_PER_ETH_DEPOSIT, SWEEP_GAS_PER_AUTHORIZATION],
+        Asset::Erc20(_) => &[
+            SWEEP_GAS_PER_BALANCE_CHECK,
+            SWEEP_GAS_PER_TRANSFER,
+            SWEEP_GAS_PER_AUTHORIZATION,
+        ],
+    };
+    gas_per_address
+        .iter()
+        .fold(SWEEP_BASE_GAS, |total, gas_per_address| {
+            total
+                .checked_add(
+                    gas_per_address
+                        .checked_mul(addresses)
+                        .unwrap_or(GasAmount::MAX),
+                )
+                .unwrap_or(GasAmount::MAX)
+        })
 }
 
 impl SweepRequest {
     pub fn gas_limit(&self) -> GasAmount {
-        sweep_gas_limit(&self.items)
+        sweep_gas_limit(self.asset, &self.items)
     }
 
     /// The delegate's batch call, naming every deposit address this sweep walks and the single
-    /// token it moves.
+    /// asset it moves.
     pub fn call_data(&self) -> Vec<u8> {
         let items: Vec<_> = self.items.iter().map(|item| item.item.clone()).collect();
-        encode_sweep_erc20_batch(&items, &[self.token])
+        match self.asset {
+            Asset::Erc20(token) => encode_sweep_erc20_batch(&items, &[token]),
+            Asset::Eth => encode_sweep_eth_batch(&items),
+        }
     }
 
     /// The delegations the sweep installs on the way, one per deposit address it still has to
