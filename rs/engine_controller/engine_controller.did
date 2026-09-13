@@ -43,8 +43,8 @@ type ResourceLimits = record {
 
 // Mirror of the subset of registry types referenced by UpdateSubnetPayload.
 // The engine controller forwards the payload unchanged to the registry, but
-// only `subnet_id` and `subnet_admins` may be set; every other field must be
-// `null`/`false` or the call is rejected.
+// besides `subnet_id` only `subnet_admins`, `is_halted` and `cooling_down` may
+// be set; every other field must be `null`/`false` or the call is rejected.
 type EcdsaCurve = variant { secp256k1 };
 type EcdsaKeyId = record { curve : EcdsaCurve; name : text };
 type SchnorrAlgorithm = variant { bip340secp256k1; ed25519 };

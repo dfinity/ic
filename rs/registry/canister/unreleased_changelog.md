@@ -28,6 +28,10 @@ on the process that this file is part of, see
 
 ## Changed
 
+* `update_subnet` now also lets the engine controller canister set `cooling_down` on a cloud engine
+  subnet. The engine controller's scope is thus `subnet_admins`, `is_halted` and `cooling_down`;
+  every other field remains rejected for that caller.
+
 * `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
   fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward
   (`deployment_progress == 1.0`).
