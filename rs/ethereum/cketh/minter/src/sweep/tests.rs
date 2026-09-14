@@ -564,7 +564,7 @@ async fn should_sign_a_rotation_authorization_at_the_tracked_nonce() {
             .filter(|event| matches!(event, EventType::AuthorizedDepositAddress { request, .. } if *request == rotation))
             .count(),
         1,
-        "rotating an address onto the configured contract must sign a tuple for the nonce the \
+        "rotating an address onto the configured contract must sign an authorization for the nonce the \
          address has reached"
     );
     let sweep = one_pending_sweep();

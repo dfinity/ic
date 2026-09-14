@@ -963,9 +963,9 @@ fn should_sweep_a_second_erc20_deposit_of_a_delegated_address_without_an_authori
 }
 
 /// Replacing the sweeper delegate re-delegates lazily the addresses already carrying the old one:
-/// the rotation tuple rides the sweep that would happen anyway, signed for the nonce the address
-/// has reached rather than for zero — which the protocol would skip — and once it has applied, the
-/// address is on the new delegate and needs no further tuple.
+/// the rotation authorization rides the sweep that would happen anyway, signed for the nonce the
+/// address has reached rather than for zero — which the protocol would skip — and once it has
+/// applied, the address is on the new delegate and needs no further authorization.
 #[test]
 fn should_rotate_a_delegated_address_onto_a_newly_configured_delegate() {
     const DEPOSIT_SUBACCOUNT: [u8; 32] = [8; 32];
@@ -1005,7 +1005,7 @@ fn should_rotate_a_delegated_address_onto_a_newly_configured_delegate() {
     assert_eq!(
         setup.anvil().authorization_nonces(&first_sweeps[0].hash),
         vec![0],
-        "the first sweep of an address must carry the tuple delegating it, signed for nonce 0"
+        "the first sweep of an address must carry the authorization delegating it, signed for nonce 0"
     );
     let address = first_deposits[0].address;
     let setup = setup
@@ -1053,7 +1053,7 @@ fn should_rotate_a_delegated_address_onto_a_newly_configured_delegate() {
         setup.anvil().authorization_nonces(&sweeps[1].hash),
         vec![1],
         "the rotation must be signed for the nonce the first sweep left the address at, since the \
-         protocol applies a tuple only at the authority's current nonce"
+         protocol applies an authorization only at the authority's current nonce"
     );
     let both_deposits = [first_deposits[0].clone(), second_deposits[0].clone()];
     let setup = setup
@@ -1065,7 +1065,7 @@ fn should_rotate_a_delegated_address_onto_a_newly_configured_delegate() {
     assert_eq!(
         setup.anvil().transaction_count(&address),
         2,
-        "applying the rotation tuple must spend the deposit address' nonce 1"
+        "applying the rotation authorization must spend the deposit address' nonce 1"
     );
 
     let third_deposits = [CexDeposit {
@@ -1092,12 +1092,12 @@ fn should_rotate_a_delegated_address_onto_a_newly_configured_delegate() {
     assert_eq!(
         setup.anvil().authorization_nonces(&sweeps[2].hash),
         Vec::<u64>::new(),
-        "a rotated address is delegated to the configured contract and needs no further tuple"
+        "a rotated address is delegated to the configured contract and needs no further authorization"
     );
     assert_eq!(
         setup.anvil().transaction_count(&address),
         2,
-        "sweeping without a tuple must leave the address at the nonce the rotation spent"
+        "sweeping without an authorization must leave the address at the nonce the rotation spent"
     );
 }
 

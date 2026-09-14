@@ -171,7 +171,8 @@ pub enum EventType {
         #[n(1)]
         block_number: BlockNumber,
     },
-    /// The minter processed the deposit helper smart contract with subaccount logs up to the specified height.
+    /// The minter processed the deposit helper smart contract with subaccount logs up to the
+    /// specified height.
     #[n(24)]
     SyncedDepositWithSubaccountToBlock {
         /// The last processed block number for the helper contract (inclusive).
@@ -239,11 +240,11 @@ pub enum EventType {
         signature: TransactionSignature,
     },
     /// A deposit address authorized the sweeper contract to run as its code. Signing costs a
-    /// threshold-ECDSA signature, so the tuple is recorded and every later sweep needing the very
-    /// same authorization request reuses it rather than signing another. A sweep needing a
+    /// threshold-ECDSA signature, so the authorization is recorded and every later sweep needing
+    /// the very same authorization request reuses it rather than signing another. A sweep needing a
     /// different chain, delegate or nonce signs and records its own: rotating an address onto a
-    /// newly configured contract takes a tuple at the nonce the address has reached, which no
-    /// earlier tuple of that address carries.
+    /// newly configured contract takes an authorization at the nonce the address has reached, which
+    /// no earlier authorization of that address carries.
     #[n(34)]
     AuthorizedDepositAddress {
         /// What was signed, which is also what replay keys the authorization by: a signature is

@@ -83,16 +83,17 @@ pub struct AutomaticDeposits {
     /// tuple that delegates the old one.
     ///
     /// Nothing prunes this map: it grows with the number of accounts that have ever been swept, and
-    /// entries naming a retired helper stay behind forever. [`Self::authorizations_len`] is exported
-    /// as a metric so that growth is visible before it needs bounding.
+    /// entries naming a retired helper stay behind forever. [`Self::authorizations_len`] is
+    /// exported as a metric so that growth is visible before it needs bounding.
     authorizations: BTreeMap<AuthorizationRequest, TransactionSignature>,
-    /// The nonce each deposit address' next authorization tuple must spend, for the addresses a
-    /// sweep has already delegated. Absent means zero: an address no tuple of the minter's has ever
+    /// The nonce each deposit address' next authorization must spend, for the addresses a sweep has
+    /// already delegated. Absent means zero: an address no authorization of the minter's has ever
     /// applied to is still at the nonce it was derived with.
     ///
-    /// This tracks the address' own transaction nonce, which only an applied tuple can move: the
-    /// minter alone holds the key to a deposit address, it only ever signs authorizations for it,
-    /// and it learns from the receipt of every sweep it sends whether the tuples it carried applied.
+    /// This tracks the address' own transaction nonce, which only an applied authorization can
+    /// move: the minter alone holds the key to a deposit address, it only ever signs authorizations
+    /// for it, and it learns from the receipt of every sweep it sends whether the authorizations it
+    /// carried applied.
     delegation_nonces: BTreeMap<DepositAddress, TransactionNonce>,
     /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
     /// its own nonce sequence, independent of the main-address withdrawal pipeline.
@@ -198,10 +199,10 @@ impl AutomaticDeposits {
     /// leave the queue on success because the funds moved, and on failure because the minter does
     /// not retry them.
     ///
-    /// Each tuple the sweep carried at the nonce its address had reached applied, so that address
-    /// advances by one — whatever the receipt says, since a tuple applies before the call it rides
-    /// with and survives its revert. A tuple carried at any other nonce was skipped and moves
-    /// nothing, which is what makes re-sending one harmless.
+    /// Each authorization the sweep carried at the nonce its address had reached applied, so that
+    /// address advances by one — whatever the receipt says, since an authorization applies before
+    /// the call it rides with and survives its revert. An authorization carried at any other nonce
+    /// was skipped and moves nothing, which is what makes re-sending one harmless.
     ///
     /// # Panics
     ///
@@ -221,7 +222,7 @@ impl AutomaticDeposits {
             .expect("BUG: missing sweep request");
         let asset = request.asset;
         let accounts: Vec<_> = request.items.iter().map(|item| item.item.account).collect();
-        let applied_tuples: Vec<_> = request
+        let applied_authorizations: Vec<_> = request
             .items
             .iter()
             .filter_map(|item| {
@@ -231,7 +232,7 @@ impl AutomaticDeposits {
             })
             .collect();
 
-        for (address, spent) in applied_tuples {
+        for (address, spent) in applied_authorizations {
             self.delegation_nonces.insert(
                 address,
                 spent
@@ -371,9 +372,9 @@ impl AutomaticDeposits {
         DelegatedSweepBatch { delegate, targets }
     }
 
-    /// The nonce the next authorization tuple of `address` must be signed for, which is the nonce
+    /// The nonce the next authorization of `address` must be signed for, which is the nonce
     /// the address has reached on chain: zero until a sweep has delegated it, and one more per
-    /// tuple of the minter's that applied to it since.
+    /// authorization of the minter's that applied to it since.
     pub fn delegation_nonce(&self, address: &DepositAddress) -> TransactionNonce {
         self.delegation_nonces
             .get(address)
@@ -551,8 +552,9 @@ impl AutomaticDeposits {
     /// # Panics
     ///
     /// If `(account, token)` is already queued. A funded pair leaves the watchlist and is never
-    /// re-scanned, so each pair reaches the queue at most once; a second entry means the log records
-    /// the same funds twice, leaving `scanned_balance` — what the sweeper acts on — ambiguous.
+    /// re-scanned, so each pair reaches the queue at most once; a second entry means the log
+    /// records the same funds twice, leaving `scanned_balance` — what the sweeper acts on —
+    /// ambiguous.
     ///
     /// Note the blast radius: [`apply_state_transition`] runs on replay as well as live, so this
     /// panic traps `post_upgrade` and no upgrade succeeds until a repairing version ships. That is

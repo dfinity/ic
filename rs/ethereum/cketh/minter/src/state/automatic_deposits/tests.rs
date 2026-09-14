@@ -1031,7 +1031,7 @@ async fn should_refuse_to_finalize_a_sweep_whose_deposit_left_the_queue() {
 }
 
 #[tokio::test]
-async fn should_advance_the_delegation_nonce_when_a_finalized_sweep_applied_its_tuple() {
+async fn should_advance_the_delegation_nonce_when_a_finalized_sweep_applied_its_authorization() {
     for status in [TransactionStatus::Success, TransactionStatus::Failure] {
         let (mut deposits, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
         assert_eq!(
@@ -1044,7 +1044,7 @@ async fn should_advance_the_delegation_nonce_when_a_finalized_sweep_applied_its_
         assert_eq!(
             deposits.delegation_nonce(&deposit_address(&account(0))),
             TransactionNonce::ONE,
-            "a tuple applies before the call it rides with, so the sweep spends its address' \
+            "an authorization applies before the call it rides with, so the sweep spends its address' \
              nonce whichever way the call went"
         );
         assert_eq!(deposits.delegation_nonces_len(), 1);
@@ -1052,7 +1052,7 @@ async fn should_advance_the_delegation_nonce_when_a_finalized_sweep_applied_its_
 }
 
 #[tokio::test]
-async fn should_not_advance_the_delegation_nonce_for_a_stale_tuple() {
+async fn should_not_advance_the_delegation_nonce_for_a_stale_authorization() {
     let (mut deposits, first) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
     finalize_sweep(&mut deposits, first.clone(), TransactionStatus::Success);
 
@@ -1066,14 +1066,14 @@ async fn should_not_advance_the_delegation_nonce_for_a_stale_tuple() {
     assert_eq!(
         deposits.delegation_nonce(&deposit_address(&account(0))),
         TransactionNonce::ONE,
-        "a tuple signed for a nonce the address has left behind is skipped and spends nothing"
+        "an authorization signed for a nonce the address has left behind is skipped and spends nothing"
     );
 }
 
 #[tokio::test]
-async fn should_not_advance_the_delegation_nonce_for_an_item_without_a_tuple() {
+async fn should_not_advance_the_delegation_nonce_for_an_item_without_an_authorization() {
     let (_, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
-    let tuple_less = SweepRequest {
+    let without_authorization = SweepRequest {
         items: request
             .items
             .iter()
@@ -1085,20 +1085,24 @@ async fn should_not_advance_the_delegation_nonce_for_an_item_without_a_tuple() {
         ..request
     };
     let mut deposits = AutomaticDeposits::default();
-    hand_to_sweep(&mut deposits, &tuple_less);
+    hand_to_sweep(&mut deposits, &without_authorization);
 
-    finalize_sweep(&mut deposits, tuple_less, TransactionStatus::Success);
+    finalize_sweep(
+        &mut deposits,
+        without_authorization,
+        TransactionStatus::Success,
+    );
 
     assert_eq!(
         deposits.delegation_nonce(&deposit_address(&account(0))),
         TransactionNonce::ZERO,
-        "a sweep carrying no tuple delegates nothing, so it spends no nonce"
+        "a sweep carrying no authorization delegates nothing, so it spends no nonce"
     );
     assert_eq!(deposits.delegation_nonces_len(), 0);
 }
 
 #[tokio::test]
-async fn should_advance_the_delegation_nonce_once_for_two_sweeps_carrying_the_same_tuple() {
+async fn should_advance_the_delegation_nonce_once_for_two_sweeps_carrying_the_same_authorization() {
     for order in [[0, 1], [1, 0]] {
         let (mut deposits, erc20_sweep) =
             deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
@@ -1121,7 +1125,7 @@ async fn should_advance_the_delegation_nonce_once_for_two_sweeps_carrying_the_sa
         assert_eq!(
             deposits.delegation_nonce(&deposit_address(&account(0))),
             TransactionNonce::ONE,
-            "only one of two tuples signed for the same nonce can apply, in whichever order the \
+            "only one of two authorizations signed for the same nonce can apply, in whichever order the \
              sweeps carrying them land"
         );
     }
