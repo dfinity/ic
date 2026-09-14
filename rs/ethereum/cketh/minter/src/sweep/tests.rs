@@ -399,8 +399,10 @@ async fn should_sweep_an_address_delegated_elsewhere_with_a_nonce_zero_authoriza
         .expect("BUG: expected a signed authorization for the configured sweeper contract");
     assert_eq!(
         item.authorization,
-        Some(authorization_request(SWEEPER_CONTRACT).signed_with(signature)),
-        "an address delegated to another contract must keep a nonce-0 tuple for the configured one"
+        Some(
+            authorization_request(SWEEPER_CONTRACT, TransactionNonce::ZERO).signed_with(signature)
+        ),
+        "an address delegated to another contract must get a tuple for the configured one at its tracked nonce, zero while none of its tuples ever applied"
     );
     assert_eq!(
         sweep.gas_limit(),
