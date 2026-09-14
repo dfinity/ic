@@ -123,15 +123,22 @@ pub(crate) async fn enqueue_pending_sweeps<R: CanisterRuntime, Rt: Runtime>(
         .into_iter()
         .collect();
     let delegations = read_delegations(&addresses, latest_block, client).await;
+    let Some((chain_id, delegate)) = read_state(|s| {
+        s.sweeper_contract_address
+            .map(|delegate| (s.ethereum_network.chain_id(), delegate))
+    }) else {
+        log!(
+            DEBUG,
+            "[create_pending_sweeper_requests]: SKIPPING: the sweeper contract address was cleared while enqueueing"
+        );
+        return;
+    };
 
     for (asset, targets) in batch_per_asset {
-        let Some(batch) = read_state(|s| s.sweep_delegations(&targets, &delegations)) else {
-            log!(
-                DEBUG,
-                "[create_pending_sweeper_requests]: SKIPPING: the sweeper contract address was cleared while enqueueing"
-            );
-            return;
-        };
+        let batch = read_state(|s| {
+            s.automatic_deposits
+                .sweep_delegations(&targets, &delegations, chain_id, delegate)
+        });
         let Some(attestation_requests) = read_state(|s| s.attestation_requests(&batch.targets))
         else {
             log!(
