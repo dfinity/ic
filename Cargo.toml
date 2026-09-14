@@ -550,8 +550,6 @@ members = [
 
 resolver = "2"
 
-exclude = ["universal_canister/impl"]
-
 [workspace.package]
 version = "0.9.0"
 authors = ["The Internet Computer Project Developers"]
