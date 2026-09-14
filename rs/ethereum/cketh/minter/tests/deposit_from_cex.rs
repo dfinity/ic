@@ -788,7 +788,7 @@ fn should_sweep_a_second_eth_deposit_of_a_delegated_address_without_an_authoriza
     assert_eq!(
         setup.anvil().authorization_nonces(&first_sweeps[0].hash),
         vec![0],
-        "the first sweep of an address must carry the tuple delegating it, signed for nonce 0"
+        "the first sweep of an address must carry the authorization delegating it, signed for nonce 0"
     );
     let setup = setup
         .expect_sweeps_finalized(1)
@@ -833,13 +833,13 @@ fn should_sweep_a_second_eth_deposit_of_a_delegated_address_without_an_authoriza
     assert_eq!(
         setup.anvil().authorization_nonces(&second_sweep.hash),
         Vec::<u64>::new(),
-        "the type-2 transaction above is what proves no tuple was sent: an address already \
+        "the type-2 transaction above is what proves no authorization was sent: an address already \
          delegated is swept carrying none"
     );
     assert_eq!(
         setup.anvil().transaction_count(&address),
         1,
-        "sweeping without a tuple must leave the deposit address at the nonce the first sweep spent"
+        "sweeping without an authorization must leave the deposit address at the nonce the first sweep spent"
     );
 
     let all_deposits = [first_deposits[0].clone(), second_deposits[0].clone()];
@@ -896,7 +896,7 @@ fn should_sweep_a_second_erc20_deposit_of_a_delegated_address_without_an_authori
     assert_eq!(
         setup.anvil().authorization_nonces(&first_sweeps[0].hash),
         vec![0],
-        "the first sweep of an address must carry the tuple delegating it, signed for nonce 0"
+        "the first sweep of an address must carry the authorization delegating it, signed for nonce 0"
     );
     let setup = setup
         .expect_sweeps_finalized(1)
@@ -941,13 +941,13 @@ fn should_sweep_a_second_erc20_deposit_of_a_delegated_address_without_an_authori
     assert_eq!(
         setup.anvil().authorization_nonces(&second_sweep.hash),
         Vec::<u64>::new(),
-        "the type-2 transaction above is what proves no tuple was sent: an address already \
+        "the type-2 transaction above is what proves no authorization was sent: an address already \
          delegated is swept carrying none"
     );
     assert_eq!(
         setup.anvil().transaction_count(&address),
         1,
-        "sweeping without a tuple must leave the deposit address at the nonce the first sweep spent"
+        "sweeping without an authorization must leave the deposit address at the nonce the first sweep spent"
     );
 
     let all_deposits = [first_deposits[0].clone(), second_deposits[0].clone()];

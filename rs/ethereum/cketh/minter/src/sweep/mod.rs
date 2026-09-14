@@ -151,7 +151,7 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
 }
 
 /// Reads on chain, at `latest_block`, which delegation each of `addresses` holds, so a sweep
-/// carries a tuple only for the addresses that still need one.
+/// carries an authorization only for the addresses that still need one.
 ///
 /// An address whose chunk failed to be read or decoded is simply absent from the result, which
 /// leaves its deposits queued for a later tick rather than sweeping on an unknown delegation.
