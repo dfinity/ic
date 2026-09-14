@@ -39,7 +39,9 @@ pub struct ReplayToolArgs {
     pub data_root: Option<PathBuf>,
 
     #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
+    /// The replay will stop at this height, deliver potential extra batches and finally deliver one
+    /// final extra batch to make a checkpoint. If this is a CUP height and there no extra batches
+    /// to deliver, the checkpoint will be made at the height itself.
     pub replay_until_height: Option<u64>,
 
     #[clap(long)]
@@ -50,9 +52,9 @@ pub struct ReplayToolArgs {
     /// The GuestOS version the validator uses; defaults to the replica version.
     pub guestos_version: Option<ReplicaVersion>,
 
-    /// The replica version under which the extra messages of the subcommand are
-    /// executed. Only needed if no consensus pool is available, otherwise the version is taken from
-    /// its finalized tip.
+    /// The replica version under which the extra messages of the subcommand are executed. Required
+    /// if no consensus pool is available, otherwise the version is taken from its finalized tip and
+    /// this argument is ignored.
     #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 }
