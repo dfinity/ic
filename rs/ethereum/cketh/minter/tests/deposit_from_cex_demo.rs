@@ -146,6 +146,97 @@ const ATTESTED_SCENARIOS: [BatchScenario; 3] = [
     },
 ];
 
+const ETH_ATTESTED_SCENARIOS: [BatchScenario; 3] = [
+    BatchScenario {
+        deposits: 1,
+        eip7702_total_gas_used: 63_283,
+        eip7702_average_gas_used: 63_283,
+        eip1559_total_gas_used: 53_283,
+        eip1559_average_gas_used: 53_283,
+    },
+    BatchScenario {
+        deposits: 10,
+        eip7702_total_gas_used: 413_076,
+        eip7702_average_gas_used: 41_307,
+        eip1559_total_gas_used: 291_345,
+        eip1559_average_gas_used: 29_134,
+    },
+    BatchScenario {
+        deposits: 20,
+        eip7702_total_gas_used: 804_603,
+        eip7702_average_gas_used: 40_230,
+        eip1559_total_gas_used: 555_753,
+        eip1559_average_gas_used: 27_787,
+    },
+];
+
+#[test]
+fn batched_eth_sweep_amortizes_gas_across_the_batch() {
+    let anvil = Anvil::start();
+    let chain_id = anvil.chain_id();
+
+    let minter = eth_address(&key_from_hex(MINTER_PRIVATE_KEY).public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+    let relayer_key = key_from_hex(RELAYER_PRIVATE_KEY);
+
+    let contracts = deploy_contracts(&anvil, &minter, &cex);
+
+    let mut previous_average = u64::MAX;
+    for scenario in ETH_ATTESTED_SCENARIOS {
+        let gas = sweep_eth_batch_attested(
+            &anvil,
+            chain_id,
+            &relayer_key,
+            &minter,
+            &cex,
+            &contracts,
+            scenario.deposits,
+        );
+        let deposits = scenario.deposits as u64;
+        let eip7702_average = gas.eip7702 / deposits;
+        let eip1559_average = gas.eip1559 / deposits;
+        println!(
+            "attested ETH batch of {}: EIP-7702 {} ({eip7702_average}/deposit), EIP-1559 {} ({eip1559_average}/deposit)",
+            scenario.deposits, gas.eip7702, gas.eip1559
+        );
+        assert_gas(
+            gas.eip7702,
+            scenario.eip7702_total_gas_used,
+            &format!("attested ETH batch of {} EIP-7702 total", scenario.deposits),
+        );
+        assert_gas(
+            eip7702_average,
+            scenario.eip7702_average_gas_used,
+            &format!(
+                "attested ETH batch of {} EIP-7702 average",
+                scenario.deposits
+            ),
+        );
+        assert_gas(
+            gas.eip1559,
+            scenario.eip1559_total_gas_used,
+            &format!("attested ETH batch of {} EIP-1559 total", scenario.deposits),
+        );
+        assert_gas(
+            eip1559_average,
+            scenario.eip1559_average_gas_used,
+            &format!(
+                "attested ETH batch of {} EIP-1559 average",
+                scenario.deposits
+            ),
+        );
+        assert!(
+            gas.eip1559 < gas.eip7702,
+            "an already-delegated (EIP-1559) sweep must cost less than one installing the delegation (EIP-7702)"
+        );
+        assert!(
+            eip7702_average < previous_average,
+            "per-deposit gas should shrink as the batch grows"
+        );
+        previous_average = eip7702_average;
+    }
+}
+
 #[test]
 fn batched_sweep_amortizes_gas_across_the_batch() {
     let anvil = Anvil::start();
@@ -986,6 +1077,122 @@ fn assert_batch_swept(
     assert_eq!(
         anvil.usdt_balance(usdt, minter),
         minter_before + DEPOSIT_AMOUNT * deposits.len() as u128,
+        "minter did not receive every deposit"
+    );
+    gas_used(receipt)
+}
+
+fn sweep_eth_batch_attested(
+    anvil: &Anvil,
+    chain_id: u64,
+    sender_key: &PrivateKey,
+    minter: &Address,
+    cex: &Address,
+    contracts: &Contracts,
+    n: usize,
+) -> BatchGas {
+    let Contracts {
+        helper, attested, ..
+    } = contracts;
+
+    let principals: Vec<Principal> = (0..n)
+        .map(|i| Principal::self_authenticating([0xE1, n as u8, i as u8]))
+        .collect();
+    let keys: Vec<PrivateKey> = principals.iter().map(derive_deposit_key).collect();
+    let deposits: Vec<Address> = keys.iter().map(|k| eth_address(&k.public_key())).collect();
+
+    let items: Vec<SweepItem> = keys
+        .iter()
+        .zip(&deposits)
+        .zip(&principals)
+        .map(|((key, deposit), principal)| {
+            let a = attest(key, chain_id, helper, principal, &[0_u8; 32]);
+            SweepItem {
+                deposit: alloy_address(deposit),
+                principal: B256::from(encode_principal(principal)),
+                subaccount: B256::ZERO,
+                r: B256::from(a.r),
+                s: B256::from(a.s),
+                v: a.v,
+            }
+        })
+        .collect();
+    let sweep_call = ICkSweeperAttested::sweepEthBatchCall { items }.abi_encode();
+
+    fund_eth(anvil, cex, &deposits);
+    let minter_before = anvil.balance(minter);
+    let authorizations: Vec<SignedAuthorization> = keys
+        .iter()
+        .map(|key| sign_authorization(key, chain_id, attested, 0))
+        .collect();
+    let receipt = anvil.send_eip7702(
+        sender_key,
+        chain_id,
+        attested,
+        sweep_call.clone(),
+        authorizations,
+    );
+    let eip7702 = assert_eth_batch_swept(
+        anvil,
+        &receipt,
+        contracts,
+        minter,
+        &deposits,
+        &principals,
+        minter_before,
+    );
+
+    fund_eth(anvil, cex, &deposits);
+    let minter_before = anvil.balance(minter);
+    let receipt = anvil.send_eip1559(sender_key, chain_id, attested, sweep_call);
+    let eip1559 = assert_eth_batch_swept(
+        anvil,
+        &receipt,
+        contracts,
+        minter,
+        &deposits,
+        &principals,
+        minter_before,
+    );
+
+    BatchGas { eip7702, eip1559 }
+}
+
+fn fund_eth(anvil: &Anvil, cex: &Address, deposits: &[Address]) {
+    for deposit in deposits {
+        let receipt = anvil.send_eth(cex, deposit, ETH_DEPOSIT_AMOUNT, None);
+        assert!(status_ok(&receipt), "CEX ETH transfer failed");
+    }
+}
+
+fn assert_eth_batch_swept(
+    anvil: &Anvil,
+    receipt: &Value,
+    contracts: &Contracts,
+    minter: &Address,
+    deposits: &[Address],
+    principals: &[Principal],
+    minter_before: u128,
+) -> u64 {
+    let Contracts { helper, .. } = contracts;
+    assert!(status_ok(receipt), "batch ETH sweep reverted");
+    let events = received_events(receipt, helper);
+    assert_eq!(
+        events.len(),
+        deposits.len(),
+        "one ReceivedEthOrErc20 event per deposit"
+    );
+    for (event, (deposit, principal)) in events.iter().zip(deposits.iter().zip(principals)) {
+        assert_eq!(event.owner, *deposit);
+        assert_eq!(event.principal, encode_principal(principal));
+        assert_eq!(event.amount, ETH_DEPOSIT_AMOUNT);
+    }
+    for deposit in deposits {
+        assert_eq!(anvil.balance(deposit), 0, "deposit not swept");
+    }
+    assert_eq!(
+        anvil.balance(minter),
+        minter_before + ETH_DEPOSIT_AMOUNT * deposits.len() as u128,
         "minter did not receive every deposit"
     );
     gas_used(receipt)
