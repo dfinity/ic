@@ -15000,6 +15000,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-state-manager",
  "ic-state-tool",
+ "ic-test-utilities-tmpdir",
  "ic-types",
  "serde_cbor",
  "slog",

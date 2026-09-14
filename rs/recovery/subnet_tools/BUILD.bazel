@@ -30,6 +30,15 @@ rust_library(
 
 rust_test(
     name = "subnet_tools_test",
+    compile_data = [":test_data"],
     crate = "subnet_tools",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        # Keep sorted.
+        "//rs/test_utilities/tmpdir",
+    ],
+)
+
+filegroup(
+    name = "test_data",
+    srcs = glob(["test_data/*"]),
 )
