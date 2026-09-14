@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "47 1 * * *" # 1:47 UTC - slightly offset to avoid high-load times of other scheduled workflows
   workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  group: bare-metal-zh2-dll01
+  queue: max
 
 env:
   CI_JOB_NAME: ${{ github.job }}
@@ -11,6 +17,10 @@ env:
 jobs:
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.label.name == 'CI_RUN_BARE_METAL' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
