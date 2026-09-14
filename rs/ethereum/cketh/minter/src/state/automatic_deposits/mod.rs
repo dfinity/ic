@@ -3,6 +3,7 @@ mod tests;
 
 use crate::asset::{Asset, Erc20Asset, EthAsset};
 use crate::attestation::AttestationRequest;
+use crate::balance_scan::batcher::Delegation;
 use crate::deposit_address::DepositAddress;
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -310,6 +311,63 @@ impl AutomaticDeposits {
         signature: TransactionSignature,
     ) {
         self.authorizations.insert(request, signature);
+    }
+
+    /// What each of `targets` needs from a sweep calling `delegate` on `chain_id`, decided from
+    /// the delegation `delegations` read on chain for its address: no tuple at all once the address
+    /// is delegated to that contract, otherwise the tuple naming the chain, the contract, and the
+    /// nonce the tuple must spend. The batch names the contract it decided against, so the sweep
+    /// can refuse to call any other.
+    ///
+    /// A target whose address holds contract code, or whose delegation the read did not yield, is
+    /// left out rather than swept: no tuple can be applied to the first, and the second is unknown
+    /// ground. Both stay queued for a later tick.
+    ///
+    /// A tuple is signed for the nonce the minter tracks for the address, which is the nonce the
+    /// address has reached on chain: zero until a sweep has delegated it, one more per tuple of the
+    /// minter's that has applied since. That is what rotates an address delegated to another
+    /// contract onto the configured one — the protocol applies a tuple only at the authority's
+    /// current nonce, so a rotation signed for zero would be skipped forever. Two sweeps carrying
+    /// the same tuple stay correct in any order they land: the second one is skipped.
+    pub fn sweep_delegations(
+        &self,
+        targets: &[SweepTarget],
+        delegations: &BTreeMap<DepositAddress, Delegation>,
+        chain_id: u64,
+        delegate: Address,
+    ) -> DelegatedSweepBatch {
+        let authorize = |target: &SweepTarget, nonce| {
+            Some(AuthorizationRequest::new(
+                target.account(),
+                chain_id,
+                delegate,
+                nonce,
+            ))
+        };
+        let targets = targets
+            .iter()
+            .filter_map(|target| {
+                let authorization = match delegations.get(&target.address()) {
+                    Some(Delegation::Delegated(installed)) if *installed == delegate => None,
+                    Some(Delegation::NotDelegated) | Some(Delegation::Delegated(_)) => {
+                        authorize(target, self.delegation_nonce(&target.address()))
+                    }
+                    Some(Delegation::Other) | None => {
+                        log!(
+                            INFO,
+                            "[sweep_delegations]: LEAVING OUT {}: its delegation is unknown or it holds contract code",
+                            target.address().as_address()
+                        );
+                        return None;
+                    }
+                };
+                Some(DelegatedSweepTarget {
+                    target: *target,
+                    authorization,
+                })
+            })
+            .collect();
+        DelegatedSweepBatch { delegate, targets }
     }
 
     /// The nonce the next authorization tuple of `address` must be signed for, which is the nonce
