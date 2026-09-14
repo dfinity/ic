@@ -66,11 +66,21 @@ pub fn split_manifest(
 /// subnet that is merged away): it holds everything of `base`, with the
 /// canisters and canister snapshots of `source` added to those of `base`, and
 /// is marked as the product of a subnet merge.
-pub fn merge_checkpoints(base: &Path, source: &Path, output: &Path) -> RecoveryResult<()> {
+///
+/// `batch_time` is the batch time of the merged state, which has to be at least
+/// the batch time of either checkpoint, so that the canisters the merge moves
+/// over do not see their time go backwards.
+pub fn merge_checkpoints(
+    base: &Path,
+    source: &Path,
+    output: &Path,
+    batch_time: Time,
+) -> RecoveryResult<()> {
     ic_state_tool::commands::merge::do_merge(
         base.to_path_buf(),
         source.to_path_buf(),
         output.to_path_buf(),
+        Some(batch_time),
     )
     .map_err(|err| RecoveryError::StateToolError(format!("Failed to merge the states: {err}")))
 }

@@ -1,8 +1,10 @@
 //! Assembles the merged state of a subnet merge.
 
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
-use ic_state_layout::{CANISTER_STATES_DIR, CheckpointLayout, SNAPSHOTS_DIR, WriteOnly};
-use ic_types::Height;
+use ic_state_layout::{
+    CANISTER_STATES_DIR, CheckpointLayout, CompleteCheckpointLayout, SNAPSHOTS_DIR, WriteOnly,
+};
+use ic_types::{Height, Time};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -16,6 +18,13 @@ use std::path::{Path, PathBuf};
 /// Everything else (system metadata, subnet queues, ingress history, ...) is
 /// `base`'s.
 ///
+/// `batch_time` is the batch time of the merged state. The merged state holds
+/// canisters of `source`, which may have run ahead of `base`, so leaving it at
+/// `base`'s batch time would take the time of those canisters backwards once
+/// the merged subnet resumes; the caller sets it to the later of the two
+/// checkpoints' batch times. It may not be before `base`'s own batch time, and
+/// `None` leaves that batch time as it is.
+///
 /// File contents are hard linked rather than copied, so this is cheap no matter
 /// how large the two states are. That makes `output` share the storage of
 /// `base` and `source`, which is sound because checkpoints are immutable.
@@ -25,7 +34,12 @@ use std::path::{Path, PathBuf};
 /// directory, the linking finds the output and links it into itself until the
 /// merge fails; anywhere else under `source` it is never reached and the merge
 /// succeeds, leaving the merged checkpoint inside the source checkpoint.
-pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), String> {
+pub fn do_merge(
+    base: PathBuf,
+    source: PathBuf,
+    output: PathBuf,
+    batch_time: Option<Time>,
+) -> Result<(), String> {
     for (path, name) in [(&base, "base"), (&source, "source")] {
         if !path.is_dir() {
             return Err(format!(
@@ -63,7 +77,7 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
         }
     })?;
 
-    let result = assemble(&base, &source, &output).and_then(|()| {
+    let result = assemble(&base, &source, &output, batch_time).and_then(|()| {
         // Creating a directory is not durable until the directory it was
         // created in is synced.
         fs::File::open(parent)
@@ -86,7 +100,12 @@ pub fn do_merge(base: PathBuf, source: PathBuf, output: PathBuf) -> Result<(), S
 }
 
 /// Assembles the merged checkpoint at `output`, an existing empty directory.
-fn assemble(base: &Path, source: &Path, output: &Path) -> Result<(), String> {
+fn assemble(
+    base: &Path,
+    source: &Path,
+    output: &Path,
+    batch_time: Option<Time>,
+) -> Result<(), String> {
     link_tree(base, output)?;
 
     for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
@@ -105,6 +124,10 @@ fn assemble(base: &Path, source: &Path, output: &Path) -> Result<(), String> {
         .serialize(pb_metadata::SubnetMerged { merged: true })
         .map_err(|err| format!("failed to write the subnet merged marker: {err:?}"))?;
 
+    if let Some(batch_time) = batch_time {
+        set_batch_time(base, &layout, batch_time)?;
+    }
+
     // The linked-in files are read-only already, being the files of `base` and
     // `source`; the marker written above is not.
     layout
@@ -112,6 +135,43 @@ fn assemble(base: &Path, source: &Path, output: &Path) -> Result<(), String> {
         .map_err(|err| format!("failed to mark the merged checkpoint read-only: {err:?}"))?;
 
     Ok(())
+}
+
+/// Sets the batch time of the merged checkpoint at `layout`, whose system
+/// metadata is `base`'s.
+///
+/// The metadata file is linked in from `base`, so it is replaced rather than
+/// written to: `serialize` unlinks it first, which leaves `base`'s own file
+/// untouched.
+fn set_batch_time(
+    base: &Path,
+    layout: &CheckpointLayout<WriteOnly>,
+    batch_time: Time,
+) -> Result<(), String> {
+    // Any height will do: the layout is only asked for the path of the system
+    // metadata file, which does not depend on one.
+    let base_layout =
+        CompleteCheckpointLayout::new_untracked(base.to_path_buf(), Height::new(0))
+            .map_err(|err| format!("failed to create the base checkpoint layout: {err:?}"))?;
+    let mut metadata = base_layout
+        .system_metadata()
+        .deserialize()
+        .map_err(|err| format!("failed to read the system metadata: {err:?}"))?;
+
+    let batch_time_nanos = batch_time.as_nanos_since_unix_epoch();
+    if batch_time_nanos < metadata.batch_time_nanos {
+        return Err(format!(
+            "the batch time {batch_time_nanos} of the merged state is before the batch time {} \
+             of the base checkpoint",
+            metadata.batch_time_nanos,
+        ));
+    }
+    metadata.batch_time_nanos = batch_time_nanos;
+
+    layout
+        .system_metadata()
+        .serialize(metadata)
+        .map_err(|err| format!("failed to write the system metadata: {err:?}"))
 }
 
 /// Replicates the directory tree rooted at `from` under `to`, hard linking every
@@ -226,7 +286,7 @@ mod tests {
         let source = checkpoint(tmp.path(), "source", &["c3"]);
         let output = tmp.path().join("merged");
 
-        do_merge(base, source, output.clone()).unwrap();
+        do_merge(base, source, output.clone(), None).unwrap();
 
         for dir in [CANISTER_STATES_DIR, SNAPSHOTS_DIR] {
             assert_eq!(entries(&output.join(dir)), ["c1", "c2", "c3"], "{dir}");
@@ -245,12 +305,92 @@ mod tests {
         let source = checkpoint(tmp.path(), "source", &["c2"]);
         let output = tmp.path().join("merged");
 
-        do_merge(base, source, output.clone()).unwrap();
+        do_merge(base, source, output.clone(), None).unwrap();
 
         assert_eq!(
             fs::read_to_string(output.join(SYSTEM_METADATA_FILE)).unwrap(),
             "base"
         );
+    }
+
+    /// Overwrites the system metadata of `checkpoint` with a real one holding
+    /// `batch_time_nanos`, in place of the plain text the helper above writes.
+    fn set_batch_time_nanos(checkpoint: &Path, batch_time_nanos: u64) {
+        CheckpointLayout::<WriteOnly>::new_untracked(checkpoint.to_path_buf(), Height::new(0))
+            .unwrap()
+            .system_metadata()
+            .serialize(pb_metadata::SystemMetadata {
+                batch_time_nanos,
+                ..Default::default()
+            })
+            .unwrap();
+    }
+
+    fn batch_time_nanos(checkpoint: &Path) -> u64 {
+        CompleteCheckpointLayout::new_untracked(checkpoint.to_path_buf(), Height::new(0))
+            .unwrap()
+            .system_metadata()
+            .deserialize()
+            .unwrap()
+            .batch_time_nanos
+    }
+
+    #[test]
+    fn merge_sets_the_batch_time() {
+        let tmp = TempDir::new().unwrap();
+        let base = checkpoint(tmp.path(), "base", &["c1"]);
+        let source = checkpoint(tmp.path(), "source", &["c2"]);
+        set_batch_time_nanos(&base, 1_000);
+        let output = tmp.path().join("merged");
+
+        do_merge(
+            base.clone(),
+            source,
+            output.clone(),
+            Some(Time::from_nanos_since_unix_epoch(2_000)),
+        )
+        .unwrap();
+
+        assert_eq!(batch_time_nanos(&output), 2_000);
+        // The metadata of the merged checkpoint is linked in from the base
+        // checkpoint, so stamping it must not write through to the base.
+        assert_eq!(batch_time_nanos(&base), 1_000);
+    }
+
+    #[test]
+    fn merge_keeps_the_batch_time_of_the_base_without_one() {
+        let tmp = TempDir::new().unwrap();
+        let base = checkpoint(tmp.path(), "base", &["c1"]);
+        let source = checkpoint(tmp.path(), "source", &["c2"]);
+        set_batch_time_nanos(&base, 1_000);
+        let output = tmp.path().join("merged");
+
+        do_merge(base, source, output.clone(), None).unwrap();
+
+        assert_eq!(batch_time_nanos(&output), 1_000);
+    }
+
+    #[test]
+    fn merge_refuses_a_batch_time_before_the_base() {
+        let tmp = TempDir::new().unwrap();
+        let base = checkpoint(tmp.path(), "base", &["c1"]);
+        let source = checkpoint(tmp.path(), "source", &["c2"]);
+        set_batch_time_nanos(&base, 2_000);
+        let output = tmp.path().join("merged");
+
+        let err = do_merge(
+            base,
+            source,
+            output.clone(),
+            Some(Time::from_nanos_since_unix_epoch(1_000)),
+        )
+        .unwrap_err();
+
+        assert!(
+            err.contains("batch time 1000") && err.contains("before the batch time 2000"),
+            "unexpected error: {err}"
+        );
+        assert!(!output.exists(), "the output was left behind");
     }
 
     #[test]
@@ -260,7 +400,7 @@ mod tests {
         let source = checkpoint(tmp.path(), "source", &["c2"]);
         let output = tmp.path().join("merged");
 
-        do_merge(base.clone(), source.clone(), output.clone()).unwrap();
+        do_merge(base.clone(), source.clone(), output.clone(), None).unwrap();
 
         let inode = |path: PathBuf| fs::metadata(path).unwrap().ino();
         let canister = |root: &Path, canister: &str| {
@@ -287,7 +427,7 @@ mod tests {
         let source = checkpoint(tmp.path(), "source", &["c2"]);
         let output = tmp.path().join("merged");
 
-        do_merge(base, source, output.clone()).unwrap();
+        do_merge(base, source, output.clone(), None).unwrap();
 
         let layout = CompleteCheckpointLayout::new_untracked(output, Height::new(0)).unwrap();
         assert!(layout.subnet_merged_marker().deserialize().unwrap().merged);
@@ -300,7 +440,7 @@ mod tests {
         let source = checkpoint(tmp.path(), "source", &["c2"]);
         let output = tmp.path().join("merged");
 
-        do_merge(base, source, output.clone()).unwrap();
+        do_merge(base, source, output.clone(), None).unwrap();
 
         // The marker is the one file the merge writes itself, so it is the one
         // that is not already read-only by virtue of being a link into an input.
@@ -340,7 +480,7 @@ mod tests {
         let source = checkpoint(tmp.path(), "source", &["c2"]);
         let output = tmp.path().join("merged");
 
-        let err = do_merge(base, source, output.clone()).unwrap_err();
+        let err = do_merge(base, source, output.clone(), None).unwrap_err();
 
         assert!(err.contains("holds c2 in both"), "unexpected error: {err}");
     }
@@ -352,7 +492,7 @@ mod tests {
         let source = checkpoint(tmp.path(), "source", &["c2"]);
         let output = checkpoint(tmp.path(), "merged", &[]);
 
-        let err = do_merge(base, source, output).unwrap_err();
+        let err = do_merge(base, source, output, None).unwrap_err();
 
         assert!(err.contains("already exists"), "unexpected error: {err}");
     }
@@ -367,7 +507,7 @@ mod tests {
         fs::create_dir(base.join(SUBNET_MERGED_FILE)).unwrap();
         let output = tmp.path().join("merged");
 
-        do_merge(base, source, output.clone()).unwrap_err();
+        do_merge(base, source, output.clone(), None).unwrap_err();
 
         assert!(!output.exists(), "the output was left behind");
     }
@@ -379,13 +519,13 @@ mod tests {
         let missing = tmp.path().join("missing");
         let output = tmp.path().join("merged");
 
-        let err = do_merge(base.clone(), missing.clone(), output.clone()).unwrap_err();
+        let err = do_merge(base.clone(), missing.clone(), output.clone(), None).unwrap_err();
         assert!(
             err.contains("source checkpoint") && err.contains("not a directory"),
             "unexpected error: {err}"
         );
 
-        let err = do_merge(missing, base, output).unwrap_err();
+        let err = do_merge(missing, base, output, None).unwrap_err();
         assert!(
             err.contains("base checkpoint") && err.contains("not a directory"),
             "unexpected error: {err}"
@@ -400,7 +540,7 @@ mod tests {
         fs::remove_dir_all(source.join(SNAPSHOTS_DIR)).unwrap();
         let output = tmp.path().join("merged");
 
-        do_merge(base, source, output.clone()).unwrap();
+        do_merge(base, source, output.clone(), None).unwrap();
 
         assert_eq!(entries(&output.join(CANISTER_STATES_DIR)), ["c1", "c2"]);
         assert_eq!(entries(&output.join(SNAPSHOTS_DIR)), ["c1"]);
