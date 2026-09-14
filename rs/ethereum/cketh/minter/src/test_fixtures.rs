@@ -30,6 +30,10 @@ use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeSet;
 
+/// The block height every fixture pins its reads to, so a state built here can serve the
+/// delegation read the enqueue makes.
+pub const LATEST_BLOCK: BlockNumber = BlockNumber::new(1_000_000);
+
 pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
     f: F,
     expected_message: &str,
@@ -285,10 +289,6 @@ pub async fn state_with_enqueued_sweep<A: Into<Asset> + Copy>(
 pub fn sweeper_contract() -> Address {
     Address::new([0x5e; 20])
 }
-
-/// The block height every fixture pins its reads to, so a state built here can serve the
-/// delegation read the enqueue makes.
-pub const LATEST_BLOCK: BlockNumber = BlockNumber::new(1_000_000);
 
 /// An [`EvmRpcClient`] answering the calls it is given, in order, with `responses`.
 pub fn stub_rpc_client(
