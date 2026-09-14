@@ -1049,9 +1049,9 @@ pub fn setup_router(
         .layer(middleware::from_fn(validate::validate_request))
         .layer(middleware::from_fn(validate::validate_subnet_request))
         .layer(common_layers)
+        .layer(middleware_subnet_lookup)
         .layer(middleware_generic_limiter)
         .layer(middleware_subnet_read_state_cache)
-        .layer(middleware_subnet_lookup)
         .layer(middleware_retry);
 
     let canister_read_state_routes = Router::new()
