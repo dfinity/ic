@@ -15,7 +15,7 @@ use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::event::AutomaticDeposit;
 use crate::state::transactions::{EthWithdrawalRequest, SweepRequest};
 use crate::state::{State, read_state};
-use crate::sweep::enqueue_pending_sweeps;
+use crate::sweep::create_pending_sweeper_requests;
 use crate::tx::{
     AccessList, AuthorizationRequest, Eip1559TransactionRequest, FinalizedEip1559Transaction,
     GasFeeEstimate, Signed, TransactionSignature,
@@ -271,12 +271,12 @@ pub async fn state_with_enqueued_sweep<A: Into<Asset> + Copy>(
     let mut runtime = mock::MockCanisterRuntime::new();
     runtime.expect_time().return_const(SWEEP_DECIDED_AT);
     let undelegated = vec![Delegation::NotDelegated; addresses];
+    runtime
+        .expect_evm_rpc_client()
+        .times(1)
+        .return_once(move || stub_rpc_client(vec![delegation_response(&undelegated)]));
 
-    enqueue_pending_sweeps(
-        &runtime,
-        &stub_rpc_client(vec![delegation_response(&undelegated)]),
-    )
-    .await;
+    create_pending_sweeper_requests(&runtime).await;
 
     read_state(|s| {
         let [request] =
@@ -376,6 +376,8 @@ pub mod mock {
     use crate::runtime::CanisterRuntime;
     use crate::time::TimeProvider;
     use async_trait::async_trait;
+    use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
+    use ic_canister_runtime::StubRuntime;
     use ic_cdk_management_canister::EcdsaPublicKeyResult;
     use mockall::mock;
 
@@ -402,6 +404,10 @@ pub mod mock {
 
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
+            type Rpc = StubRuntime;
+
+            fn evm_rpc_client(&self) -> EvmRpcClient<StubRuntime, CandidResponseConverter, DoubleCycles>;
+
             async fn sign_with_ecdsa(
                 &self,
                 key_name: String,
