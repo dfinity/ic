@@ -83,7 +83,8 @@ async fn should_sign_one_attestation_for_every_token_of_an_account() {
     runtime.expect_time().return_const(NOW);
     expect_signing(&mut runtime);
 
-    enqueue(&mut runtime, &[(account(), Delegation::NotDelegated)]).await;
+    expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
+    create_pending_sweeper_requests(&runtime).await;
 
     assert_eq!(
         recorded_events()
@@ -112,7 +113,8 @@ async fn should_sign_and_record_one_authorization_for_every_account() {
     expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
     expect_signing(&mut runtime);
 
-    enqueue(&mut runtime, &[(account(), Delegation::NotDelegated)]).await;
+    expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
+    create_pending_sweeper_requests(&runtime).await;
 
     assert_eq!(
         recorded_events()
@@ -132,7 +134,8 @@ async fn should_reuse_the_recorded_authorization_on_a_later_sweep() {
     expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
     expect_signing(&mut runtime);
 
-    enqueue(&mut runtime, &[(account(), Delegation::NotDelegated)]).await;
+    expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
+    create_pending_sweeper_requests(&runtime).await;
     create_pending_sweeper_requests(&runtime).await;
 
     assert_eq!(
@@ -153,7 +156,8 @@ async fn should_sign_a_fresh_authorization_when_the_sweeper_contract_changes() {
     expect_authorization_signing(&mut runtime, ANOTHER_SWEEPER_CONTRACT, 1);
     expect_signing(&mut runtime);
 
-    enqueue(&mut runtime, &[(account(), Delegation::NotDelegated)]).await;
+    expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
+    create_pending_sweeper_requests(&runtime).await;
     let first = stored_authorization(SWEEPER_CONTRACT);
     assert!(first.is_some());
 
@@ -162,7 +166,8 @@ async fn should_sign_a_fresh_authorization_when_the_sweeper_contract_changes() {
     // account, hence the same authorization but for the delegate, which is what must miss.
     queue_deposit(&account(), &usdt());
 
-    enqueue(&mut runtime, &[(account(), Delegation::NotDelegated)]).await;
+    expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
+    create_pending_sweeper_requests(&runtime).await;
     let second = stored_authorization(ANOTHER_SWEEPER_CONTRACT);
     assert!(second.is_some());
     assert_ne!(first, second);
@@ -180,14 +185,14 @@ async fn should_enqueue_one_sweep_per_token() {
     runtime.expect_time().return_const(NOW);
     expect_signing(&mut runtime);
 
-    enqueue(
+    expect_delegation_read(
         &mut runtime,
         &[
             (account(), Delegation::NotDelegated),
             (another_account(), Delegation::NotDelegated),
         ],
-    )
-    .await;
+    );
+    create_pending_sweeper_requests(&runtime).await;
 
     let enqueued = pending_sweeps();
     assert_eq!(
@@ -220,7 +225,8 @@ async fn should_carry_the_signed_attestation_and_authorization_of_every_swept_ac
     runtime.expect_time().return_const(NOW);
     expect_signing(&mut runtime);
 
-    enqueue(&mut runtime, &[(account(), Delegation::NotDelegated)]).await;
+    expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
+    create_pending_sweeper_requests(&runtime).await;
 
     let enqueued = pending_sweeps();
     let [sweep] = enqueued.as_slice() else {
@@ -255,7 +261,8 @@ async fn should_not_accept_a_sweep_the_sweeper_gas_cannot_pay_for() {
     runtime.expect_time().return_const(NOW);
     expect_signing(&mut runtime);
 
-    enqueue(&mut runtime, &[(account(), Delegation::NotDelegated)]).await;
+    expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
+    create_pending_sweeper_requests(&runtime).await;
 
     assert_eq!(
         pending_sweeps(),
@@ -276,7 +283,8 @@ async fn should_not_offer_an_enqueued_deposit_to_a_second_sweep() {
     runtime.expect_time().return_const(NOW);
     expect_signing(&mut runtime);
 
-    enqueue(&mut runtime, &[(account(), Delegation::NotDelegated)]).await;
+    expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
+    create_pending_sweeper_requests(&runtime).await;
     assert_eq!(pending_sweeps().len(), 1);
 
     create_pending_sweeper_requests(&runtime).await;
@@ -299,14 +307,14 @@ async fn should_leave_out_a_deposit_whose_attestation_could_not_be_signed() {
         .returning(|_, _, _| Err(CallError::new("sign_with_ecdsa", Reason::OutOfCycles)));
     expect_signing(&mut runtime);
 
-    enqueue(
+    expect_delegation_read(
         &mut runtime,
         &[
             (account(), Delegation::NotDelegated),
             (another_account(), Delegation::NotDelegated),
         ],
-    )
-    .await;
+    );
+    create_pending_sweeper_requests(&runtime).await;
 
     let enqueued = pending_sweeps();
     let [sweep] = enqueued.as_slice() else {
@@ -333,11 +341,11 @@ async fn should_sweep_a_delegated_address_without_an_authorization() {
     runtime.expect_time().return_const(NOW);
     expect_signing(&mut runtime);
 
-    enqueue(
+    expect_delegation_read(
         &mut runtime,
         &[(account(), Delegation::Delegated(SWEEPER_CONTRACT))],
-    )
-    .await;
+    );
+    create_pending_sweeper_requests(&runtime).await;
 
     let enqueued = pending_sweeps();
     let [sweep] = enqueued.as_slice() else {
@@ -373,11 +381,11 @@ async fn should_sweep_an_address_delegated_elsewhere_with_a_nonce_zero_authoriza
     expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
     expect_signing(&mut runtime);
 
-    enqueue(
+    expect_delegation_read(
         &mut runtime,
         &[(account(), Delegation::Delegated(ANOTHER_SWEEPER_CONTRACT))],
-    )
-    .await;
+    );
+    create_pending_sweeper_requests(&runtime).await;
 
     let enqueued = pending_sweeps();
     let [sweep] = enqueued.as_slice() else {
@@ -410,14 +418,14 @@ async fn should_leave_out_an_address_holding_other_code() {
     runtime.expect_time().return_const(NOW);
     expect_signing(&mut runtime);
 
-    enqueue(
+    expect_delegation_read(
         &mut runtime,
         &[
             (account(), Delegation::Other),
             (another_account(), Delegation::NotDelegated),
         ],
-    )
-    .await;
+    );
+    create_pending_sweeper_requests(&runtime).await;
 
     let enqueued = pending_sweeps();
     let [sweep] = enqueued.as_slice() else {
@@ -472,14 +480,14 @@ async fn should_read_delegations_once_for_every_asset_of_a_tick() {
     runtime.expect_time().return_const(NOW);
     expect_signing(&mut runtime);
 
-    enqueue(
+    expect_delegation_read(
         &mut runtime,
         &[
             (account(), Delegation::NotDelegated),
             (another_account(), Delegation::NotDelegated),
         ],
-    )
-    .await;
+    );
+    create_pending_sweeper_requests(&runtime).await;
 
     assert_eq!(
         pending_sweeps().len(),
@@ -503,7 +511,8 @@ async fn should_skip_the_tick_when_the_sweeper_contract_changed_since_the_read()
             sign_digest_with_derived_key(key_name, derivation_path, message_hash)
         });
 
-    enqueue(&mut runtime, &[(account(), Delegation::NotDelegated)]).await;
+    expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
+    create_pending_sweeper_requests(&runtime).await;
 
     assert_eq!(
         pending_sweeps(),
@@ -532,11 +541,11 @@ async fn should_skip_the_tick_when_the_sweeper_contract_changed_since_a_tuple_le
             sign_digest_with_derived_key(key_name, derivation_path, message_hash)
         });
 
-    enqueue(
+    expect_delegation_read(
         &mut runtime,
         &[(account(), Delegation::Delegated(SWEEPER_CONTRACT))],
-    )
-    .await;
+    );
+    create_pending_sweeper_requests(&runtime).await;
 
     assert_eq!(
         pending_sweeps(),
@@ -731,15 +740,16 @@ fn mock() -> MockCanisterRuntime {
     MockCanisterRuntime::new()
 }
 
-/// Runs one enqueue tick whose single delegation read is answered with `delegations`.
-async fn enqueue(runtime: &mut MockCanisterRuntime, delegations: &[(Account, Delegation)]) {
+/// Expects the next tick to read the delegations once and answers it with `delegations`.
+fn expect_delegation_read(
+    runtime: &mut MockCanisterRuntime,
+    delegations: &[(Account, Delegation)],
+) {
     let response = delegation_read(delegations);
     runtime
         .expect_evm_rpc_client()
         .times(1)
         .return_once(move || stub_rpc_client(vec![response]));
-
-    create_pending_sweeper_requests(runtime).await;
 }
 
 /// The answer to a delegation read of these accounts' addresses, ordered as the read lists them.
