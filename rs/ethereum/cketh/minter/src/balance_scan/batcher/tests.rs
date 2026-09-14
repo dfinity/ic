@@ -299,6 +299,22 @@ fn decode_delegation_wrong_length_is_err() {
     );
 }
 
+#[test]
+fn decode_delegation_unrepresentable_length_is_err() {
+    assert_eq!(
+        decode_delegation_batch(&returned_blob(&[]), usize::MAX),
+        Err(BatcherDecodeError::UnrepresentableLength {
+            entries: usize::MAX
+        })
+    );
+    assert_eq!(
+        decode_delegation_batch(&returned_blob(&[]), usize::MAX / WORD),
+        Err(BatcherDecodeError::UnrepresentableLength {
+            entries: usize::MAX / WORD
+        })
+    );
+}
+
 fn returned_blob(words: &[[u8; WORD]]) -> Vec<u8> {
     let mut blob = vec![0_u8; WORD];
     for word in words {
