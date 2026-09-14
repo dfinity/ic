@@ -195,7 +195,6 @@ rust_ic_test_suite(
         "@crate_index//:regex-lite",
         "@crate_index//:rstest",
         "@crate_index//:serde",
-        "@crate_index//:strum",
         "@crate_index//:tokio",
         "@crate_index//:wasmparser",
         "@crate_index//:wat",

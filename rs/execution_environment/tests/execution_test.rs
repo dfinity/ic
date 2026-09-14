@@ -35,11 +35,10 @@ use ic_types::{
     CanisterId, CryptoHashOfPartialState, NumBytes, Time, ingress::WasmResult,
     messages::NO_DEADLINE,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, NominalCycles};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
-use strum::IntoEnumIterator;
 
 /// One billion for better cycles readability.
 const B: u128 = 1e9 as u128;
@@ -3237,65 +3236,28 @@ fn consumed_by_canisters(env: &StateMachine) -> NominalCycles {
 /// Asserts that `SubnetMetrics::consumed_cycles_total_including_canisters` of the
 /// latest state is what it is defined to be, and returns it.
 ///
-/// Both summands are recomputed here from the state rather than taken from
-/// `SubnetMetrics::consumed_cycles_total()`, so that the assertion does not inherit
-/// the categorization it is meant to check. Walking `CyclesUseCase::iter()` and
-/// matching exhaustively also means a newly added use case does not compile until it
-/// has been classified here, rather than being silently left out of the total.
+/// No test using this helper makes an outcall, requests a threshold signature or
+/// drops a message, so the whole subnet-level summand is the cycles consumed by
+/// deleted canisters -- asserted rather than assumed, so that a test which starts
+/// producing any of the rest fails here instead of quietly comparing against a total
+/// it no longer accounts for. The canisters' summand is likewise summed over the
+/// canisters themselves, so that neither side of the comparison is read back from
+/// the bookkeeping under test.
 fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
     let state = env.get_latest_state();
     let subnet_metrics = &state.metadata.subnet_metrics;
 
-    // No test using this helper makes an HTTP or ECDSA outcall, so the subnet-level
-    // consumption of both is zero. Asserted rather than summed into `subnet_level`
-    // below: the two scalar fields are supersets of their use case entries, so
-    // adding them would mean recomputing the total out of exactly the bookkeeping
-    // under test. A test that starts making outcalls fails here, rather than
-    // quietly comparing against a total it no longer accounts for.
+    let consumed_by_deleted_canisters = subnet_metrics.get_consumed_cycles_by_deleted_canisters();
     assert_eq!(
-        subnet_metrics.get_consumed_cycles_http_outcalls(),
-        NominalCycles::zero()
+        subnet_metrics.consumed_cycles_total(),
+        consumed_by_deleted_canisters
     );
-    assert_eq!(
-        subnet_metrics.get_consumed_cycles_ecdsa_outcalls(),
-        NominalCycles::zero()
-    );
-
-    let mut subnet_level = subnet_metrics.get_consumed_cycles_by_deleted_canisters();
-    for use_case in CyclesUseCase::iter() {
-        match use_case {
-            // Contribute nothing here. The two outcall use cases are covered by the
-            // scalar fields asserted zero above; the canister-level use cases only
-            // ever land in the map when a canister is deleted, at which point that
-            // canister's whole consumption is added to
-            // `consumed_cycles_by_deleted_canisters`. Adding either here as well
-            // would count a deleted canister twice.
-            CyclesUseCase::ECDSAOutcalls
-            | CyclesUseCase::HTTPOutcalls
-            | CyclesUseCase::DeletedCanisters
-            | CyclesUseCase::Memory
-            | CyclesUseCase::ComputeAllocation
-            | CyclesUseCase::IngressInduction
-            | CyclesUseCase::Instructions
-            | CyclesUseCase::RequestAndResponseTransmission
-            | CyclesUseCase::Uninstall
-            | CyclesUseCase::CanisterCreation
-            | CyclesUseCase::BurnedCycles => {}
-            // Never charged to a canister's balance, so no scalar field covers these.
-            CyclesUseCase::SchnorrOutcalls
-            | CyclesUseCase::VetKd
-            | CyclesUseCase::DroppedMessages => {
-                subnet_level += subnet_metrics
-                    .get_consumed_cycles_by_use_case()
-                    .get(&use_case)
-                    .copied()
-                    .unwrap_or_else(NominalCycles::zero);
-            }
-        }
-    }
 
     let total = subnet_metrics.consumed_cycles_total_including_canisters();
-    assert_eq!(total, subnet_level + consumed_by_canisters(env));
+    assert_eq!(
+        total,
+        consumed_by_deleted_canisters + consumed_by_canisters(env)
+    );
     total
 }
 
