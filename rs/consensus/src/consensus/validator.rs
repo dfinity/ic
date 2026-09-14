@@ -89,7 +89,6 @@ enum ValidationFailure {
     DkgPayloadValidationFailed(DkgPayloadValidationFailure),
     IDkgPayloadValidationFailed(IDkgPayloadValidationFailure),
     DkgSummaryNotFound(Height),
-    TranscriptNotFound(Height, NiDkgTag),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
     StateManagerError(StateManagerError),
@@ -115,6 +114,7 @@ enum InvalidArtifactReason {
     MismatchedRank(Rank, Option<Rank>),
     MembershipError(MembershipError),
     InappropriateDkgId(NiDkgId),
+    TranscriptNotFound(Height, NiDkgTag),
     SignerNotInThresholdCommittee(NodeId),
     SignerNotInMultiSigCommittee(NodeId),
     InvalidPayload(InvalidPayloadReason),
@@ -326,7 +326,7 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
             &NiDkgTag::HighThreshold,
         )
         .ok_or_else(|| {
-            ValidationFailure::TranscriptNotFound(self.height(), NiDkgTag::HighThreshold)
+            InvalidArtifactReason::TranscriptNotFound(self.height(), NiDkgTag::HighThreshold)
         })?;
         if !high_threshold_transcript
             .committee
@@ -400,8 +400,11 @@ impl SignatureVerify for CatchUpPackage {
         verify_catch_up_package(crypto, subnet_id_to_validate_against, self).map_err(
             |err| match err {
                 CatchUpPackageVerificationError::HighThresholdTranscriptNotFound => {
-                    ValidationFailure::TranscriptNotFound(self.height(), NiDkgTag::HighThreshold)
-                        .into()
+                    InvalidArtifactReason::TranscriptNotFound(
+                        self.height(),
+                        NiDkgTag::HighThreshold,
+                    )
+                    .into()
                 }
                 CatchUpPackageVerificationError::InappropriateDkgId { signer_dkg_id, .. } => {
                     InvalidArtifactReason::InappropriateDkgId(signer_dkg_id).into()
