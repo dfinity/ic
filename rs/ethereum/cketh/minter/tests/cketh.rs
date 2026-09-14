@@ -1192,6 +1192,8 @@ fn should_derive_minter_address() {
 #[allow(deprecated)]
 #[test]
 fn should_retrieve_minter_info() {
+    const MINIMUM_ETH_DEPOSIT_WEI: u64 = 5_000_000_000_000_000;
+
     let cketh = CkEthSetup::default();
     let max_eth_logs_block_range = cketh.max_logs_block_range();
     let caller: Principal = cketh.caller.into();
@@ -1223,6 +1225,7 @@ fn should_retrieve_minter_info() {
             last_gas_fee_estimate: None,
             erc20_balances: None,
             minimum_deposit_amounts: None,
+            minimum_eth_deposit_amount: Some(Nat::from(MINIMUM_ETH_DEPOSIT_WEI)),
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_deposit_with_subaccount_scraped_block_number: Some(

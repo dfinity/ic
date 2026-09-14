@@ -505,12 +505,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
             } => ET::AcceptedSweepRequest(SweepRequest {
                 id: SweepId(sweep_id.0.to_u64().unwrap()),
                 destination: destination.parse().unwrap(),
-                token: match ic_cketh_minter::asset::Asset::try_from(asset).unwrap() {
-                    ic_cketh_minter::asset::Asset::Erc20(address) => address,
-                    ic_cketh_minter::asset::Asset::Eth => {
-                        panic!("BUG: no recorded sweep moves ETH yet")
-                    }
-                },
+                asset: asset.try_into().unwrap(),
                 items: map_authorized_sweep_items(items),
                 max_transaction_fee: max_transaction_fee.try_into().unwrap(),
                 created_at,

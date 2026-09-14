@@ -2957,7 +2957,8 @@ mod sweep_lane {
     };
 
     const SWEEP_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
-    use crate::sweeper_contract::SweepItem;
+    use crate::asset::Asset;
+    use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch, encode_sweep_eth_batch};
     use crate::tx::{
         DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate,
         SignableTransaction, SignedAuthorization, SweepTransaction, TransactionSignature,
@@ -2977,7 +2978,7 @@ mod sweep_lane {
         SweepRequest {
             id: SweepId(id),
             destination: Address::new([id as u8; 20]),
-            token: Address::new([0xc0; 20]),
+            asset: Asset::Erc20(Address::new([0xc0; 20])),
             items: vec![sweep_item(1, None), sweep_item(2, None)],
             max_transaction_fee: Wei::from(1_000_000_000_000_000_u64),
             created_at: 1_620_328_630_000_000_000,
@@ -3055,21 +3056,73 @@ mod sweep_lane {
 
     #[test]
     fn should_scale_the_sweep_gas_limit_with_the_distinct_addresses_walked() {
-        const MEASURED_TEN_DEPOSIT_SWEEP_GAS: u128 = 609_431;
+        const MEASURED_TEN_DEPOSIT_ERC20_SWEEP_GAS: u128 = 609_431;
+        const MEASURED_TEN_DEPOSIT_ETH_SWEEP_GAS: u128 = 413_076;
+        let erc20 = Asset::Erc20(Address::new([0xc0; 20]));
 
         let items_for = |addresses: u8| -> Vec<AuthorizedSweepItem> {
             (1..=addresses).map(|seed| sweep_item(seed, None)).collect()
         };
 
-        assert_eq!(sweep_gas_limit(&items_for(1)), GasAmount::new(225_000));
-        assert_eq!(sweep_gas_limit(&items_for(10)), GasAmount::new(1_710_000));
-        assert!(sweep_gas_limit(&items_for(10)) > GasAmount::new(MEASURED_TEN_DEPOSIT_SWEEP_GAS));
+        assert_eq!(
+            sweep_gas_limit(erc20, &items_for(1)),
+            GasAmount::new(225_000)
+        );
+        assert_eq!(
+            sweep_gas_limit(erc20, &items_for(10)),
+            GasAmount::new(1_710_000)
+        );
+        assert!(
+            sweep_gas_limit(erc20, &items_for(10))
+                > GasAmount::new(MEASURED_TEN_DEPOSIT_ERC20_SWEEP_GAS)
+        );
+
+        assert_eq!(
+            sweep_gas_limit(Asset::Eth, &items_for(1)),
+            GasAmount::new(140_000)
+        );
+        assert_eq!(
+            sweep_gas_limit(Asset::Eth, &items_for(10)),
+            GasAmount::new(860_000)
+        );
+        assert!(
+            sweep_gas_limit(Asset::Eth, &items_for(10))
+                > GasAmount::new(MEASURED_TEN_DEPOSIT_ETH_SWEEP_GAS)
+        );
+        assert!(
+            sweep_gas_limit(Asset::Eth, &items_for(10)) < sweep_gas_limit(erc20, &items_for(10))
+        );
 
         let one_address_ten_times: Vec<_> = (0..10).map(|_| sweep_item(1, None)).collect();
         assert_eq!(
-            sweep_gas_limit(&one_address_ten_times),
-            sweep_gas_limit(&items_for(1))
+            sweep_gas_limit(erc20, &one_address_ten_times),
+            sweep_gas_limit(erc20, &items_for(1))
         );
+    }
+
+    #[test]
+    fn should_encode_the_batch_call_of_the_asset_the_sweep_moves() {
+        let token = Address::new([0xc0; 20]);
+        let items: Vec<SweepItem> = sweep_request(0)
+            .items
+            .iter()
+            .map(|authorized| authorized.item.clone())
+            .collect();
+        let erc20_sweep = SweepRequest {
+            asset: Asset::Erc20(token),
+            ..sweep_request(0)
+        };
+        let eth_sweep = SweepRequest {
+            asset: Asset::Eth,
+            ..sweep_request(0)
+        };
+
+        assert_eq!(
+            erc20_sweep.call_data(),
+            encode_sweep_erc20_batch(&items, &[token])
+        );
+        assert_eq!(eth_sweep.call_data(), encode_sweep_eth_batch(&items));
+        assert_ne!(eth_sweep.call_data(), erc20_sweep.call_data());
     }
 
     #[test]
@@ -3084,8 +3137,14 @@ mod sweep_lane {
             )
             .expect("BUG: the fixture allowance covers the fixture fee");
 
-        assert_eq!(request.gas_limit(), sweep_gas_limit(&request.items));
-        assert_eq!(transaction.gas_limit(), sweep_gas_limit(&request.items));
+        assert_eq!(
+            request.gas_limit(),
+            sweep_gas_limit(request.asset, &request.items)
+        );
+        assert_eq!(
+            transaction.gas_limit(),
+            sweep_gas_limit(request.asset, &request.items)
+        );
     }
 
     #[test]

@@ -464,6 +464,13 @@ impl CkEthSetup {
         .unwrap()
     }
 
+    pub fn minter_count_events(&self, filter: impl Fn(&Event) -> bool) -> usize {
+        self.get_all_events()
+            .into_iter()
+            .filter(|event| filter(event))
+            .count()
+    }
+
     pub fn get_all_events(&self) -> Vec<Event> {
         const FIRST_BATCH_SIZE: u64 = 100;
         let GetEventsResult {

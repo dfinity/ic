@@ -854,7 +854,7 @@ fn automatic_deposit(
 }
 
 #[test]
-fn should_keep_eth_entries_out_of_sweep_batches() {
+fn should_batch_eth_entries_alongside_tokens() {
     let mut deposits = AutomaticDeposits::default();
     deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
@@ -873,13 +873,25 @@ fn should_keep_eth_entries_out_of_sweep_batches() {
 
     let batches = deposits.requests_batch(10);
 
-    assert_eq!(batches.len(), 1);
+    assert_eq!(batches.len(), 2);
+    assert_eq!(accounts_in(&batches, Asset::Eth), vec![account(0)]);
     assert_eq!(accounts_in(&batches, usdc()), vec![account(1)]);
+}
+
+#[test]
+fn should_cap_each_asset_batch_at_the_requested_size() {
+    let mut entries: Vec<(Account, Asset)> =
+        (0..11).map(|index| (account(index), Asset::Eth)).collect();
+    entries.push((account(11), Asset::Erc20(usdc())));
+    let deposits = queued(&entries);
+
+    let batches = deposits.requests_batch(10);
+
     assert_eq!(
-        deposits.sweep_len(),
-        2,
-        "BUG: the ETH entry stays queued, awaiting the sweepEthBatch lane"
+        accounts_in(&batches, Asset::Eth),
+        (0..10).map(account).collect::<Vec<_>>()
     );
+    assert_eq!(accounts_in(&batches, usdc()), vec![account(11)]);
 }
 
 #[test]
@@ -894,7 +906,7 @@ fn should_batch_queued_deposits_by_token() {
 
     assert_eq!(
         batches.keys().copied().collect::<Vec<_>>(),
-        vec![usdc(), usdt()]
+        vec![Asset::Erc20(usdc()), Asset::Erc20(usdt())]
     );
     assert_eq!(accounts_in(&batches, usdc()), vec![account(0), account(1)]);
     assert_eq!(accounts_in(&batches, usdt()), vec![account(2)]);
@@ -907,23 +919,25 @@ fn should_batch_queued_deposits_by_token() {
 
 #[test]
 fn should_stop_offering_a_deposit_a_sweep_has_taken() {
-    let mut deposits = queued(&[(account(0), usdc()), (account(1), usdc())]);
+    for asset in sweepable_assets() {
+        let mut deposits = queued(&[(account(0), asset), (account(1), asset)]);
 
-    deposits.record_sweep_scheduled(SweepId(7), usdc(), [account(0)]);
+        deposits.record_sweep_scheduled(SweepId(7), asset, [account(0)]);
 
-    let batches = deposits.requests_batch(10);
-    assert_eq!(accounts_in(&batches, usdc()), vec![account(1)]);
+        let batches = deposits.requests_batch(10);
+        assert_eq!(accounts_in(&batches, asset), vec![account(1)]);
 
-    // The taken deposit is still queued: only a settled sweep removes it.
-    assert_eq!(deposits.sweep_len(), 2);
+        // The taken deposit is still queued: only a settled sweep removes it.
+        assert_eq!(deposits.sweep_len(), 2);
+    }
 }
 
 #[test]
 fn should_offer_nothing_once_every_deposit_is_taken() {
-    let mut deposits = queued(&[(account(0), usdc()), (account(1), usdt())]);
+    let mut deposits = queued(&[(account(0), Asset::Eth), (account(1), Asset::Erc20(usdt()))]);
 
-    deposits.record_sweep_scheduled(SweepId(1), usdc(), [account(0)]);
-    deposits.record_sweep_scheduled(SweepId(2), usdt(), [account(1)]);
+    deposits.record_sweep_scheduled(SweepId(1), Asset::Eth, [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(2), Asset::Erc20(usdt()), [account(1)]);
 
     assert!(deposits.requests_batch(10).is_empty());
     assert_eq!(deposits.sweep_len(), 2);
@@ -931,11 +945,21 @@ fn should_offer_nothing_once_every_deposit_is_taken() {
 
 #[test]
 #[should_panic(expected = "was already taken by another sweep")]
-fn should_refuse_to_hand_the_same_deposit_to_two_sweeps() {
-    let mut deposits = queued(&[(account(0), usdc())]);
+fn should_refuse_to_hand_the_same_erc20_deposit_to_two_sweeps() {
+    hand_a_deposit_to_two_sweeps(Asset::Erc20(usdc()));
+}
 
-    deposits.record_sweep_scheduled(SweepId(1), usdc(), [account(0)]);
-    deposits.record_sweep_scheduled(SweepId(2), usdc(), [account(0)]);
+#[test]
+#[should_panic(expected = "was already taken by another sweep")]
+fn should_refuse_to_hand_the_same_eth_deposit_to_two_sweeps() {
+    hand_a_deposit_to_two_sweeps(Asset::Eth);
+}
+
+fn hand_a_deposit_to_two_sweeps(asset: Asset) {
+    let mut deposits = queued(&[(account(0), asset)]);
+
+    deposits.record_sweep_scheduled(SweepId(1), asset, [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(2), asset, [account(0)]);
 }
 
 #[test]
@@ -943,45 +967,52 @@ fn should_refuse_to_hand_the_same_deposit_to_two_sweeps() {
 fn should_refuse_to_schedule_a_deposit_that_is_not_queued() {
     let mut deposits = queued(&[(account(0), usdc())]);
 
-    deposits.record_sweep_scheduled(SweepId(1), usdt(), [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(1), Asset::Erc20(usdt()), [account(0)]);
 }
 
 #[tokio::test]
 async fn should_release_a_deposit_once_its_sweep_succeeds() {
-    let (mut deposits, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
-    queue(&mut deposits, &[(account(1), usdc())]);
+    for asset in sweepable_assets() {
+        let (mut deposits, request) = deposits_with_enqueued_sweep(&[(account(0), asset)]).await;
+        queue(&mut deposits, &[(account(1), asset)]);
 
-    finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+        finalize_sweep(&mut deposits, request, TransactionStatus::Success);
 
-    // The swept pair is gone from the queue; the pair queued after the sweep was decided is still
-    // offered.
-    assert_eq!(deposits.sweep_len(), 1);
-    assert_eq!(
-        accounts_in(&deposits.requests_batch(10), usdc()),
-        vec![account(1)]
-    );
+        // The swept pair is gone from the queue; the pair queued after the sweep was decided is
+        // still offered.
+        assert_eq!(deposits.sweep_len(), 1);
+        assert_eq!(
+            accounts_in(&deposits.requests_batch(10), asset),
+            vec![account(1)]
+        );
+    }
 }
 
 #[tokio::test]
-async fn should_drop_a_deposit_once_its_sweep_fails() {
-    let (mut deposits, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+async fn should_drop_every_deposit_of_a_sweep_once_it_fails() {
+    for asset in sweepable_assets() {
+        let (mut deposits, request) =
+            deposits_with_enqueued_sweep(&[(account(0), asset), (account(1), asset)]).await;
 
-    finalize_sweep(&mut deposits, request, TransactionStatus::Failure);
+        finalize_sweep(&mut deposits, request, TransactionStatus::Failure);
 
-    // A reverted sweep moved nothing, but the minter does not retry: the pair leaves the queue and
-    // has to be armed afresh.
-    assert_eq!(deposits.sweep_len(), 0);
-    assert!(deposits.requests_batch(10).is_empty());
+        // A reverted sweep moved nothing, but the minter does not retry: every pair the sweep named
+        // leaves the queue, not only the one that made it revert, and each has to be armed afresh.
+        assert_eq!(deposits.sweep_len(), 0);
+        assert!(deposits.requests_batch(10).is_empty());
+    }
 }
 
 #[tokio::test]
 async fn should_release_every_account_a_sweep_held() {
-    let (mut deposits, request) =
-        deposits_with_enqueued_sweep(&[(account(0), usdc()), (account(1), usdc())]).await;
+    for asset in sweepable_assets() {
+        let (mut deposits, request) =
+            deposits_with_enqueued_sweep(&[(account(0), asset), (account(1), asset)]).await;
 
-    finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+        finalize_sweep(&mut deposits, request, TransactionStatus::Success);
 
-    assert_eq!(deposits.sweep_len(), 0);
+        assert_eq!(deposits.sweep_len(), 0);
+    }
 }
 
 /// The mismatch this test finalizes cannot come out of `create_pending_sweeper_requests`, which
@@ -993,7 +1024,7 @@ async fn should_refuse_to_finalize_a_sweep_whose_deposit_left_the_queue() {
     let (_, request) =
         deposits_with_enqueued_sweep(&[(account(0), usdc()), (account(1), usdc())]).await;
     let mut deposits = queued(&[(account(0), usdc())]);
-    deposits.record_sweep_scheduled(SweepId(0), usdc(), [account(0)]);
+    deposits.record_sweep_scheduled(SweepId(0), Asset::Erc20(usdc()), [account(0)]);
     deposits.record_sweep_request(request.clone());
 
     finalize_sweep(&mut deposits, request, TransactionStatus::Success);
@@ -1036,26 +1067,22 @@ fn finalize_sweep(
 }
 
 /// An [`AutomaticDeposits`] whose sweep queue holds exactly these funded pairs.
-fn queued(pairs: &[(Account, Address)]) -> AutomaticDeposits {
+fn queued<A: Into<Asset> + Copy>(pairs: &[(Account, A)]) -> AutomaticDeposits {
     let mut deposits = AutomaticDeposits::default();
     queue(&mut deposits, pairs);
     assert_eq!(deposits.sweep_len(), pairs.len());
     deposits
 }
 
-fn queue(deposits: &mut AutomaticDeposits, pairs: &[(Account, Address)]) {
-    for (account, token) in pairs {
+fn queue<A: Into<Asset> + Copy>(deposits: &mut AutomaticDeposits, pairs: &[(Account, A)]) {
+    for (account, asset) in pairs {
+        let asset: Asset = (*asset).into();
         deposits
-            .watch_deposit(
-                ts(0),
-                *account,
-                Asset::Erc20(*token),
-                deposit_address(account),
-            )
+            .watch_deposit(ts(0), *account, asset, deposit_address(account))
             .unwrap();
         deposits.record_automatic_deposit_received(&automatic_deposit(
             *account,
-            *token,
+            asset,
             10,
             BlockNumber::new(900),
             3,
@@ -1063,9 +1090,17 @@ fn queue(deposits: &mut AutomaticDeposits, pairs: &[(Account, Address)]) {
     }
 }
 
-fn accounts_in(batches: &BTreeMap<Address, Vec<SweepTarget>>, token: Address) -> Vec<Account> {
+/// One asset of each kind the sweep queue batches, so a lifecycle test covers both.
+fn sweepable_assets() -> [Asset; 2] {
+    [Asset::Eth, Asset::Erc20(usdc())]
+}
+
+fn accounts_in(
+    batches: &BTreeMap<Asset, Vec<SweepTarget>>,
+    asset: impl Into<Asset>,
+) -> Vec<Account> {
     batches
-        .get(&token)
+        .get(&asset.into())
         .map(|targets| targets.iter().map(|target| target.account()).collect())
         .unwrap_or_default()
 }

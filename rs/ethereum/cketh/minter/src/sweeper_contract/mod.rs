@@ -18,6 +18,10 @@ use minicbor::{Decode, Encode};
 /// keccak256("sweepErc20Batch((address,bytes32,bytes32,bytes32,bytes32,uint8)[],address[])").
 const SWEEP_ERC20_BATCH_SELECTOR: [u8; 4] = hex_literal::hex!("3a7ce054");
 
+/// First 4 bytes of
+/// keccak256("sweepEthBatch((address,bytes32,bytes32,bytes32,bytes32,uint8)[])").
+const SWEEP_ETH_BATCH_SELECTOR: [u8; 4] = hex_literal::hex!("509181f7");
+
 /// A 6-word ABI head: `(address, bytes32, bytes32, bytes32, bytes32, uint8)`. Every component is
 /// static, so the elements of a `SweepItem[]` are encoded inline rather than behind offsets.
 const WORDS_PER_ITEM: usize = 6;
@@ -59,21 +63,46 @@ pub fn encode_sweep_erc20_batch(items: &[SweepItem], tokens: &[Address]) -> Vec<
 
     data.extend(word(items.len()));
     for item in items {
-        data.extend(<[u8; 32]>::from(item.deposit.as_address()));
-        data.extend(encode_principal(&item.account.owner));
-        data.extend(item.account.effective_subaccount());
-        data.extend(item.attestation.r.to_be_bytes());
-        data.extend(item.attestation.s.to_be_bytes());
-        // `ecrecover` wants v as 27 or 28, where the signature carries the parity bit.
-        data.extend(word(usize::from(
-            27 + u8::from(item.attestation.signature_y_parity),
-        )));
+        data.extend(encode_item(item));
     }
 
     data.extend(word(tokens.len()));
     for token in tokens {
         data.extend(<[u8; 32]>::from(token));
     }
+    data
+}
+
+/// Encode `sweepEthBatch(SweepItem[] items)` on the deployed delegate, which sweeps the whole
+/// ETH balance held by every `item`'s deposit address to the minter's main address through the
+/// deposit helper.
+///
+/// The single argument is dynamic, so the head holds one offset and the items block follows.
+pub fn encode_sweep_eth_batch(items: &[SweepItem]) -> Vec<u8> {
+    let head_len = WORD;
+    let items_block_len = WORD + items.len() * WORDS_PER_ITEM * WORD;
+
+    let mut data = Vec::with_capacity(SWEEP_ETH_BATCH_SELECTOR.len() + head_len + items_block_len);
+    data.extend(SWEEP_ETH_BATCH_SELECTOR);
+    data.extend(word(head_len));
+    data.extend(word(items.len()));
+    for item in items {
+        data.extend(encode_item(item));
+    }
+    data
+}
+
+fn encode_item(item: &SweepItem) -> Vec<u8> {
+    let mut data = Vec::with_capacity(WORDS_PER_ITEM * WORD);
+    data.extend(<[u8; 32]>::from(item.deposit.as_address()));
+    data.extend(encode_principal(&item.account.owner));
+    data.extend(item.account.effective_subaccount());
+    data.extend(item.attestation.r.to_be_bytes());
+    data.extend(item.attestation.s.to_be_bytes());
+    // `ecrecover` wants v as 27 or 28, where the signature carries the parity bit.
+    data.extend(word(usize::from(
+        27 + u8::from(item.attestation.signature_y_parity),
+    )));
     data
 }
 

@@ -205,11 +205,11 @@ impl AutomaticDeposits {
             .sweeper_transactions
             .get_processed_request(&id)
             .expect("BUG: missing sweep request");
-        let token = request.token;
+        let asset = request.asset;
         let accounts: Vec<_> = request.items.iter().map(|item| item.item.account).collect();
 
         for account in accounts {
-            let request = DepositRequest::new(account, Asset::Erc20(token));
+            let request = DepositRequest::new(account, asset);
             let entry = self
                 .sweep
                 .remove(&request)
@@ -554,23 +554,14 @@ impl AutomaticDeposits {
         })
     }
 
-    /// The queued deposits a sweep could take next, batched by token, skipping those a sweep
+    /// The queued deposits a sweep could take next, batched by asset, skipping those a sweep
     /// already holds: taking them twice would move a balance the minter has already accounted for.
-    /// ETH entries stay queued but are never batched yet: they wait for the `sweepEthBatch` lane
-    /// (DEFI-2931).
-    pub fn requests_batch(
-        &self,
-        requested_batch_size: usize,
-    ) -> BTreeMap<Address, Vec<SweepTarget>> {
+    pub fn requests_batch(&self, requested_batch_size: usize) -> BTreeMap<Asset, Vec<SweepTarget>> {
         let mut batches = BTreeMap::new();
         for (deposit_request, sweep_entry) in
             self.sweep.iter().filter(|(_, entry)| entry.is_sweepable())
         {
-            let token = match deposit_request.asset {
-                Asset::Erc20(token) => token,
-                Asset::Eth => continue,
-            };
-            let batch: &mut Vec<_> = batches.entry(token).or_default();
+            let batch: &mut Vec<_> = batches.entry(deposit_request.asset).or_default();
             if batch.len() < requested_batch_size {
                 batch.push(SweepTarget {
                     account: deposit_request.account,
@@ -581,7 +572,7 @@ impl AutomaticDeposits {
         batches
     }
 
-    /// Record that `sweep_id` took these accounts' deposits of `token`: each leaves the pool of
+    /// Record that `sweep_id` took these accounts' deposits of `asset`: each leaves the pool of
     /// sweepable entries until the sweep is done with it.
     ///
     /// # Panics
@@ -591,11 +582,11 @@ impl AutomaticDeposits {
     pub fn record_sweep_scheduled(
         &mut self,
         sweep_id: SweepId,
-        token: Address,
+        asset: Asset,
         accounts: impl IntoIterator<Item = Account>,
     ) {
         for account in accounts {
-            let request = DepositRequest::new(account, Asset::Erc20(token));
+            let request = DepositRequest::new(account, asset);
             let entry = self
                 .sweep
                 .get_mut(&request)

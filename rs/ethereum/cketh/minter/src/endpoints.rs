@@ -87,6 +87,7 @@ pub struct MinterInfo {
     pub last_gas_fee_estimate: Option<GasFeeEstimate>,
     pub erc20_balances: Option<Vec<Erc20Balance>>,
     pub minimum_deposit_amounts: Option<Vec<Erc20MinimumDeposit>>,
+    pub minimum_eth_deposit_amount: Option<Nat>,
     pub last_eth_scraped_block_number: Option<Nat>,
     pub last_erc20_scraped_block_number: Option<Nat>,
     pub last_deposit_with_subaccount_scraped_block_number: Option<Nat>,

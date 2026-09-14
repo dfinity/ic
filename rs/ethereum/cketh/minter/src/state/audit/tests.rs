@@ -570,10 +570,7 @@ impl GetEventsFile {
                 } => ET::AcceptedSweepRequest(SweepRequest {
                     id: SweepId(sweep_id.0.to_u64().unwrap()),
                     destination: destination.parse().unwrap(),
-                    token: match crate::asset::Asset::try_from(asset).unwrap() {
-                        crate::asset::Asset::Erc20(address) => address,
-                        crate::asset::Asset::Eth => panic!("BUG: no recorded sweep moves ETH yet"),
-                    },
+                    asset: asset.try_into().unwrap(),
                     items: map_authorized_sweep_items(items),
                     max_transaction_fee: max_transaction_fee.try_into().unwrap(),
                     created_at,

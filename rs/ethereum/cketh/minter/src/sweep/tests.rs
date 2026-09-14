@@ -179,8 +179,8 @@ async fn should_enqueue_one_sweep_per_token() {
 
     let enqueued = pending_sweeps();
     assert_eq!(
-        enqueued.iter().map(|r| r.token).collect::<Vec<_>>(),
-        vec![usdc(), usdt()]
+        enqueued.iter().map(|r| r.asset).collect::<Vec<_>>(),
+        vec![Asset::Erc20(usdc()), Asset::Erc20(usdt())]
     );
     assert_eq!(
         enqueued.iter().map(|r| r.id).collect::<Vec<_>>(),
