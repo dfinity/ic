@@ -252,7 +252,7 @@ pub fn encode_delegation_batch(addresses: &[DepositAddress]) -> Vec<u8> {
 }
 
 /// Decode the return blob of [`DELEGATION_BATCHER_INITCODE`] — one leading zero word, then
-/// `n x 32` bytes — into `n` delegations, in call order.
+/// `address_count x 32` bytes — into `address_count` delegations, in call order.
 ///
 /// Each word after the first is the first 32 bytes of an account's code, zero-padded beyond its
 /// size. The
@@ -266,7 +266,7 @@ pub fn encode_delegation_batch(addresses: &[DepositAddress]) -> Vec<u8> {
 ///   contract out of the `0xef` space;
 /// * anything else is deployed contract code.
 ///
-/// Returns `Err` if the blob length is not exactly `n + 1` words; never panics.
+/// Returns `Err` if the blob length is not exactly `address_count + 1` words; never panics.
 ///
 /// The first classification rests on the account being a deposit address and does not generalize:
 /// [EIP-3541] reserves only the `0xef` prefix, so a contract whose runtime code starts with 32
@@ -275,19 +275,25 @@ pub fn encode_delegation_batch(addresses: &[DepositAddress]) -> Vec<u8> {
 /// [EIP-3541]: https://eips.ethereum.org/EIPS/eip-3541
 /// [EIP-7702]: https://eips.ethereum.org/EIPS/eip-7702
 pub fn decode_delegation_batch(
-    ret: &[u8],
-    n: usize,
+    returned_blob: &[u8],
+    address_count: usize,
 ) -> Result<Vec<Delegation>, BatcherDecodeError> {
-    let expected = (DELEGATION_BATCH_LEADING_WORDS + n) * WORD;
-    if ret.len() != expected {
+    let expected = (DELEGATION_BATCH_LEADING_WORDS + address_count) * WORD;
+    if returned_blob.len() != expected {
         return Err(BatcherDecodeError::WrongLength {
             expected,
-            got: ret.len(),
+            got: returned_blob.len(),
         });
     }
-    Ok(ret[DELEGATION_BATCH_LEADING_WORDS * WORD..]
+    Ok(returned_blob[DELEGATION_BATCH_LEADING_WORDS * WORD..]
         .chunks_exact(WORD)
-        .map(|word| classify_code_prefix(word.try_into().expect("BUG: chunk is exactly one word")))
+        .map(|code_prefix| {
+            classify_code_prefix(
+                code_prefix
+                    .try_into()
+                    .expect("BUG: chunk is exactly one word"),
+            )
+        })
         .collect())
 }
 
