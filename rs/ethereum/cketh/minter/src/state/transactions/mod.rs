@@ -312,20 +312,15 @@ const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
 const SWEEP_GAS_PER_ETH_DEPOSIT: GasAmount = GasAmount::new(40_000);
 
 pub fn sweep_gas_limit(asset: Asset, items: &[AuthorizedSweepItem]) -> GasAmount {
-    let saturating_count = |occurrences: usize| u64::try_from(occurrences).unwrap_or(u64::MAX);
-    let addresses = saturating_count(
-        items
-            .iter()
-            .map(|authorized| authorized.item.deposit)
-            .collect::<BTreeSet<_>>()
-            .len(),
-    );
-    let authorizations = saturating_count(
-        items
-            .iter()
-            .filter(|authorized| authorized.authorization.is_some())
-            .count(),
-    );
+    let addresses = items
+        .iter()
+        .map(|authorized| authorized.item.deposit)
+        .collect::<BTreeSet<_>>()
+        .len() as u64;
+    let authorizations = items
+        .iter()
+        .filter(|authorized| authorized.authorization.is_some())
+        .count() as u64;
     let gas_per_address: &[GasAmount] = match asset {
         Asset::Eth => &[SWEEP_GAS_PER_ETH_DEPOSIT],
         Asset::Erc20(_) => &[SWEEP_GAS_PER_BALANCE_CHECK, SWEEP_GAS_PER_TRANSFER],
