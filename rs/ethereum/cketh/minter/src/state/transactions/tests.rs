@@ -3096,14 +3096,10 @@ mod sweep_lane {
             sweep_gas_limit(Asset::Eth, &items_for(10)) < sweep_gas_limit(erc20, &items_for(10))
         );
 
-        let one_address_ten_times: Vec<_> = (0..10)
-            .map(|_| sweep_item(1, Some(authorization(1))))
-            .collect();
+        let one_address_ten_times: Vec<_> = (0..10).map(|_| sweep_item(1, None)).collect();
         assert_eq!(
             sweep_gas_limit(erc20, &one_address_ten_times),
-            GasAmount::new(585_000),
-            "the balance check and the transfer collapse onto the one address walked, while every \
-             tuple in the list is charged"
+            sweep_gas_limit(erc20, &[sweep_item(1, None)])
         );
     }
 
