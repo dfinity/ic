@@ -386,6 +386,29 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
     }
 }
 
+/// Determines who runs the cycles and memory usage checks and updates for the
+/// memory usage change of a management operation executed by
+/// `ExecutionEnvironment::execute_mgmt_operation_on_canister`.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub(crate) enum CyclesAndMemoryUsageAccounting {
+    /// `execute_mgmt_operation_on_canister` accounts for the memory usage change
+    /// of the operation (and charges for the operation's
+    /// `CanisterManagerResponse::instructions_to_charge_on_success`) after the operation
+    /// succeeded. This is what management operations should use: it accounts for
+    /// the overall memory usage change of the operation, including any canister
+    /// history the operation recorded.
+    AfterOperation,
+    /// The operation runs `CanisterManager::cycles_and_memory_usage_checks_and_updates`
+    /// itself. This is only needed by `update_settings`, whose freezing threshold
+    /// check must not be unconditional: it deliberately tolerates the canister
+    /// becoming frozen by the updated settings (and only fails if the compute or
+    /// memory allocation increases), so that the freezing threshold can be raised
+    /// to freeze the canister. Doing the checks and updates in the operation also
+    /// keeps them consistent with the ones `update_settings` runs for the updated
+    /// memory *allocation* (which the checks and updates here do not cover).
+    InOperation,
+}
+
 /// Represent a paused execution that can be resumed or aborted.
 pub trait PausedExecution: std::fmt::Debug + Send {
     /// Resumes a paused execution.
@@ -617,12 +640,25 @@ impl ExecutionEnvironment {
     /// the cycles consumed before the failure can be charged and
     /// the instructions can be accounted for.
     ///
+    /// Unless the operation accounts for its cycles and memory usage itself
+    /// (see `CyclesAndMemoryUsageAccounting`), the memory usage change of the
+    /// operation is accounted for after the operation succeeded: the memory
+    /// usage before the operation is read off the saved canister state and the
+    /// memory usage after the operation off the updated canister state (and thus
+    /// includes any canister history recorded by the operation). The instructions
+    /// charged for at that point are the operation's
+    /// `CanisterManagerResponse::instructions_to_charge_on_success`, i.e. the ones it did
+    /// not already charge for itself.
+    ///
     /// If the operation fails with an error, then
     /// - changes to the canister state, message, and round limits
     ///   are discarded;
     /// - instructions used (before the failure) are accounted for
     ///   in round limits;
     /// - cycles consumed for those instructions are charged.
+    ///
+    /// The same holds if accounting for the memory usage change of a successful
+    /// operation fails, i.e., the operation is rolled back in that case, too.
     ///
     /// Note. It is expected that the cycles consumed for instructions
     /// executed before the failure can actually be charged.
@@ -633,6 +669,7 @@ impl ExecutionEnvironment {
         &self,
         canister_id: CanisterId,
         op: F,
+        accounting: CyclesAndMemoryUsageAccounting,
         state: &mut ReplicatedState,
         msg: &mut CanisterCall,
         round_limits: &mut RoundLimits,
@@ -648,6 +685,11 @@ impl ExecutionEnvironment {
     {
         let cost_schedule = state.get_own_cost_schedule();
         let subnet_cycles_config = state.get_own_subnet_cycles_config();
+        let sender = *msg.sender();
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
         let mut consumed_cycles = ConsumedCyclesForInstructions::new(
             &self.cycles_account_manager,
             cost_schedule,
@@ -658,7 +700,43 @@ impl ExecutionEnvironment {
                 let saved_canister = canister.clone();
                 let saved_msg = msg.clone();
                 let saved_round_limits = round_limits.clone();
-                match op(canister, msg, round_limits, &mut consumed_cycles) {
+                // The canister's memory usage before the operation.
+                let old_memory_usage = saved_canister.memory_usage();
+                let op_result = op(canister, msg, round_limits, &mut consumed_cycles);
+                let result = match (op_result, accounting) {
+                    (Ok(response), CyclesAndMemoryUsageAccounting::AfterOperation) => {
+                        let instructions = response.instructions_to_charge_on_success;
+                        self.canister_manager
+                            .cycles_and_memory_usage_checks_and_updates_after_operation(
+                                subnet_cycles_config,
+                                canister,
+                                sender,
+                                instructions,
+                                round_limits,
+                                old_memory_usage,
+                                &resource_saturation,
+                            )
+                            .map(|()| {
+                                round_limits.instructions -= as_round_instructions(instructions);
+                                response
+                            })
+                    }
+                    (result, CyclesAndMemoryUsageAccounting::InOperation) => {
+                        // An operation running the checks and updates itself must
+                        // charge for all of its instructions itself: the
+                        // `instructions_to_charge_on_success` that the branch above charges for
+                        // would be silently dropped here.
+                        debug_assert!(
+                            !matches!(&result, Ok(response)
+                                if response.instructions_to_charge_on_success != NumInstructions::new(0)),
+                            "`CyclesAndMemoryUsageAccounting::InOperation` drops \
+                             `CanisterManagerResponse::instructions_to_charge_on_success`"
+                        );
+                        result
+                    }
+                    (result, CyclesAndMemoryUsageAccounting::AfterOperation) => result,
+                };
+                match result {
                     Ok(response) => self.process_canister_manager_result(
                         Ok(response),
                         state,
@@ -1821,48 +1899,34 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok(Ic00Method::UploadChunk) => {
-                let resource_saturation = self.subnet_memory_saturation(
-                    &round_limits.subnet_available_memory,
-                    state.resource_limits(),
-                );
-                match UploadChunkArgs::decode(payload) {
-                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                        response: Err(err),
-                        refund: msg.take_cycles(),
-                    },
-                    Ok(args) => self.upload_chunk(
-                        *msg.sender(),
-                        &mut state,
-                        &mut msg,
-                        args,
-                        round_limits,
-                        &resource_saturation,
-                        current_round,
-                    ),
-                }
-            }
+            Ok(Ic00Method::UploadChunk) => match UploadChunkArgs::decode(payload) {
+                Err(err) => ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund: msg.take_cycles(),
+                },
+                Ok(args) => self.upload_chunk(
+                    *msg.sender(),
+                    &mut state,
+                    &mut msg,
+                    args,
+                    round_limits,
+                    current_round,
+                ),
+            },
 
             Ok(Ic00Method::ClearChunkStore) => match ClearChunkStoreArgs::decode(payload) {
                 Err(err) => ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
                     refund: msg.take_cycles(),
                 },
-                Ok(args) => {
-                    let resource_saturation = self.subnet_memory_saturation(
-                        &round_limits.subnet_available_memory,
-                        state.resource_limits(),
-                    );
-                    self.clear_chunk_store(
-                        *msg.sender(),
-                        &mut state,
-                        &mut msg,
-                        args,
-                        round_limits,
-                        &resource_saturation,
-                        current_round,
-                    )
-                }
+                Ok(args) => self.clear_chunk_store(
+                    *msg.sender(),
+                    &mut state,
+                    &mut msg,
+                    args,
+                    round_limits,
+                    current_round,
+                ),
             },
 
             Ok(Ic00Method::StoredChunks) => {
@@ -1953,6 +2017,7 @@ impl ExecutionEnvironment {
                                                 round_limits,
                                             )
                                         },
+                                        CyclesAndMemoryUsageAccounting::AfterOperation,
                                         &mut state,
                                         &mut msg,
                                         round_limits,
@@ -2020,21 +2085,14 @@ impl ExecutionEnvironment {
                         response: Err(err),
                         refund: msg.take_cycles(),
                     },
-                    Ok(args) => {
-                        let resource_saturation = self.subnet_memory_saturation(
-                            &round_limits.subnet_available_memory,
-                            state.resource_limits(),
-                        );
-                        self.delete_canister_snapshot(
-                            *msg.sender(),
-                            &mut state,
-                            &mut msg,
-                            args,
-                            round_limits,
-                            &resource_saturation,
-                            current_round,
-                        )
-                    }
+                    Ok(args) => self.delete_canister_snapshot(
+                        *msg.sender(),
+                        &mut state,
+                        &mut msg,
+                        args,
+                        round_limits,
+                        current_round,
+                    ),
                 }
             }
 
@@ -2732,6 +2790,9 @@ impl ExecutionEnvironment {
                     &self.metrics,
                 )
             },
+            // `update_settings` runs the checks and updates itself since its freezing
+            // threshold check must not be unconditional.
+            CyclesAndMemoryUsageAccounting::InOperation,
             state,
             msg,
             round_limits,
@@ -2750,24 +2811,13 @@ impl ExecutionEnvironment {
         time: Time,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
-        let subnet_cycles_config = state.get_own_subnet_cycles_config();
-        let resource_saturation = self.subnet_memory_saturation(
-            &round_limits.subnet_available_memory,
-            state.resource_limits(),
-        );
         self.execute_mgmt_operation_on_canister(
             canister_id,
-            |canister, _msg, round_limits, _consumed_cycles| {
-                self.canister_manager.uninstall_code(
-                    origin,
-                    canister,
-                    round_limits,
-                    subnet_admins,
-                    time,
-                    subnet_cycles_config,
-                    &resource_saturation,
-                )
+            |canister, _msg, _round_limits, _consumed_cycles| {
+                self.canister_manager
+                    .uninstall_code(origin, canister, subnet_admins, time)
             },
+            CyclesAndMemoryUsageAccounting::AfterOperation,
             state,
             msg,
             round_limits,
@@ -2791,6 +2841,7 @@ impl ExecutionEnvironment {
                 self.canister_manager
                     .start_canister(sender, canister, subnet_admins)
             },
+            CyclesAndMemoryUsageAccounting::AfterOperation,
             state,
             msg,
             round_limits,
@@ -2910,6 +2961,7 @@ impl ExecutionEnvironment {
                 self.canister_manager
                     .stop_canister(msg, call_id, canister, subnet_admins)
             },
+            CyclesAndMemoryUsageAccounting::AfterOperation,
             state,
             msg,
             round_limits,
@@ -2941,6 +2993,7 @@ impl ExecutionEnvironment {
                 self.canister_manager
                     .add_cycles(sender, cycles, canister, provisional_whitelist)
             },
+            CyclesAndMemoryUsageAccounting::AfterOperation,
             state,
             msg,
             round_limits,
@@ -2955,7 +3008,6 @@ impl ExecutionEnvironment {
         msg: &mut CanisterCall,
         args: UploadChunkArgs,
         round_limits: &mut RoundLimits,
-        resource_saturation: &ResourceSaturation,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
         let subnet_cycles_config = state.get_own_subnet_cycles_config();
@@ -2970,10 +3022,10 @@ impl ExecutionEnvironment {
                     chunk,
                     round_limits,
                     subnet_cycles_config,
-                    resource_saturation,
                     consumed_cycles,
                 )
             },
+            CyclesAndMemoryUsageAccounting::AfterOperation,
             state,
             msg,
             round_limits,
@@ -2988,22 +3040,15 @@ impl ExecutionEnvironment {
         msg: &mut CanisterCall,
         args: ClearChunkStoreArgs,
         round_limits: &mut RoundLimits,
-        resource_saturation: &ResourceSaturation,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
-        let subnet_cycles_config = state.get_own_subnet_cycles_config();
         let canister_id = args.get_canister_id();
         self.execute_mgmt_operation_on_canister(
             canister_id,
-            |canister, _msg, round_limits, _consumed_cycles| {
-                self.canister_manager.clear_chunk_store(
-                    sender,
-                    canister,
-                    round_limits,
-                    subnet_cycles_config,
-                    resource_saturation,
-                )
+            |canister, _msg, _round_limits, _consumed_cycles| {
+                self.canister_manager.clear_chunk_store(sender, canister)
             },
+            CyclesAndMemoryUsageAccounting::AfterOperation,
             state,
             msg,
             round_limits,
@@ -3035,28 +3080,21 @@ impl ExecutionEnvironment {
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
         let canister_id = args.get_canister_id();
-        let subnet_cycles_config = state.get_own_subnet_cycles_config();
-        let resource_saturation = self.subnet_memory_saturation(
-            &round_limits.subnet_available_memory,
-            state.resource_limits(),
-        );
         let time = state.time();
         let replace_snapshot = args.replace_snapshot();
         let uninstall_code = args.uninstall_code().unwrap_or_default();
         self.execute_mgmt_operation_on_canister(
             canister_id,
-            |canister, _msg, round_limits, _consumed_cycles| {
+            |canister, _msg, _round_limits, _consumed_cycles| {
                 self.canister_manager.take_canister_snapshot(
-                    subnet_cycles_config,
                     origin,
                     canister,
                     replace_snapshot,
                     uninstall_code,
-                    round_limits,
-                    &resource_saturation,
                     time,
                 )
             },
+            CyclesAndMemoryUsageAccounting::AfterOperation,
             state,
             msg,
             round_limits,
@@ -3113,10 +3151,6 @@ impl ExecutionEnvironment {
             };
 
         let subnet_cycles_config = state.get_own_subnet_cycles_config();
-        let resource_saturation = self.subnet_memory_saturation(
-            &round_limits.subnet_available_memory,
-            state.resource_limits(),
-        );
         let time = state.time();
         let expected_compiled_wasms = Arc::clone(&state.metadata.expected_compiled_wasms);
         self.execute_mgmt_operation_on_canister(
@@ -3132,12 +3166,12 @@ impl ExecutionEnvironment {
                     round_limits,
                     instruction_limits,
                     origin,
-                    &resource_saturation,
                     time,
                     &self.metrics,
                     consumed_cycles,
                 )
             },
+            CyclesAndMemoryUsageAccounting::AfterOperation,
             state,
             msg,
             round_limits,
@@ -3167,23 +3201,19 @@ impl ExecutionEnvironment {
         msg: &mut CanisterCall,
         args: DeleteCanisterSnapshotArgs,
         round_limits: &mut RoundLimits,
-        resource_saturation: &ResourceSaturation,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
         let canister_id = args.get_canister_id();
-        let subnet_cycles_config = state.get_own_subnet_cycles_config();
         self.execute_mgmt_operation_on_canister(
             canister_id,
-            |canister, _msg, round_limits, _consumed_cycles| {
+            |canister, _msg, _round_limits, _consumed_cycles| {
                 self.canister_manager.delete_canister_snapshot(
                     sender,
                     canister,
                     args.get_snapshot_id(),
-                    round_limits,
-                    subnet_cycles_config,
-                    resource_saturation,
                 )
             },
+            CyclesAndMemoryUsageAccounting::AfterOperation,
             state,
             msg,
             round_limits,
@@ -3215,6 +3245,7 @@ impl ExecutionEnvironment {
                     consumed_cycles,
                 )
             },
+            CyclesAndMemoryUsageAccounting::AfterOperation,
             state,
             msg,
             round_limits,
@@ -3298,25 +3329,14 @@ impl ExecutionEnvironment {
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
         let canister_id = args.get_canister_id();
-        let subnet_cycles_config = state.get_own_subnet_cycles_config();
-        let resource_saturation = self.subnet_memory_saturation(
-            &round_limits.subnet_available_memory,
-            state.resource_limits(),
-        );
         let time = state.time();
         self.execute_mgmt_operation_on_canister(
             canister_id,
-            |canister, _msg, round_limits, _consumed_cycles| {
-                self.canister_manager.create_snapshot_from_metadata(
-                    sender,
-                    canister,
-                    args,
-                    subnet_cycles_config,
-                    round_limits,
-                    &resource_saturation,
-                    time,
-                )
+            |canister, _msg, _round_limits, _consumed_cycles| {
+                self.canister_manager
+                    .create_snapshot_from_metadata(sender, canister, args, time)
             },
+            CyclesAndMemoryUsageAccounting::AfterOperation,
             state,
             msg,
             round_limits,
@@ -3335,10 +3355,6 @@ impl ExecutionEnvironment {
     ) -> ExecuteSubnetMessageResult {
         let canister_id = args.get_canister_id();
         let subnet_cycles_config = state.get_own_subnet_cycles_config();
-        let resource_saturation = self.subnet_memory_saturation(
-            &round_limits.subnet_available_memory,
-            state.resource_limits(),
-        );
         self.execute_mgmt_operation_on_canister(
             canister_id,
             |canister, _msg, round_limits, consumed_cycles| {
@@ -3348,10 +3364,10 @@ impl ExecutionEnvironment {
                     &args,
                     round_limits,
                     subnet_cycles_config,
-                    &resource_saturation,
                     consumed_cycles,
                 )
             },
+            CyclesAndMemoryUsageAccounting::AfterOperation,
             state,
             msg,
             round_limits,
