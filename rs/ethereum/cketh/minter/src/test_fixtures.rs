@@ -1,4 +1,3 @@
-use crate::EVM_RPC_ID_STAGING;
 use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
 use crate::balance_scan::batcher::Delegation;
@@ -21,6 +20,7 @@ use crate::tx::{
     AccessList, AuthorizationRequest, Eip1559TransactionRequest, FinalizedEip1559Transaction,
     GasFeeEstimate, Signed, TransactionSignature,
 };
+use crate::{EVM_RPC_ID_PRODUCTION, EVM_RPC_ID_STAGING};
 use candid::{Nat, Principal};
 use ethnum::u256;
 use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
@@ -301,7 +301,7 @@ pub fn stub_rpc_client(
             Err(error) => runtime.add_stub_error(error),
         };
     }
-    EvmRpcClient::builder(runtime, Principal::anonymous())
+    EvmRpcClient::builder(runtime, EVM_RPC_ID_PRODUCTION)
         .with_rpc_sources(RpcServices::EthMainnet(None))
         .with_consensus_strategy(ConsensusStrategy::Threshold {
             total: Some(4),
