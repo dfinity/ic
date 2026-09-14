@@ -274,6 +274,14 @@ impl State {
         Some(deposit_address(&master_public_key, &chain_code, account))
     }
 
+    /// The subaccount-aware deposit helper every attestation this minter signs names, `None` while
+    /// none is configured. Without it no deposit address can be attested, hence no sweep built.
+    pub fn deposit_helper_contract(&self) -> Option<Address> {
+        self.log_scrapings
+            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)
+            .copied()
+    }
+
     /// What a ckERC20 deposit address must attest to in order to be swept: the account it credits,
     /// bound to the chain and the subaccount-aware deposit helper this minter runs against.
     /// `None` while that helper is unknown.
@@ -281,9 +289,7 @@ impl State {
     /// The only place an [`AttestationRequest`] is built outside its own module, so a caller cannot
     /// attest under a chain or a helper the minter does not use.
     pub fn attestation_request(&self, account: Account) -> Option<AttestationRequest> {
-        let deposit_helper = *self
-            .log_scrapings
-            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)?;
+        let deposit_helper = self.deposit_helper_contract()?;
         Some(AttestationRequest::new(
             self.ethereum_network.chain_id(),
             deposit_helper,
@@ -295,9 +301,7 @@ impl State {
         &self,
         accounts: &[T],
     ) -> Option<Vec<AttestationRequest>> {
-        let deposit_helper = *self
-            .log_scrapings
-            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)?;
+        let deposit_helper = self.deposit_helper_contract()?;
         Some(
             accounts
                 .iter()
