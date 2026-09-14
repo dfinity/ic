@@ -260,7 +260,7 @@ impl CatchUpPackageProvider {
     // given CUP. This avoids unnecessary CUP downloads and hence reduces
     // network bandwidth requirements.
     //
-    // Also checks the signer and the signature of the downloaded catch up package.
+    // Also checks the signature of the downloaded catch up package.
     async fn fetch_and_verify_catch_up_package(
         &mut self,
         node_id: &NodeId,
