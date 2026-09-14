@@ -9538,3 +9538,46 @@ fn failed_take_canister_snapshot_does_not_charge_for_instructions() {
     assert_eq!(test.subnet_available_memory().get_execution_memory(), 0);
     assert_eq!(balance_before, balance_after);
 }
+
+#[test]
+fn clear_chunk_store_of_frozen_canister_with_empty_chunk_store_succeeds() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id)
+            .wasm_chunk_store_memory_usage(),
+        NumBytes::new(0)
+    );
+
+    // Set the freezing threshold high to freeze the canister.
+    let payload = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1_000_000_000_000)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, payload)
+        .unwrap();
+
+    // Clearing an already empty chunk store does not change the canister's memory
+    // usage and charges for no instructions, so the cycles and memory usage checks
+    // are skipped and the operation succeeds even though the canister is frozen.
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let clear_args = ClearChunkStoreArgs {
+        canister_id: canister_id.into(),
+    };
+    test.subnet_message(Method::ClearChunkStore, clear_args.encode())
+        .unwrap();
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    assert_eq!(balance_before, balance_after);
+    assert_eq!(
+        test.canister_state(canister_id)
+            .wasm_chunk_store_memory_usage(),
+        NumBytes::new(0)
+    );
+}
