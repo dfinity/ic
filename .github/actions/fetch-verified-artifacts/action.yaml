@@ -14,13 +14,14 @@ inputs:
   commit:
     required: true
     description: 40-hex git commit id whose artifacts to fetch (the CDN path segment).
-  signer-workflow:
+  build-workflow:
     required: true
     description: |
-      Workflow whose attest-uploads job must have attested the upload:
+      Top-level workflow of the CI run that must have uploaded and attested the
+      artifacts, enforced on the attestation certificate's Build Config URI:
       dfinity/ic/.github/workflows/ci-kickoff.yml for master commits,
       dfinity/ic/.github/workflows/release-testing.yml for rc--*/hotfix-*
-      commits.
+      commits. The signer is always ci-main.yml, which both of these call.
   source-ref-regex:
     required: true
     description: |
@@ -84,7 +85,7 @@ runs:
       shell: bash
       env:
         COMMIT: ${{ inputs.commit }}
-        SIGNER_WORKFLOW: ${{ inputs.signer-workflow }}
+        BUILD_WORKFLOW: ${{ inputs.build-workflow }}
         SOURCE_REF_REGEX: ${{ inputs.source-ref-regex }}
         FILES: ${{ inputs.files }}
         OUT_DIR: ${{ inputs.out-dir }}
@@ -147,7 +148,7 @@ runs:
           sums="$sums_cache/$(printf '%s' "$dir" | sha256sum | cut -d' ' -f1).SHA256SUMS"
           if ! [ -f "$sums" ]; then
             "$GITHUB_WORKSPACE/ci/scripts/fetch-attested-sums.sh" \
-              "$COMMIT" "$dir" "$SIGNER_WORKFLOW" "$SOURCE_REF_REGEX" "$sums.unverified"
+              "$COMMIT" "$dir" "$BUILD_WORKFLOW" "$SOURCE_REF_REGEX" "$sums.unverified"
             mv "$sums.unverified" "$sums"
           fi
 

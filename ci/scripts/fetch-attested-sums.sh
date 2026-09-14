@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
-# Download a directory's SHA256SUMS file from the CDN and verify it against
-# the build-provenance attestation created by the `attest-uploads` job of the
-# pipeline that built <commit> (see .github/actions/attest-uploads).
+# Download a directory's SHA256SUMS file from the CDN and verify it against the
+# build-provenance attestation minted by the CI run that built <commit> (the
+# Attest steps of .github/workflows/ci-main.yml, called by ci-kickoff.yml for
+# master commits or release-testing.yml for rc--*/hotfix-* commits).
 #
 # The CDN (download.dfinity.systems, S3 + Cloudflare R2) is not a trust anchor:
 # whoever can write to the buckets can replace artifacts and their SHA256SUMS
@@ -15,20 +16,27 @@
 # than SHA256SUMS files ever needs attestation verification.
 #
 # Usage:
-#   fetch-attested-sums.sh <commit> <cdn-subdir> <signer-workflow> <source-ref-regex> <out-file>
+#   fetch-attested-sums.sh <commit> <cdn-subdir> <build-workflow> <source-ref-regex> <out-file>
 #
 #   <commit>           40-hex git commit id whose artifacts to fetch
 #   <cdn-subdir>       directory under ic/<commit>/ on the CDN,
 #                      e.g. "canisters", "binaries/x86_64-linux", "guest-os/update-img"
-#   <signer-workflow>  workflow whose attest-uploads job must have attested the upload, e.g.
+#   <build-workflow>   top-level workflow of the CI run that must have uploaded and
+#                      attested the artifacts, e.g.
 #                        dfinity/ic/.github/workflows/ci-kickoff.yml (master commits)
 #                        dfinity/ic/.github/workflows/release-testing.yml (rc--*/hotfix-* commits)
+#                      Both of these call ci-main.yml as a reusable workflow and it is
+#                      ci-main.yml's upload jobs that attest, so ci-main.yml is always
+#                      the SIGNER (pinned below, invariant across pipelines) while the
+#                      calling pipeline shows up only in the certificate's Build Config
+#                      URI (OID 1.3.6.1.4.1.57264.1.18). `gh` has no flag for that
+#                      field, so it is enforced in the jq filter further down.
 #   <source-ref-regex> regex (anchored by this script) that the attestation's
 #                      source git ref must match, e.g.
 #                        refs/heads/master (master commits)
 #                        refs/heads/(rc--|hotfix-)[^/]+ (release-qualification branches)
-#                      The signer-workflow pin alone fixes WHICH workflow
-#                      signed, not from which ref it ran: those workflows can
+#                      The build-workflow pin alone fixes WHICH pipeline ran,
+#                      not from which ref it ran: those workflows can
 #                      be dispatched on arbitrary branches (and ci-kickoff
 #                      also runs for dev-gh-* pushes and PRs), so without
 #                      this binding anyone able to trigger a release build of
@@ -41,24 +49,29 @@
 # Beyond `gh attestation verify` (which proves "SOME file of this build has
 # this digest"), the script also requires the verified attestation to record
 # the file's digest under the subject name "ic/<commit>/<cdn-subdir>/SHA256SUMS".
-# One attestation covers every file a build uploaded, so without this
-# subject-name binding a CDN writer could serve one directory's (legitimately
-# attested) SHA256SUMS at another directory's path — e.g. the prod update-img
-# sums at the update-img-dev path — and have consumers record a valid build
-# hash for the wrong artifact. The subject names are trustworthy because the
-# pinned --signer-workflow's attest-uploads job generates them from its own
-# upload manifest.
+# Each attestation covers every file its uploading job uploaded (a release build
+# mints one per uploading job), so without this subject-name binding a CDN writer
+# could serve one directory's (legitimately attested) SHA256SUMS at another
+# directory's path — e.g. the prod update-img sums at the update-img-dev path —
+# and have consumers record a valid build hash for the wrong artifact. The
+# subject names are trustworthy because the pinned signer workflow's upload jobs
+# generate them from their own upload manifests.
+#
+# Attestations minted between #11323 and #11569 were signed by the calling
+# workflow itself (ci-kickoff.yml / release-testing.yml) rather than by
+# ci-main.yml, and are rejected here by design. They cannot be re-minted: a
+# workflow_dispatch on such a commit's branch runs that branch's tree.
 
 set -euo pipefail
 
 if [ "$#" -ne 5 ]; then
-    echo "usage: $0 <commit> <cdn-subdir> <signer-workflow> <source-ref-regex> <out-file>" >&2
+    echo "usage: $0 <commit> <cdn-subdir> <build-workflow> <source-ref-regex> <out-file>" >&2
     exit 1
 fi
 
 commit="$1"
 subdir="$2"
-signer_workflow="$3"
+build_workflow="$3"
 source_ref_regex="$4"
 out_file="$5"
 
@@ -66,6 +79,11 @@ out_file="$5"
 # dfinity/ic-private are not attested; their commits gain attestations once
 # the (hotfix-*) branch is pushed to dfinity/ic and rebuilt there.
 repo="dfinity/ic"
+
+# The reusable workflow whose upload jobs mint the attestation, and hence the
+# certificate SAN (Build Signer URI) of every attestation this script accepts.
+# It is the same for every pipeline: see <build-workflow> above.
+signer_workflow="dfinity/ic/.github/workflows/ci-main.yml"
 
 if ! [[ "$commit" =~ ^[0-9a-f]{40}$ ]]; then
     echo "ERROR: commit must be a 40-character lowercase hex git commit id, got: $commit" >&2
@@ -82,8 +100,8 @@ if ! [[ "$subdir" =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$ ]] \
     exit 1
 fi
 
-if ! [[ "$signer_workflow" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-    echo "ERROR: invalid signer-workflow: $signer_workflow" >&2
+if ! [[ "$build_workflow" =~ ^dfinity/ic/\.github/workflows/[A-Za-z0-9_-]+\.yml$ ]]; then
+    echo "ERROR: invalid build-workflow (expected dfinity/ic/.github/workflows/<name>.yml): $build_workflow" >&2
     exit 1
 fi
 
@@ -109,26 +127,35 @@ gh attestation verify "$out_file" \
     --format json \
     >"$verify_output"
 
-# Bind the digest to THIS directory's path and the attestation to the
-# expected source ref: at least one verified attestation must BOTH have been
-# minted from a ref matching <source-ref-regex> (sourceRepositoryRef in its
-# Sigstore certificate) AND list the file's digest under the expected subject
-# name. Both conditions are checked on the same attestation entry — an
-# attacker must not be able to satisfy them with two different attestations.
+# Bind, on the SAME verified attestation entry: (1) the top-level workflow of
+# the run that minted it (buildConfigURI, OID 1.3.6.1.4.1.57264.1.18) to
+# <build-workflow>, (2) the ref it ran from (sourceRepositoryRef) to
+# <source-ref-regex>, and (3) the file's digest to THIS directory's subject
+# name. (1) and (2) are certificate fields Fulcio populates from the run's OIDC
+# token; (3) is statement data, trustworthy only because --signer-workflow above
+# pins who produced it. All three are checked on one entry — an attacker must
+# not be able to satisfy them with three different attestations.
+#
+# The buildConfigURI is "<workflow path>@<ref>"; the prefix match includes the
+# trailing '@' so it can only match at the end of the workflow path, never at a
+# workflow whose name merely extends <build-workflow>'s.
 digest="$(sha256sum "$out_file" | cut -d' ' -f1)"
 jq -e \
     --arg name "$expected_subject" \
     --arg digest "$digest" \
     --arg refRegex "^(${source_ref_regex})\$" \
+    --arg buildConfigPrefix "https://github.com/${build_workflow}@" \
     '[.[]
-      | select(.verificationResult.signature.certificate.sourceRepositoryRef // ""
-               | test($refRegex))
+      | .verificationResult.signature.certificate as $cert
+      | select(($cert.buildConfigURI // "") | startswith($buildConfigPrefix))
+      | select(($cert.sourceRepositoryRef // "") | test($refRegex))
       | .verificationResult.statement.subject[]?
       | select(.name == $name and .digest.sha256 == $digest)]
      | length > 0' \
     "$verify_output" >/dev/null || {
-    echo "ERROR: no verified attestation minted from a ref matching '${source_ref_regex}' records digest $digest under subject '$expected_subject'." >&2
-    echo "The file served at $url is either attested from an unexpected ref (unqualified build?) or not as this directory's SHA256SUMS (cross-directory substitution?)." >&2
+    echo "ERROR: no verified attestation from a '${build_workflow}' run on a ref matching '${source_ref_regex}' records digest $digest under subject '$expected_subject'." >&2
+    echo "The file served at $url is either attested by an unexpected pipeline, attested from an unexpected ref (unqualified build?), or not attested as this directory's SHA256SUMS (cross-directory substitution?)." >&2
+    echo "Note: attestations minted between #11323 and #11569 were signed by the calling workflow rather than by ci-main.yml and are rejected here by design." >&2
     exit 1
 }
 

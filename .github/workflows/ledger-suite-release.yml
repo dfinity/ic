@@ -20,10 +20,11 @@
 # Release Workflow:
 # 1. Pick a commit on the master branch for which the FI nightly test passed, and verify that artifacts are available in
 #    the CDN (e.g., verify that https://download.dfinity.systems/ic/${commit}/canisters/ic-icrc1-ledger.wasm.gz exists).
-#    The commit's CDN uploads must carry a build-provenance attestation (created by the attest-uploads job of the
-#    ci-kickoff pipeline for every master commit): this workflow verifies every downloaded artifact against it and
-#    fails otherwise, so tags on commits that predate the attestation rollout and verification should not be released
-#    with this workflow.
+#    The commit's CDN uploads must carry a build-provenance attestation (minted by the ci-kickoff pipeline's CI Main
+#    run for every master commit): this workflow verifies every downloaded artifact against it and fails otherwise,
+#    so tags on commits that predate the attestation rollout and verification should not be released with this
+#    workflow. The same holds for commits built between #11323 and #11569, whose attestations were signed by
+#    ci-kickoff.yml itself rather than by ci-main.yml and are rejected by the verifier.
 # 2. Create a release candidate tag: ledger-suite-{type}-YYYY-MM-DD.rc1
 #    - This creates a prerelease for testing
 #    - If issues are found, create .rc2, .rc3, etc. with fixes
@@ -175,18 +176,17 @@ jobs:
 
       # Downloads every artifact and verifies its bytes against the CDN's
       # canisters/SHA256SUMS, which is itself verified against the
-      # build-provenance attestation created by the attest-uploads job of the
-      # ci-kickoff pipeline for this exact commit. Any CDN substitution fails
-      # the release instead of being republished with matching checksums.
-      # The SHA256SUMS this emits into out-dir
-      # lists the verified hashes under the release filenames and is published
-      # as the release's verification data.
+      # build-provenance attestation minted by the ci-kickoff pipeline's CI Main
+      # run for this exact commit. Any CDN substitution fails the release
+      # instead of being republished with matching checksums. The SHA256SUMS
+      # this emits into out-dir lists the verified hashes under the release
+      # filenames and is published as the release's verification data.
       - name: Download and verify artifacts and SHA256SUMS
         id: download
         uses: ./.github/actions/fetch-verified-artifacts
         with:
           commit: ${{ steps.parse_tag.outputs.tag_commit }}
-          signer-workflow: dfinity/ic/.github/workflows/ci-kickoff.yml
+          build-workflow: dfinity/ic/.github/workflows/ci-kickoff.yml
           # Ledger-suite tags point at master commits; only attestations
           # minted from master itself are acceptable (ci-kickoff.yml also
           # runs for other refs).
