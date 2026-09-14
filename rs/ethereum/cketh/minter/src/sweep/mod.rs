@@ -19,7 +19,7 @@ use crate::balance_scan::batcher::{
 };
 use crate::balance_scan::call_args;
 use crate::deposit_address::DepositAddress;
-use crate::eth_rpc_client::{MIN_ATTACHED_CYCLES, NoReduction, ToReducedWithStrategy, rpc_client};
+use crate::eth_rpc_client::{MIN_ATTACHED_CYCLES, NoReduction, ToReducedWithStrategy};
 use crate::numeric::BlockNumber;
 use crate::sweeper_contract::SweepItem;
 use crate::{
@@ -79,14 +79,6 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         return;
     }
 
-    let client = read_state(rpc_client);
-    enqueue_pending_sweeps(runtime, &client).await;
-}
-
-pub(crate) async fn enqueue_pending_sweeps<R: CanisterRuntime, Rt: Runtime>(
-    runtime: &R,
-    client: &EvmRpcClient<Rt, CandidResponseConverter, DoubleCycles>,
-) {
     let batch_per_asset =
         read_state(|s| s.automatic_deposits.requests_batch(MAX_DEPOSITS_PER_SWEEP));
     if batch_per_asset.is_empty() {
@@ -122,7 +114,7 @@ pub(crate) async fn enqueue_pending_sweeps<R: CanisterRuntime, Rt: Runtime>(
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
-    let delegations = read_delegations(&addresses, latest_block, client).await;
+    let delegations = read_delegations(&addresses, latest_block, &runtime.evm_rpc_client()).await;
     let Some((chain_id, delegate)) = read_state(|s| {
         s.sweeper_contract_address
             .map(|delegate| (s.ethereum_network.chain_id(), delegate))
