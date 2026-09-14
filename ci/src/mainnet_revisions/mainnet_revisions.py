@@ -22,11 +22,14 @@ SAVED_VERSIONS_CANISTERS_FILE = "mainnet-canister-revisions.json"
 CDN_BASE_URL = "https://download.dfinity.systems"
 
 # Every version recorded here is NNS-elected and therefore built by the
-# release-testing pipeline, whose attest-uploads job attests everything the build
-# uploaded to the CDN. fetch-attested-sums.sh verifies a CDN SHA256SUMS file against
-# that attestation, pinned to this signer and to the exact commit.
-ATTESTATION_SIGNER_WORKFLOW = "dfinity/ic/.github/workflows/release-testing.yml"
-# The signer pin fixes which workflow signed, not from which ref it ran
+# release-testing pipeline, whose CI Main run attests everything the build uploaded
+# to the CDN. fetch-attested-sums.sh verifies a CDN SHA256SUMS file against that
+# attestation, pinned to this pipeline and to the exact commit. The pipeline is
+# pinned on the certificate's Build Config URI, not on the signer: the attestation
+# is minted inside the reusable ci-main.yml, so ci-main.yml is the signer whatever
+# the calling pipeline.
+ATTESTATION_BUILD_WORKFLOW = "dfinity/ic/.github/workflows/release-testing.yml"
+# The pipeline pin fixes which workflow ran, not from which ref it ran
 # (release-testing.yml can be dispatched on arbitrary branches): only accept
 # attestations minted from release-qualification branches.
 ATTESTATION_SOURCE_REF_REGEX = r"refs/heads/(rc--|hotfix-)[^/]+"
@@ -530,7 +533,7 @@ def fetch_attested_sha256sums(version: str, subdir: str) -> dict:
     Verified {filename: hex sha256} for the CDN directory ic/<version>/<subdir>.
 
     Downloads the directory's SHA256SUMS and verifies it against the
-    build-provenance attestation minted by release-testing.yml's attest-uploads job
+    build-provenance attestation minted by the release-testing.yml pipeline
     for exactly this commit, via ci/scripts/fetch-attested-sums.sh.
     Raises CalledProcessError when no such attestation exists or the file does not
     match it; nothing is parsed before verification succeeds.
@@ -541,7 +544,7 @@ def fetch_attested_sha256sums(version: str, subdir: str) -> dict:
                 str(FETCH_ATTESTED_SUMS_SCRIPT),
                 version,
                 subdir,
-                ATTESTATION_SIGNER_WORKFLOW,
+                ATTESTATION_BUILD_WORKFLOW,
                 ATTESTATION_SOURCE_REF_REGEX,
                 tmp_file.name,
             ],
@@ -586,7 +589,10 @@ class VersionArtifactSums:
     is_record_up_to_date() keeps complete records untouched, so this requirement
     only bites for versions whose builds are expected to attest. (Dispatching
     release-testing.yml on an old branch cannot backfill such versions: workflows
-    run from the dispatched ref's tree, which predates the attest-uploads job.)
+    run from the dispatched ref's tree. That tree must already carry the inlined
+    Attest steps -- branches built between #11323 and #11569 produce attestations
+    signed by release-testing.yml itself, which the verifier rejects, and branches
+    older still produce none at all.)
 
     A version whose commit is NOT public yet (an undisclosed hotfix built
     in ic-private and not attested in this repository) falls back to trusting the
@@ -626,7 +632,10 @@ class VersionArtifactSums:
                     f"Refusing to record CDN-served hashes for the public commit {self.version}; "
                     "backfill the attestation by re-running release-testing.yml on its branch "
                     "(for a hotfix without one: push its elected commit to dfinity/ic as a "
-                    "hotfix-* branch first)."
+                    "hotfix-* branch first). Backfilling only works if that branch's tree "
+                    "already attests inside ci-main.yml: older trees mint no attestation, and "
+                    "trees between #11323 and #11569 mint one signed by release-testing.yml, "
+                    "which is rejected."
                 )
             self.logger.warning(
                 "Commit %s is not public (undisclosed security patch?): recording UNVERIFIED "

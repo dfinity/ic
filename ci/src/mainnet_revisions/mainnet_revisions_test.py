@@ -104,6 +104,38 @@ def test_parse_sha256sums_single_space():
     assert parse_sha256sums(f"{HASH}  update-img.tar.zst\n") == {"update-img.tar.zst": HASH}
 
 
+def test_fetch_attested_sums_positional_contract(monkeypatch):
+    # ci/scripts/fetch-attested-sums.sh takes its five arguments positionally, so
+    # a rename or reorder on either side cannot be caught by the interpreter: it
+    # would verify against the wrong pipeline or the wrong ref regex and still
+    # exit 0. Pin the exact argv this module must produce.
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen["check"] = kwargs.get("check")
+        pathlib.Path(cmd[5]).write_text(f"{HASH}  update-img.tar.zst\n", encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert mainnet_revisions.fetch_attested_sha256sums(VERSION, "guest-os/update-img") == {"update-img.tar.zst": HASH}
+    # A non-zero exit of the verifier must propagate, never be ignored.
+    assert seen["check"] is True
+    assert seen["cmd"][:5] == [
+        str(mainnet_revisions.FETCH_ATTESTED_SUMS_SCRIPT),
+        VERSION,
+        "guest-os/update-img",
+        # <build-workflow>: the run's top-level workflow, matched against the
+        # attestation certificate's Build Config URI. The signer is ci-main.yml.
+        "dfinity/ic/.github/workflows/release-testing.yml",
+        # <source-ref-regex>: release-qualification branches only.
+        r"refs/heads/(rc--|hotfix-)[^/]+",
+    ]
+    # The out-file is the fifth positional argument.
+    assert len(seen["cmd"]) == 6
+
+
 ATTESTATION_FAILED = subprocess.CalledProcessError(1, "gh attestation verify")
 
 
