@@ -1368,9 +1368,10 @@ pub mod test {
                     log.clone(),
                 );
 
-                // TEST 1: Non-replicated request artifact is missing the response, while
-                // the request is still awaiting one. It should be left unvalidated, to be
-                // reconsidered once our state shows the request as responded to.
+                // TEST 1: Non-replicated request artifact is missing the response. It is
+                // held back rather than invalidated, even though a Legacy request never
+                // reaches the delivered contexts: this component stays agnostic to the
+                // pricing version. It is dropped once the request leaves the state.
                 {
                     let mut canister_http_pool =
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
