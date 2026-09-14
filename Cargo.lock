@@ -7906,7 +7906,6 @@ dependencies = [
  "icrc-cbor",
  "icrc-ledger-client-cdk",
  "icrc-ledger-types",
- "itertools 0.12.1",
  "maplit",
  "minicbor",
  "mockall",
