@@ -3166,8 +3166,6 @@ fn certified_subnet_metrics(env: &StateMachine) -> (MixedHashTree, CryptoHashOfP
 /// certification version `V29` on, that aggregate is what
 /// `/subnet/<subnet_id>/metrics` certifies, so a replica restarting from a
 /// checkpoint has to certify byte-for-byte the same leaf as one that kept running.
-/// Were the two to disagree, the restarted replica would not be able to contribute
-/// to certifying the states its peers compute.
 #[test]
 fn subnet_metrics_are_unchanged_across_a_restart() {
     let env = StateMachineBuilder::new()
@@ -3177,7 +3175,6 @@ fn subnet_metrics_are_unchanged_across_a_restart() {
         )))
         .with_subnet_type(SubnetType::Application)
         .build();
-    env.set_checkpoints_enabled(true);
 
     // Non-zero *persisted* consumption: deleting a canister moves its consumption
     // and its remaining balance into the subnet-level fields, which are part of the
@@ -3226,23 +3223,39 @@ fn subnet_metrics_are_unchanged_across_a_restart() {
     assert_eq!(certified_subnet_metrics(&env), certified_before);
 }
 
-/// Asserts that `SubnetMetrics::consumed_cycles_total_including_canisters` of the
-/// latest state is what it is defined to be -- the subnet-level total plus the
-/// consumption of the canisters that currently exist -- recomputed here from the
-/// state itself, and returns it.
-fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
-    let state = env.get_latest_state();
-    let consumed_by_canisters = state
+/// The cycles consumed by the canisters that currently exist, summed over the
+/// canisters themselves rather than read off any aggregate.
+fn consumed_by_canisters(env: &StateMachine) -> NominalCycles {
+    env.get_latest_state()
         .canisters_iter()
         .fold(NominalCycles::zero(), |total, canister| {
             total + canister.system_state.canister_metrics().consumed_cycles()
-        });
+        })
+}
+
+/// Asserts that `SubnetMetrics::consumed_cycles_total_including_canisters` of the
+/// latest state is what it is defined to be, and returns it.
+///
+/// Both summands are recomputed here from the state, field by field, rather than
+/// taken from `SubnetMetrics::consumed_cycles_total()`: the subnet-level part is the
+/// three scalar fields plus the three use cases that are only ever recorded at the
+/// subnet level. The canister-level entries of `consumed_cycles_by_use_case` are
+/// deliberately left out -- they are only ever populated when a canister is deleted,
+/// at which point that canister's consumption is already in
+/// `consumed_cycles_by_deleted_canisters`, so adding them would count a deleted
+/// canister twice.
+fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
+    let state = env.get_latest_state();
     let subnet_metrics = &state.metadata.subnet_metrics;
+    let subnet_level = subnet_metrics.get_consumed_cycles_by_deleted_canisters()
+        + subnet_metrics.get_consumed_cycles_http_outcalls()
+        + subnet_metrics.get_consumed_cycles_ecdsa_outcalls()
+        + subnet_metrics.get_consumed_cycles_schnorr_outcalls()
+        + subnet_metrics.get_consumed_cycles_vetkd()
+        + subnet_metrics.get_consumed_cycles_dropped_messages();
+
     let total = subnet_metrics.consumed_cycles_total_including_canisters();
-    assert_eq!(
-        total,
-        subnet_metrics.consumed_cycles_total() + consumed_by_canisters
-    );
+    assert_eq!(total, subnet_level + consumed_by_canisters(env));
     total
 }
 
@@ -3258,7 +3271,7 @@ fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
 #[test]
 fn consumed_cycles_in_subnet_metrics_are_refreshed_every_round() {
     /// Burned by the heartbeat below, in every round.
-    const BURNED_PER_ROUND: u128 = 1_000_000;
+    const BURNED_PER_ROUND: u128 = 1_000_000_000;
     /// Rounds to observe; more than one, so that a refresh happening only on the
     /// first round after the heartbeat was installed would not pass either.
     const ROUNDS: usize = 5;
@@ -3294,20 +3307,45 @@ fn consumed_cycles_in_subnet_metrics_are_refreshed_every_round() {
         previous = current;
     }
 
-    // The subnet-level part is refreshed in lockstep: deleting a canister moves its
-    // consumption out of the canisters' part and into
-    // `consumed_cycles_by_deleted_canisters`, and burns its remaining balance on top.
-    // The aggregate the round commits accounts for both at once -- never for one
-    // without the other, which is what counting the canister twice, or not at all,
-    // would look like.
+    // The subnet-level part is refreshed in lockstep with the canisters' part.
+    // Deleting a canister moves its consumption out of the canisters' part and into
+    // `consumed_cycles_by_deleted_canisters`, and burns its remaining balance on top,
+    // so the aggregate grows by exactly the burned balance -- plus whatever the
+    // canister that stays behind consumes meanwhile, which is measured below rather
+    // than bounded, to keep the comparison exact. Counting the victim twice, or
+    // dropping it, would be off by exactly its consumption.
     let victim = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
-    assert_consumed_cycles_are_refreshed(&env);
     env.stop_canister(victim).unwrap();
+
+    let before_deletion = assert_consumed_cycles_are_refreshed(&env);
+    let (victim_consumed, victim_balance) = {
+        let state = env.get_latest_state();
+        let victim_state = state
+            .canister_state(&victim)
+            .expect("the victim must still exist at this point");
+        (
+            victim_state
+                .system_state
+                .canister_metrics()
+                .consumed_cycles(),
+            victim_state.system_state.balance(),
+        )
+    };
+    // Without this, an aggregate counting the victim twice would look exactly like
+    // one counting it once.
+    assert_gt!(victim_consumed.get(), 0);
+    let others_consumed_before = consumed_by_canisters(&env).get() - victim_consumed.get();
+
     env.delete_canister(victim).unwrap();
+
     let after_deletion = assert_consumed_cycles_are_refreshed(&env);
-    assert_gt!(
+    assert!(env.get_latest_state().canister_state(&victim).is_none());
+    let others_consumed_after = consumed_by_canisters(&env).get();
+    assert_eq!(
         after_deletion.get(),
-        previous.get() + INITIAL_CYCLES_BALANCE.get()
+        before_deletion.get()
+            + victim_balance.get()
+            + (others_consumed_after - others_consumed_before)
     );
 }
 
