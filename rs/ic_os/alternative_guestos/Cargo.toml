@@ -1,0 +1,13 @@
+[package]
+name = "alternative_guestos"
+edition.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+ic-certificate-verification = { workspace = true }
+ic-certification = { workspace = true }
+serde_cbor = { workspace = true }
+
+ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }

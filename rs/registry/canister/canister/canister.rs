@@ -79,6 +79,7 @@ use registry_canister::{
         firewall::{
             AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
         },
+        merge_subnets::MergeSubnetsPayload,
         node_management::{
             do_remove_node_directly::RemoveNodeDirectlyPayload,
             do_remove_nodes::RemoveNodesPayload,
@@ -209,6 +210,7 @@ fn canister_init() {
     #[cfg(feature = "test")]
     {
         use registry_canister::flags::temporary_overrides::{
+            test_set_blank_replica_version_id_for_cloud_engines_enabled,
             test_set_swapping_enabled_subnets, test_set_swapping_status,
             test_set_swapping_whitelisted_callers,
         };
@@ -234,6 +236,15 @@ fn canister_init() {
         );
         test_set_swapping_enabled_subnets(
             init_payload.swapping_enabled_subnets.unwrap_or_default(),
+        );
+        println!(
+            "{LOG_PREFIX}canister_init: Blank replica_version_id for Cloud Engines enabled: {:?}",
+            init_payload.is_blank_replica_version_id_for_cloud_engines_enabled
+        );
+        test_set_blank_replica_version_id_for_cloud_engines_enabled(
+            init_payload
+                .is_blank_replica_version_id_for_cloud_engines_enabled
+                .unwrap_or_default(),
         );
     }
 }
@@ -1070,6 +1081,24 @@ fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) {
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
                 "{LOG_PREFIX} Reroute canister ranges failed: {error_message}"
+            ))
+        });
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update merge_subnets")]
+fn merge_subnets() {
+    check_caller_is_governance_and_log("merge_subnets");
+    over(candid_one, merge_subnets_);
+}
+
+#[candid_method(update, rename = "merge_subnets")]
+fn merge_subnets_(payload: MergeSubnetsPayload) {
+    registry_mut()
+        .merge_subnets(payload)
+        .unwrap_or_else(|error_message| {
+            trap_with(&format!(
+                "{LOG_PREFIX} Merge subnets failed: {error_message}"
             ))
         });
     recertify_registry();

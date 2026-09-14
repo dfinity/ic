@@ -1,7 +1,7 @@
 use crate::canister_state::queues::{
     CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool,
 };
-use crate::canister_state::system_state::{CanisterOutputQueuesIterator, push_input};
+use crate::canister_state::system_state::{CallOrigin, CanisterOutputQueuesIterator, push_input};
 use crate::metadata_state::subnet_call_context_manager::{
     PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
 };
@@ -30,14 +30,14 @@ use ic_types::{
     CanisterId, NumBytes, SubnetId, Time,
     batch::{ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
-    ingress::IngressStatus,
+    ingress::{IngressState, IngressStatus},
     messages::{
         CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
     },
     time::CoarseTime,
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, CyclesAccountManagerSubnetConfig,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesAccountManagerSubnetConfig,
     CyclesUseCaseKind, DroppedMessages,
 };
 use ic_validate_eq::ValidateEq;
@@ -49,7 +49,7 @@ use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
 #[cfg(debug_assertions)]
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CyclesUseCase, NominalCycles};
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
@@ -481,13 +481,23 @@ impl ReplicatedState {
     /// Creates a replicated state from a checkpoint.
     pub fn new_from_checkpoint(
         canister_states: BTreeMap<CanisterId, Arc<CanisterState>>,
-        metadata: SystemMetadata,
+        mut metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
         refunds: RefundPool,
         epoch_query_stats: RawQueryStats,
     ) -> Self {
+        let canister_states = CanisterStates::new(canister_states);
+
+        // The consumed-cycles total is transient, so derive it from the canisters
+        // just loaded. A running replica gets the same value from
+        // `Self::refresh_consumed_cycles`, so the canonical state tree at
+        // `/subnet/<subnet_id>/metrics` hashes identically across a restart.
+        metadata
+            .subnet_metrics
+            .refresh_consumed_cycles(canister_states.total_consumed_cycles());
+
         Self {
-            canister_states: CanisterStates::new(canister_states),
+            canister_states,
             metadata,
             subnet_queues,
             refunds,
@@ -592,8 +602,9 @@ impl ReplicatedState {
     }
 
     /// Permanently removes the canister and its scheduling priority from the subnet
-    /// schedule; and records the removal as an unflushed checkpoint operation, so that
-    /// the canister's directory is also deleted from the tip.
+    /// schedule; and records the removal of the canister and of all its snapshots as
+    /// unflushed checkpoint operations, so that their directories are also deleted from
+    /// the tip.
     ///
     /// Use `take_canister_state()` instead if the canister is only temporarily removed
     /// from the state (e.g. to work around borrow checker limitations).
@@ -602,7 +613,7 @@ impl ReplicatedState {
         let canister_state = self.canister_states.remove(canister_id)?;
         self.metadata
             .unflushed_checkpoint_ops
-            .delete_canister(*canister_id);
+            .delete_canister(&canister_state);
         Some(canister_state)
     }
 
@@ -680,6 +691,19 @@ impl ReplicatedState {
         F: FnMut(&CanisterId, &mut Arc<CanisterState>) -> Result<(), E>,
     {
         self.canister_states.try_for_each_mut(f)
+    }
+
+    /// Refreshes
+    /// [`crate::metadata_state::SubnetMetrics::consumed_cycles_total_including_canisters`]
+    /// from the current canister states. The total is derived, not persisted;
+    /// [`Self::new_from_checkpoint`] derives it the same way.
+    ///
+    /// `O(|hot canisters|)`.
+    pub fn refresh_consumed_cycles(&mut self) {
+        let consumed_by_canisters = self.canister_states.total_consumed_cycles();
+        self.metadata
+            .subnet_metrics
+            .refresh_consumed_cycles(consumed_by_canisters);
     }
 
     /// Re-establishes strict hot / cold partitioning of canister states (see
@@ -1113,6 +1137,15 @@ impl ReplicatedState {
         Ok(())
     }
 
+    /// Pools `amount` cycles to be refunded to `receiver`, wherever it is hosted.
+    ///
+    /// Message Routing routes the pooled refunds (via the loopback stream, if the
+    /// recipient is local) and credits them on induction, accounting for them as
+    /// lost if the recipient no longer exists.
+    pub fn add_refund(&mut self, receiver: CanisterId, amount: Cycles) {
+        self.refunds.add(receiver, amount);
+    }
+
     /// Credits the cycles in `refund` to the recipient canister's balance.
     ///
     /// Returns `true` if the recipient canister exists and was credited, `false`
@@ -1460,7 +1493,7 @@ impl ReplicatedState {
         // enforce an explicit decision whenever new fields are added.
         let Self {
             mut canister_states,
-            metadata,
+            mut metadata,
             mut subnet_queues,
             mut refunds,
             consensus_queue,
@@ -1470,15 +1503,29 @@ impl ReplicatedState {
         // Consensus queue is always empty at the end of the round.
         assert!(consensus_queue.is_empty());
 
-        // Retain only canisters hosted by `own_subnet_id`.
+        // Retain only canisters hosted by `subnet_id`; and record the removal of the
+        // others (and of their snapshots), so that their directories are deleted from
+        // tip by the flush of these operations, making `TipRequest::FilterTipCanisters`
+        // a pure safety net.
         //
         // TODO: Validate that canisters are split across no more than 2 subnets.
-        canister_states.retain(|canister_id, _| {
+        let is_local_canister = |canister_id: &CanisterId| {
             routing_table
                 .lookup_entry(*canister_id)
                 .map(|(_range, subnet_id)| subnet_id)
                 == Some(subnet_id)
-        });
+        };
+        let dropped_canister_ids: Vec<CanisterId> = canister_states
+            .all_keys()
+            .filter(|canister_id| !is_local_canister(canister_id))
+            .cloned()
+            .collect();
+        for canister_id in dropped_canister_ids {
+            let canister_state = canister_states.remove(&canister_id).unwrap();
+            metadata
+                .unflushed_checkpoint_ops
+                .delete_canister(&canister_state);
+        }
 
         // All subnet messages (ingress and canister) only remain on subnet A' because:
         //
@@ -1544,16 +1591,7 @@ impl ReplicatedState {
 
         // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which
         // canisters are present in `canister_states`.
-        let local_canister_ids = canister_states.all_keys().cloned().collect::<Vec<_>>();
-        for canister_id in local_canister_ids.iter() {
-            let mut canister_state = canister_states.remove(canister_id).unwrap();
-            if canister_state.has_input() {
-                Arc::make_mut(&mut canister_state)
-                    .system_state
-                    .split_input_schedules(canister_id, canister_states);
-            }
-            canister_states.insert(canister_state);
-        }
+        repartition_input_schedules(canister_states);
 
         // Drop in-progress management calls being executed by canisters on subnet B
         // (`own_subnet_id != split_from`). The corresponding calls will be rejected on
@@ -1575,6 +1613,120 @@ impl ReplicatedState {
         *epoch_query_stats = RawQueryStats::default();
     }
 
+    /// Makes adjustments to the replicated state during the first round after a
+    /// subnet merge:
+    ///
+    ///  * Resets the "subnet was merged" marker.
+    ///  * Updates canisters' input schedules, based on `self.canister_states`.
+    ///  * Records all not yet responded ingress-induced call contexts as
+    ///    `Processing` in the ingress history.
+    ///
+    /// Canisters hosted by the other merged subnets used to be remote and are now
+    /// local, so their input queues may sit in the wrong input schedule. As with a
+    /// subnet split, the schedules are explicitly re-partitioned, because a queue
+    /// in the wrong schedule is only corrected once it becomes empty (which is not
+    /// guaranteed to ever happen).
+    ///
+    /// The ingress history of the merged subnet does not necessarily cover the
+    /// in-progress ingress messages of all merged subnets, so the corresponding
+    /// entries are (re)created here (timestamped with `batch_time`, the time of
+    /// the batch being processed), ensuring that every in-progress ingress
+    /// message can be tracked to completion.
+    ///
+    /// Only call contexts of canisters are considered; subnet call contexts are
+    /// ignored, as subnet merging ensures that the subnets being merged have no
+    /// in-progress subnet call contexts.
+    ///
+    /// A message that already has an ingress history entry is left alone; its
+    /// status is expected to be `Processing`, anything else is reported via
+    /// `on_unexpected_ingress_status()` (as it indicates a bug).
+    pub fn after_merge(
+        &mut self,
+        batch_time: Time,
+        ingress_memory_capacity: NumBytes,
+        on_unexpected_ingress_status: impl Fn(&MessageId, &IngressStatus),
+    ) {
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS A `match`!
+        let Self {
+            canister_states,
+            metadata,
+            subnet_queues: _,
+            consensus_queue: _,
+            refunds: _,
+            epoch_query_stats: _,
+        } = self;
+
+        assert!(
+            metadata.subnet_merged,
+            "Not a state resulting from a subnet merge"
+        );
+        metadata.subnet_merged = false;
+
+        // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which
+        // canisters are present in `canister_states`.
+        repartition_input_schedules(canister_states);
+
+        // Record all not yet responded ingress-induced call contexts as `Processing`
+        // in the ingress history.
+        let ingress_statuses = canister_states
+            .all_values()
+            .flat_map(|canister_state| {
+                let receiver = canister_state.canister_id().get();
+                canister_state
+                    .system_state
+                    .call_context_manager()
+                    .into_iter()
+                    .flat_map(|ccm| ccm.call_contexts().values())
+                    .filter(|call_context| !call_context.has_responded())
+                    .filter_map(move |call_context| match call_context.call_origin() {
+                        CallOrigin::Ingress(user_id, message_id, _) => Some((
+                            message_id.clone(),
+                            IngressStatus::Known {
+                                receiver,
+                                user_id: *user_id,
+                                time: batch_time,
+                                state: IngressState::Processing,
+                            },
+                        )),
+                        CallOrigin::CanisterUpdate(..)
+                        | CallOrigin::Query(..)
+                        | CallOrigin::CanisterQuery(..)
+                        | CallOrigin::SystemTask => None,
+                    })
+            })
+            .collect::<Vec<_>>();
+
+        for (message_id, status) in ingress_statuses {
+            match metadata.ingress_history.get(&message_id) {
+                // No entry yet, record the in-progress ingress message.
+                None => {
+                    metadata.ingress_history.insert(
+                        message_id,
+                        status,
+                        batch_time,
+                        ingress_memory_capacity,
+                        |_| {},
+                    );
+                }
+
+                // Already recorded as `Processing`, nothing to do.
+                Some(IngressStatus::Known {
+                    state: IngressState::Processing,
+                    ..
+                }) => {}
+
+                // Any other status indicates a bug, report it. The existing entry is
+                // preserved, as overwriting a terminal status would be worse.
+                Some(unexpected_status) => {
+                    on_unexpected_ingress_status(&message_id, unexpected_status)
+                }
+            }
+        }
+    }
+
     /// Splits the replicated state during a special DSM round, retaining only the
     /// canisters mapped to `subnet_id` in the loaded routing table.
     ///
@@ -1588,7 +1740,11 @@ impl ReplicatedState {
     /// Splitting the replicated state consists of:
     ///
     ///  * Retaining only the canisters that are to be hosted by `subnet_id`, as
-    ///    determined by the routing table (*hosted canisters*).
+    ///    determined by the routing table (*hosted canisters*); and recording the
+    ///    removal of the rest as `UnflushedCheckpointOp::DeleteCanister` (plus an
+    ///    `UnflushedCheckpointOp::DeleteSnapshot` per snapshot of theirs), so that
+    ///    their directories are explicitly deleted from tip, in order relative to the
+    ///    other checkpoint operations.
     ///  * Retaining only the snapshots of *hosted canisters*.
     ///  * Pruning the ingress history, retaining only messages addressed to this
     ///    subnet and messages in terminal states (which will eventually time out).
@@ -1640,21 +1796,31 @@ impl ReplicatedState {
             );
         });
 
-        // Retain only canisters hosted by this subnet.
-        canister_states.retain(|canister_id, _| lookup_subnet(canister_id) == Some(subnet_id));
+        // Retain only canisters hosted by this subnet; and record the removal of the
+        // others (and of their snapshots), so that their directories are deleted from
+        // tip by the flush of these operations, in order relative to the other
+        // checkpoint operations.
+        //
+        // A splitting batch always requires a full state hash, so the split round is
+        // always a checkpoint round and `FilterTipCanisters` would remove the very same
+        // directories later in the same round. Recording the removals makes every
+        // canister and snapshot directory mutation in tip an explicit, ordered
+        // operation, leaving `FilterTipCanisters` as a pure safety net.
+        let dropped_canister_ids: Vec<CanisterId> = canister_states
+            .all_keys()
+            .filter(|canister_id| lookup_subnet(canister_id) != Some(subnet_id))
+            .cloned()
+            .collect();
+        for canister_id in dropped_canister_ids {
+            let canister_state = canister_states.remove(&canister_id).unwrap();
+            metadata
+                .unflushed_checkpoint_ops
+                .delete_canister(&canister_state);
+        }
 
         // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which
         // canisters are present in `canister_states`.
-        let local_canister_ids = canister_states.all_keys().cloned().collect::<Vec<_>>();
-        for canister_id in local_canister_ids.iter() {
-            let mut canister_state = canister_states.remove(canister_id).unwrap();
-            if canister_state.has_input() {
-                Arc::make_mut(&mut canister_state)
-                    .system_state
-                    .split_input_schedules(canister_id, &canister_states);
-            }
-            canister_states.insert(canister_state);
-        }
+        repartition_input_schedules(&mut canister_states);
 
         // On *subnet B*:
         if subnet_id != metadata.own_subnet_id {
@@ -1764,6 +1930,25 @@ impl ReplicatedState {
     }
 }
 
+/// Re-partitions the local and remote sender schedules of all canisters in
+/// `canister_states`, based on which canisters are present in `canister_states`.
+///
+/// For use whenever the set of canisters hosted by the subnet changes, i.e. after
+/// a subnet split or a subnet merge. See
+/// [`CanisterQueues::split_input_schedules`] for why this must be done eagerly.
+fn repartition_input_schedules(canister_states: &mut CanisterStates) {
+    let local_canister_ids = canister_states.all_keys().cloned().collect::<Vec<_>>();
+    for canister_id in local_canister_ids.iter() {
+        let mut canister_state = canister_states.remove(canister_id).unwrap();
+        if canister_state.has_input() {
+            Arc::make_mut(&mut canister_state)
+                .system_state
+                .split_input_schedules(canister_id, canister_states);
+        }
+        canister_states.insert(canister_state);
+    }
+}
+
 /// Converts a `CanisterInput` popped from a subnet input queue into a
 /// `SubnetMessage`.
 ///
@@ -1814,7 +1999,6 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
 
 pub mod testing {
     use super::*;
-    use ic_types_cycles::Cycles;
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
@@ -1838,9 +2022,6 @@ pub mod testing {
         /// Testing only: Returns the number of messages across all canister and
         /// subnet output queues.
         fn output_message_count(&self) -> usize;
-
-        /// Testing only: Adds the given refund to the subnet-wide refund pool.
-        fn add_refund(&mut self, receiver: CanisterId, amount: Cycles);
     }
 
     impl ReplicatedStateTesting for ReplicatedState {
@@ -1872,10 +2053,6 @@ pub mod testing {
                 .map(|canister| canister.system_state.queues().output_queues_message_count())
                 .sum::<usize>()
                 + self.subnet_queues.output_queues_message_count()
-        }
-
-        fn add_refund(&mut self, receiver: CanisterId, amount: Cycles) {
-            self.refunds.add(receiver, amount);
         }
     }
 

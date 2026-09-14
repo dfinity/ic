@@ -42,8 +42,9 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
+    CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
+    consensus::get_faults_tolerated,
     crypto::{BasicSigOf, CryptoHashOf},
     messages::{CallbackId, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
@@ -54,10 +55,10 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
-    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, CanisterHttpRequestArgs,
-    DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, DataSize, FlexibleCanisterHttpRequestArgs, HttpHeader,
-    HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts,
-    TransformContext,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO, CanisterHttpRequestArgs,
+    DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod,
+    PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, TransformContext,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
@@ -94,6 +95,17 @@ pub const MAX_CANISTER_HTTP_RESPONSE_BYTES: u64 = 2_000_000;
 
 /// Maximum size of a canister http reject message.
 pub const MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
+
+/// The [`count_bytes`](CanisterHttpReject::count_bytes) of the largest
+/// [`CanisterHttpReject`] there is: a reject code plus a message of the maximum
+/// length.
+///
+/// Unlike a successful response, a reject is *not* bounded by the request's
+/// `max_response_bytes` (see
+/// [`CanisterHttpRequestContext::max_http_outcall_content_size`]), so this is the
+/// response size any outcall may end up delivering, whatever size it asked for.
+pub const MAX_CANISTER_HTTP_REJECT_BYTES: u64 =
+    CanisterHttpReject::count_bytes_from_parts(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES) as u64;
 
 /// Bytes reserved on top of a request's `max_response_bytes` for the Candid
 /// encoding of the response, since `max_response_bytes` is enforced on the
@@ -271,6 +283,13 @@ impl ReplicationKind {
             Self::Flexible { total_requests, .. } => (*total_requests as usize).max(1),
         }
     }
+}
+
+/// The number of agreeing replicas required to deliver a fully-replicated HTTP outcall
+/// response on a canister-http committee of `committee_size` nodes.
+pub fn canister_http_threshold(committee_size: usize) -> usize {
+    let committee_size = committee_size.max(1);
+    committee_size - get_faults_tolerated(committee_size)
 }
 
 impl From<&ReplicationCounts> for ReplicationKind {
@@ -646,6 +665,7 @@ impl CanisterHttpRequestContext {
         registry_version: RegistryVersion,
         cost_schedule: CanisterCyclesCostSchedule,
         rng: &mut dyn RngCore,
+        pay_as_you_go_enabled: bool,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
         validate_url_length(&args.url)?;
@@ -697,9 +717,14 @@ impl CanisterHttpRequestContext {
             time,
             replication,
             pricing_version: {
+                let allowed_versions = if pay_as_you_go_enabled {
+                    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO
+                } else {
+                    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS
+                };
                 let final_version_u32 = args
                     .pricing_version
-                    .filter(|v| ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS.contains(v))
+                    .filter(|v| allowed_versions.contains(v))
                     .unwrap_or(DEFAULT_HTTP_OUTCALLS_PRICING_VERSION);
                 PricingVersion::from_repr(final_version_u32).unwrap_or(PricingVersion::Legacy)
             },
@@ -948,25 +973,20 @@ pub struct CanisterHttpRequest {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
-    pub canister_id: CanisterId,
     pub content: CanisterHttpResponseContent,
 }
 
 impl CanisterHttpResponse {
     /// Same calculation as `Self::count_bytes` but from decomposed parts.
-    pub fn count_bytes_from_parts(canister_id: &CanisterId, content_size: usize) -> usize {
-        size_of::<CanisterHttpRequestId>() + canister_id.get_ref().data_size() + content_size
+    pub const fn count_bytes_from_parts(content_size: usize) -> usize {
+        size_of::<CanisterHttpRequestId>() + content_size
     }
 }
 
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
-        let CanisterHttpResponse {
-            id: _,
-            canister_id,
-            content,
-        } = &self;
-        Self::count_bytes_from_parts(canister_id, content.count_bytes())
+        let CanisterHttpResponse { id: _, content } = &self;
+        Self::count_bytes_from_parts(content.count_bytes())
     }
 }
 
@@ -1018,7 +1038,7 @@ impl From<&CanisterHttpReject> for RejectContext {
 
 impl CanisterHttpReject {
     /// Same calculation as `Self::count_bytes` but from decomposed parts.
-    pub fn count_bytes_from_parts(message_len: usize) -> usize {
+    pub const fn count_bytes_from_parts(message_len: usize) -> usize {
         size_of::<RejectCode>() + message_len
     }
 }
@@ -1232,14 +1252,22 @@ impl CanisterHttpRequestContext {
     /// [`CanisterHttpResponseContent`] it could legitimately have produced.
     pub fn max_http_outcall_content_size(&self, is_reject: bool) -> u64 {
         if is_reject {
-            CanisterHttpReject::count_bytes_from_parts(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES)
-                as u64
+            MAX_CANISTER_HTTP_REJECT_BYTES
         } else {
-            self.max_response_bytes
-                .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get())
-                + CANDID_OVERHEAD_RESERVE_BYTES
+            max_http_outcall_response_size(self.max_response_bytes)
         }
     }
+}
+
+/// The largest [`CanisterHttpResponseContent::Success`] an outcall with the given
+/// `max_response_bytes` may deliver.
+///
+/// A response is delivered Candid-encoded, so it may exceed `max_response_bytes` by
+/// [`CANDID_OVERHEAD_RESERVE_BYTES`].
+pub fn max_http_outcall_response_size(max_response_bytes: Option<NumBytes>) -> u64 {
+    max_response_bytes
+        .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get())
+        .saturating_add(CANDID_OVERHEAD_RESERVE_BYTES)
 }
 
 /// Metadata about some [`CanisterHttpResponseContent`].
@@ -1400,6 +1428,7 @@ impl PbArtifact for CanisterHttpResponseArtifact {
 #[cfg(test)]
 mod tests {
     use crate::{
+        CanisterId,
         crypto::{CryptoHash, SignedBytesWithoutDomainSeparator},
         messages::NO_DEADLINE,
         time::UNIX_EPOCH,
@@ -1416,6 +1445,7 @@ mod tests {
     };
     use ic_types_test_utils::ids::node_test_id;
     use rstest::rstest;
+    use std::str::FromStr;
     use strum::IntoEnumIterator;
 
     /// The signed bytes of a [`CanisterHttpResponseReceipt`] must round-trip, for
@@ -1456,7 +1486,7 @@ mod tests {
                     content_hash: CryptoHashOf::new(CryptoHash(vec![0; 32])),
                     content_size: 0,
                     is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: ReplicaVersion::from_str("foobar_version").unwrap(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt { spent },
             }
@@ -1473,6 +1503,57 @@ mod tests {
         ];
         let encodings: BTreeSet<_> = amounts.iter().map(|spent| signed_bytes(*spent)).collect();
         assert_eq!(encodings.len(), amounts.len());
+    }
+
+    #[test]
+    fn canister_http_threshold_tolerates_a_third_of_the_committee() {
+        // The concrete quorums, including the subnet sizes the pricing tests use.
+        for (committee_size, expected) in [
+            (0, 1),
+            (1, 1),
+            (2, 2),
+            (3, 3),
+            (4, 3),
+            (7, 5),
+            (13, 9),
+            (28, 19),
+            (34, 23),
+            (40, 27),
+        ] {
+            assert_eq!(
+                canister_http_threshold(committee_size),
+                expected,
+                "committee of {committee_size}"
+            );
+        }
+        for committee_size in 0..=64 {
+            let threshold = canister_http_threshold(committee_size);
+            // Never zero, so that a fee can be split into that many shares ...
+            assert!(threshold >= 1, "committee of {committee_size}");
+            // ... never more than the committee that has to reach it ...
+            assert!(
+                threshold <= committee_size.max(1),
+                "committee of {committee_size}"
+            );
+            // ... and always a strict majority, so two disjoint sets cannot both reach it.
+            assert!(
+                2 * threshold > committee_size,
+                "committee of {committee_size}"
+            );
+        }
+    }
+
+    #[test]
+    fn max_canister_http_reject_bytes_is_the_size_of_the_largest_reject() {
+        // The pricing of an outcall floors every response size at this constant (see
+        // `ic_https_outcalls_pricing::fees::max_consensus_fee`), so it has to be the
+        // `content_size` of an actual maximally large reject rather than an
+        // approximation of it.
+        let largest = CanisterHttpResponseContent::Reject(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "x".repeat(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES),
+        });
+        assert_eq!(largest.count_bytes() as u64, MAX_CANISTER_HTTP_REJECT_BYTES);
     }
 
     #[test]
@@ -2206,6 +2287,7 @@ mod tests {
             RegistryVersion::from(1),
             CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
+            /* pay_as_you_go_enabled = */ false,
         )
     }
 

@@ -54,7 +54,7 @@ system_test_nns(
     env = ENV,
     guestos_update = "test",
     setupos = True,
-    tags = ["long_test"],
+    tags = ["system_test_large"],
     test_timeout = "eternal",
     runtime_deps = RUNTIME_DEPS,
     deps = [
@@ -117,7 +117,7 @@ system_test_nns(
     env = ENV,
     guestos_update = "test",
     setupos = True,
-    tags = ["long_test"],
+    tags = ["system_test_large"],
     test_timeout = "eternal",
     runtime_deps = RUNTIME_DEPS,
     deps = [
@@ -136,7 +136,7 @@ system_test_nns(
     env = ENV,
     guestos_update = "test",
     setupos = True,
-    tags = ["long_test"],
+    tags = ["system_test_large"],
     test_timeout = "eternal",
     runtime_deps = RUNTIME_DEPS,
     deps = [
@@ -155,7 +155,7 @@ system_test_nns(
     env = ENV,
     guestos_update = "test",
     setupos = True,
-    tags = ["long_test"],
+    tags = ["system_test_large"],
     test_timeout = "eternal",
     runtime_deps = RUNTIME_DEPS,
     deps = [

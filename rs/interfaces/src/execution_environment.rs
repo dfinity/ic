@@ -53,14 +53,6 @@ pub struct InstanceStats {
     /// Non-deterministic number of dirty Wasm (64 KiB) pages (write).
     pub wasm_dirty_wasm_pages_count: usize,
 
-    /// Number of times a write access is handled when the page has already been
-    /// read.
-    pub wasm_read_before_write_count: usize,
-
-    /// Number of times a write access is handled when the page has not yet been
-    /// read.
-    pub wasm_direct_write_count: usize,
-
     /// Number of sigsegv handled.
     pub wasm_sigsegv_count: usize,
 
@@ -82,14 +74,6 @@ pub struct InstanceStats {
     /// Number of modified OS pages (4KiB) in stable memory.
     pub stable_dirty_pages: usize,
 
-    /// Number of times a write access is handled when the page has already been
-    /// read.
-    pub stable_read_before_write_count: usize,
-
-    /// Number of times a write access is handled when the page has not yet been
-    /// read.
-    pub stable_direct_write_count: usize,
-
     /// Number of sigsegv handled.
     pub stable_sigsegv_count: usize,
 
@@ -104,9 +88,6 @@ pub struct InstanceStats {
 
     /// Total time spent in SIGSEGV handler for stable memory.
     pub stable_sigsegv_handler_duration: Duration,
-
-    /// The cost of the message when the DMT charges for all page accesses.
-    pub dmt_projected_message_cost: usize,
 }
 
 impl InstanceStats {

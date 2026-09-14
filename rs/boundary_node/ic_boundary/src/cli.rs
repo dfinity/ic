@@ -281,7 +281,7 @@ pub struct RateLimiting {
     /// File is re-read periodically (see below) and new rules are applied if the changes are detected.
     ///
     /// Expecting YAML list with objects that have at least one of
-    /// (canister_id, subnet_id, methods_regex, request_types, limit) fields.
+    /// (canister_id, subnet_id, sender_id, methods_regex, request_types, limit) fields.
     ///
     /// Example:
     /// - canister_id: aaaaa-aa
@@ -292,6 +292,9 @@ pub struct RateLimiting {
     /// - subnet_id: aaaaaa-aa
     ///   canister_id: aaaaa-aa
     ///   methods_regex: ^baz$
+    ///   limit: block
+    ///
+    /// - sender_id: 2vxsx-fae
     ///   limit: block
     #[clap(env, long)]
     pub rate_limit_generic_file: Option<PathBuf>,

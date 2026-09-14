@@ -85,6 +85,7 @@ itertools = { workspace = true }
 lazy_static = { workspace = true }
 libc = { workspace = true }
 macaddr = { workspace = true }
+network = { path = "../../ic_os/networking/network" }
 nix = { workspace = true }
 num_cpus = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
@@ -96,6 +97,7 @@ regex = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
 ring = { workspace = true, features = ["std"] }
+rsa = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

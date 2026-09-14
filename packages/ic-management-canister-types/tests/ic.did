@@ -124,6 +124,34 @@ type http_request_result = record {
     body : blob;
 };
 
+type http_request_resource_report = record {
+    raw_response_bytes : opt variant { used : nat64; exceeded : reserved };
+    http_roundtrip_time_ms : opt variant { used : nat64; exceeded : reserved };
+    transform_instructions : opt variant { used : nat64; exceeded : reserved };
+    transformed_response_bytes : opt variant { used : nat64; exceeded : reserved };
+    cycles : opt variant { used : nat; exceeded : reserved };
+};
+
+type flexible_http_request_err = record {
+    global_error : opt variant {
+        timeout : reserved;
+        out_of_cycles : reserved;
+        responses_too_large : reserved;
+        too_many_rejects : reserved;
+    };
+    node_details : vec record {
+        node_id : principal;
+        report : http_request_resource_report;
+        error : opt record { code : text; message : text };
+    };
+    message : text;
+};
+
+type flexible_http_request_result = variant {
+    ok : vec http_request_result;
+    err : flexible_http_request_err;
+};
+
 type ecdsa_curve = variant {
     secp256k1;
 };
@@ -365,6 +393,24 @@ type http_request_args = record {
         context : blob;
     };
     is_replicated : opt bool;
+    pricing_version : opt nat32;
+};
+
+type flexible_http_request_args = record {
+    url : text;
+    max_response_bytes : opt nat64;
+    method : variant { get; head; post; put; delete; patch };
+    headers : vec http_header;
+    body : opt blob;
+    transform : opt record {
+        function : func(record { response : http_request_result; context : blob }) -> (http_request_result) query;
+        context : blob;
+    };
+    replication : opt record {
+        min_responses : nat32;
+        max_responses : nat32;
+        total_requests : nat32;
+    };
 };
 
 type ecdsa_public_key_args = record {
@@ -445,6 +491,38 @@ type node_metrics_history_args = record {
 type node_metrics_history_result = vec record {
     timestamp_nanos : nat64;
     node_metrics : vec node_metrics;
+};
+
+type subnet_metrics_args = record {
+    subnet_id : principal;
+};
+
+// This API is EXPERIMENTAL and may evolve in a non-backward-compatible way.
+//
+// Only `block_height` is current as of the block in which the call is executed.
+// The other four fields are read from the subnet's aggregated metrics, which the
+// replica updates at the *end* of a round, so they describe the state as of an
+// earlier block; see the individual fields.
+type subnet_metrics_result = record {
+    // Height of the block in whose execution this call is processed.
+    // Monotonically non-decreasing for a given subnet; the heights of different
+    // subnets are unrelated.
+    block_height : nat;
+    // Number of canisters on the subnet, as of the end of the previous round.
+    num_canisters : nat;
+    // Total size in bytes of the state taken by the canisters on the subnet, as
+    // of the end of the previous round. Recomputed only every 10 rounds, because
+    // summing it over every canister is expensive and it does not need to be
+    // exact, so it can be up to ten rounds stale and reads as 0 for the first
+    // rounds after the subnet is created.
+    canister_state_bytes : nat;
+    // Total cycles removed from circulation on the subnet by all current and
+    // deleted canisters, as of the end of the previous round.
+    consumed_cycles_total : nat;
+    // Total number of transactions processed on the subnet, i.e. the total
+    // number of messages executed in replicated mode, as of the end of the
+    // previous round.
+    update_transactions_total : nat;
 };
 
 type subnet_info_args = record {
@@ -683,6 +761,7 @@ service ic : {
     deposit_cycles : (deposit_cycles_args) -> ();
     raw_rand : () -> (raw_rand_result);
     http_request : (http_request_args) -> (http_request_result);
+    flexible_http_request : (flexible_http_request_args) -> (flexible_http_request_result);
 
     // Public canister data
     canister_info : (canister_info_args) -> (canister_info_result) query;
@@ -709,6 +788,7 @@ service ic : {
 
     // metrics interface
     node_metrics_history : (node_metrics_history_args) -> (node_metrics_history_result);
+    subnet_metrics : (subnet_metrics_args) -> (subnet_metrics_result);
 
     // subnet info
     subnet_info : (subnet_info_args) -> (subnet_info_result);

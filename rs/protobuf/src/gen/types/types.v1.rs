@@ -381,7 +381,7 @@ pub struct PostSplitArgs {
     #[prost(message, optional, tag = "1")]
     pub new_subnet_id: ::core::option::Option<SubnetId>,
 }
-/// next id: 16
+/// next id: 17
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Summary {
     #[prost(uint64, tag = "1")]
@@ -402,6 +402,15 @@ pub struct Summary {
     pub current_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
     #[prost(message, repeated, tag = "12")]
     pub next_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
+    /// Set by replica versions that no longer maintain `transcripts_for_remote_subnets` (field 10).
+    ///
+    /// When set, field 10 must be ignored entirely, including when hashing the summary. This is what
+    /// allows the field to be removed without changing the hash of a summary: replica versions that
+    /// still maintain the field and versions that have dropped it derive the same hash from the same
+    /// wire bytes, because both read this marker. `repeated` fields cannot express the difference
+    /// between "absent" and "empty" on the wire, hence the separate marker.
+    #[prost(bool, tag = "16")]
+    pub transcripts_for_remote_subnets_removed: bool,
     #[prost(oneof = "summary::SubnetSplittingStatus", tags = "13, 14, 15")]
     pub subnet_splitting_status: ::core::option::Option<summary::SubnetSplittingStatus>,
 }
@@ -569,8 +578,6 @@ pub struct CanisterHttpRequest {
 pub struct CanisterHttpResponse {
     #[prost(uint64, tag = "1")]
     pub id: u64,
-    #[prost(message, optional, tag = "4")]
-    pub canister_id: ::core::option::Option<CanisterId>,
     #[prost(message, optional, tag = "3")]
     pub content: ::core::option::Option<CanisterHttpResponseContent>,
 }

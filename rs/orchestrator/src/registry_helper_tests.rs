@@ -6,6 +6,7 @@ use ic_registry_keys::{make_standard_engine_replica_version_record_key, make_sub
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::PrincipalId;
 use lazy_static::lazy_static;
+use std::str::FromStr;
 
 fn subnet_id(id: u64) -> SubnetId {
     SubnetId::from(PrincipalId::new_subnet_test_id(id))
@@ -52,7 +53,7 @@ fn test_get_replica_version_when_specified_directly() {
     // Step 3: Verify result(s).
     assert_eq!(
         result.unwrap(),
-        ReplicaVersion::try_from("some_version").unwrap(),
+        ReplicaVersion::from_str("some_version").unwrap(),
     );
 }
 

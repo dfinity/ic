@@ -31,6 +31,7 @@ ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-transport = { path = "../registry/transport" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }
 pocket-ic = { path = "../../packages/pocket-ic" }
 prost = { workspace = true }

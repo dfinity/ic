@@ -22,9 +22,11 @@ exit_status=0
 
 # Patterns of files we do not want to test
 blacklist=(
-    "inject_version_into_wasm" # this is a bazel test
-    "empty.did"                # the didc checker does not like empty service files
-    "test.did"                 # we avoid checking test dids
+    "inject_version_into_wasm"   # this is a bazel test
+    "empty.did"                  # the didc checker does not like empty service files
+    "test.did"                   # we avoid checking test dids
+    "pocket-ic/test_canister"    # the pocket-ic test canister is test-only; all its clients live in this repo
+    "sender_canister/sender.did" # ditto for the rosetta-api sender canister
 )
 
 # turn blacklist into a grep exclusion

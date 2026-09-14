@@ -15,31 +15,32 @@
 
 use crate::{Args, Partition, crypt_name, metrics_file_path, run};
 use anyhow::{Result, anyhow};
-use config_types::{GuestOSConfig, GuestVMType, ICOSSettings};
+use attestation::attestation_report::tcb_version_to_u64;
+use config_types::GuestVMType;
 use guest_disk::DiskEncryption;
 use guest_disk::crypt::{
-    KeyslotMetadata, LUKS2_N_KEYSLOTS, LUKS2_N_TOKENS, LuksHeaderLocation, activate_crypt_device,
-    check_encryption_key, deactivate_crypt_device, format_crypt_device, open_luks2_device,
-    read_keyslot_metadata,
+    IC_KEY_TOKEN_TYPE, KeyslotToken, LUKS2_N_KEYSLOTS, LUKS2_N_TOKENS, LuksHeaderLocation,
+    SINGLE_KEYSLOT_INDEX, SINGLE_TOKEN_INDEX, SevMetadata, check_passphrase,
+    deactivate_crypt_device, format_luks2_device, open_luks2_device, read_single_keyslot_token,
 };
-use guest_disk::sev::{SevDiskEncryption, can_open_store};
+use guest_disk::sev::{SevDiskEncryption, can_open, rekey};
 use ic_device::device_mapping::{Bytes, TempDevice};
-use ic_os_logging::init_logging;
 use itertools::Either::Right;
-use libcryptsetup_rs::consts::flags::{CryptActivate, CryptVolumeKey};
+use libcryptsetup_rs::consts::flags::CryptVolumeKey;
 use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{
-    CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo,
+    CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo, TokenInput,
 };
 use prometheus::Registry;
-use sev::Generation;
+use serde_json::json;
 use sev::firmware::host::TcbVersion;
-use sev::parser::ByteParser;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
-use sev_guest_testing::MockSevGuestFirmwareBuilder;
+use sev_guest_testing::{DEFAULT_GENERATION, MockSevGuestFirmwareBuilder};
 use std::fs;
-use std::fs::{File, OpenOptions, Permissions};
-use std::io::{Read, Write};
+use std::fs::OpenOptions;
+use std::fs::{File, Permissions};
+use std::io::Read;
+use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use tempfile::{TempDir, tempdir};
@@ -51,20 +52,12 @@ static TEST_MUTEX: parking_lot::Mutex<()> = parking_lot::const_mutex(());
 const TEST_VOLUME_KEY_BYTES: usize = 512 / 8;
 const TEST_PBKDF_ITERATIONS: u32 = 1000;
 
-/// A raw passphrase used to simulate a legacy "previous key" left on disk by an earlier
-/// GuestOS release.
-const PREVIOUS_KEY: &[u8] = b"previous key";
-
 fn default_launch_tcb() -> TcbVersion {
     TcbVersion::new(None, 1, 2, 3, 4)
 }
 
 fn default_launch_tcb_as_u64() -> u64 {
-    u64::from_le_bytes(
-        default_launch_tcb()
-            .to_bytes_with(Generation::Milan)
-            .unwrap(),
-    )
+    tcb_version_to_u64(default_launch_tcb(), DEFAULT_GENERATION).unwrap()
 }
 
 /// The default launch measurement for slot A. Tests that assert on keyslot metadata
@@ -75,16 +68,6 @@ fn default_launch_measurement() -> [u8; 48] {
 
 fn default_launch_measurement_as_hex() -> String {
     hex::encode(default_launch_measurement())
-}
-
-fn create_guestos_config(enable_trusted_execution_environment: bool) -> GuestOSConfig {
-    GuestOSConfig {
-        icos_settings: ICOSSettings {
-            enable_trusted_execution_environment,
-            ..Default::default()
-        },
-        ..GuestOSConfig::default()
-    }
 }
 
 /// Counts the number of active LUKS2 keyslots on the given crypt device.
@@ -130,10 +113,10 @@ impl<'a> PartitionView<'a> {
         &self.device_path
     }
 
-    /// The LUKS header location for this partition, borrowing the stored detached path if any.
-    fn header_location(&self) -> LuksHeaderLocation<'_> {
+    /// The LUKS header location for this partition.
+    fn header_location(&self) -> LuksHeaderLocation {
         match &self.detached_header_path {
-            Some(path) => LuksHeaderLocation::Detached(path),
+            Some(path) => LuksHeaderLocation::Detached(path.clone()),
             None => LuksHeaderLocation::Attached,
         }
     }
@@ -164,58 +147,70 @@ impl<'a> PartitionView<'a> {
     }
 
     fn open_crypt_device(&self) -> CryptDevice {
-        open_luks2_device(&self.device_path, self.header_location()).unwrap()
+        open_luks2_device(&self.device_path, &self.header_location(), true).unwrap()
     }
 
     fn has_attached_luks2_header(&self) -> bool {
-        open_luks2_device(&self.device_path, LuksHeaderLocation::Attached).is_ok()
+        open_luks2_device(&self.device_path, &LuksHeaderLocation::Attached, true).is_ok()
     }
 
     fn has_detached_luks2_header(&self) -> bool {
         match &self.detached_header_path {
-            Some(header_path) => {
-                open_luks2_device(&self.device_path, LuksHeaderLocation::Detached(header_path))
-                    .is_ok()
-            }
+            Some(header_path) => open_luks2_device(
+                &self.device_path,
+                &LuksHeaderLocation::Detached(header_path.clone()),
+                /*verify_luks_params=*/ true,
+            )
+            .is_ok(),
             // A partition configured for an attached header has no detached header to inspect.
             None => false,
         }
     }
 
-    /// Reads all `ic-key-metadata` tokens from the device, verifying in passing that no
-    /// unexpected (internal or invalid) tokens are present.
-    fn read_keyslot_metadata(&self) -> Vec<KeyslotMetadata> {
+    /// Asserts that there is only a single token at index 0 and returns it.
+    fn read_keyslot_token(&self) -> KeyslotToken {
+        self.assert_single_metadata_token();
+        let token = read_single_keyslot_token(&mut self.open_crypt_device()).unwrap();
+        assert_eq!(token.keyslots, [SINGLE_KEYSLOT_INDEX.to_string()]);
+        token
+    }
+
+    /// Asserts that the device carries no token at all.
+    fn assert_no_metadata_token(&self) {
         let mut crypt_device = self.open_crypt_device();
-        let mut expected_token_count = 0;
-        // Verify that only our tokens are present. There is no reason for any other token type
-        // to be present.
         for token_id in 0..LUKS2_N_TOKENS {
-            match crypt_device.token_handle().status(token_id).unwrap() {
-                CryptTokenInfo::Invalid => {
-                    panic!("expected token {token_id} to be valid");
-                }
-                CryptTokenInfo::Inactive => { /* no-op */ }
-                CryptTokenInfo::Internal(_) | CryptTokenInfo::InternalUnknown(_) => {
-                    panic!("Did not expect internal token {token_id}")
-                }
-                CryptTokenInfo::External(_) | CryptTokenInfo::ExternalUnknown(_) => {
-                    expected_token_count += 1;
-                }
-            }
+            assert!(
+                matches!(
+                    crypt_device.token_handle().status(token_id).unwrap(),
+                    CryptTokenInfo::Inactive
+                ),
+                "did not expect token {token_id} on the device"
+            );
         }
+    }
 
-        let metadata = read_keyslot_metadata(&mut crypt_device).unwrap();
-        assert_eq!(
-            metadata.len(),
-            expected_token_count,
-            "expected to read all ic-key-metadata tokens from the device"
-        );
-
-        for entry in &metadata {
-            entry.keyslot().expect("expected keyslot to be present");
+    /// Asserts the single-token invariant: the only token on the device is the
+    /// `{IC_KEY_TOKEN_TYPE}` token, in the first token position; all other tokens are
+    /// inactive.
+    fn assert_single_metadata_token(&self) {
+        let mut crypt_device = self.open_crypt_device();
+        for token_id in 0..LUKS2_N_TOKENS {
+            let status = crypt_device.token_handle().status(token_id).unwrap();
+            let expected = if token_id == SINGLE_TOKEN_INDEX {
+                matches!(
+                    status,
+                    CryptTokenInfo::ExternalUnknown(ref token_type)
+                        if token_type == IC_KEY_TOKEN_TYPE
+                )
+            } else {
+                matches!(status, CryptTokenInfo::Inactive)
+            };
+            assert!(
+                expected,
+                "token {token_id}: expected the only token to be the {IC_KEY_TOKEN_TYPE} token \
+                 in the first position and all other positions to be inactive"
+            );
         }
-
-        metadata
     }
 
     fn active_keyslot_count(&self) -> usize {
@@ -243,6 +238,21 @@ impl<'a> PartitionView<'a> {
 
     fn assert_payload(&self, expected: &[u8]) {
         assert_device_has_content(&self.mapper_path(), expected);
+    }
+
+    /// Formats the partition, writes `payload` through an open mapper, and closes it again.
+    fn format_with_payload(&self, payload: &[u8]) {
+        self.format().unwrap();
+        self.open().unwrap();
+        self.write_payload(payload);
+        self.deactivate();
+    }
+
+    /// Opens the partition, asserts its payload, and closes it again.
+    fn open_and_assert_payload(&self, payload: &[u8]) {
+        self.open().unwrap();
+        self.assert_payload(payload);
+        self.deactivate();
     }
 }
 
@@ -272,11 +282,6 @@ impl BootSlot {
         self.var_dir.path().join("store.header")
     }
 
-    /// Path of the ephemeral previous-key file on this slot's var partition.
-    fn previous_key_path(&self) -> PathBuf {
-        self.var_dir.path().join("previous_key")
-    }
-
     /// Path of the generated-key file on this slot's var partition.
     fn generated_key_path(&self) -> PathBuf {
         self.var_dir.path().join("generated_key")
@@ -298,7 +303,8 @@ struct TestFixture {
     _store_device: TempDevice,
     slots: [BootSlot; 2],
     active_slot: usize,
-    guestos_config: GuestOSConfig,
+    sev_enabled: bool,
+    guest_vm_type: GuestVMType,
     launch_tcb: TcbVersion,
     _guard: parking_lot::MutexGuard<'static, ()>,
 }
@@ -307,16 +313,16 @@ impl TestFixture {
     /// Fixture with SEV disk encryption enabled (store uses a detached header, keys are
     /// derived from the SEV launch measurement).
     fn new_sev() -> Self {
-        Self::new(create_guestos_config(true))
+        Self::new(true)
     }
 
     /// Fixture with a generated (non-SEV) disk key: TEE/SEV disabled, store uses an attached
     /// header.
     fn new_with_generated_key() -> Self {
-        Self::new(create_guestos_config(false))
+        Self::new(false)
     }
 
-    fn new(guestos_config: GuestOSConfig) -> Self {
+    fn new(sev_enabled: bool) -> Self {
         let guard = TEST_MUTEX.lock();
         cleanup();
         // LUKS2 needs 16 MiB of space for the metadata, let's add 2 MiB for the data.
@@ -330,7 +336,8 @@ impl TestFixture {
                 BootSlot::new("B", [0_u8; 48]),
             ],
             active_slot: 0,
-            guestos_config,
+            sev_enabled,
+            guest_vm_type: GuestVMType::Default,
             launch_tcb: default_launch_tcb(),
             _guard: guard,
         }
@@ -348,7 +355,7 @@ impl TestFixture {
     /// slot's Store header file) only under SEV; otherwise an attached header.
     fn store_partition(&self) -> PartitionView<'_> {
         // SEV: the store partition carries its LUKS header detached (on the var partition).
-        let detached_header_path = self.is_sev_enabled().then(|| self.store_header_path());
+        let detached_header_path = self.sev_enabled.then(|| self.store_header_path());
         PartitionView::new(
             self,
             Partition::Store,
@@ -378,16 +385,6 @@ impl TestFixture {
         &self.store_device_path
     }
 
-    fn is_sev_enabled(&self) -> bool {
-        self.guestos_config
-            .icos_settings
-            .enable_trusted_execution_environment
-    }
-
-    fn previous_key_path(&self) -> PathBuf {
-        self.active_boot_slot().previous_key_path()
-    }
-
     fn store_header_path(&self) -> PathBuf {
         self.active_boot_slot().store_header_path()
     }
@@ -413,24 +410,32 @@ impl TestFixture {
     }
 
     fn run(&self, args: Args) -> Result<()> {
-        let previous_key_path = self.previous_key_path();
         let store_luks_header_path = self.store_header_path();
         let generated_key_path = self.generated_key_path();
         run(
             args,
-            &self.guestos_config,
-            self.is_sev_enabled(),
+            self.guest_vm_type,
+            self.sev_enabled,
             || Ok(Box::new(self.sev_firmware_builder())),
-            &previous_key_path,
             &store_luks_header_path,
             &generated_key_path,
             self.metrics_dir(),
         )
     }
 
-    /// Derives the current SEV disk-encryption key for the given partition's data device,
-    /// using the active slot's measurement.
+    fn launch_tcb_as_u64(&self) -> u64 {
+        tcb_version_to_u64(self.launch_tcb, DEFAULT_GENERATION).unwrap()
+    }
+
+    /// Derives the SEV disk-encryption key for the given partition's data device at the
+    /// current launch TCB, using the active slot's measurement.
     fn derive_sev_key(&self, partition: Partition) -> Vec<u8> {
+        self.derive_sev_key_at(partition, self.launch_tcb_as_u64())
+    }
+
+    /// Derives the SEV disk-encryption key for the given partition's data device at the
+    /// given TCB version, using the active slot's measurement.
+    fn derive_sev_key_at(&self, partition: Partition, tcb_version: u64) -> Vec<u8> {
         let device_path = self.partition(partition).device_path().to_path_buf();
         let mut firmware = self.sev_firmware_builder();
         derive_key_from_sev_measurement(
@@ -438,53 +443,48 @@ impl TestFixture {
             Key::DiskEncryptionKey {
                 device_path: &device_path,
             },
+            tcb_version,
         )
         .unwrap()
         .into_bytes()
     }
 
-    /// SEV: whether the store partition can be unlocked locally with the previous key or the
-    /// current SEV-derived key (used to decide whether key exchange can be skipped).
-    fn can_open_store(&self) -> Result<bool> {
-        let previous_key_path = self.previous_key_path();
+    /// SEV: whether the store partition can be unlocked locally with the SEV-derived key
+    /// (used to decide whether key exchange can be skipped).
+    fn can_open_store(&self) -> Result<()> {
         let store_luks_header_path = self.store_header_path();
         let mut firmware = self.sev_firmware_builder();
-        can_open_store(
+        can_open(
             self.store_device_path(),
-            &previous_key_path,
-            &store_luks_header_path,
+            &LuksHeaderLocation::Detached(store_luks_header_path.clone()),
             &mut firmware,
         )
     }
 
-    /// Writes the [`PREVIOUS_KEY`] file on the active slot's var partition.
-    fn write_previous_key(&self) {
-        let previous_key_path = self.previous_key_path();
-        fs::write(&previous_key_path, PREVIOUS_KEY)
-            .expect("Failed to write previous key for testing");
-    }
-
-    fn assert_no_detached_store_header(&self) {
-        let store_header_path = self.store_header_path();
-        assert!(!store_header_path.exists());
-        assert!(!self.store_partition().has_detached_luks2_header());
-    }
-
-    fn enable_sev(&mut self) {
-        self.guestos_config = create_guestos_config(true);
-    }
-
     fn set_guest_vm_type(&mut self, vm_type: GuestVMType) {
-        self.guestos_config.guest_vm_type = vm_type;
+        self.guest_vm_type = vm_type;
+    }
+
+    /// Sets the SEV launch TCB version (the simulated firmware version): before formatting,
+    /// or mid-test to simulate a firmware upgrade or downgrade.
+    fn set_launch_tcb(&mut self, tcb: TcbVersion) {
+        self.launch_tcb = tcb;
+    }
+
+    /// Sets the active boot slot's SEV launch measurement (identifies the GuestOS version).
+    fn set_launch_measurement(&mut self, measurement: [u8; 48]) {
+        self.slots[self.active_slot].launch_measurement = measurement;
     }
 
     /// SEV upgrade protocol: installs a new GuestOS version (identified by its SEV launch
-    /// measurement) on the other boot slot, then rotates the SEV key (copy detached header,
-    /// exchange key) and boots. Returns the result of opening the store so callers can attach
-    /// context (e.g. an iteration index).
-    fn upgrade_sev_guestos_to(&mut self, new_launch_measurement: [u8; 48]) -> Result<()> {
-        // Derive the current slot's key (upgrade protocol key exchange).
-        let old_key = self.derive_sev_key(Partition::Store);
+    /// measurement) on the other boot slot, then runs the upgrade key exchange: the old
+    /// GuestOS serves its derived key and detached header, and the upgrade client (running
+    /// the new GuestOS's code) copies the header to the new slot's var partition and
+    /// re-keys it to the new GuestOS's derived key. Returns the result of opening the
+    /// store so callers can attach context (e.g. an iteration index).
+    fn upgrade_sev_guestos_to(&mut self, new_launch_measurement: [u8; 48]) {
+        // The old GuestOS's orchestrator derives and serves its Store key.
+        let served_key = self.derive_sev_key(Partition::Store);
 
         let target = 1 - self.active_slot;
 
@@ -494,23 +494,29 @@ impl TestFixture {
         // Format the target's var partition (drop old, create fresh).
         let _ = std::mem::replace(&mut self.slots[target].var_dir, tempdir().unwrap());
 
-        // Copy the detached Store header from the current var to the target var.
+        // The upgrade client copies the served detached Store header from the current var
+        // to the target's var partition and re-keys it with the new GuestOS's derived key.
         let src_header = self.slots[self.active_slot].store_header_path();
         let dst_header = self.slots[target].store_header_path();
         fs::copy(&src_header, &dst_header)
             .expect("Failed to copy detached Store header during upgrade");
-
-        // Make the previous key available on the target's var (upgrade protocol).
-        let target_previous_key = self.slots[target].previous_key_path();
-        fs::write(&target_previous_key, &old_key).unwrap();
+        let mut upgrade_vm_firmware = self
+            .sev_firmware_builder()
+            .with_measurement(new_launch_measurement);
+        rekey(
+            self.store_device_path(),
+            &LuksHeaderLocation::Detached(dst_header.clone()),
+            &served_key,
+            &mut upgrade_vm_firmware,
+        )
+        .expect("Failed to re-key the Store LUKS header during upgrade");
 
         self.active_slot = target;
-        self.store_partition().open()
     }
 
     /// Switches to the other boot slot with no key exchange or var formatting.
-    /// The other slot boots with its own frozen var partition (detached header + SEV key from
-    /// its last boot).
+    /// The other slot boots with its own frozen var partition (detached Store header and
+    /// the keyslot for its own launch measurement from its last boot).
     fn rollback(&mut self) {
         self.active_slot = 1 - self.active_slot;
         self.store_partition().open().unwrap();
@@ -585,6 +591,13 @@ fn create_crypt_device_luks_parameters(
         .unwrap();
 }
 
+fn add_raw_metadata_token(crypt_device: &mut CryptDevice, token: serde_json::Value) {
+    crypt_device
+        .token_handle()
+        .json_set(TokenInput::AddToken(&token))
+        .unwrap();
+}
+
 #[test]
 fn test_generated_key_init_and_reopen() {
     for partition_name in [Partition::Store, Partition::Var] {
@@ -628,11 +641,8 @@ fn test_generated_key_init_and_reopen() {
                 "detached Store header should not exist for {partition_name:?} with generated key"
             );
         }
-        assert_eq!(
-            partition.read_keyslot_metadata().len(),
-            0,
-            "Unexpected keyslot metadata when using generated key for {partition_name:?}"
-        );
+        // Generated-key partitions carry no metadata token.
+        partition.assert_no_metadata_token();
     }
 }
 
@@ -685,6 +695,19 @@ fn test_sev_key_init_and_reopen() {
             .expect("Failed to reopen partition with SEV key");
 
         partition.assert_payload(b"test_data");
+        partition.assert_single_metadata_token();
+
+        // Opening the device must export the LUKS metrics.
+        let metrics_content = fs::read_to_string(fixture.metrics_file(partition_name))
+            .expect("Failed to read metrics file");
+        assert!(
+            metrics_content.contains("guest_disk_encryption_info"),
+            "Missing encryption info metric for {partition_name:?}: {metrics_content}"
+        );
+        assert!(
+            metrics_content.contains("num_keyslots=\"1\""),
+            "Missing or incorrect num_keyslots label for {partition_name:?}: {metrics_content}"
+        );
 
         if partition_name == Partition::Store {
             assert!(fixture.store_header_path().exists());
@@ -697,25 +720,17 @@ fn test_sev_key_init_and_reopen() {
 }
 
 #[test]
-fn test_sev_format_writes_keyslot_metadata() {
+fn test_sev_format_writes_keyslot_token() {
     for partition in [Partition::Store, Partition::Var] {
         let fixture = TestFixture::new_sev();
         fixture.partition(partition).format().unwrap();
 
-        let metadata = fixture.partition(partition).read_keyslot_metadata();
+        let token = fixture.partition(partition).read_keyslot_token();
         assert_eq!(
-            metadata.len(),
-            1,
-            "expected one metadata token for {partition:?}"
-        );
-        assert_eq!(
-            metadata[0].sev_metadata.launch_measurement_hex,
+            token.sev_metadata.launch_measurement_hex,
             default_launch_measurement_as_hex()
         );
-        assert_eq!(
-            metadata[0].sev_metadata.tcb_version,
-            default_launch_tcb_as_u64()
-        );
+        assert_eq!(token.sev_metadata.tcb_version, default_launch_tcb_as_u64());
     }
 }
 
@@ -795,7 +810,6 @@ fn test_format_store_refuses_existing_detached_header() {
 
     let mut encryption = SevDiskEncryption {
         sev_firmware: Box::new(MockSevGuestFirmwareBuilder::new()),
-        previous_key_path: fixture.previous_key_path(),
         store_luks_header_path: store_header_path.clone(),
         guest_vm_type: GuestVMType::Default,
         metrics_registry: Registry::new(),
@@ -816,153 +830,9 @@ fn test_format_store_refuses_existing_detached_header() {
     );
 }
 
-/// Tests that opening a Store partition encrypted with a raw (non-SEV) previous key
-/// via the upgrade path exchanges keys, removes deprecated keys, and writes SEV
-/// metadata for the new keyslot.
-#[test]
-fn test_sev_unlock_store_partition_with_previous_key() {
-    const DEPRECATED_KEY: &[u8] = b"deprecated key";
-
-    let fixture = TestFixture::new_sev();
-
-    fs::write(fixture.previous_key_path(), PREVIOUS_KEY)
-        .expect("Failed to write previous key for testing");
-
-    // Let's assume the store partition is already encrypted with a previous key.
-    let (mut device, _keyslot) = format_crypt_device(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        PREVIOUS_KEY,
-    )
-    .unwrap();
-
-    // Let's also assume that an old deprecated key had been added to the device which will be
-    // removed (only the previous key and the new SEV key should remain).
-    device
-        .keyslot_handle()
-        .add_by_passphrase(None, PREVIOUS_KEY, DEPRECATED_KEY)
-        .expect("Failed to add deprecated key slot");
-
-    drop(device);
-
-    // Write some data to the disk.
-    activate_crypt_device(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        "store-crypt",
-        PREVIOUS_KEY,
-        CryptActivate::empty(),
-        false,
-        None,
-    )
-    .expect("Failed to activate device");
-    fixture.store_partition().write_payload(b"hello world");
-
-    fixture.store_partition().deactivate();
-
-    check_encryption_key(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        PREVIOUS_KEY,
-    )
-    .expect("previous key should unlock the store partition");
-
-    check_encryption_key(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        DEPRECATED_KEY,
-    )
-    .expect("deprecated key should unlock the store partition");
-
-    // This is where the real testing starts. We open the disk with open() - in production, this
-    // would happen during an upgrade.
-    fixture.store_partition().open().unwrap();
-
-    // Check that previous content is still there.
-    fixture.store_partition().assert_payload(b"hello world");
-    assert!(fixture.store_header_path().exists());
-    assert!(fixture.store_partition().has_detached_luks2_header());
-
-    // Check that the previous key file has been deleted.
-    assert!(!fixture.previous_key_path().exists());
-
-    // Check that the SEV key unlocks the device, the previous key unlocks the device, and the
-    // deprecated key is removed.
-    check_encryption_key(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        PREVIOUS_KEY,
-    )
-    .expect("previous key should unlock the store partition");
-
-    let sev_key = fixture.derive_sev_key(Partition::Store);
-
-    check_encryption_key(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        &sev_key,
-    )
-    .expect("SEV key should unlock the store partition");
-
-    check_encryption_key(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        DEPRECATED_KEY,
-    )
-    .expect_err("deprecated key should not unlock the store partition");
-
-    let mut device = fixture.store_partition().open_crypt_device();
-    let metadata = read_keyslot_metadata(&mut device).expect("Failed to read key-slot metadata");
-    assert_eq!(metadata.len(), 1);
-    assert_eq!(
-        metadata[0].sev_metadata.launch_measurement_hex,
-        default_launch_measurement_as_hex(),
-    );
-    assert_eq!(
-        metadata[0].sev_metadata.tcb_version,
-        default_launch_tcb_as_u64(),
-    );
-    let metadata_keyslot = metadata[0].keyslot().unwrap();
-
-    let previous_keyslot = device
-        .activate_handle()
-        .activate_by_passphrase(None, None, PREVIOUS_KEY, CryptActivate::empty())
-        .expect("previous key should resolve to an active keyslot");
-    let sev_keyslot = device
-        .activate_handle()
-        .activate_by_passphrase(None, None, &sev_key, CryptActivate::empty())
-        .expect("SEV key should resolve to the rotated keyslot");
-    assert_ne!(
-        previous_keyslot, sev_keyslot,
-        "previous and rotated SEV passphrases must occupy different keyslots"
-    );
-    assert_eq!(
-        metadata_keyslot, sev_keyslot,
-        "metadata should be attached to the rotated SEV passphrase keyslot"
-    );
-
-    let mut keyslot_handle = device.keyslot_handle();
-
-    // Test that all active keys have correct params.
-    for keyslot in 0..LUKS2_N_KEYSLOTS {
-        if matches!(
-            keyslot_handle
-                .status(keyslot)
-                .expect("Failed to get keyslot status"),
-            KeyslotInfo::Active | KeyslotInfo::ActiveLast
-        ) {
-            let pbkdf = keyslot_handle
-                .get_pbkdf(keyslot)
-                .expect("Failed to get PBKDF params for active keyslot");
-            assert_eq!(pbkdf.type_, CryptKdf::Pbkdf2);
-            assert_eq!(pbkdf.iterations, TEST_PBKDF_ITERATIONS);
-        }
-    }
-    assert_eq!(fixture.store_partition().active_keyslot_count(), 2);
-}
-
 /// Tests that a GuestOS rollback works without key exchange: the rolled-back
-/// GuestOS uses its own frozen detached header and opens via the SEV-derived key.
+/// GuestOS uses its own frozen detached header, whose keyslot matches its own launch
+/// measurement.
 #[test]
 fn test_rollback_uses_frozen_header_without_key_exchange() {
     let mut fixture = TestFixture::new_sev();
@@ -974,14 +844,11 @@ fn test_rollback_uses_frozen_header_without_key_exchange() {
     fixture.store_partition().deactivate();
 
     // Upgrade to the other slot.
-    fixture.upgrade_sev_guestos_to([0x11; 48]).unwrap();
+    fixture.upgrade_sev_guestos_to([0x11; 48]);
+    fixture.store_partition().open().unwrap();
     fixture.store_partition().deactivate();
 
-    // Rollback: no key file, uses the original slot's frozen detached header.
-    assert!(
-        !fixture.previous_key_path().exists(),
-        "no previous key after upgrade consumed it"
-    );
+    // Rollback: the original slot boots with its own frozen header and keyslot.
     fixture.rollback();
     fixture.store_partition().assert_payload(b"rollback data");
     assert_eq!(fixture.active_boot_slot().name, "A");
@@ -993,74 +860,35 @@ fn test_rollback_uses_frozen_header_without_key_exchange() {
     fixture.store_partition().deactivate();
 }
 
+/// The store cannot be opened by a GuestOS whose launch measurement does not match the
+/// keyslot in the detached header (its SEV-derived key differs).
 #[test]
-fn test_sev_upgrade_vm_keeps_previous_key_file() {
+fn test_open_store_fails_with_wrong_launch_measurement() {
     let mut fixture = TestFixture::new_sev();
-    fixture.set_guest_vm_type(GuestVMType::Upgrade);
 
-    fixture.write_previous_key();
+    fixture.store_partition().format().unwrap();
 
-    // Simulate a store partition encrypted with the previous key.
-    format_crypt_device(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        PREVIOUS_KEY,
-    )
-    .unwrap();
-
+    // Simulate a different GuestOS booting from the same slot.
+    fixture.slots[fixture.active_slot].launch_measurement = [0xAA; 48];
     fixture
         .store_partition()
         .open()
-        .expect("opening Store with previous key should succeed during upgrade");
-
+        .expect_err("opening Store with a mismatched launch measurement must fail");
     assert!(
-        fixture.previous_key_path().exists(),
-        "Upgrade Guest VM should preserve previous key file"
+        !fixture.store_partition().mapper_path().exists(),
+        "no mapper device should exist after the failed open"
     );
-    assert_eq!(
-        fs::read(fixture.previous_key_path()).unwrap(),
-        PREVIOUS_KEY,
-        "Upgrade Guest VM should keep the previous key file contents unchanged"
-    );
-    assert_eq!(fixture.store_partition().active_keyslot_count(), 2);
 }
 
 #[test]
-fn test_sev_unlock_store_with_current_key_if_previous_key_does_not_work() {
+fn test_open_store_after_format_luks2_device_with_detached_header() {
     let fixture = TestFixture::new_sev();
 
-    // The store partition is encrypted with the current SEV key but not with the previous key.
-    fixture.write_previous_key();
-
-    let sev_key = fixture.derive_sev_key(Partition::Store);
-    format_crypt_device(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        &sev_key,
-    )
-    .unwrap();
-
-    // Opening it should succeed
+    // Format the store device.
     fixture
         .store_partition()
-        .open()
-        .expect("Failed to open store partition");
-    assert!(fixture.store_partition().has_detached_luks2_header());
-    assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
-}
-
-#[test]
-fn test_open_store_after_format_crypt_device_with_detached_header() {
-    let fixture = TestFixture::new_sev();
-
-    // Format the store device with a detached header locked by the current SEV key.
-    let sev_key = fixture.derive_sev_key(Partition::Store);
-    format_crypt_device(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        &sev_key,
-    )
-    .expect("Failed to format Store device with current SEV key");
+        .format()
+        .expect("Failed to format Store device with current SEV key");
 
     assert!(fixture.store_partition().has_detached_luks2_header());
     assert!(!fixture.store_partition().has_attached_luks2_header());
@@ -1097,55 +925,20 @@ fn test_fails_to_open_var_if_key_doesnt_work() {
         .expect_err("Expected setup_disk_encryption to fail due to wrong key");
 }
 
-#[test]
-fn test_open_store_with_same_previous_and_current_key_keeps_valid_token_metadata() {
-    let fixture = TestFixture::new_sev();
-    fixture.store_partition().format().unwrap();
-
-    // Use the current SEV key as the previous key, so previous == current.
-    let current_key = fixture.derive_sev_key(Partition::Store);
-    fs::write(fixture.previous_key_path(), &current_key)
-        .expect("Failed to write current key as previous key");
-
-    let metadata_before = fixture.store_partition().read_keyslot_metadata();
-    assert_eq!(metadata_before.len(), 1);
-
-    fixture
-        .store_partition()
-        .open()
-        .expect("opening Store should succeed when previous and current SEV keys are equal");
-
-    let metadata_after = fixture.store_partition().read_keyslot_metadata();
-    assert_eq!(metadata_after.len(), 2);
-
-    let active_keyslot = fixture
-        .store_partition()
-        .open_crypt_device()
-        .activate_handle()
-        .activate_by_passphrase(None, None, &current_key, CryptActivate::empty())
-        .expect("Current SEV key should still resolve to an active keyslot");
-    assert_eq!(metadata_after[0].keyslot().unwrap(), active_keyslot);
-
-    fixture.store_partition().deactivate();
-}
-
-/// Tests that the store partition survives many upgrades, each deriving a different SEV key,
-/// while always keeping exactly two keyslots (the previous and the current one).
+/// Tests that the store partition survives many upgrades, each re-keying the copied
+/// detached header, while always keeping exactly one keyslot. The last upgrade re-keys
+/// with the same key (same launch measurement), which must be equally harmless.
 #[test]
 fn test_open_store_multiple_times_with_different_keys() {
-    init_logging();
     let mut fixture = TestFixture::new_sev();
 
     fixture.store_partition().format().unwrap();
-    // Corrupt the area where an attached header would live so only the detached header is used.
-    fixture.store_partition().corrupt_attached_header();
 
     for iteration in 0..6 {
-        fixture
-            .upgrade_sev_guestos_to([iteration as u8; 48])
-            .unwrap_or_else(|e| {
-                panic!("Failed to open store partition on iteration {iteration}: {e:#}")
-            });
+        fixture.upgrade_sev_guestos_to([iteration as u8; 48]);
+        fixture.store_partition().open().unwrap_or_else(|e| {
+            panic!("Failed to open store partition on iteration {iteration}: {e:#}")
+        });
         assert!(
             fixture.store_partition().mapper_path().exists(),
             "store mapper device should exist on iteration {iteration}"
@@ -1153,79 +946,132 @@ fn test_open_store_multiple_times_with_different_keys() {
         fixture.store_partition().deactivate();
     }
 
-    // After six upgrades only the two most recent keys (iterations 4 and 5) survive.
-    let metadata = fixture.store_partition().read_keyslot_metadata();
-    assert_eq!(metadata.len(), 2);
-    assert_ne!(
-        metadata[0].keyslot().unwrap(),
-        metadata[1].keyslot().unwrap()
+    // An upgrade to a GuestOS with the same launch measurement re-keys the header with
+    // the same key; it must remain in the single-keyslot/single-token state.
+    fixture.upgrade_sev_guestos_to([5_u8; 48]);
+    fixture.store_partition().deactivate();
+
+    // Each re-key replaces the old key in place: the single keyslot (always the first)
+    // and the single metadata token (always the first) carry the newest GuestOS's key
+    // and launch measurement.
+    let token = fixture.store_partition().read_keyslot_token();
+    assert_eq!(
+        token.sev_metadata.launch_measurement_hex,
+        hex::encode([5_u8; 48])
     );
-    // The two surviving keyslots must carry the measurements from the last two iterations.
-    // (Order is not asserted: token ordering depends on keyslot allocation.)
-    let measurements: Vec<String> = metadata
-        .iter()
-        .map(|m| m.sev_metadata.launch_measurement_hex.clone())
-        .collect();
-    assert!(
-        measurements.contains(&hex::encode([4_u8; 48])),
-        "expected a keyslot from iteration 4, got {measurements:?}"
-    );
-    assert!(
-        measurements.contains(&hex::encode([5_u8; 48])),
-        "expected a keyslot from iteration 5, got {measurements:?}"
-    );
+    assert_eq!(token.sev_metadata.tcb_version, fixture.launch_tcb_as_u64());
+    assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
+}
+
+/// A legacy header carrying an extra (stale) keyslot converges back to the single first
+/// keyslot on the next upgrade.
+// TODO: remove when we clean up destroy_keyslots_except_first (see comment on that function)
+#[test]
+fn test_upgrade_removes_stale_keyslots() {
+    const STALE_KEY: &[u8] = b"stale previous key";
+
+    let mut fixture = TestFixture::new_sev();
+
+    // Build the legacy layout: the previous GuestOS's key in the first keyslot, the
+    // current GuestOS's (served) key in a later one.
+    let served_key = fixture.derive_sev_key(Partition::Store);
+    let mut crypt_device = format_luks2_device(
+        fixture.store_device_path(),
+        &LuksHeaderLocation::Detached(fixture.store_header_path()),
+        STALE_KEY,
+    )
+    .unwrap();
+    crypt_device
+        .keyslot_handle()
+        .add_by_passphrase(None, STALE_KEY, &served_key)
+        .expect("Failed to add the current GuestOS's keyslot");
+    drop(crypt_device);
     assert_eq!(fixture.store_partition().active_keyslot_count(), 2);
+
+    fixture.upgrade_sev_guestos_to([0x22; 48]);
+
+    assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
+    // The re-key converges the legacy header back to the single token in the first
+    // position, assigned to the single keyslot.
+    fixture.store_partition().read_keyslot_token();
 }
 
+/// A legacy header carrying its keyslot at a non-zero index and its IC key metadata
+/// token at a non-zero index migrates on the next upgrade: the re-key succeeds and
+/// converges to the canonical layout with a single keyslot at index 0 and a single
+/// token at index 0.
+// TODO: remove this test once all nodes only use a single key slot + token per device
 #[test]
-fn test_can_open_store_with_previous_key() {
-    let fixture = TestFixture::new_sev();
+fn test_rekey_migrates_legacy_keyslot_and_token_positions() {
+    const LEGACY_KEYSLOT_INDEX: u32 = 2;
+    const LEGACY_TOKEN_INDEX: u32 = 3;
+    const STALE_KEY: &[u8] = b"stale previous key";
 
-    // Prepare device encrypted with a previous key and write previous key file
-    fixture.write_previous_key();
+    let mut fixture = TestFixture::new_sev();
 
-    // Format device with previous key
-    format_crypt_device(
+    // Build the legacy layout: the current GuestOS's (served) key in keyslot 2, keyslot
+    // 0 unused, and the IC key metadata token in token position 3.
+    let served_key = fixture.derive_sev_key(Partition::Store);
+    let mut crypt_device = format_luks2_device(
         fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        PREVIOUS_KEY,
+        &LuksHeaderLocation::Detached(fixture.store_header_path()),
+        STALE_KEY,
     )
     .unwrap();
+    crypt_device
+        .keyslot_handle()
+        .add_by_passphrase(Some(LEGACY_KEYSLOT_INDEX), STALE_KEY, &served_key)
+        .expect("Failed to add the served key's keyslot at the legacy position");
+    crypt_device
+        .keyslot_handle()
+        .destroy(SINGLE_KEYSLOT_INDEX)
+        .expect("Failed to remove the format key's keyslot");
+    let mut legacy_token = KeyslotToken::new_sev(SevMetadata {
+        launch_measurement_hex: default_launch_measurement_as_hex(),
+        tcb_version: default_launch_tcb_as_u64(),
+    });
+    legacy_token.keyslots = vec![LEGACY_KEYSLOT_INDEX.to_string()];
+    crypt_device
+        .token_handle()
+        .json_set(TokenInput::ReplaceToken(
+            LEGACY_TOKEN_INDEX,
+            &serde_json::to_value(legacy_token).unwrap(),
+        ))
+        .expect("Failed to write the legacy IC key metadata token at position 3");
+    drop(crypt_device);
 
-    // can_open_store should return true because previous key unlocks the device
-    let result = fixture
-        .can_open_store()
-        .expect("can_open_store returned error");
-    assert!(
-        result,
-        "Expected can_open_store to return true when previous key works"
-    );
-}
+    // Sanity-check the legacy layout before the migration: exactly one active keyslot
+    // (in position 2) and the IC key token in position 3.
+    assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
+    assert!(matches!(
+        fixture
+            .store_partition()
+            .open_crypt_device()
+            .token_handle()
+            .status(LEGACY_TOKEN_INDEX)
+            .unwrap(),
+        CryptTokenInfo::ExternalUnknown(ref token_type) if token_type == IC_KEY_TOKEN_TYPE
+    ));
 
-#[test]
-fn test_can_open_store_with_derived_key_when_previous_key_fails() {
-    let fixture = TestFixture::new_sev();
+    fixture.upgrade_sev_guestos_to([0x33; 48]);
 
-    // Write a previous key that does NOT unlock the device
-    fs::write(fixture.previous_key_path(), b"wrong previous key")
-        .expect("Failed to write previous key");
-
-    // Format the device with the current SEV derived key
-    let sev_key = fixture.derive_sev_key(Partition::Store);
-    format_crypt_device(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        &sev_key,
-    )
-    .unwrap();
-
-    // can_open_store should return true because the derived SEV key can open it
-    let result = fixture
-        .can_open_store()
-        .expect("can_open_store returned error");
-    assert!(
-        result,
-        "Expected can_open_store to return true when derived SEV key works"
+    // The migrated header carries exactly one active keyslot, and it is at index 0.
+    assert_eq!(fixture.store_partition().active_keyslot_count(), 1);
+    assert!(matches!(
+        fixture
+            .store_partition()
+            .open_crypt_device()
+            .keyslot_handle()
+            .status(SINGLE_KEYSLOT_INDEX)
+            .unwrap(),
+        KeyslotInfo::Active | KeyslotInfo::ActiveLast
+    ));
+    // The single token moved to position 0 referencing keyslot 0 (asserted by
+    // read_keyslot_token) and carries the new GuestOS's launch measurement.
+    let token = fixture.store_partition().read_keyslot_token();
+    assert_eq!(
+        token.sev_metadata.launch_measurement_hex,
+        hex::encode([0x33_u8; 48])
     );
 }
 
@@ -1238,34 +1084,23 @@ fn test_can_open_store_with_detached_header_after_attached_header_is_corrupted()
     // where an attached header would be must not affect the result.
     fixture.store_partition().corrupt_attached_header();
 
-    let result = fixture
+    fixture
         .can_open_store()
         .expect("can_open_store returned error");
-
-    assert!(
-        result,
-        "Expected can_open_store to return true when the detached header works"
-    );
 }
 
 #[test]
 fn test_cannot_open_store_when_no_key_works() {
-    let fixture = TestFixture::new_sev();
+    let mut fixture = TestFixture::new_sev();
 
-    // No previous key file and device is unformatted -> should return false
-    // Ensure previous key file does not exist
-    let _ = fs::remove_file(fixture.previous_key_path());
+    fixture.store_partition().format().unwrap();
+    // Simulate a different GuestOS booting from the same slot: its derived key does not
+    // unlock the keyslot.
+    fixture.set_launch_measurement([0xAA; 48]);
 
-    // Create an unformatted device (no LUKS header)
-    // can_open_store should return false
-    let result = fixture
+    fixture
         .can_open_store()
-        .expect("can_open_store returned error");
-    assert!(
-        !result,
-        "Expected can_open_store to return false when no key can open the device"
-    );
-    fixture.assert_no_detached_store_header();
+        .expect_err("no key should open the device");
 }
 
 #[test]
@@ -1290,37 +1125,12 @@ fn test_format_store_populates_detached_header_and_sets_permissions() {
 }
 
 #[test]
-fn test_open_store_succeeds_with_detached_header_after_attached_header_is_corrupted() {
-    let fixture = TestFixture::new_sev();
-
-    fixture.store_partition().format().unwrap();
-
-    assert!(fixture.store_header_path().exists());
-    // The store partition is formatted with a detached header only; there is no attached
-    // LUKS header on the data device.
-    assert!(!fixture.store_partition().has_attached_luks2_header());
-
-    // Corrupting the area on the data device where an attached header would have been must
-    // not affect opening because only the detached header is used.
-    fixture.store_partition().corrupt_attached_header();
-
-    fixture
-        .store_partition().open()
-        .expect("opening Store should succeed with the detached header even if the attached header is corrupted");
-
-    assert!(
-        fixture.store_partition().mapper_path().exists(),
-        "store mapper device should exist after open"
-    );
-}
-
-#[test]
 fn test_cannot_open_with_generated_key_if_sev_is_enabled() {
     for partition in [Partition::Store, Partition::Var] {
         let mut fixture = TestFixture::new_with_generated_key();
         fixture.partition(partition).format().unwrap();
         fixture.partition(partition).open().unwrap();
-        fixture.enable_sev();
+        fixture.sev_enabled = true;
         fixture
             .partition(partition)
             .open()
@@ -1343,7 +1153,6 @@ fn assert_sev_rejects_tampered_luks_parameters(
         .partition(Partition::Var)
         .device_path()
         .to_path_buf();
-    // The SEV key is derived from the launch measurement and never persisted.
     let passphrase = fixture.derive_sev_key(Partition::Var);
 
     create_crypt_device_luks_parameters(
@@ -1500,6 +1309,10 @@ fn test_metrics_export() {
         "Missing or incorrect num_keyslots label: {metrics_content}"
     );
     assert!(
+        metrics_content.contains("num_tokens=\"0\""),
+        "Missing or incorrect num_tokens label: {metrics_content}"
+    );
+    assert!(
         metrics_content.contains("keyslot_cipher=\"aes-xts-plain64\""),
         "Missing or incorrect keyslot_cipher label: {metrics_content}"
     );
@@ -1513,10 +1326,315 @@ fn test_metrics_export() {
     );
 }
 
+/// Tests that a firmware upgrade (launch TCB change) rotates the keyslot's TCB in place:
+/// data is preserved, but the old-TCB passphrase is replaced and no longer unlocks the device.
+#[test]
+fn test_sev_firmware_upgrade_rotates_keyslot_metadata() {
+    for partition_name in [Partition::Store, Partition::Var] {
+        let mut fixture = TestFixture::new_sev();
+
+        let tcb_v1 = TcbVersion::new(None, 1, 1, 1, 1);
+        let tcb_v1_u64 = tcb_version_to_u64(tcb_v1, DEFAULT_GENERATION).unwrap();
+        fixture.set_launch_tcb(tcb_v1);
+
+        let partition = fixture.partition(partition_name);
+        partition.format_with_payload(b"data before upgrade");
+        let old_tcb_key = fixture.derive_sev_key_at(partition_name, tcb_v1_u64);
+
+        // There is one keyslot with the initial TCB version.
+        let token = partition.read_keyslot_token();
+        assert_eq!(token.sev_metadata.tcb_version, tcb_v1_u64);
+
+        // Firmware upgrade: TCB changes, measurement stays the same.
+        let tcb_v2 = TcbVersion::new(None, 2, 2, 2, 2);
+        let tcb_v2_u64 = tcb_version_to_u64(tcb_v2, DEFAULT_GENERATION).unwrap();
+        fixture.set_launch_tcb(tcb_v2);
+
+        let partition = fixture.partition(partition_name);
+        partition.open_and_assert_payload(b"data before upgrade");
+
+        // There is one keyslot with the upgraded TCB version.
+        let token_after_upgrade = partition.read_keyslot_token();
+        assert_eq!(token_after_upgrade.sev_metadata.tcb_version, tcb_v2_u64);
+
+        // The old-TCB passphrase was replaced and must no longer unlock the device.
+        check_passphrase(
+            partition.device_path(),
+            &partition.header_location(),
+            &old_tcb_key,
+        )
+        .expect_err("the old-TCB passphrase must no longer unlock after rotation");
+
+        // Re-open: should succeed with the rotated TCB.
+        partition
+            .open()
+            .expect("re-open after TCB rotation should succeed");
+        partition.deactivate();
+    }
+}
+
+/// TCB rotation must only run for the default VM: the Upgrade VM keeps using keyslots sealed
+/// at a TCB version older than the launch TCB (e.g. after a firmware upgrade) and leaves them
+/// unchanged.
+#[test]
+fn test_upgrade_vm_can_use_keyslot_with_old_tcb() {
+    let mut fixture = TestFixture::new_sev();
+    fixture.set_guest_vm_type(GuestVMType::Upgrade);
+
+    let tcb_v1 = TcbVersion::new(None, 1, 0, 0, 0);
+    let tcb_v1_u64 = tcb_version_to_u64(tcb_v1, DEFAULT_GENERATION).unwrap();
+    fixture.set_launch_tcb(tcb_v1);
+    fixture
+        .store_partition()
+        .format_with_payload(b"upgrade-vm-old-tcb");
+
+    // Firmware upgrade: the Upgrade VM must keep using the old-TCB keyslot.
+    fixture.set_launch_tcb(TcbVersion::new(None, 2, 0, 0, 0));
+
+    fixture
+        .store_partition()
+        .open_and_assert_payload(b"upgrade-vm-old-tcb");
+
+    let token = fixture.store_partition().read_keyslot_token();
+    assert_eq!(
+        token.sev_metadata.tcb_version, tcb_v1_u64,
+        "TCB rotation should be skipped for the Upgrade VM"
+    );
+
+    // A key derived at the old TCB still unlocks the device.
+    let old_tcb_key = fixture.derive_sev_key_at(Partition::Store, tcb_v1_u64);
+    let store_header_path = fixture.store_header_path();
+    check_passphrase(
+        fixture.store_device_path(),
+        &LuksHeaderLocation::Detached(store_header_path.clone()),
+        &old_tcb_key,
+    )
+    .expect("a key derived at the old TCB should unlock the store");
+}
+
+/// Tests that after a firmware downgrade (launch TCB lower than the keyslot's TCB) the store
+/// can no longer be unlocked: the firmware refuses to derive keys above the launch TCB. The
+/// keyslot is left untouched, so a firmware re-upgrade restores access.
+#[test]
+fn test_firmware_downgrade_cannot_unlock_store() {
+    let tcb_v2 = TcbVersion::new(None, 2, 0, 0, 0);
+    let tcb_v2_u64 = tcb_version_to_u64(tcb_v2, DEFAULT_GENERATION).unwrap();
+    let tcb_v1 = TcbVersion::new(None, 1, 0, 0, 0);
+
+    let mut fixture = TestFixture::new_sev();
+    fixture.set_launch_tcb(tcb_v2);
+    fixture
+        .store_partition()
+        .format_with_payload(b"firmware-downgrade");
+
+    fixture.set_launch_tcb(tcb_v1);
+    fixture
+        .store_partition()
+        .open()
+        .expect_err("open after firmware downgrade should fail");
+    fixture.store_partition().deactivate();
+
+    let token = fixture.store_partition().read_keyslot_token();
+    assert_eq!(
+        token.sev_metadata.tcb_version, tcb_v2_u64,
+        "the failed open must not modify the keyslot"
+    );
+
+    fixture.set_launch_tcb(tcb_v2);
+    fixture
+        .store_partition()
+        .open_and_assert_payload(b"firmware-downgrade");
+}
+
+/// Tests a firmware upgrade followed by one and then a second GuestOS upgrade. The header
+/// always carries a single keyslot derived at the newest TCB and the newest GuestOS's
+/// measurement; rollback to an older GuestOS works via that slot's frozen header.
+#[test]
+fn test_firmware_upgrade_then_guestos_upgrade() {
+    let guestos_v1_measurement = [0x11_u8; 48];
+    let guestos_v2_measurement = [0x22_u8; 48];
+    let guestos_v3_measurement = [0x33_u8; 48];
+
+    let tcb_v1 = TcbVersion::new(None, 1, 0, 0, 0);
+    let tcb_v2 = TcbVersion::new(None, 2, 0, 0, 0);
+    let tcb_v2_u64 = tcb_version_to_u64(tcb_v2, DEFAULT_GENERATION).unwrap();
+
+    let mut fixture = TestFixture::new_sev();
+
+    // 1. GuestOS 1 formats and opens at firmware v1.
+    fixture.set_launch_measurement(guestos_v1_measurement);
+    fixture.set_launch_tcb(tcb_v1);
+    fixture
+        .store_partition()
+        .format_with_payload(b"firmware-then-guestos-upgrade");
+
+    // 2. Firmware upgrade (v1→v2). Same GuestOS, same measurement.
+    fixture.set_launch_tcb(tcb_v2);
+    fixture
+        .store_partition()
+        .open_and_assert_payload(b"firmware-then-guestos-upgrade");
+
+    let after_fw_token = fixture.store_partition().read_keyslot_token();
+    assert_eq!(
+        after_fw_token.sev_metadata.tcb_version, tcb_v2_u64,
+        "firmware upgrade should rotate TCB"
+    );
+
+    // 3. GuestOS upgrade (v1→v2): the upgrade client copies slot A's frozen header onto
+    //    slot B's var and re-keys it to GuestOS 2's key. TCB stays at firmware v2.
+    fixture.upgrade_sev_guestos_to(guestos_v2_measurement);
+    fixture
+        .store_partition()
+        .open_and_assert_payload(b"firmware-then-guestos-upgrade");
+
+    // The single keyslot carries B's measurement at the upgraded TCB.
+    let after_upgrade_token = fixture.store_partition().read_keyslot_token();
+    assert_eq!(
+        after_upgrade_token.sev_metadata.launch_measurement_hex,
+        hex::encode(guestos_v2_measurement)
+    );
+    assert_eq!(
+        after_upgrade_token.sev_metadata.tcb_version, tcb_v2_u64,
+        "GuestOS 2's keyslot should have the upgraded TCB"
+    );
+
+    // GuestOS 2's key unlocks the new header; GuestOS 1's key no longer does.
+    let guestos_v2_key = fixture.derive_sev_key(Partition::Store);
+    let store_header_path = fixture.store_header_path();
+    check_passphrase(
+        fixture.store_device_path(),
+        &LuksHeaderLocation::Detached(store_header_path.clone()),
+        &guestos_v2_key,
+    )
+    .expect("GuestOS 2 key should unlock after firmware + GuestOS upgrade");
+
+    // 4. Second GuestOS upgrade (v2→v3): still a single keyslot at firmware v2, now
+    //    with GuestOS 3's measurement.
+    fixture.upgrade_sev_guestos_to(guestos_v3_measurement);
+    fixture
+        .store_partition()
+        .open_and_assert_payload(b"firmware-then-guestos-upgrade");
+
+    let final_token = fixture.store_partition().read_keyslot_token();
+    assert_eq!(
+        final_token.sev_metadata.launch_measurement_hex,
+        hex::encode(guestos_v3_measurement)
+    );
+    assert_eq!(
+        final_token.sev_metadata.tcb_version, tcb_v2_u64,
+        "the remaining keyslot must be derived at the upgraded TCB"
+    );
+
+    // Rollback to GuestOS 1: its frozen header (at firmware v1) still unlocks and rotates
+    // to firmware v2 on open.
+    fixture.rollback();
+    assert_eq!(fixture.active_boot_slot().name, "B");
+    fixture
+        .store_partition()
+        .assert_payload(b"firmware-then-guestos-upgrade");
+    fixture.store_partition().deactivate();
+
+    let post_rollback_token = fixture.store_partition().read_keyslot_token();
+    assert_eq!(
+        post_rollback_token.sev_metadata.tcb_version, tcb_v2_u64,
+        "rollback open should rotate the TCB from v1 to v2"
+    );
+}
+
+/// Tests a GuestOS upgrade, then firmware upgrade, then rollback to the previous GuestOS.
+/// Rollback uses the frozen detached header from the previous GuestOS's var partition.
+#[test]
+fn test_guestos_upgrade_then_firmware_upgrade_then_rollback() {
+    let guestos_v1_measurement = [0x11_u8; 48];
+    let guestos_v2_measurement = [0x22_u8; 48];
+
+    let tcb_v1 = TcbVersion::new(None, 1, 0, 0, 0);
+    let tcb_v2 = TcbVersion::new(None, 2, 0, 0, 0);
+    let tcb_v2_u64 = tcb_version_to_u64(tcb_v2, DEFAULT_GENERATION).unwrap();
+
+    let mut fixture = TestFixture::new_sev();
+
+    // 1. GuestOS 1 formats and opens at firmware v1.
+    fixture.set_launch_measurement(guestos_v1_measurement);
+    fixture.set_launch_tcb(tcb_v1);
+    fixture
+        .store_partition()
+        .format_with_payload(b"guestos-fw-rollback");
+
+    // 2. GuestOS upgrade (v1→v2): switches to slot B, copies slot A's frozen detached
+    //    header onto slot B's var and writes the previous key. Opening then performs the
+    //    key exchange. TCB stays at firmware v1.
+    fixture.upgrade_sev_guestos_to(guestos_v2_measurement);
+    fixture
+        .store_partition()
+        .open()
+        .expect("GuestOS 2 should open after upgrade");
+    fixture.store_partition().deactivate();
+
+    // 3. Firmware upgrade (v1→v2). GuestOS 2 opens; the TCB rotates on slot B's header.
+    fixture.set_launch_tcb(tcb_v2);
+    fixture
+        .store_partition()
+        .open_and_assert_payload(b"guestos-fw-rollback");
+
+    // 4. Rollback to GuestOS 1: switch back to slot A, which still holds GuestOS 1's own
+    //    frozen detached header (at firmware v1). The open unlocks via candidate
+    //    enumeration and rotates the token to the firmware's TCB.
+    fixture.rollback();
+    assert_eq!(fixture.active_boot_slot().name, "A");
+    fixture
+        .store_partition()
+        .assert_payload(b"guestos-fw-rollback");
+    fixture.store_partition().deactivate();
+
+    // GuestOS 1's frozen token (firmware v1) rotated to firmware v2 on rollback open.
+    let post_rollback_token = fixture.store_partition().read_keyslot_token();
+    assert_eq!(
+        post_rollback_token.sev_metadata.tcb_version, tcb_v2_u64,
+        "rollback open should rotate the TCB from v1 to v2"
+    );
+
+    // Re-opening should work with the rotated TCB.
+    fixture
+        .store_partition()
+        .open()
+        .expect("re-open after rollback should succeed");
+    fixture.store_partition().deactivate();
+}
+
+/// SEV: can_open_store errors when the keyslot's metadata token is malformed.
+#[test]
+fn test_can_open_store_fails_when_the_token_is_malformed() {
+    let fixture = TestFixture::new_sev();
+    fixture.store_partition().format().unwrap();
+
+    let mut crypt_device = fixture.store_partition().open_crypt_device();
+    crypt_device
+        .token_handle()
+        .json_set(TokenInput::RemoveToken(SINGLE_TOKEN_INDEX))
+        .unwrap();
+    // A token that does not parse as a keyslot token (the SEV metadata is missing).
+    add_raw_metadata_token(
+        &mut crypt_device,
+        json!({
+            "type": "ic-key-metadata",
+            "keyslots": [],
+        }),
+    );
+
+    let err = fixture
+        .can_open_store()
+        .expect_err("a malformed token must be an error");
+
+    assert!(
+        format!("{err:#}").contains("IC key metadata token"),
+        "unexpected error: {err:#}"
+    );
+}
+
 #[test]
 fn test_run_returns_sev_firmware_factory_error() {
     let temp_dir = tempdir().unwrap();
-    let guestos_config = create_guestos_config(true);
     let device_path = temp_dir.path().join("dummy_device");
 
     let err = run(
@@ -1524,10 +1642,9 @@ fn test_run_returns_sev_firmware_factory_error() {
             partition: Partition::Store,
             device_path,
         },
-        &guestos_config,
+        GuestVMType::Default,
         true,
         || Err(anyhow!("boom")),
-        &temp_dir.path().join("previous_key"),
         &temp_dir.path().join("store.header"),
         &temp_dir.path().join("generated_key"),
         temp_dir.path(),

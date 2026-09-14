@@ -38,7 +38,10 @@ use ic_types::{
     time::expiry_time_from_now,
 };
 use rand::{Rng, seq::SliceRandom};
-use rustls::{ClientConfig, pki_types::ServerName};
+use rustls::{
+    ClientConfig,
+    pki_types::{CertificateDer, ServerName, pem::PemObject},
+};
 use tokio::{
     net::TcpStream,
     select,
@@ -155,10 +158,10 @@ impl DelegationManager {
         delegation
             .is_consistent_with(
                 CanisterRangesCheck::AllSubnetRanges,
-                network_topology.routing_table_for_certification(),
+                network_topology.routing_table(),
                 |subnet_id| {
                     network_topology
-                        .subnets_for_certification()
+                        .subnets()
                         .get(&subnet_id)
                         .map(|subnet_topology| subnet_topology.public_key.as_slice())
                 },
@@ -389,6 +392,7 @@ async fn try_fetch_delegation_from_nns(
         CONNECTION_TIMEOUT,
         connect(
             log.clone(),
+            config,
             rt_handle,
             subnet_type,
             nns_subnet_id,
@@ -537,8 +541,36 @@ fn observe_delegation_sizes(builder: &NNSDelegationBuilder, metrics: &Delegation
         .observe(builder.flat_certificate_size_bytes() as f64);
 }
 
+/// The trust anchors used to authenticate an API boundary node: the public roots
+/// compiled into the replica, plus anything in `extra_anchors_pem`.
+///
+/// `extra_anchors_pem` is unset in production. It exists for testnets, where the
+/// API boundary node's certificate is issued by a throw-away CA rather than by a
+/// public one; see [`Config::extra_api_boundary_node_trust_anchors_pem`].
+fn api_boundary_node_root_store(
+    extra_anchors_pem: Option<&str>,
+) -> Result<rustls::RootCertStore, BoxError> {
+    let mut root_store =
+        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
+    let Some(extra_anchors_pem) = extra_anchors_pem else {
+        return Ok(root_store);
+    };
+
+    for certificate in CertificateDer::pem_slice_iter(extra_anchors_pem.as_bytes()) {
+        let certificate = certificate
+            .map_err(|err| format!("Could not parse an extra API BN trust anchor: {err}"))?;
+        root_store
+            .add(certificate)
+            .map_err(|err| format!("Could not add an extra API BN trust anchor: {err}"))?;
+    }
+
+    Ok(root_store)
+}
+
 async fn connect(
     log: ReplicaLogger,
+    config: &Config,
     rt_handle: &tokio::runtime::Handle,
     subnet_type: SubnetType,
     nns_subnet_id: SubnetId,
@@ -604,8 +636,9 @@ async fn connect(
 
             let addr = SocketAddr::new(ip_addr, 443);
 
-            let root_store =
-                rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+            let root_store = api_boundary_node_root_store(
+                config.extra_api_boundary_node_trust_anchors_pem.as_deref(),
+            )?;
             let tls_client_config = rustls::ClientConfig::builder()
                 .with_root_certificates(root_store)
                 .with_no_client_auth();

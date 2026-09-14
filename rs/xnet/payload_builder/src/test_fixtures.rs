@@ -45,7 +45,7 @@ pub(crate) const SRC_CANISTER: u64 = 2;
 pub(crate) const DST_CANISTER: u64 = 3;
 pub(crate) const CALLBACK_ID: u64 = 4;
 
-pub(crate) const PAYLOAD_BYTES_LIMIT: NumBytes = NumBytes::new(POOL_SLICE_BYTE_SIZE_MAX as u64);
+pub(crate) const PAYLOAD_BYTES_LIMIT: NumBytes = NumBytes::new(4 << 20);
 
 pub(crate) const LOCAL_NODE_1_OPERATOR_1: NodeId = NODE_1;
 pub(crate) const REMOTE_NODE_1_OPERATOR_1: NodeId = NODE_2;
@@ -162,11 +162,14 @@ pub(crate) fn get_xnet_state_for_testing_with_subnet_type(
     (
         vec![payload_3, payload_2, payload_1],
         btreemap![
-            SUBNET_1 => ExpectedIndices {message_index:StreamIndex::new(21), signal_index:StreamIndex::new(16)},
-            SUBNET_2 => ExpectedIndices {message_index:StreamIndex::new(7), signal_index:StreamIndex::new(3)},
-            SUBNET_3 => ExpectedIndices {message_index:StreamIndex::new(2), signal_index:StreamIndex::new(0)},
-            SUBNET_4 => ExpectedIndices {message_index:StreamIndex::new(1), signal_index:StreamIndex::new(0)},
-            SUBNET_5 => ExpectedIndices {message_index:StreamIndex::new(0), signal_index:StreamIndex::new(0)},
+            // None of these streams hold reject signals, so `min_useful_header_begin` is `None`.
+            // See `expected_indices_for_stream_reject_signal_gc()` for the cases where
+            // reject signals actually constrain it.
+            SUBNET_1 => ExpectedIndices { message_index: 21.into(), signal_index: 16.into(), min_useful_header_begin: None},
+            SUBNET_2 => ExpectedIndices { message_index: 7.into(), signal_index: 3.into(), min_useful_header_begin: None},
+            SUBNET_3 => ExpectedIndices { message_index: 2.into(), signal_index: 0.into(), min_useful_header_begin: None},
+            SUBNET_4 => ExpectedIndices { message_index: 1.into(), signal_index: 0.into(), min_useful_header_begin: None},
+            SUBNET_5 => ExpectedIndices { message_index: 0.into(), signal_index: 0.into(), min_useful_header_begin: None},
         ],
     )
 }
@@ -339,7 +342,7 @@ pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
             LOCAL_SUBNET,
             expected_index,
             expected_index,
-            (POOL_SLICE_BYTE_SIZE_MAX - 350) * 98 / 100
+            adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX)
         ));
     }
 

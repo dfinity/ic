@@ -46,9 +46,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
 };
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_platform_version};
 use ic_types::{
-    CanisterId, CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
+    CanisterId, CryptoHashOfPartialState, Height, PlatformVersion, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
@@ -256,7 +256,6 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
         None,
         None,
         None,
-        None,
         Default::default(),
     );
 
@@ -448,6 +447,7 @@ pub struct HttpEndpointBuilder {
     certified_height: Option<Height>,
     ingress_pool_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_channel_capacity: usize,
+    platform_version: Option<PlatformVersion>,
 }
 
 impl HttpEndpointBuilder {
@@ -464,7 +464,13 @@ impl HttpEndpointBuilder {
             tls_config: Arc::new(MockTlsConfig::new()),
             certified_height: None,
             ingress_channel_capacity: MAX_P2P_IO_CHANNEL_SIZE,
+            platform_version: None,
         }
+    }
+
+    pub fn with_platform_version(mut self, platform_version: PlatformVersion) -> Self {
+        self.platform_version = Some(platform_version);
+        self
     }
 
     pub fn with_state_manager(
@@ -543,6 +549,7 @@ impl HttpEndpointBuilder {
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
         let node_id = node_test_id(1);
+        let platform_version = self.platform_version.unwrap_or_else(test_platform_version);
 
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
@@ -564,6 +571,7 @@ impl HttpEndpointBuilder {
             sig_verifier,
             node_id,
             subnet_id,
+            platform_version,
             nns_subnet_id,
             log,
             self.consensus_cache,

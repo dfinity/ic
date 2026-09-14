@@ -1,4 +1,4 @@
-use crate::deserialize_registry_value;
+use crate::{deserialize_registry_value, replica_version::ReplicaVersionRegistry};
 use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use ic_interfaces_registry::{
     RegistryClient, RegistryClientResult, RegistryClientVersionedResult, RegistryVersionedRecord,
@@ -7,17 +7,13 @@ use ic_limits::{INITIAL_NOTARY_DELAY, UNIT_DELAY_APP_SUBNET};
 use ic_protobuf::{
     registry::{
         node::v1::NodeRecord,
-        replica_version::v1::ReplicaVersionRecord,
-        standard_engine_replica_version::v1::StandardEngineReplicaVersionRecord,
         subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord, SubnetType},
     },
     types::v1::SubnetId as SubnetIdProto,
 };
 use ic_registry_keys::{
     DEFAULT_INITIAL_DKG_SUBNET_ID_KEY, ROOT_SUBNET_ID_KEY, make_catch_up_package_contents_key,
-    make_node_record_key, make_replica_version_key,
-    make_standard_engine_replica_version_record_key, make_subnet_list_record_key,
-    make_subnet_record_key,
+    make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_types::{
@@ -189,20 +185,6 @@ pub trait SubnetRegistry {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<ReplicaVersion>;
-
-    /// Return the [ReplicaVersionRecord] as recorded in the subnet record
-    /// at the given height.
-    fn get_replica_version_record(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<ReplicaVersionRecord>;
-
-    fn get_replica_version_record_from_version_id(
-        &self,
-        replica_version_id: &ReplicaVersion,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<ReplicaVersionRecord>;
 
     /// Return the [RegistryVersion] at which the [SubnetRecord] for the provided
     /// [SubnetId] was last updated.
@@ -481,7 +463,7 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         }
 
         let Some(standard_engine_record) =
-            get_standard_engine_replica_version_record(self, version)?
+            self.get_standard_engine_replica_version_record(version)?
         else {
             return Err(DecodeError {
                 error: format!(
@@ -508,33 +490,6 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
             &resolved_replica_version_id,
             "using standard engine replica version",
         )
-    }
-
-    fn get_replica_version_record(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<ReplicaVersionRecord> {
-        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
-        Ok(match deserialize_registry_value::<SubnetRecord>(bytes)? {
-            Some(record) => {
-                let bytes = self.get_value(
-                    &make_replica_version_key(record.replica_version_id),
-                    version,
-                );
-                deserialize_registry_value::<ReplicaVersionRecord>(bytes)?
-            }
-            None => None,
-        })
-    }
-
-    fn get_replica_version_record_from_version_id(
-        &self,
-        replica_version_id: &ReplicaVersion,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<ReplicaVersionRecord> {
-        let bytes = self.get_value(&make_replica_version_key(replica_version_id), version);
-        deserialize_registry_value::<ReplicaVersionRecord>(bytes)
     }
 
     fn get_subnet_record_registry_version(
@@ -626,14 +581,6 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
     }
 }
 
-fn get_standard_engine_replica_version_record<T: RegistryClient + ?Sized>(
-    client: &T,
-    version: RegistryVersion,
-) -> RegistryClientResult<StandardEngineReplicaVersionRecord> {
-    let bytes = client.get_value(&make_standard_engine_replica_version_record_key(), version);
-    deserialize_registry_value::<StandardEngineReplicaVersionRecord>(bytes)
-}
-
 /// Computes an engine's upgrade priority, a pseudo-random real/floating point
 /// number in the closed interval [0.0, 1.0].
 ///
@@ -644,7 +591,7 @@ fn get_standard_engine_replica_version_record<T: RegistryClient + ?Sized>(
 ///
 /// 1. the engine's ID
 /// 2. the new replica version
-fn engine_upgrade_priority(subnet_id: SubnetId, new_replica_version_id: &str) -> f64 {
+pub fn engine_upgrade_priority(subnet_id: SubnetId, new_replica_version_id: &str) -> f64 {
     let mut hasher = Sha256::new_with_context(&DomainSeparationContext::new("upgrade priority"));
     hasher.write(new_replica_version_id.as_bytes());
     hasher.write(subnet_id.to_string().as_bytes());
@@ -758,7 +705,14 @@ impl<T: RegistryClient + ?Sized> SubnetTransportRegistry for T {
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
+    use ic_protobuf::registry::{
+        replica_version::v1::ReplicaVersionRecord,
+        standard_engine_replica_version::v1::StandardEngineReplicaVersionRecord,
+    };
     use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_keys::{
+        make_replica_version_key, make_standard_engine_replica_version_record_key,
+    };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_types::PrincipalId;
     use std::{str::FromStr, sync::Arc};
@@ -829,7 +783,7 @@ mod tests {
         let subnet_id = subnet_id(4);
         let version = RegistryVersion::from(2);
 
-        let replica_version = ReplicaVersion::try_from("some_version").unwrap();
+        let replica_version = ReplicaVersion::from_str("some_version").unwrap();
         let replica_version_record = ReplicaVersionRecord::default();
 
         let subnet_record = SubnetRecord {
@@ -844,12 +798,72 @@ mod tests {
         );
 
         let result = registry.get_replica_version(subnet_id, version).unwrap();
-        assert_eq!(result, Some(replica_version));
+        assert_eq!(result, Some(replica_version.clone()));
 
         let result = registry
-            .get_replica_version_record(subnet_id, version)
+            .get_replica_version_record(&replica_version, version)
             .unwrap();
         assert_eq!(result, Some(replica_version_record))
+    }
+
+    #[test]
+    fn can_get_replica_version_record_for_cloud_engine_with_blank_replica_version_id() {
+        // Step 1: Prepare the world: a CloudEngine subnet with a blank
+        // replica_version_id, resolved via StandardEngineReplicaVersionRecord
+        // to "new".
+        let engine_subnet_id = subnet_id(1);
+        let new_replica_version_record = ReplicaVersionRecord {
+            release_package_sha256_hex: "abc123".to_string(),
+            ..Default::default()
+        };
+
+        let data_provider = ProtoRegistryDataProvider::new();
+        data_provider
+            .add(
+                &make_subnet_record_key(engine_subnet_id),
+                RegistryVersion::from(2),
+                Some(SubnetRecord {
+                    replica_version_id: "".to_string(),
+                    subnet_type: SubnetType::CloudEngine as i32,
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+        data_provider
+            .add(
+                &make_standard_engine_replica_version_record_key(),
+                RegistryVersion::from(2),
+                Some(StandardEngineReplicaVersionRecord {
+                    new_replica_version_id: "new".to_string(),
+                    old_replica_version_id: "old".to_string(),
+                    deployment_progress: 1.0,
+                }),
+            )
+            .unwrap();
+        data_provider
+            .add(
+                &make_replica_version_key("new"),
+                RegistryVersion::from(2),
+                Some(new_replica_version_record.clone()),
+            )
+            .unwrap();
+
+        let registry = FakeRegistryClient::new(Arc::new(data_provider));
+        registry.update_to_latest_version();
+
+        // Step 2: Run the code under test.
+        let replica_version = registry
+            .get_replica_version(engine_subnet_id, RegistryVersion::from(2))
+            .unwrap()
+            .unwrap();
+        let result = registry
+            .get_replica_version_record(&replica_version, RegistryVersion::from(2))
+            .unwrap();
+
+        // Step 3: Verify result(s). Blank resolves to "new" (deployment_progress
+        // is 1.0), so this must be new_replica_version_record, not None.
+        assert_eq!(replica_version, ReplicaVersion::try_from("new").unwrap());
+        assert_eq!(result, Some(new_replica_version_record));
     }
 
     #[test]
@@ -952,15 +966,15 @@ mod tests {
         // Step 3: Verify result(s).
         assert_eq!(
             low_priority_result,
-            Some(ReplicaVersion::try_from("new").unwrap())
+            Some(ReplicaVersion::from_str("new").unwrap())
         );
         assert_eq!(
             high_priority_result,
-            Some(ReplicaVersion::try_from("old").unwrap())
+            Some(ReplicaVersion::from_str("old").unwrap())
         );
         assert_eq!(
             override_result,
-            Some(ReplicaVersion::try_from("override").unwrap())
+            Some(ReplicaVersion::from_str("override").unwrap())
         );
     }
 
@@ -1136,7 +1150,7 @@ mod tests {
         let subnet_id = subnet_id(4);
         let version = RegistryVersion::from(2);
         let max_block_payload_size_bytes = 4 * 1024 * 1024; // 4MiB
-        let replica_version = ReplicaVersion::try_from("some_version").unwrap();
+        let replica_version = ReplicaVersion::from_str("some_version").unwrap();
 
         let subnet_record = SubnetRecord {
             max_block_payload_size: max_block_payload_size_bytes,

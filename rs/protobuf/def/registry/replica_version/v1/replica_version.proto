@@ -52,12 +52,3 @@ message GuestLaunchMeasurementMetadata {
   // Supported values can be found in ic-os/defs.bzl under `vcpu_types`.
   optional string vcpu_type = 2;
 }
-
-// A list of blessed versions of the IC Replica
-//
-// New versions are added here after a vote has been accepted by token
-// holders. Subnetworks can then be upgraded to any of those version.
-message BlessedReplicaVersions {
-  // A list of version information ids.
-  repeated string blessed_version_ids = 1;
-}
