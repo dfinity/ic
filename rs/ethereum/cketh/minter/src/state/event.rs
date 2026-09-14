@@ -239,8 +239,11 @@ pub enum EventType {
         signature: TransactionSignature,
     },
     /// A deposit address authorized the sweeper contract to run as its code. Signing costs a
-    /// threshold-ECDSA signature, so the tuple is recorded and every later sweep of the same
-    /// address reuses it rather than signing another.
+    /// threshold-ECDSA signature, so the tuple is recorded and every later sweep needing the very
+    /// same authorization request reuses it rather than signing another. A sweep needing a
+    /// different chain, delegate or nonce signs and records its own: rotating an address onto a
+    /// newly configured contract takes a tuple at the nonce the address has reached, which no
+    /// earlier tuple of that address carries.
     #[n(34)]
     AuthorizedDepositAddress {
         /// What was signed, which is also what replay keys the authorization by: a signature is
