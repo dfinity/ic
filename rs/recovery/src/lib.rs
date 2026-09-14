@@ -854,16 +854,6 @@ impl Recovery {
                     chain_key_config,
                     replacement_nodes,
                     registry_params,
-                    // The block time the recovered subnet starts from, which
-                    // the canisters it holds have to resume after. Now is past
-                    // the state any recovery replays, so that is the default; a
-                    // subnet merge passes the later of the batch times of the
-                    // two states it merged instead, since either subnet's
-                    // canisters may have run ahead of the merged state's own
-                    // batch time. It cannot raise that batch time instead:
-                    // every file of a merged state is linked from one of the
-                    // two checkpoints that were validated against their CUPs,
-                    // which is what makes its manifest verifiable.
                     time.unwrap_or_else(SystemTime::now),
                 ),
         })
