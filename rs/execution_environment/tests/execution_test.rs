@@ -35,10 +35,11 @@ use ic_types::{
     CanisterId, CryptoHashOfPartialState, NumBytes, Time, ingress::WasmResult,
     messages::NO_DEADLINE,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, NominalCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
+use strum::IntoEnumIterator;
 
 /// One billion for better cycles readability.
 const B: u128 = 1e9 as u128;
@@ -3236,23 +3237,49 @@ fn consumed_by_canisters(env: &StateMachine) -> NominalCycles {
 /// Asserts that `SubnetMetrics::consumed_cycles_total_including_canisters` of the
 /// latest state is what it is defined to be, and returns it.
 ///
-/// Both summands are recomputed here from the state, field by field, rather than
-/// taken from `SubnetMetrics::consumed_cycles_total()`: the subnet-level part is the
-/// three scalar fields plus the three use cases that are only ever recorded at the
-/// subnet level. The canister-level entries of `consumed_cycles_by_use_case` are
-/// deliberately left out -- they are only ever populated when a canister is deleted,
-/// at which point that canister's consumption is already in
-/// `consumed_cycles_by_deleted_canisters`, so adding them would count a deleted
-/// canister twice.
+/// Both summands are recomputed here from the state rather than taken from
+/// `SubnetMetrics::consumed_cycles_total()`, so that the assertion does not inherit
+/// the categorization it is meant to check. Walking `CyclesUseCase::iter()` and
+/// matching exhaustively also means a newly added use case does not compile until it
+/// has been classified here, rather than being silently left out of the total.
 fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
     let state = env.get_latest_state();
     let subnet_metrics = &state.metadata.subnet_metrics;
-    let subnet_level = subnet_metrics.get_consumed_cycles_by_deleted_canisters()
+
+    let mut subnet_level = subnet_metrics.get_consumed_cycles_by_deleted_canisters()
         + subnet_metrics.get_consumed_cycles_http_outcalls()
-        + subnet_metrics.get_consumed_cycles_ecdsa_outcalls()
-        + subnet_metrics.get_consumed_cycles_schnorr_outcalls()
-        + subnet_metrics.get_consumed_cycles_vetkd()
-        + subnet_metrics.get_consumed_cycles_dropped_messages();
+        + subnet_metrics.get_consumed_cycles_ecdsa_outcalls();
+    for use_case in CyclesUseCase::iter() {
+        match use_case {
+            // Already covered by the scalar fields above: the two outcall fields are
+            // supersets of their use case entries, and the canister-level use cases
+            // only ever land in the map when a canister is deleted, at which point
+            // that canister's whole consumption is added to
+            // `consumed_cycles_by_deleted_canisters`. Adding them here as well would
+            // count a deleted canister twice.
+            CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::HTTPOutcalls
+            | CyclesUseCase::DeletedCanisters
+            | CyclesUseCase::Memory
+            | CyclesUseCase::ComputeAllocation
+            | CyclesUseCase::IngressInduction
+            | CyclesUseCase::Instructions
+            | CyclesUseCase::RequestAndResponseTransmission
+            | CyclesUseCase::Uninstall
+            | CyclesUseCase::CanisterCreation
+            | CyclesUseCase::BurnedCycles => {}
+            // Never charged to a canister's balance, so no scalar field covers these.
+            CyclesUseCase::SchnorrOutcalls
+            | CyclesUseCase::VetKd
+            | CyclesUseCase::DroppedMessages => {
+                subnet_level += subnet_metrics
+                    .get_consumed_cycles_by_use_case()
+                    .get(&use_case)
+                    .copied()
+                    .unwrap_or_else(NominalCycles::zero);
+            }
+        }
+    }
 
     let total = subnet_metrics.consumed_cycles_total_including_canisters();
     assert_eq!(total, subnet_level + consumed_by_canisters(env));
