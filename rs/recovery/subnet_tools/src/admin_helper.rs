@@ -154,7 +154,7 @@ mod tests {
         let result = get_halt_subnet_at_cup_height_command(
             &fake_admin_helper(),
             subnet_id_from_str(FAKE_SUBNET_ID_1),
-            &Some(SSH_KEY.into()),
+            &Some(SSH_KEY.to_string()),
         )
         .join(" ");
 
