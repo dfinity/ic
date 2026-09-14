@@ -356,7 +356,7 @@ async fn should_sweep_a_delegated_address_without_an_authorization() {
     };
     assert_eq!(
         item.authorization, None,
-        "an address already delegated to the sweeper contract must be swept carrying no tuple"
+        "an address already delegated to the sweeper contract must be swept carrying no authorization"
     );
     assert_eq!(
         recorded_events()
@@ -364,12 +364,12 @@ async fn should_sweep_a_delegated_address_without_an_authorization() {
             .filter(|event| matches!(event, EventType::AuthorizedDepositAddress { .. }))
             .count(),
         0,
-        "signing a tuple the sweep does not carry would pay for a threshold signature for nothing"
+        "signing an authorization the sweep does not carry would pay for a threshold signature for nothing"
     );
     assert_eq!(
         sweep.gas_limit(),
         GasAmount::new(185_000),
-        "the sweep must not budget the gas of a tuple it does not carry"
+        "the sweep must not budget the gas of an authorization it does not carry"
     );
 }
 
@@ -399,12 +399,12 @@ async fn should_sweep_an_address_delegated_elsewhere_with_a_nonce_zero_authoriza
     assert_eq!(
         item.authorization,
         Some(authorization_request(SWEEPER_CONTRACT).signed_with(signature)),
-        "an address delegated to another contract must keep a nonce-0 tuple for the configured one"
+        "an address delegated to another contract must keep a nonce-0 authorization for the configured one"
     );
     assert_eq!(
         sweep.gas_limit(),
         GasAmount::new(225_000),
-        "the sweep must budget the gas of the tuple it carries"
+        "the sweep must budget the gas of the authorization it carries"
     );
 }
 
@@ -501,11 +501,11 @@ async fn should_skip_the_tick_when_the_sweeper_contract_changed_since_the_read()
     for (delegation, requirement) in [
         (
             Delegation::NotDelegated,
-            "a tuple naming a contract the sweep no longer calls must not be sent",
+            "an authorization naming a contract the sweep no longer calls must not be sent",
         ),
         (
             Delegation::Delegated(SWEEPER_CONTRACT),
-            "an address read as delegated to the contract the sweep no longer calls must not be swept without a tuple",
+            "an address read as delegated to the contract the sweep no longer calls must not be swept without an authorization",
         ),
     ] {
         init_state(state_ready_to_sign(&[(account(), usdc())]));

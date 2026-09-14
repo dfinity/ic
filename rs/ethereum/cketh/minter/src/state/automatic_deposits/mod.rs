@@ -280,19 +280,20 @@ impl AutomaticDeposits {
         self.authorizations.insert(request, signature);
     }
 
-    /// What each of `targets` needs from a sweep calling `delegate` on `chain_id`, decided from
-    /// the delegation `delegations` read on chain for its address: no tuple at all once the address
-    /// is delegated to that contract, otherwise the tuple naming the chain, the contract, and the
-    /// nonce the tuple must spend. The batch names the contract it decided against, so the sweep
-    /// can refuse to call any other.
+    /// What each of `targets` needs from a sweep calling `delegate` on `chain_id`, decided from the
+    /// delegation `delegations` read on chain for its address: no authorization at all once the
+    /// address is delegated to that contract, otherwise the authorization naming the chain, the
+    /// contract, and the nonce the authorization must spend. The batch names the contract it
+    /// decided against, so the sweep can refuse to call any other.
     ///
     /// A target whose address holds contract code, or whose delegation the read did not yield, is
-    /// left out rather than swept: no tuple can be applied to the first, and the second is unknown
-    /// ground. Both stay queued for a later tick.
+    /// left out rather than swept: no authorization can be applied to the first, and the second is
+    /// unknown ground. Both stay queued for a later tick.
     ///
-    /// The nonce of a tuple is zero, the nonce of an address that has never been delegated —
-    /// applying an authorization spends it — so a tuple this sweep carries either installs the
-    /// delegation or is skipped, and both are correct in any order the sweeps carrying them land.
+    /// The nonce of an authorization is zero, the nonce of an address that has never been delegated
+    /// — applying an authorization spends it — so an authorization this sweep carries either
+    /// installs the delegation or is skipped, and both are correct in any order the sweeps carrying
+    /// them land.
     pub fn sweep_delegations(
         &self,
         targets: &[SweepTarget],
@@ -314,11 +315,11 @@ impl AutomaticDeposits {
                 let authorization = match delegations.get(&target.address()) {
                     Some(Delegation::Delegated(installed)) if *installed == delegate => None,
                     Some(Delegation::NotDelegated) => authorize(target, TransactionNonce::ZERO),
-                    // TODO DEFI-2997: track deposit address nonce. A tuple at nonce zero cannot
-                    // apply to an address already delegated: the address spent that nonce when it
-                    // was delegated, so the protocol skips the tuple and the address keeps the
-                    // other contract. Re-delegating it needs the nonce the address has reached,
-                    // which the minter does not track yet.
+                    // TODO DEFI-2997: track deposit address nonce. An authorization at nonce zero
+                    // cannot apply to an address already delegated: the address spent that nonce
+                    // when it was delegated, so the protocol skips the authorization and the
+                    // address keeps the other contract. Re-delegating it needs the nonce the
+                    // address has reached, which the minter does not track yet.
                     Some(Delegation::Delegated(_another_delegate)) => {
                         authorize(target, TransactionNonce::ZERO)
                     }

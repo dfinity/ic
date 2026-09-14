@@ -296,11 +296,11 @@ const SWEEP_GAS_PER_TRANSFER: GasAmount = GasAmount::new(110_000);
 /// Gas one EIP-7702 authorization costs: 25'000 (`PER_EMPTY_ACCOUNT_COST`) charged upfront for
 /// every tuple, before any of them is looked at.
 ///
-/// Budgeted for the tuples the sweep carries, which are those of the addresses it still has to
-/// delegate. A tuple the EVM skips — another sweep delegated the address in between, so the nonce
-/// it was signed for no longer matches — is charged the same 25'000 and refunded 12'500 for an
-/// authority the state trie already holds. That refund lands after execution and so cannot shrink
-/// the limit the transaction had to declare, leaving 25'000 the figure to budget either way.
+/// Budgeted for the authorizations the sweep carries, which are those of the addresses it still has
+/// to delegate. An authorization the EVM skips — another sweep delegated the address in between, so
+/// the nonce it was signed for no longer matches — is charged the same 25'000 and refunded 12'500
+/// for an authority the state trie already holds. That refund lands after execution and so cannot
+/// shrink the limit the transaction had to declare, leaving 25'000 the figure to budget either way.
 /// Rounded up as its siblings are.
 const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
 
@@ -352,9 +352,9 @@ impl SweepRequest {
     }
 
     /// The delegations the sweep installs on the way, one per deposit address it still has to
-    /// delegate. Signed for nonce zero, so a tuple another sweep's delegation raced is skipped
-    /// rather than sinking the sweep. Empty once every address the sweep touches is delegated,
-    /// which is what makes it a plain EIP-1559 transaction.
+    /// delegate. Signed for nonce zero, so an authorization another sweep's delegation raced is
+    /// skipped rather than sinking the sweep. Empty once every address the sweep touches is
+    /// delegated, which is what makes it a plain EIP-1559 transaction.
     pub fn authorizations(&self) -> Vec<SignedAuthorization> {
         self.items
             .iter()
