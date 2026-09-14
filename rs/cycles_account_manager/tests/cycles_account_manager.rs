@@ -424,11 +424,12 @@ const RESPONSE_EXECUTION_SETTINGS: [ResponseExecutionSetting; 4] =
 /// with the ones in effect when the response arrives.
 ///
 /// The Wasm execution modes differ whenever the canister is upgraded across the
-/// call. The cost schedules cannot differ today, since the cost schedule of a
-/// subnet is fixed when the subnet is created, but the accounting must not depend
-/// on that: it settles the prepayment recorded in the callback, which carries the
-/// cost schedule in effect at the call, against a requirement derived from the
-/// cost schedule in effect at the response.
+/// call. The cost schedules differ only if the cost schedule of the canister's
+/// subnet changed across the call, which no proposal does today, though the
+/// registry does not enforce that a canister migration keeps it either. The
+/// accounting must not depend on it: it settles the prepayment recorded in the
+/// callback, which carries the cost schedule in effect at the call, against a
+/// requirement derived from the cost schedule in effect at the response.
 fn response_execution_settings() -> Vec<(ResponseExecutionSetting, ResponseExecutionSetting)> {
     RESPONSE_EXECUTION_SETTINGS
         .into_iter()

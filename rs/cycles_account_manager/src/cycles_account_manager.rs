@@ -856,16 +856,17 @@ impl CyclesAccountManager {
     ///
     /// The cycles for a response execution are prepaid when the corresponding call
     /// is performed, i.e., using the instruction costs of the Wasm execution mode
-    /// of the calling canister at that time. The canister might have been upgraded
-    /// to a different Wasm execution mode before the response arrives:
+    /// of the calling canister and the cost schedule of its subnet at that time. The
+    /// canister might have been upgraded to a different Wasm execution mode, or the
+    /// cost schedule of its subnet might have changed, before the response arrives:
     ///
-    /// - if the prepayment falls short of the requirement (the canister was upgraded
-    ///   to a more expensive Wasm execution mode), then the missing cycles are
-    ///   withdrawn from the canister's balance. No freezing threshold is applied:
+    /// - if the prepayment falls short of the requirement (e.g., the canister was
+    ///   upgraded to a more expensive Wasm execution mode), then the missing cycles
+    ///   are withdrawn from the canister's balance. No freezing threshold is applied:
     ///   the canister already committed to executing the response when it performed
     ///   the corresponding call;
-    /// - if the prepayment exceeds the requirement (the canister was upgraded to a
-    ///   cheaper Wasm execution mode), then the excess is refunded immediately.
+    /// - if the prepayment exceeds the requirement (e.g., the canister was upgraded
+    ///   to a cheaper Wasm execution mode), then the excess is refunded immediately.
     ///
     /// Matching the prepayment to the requirement lets the canister pay exactly for
     /// the instructions it executed, at the instruction costs of the Wasm execution
