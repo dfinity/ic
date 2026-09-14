@@ -52,16 +52,16 @@ jobs:
           echo "sha=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
 
       # Every CDN download below is verified against the build-provenance
-      # attestation created by the attest-uploads job of release-testing.yml
+      # attestation minted by the release-testing.yml pipeline's CI Main run
       # for this exact commit, and the release aborts on any mismatch.
-      # Pinning the release-testing.yml signer
-      # also enforces that a release-* tag can only ship commits that went
-      # through the release-qualification pipeline.
+      # Pinning release-testing.yml as the run's top-level workflow (the
+      # certificate's Build Config URI) also enforces that a release-* tag can
+      # only ship commits that went through the release-qualification pipeline.
       - name: Download and verify release binaries
         uses: ./.github/actions/fetch-verified-artifacts
         with:
           commit: ${{ steps.commit.outputs.sha }}
-          signer-workflow: dfinity/ic/.github/workflows/release-testing.yml
+          build-workflow: dfinity/ic/.github/workflows/release-testing.yml
           # release-* tags ship release-qualified commits only: accept
           # attestations minted from release branches, not from a
           # workflow_dispatch of release-testing.yml on some other ref.
@@ -121,7 +121,7 @@ jobs:
         uses: ./.github/actions/fetch-verified-artifacts
         with:
           commit: ${{ steps.commit.outputs.sha }}
-          signer-workflow: dfinity/ic/.github/workflows/release-testing.yml
+          build-workflow: dfinity/ic/.github/workflows/release-testing.yml
           # release-* tags ship release-qualified commits only: accept
           # attestations minted from release branches, not from a
           # workflow_dispatch of release-testing.yml on some other ref.
