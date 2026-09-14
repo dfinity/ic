@@ -22,7 +22,7 @@ use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
         CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPayloadValidationFailure,
-        InvalidCanisterHttpPayloadReason,
+        InvalidCanisterHttpPayloadReason, ResponseDisposition,
     },
     consensus::{InvalidPayloadReason, PayloadValidationError, PayloadValidationFailure},
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
@@ -1784,10 +1784,10 @@ pub(crate) fn add_received_artifacts_to_pool(
             timestamp: UNIX_EPOCH,
         });
 
-        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated {
-            share: artifact.share,
-            retain_response: true,
-        }]);
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
+            artifact.share,
+            ResponseDisposition::Publish,
+        )]);
     }
 }
 
@@ -1805,10 +1805,10 @@ pub(crate) fn add_received_shares_to_pool(
             timestamp: UNIX_EPOCH,
         });
 
-        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated {
-            share: artifact.share,
-            retain_response: true,
-        }]);
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
+            artifact.share,
+            ResponseDisposition::Publish,
+        )]);
     }
 }
 
@@ -1820,7 +1820,8 @@ pub(crate) fn add_own_share_to_pool(
 ) {
     pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
         share.clone(),
-        Some(content.clone()),
+        content.clone(),
+        ResponseDisposition::KeepLocal,
     )]);
 }
 

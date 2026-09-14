@@ -206,16 +206,30 @@ pub enum CanisterHttpPayloadValidationFailure {
 pub type CanisterHttpPayloadValidationError =
     ValidationError<InvalidCanisterHttpPayloadReason, CanisterHttpPayloadValidationFailure>;
 
+/// What is to happen to the response of a share that enters the validated pool.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResponseDisposition {
+    /// Gossip the response along with the share, and retain it both to put into a
+    /// block and to serve to peers that pull the artifact: the peers of an outcall
+    /// that is not fully replicated cannot produce the response themselves.
+    Publish,
+    /// Retain the response, to put into a block, but neither gossip nor serve it:
+    /// every replica of a fully replicated outcall produces the response itself.
+    KeepLocal,
+    /// Neither retain nor gossip the response: the outcall has already been answered,
+    /// so its response can never make it into a block and is of no use to anyone. The
+    /// share is still of use, as a receipt of the cycles spent on the outcall.
+    Discard,
+}
+
 #[derive(Debug)]
 pub enum CanisterHttpChangeAction {
-    // The response is `None` for an outcall that has already been answered.
-    AddToValidated(CanisterHttpResponseShare, Option<CanisterHttpResponse>),
-    AddToValidatedAndGossipResponse(CanisterHttpResponseShare, CanisterHttpResponse),
-    MoveToValidated {
-        share: CanisterHttpResponseShare,
-        // `false` for an outcall that has already been answered.
-        retain_response: bool,
-    },
+    AddToValidated(
+        CanisterHttpResponseShare,
+        CanisterHttpResponse,
+        ResponseDisposition,
+    ),
+    MoveToValidated(CanisterHttpResponseShare, ResponseDisposition),
     RemoveValidated(CanisterHttpResponseId),
     RemoveUnvalidated(CanisterHttpResponseId),
     RemoveContent(CryptoHashOf<CanisterHttpResponse>),
