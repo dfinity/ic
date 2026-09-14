@@ -120,12 +120,19 @@ curl -fsSL --retry 3 "$url" -o "$out_file"
 echo "Verifying attestation of $expected_subject" >&2
 verify_output="$(mktemp)"
 trap 'rm -f "$verify_output"' EXIT
-gh attestation verify "$out_file" \
+# A failure here means no attestation for these bytes at this commit is signed
+# by $signer_workflow at all. gh reports that as a bare sigstore verification
+# error, so explain the most likely cause rather than letting it stand alone.
+if ! gh attestation verify "$out_file" \
     --repo "$repo" \
     --signer-workflow "$signer_workflow" \
     --source-digest "$commit" \
     --format json \
-    >"$verify_output"
+    >"$verify_output"; then
+    echo "ERROR: no attestation signed by '$signer_workflow' verifies $expected_subject at commit $commit." >&2
+    echo "Either the commit was never built by a release build, or its attestation carries a different signer: attestations minted between #11323 and #11569 were signed by the calling workflow (ci-kickoff.yml / release-testing.yml) instead of ci-main.yml, and commits older than #11323 have none at all. Neither can be backfilled -- a workflow_dispatch runs the dispatched ref's own tree." >&2
+    exit 1
+fi
 
 # Bind, on the SAME verified attestation entry: (1) the top-level workflow of
 # the run that minted it (buildConfigURI, OID 1.3.6.1.4.1.57264.1.18) to
@@ -155,7 +162,6 @@ jq -e \
     "$verify_output" >/dev/null || {
     echo "ERROR: no verified attestation from a '${build_workflow}' run on a ref matching '${source_ref_regex}' records digest $digest under subject '$expected_subject'." >&2
     echo "The file served at $url is either attested by an unexpected pipeline, attested from an unexpected ref (unqualified build?), or not attested as this directory's SHA256SUMS (cross-directory substitution?)." >&2
-    echo "Note: attestations minted between #11323 and #11569 were signed by the calling workflow rather than by ci-main.yml and are rejected here by design." >&2
     exit 1
 }
 
