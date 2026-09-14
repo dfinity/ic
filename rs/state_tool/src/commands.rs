@@ -2,7 +2,6 @@
 pub mod canister_metrics;
 pub mod cdiff;
 pub mod chash;
-pub mod checkpoint_time;
 pub mod convert_ids;
 pub mod copy;
 pub mod decode;

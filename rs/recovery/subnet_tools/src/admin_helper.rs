@@ -9,14 +9,11 @@ use ic_recovery::admin_helper::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 
-/// Arguments naming the two subnets an operation moves canister id ranges
-/// between, and the subnet an `ic-admin` subnet command applies to.
-pub const SOURCE_SUBNET_ARG: &str = "source-subnet";
-pub const DESTINATION_SUBNET_ARG: &str = "destination-subnet";
-pub const SUBNET_ARG: &str = "subnet";
-
+const SOURCE_SUBNET_ARG: &str = "source-subnet";
+const DESTINATION_SUBNET_ARG: &str = "destination-subnet";
 const CANISTER_ID_RANGES_ARG: &str = "canister-id-ranges";
 const MIGRATION_TRACE_ARG: &str = "migration-trace";
+const SUBNET_ARG: &str = "subnet";
 
 /// Propose to make the subnet halt after reaching the next CUP height.
 ///

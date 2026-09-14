@@ -20,7 +20,7 @@ use ic_registry_routing_table::RoutingTable;
 use ic_subnet_tools::{
     agent_helper::AgentHelper,
     state_tool_helper,
-    utils::{get_cup, get_state_hash},
+    utils::{get_batch_time_from_cup, get_cup, get_state_hash},
     validation::validate_artifacts,
 };
 use ic_types::{Height, consensus::CatchUpPackage, consensus::HasHeight};
@@ -455,9 +455,17 @@ impl Step for MergeStatesStep {
 
         // The block time the recovered subnet starts from has to be larger than
         // the times of both checkpoints the merged state is assembled from.
-        let source_time = state_tool_helper::checkpoint_time_nanos(&source_checkpoint)?;
-        let destination_time = state_tool_helper::checkpoint_time_nanos(&destination_checkpoint)?;
-        let merged_time = source_time.max(destination_time) + self.time_margin.as_nanos() as u64;
+        // Each subnet halted at a CUP, so the batch time of the checkpoint it
+        // halted at is the block time of that CUP, which the preceding steps
+        // downloaded and validated against the NNS signed state tree.
+        let source_time =
+            get_batch_time_from_cup(&self.layout.downloaded_cup_file(TargetSubnet::Source))?;
+        let destination_time =
+            get_batch_time_from_cup(&self.layout.downloaded_cup_file(TargetSubnet::Destination))?;
+        let merged_time = source_time
+            .max(destination_time)
+            .as_nanos_since_unix_epoch()
+            + self.time_margin.as_nanos() as u64;
         info!(
             self.logger,
             "The source subnet halted at height {source_height} and time {source_time}, the \

@@ -2,8 +2,10 @@ use ic_base_types::SubnetId;
 use ic_recovery::admin_helper::{
     AdminHelper, CommandHelper, IcAdmin, SSH_READONLY_ACCESS_ARG, SUMMARY_ARG, quote,
 };
-use ic_subnet_tools::admin_helper::{DESTINATION_SUBNET_ARG, SOURCE_SUBNET_ARG, SUBNET_ARG};
 
+const SOURCE_SUBNET_ARG: &str = "source-subnet";
+const DESTINATION_SUBNET_ARG: &str = "destination-subnet";
+const SUBNET_ARG: &str = "subnet";
 const SUBNET_ID_ARG: &str = "subnet-id";
 
 /// Propose to label the subnet as "cooling down", i.e. to have it stop

@@ -74,14 +74,3 @@ pub fn merge_checkpoints(base: &Path, source: &Path, output: &Path) -> RecoveryR
     )
     .map_err(|err| RecoveryError::StateToolError(format!("Failed to merge the states: {err}")))
 }
-
-/// The batch time of the checkpoint at `path`, in nanoseconds since the Epoch,
-/// i.e. the IC time the subnet had reached when it wrote the checkpoint.
-pub fn checkpoint_time_nanos(path: &Path) -> RecoveryResult<u64> {
-    ic_state_tool::commands::checkpoint_time::batch_time_nanos(path.to_path_buf()).map_err(|err| {
-        RecoveryError::StateToolError(format!(
-            "Failed to read the batch time of the checkpoint {}: {err}",
-            path.display()
-        ))
-    })
-}
