@@ -260,11 +260,10 @@ pub fn encode_delegation_batch(addresses: &[DepositAddress]) -> Vec<u8> {
 /// `address_count x 32` bytes — into `address_count` delegations, in call order.
 ///
 /// Each word after the first is the first 32 bytes of an account's code, zero-padded beyond its
-/// size. The
-/// accounts read are [`DepositAddress`]es, whose address is the hash of a public key the minter
-/// derives, never the hash of a deployer and nonce or of `CREATE2` inputs, so no contract can be
-/// deployed at one and the only code such an account can ever hold is a delegation designator.
-/// That classifies each word unambiguously:
+/// size. The accounts read are [`DepositAddress`]es, whose address is the hash of a public key
+/// the minter derives, never the hash of a deployer and nonce or of `CREATE2` inputs, so no
+/// contract can be deployed at one and the only code such an account can ever hold is a
+/// delegation designator. That classifies each word unambiguously:
 /// * an all-zero word means no code at all, hence no delegation;
 /// * `0xef0100 || delegate || 9 zero bytes` is a code of exactly 23 bytes whose only possible
 ///   origin is an applied [EIP-7702] authorization tuple, since [EIP-3541] keeps every deployed
