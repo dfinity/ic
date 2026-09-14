@@ -126,6 +126,9 @@ pub struct BalanceOfCall {
 pub enum BatcherDecodeError {
     /// The return blob is not exactly `n` 32-byte words.
     WrongLength { expected: usize, got: usize },
+    /// `n` is so large that `n` 32-byte words does not fit in a `usize`, so no blob can ever
+    /// match it.
+    UnrepresentableLength { entries: usize },
 }
 
 /// Build the create-call `input` for a batch of `balanceOf` sub-calls:
@@ -159,10 +162,12 @@ pub fn encode_eth_balance_batch(holders: &[DepositAddress]) -> Vec<u8> {
 /// program can return a partial result: [`BATCHER_INITCODE`] reverts the whole call if any
 /// `balanceOf` sub-call fails, and [`ETH_BATCHER_INITCODE`] has no failure path at all — the
 /// `BALANCE` opcode makes no sub-calls. A failed batch therefore surfaces as an `eth_call` error
-/// upstream, never as a `0` here. Returns `Err` if the blob length is not exactly `n` words;
-/// never panics.
+/// upstream, never as a `0` here. Returns `Err` if the blob length is not exactly `n` words, or if
+/// `n` is so large that that length does not fit in a `usize`; never panics.
 pub fn decode_balance_batch(ret: &[u8], n: usize) -> Result<Vec<Erc20Value>, BatcherDecodeError> {
-    let expected = n * WORD;
+    let expected = n
+        .checked_mul(WORD)
+        .ok_or(BatcherDecodeError::UnrepresentableLength { entries: n })?;
     if ret.len() != expected {
         return Err(BatcherDecodeError::WrongLength {
             expected,
