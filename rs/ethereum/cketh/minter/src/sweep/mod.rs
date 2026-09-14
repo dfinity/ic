@@ -92,6 +92,13 @@ pub(crate) async fn enqueue_pending_sweeps<R: CanisterRuntime, Rt: Runtime>(
     if batch_per_asset.is_empty() {
         return;
     }
+    if read_state(|s| s.deposit_helper_contract()).is_none() {
+        log!(
+            DEBUG,
+            "[create_pending_sweeper_requests]: SKIPPING: no deposit helper with subaccount is configured"
+        );
+        return;
+    }
 
     let Some(gas_fee_estimate) = lazy_refresh_gas_fee_estimate(runtime).await else {
         log!(
