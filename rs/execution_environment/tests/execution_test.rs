@@ -7,6 +7,7 @@ use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
+use ic_crypto_tree_hash::{MixedHashTree, Path as LabeledTreePath, sparse_labeled_tree_from_paths};
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_execution_environment::units::{GIB, MIB};
 use ic_interfaces_state_manager::StateReader;
@@ -30,8 +31,11 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
-use ic_types::{CanisterId, NumBytes, Time, ingress::WasmResult, messages::NO_DEADLINE};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types::{
+    CanisterId, CryptoHashOfPartialState, NumBytes, Time, ingress::WasmResult,
+    messages::NO_DEADLINE,
+};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, NominalCycles};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
@@ -3138,6 +3142,173 @@ fn subnet_metrics_consumed_cycles_total_is_the_committed_aggregate() {
         candid::Nat::from(post_total.get())
     );
     assert_gt!(victim_consumed.get(), 0);
+}
+
+/// The certified `/subnet/<subnet_id>/metrics` leaf of the latest state, together
+/// with the root hash of the canonical state tree it is certified under.
+fn certified_subnet_metrics(env: &StateMachine) -> (MixedHashTree, CryptoHashOfPartialState) {
+    env.certify_latest_state();
+    let paths = vec![LabeledTreePath::new(vec![
+        b"subnet".into(),
+        env.get_subnet_id().get().into(),
+        b"metrics".into(),
+    ])];
+    let (_state, tree, certification) = env
+        .state_manager
+        .read_certified_state(&sparse_labeled_tree_from_paths(&paths).unwrap())
+        .expect("the latest state must be certified");
+    (tree, certification.signed.content.hash)
+}
+
+/// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
+/// is not persisted: `ReplicatedState::new_from_checkpoint` re-derives it from the
+/// canisters it loads, exactly as the refresh on every committed state does. From
+/// certification version `V29` on, that aggregate is what
+/// `/subnet/<subnet_id>/metrics` certifies, so a replica restarting from a
+/// checkpoint has to certify byte-for-byte the same leaf as one that kept running.
+/// Were the two to disagree, the restarted replica would not be able to contribute
+/// to certifying the states its peers compute.
+#[test]
+fn subnet_metrics_are_unchanged_across_a_restart() {
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    env.set_checkpoints_enabled(true);
+
+    // Non-zero *persisted* consumption: deleting a canister moves its consumption
+    // and its remaining balance into the subnet-level fields, which are part of the
+    // checkpoint.
+    let victim = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+    env.stop_canister(victim).unwrap();
+    env.delete_canister(victim).unwrap();
+
+    // Non-zero *transient* consumption: a canister that is still around, and has
+    // consumed cycles both by being installed and by burning some explicitly.
+    let canister = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+    env.execute_ingress(
+        canister,
+        "update",
+        wasm().cycles_burn128(1_000_000_u128).reply().build(),
+    )
+    .unwrap();
+
+    // Write a checkpoint holding all of the above, and certify the state it holds.
+    env.checkpointed_tick();
+    let height_before = env.state_manager.latest_state_height();
+    let metrics_before = env.get_latest_state().metadata.subnet_metrics.clone();
+    let certified_before = certified_subnet_metrics(&env);
+
+    // Both parts are non-zero, so the comparison below is not vacuous -- and, in
+    // particular, the transient part is a strictly positive share of the total.
+    assert_gt!(metrics_before.consumed_cycles_total().get(), 0);
+    assert_gt!(
+        metrics_before
+            .consumed_cycles_total_including_canisters()
+            .get(),
+        metrics_before.consumed_cycles_total().get()
+    );
+
+    let env = env.restart_node();
+
+    // The restarted replica resumes from the very same state...
+    assert_eq!(env.state_manager.latest_state_height(), height_before);
+    // ...holding the very same subnet metrics, transient fields included...
+    assert_eq!(
+        env.get_latest_state().metadata.subnet_metrics,
+        metrics_before
+    );
+    // ...and certifying the very same `/subnet/<subnet_id>/metrics` leaf, under the
+    // very same canonical state tree root hash.
+    assert_eq!(certified_subnet_metrics(&env), certified_before);
+}
+
+/// Asserts that `SubnetMetrics::consumed_cycles_total_including_canisters` of the
+/// latest state is what it is defined to be -- the subnet-level total plus the
+/// consumption of the canisters that currently exist -- recomputed here from the
+/// state itself, and returns it.
+fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
+    let state = env.get_latest_state();
+    let consumed_by_canisters = state
+        .canisters_iter()
+        .fold(NominalCycles::zero(), |total, canister| {
+            total + canister.system_state.canister_metrics().consumed_cycles()
+        });
+    let subnet_metrics = &state.metadata.subnet_metrics;
+    let total = subnet_metrics.consumed_cycles_total_including_canisters();
+    assert_eq!(
+        total,
+        subnet_metrics.consumed_cycles_total() + consumed_by_canisters
+    );
+    total
+}
+
+/// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
+/// is refreshed on every committed state, not only on the rounds that happen to
+/// touch the subnet-level fields. From certification version `V29` on the aggregate
+/// is certified at `/subnet/<subnet_id>/metrics`, so a stale one would be served to
+/// users as the current consumption of the subnet.
+///
+/// A heartbeat that burns a fixed amount of cycles makes every single round consume
+/// cycles, and only on that canister, so a refresh that skipped a round would leave
+/// the aggregate behind by at least the burned amount.
+#[test]
+fn consumed_cycles_in_subnet_metrics_are_refreshed_every_round() {
+    /// Burned by the heartbeat below, in every round.
+    const BURNED_PER_ROUND: u128 = 1_000_000;
+    /// Rounds to observe; more than one, so that a refresh happening only on the
+    /// first round after the heartbeat was installed would not pass either.
+    const ROUNDS: usize = 5;
+
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let canister = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+    env.execute_ingress(
+        canister,
+        "update",
+        wasm()
+            .set_heartbeat(wasm().cycles_burn128(BURNED_PER_ROUND).build())
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    let mut previous = assert_consumed_cycles_are_refreshed(&env);
+    for _ in 0..ROUNDS {
+        env.tick();
+
+        let current = assert_consumed_cycles_are_refreshed(&env);
+        // The heartbeat burned its cycles in this round, and the aggregate committed
+        // at the end of it already accounts for them; executing the heartbeat charged
+        // the canister some more on top.
+        assert_gt!(current.get(), previous.get() + BURNED_PER_ROUND);
+        previous = current;
+    }
+
+    // The subnet-level part is refreshed in lockstep: deleting a canister moves its
+    // consumption out of the canisters' part and into
+    // `consumed_cycles_by_deleted_canisters`, and burns its remaining balance on top.
+    // The aggregate the round commits accounts for both at once -- never for one
+    // without the other, which is what counting the canister twice, or not at all,
+    // would look like.
+    let victim = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+    assert_consumed_cycles_are_refreshed(&env);
+    env.stop_canister(victim).unwrap();
+    env.delete_canister(victim).unwrap();
+    let after_deletion = assert_consumed_cycles_are_refreshed(&env);
+    assert_gt!(
+        after_deletion.get(),
+        previous.get() + INITIAL_CYCLES_BALANCE.get()
+    );
 }
 
 #[test]
