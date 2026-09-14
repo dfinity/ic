@@ -60,3 +60,17 @@ pub fn split_manifest(
 
     Ok(())
 }
+
+/// Assembles the checkpoint at `output` from the checkpoints at `base` (the
+/// state of the destination subnet of a merge) and `source` (the state of the
+/// subnet that is merged away): it holds everything of `base`, with the
+/// canisters and canister snapshots of `source` added to those of `base`, and
+/// is marked as the product of a subnet merge.
+pub fn merge_checkpoints(base: &Path, source: &Path, output: &Path) -> RecoveryResult<()> {
+    ic_state_tool::commands::merge::do_merge(
+        base.to_path_buf(),
+        source.to_path_buf(),
+        output.to_path_buf(),
+    )
+    .map_err(|err| RecoveryError::StateToolError(format!("Failed to merge the states: {err}")))
+}

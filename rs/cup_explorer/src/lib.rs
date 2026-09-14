@@ -43,7 +43,7 @@ pub async fn get_catchup_content(url: &Url) -> Result<Option<pb::CatchUpContent>
 }
 
 /// Fetches the CatchUp package, if it's present.
-async fn get_cup(url: &Url) -> Result<Option<pb::CatchUpPackage>, String> {
+pub async fn get_cup(url: &Url) -> Result<Option<pb::CatchUpPackage>, String> {
     let agent = Agent::new(url.clone(), Sender::Anonymous);
     agent
         .query_cup_endpoint(None)
