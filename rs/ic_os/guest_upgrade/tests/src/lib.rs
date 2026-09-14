@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use anyhow::bail;
+use anyhow::{bail, ensure};
 use attestation::SevAttestationPackage;
 use attestation::attestation_package::SevRootCertificateVerification;
 use config_types::{
@@ -24,9 +24,13 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::add_replica_version_record;
 use ic_types::ReplicaVersion;
 use rand::RngCore;
+use sev::firmware::host::TcbVersion;
+use sev::parser::ByteParser;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
-use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
+use sev_guest_testing::{
+    DEFAULT_GENERATION, FakeAttestationReportSigner, MockSevGuestFirmwareBuilder,
+};
 use std::future::Future;
 use std::net::Ipv6Addr;
 use std::str::FromStr;
@@ -52,6 +56,14 @@ const BOGUS_CUSTOM_DATA: [u8; 64] = [255; 64];
 const DEFAULT_CHIP_ID: [u8; 64] = [88; 64];
 /// Chip ID that is different from the expected one.
 const DIFFERENT_CHIP_ID: [u8; 64] = [123; 64];
+
+fn default_launch_tcb_as_u64() -> u64 {
+    u64::from_le_bytes(
+        TcbVersion::new(None, 1, 0, 0, 0)
+            .to_bytes_with(DEFAULT_GENERATION)
+            .unwrap(),
+    )
+}
 
 #[derive(Debug, Clone)]
 struct TestConfig {
@@ -183,6 +195,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
                         .server_sign_attestation_reports
                         .then_some(fake_attestation_report_signer.clone()),
                 )
+                .with_launch_tcb(TcbVersion::new(None, 1, 0, 0, 0))
                 .with_measurement(config.server_measurement),
             client_sev_firmware: MockSevGuestFirmwareBuilder::new()
                 .with_chip_id(config.client_chip_id)
@@ -212,6 +225,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             Key::DiskEncryptionKey {
                 device_path: self.store_device.path(),
             },
+            default_launch_tcb_as_u64(),
         )
         .expect("Failed to derive the served Store key")
         .into_bytes()
@@ -234,7 +248,10 @@ impl DiskEncryptionKeyExchangeTestFixture {
             .withf(move |device_path, luks_header_path, _| {
                 device_path == store_device_path && luks_header_path == store_luks_header_path
             })
-            .returning(move |_, _, _| Ok(can_open));
+            .returning(move |_, _, _| {
+                ensure!(can_open, "cannot open");
+                Ok(())
+            });
     }
 
     /// Run the key exchange test and return (server status, client status).

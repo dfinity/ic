@@ -29,7 +29,7 @@ use ic_recovery::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_tools::{
-    admin_helper::get_halt_subnet_at_cup_height_command, cli::print_url_and_ask_for_confirmation,
+    admin_helper::get_halt_subnet_at_cup_height_command, utils::print_url_and_ask_for_confirmation,
 };
 use ic_types::Height;
 use serde::{Deserialize, Serialize};

@@ -1,6 +1,4 @@
-use crate::{
-    layout::Layout, target_subnet::TargetSubnet, utils::find_expected_state_hash_for_subnet_id,
-};
+use crate::{layout::Layout, target_subnet::TargetSubnet};
 
 use ic_base_types::SubnetId;
 use ic_metrics::MetricsRegistry;
@@ -17,7 +15,7 @@ use ic_state_manager::split::resolve_ranges_and_split;
 use ic_subnet_tools::{
     agent_helper::AgentHelper,
     state_tool_helper,
-    utils::{get_batch_time_from_cup, get_state_hash},
+    utils::{find_expected_state_hash_for_subnet_id, get_batch_time_from_cup, get_state_hash},
     validation::validate_artifacts,
 };
 use ic_types::Height;

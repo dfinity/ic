@@ -196,45 +196,45 @@ impl Metrics {
     fn new(registry: &Registry) -> Self {
         Self {
             scale: register_int_gauge_with_registry!(
-                format!("generic_limiter_scale"),
-                format!("Current scale that's applied to the rules"),
+                "generic_limiter_scale",
+                "Current scale that's applied to the rules",
                 registry,
             )
             .unwrap(),
 
             last_successful_fetch: register_int_gauge_with_registry!(
-                format!("generic_limiter_last_successful_fetch"),
-                format!("How many seconds ago the last successful fetch happened"),
+                "generic_limiter_last_successful_fetch",
+                "How many seconds ago the last successful fetch happened",
                 registry
             )
             .unwrap(),
 
             active_rules: register_int_gauge_with_registry!(
-                format!("generic_limiter_rules"),
-                format!("Number of rules currently installed"),
+                "generic_limiter_rules",
+                "Number of rules currently installed",
                 registry
             )
             .unwrap(),
 
             fetches: register_int_counter_vec_with_registry!(
-                format!("generic_limiter_fetches"),
-                format!("Count of rule fetches and their outcome"),
+                "generic_limiter_fetches",
+                "Count of rule fetches and their outcome",
                 &["result"],
                 registry
             )
             .unwrap(),
 
             decisions: register_int_counter_vec_with_registry!(
-                format!("generic_limiter_decisions"),
-                format!("Count of decisions made by the ratelimiter"),
+                "generic_limiter_decisions",
+                "Count of decisions made by the ratelimiter",
                 &["decision"],
                 registry
             )
             .unwrap(),
 
             shards_count: register_int_gauge_with_registry!(
-                format!("generic_limiter_shards_count"),
-                format!("Number of dynamic shards if the corresponding rules are used"),
+                "generic_limiter_shards_count",
+                "Number of dynamic shards if the corresponding rules are used",
                 registry,
             )
             .unwrap(),

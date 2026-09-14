@@ -10,10 +10,10 @@ use ic_system_test_driver::{
     util::runtime_from_url,
 };
 
+use base64::prelude::*;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
 use ic_types::{NodeId, SubnetId};
-use openssh_keys::PublicKey;
 use registry_canister::mutations::{
     do_set_subnet_operational_level::{NodeSshAccess, SetSubnetOperationalLevelPayload},
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
@@ -55,10 +55,28 @@ fn private_key_to_pem_string(rsa: &rsa::RsaPrivateKey) -> String {
         .to_string()
 }
 
+/// Renders an RSA public key (big-endian `e` and `n`) as an OpenSSH
+/// `authorized_keys` line, `ssh-rsa <base64(blob)> <comment>`, where the blob
+/// is the SSH wire encoding `string("ssh-rsa") || mpint(e) || mpint(n)`
+/// (RFC 4253, section 6.6).
 fn public_key_to_string(e: Vec<u8>, n: Vec<u8>) -> String {
-    let mut key = PublicKey::from_rsa(e, n);
-    key.set_comment("ci@ci.ci");
-    key.to_string()
+    fn write_bytes(buf: &mut Vec<u8>, bytes: &[u8]) {
+        buf.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+        buf.extend_from_slice(bytes);
+    }
+    // An SSH `mpint` is a big-endian two's-complement integer, so a positive
+    // value whose most significant bit is set needs a leading zero byte.
+    fn write_mpint(buf: &mut Vec<u8>, mut num: Vec<u8>) {
+        if num.first().is_some_and(|b| b & 0x80 != 0) {
+            num.insert(0, 0);
+        }
+        write_bytes(buf, &num);
+    }
+    let mut blob = Vec::new();
+    write_bytes(&mut blob, b"ssh-rsa");
+    write_mpint(&mut blob, e);
+    write_mpint(&mut blob, n);
+    format!("ssh-rsa {} ci@ci.ci", BASE64_STANDARD.encode(&blob))
 }
 
 pub enum AuthMean {

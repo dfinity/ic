@@ -22,3 +22,6 @@ ic-types = { path = "../../types/types" }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+ic-test-utilities-tmpdir = { path = "../../test_utilities/tmpdir" }
