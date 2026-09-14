@@ -876,19 +876,12 @@ impl CyclesAccountManager {
     /// `CompoundCycles` saturates part by part, so `required - prepaid` is the
     /// shortfall and `prepaid - required` the excess of the real and of the nominal
     /// part on its own, and for either part at most one of the two is non-zero.
-    ///
-    /// This means that the adjustment does not rely on the prepayment and the
-    /// requirement carrying the same cost schedule: the prepayment recorded in the
-    /// callback carries the cost schedule in effect when the call was performed,
-    /// whereas the requirement is derived from the cost schedule in effect when the
-    /// response is executed. The two always coincide today, since a subnet keeps the
-    /// cost schedule it was created with, but were the cost schedule of a live
-    /// subnet allowed to change, then a canister whose subnet switched from the
-    /// normal to the free cost schedule across a call would get back here the whole
-    /// real prepayment it made under the normal cost schedule, and one whose subnet
-    /// switched the other way round would pay the real requirement here; either way
-    /// it ends up with exactly the prepayment that the cost schedule in effect at
-    /// response time requires.
+    /// Hence the adjustment does not rely on the prepayment and the requirement
+    /// carrying the same cost schedule, which a comparison of the two would (see the
+    /// `No ordering` section of the `CompoundCycles` documentation): the canister
+    /// ends up with exactly the prepayment that the cost schedule in effect when the
+    /// response is executed requires, whatever cost schedule the prepayment recorded
+    /// in the callback carries.
     ///
     /// A failing adjustment must leave the canister state unchanged: neither the
     /// balance nor the consumed cycles metrics may move. The withdrawal is therefore
