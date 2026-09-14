@@ -171,7 +171,9 @@ pub struct BalanceOfCall {
 /// Error encountered while decoding the return blob of a batcher program.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum BatcherDecodeError {
-    /// The return blob is not exactly `n` 32-byte words.
+    /// The return blob does not have the length the decoder expects for the entry count it was
+    /// given: one 32-byte word per entry, plus whatever fixed words the program puts ahead of
+    /// them.
     WrongLength { expected: usize, got: usize },
     /// The entry count calls for a blob whose length does not fit in a `usize`, so no blob can
     /// ever match it.
