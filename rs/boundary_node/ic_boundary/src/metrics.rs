@@ -427,14 +427,11 @@ pub async fn metrics_middleware_status(
     next: Next,
 ) -> impl IntoResponse {
     let response = next.run(request).await;
-    let health = response
-        .extensions()
-        .get::<ReplicaHealthStatus>()
-        .unwrap()
-        .as_ref();
 
-    let HttpMetricParamsStatus { counter } = metric_params;
-    counter.with_label_values(&[health]).inc();
+    if let Some(health) = response.extensions().get::<ReplicaHealthStatus>().as_ref() {
+        let HttpMetricParamsStatus { counter } = metric_params;
+        counter.with_label_values(&[health]).inc();
+    }
 
     response
 }
