@@ -118,7 +118,6 @@ async fn should_sign_and_record_one_authorization_for_every_account() {
     expect_authorization_signing(
         &mut runtime,
         &authorization_request(SWEEPER_CONTRACT, TransactionNonce::ZERO),
-        1,
     );
     expect_signing(&mut runtime);
     expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
@@ -143,7 +142,6 @@ async fn should_reuse_the_recorded_authorization_on_a_later_sweep() {
     expect_authorization_signing(
         &mut runtime,
         &authorization_request(SWEEPER_CONTRACT, TransactionNonce::ZERO),
-        1,
     );
     expect_signing(&mut runtime);
     expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
@@ -168,12 +166,10 @@ async fn should_sign_a_fresh_authorization_when_the_sweeper_contract_changes() {
     expect_authorization_signing(
         &mut runtime,
         &authorization_request(SWEEPER_CONTRACT, TransactionNonce::ZERO),
-        1,
     );
     expect_authorization_signing(
         &mut runtime,
         &authorization_request(ANOTHER_SWEEPER_CONTRACT, TransactionNonce::ZERO),
-        1,
     );
     expect_signing(&mut runtime);
     expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
@@ -387,7 +383,6 @@ async fn should_sweep_an_address_delegated_elsewhere_with_a_nonce_zero_authoriza
     expect_authorization_signing(
         &mut runtime,
         &authorization_request(SWEEPER_CONTRACT, TransactionNonce::ZERO),
-        1,
     );
     expect_signing(&mut runtime);
     expect_delegation_read(
@@ -540,7 +535,7 @@ async fn should_skip_the_tick_when_the_sweeper_contract_changed_since_the_read()
 async fn should_sign_a_rotation_authorization_at_the_tracked_nonce() {
     let rotation = authorization_request(SWEEPER_CONTRACT, TransactionNonce::ONE);
     let mut runtime = mock();
-    expect_authorization_signing(&mut runtime, &rotation, 1);
+    expect_authorization_signing(&mut runtime, &rotation);
     finalize_a_first_sweep(&mut runtime).await;
     queue_deposit(&account(), &usdc());
 
@@ -664,11 +659,7 @@ fn pending_sweeps() -> Vec<SweepRequest> {
     read_state(|s| s.automatic_deposits.sweep_requests_batch(usize::MAX))
 }
 
-fn expect_authorization_signing(
-    runtime: &mut MockCanisterRuntime,
-    request: &AuthorizationRequest,
-    times: usize,
-) {
+fn expect_authorization_signing(runtime: &mut MockCanisterRuntime, request: &AuthorizationRequest) {
     let digest = request.authorization().hash().0;
     let path: Vec<Vec<u8>> = request
         .derivation_path()
@@ -680,7 +671,7 @@ fn expect_authorization_signing(
         .withf(move |_, derivation_path, message_hash| {
             *message_hash == digest && *derivation_path == path
         })
-        .times(times)
+        .times(1)
         .returning(sign_digest_with_derived_key);
 }
 
