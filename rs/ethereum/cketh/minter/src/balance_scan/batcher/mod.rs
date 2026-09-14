@@ -296,14 +296,10 @@ pub fn decode_delegation_batch(
         });
     }
     Ok(returned_blob[DELEGATION_BATCH_LEADING_WORDS * WORD..]
-        .chunks_exact(WORD)
-        .map(|code_prefix| {
-            classify_code_prefix(
-                code_prefix
-                    .try_into()
-                    .expect("BUG: chunk is exactly one word"),
-            )
-        })
+        .as_chunks::<WORD>()
+        .0
+        .iter()
+        .map(classify_code_prefix)
         .collect())
 }
 
