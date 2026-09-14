@@ -55,7 +55,7 @@ async fn should_be_no_op_when_no_deposit_helper_contract() {
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
 
-    enqueue_pending_sweeps(&runtime, &stub_rpc_client(vec![])).await;
+    create_pending_sweeper_requests(&runtime).await;
 
     assert_eq!(
         read_state(State::clone),
