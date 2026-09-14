@@ -227,8 +227,13 @@ impl AutomaticDeposits {
             .iter()
             .filter_map(|item| {
                 let spent = item.authorization.as_ref()?.nonce;
-                (spent == self.delegation_nonce(&item.item.deposit))
-                    .then_some((item.item.deposit, spent))
+                let tracked = self.delegation_nonce(&item.item.deposit);
+                assert!(
+                    spent <= tracked,
+                    "BUG: {id:?} carried an authorization of {} at nonce {spent:?}, ahead of the nonce {tracked:?} the minter tracks for it, which only its own applied authorizations move",
+                    item.item.deposit.as_address()
+                );
+                (spent == tracked).then_some((item.item.deposit, spent))
             })
             .collect();
 

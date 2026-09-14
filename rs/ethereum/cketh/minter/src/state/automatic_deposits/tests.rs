@@ -15,7 +15,7 @@ use crate::test_fixtures::{
     deposit_address, deposits_with_enqueued_sweep, gas_fee_estimate, usdc, usdt,
 };
 use crate::timed_sized_map::{Entry, Timestamp};
-use crate::tx::{SignableTransaction, Signed, TransactionSignature};
+use crate::tx::{SignableTransaction, Signed, SignedAuthorization, TransactionSignature};
 use candid::Principal;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -1052,22 +1052,29 @@ async fn should_advance_the_delegation_nonce_when_a_finalized_sweep_applied_its_
 }
 
 #[tokio::test]
-async fn should_not_advance_the_delegation_nonce_for_a_stale_authorization() {
-    let (mut deposits, first) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
-    finalize_sweep(&mut deposits, first.clone(), TransactionStatus::Success);
-
-    let stale = SweepRequest {
-        id: SweepId(1),
-        ..first
+#[should_panic(expected = "ahead of the nonce")]
+async fn should_refuse_an_authorization_ahead_of_the_tracked_nonce() {
+    let (_, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+    let ahead = SweepRequest {
+        items: request
+            .items
+            .iter()
+            .map(|item| AuthorizedSweepItem {
+                authorization: item.authorization.clone().map(|authorization| {
+                    SignedAuthorization {
+                        nonce: TransactionNonce::ONE,
+                        ..authorization
+                    }
+                }),
+                ..item.clone()
+            })
+            .collect(),
+        ..request
     };
-    hand_to_sweep(&mut deposits, &stale);
-    finalize_sweep(&mut deposits, stale, TransactionStatus::Success);
+    let mut deposits = AutomaticDeposits::default();
+    hand_to_sweep(&mut deposits, &ahead);
 
-    assert_eq!(
-        deposits.delegation_nonce(&deposit_address(&account(0))),
-        TransactionNonce::ONE,
-        "an authorization signed for a nonce the address has left behind is skipped and spends nothing"
-    );
+    finalize_sweep(&mut deposits, ahead, TransactionStatus::Success);
 }
 
 #[tokio::test]
