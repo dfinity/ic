@@ -19,8 +19,8 @@ pub type SignedSweepTransaction = Signed<SweepTransaction>;
 /// tuple, so the list can be shorter than the set of addresses swept.
 ///
 /// A deposit address stays delegated to the contract its last applied tuple named, so a sweep needs
-/// type `0x04` only as long as it still touches an address no earlier sweep delegated to the
-/// configured contract, one a delegate change has to rotate included. The
+/// type `0x04` only while it touches an address not yet delegated to the configured contract:
+/// one never delegated, or one still on a contract the minter has since moved away from. The
 /// [`SweepTransaction::Eip7702`] variant therefore always carries a non-empty authorization list:
 /// [`SweepTransaction::new`] is what decides the variant, and it decides on exactly that.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
