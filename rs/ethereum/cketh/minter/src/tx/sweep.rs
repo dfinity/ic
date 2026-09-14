@@ -15,11 +15,12 @@ pub type SignedSweepTransaction = Signed<SweepTransaction>;
 /// A transaction sent from the minter's dedicated sweeper address: a plain EIP-1559 transaction
 /// (`0x02`), or an EIP-7702 one (`0x04`) whose authorization list additionally installs the
 /// delegation to the sweeper contract of those deposit addresses it sweeps that are not delegated
-/// yet. The ones already delegated are swept without an authorization tuple, so the list can be
-/// shorter than the set of addresses swept.
+/// to that contract yet. The ones already delegated to it are swept without an authorization
+/// tuple, so the list can be shorter than the set of addresses swept.
 ///
-/// A deposit address is delegated once and stays delegated, so a sweep needs type `0x04` only as
-/// long as it still touches an address no earlier sweep delegated. The
+/// A deposit address stays delegated to the contract its last applied tuple named, so a sweep needs
+/// type `0x04` only as long as it still touches an address no earlier sweep delegated to the
+/// configured contract, one a delegate change has to rotate included. The
 /// [`SweepTransaction::Eip7702`] variant therefore always carries a non-empty authorization list:
 /// [`SweepTransaction::new`] is what decides the variant, and it decides on exactly that.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]

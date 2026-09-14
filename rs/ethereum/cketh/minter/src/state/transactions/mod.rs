@@ -357,9 +357,11 @@ impl SweepRequest {
     }
 
     /// The delegations the sweep installs on the way, one per deposit address it still has to
-    /// delegate. Signed for nonce zero, so a tuple another sweep's delegation raced is skipped
-    /// rather than sinking the sweep. Empty once every address the sweep touches is delegated,
-    /// which is what makes it a plain EIP-1559 transaction.
+    /// point at the configured sweeper contract, an address delegated to another contract
+    /// included. Signed for the nonce the minter tracks for the address, so a tuple another sweep's
+    /// delegation raced is skipped rather than sinking the sweep. Empty once every address the
+    /// sweep touches is delegated to that contract, which is what makes it a plain EIP-1559
+    /// transaction.
     pub fn authorizations(&self) -> Vec<SignedAuthorization> {
         self.items
             .iter()
