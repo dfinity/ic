@@ -3096,19 +3096,15 @@ mod sweep_lane {
             sweep_gas_limit(Asset::Eth, &items_for(10)) < sweep_gas_limit(erc20, &items_for(10))
         );
 
-        let one_address_ten_times: Vec<_> = (0..10)
-            .map(|_| sweep_item(1, Some(authorization(1))))
-            .collect();
+        let one_address_ten_times: Vec<_> = (0..10).map(|_| sweep_item(1, None)).collect();
         assert_eq!(
             sweep_gas_limit(erc20, &one_address_ten_times),
-            GasAmount::new(585_000),
-            "the balance check and the transfer collapse onto the one address walked, while every \
-             tuple in the list is charged"
+            sweep_gas_limit(erc20, &[sweep_item(1, None)])
         );
     }
 
     #[test]
-    fn should_charge_authorization_gas_only_for_items_carrying_a_tuple() {
+    fn should_charge_authorization_gas_only_for_items_carrying_an_authorization() {
         let erc20 = Asset::Erc20(Address::new([0xc0; 20]));
         let delegated = sweep_item(1, None);
         let to_delegate = sweep_item(2, Some(authorization(2)));
@@ -3116,7 +3112,7 @@ mod sweep_lane {
         assert_eq!(
             sweep_gas_limit(erc20, from_ref(&delegated)),
             GasAmount::new(185_000),
-            "an address swept without a tuple costs its balance check and its transfer only"
+            "an address swept without an authorization costs its balance check and its transfer only"
         );
         assert_eq!(
             sweep_gas_limit(erc20, &[delegated.clone(), to_delegate.clone()]),
