@@ -168,11 +168,14 @@ pub struct BalanceOfCall {
     pub holder: DepositAddress,
 }
 
-/// Error encountered while decoding a balance-batch return blob.
+/// Error encountered while decoding the return blob of a batcher program.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum BatcherDecodeError {
     /// The return blob is not exactly `n` 32-byte words.
     WrongLength { expected: usize, got: usize },
+    /// The entry count calls for a blob whose length does not fit in a `usize`, so no blob can
+    /// ever match it.
+    UnrepresentableLength { entries: usize },
 }
 
 /// Build the create-call `input` for a batch of `balanceOf` sub-calls:
@@ -266,7 +269,8 @@ pub fn encode_delegation_batch(addresses: &[DepositAddress]) -> Vec<u8> {
 ///   contract out of the `0xef` space;
 /// * anything else is deployed contract code.
 ///
-/// Returns `Err` if the blob length is not exactly `address_count + 1` words; never panics.
+/// Returns `Err` if the blob length is not exactly `address_count + 1` words, or if
+/// `address_count` is so large that that length does not fit in a `usize`; never panics.
 ///
 /// The first classification rests on the account being a deposit address and does not generalize:
 /// [EIP-3541] reserves only the `0xef` prefix, so a contract whose runtime code starts with 32
@@ -278,7 +282,12 @@ pub fn decode_delegation_batch(
     returned_blob: &[u8],
     address_count: usize,
 ) -> Result<Vec<Delegation>, BatcherDecodeError> {
-    let expected = (DELEGATION_BATCH_LEADING_WORDS + address_count) * WORD;
+    let expected = DELEGATION_BATCH_LEADING_WORDS
+        .checked_add(address_count)
+        .and_then(|words| words.checked_mul(WORD))
+        .ok_or(BatcherDecodeError::UnrepresentableLength {
+            entries: address_count,
+        })?;
     if returned_blob.len() != expected {
         return Err(BatcherDecodeError::WrongLength {
             expected,
