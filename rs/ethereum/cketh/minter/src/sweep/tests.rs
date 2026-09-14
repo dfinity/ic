@@ -55,9 +55,13 @@ async fn should_be_no_op_when_no_deposit_helper_contract() {
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
 
-    enqueue(&runtime, &[(account(), Delegation::NotDelegated)]).await;
+    enqueue_pending_sweeps(&runtime, &stub_rpc_client(vec![])).await;
 
-    assert_eq!(read_state(State::clone), before);
+    assert_eq!(
+        read_state(State::clone),
+        before,
+        "a tick that can build no sweep must not pay for a delegation read"
+    );
 }
 
 #[tokio::test]
@@ -362,6 +366,41 @@ async fn should_sweep_a_delegated_address_without_an_authorization() {
         sweep.gas_limit(),
         GasAmount::new(185_000),
         "the sweep must not budget the gas of a tuple it does not carry"
+    );
+}
+
+#[tokio::test]
+async fn should_sweep_an_address_delegated_elsewhere_with_a_nonce_zero_authorization() {
+    init_state(state_ready_to_sign(&[(account(), usdc())]));
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
+    expect_signing(&mut runtime);
+
+    enqueue(
+        &runtime,
+        &[(account(), Delegation::Delegated(ANOTHER_SWEEPER_CONTRACT))],
+    )
+    .await;
+
+    let enqueued = pending_sweeps();
+    let [sweep] = enqueued.as_slice() else {
+        panic!("BUG: expected exactly one sweep, got {enqueued:?}");
+    };
+    let [item] = sweep.items.as_slice() else {
+        panic!("BUG: expected exactly one item, got {:?}", sweep.items);
+    };
+    let signature = stored_authorization(SWEEPER_CONTRACT)
+        .expect("BUG: expected a signed authorization for the configured sweeper contract");
+    assert_eq!(
+        item.authorization,
+        Some(authorization_request(SWEEPER_CONTRACT).signed_with(signature)),
+        "an address delegated to another contract must keep a nonce-0 tuple for the configured one"
+    );
+    assert_eq!(
+        sweep.gas_limit(),
+        GasAmount::new(225_000),
+        "the sweep must budget the gas of the tuple it carries"
     );
 }
 
