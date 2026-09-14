@@ -153,7 +153,7 @@ pub fn automatic_deposit() -> AutomaticDeposit {
 }
 
 /// An [`AutomaticDeposits`] whose sweep queue holds exactly these funded pairs, all taken by the
-/// one sweep [`enqueue_pending_sweeps`] enqueued for them, returned along with that request.
+/// one sweep [`create_pending_sweeper_requests`] enqueued for them, returned along with that request.
 pub async fn deposits_with_enqueued_sweep<A: Into<Asset> + Copy>(
     pairs: &[(Account, A)],
 ) -> (AutomaticDeposits, SweepRequest) {
@@ -210,7 +210,7 @@ pub fn prepay_sweep_gas(state: &mut State) {
 }
 
 /// A [`State`] whose sweep queue holds exactly these funded pairs, all taken by the one sweep
-/// [`enqueue_pending_sweeps`] enqueued for them, returned along with that request. The deposits,
+/// [`create_pending_sweeper_requests`] enqueued for them, returned along with that request. The deposits,
 /// attestations and authorizations the enqueue pairs up arrive through the event log, so the sweep
 /// is assembled by the production path without the runtime signing anything.
 pub async fn state_with_enqueued_sweep<A: Into<Asset> + Copy>(
