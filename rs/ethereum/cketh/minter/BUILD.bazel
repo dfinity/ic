@@ -351,6 +351,7 @@ rust_test(
         "//rs/ethereum/cketh/test_utils",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
+        "@crate_index//:itertools",
     ],
 )
 
