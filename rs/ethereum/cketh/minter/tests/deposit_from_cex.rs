@@ -27,6 +27,7 @@ use ic_cketh_test_utils::live::{
 };
 use ic_cketh_test_utils::{CkEthSetup, SWEEPER_ADDRESS};
 use ic_ethereum_types::Address;
+use itertools::Itertools;
 
 #[test]
 fn should_read_erc20_balances_across_tokens_and_holders() {
@@ -247,49 +248,58 @@ fn should_read_many_eth_balances_in_a_single_call() {
 
 #[test]
 fn should_read_delegations_across_addresses() {
+    const BATCH_SIZE: usize = 3;
+
     let anvil = Anvil::start();
     let dev = address_from_hex(DEV_ACCOUNT);
 
-    let bare = DepositAddress::new(Address::new([0x11; 20]));
-    let delegated = DepositAddress::new(Address::new([0x22; 20]));
-    let delegate = Address::new([0xab; 20]);
-    anvil.set_code(delegated.as_address(), &delegation_designator(&delegate));
-    let contract = DepositAddress::new(deploy_mock_erc20(&anvil, &dev));
-
-    let read = |addresses: &[DepositAddress]| -> Vec<Delegation> {
-        let out = anvil
-            .eth_call_create(&dev, &encode_delegation_batch(addresses))
-            .expect("the delegation batch must not revert");
-        decode_delegation_batch(&out, addresses.len()).expect("decode failed")
+    let bare = |address_byte: u8| {
+        (
+            DepositAddress::new(Address::new([address_byte; 20])),
+            Delegation::NotDelegated,
+        )
     };
+    let delegated = |address_byte: u8, delegate_byte: u8| {
+        let address = DepositAddress::new(Address::new([address_byte; 20]));
+        let delegate = Address::new([delegate_byte; 20]);
+        anvil.set_code(address.as_address(), &delegation_designator(&delegate));
+        (address, Delegation::Delegated(delegate))
+    };
+    let contract = || {
+        (
+            DepositAddress::new(deploy_mock_erc20(&anvil, &dev)),
+            Delegation::Other,
+        )
+    };
+    let addresses_with_expected_delegation = [
+        bare(0x11),
+        bare(0x22),
+        bare(0x33),
+        delegated(0x44, 0xa1),
+        delegated(0x55, 0xa2),
+        delegated(0x66, 0xa3),
+        contract(),
+        contract(),
+        contract(),
+    ];
 
-    assert_eq!(
-        read(&[bare, delegated, contract]),
-        vec![
-            Delegation::NotDelegated,
-            Delegation::Delegated(delegate),
-            Delegation::Other,
-        ]
-    );
-    assert_eq!(
-        read(&[contract, bare, delegated]),
-        vec![
-            Delegation::Other,
-            Delegation::NotDelegated,
-            Delegation::Delegated(delegate),
-        ],
-        "decoding is positional: the argument order decides, not the shape of the accounts"
-    );
-    assert_eq!(
-        read(&[delegated, bare, contract]),
-        vec![
-            Delegation::Delegated(delegate),
-            Delegation::NotDelegated,
-            Delegation::Other,
-        ],
-        "a designator first must not make the returned blob look like code starting with 0xef, \
-         which EIP-3541 forbids a create-style call to return"
-    );
+    for batch in addresses_with_expected_delegation
+        .iter()
+        .permutations(BATCH_SIZE)
+    {
+        let addresses: Vec<DepositAddress> = batch.iter().map(|(address, _)| *address).collect();
+        let expected: Vec<Delegation> = batch.iter().map(|(_, delegation)| *delegation).collect();
+        let out = anvil
+            .eth_call_create(&dev, &encode_delegation_batch(&addresses))
+            .expect("the delegation batch must not revert");
+        assert_eq!(
+            decode_delegation_batch(&out, addresses.len()).expect("decode failed"),
+            expected,
+            "decoding is positional: the argument order alone decides the result; in particular \
+             a designator first must not make the returned blob look like code starting with \
+             0xef, which EIP-3541 forbids a create-style call to return (batch: {addresses:?})"
+        );
+    }
 }
 
 #[test]
