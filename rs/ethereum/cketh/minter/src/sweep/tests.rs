@@ -62,11 +62,7 @@ async fn should_be_no_op_when_no_deposit_helper_contract() {
 
     create_pending_sweeper_requests(&runtime).await;
 
-    assert_eq!(
-        read_state(State::clone),
-        before,
-        "a tick that can build no sweep must not pay for a delegation read"
-    );
+    assert_eq!(read_state(State::clone), before);
 }
 
 #[tokio::test]
