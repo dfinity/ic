@@ -25,7 +25,10 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
-    messages::{SignedIngress, extract_effective_canister_id},
+    messages::{
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload as ResponsePayload, SignedIngress,
+        extract_effective_canister_id,
+    },
     time::{CoarseTime, UNIX_EPOCH},
 };
 use ic_types_cycles::{
@@ -454,20 +457,29 @@ fn subnet_cycles_config(
     )
 }
 
-fn consumed_cycles_for_instructions(system_state: &SystemState) -> (NominalCycles, NominalCycles) {
+/// The consumed cycles gauge and the monotonic consumed cycles counter of the
+/// given use case.
+fn consumed_cycles(
+    system_state: &SystemState,
+    use_case: CyclesUseCase,
+) -> (NominalCycles, NominalCycles) {
     let gauge = system_state
         .canister_metrics()
         .consumed_cycles_by_use_cases()
-        .get(&CyclesUseCase::Instructions)
+        .get(&use_case)
         .copied()
         .unwrap_or_else(NominalCycles::zero);
     let counter = system_state
         .canister_metrics()
         .consumed_cycles_by_use_cases_monotonic()
-        .get(&CyclesUseCase::Instructions)
+        .get(&use_case)
         .copied()
         .unwrap_or_else(NominalCycles::zero);
     (gauge, counter)
+}
+
+fn consumed_cycles_for_instructions(system_state: &SystemState) -> (NominalCycles, NominalCycles) {
+    consumed_cycles(system_state, CyclesUseCase::Instructions)
 }
 
 /// A canister whose cost schedule or Wasm execution mode changed across a call
@@ -702,6 +714,89 @@ fn settle_prepayment_for_unexecuted_response_charges_only_the_base_fee() {
             (charged.nominal(), charged.nominal()),
             "unexpected consumed cycles for {context}"
         );
+    }
+}
+
+/// The cycles prepaid for transmitting a response are settled by refunding the part
+/// of the prepayment that the transmission did not cost. That path never tops up the
+/// prepayment either: the refund is `prepaid - cost`, which saturates part by part,
+/// so the refund never exceeds the prepayment, as `refund_cycles` requires, and the
+/// canister is charged at most what it prepaid in each of the two parts.
+///
+/// Checked for every combination of the cost schedule at the call with the one at the
+/// response: the canister pays the real transmission cost capped at what it prepaid,
+/// i.e. nothing at all if either of the two schedules is the free one, while the
+/// consumed cycles metrics report the nominal transmission cost, which does not
+/// depend on the cost schedule. The Wasm execution mode plays no role here, since the
+/// transmission fees do not depend on it.
+#[test]
+fn response_transmission_refund_never_exceeds_the_prepayment() {
+    const COST_SCHEDULES: [CanisterCyclesCostSchedule; 2] = [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ];
+    let response_sizes = [
+        NumBytes::new(0),
+        NumBytes::new(1_024),
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+    ];
+
+    for at_call in COST_SCHEDULES {
+        for at_response in COST_SCHEDULES {
+            for response_size in response_sizes {
+                let cycles_account_manager = cycles_account_manager();
+                let config_at_call = subnet_cycles_config(at_call);
+                let config_at_response = subnet_cycles_config(at_response);
+                let context = format!(
+                    "{at_call:?} at call, {at_response:?} at response, {response_size} bytes"
+                );
+
+                // The canister prepaid for transmitting a response of the maximum
+                // size under the cost schedule in effect when it performed the call.
+                let prepaid =
+                    cycles_account_manager.prepayment_for_response_transmission(config_at_call);
+                let mut system_state = SystemStateBuilder::new()
+                    .initial_cycles(prepaid.real())
+                    .build();
+                let initial_balance = system_state.balance();
+                system_state.consume_cycles(prepaid);
+
+                let response = ResponsePayload::Data(vec![0; response_size.get() as usize]);
+                let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
+                let refund = cycles_account_manager.refund_for_response_transmission(
+                    &no_op_logger(),
+                    &no_op_counter,
+                    &response,
+                    prepaid,
+                    config_at_response,
+                );
+                // Fails the debug assertions of `refund_cycles` were the refund to
+                // exceed the prepayment in either of the two parts.
+                system_state.refund_cycles(prepaid, refund);
+
+                let cost = cycles_account_manager
+                    .xnet_call_bytes_transmitted_fee(response_size, config_at_response);
+                let charged = prepaid.component_wise_min(cost);
+                assert_eq!(
+                    system_state.balance() + charged.real(),
+                    initial_balance,
+                    "unexpected balance for {context}"
+                );
+                assert_eq!(
+                    consumed_cycles(&system_state, CyclesUseCase::RequestAndResponseTransmission),
+                    (charged.nominal(), charged.nominal()),
+                    "unexpected consumed cycles for {context}"
+                );
+                // The nominal parts do not depend on the cost schedule, so the
+                // reported amount is the nominal transmission cost whatever the cost
+                // schedules at the call and at the response are.
+                assert_eq!(
+                    charged.nominal(),
+                    cost.nominal(),
+                    "unexpected nominal charge for {context}"
+                );
+            }
+        }
     }
 }
 
