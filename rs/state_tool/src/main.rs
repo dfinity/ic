@@ -130,14 +130,6 @@ enum Opt {
         /// must be outside the base and source checkpoints.
         #[clap(long, required = true)]
         output: PathBuf,
-        /// Batch time of the merged state, which has to be at least the batch
-        /// time of either checkpoint: the merged state holds canisters of the
-        /// source subnet, whose time would go backwards otherwise.
-        ///
-        /// If not specified, the merged state keeps the batch time of the base
-        /// checkpoint.
-        #[clap(long)]
-        batch_time_nanos: Option<u64>,
     },
 
     /// Prunes a replicated state, as part of a subnet split.
@@ -297,13 +289,7 @@ pub(crate) fn main_inner(args: Vec<String>) {
             base,
             source,
             output,
-            batch_time_nanos,
-        } => commands::merge::do_merge(
-            base,
-            source,
-            output,
-            batch_time_nanos.map(Time::from_nanos_since_unix_epoch),
-        ),
+        } => commands::merge::do_merge(base, source, output),
         Opt::Split {
             root,
             subnet_id,
