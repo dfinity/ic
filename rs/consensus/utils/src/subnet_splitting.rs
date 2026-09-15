@@ -316,7 +316,7 @@ mod tests {
     fn get_status_should_return_not_scheduled_when_latest_cup_is_not_subnet_splitting_test(
         #[values(
             None,
-            Some(CupType::Genesis(GenesisArgs { height: 0 })),
+            Some(CupType::Genesis(GenesisArgs {})),
             Some(CupType::Recovery(RecoveryArgs {
                 height: 1_000,
                 time: 1,
@@ -467,7 +467,7 @@ mod tests {
     fn get_status_should_fail_when_looked_up_version_is_smaller_than_last_summary_version_test(
         #[values(
             None,
-            Some(CupType::Genesis(GenesisArgs { height: 0 })),
+            Some(CupType::Genesis(GenesisArgs {})),
             Some(CupType::Recovery(RecoveryArgs {
                 height: 1_000,
                 time: 1,
@@ -525,7 +525,7 @@ mod tests {
     fn get_status_should_return_scheduled_when_last_summary_block_starts_the_split_test(
         #[values(
             None,
-            Some(CupType::Genesis(GenesisArgs { height: 0 })),
+            Some(CupType::Genesis(GenesisArgs {})),
             Some(CupType::Recovery(RecoveryArgs {
                 height: 1_000,
                 time: 1,
