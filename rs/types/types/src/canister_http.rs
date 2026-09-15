@@ -1406,7 +1406,9 @@ pub type CanisterHttpResponseShare = BasicSigned<CanisterHttpResponseReceipt>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct CanisterHttpResponseArtifact {
     pub share: CanisterHttpResponseShare,
-    // The response should not be included in the case of fully replicated outcalls.
+    // The response should not be included in the case of fully replicated outcalls, where
+    // every replica produces it itself; nor in the case of an outcall that has already been
+    // responded to, where the share is nothing but a receipt for the cycles that were spent.
     pub response: Option<CanisterHttpResponse>,
 }
 

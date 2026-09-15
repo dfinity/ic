@@ -69,7 +69,8 @@ pub const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 254;
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
 
-fn decoder_config() -> DecoderConfig {
+/// Candid decoder configuration used for all management-canister payload types.
+pub fn decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();
     config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
     config.set_full_error_message(false);
