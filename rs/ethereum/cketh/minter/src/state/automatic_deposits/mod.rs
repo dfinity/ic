@@ -87,13 +87,17 @@ pub struct AutomaticDeposits {
     /// exported as a metric so that growth is visible before it needs bounding.
     authorizations: BTreeMap<AuthorizationRequest, TransactionSignature>,
     /// The nonce each deposit address' next authorization must spend, for the addresses a sweep has
-    /// already delegated. Absent means zero: an address no authorization of the minter's has ever
-    /// applied to is still at the nonce it was derived with.
+    /// already delegated. Absent means zero: an address no finalized sweep has carried an
+    /// authorization for is still at the nonce it was derived with.
     ///
-    /// This tracks the address' own transaction nonce, which only an applied authorization can
-    /// move: the minter alone holds the key to a deposit address, it only ever signs authorizations
-    /// for it, and it learns from the receipt of every sweep it sends whether the authorizations it
-    /// carried applied.
+    /// A counter, not a chain read: it advances by one for every finalized sweep that carried an
+    /// authorization at the nonce tracked here, whether the EVM applied or skipped it. The minter
+    /// alone holds the key to a deposit address and only ever signs at the tracked nonce, so the
+    /// counter never runs ahead of the address' nonce on chain. It can run behind it: every signed
+    /// authorization is public through `get_events`, and EIP-7702 lets anyone send one, so an
+    /// authorization a stranger applied moves the address without moving the counter. The next
+    /// sweep carrying an authorization then spends a nonce the chain has passed, is skipped, and
+    /// still advances the counter, so a rotation lands one sweep late rather than never.
     delegation_nonces: BTreeMap<DepositAddress, TransactionNonce>,
     /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
     /// its own nonce sequence, independent of the main-address withdrawal pipeline.
@@ -230,7 +234,7 @@ impl AutomaticDeposits {
                 let tracked = self.delegation_nonce(&item.item.deposit);
                 assert!(
                     spent <= tracked,
-                    "BUG: {id:?} carried an authorization of {} at nonce {spent:?}, ahead of the nonce {tracked:?} the minter tracks for it, which only its own applied authorizations move",
+                    "BUG: {id:?} carried an authorization of {} at nonce {spent:?}, ahead of the nonce {tracked:?} the minter tracks for it, which only the authorizations its own finalized sweeps carried move",
                     item.item.deposit.as_address()
                 );
                 (spent == tracked).then_some((item.item.deposit, spent))
