@@ -719,7 +719,7 @@ crate.spec(
         "pubsub",
     ],
     package = "ic-bn-lib",
-    version = "^0.7.0",
+    version = "^0.9",
 )
 crate.spec(
     package = "ic-btc-interface",
@@ -782,7 +782,7 @@ crate.spec(
     features = ["acme"],
     git = "https://github.com/dfinity/ic-gateway",
     package = "ic-gateway",
-    tag = "v0.6.5",
+    tag = "v0.6.12",
 )
 crate.spec(
     package = "ic-http-certification",
@@ -1970,7 +1970,11 @@ crate.spec(
 )
 crate.spec(
     package = "vsock",
-    version = "^0.4",
+    version = "^0.5.4",
+)
+crate.spec(
+    package = "tokio-vsock",
+    version = "0.7.2",
 )
 crate.spec(
     package = "walkdir",

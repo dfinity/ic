@@ -16,8 +16,11 @@ use bytes::Bytes;
 use candid::Principal;
 use http::header::CONTENT_TYPE;
 use humantime::format_rfc3339;
-use ic_bn_lib::http::{body::CountingBody, cache::CacheStatus, http_version};
 use ic_bn_lib::{http::server::conn::ConnInfo, tasks::Run};
+use ic_bn_lib::{
+    http::{body::CountingBody, cache::CacheStatus, http_version},
+    truncate,
+};
 use ic_bn_lib::{
     prometheus::{
         Encoder, HistogramOpts, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec, Registry,
@@ -427,14 +430,11 @@ pub async fn metrics_middleware_status(
     next: Next,
 ) -> impl IntoResponse {
     let response = next.run(request).await;
-    let health = response
-        .extensions()
-        .get::<ReplicaHealthStatus>()
-        .unwrap()
-        .as_ref();
 
-    let HttpMetricParamsStatus { counter } = metric_params;
-    counter.with_label_values(&[health]).inc();
+    if let Some(health) = response.extensions().get::<ReplicaHealthStatus>().as_ref() {
+        let HttpMetricParamsStatus { counter } = metric_params;
+        counter.with_label_values(&[health]).inc();
+    }
 
     response
 }
@@ -620,10 +620,10 @@ pub async fn metrics_middleware(
         let remote_addr_hashed = hash_fn(&remote_addr);
         let sender_hashed = hash_fn(&sender);
 
-        let method_name = ctx.method_name.as_ref().map(|name| {
-            let truncated_len = name.len().min(MAX_LOGGING_METHOD_NAME_LENGTH);
-            name[..truncated_len].to_string()
-        });
+        let method_name = ctx
+            .method_name
+            .as_ref()
+            .map(|name| truncate(name, MAX_LOGGING_METHOD_NAME_LENGTH));
 
         // Log
         if !log_failed_requests_only || failed {

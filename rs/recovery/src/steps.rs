@@ -275,7 +275,9 @@ impl Step for MergeCertificationPoolsStep {
     }
 }
 
-pub(crate) struct DownloadIcDataStep {
+/// Downloads data (the state, the consensus pool, ...) of a node into a
+/// working directory.
+pub struct DownloadIcDataStep {
     pub logger: Logger,
     pub ssh_helper: SshHelper,
     pub backup_dir: PathBuf,

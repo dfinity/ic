@@ -1,6 +1,7 @@
 use std::{mem::size_of, sync::Arc, time::Duration};
 
 use axum::{
+    Extension,
     body::{Body, HttpBody},
     extract::{Request, State},
     middleware::Next,
@@ -17,11 +18,13 @@ use moka::sync::Cache;
 
 use crate::{
     errors::{ApiError, buffer_body_to_bytes},
+    http::RequestType,
     routes::ReadStatePaths,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct CacheKey {
+    request_type: RequestType,
     subnet_id: SubnetId,
     paths: ReadStatePaths,
 }
@@ -107,6 +110,7 @@ impl SubnetReadStateCacheState {
 
 pub async fn subnet_read_state_cache_middleware(
     State(state): State<Arc<SubnetReadStateCacheState>>,
+    Extension(request_type): Extension<RequestType>,
     mut request: Request,
     next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -117,7 +121,11 @@ pub async fn subnet_read_state_cache_middleware(
         return Ok(next.run(request).await);
     };
 
-    let cache_key = CacheKey { subnet_id, paths };
+    let cache_key = CacheKey {
+        request_type,
+        subnet_id,
+        paths,
+    };
 
     if let Some(cached) = state.cache.get(&cache_key) {
         state.hits.inc();
@@ -165,7 +173,11 @@ mod tests {
     const DEFAULT_MAX_ITEM_SIZE: usize = 1024 * 1024;
     const DEFAULT_BODY_TIMEOUT: Duration = Duration::from_secs(10);
 
-    fn make_request(subnet_id: SubnetId, paths: Vec<Vec<Vec<u8>>>) -> Request<Body> {
+    fn make_request_with_type(
+        subnet_id: SubnetId,
+        paths: Vec<Vec<Vec<u8>>>,
+        request_type: RequestType,
+    ) -> Request<Body> {
         let paths = paths
             .iter()
             .map(|x| x.iter().map(|x| Blob(x.clone())).collect())
@@ -177,7 +189,12 @@ mod tests {
         }
 
         req.extensions_mut().insert(subnet_id);
+        req.extensions_mut().insert(request_type);
         req
+    }
+
+    fn make_request(subnet_id: SubnetId, paths: Vec<Vec<Vec<u8>>>) -> Request<Body> {
+        make_request_with_type(subnet_id, paths, RequestType::ReadStateSubnetV2)
     }
 
     async fn dummy_handler() -> impl IntoResponse {
@@ -302,6 +319,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_different_api_versions_are_separate_entries() {
+        let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
+
+        let paths = cacheable_paths();
+
+        // Subnet 1 - v2
+        let req = make_request_with_type(
+            test_subnet_id(1),
+            paths.clone(),
+            RequestType::ReadStateSubnetV2,
+        );
+        app.call(req).await.unwrap();
+        assert_eq!(state.misses.get(), 1);
+
+        // Subnet 1 - v3
+        let req = make_request_with_type(
+            test_subnet_id(1),
+            paths.clone(),
+            RequestType::ReadStateSubnetV3,
+        );
+        app.call(req).await.unwrap();
+        assert_eq!(state.misses.get(), 2);
+        assert_eq!(state.hits.get(), 0);
+    }
+
+    #[tokio::test]
     async fn test_path_order_does_not_matter() {
         let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
@@ -329,6 +372,7 @@ mod tests {
 
         let mut req = Request::post("/").body(Body::from("body")).unwrap();
         req.extensions_mut().insert(test_subnet_id(1));
+        req.extensions_mut().insert(RequestType::ReadStateSubnetV2);
 
         let resp = app.call(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);

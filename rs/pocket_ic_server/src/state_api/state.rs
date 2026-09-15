@@ -43,10 +43,7 @@ use ic_gateway::{
         },
         ic_agent::agent::route_provider::RoundRobinRouteProvider,
     },
-    routing::{
-        domain::CustomDomainStorage,
-        ic::routing_table_manager::{LooksUpSubnetType, SubnetType},
-    },
+    routing::domain::CustomDomainStorage,
     setup_router,
 };
 use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
@@ -78,13 +75,6 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::reload;
-
-struct NoOpSubnetTypeLookup;
-impl LooksUpSubnetType for NoOpSubnetTypeLookup {
-    fn lookup_subnet_type(&self, _: &candid::Principal) -> Option<SubnetType> {
-        None
-    }
-}
 
 // The maximum wait time for a computation to finish synchronously.
 pub(crate) const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -909,7 +899,7 @@ impl ApiState {
                     None,
                     None,
                     None,
-                    Arc::new(NoOpSubnetTypeLookup),
+                    None,
                 )
                 .await
                 .unwrap();

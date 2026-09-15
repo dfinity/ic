@@ -9,7 +9,7 @@ readonly RETRY_DELAY=5
 
 notify_console() {
     local message="$1"
-    /opt/ic/bin/vsock_guest --notify "$message" --count 1 >/dev/null 2>&1 || true
+    /opt/ic/bin/vsock_guest notify "$message" --count 1 >/dev/null 2>&1 || true
 }
 
 function read_config_variables() {
@@ -133,7 +133,7 @@ while [ $attempt -le $MAX_ATTEMPTS ]; do
 
     if perform_recovery; then
         echo "✓ Recovery completed successfully on attempt $attempt"
-        /opt/ic/bin/vsock_guest --notify "Manual recovery completed successfully" --count 10
+        /opt/ic/bin/vsock_guest notify "Manual recovery completed successfully" --count 10
         exit 0
     else
         echo "✗ Recovery failed on attempt $attempt"
@@ -149,5 +149,5 @@ while [ $attempt -le $MAX_ATTEMPTS ]; do
 done
 
 echo "ERROR: Recovery failed after $MAX_ATTEMPTS attempts"
-/opt/ic/bin/vsock_guest --notify "Manual recovery failed after $MAX_ATTEMPTS attempts" --count 10
+/opt/ic/bin/vsock_guest notify "Manual recovery failed after $MAX_ATTEMPTS attempts" --count 10
 exit 1

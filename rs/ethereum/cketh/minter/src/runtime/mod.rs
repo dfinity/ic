@@ -1,6 +1,10 @@
+use crate::eth_rpc_client::rpc_client;
 use crate::management::CallError;
+use crate::state::read_state;
 use crate::time::{IC_TIME_PROVIDER, TimeProvider};
 use async_trait::async_trait;
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
+use ic_canister_runtime::{IcRuntime, Runtime};
 use ic_cdk_management_canister::EcdsaPublicKeyResult;
 use ic_management_canister_types_private::DerivationPath;
 use serde_bytes::ByteBuf;
@@ -10,6 +14,12 @@ use serde_bytes::ByteBuf;
 /// Abstracting them away lets the logic that drives them be exercised without a canister.
 #[async_trait]
 pub trait CanisterRuntime: TimeProvider {
+    /// The runtime the EVM RPC client makes its canister calls through.
+    type Rpc: Runtime;
+
+    /// A client of the EVM RPC canister, set up for the Ethereum network the minter runs against.
+    fn evm_rpc_client(&self) -> EvmRpcClient<Self::Rpc, CandidResponseConverter, DoubleCycles>;
+
     /// Signs a message hash with the tECDSA key `key_name` derived along `derivation_path`.
     async fn sign_with_ecdsa(
         &self,
@@ -40,6 +50,12 @@ impl TimeProvider for IcCanisterRuntime {
 
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
+    type Rpc = IcRuntime;
+
+    fn evm_rpc_client(&self) -> EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles> {
+        read_state(rpc_client)
+    }
+
     async fn sign_with_ecdsa(
         &self,
         key_name: String,

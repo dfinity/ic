@@ -371,7 +371,7 @@ const MIN_DEPOSITS: &[(Address, Erc20Value)] = &[
     ), // ckSepoliaPEPE
 ];
 
-fn call_args(input: Vec<u8>, block: BlockNumber) -> evm_rpc_types::CallArgs {
+pub(crate) fn call_args(input: Vec<u8>, block: BlockNumber) -> evm_rpc_types::CallArgs {
     evm_rpc_types::CallArgs {
         transaction: evm_rpc_types::TransactionRequest {
             // Create-style call (no `to`): the node runs `input` as init code and returns its

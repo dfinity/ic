@@ -1,3 +1,6 @@
+//! `ic-admin` command builders shared by the subnet splitting and subnet
+//! merging tools.
+
 use crate::utils::canister_id_range_to_string;
 
 use ic_base_types::SubnetId;
@@ -12,10 +15,40 @@ const CANISTER_ID_RANGES_ARG: &str = "canister-id-ranges";
 const MIGRATION_TRACE_ARG: &str = "migration-trace";
 const SUBNET_ARG: &str = "subnet";
 
+/// Propose to make the subnet halt after reaching the next CUP height.
+///
+/// Optionally adds a ssh-readonly-access key to the subnet.
+pub fn get_halt_subnet_at_cup_height_command(
+    admin_helper: &AdminHelper,
+    subnet_id: SubnetId,
+    key: &Option<String>,
+) -> IcAdmin {
+    let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
+
+    ic_admin
+        .add_positional_argument("propose-to-update-subnet")
+        .add_argument(SUBNET_ARG, subnet_id)
+        .add_argument(
+            SUMMARY_ARG,
+            quote(format!(
+                "Halt subnet {subnet_id} at cup height and optionally update ssh readonly access",
+            )),
+        )
+        .add_argument("halt-at-cup-height", true);
+
+    if let Some(key) = key {
+        ic_admin.add_argument(SSH_READONLY_ACCESS_ARG, quote(key));
+    }
+
+    admin_helper.add_proposer_args(&mut ic_admin);
+
+    ic_admin
+}
+
 /// Propose additions or updates to `canister_migrations`.
 ///
 /// Step 1 of canister migration.
-pub(crate) fn get_propose_to_prepare_canister_migration_command(
+pub fn get_propose_to_prepare_canister_migration_command(
     admin_helper: &AdminHelper,
     canister_id_ranges: &[CanisterIdRange],
     source_subnet_id: SubnetId,
@@ -41,7 +74,7 @@ pub(crate) fn get_propose_to_prepare_canister_migration_command(
 /// Propose to modify the routing table.
 ///
 /// Step 2 of canister migration.
-pub(crate) fn get_propose_to_reroute_canister_ranges_command(
+pub fn get_propose_to_reroute_canister_ranges_command(
     admin_helper: &AdminHelper,
     canister_id_ranges: &[CanisterIdRange],
     source_subnet_id: SubnetId,
@@ -67,7 +100,7 @@ pub(crate) fn get_propose_to_reroute_canister_ranges_command(
 /// Propose to remove entries from `canister_migrations`.
 ///
 /// Step 3 of canister migration.
-pub(crate) fn get_propose_to_complete_canister_migration_command(
+pub fn get_propose_to_complete_canister_migration_command(
     admin_helper: &AdminHelper,
     canister_id_ranges: &[CanisterIdRange],
     source_subnet_id: SubnetId,
@@ -86,36 +119,6 @@ pub(crate) fn get_propose_to_complete_canister_migration_command(
             CANISTER_ID_RANGES_ARG,
             canister_id_ranges.iter().map(canister_id_range_to_string),
         );
-
-    admin_helper.add_proposer_args(&mut ic_admin);
-
-    ic_admin
-}
-
-/// Propose to make the Subnet halt after reaching the next CUP height.
-///
-/// Optionally adds a ssh-readonly-access key to the Subnet.
-pub(crate) fn get_halt_subnet_at_cup_height_command(
-    admin_helper: &AdminHelper,
-    subnet_id: SubnetId,
-    key: &Option<String>,
-) -> IcAdmin {
-    let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
-
-    ic_admin
-        .add_positional_argument("propose-to-update-subnet")
-        .add_argument(SUBNET_ARG, subnet_id)
-        .add_argument(
-            SUMMARY_ARG,
-            quote(format!(
-                "Halt subnet {subnet_id} at cup height and optionally update ssh readonly access",
-            )),
-        )
-        .add_argument("halt-at-cup-height", true);
-
-    if let Some(key) = key {
-        ic_admin.add_argument(SSH_READONLY_ACCESS_ARG, quote(key));
-    }
 
     admin_helper.add_proposer_args(&mut ic_admin);
 

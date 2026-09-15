@@ -57,7 +57,7 @@ rust_test(
     env = {
         "RUST_TEST_THREADS": "4",
     },
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     deps = [
         "//rs/certification/test-utils",
         "//rs/crypto/tls_interfaces",
