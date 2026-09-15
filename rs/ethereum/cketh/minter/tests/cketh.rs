@@ -1367,6 +1367,31 @@ fn should_export_the_sweeper_funding_metrics() {
 }
 
 #[test]
+fn should_export_the_sweep_pipeline_metrics() {
+    CkEthSetup::default()
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_armed_deposit_addresses 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_longest_armed_age_seconds 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_queued_deposits 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeps_finalized_total\{status="success"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeps_finalized_total\{status="failure"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_unfinalized_sweep_age_seconds 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_balance_scan_candidates_total 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_errors_total\{kind="eth_call"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_errors_total\{kind="decode"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds \+Inf \d+")
+        .assert_contains_metric_matching(r"cketh_minter_untracked_delegations_total 0 \d+");
+}
+
+#[test]
 fn should_export_the_stored_attestation_and_authorization_metrics() {
     CkEthSetup::default()
         .check_minter_metrics()

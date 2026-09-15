@@ -889,6 +889,18 @@ where
         self.pending_requests.iter()
     }
 
+    /// Every request the pipeline still owes a finalized transaction: those queued, and those whose
+    /// transaction has been created or sent but not finalized. A resubmitted request is yielded
+    /// once per stage it sits in, which callers that only aggregate do not care about.
+    pub fn unfinalized_requests_iter(&self) -> impl Iterator<Item = &R> {
+        self.pending_requests.iter().chain(
+            self.created_tx
+                .alt_keys()
+                .chain(self.sent_tx.alt_keys())
+                .filter_map(|id| self.processed_requests.get(id)),
+        )
+    }
+
     pub fn requests_len(&self) -> usize {
         self.pending_requests.len()
     }

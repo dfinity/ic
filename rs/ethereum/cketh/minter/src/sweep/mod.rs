@@ -131,6 +131,10 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
             s.automatic_deposits
                 .sweep_delegations(&targets, &delegations, chain_id, delegate)
         });
+        mutate_state(|s| {
+            s.sweep_observations
+                .record_untracked_delegations(batch.untracked_delegations)
+        });
         let Some(attestation_requests) = read_state(|s| s.attestation_requests(&batch.targets))
         else {
             log!(

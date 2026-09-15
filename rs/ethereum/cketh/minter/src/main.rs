@@ -1369,6 +1369,86 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Number of delegation authorizations the minter has signed and stored.",
                 )?;
 
+                let now = Timestamp::from_nanos(now_nanos);
+                w.encode_gauge(
+                    "cketh_minter_armed_deposit_addresses",
+                    s.automatic_deposits.armed_len(now) as f64,
+                    "Number of (account, asset) pairs currently armed and being scanned for a \
+                     deposit.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_longest_armed_age_seconds",
+                    s.automatic_deposits
+                        .longest_armed_age(now)
+                        .map(|age| age.as_secs() as f64)
+                        .unwrap_or(0.0),
+                    "Age of the oldest armed pair still waiting for a deposit to be detected; 0 if \
+                     none is armed.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_queued_deposits",
+                    s.automatic_deposits.sweep_len() as f64,
+                    "Detected deposits waiting for a sweep to move them.",
+                )?;
+                w.counter_vec(
+                    "cketh_minter_sweeps_finalized_total",
+                    "Sweeps that finalized, by outcome. A failed sweep moved nothing and dropped \
+                     every deposit it named, each of which has to be armed afresh.",
+                )?
+                .value(
+                    &[("status", "success")],
+                    s.automatic_deposits.successful_sweeps() as f64,
+                )?
+                .value(
+                    &[("status", "failure")],
+                    s.automatic_deposits.failed_sweeps() as f64,
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_unfinalized_sweep_age_seconds",
+                    s.automatic_deposits
+                        .oldest_unfinalized_sweep()
+                        .map(|created_at| {
+                            (now_nanos.saturating_sub(created_at) / 1_000_000_000) as f64
+                        })
+                        .unwrap_or(0.0),
+                    "Age of the oldest sweep awaiting finalization; 0 if none is outstanding.",
+                )?;
+                w.encode_counter(
+                    "cketh_minter_balance_scan_candidates_total",
+                    s.automatic_deposits.balance_scan_candidates() as f64,
+                    "Deposits the balance scan found at or above their asset's minimum, i.e. that \
+                     entered the sweep queue.",
+                )?;
+                w.counter_vec(
+                    "cketh_minter_balance_scan_errors_total",
+                    "Balance-scan batches that yielded no balances, by where they failed. Resets \
+                     on upgrade.",
+                )?
+                .value(
+                    &[("kind", "eth_call")],
+                    s.sweep_observations.balance_scan_call_errors() as f64,
+                )?
+                .value(
+                    &[("kind", "decode")],
+                    s.sweep_observations.balance_scan_decode_errors() as f64,
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_last_balance_scan_age_seconds",
+                    s.sweep_observations
+                        .last_balance_scan_age(now)
+                        .map(|age| age.as_secs() as f64)
+                        .unwrap_or(f64::INFINITY),
+                    "Time since the last balance scan completed; +Inf if none has completed since \
+                     the minter last started.",
+                )?;
+                w.encode_counter(
+                    "cketh_minter_untracked_delegations_total",
+                    s.sweep_observations.untracked_delegations() as f64,
+                    "Deposit addresses a sweep's delegation read found delegated to another \
+                     contract, which the minter cannot re-delegate and so cannot sweep. Resets on \
+                     upgrade.",
+                )?;
+
                 w.encode_counter(
                     "cketh_minter_sweeper_funding_cketh_burned_total",
                     s.sweeper_funding.cumulative_burned().as_f64(),

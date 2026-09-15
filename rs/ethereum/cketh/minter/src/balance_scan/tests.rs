@@ -294,7 +294,7 @@ async fn should_detect_a_funded_pair_from_pre_scan_targets_even_after_eviction()
 
     // The funded pair is still detected: scan_balances works off the captured targets alone, so the
     // detection is never lost to a mid-scan eviction.
-    let outcomes = scan_balances(
+    let pass = scan_balances(
         &targets,
         latest,
         &stub_rpc_client(vec![ok_balances(&[min])]),
@@ -302,7 +302,7 @@ async fn should_detect_a_funded_pair_from_pre_scan_targets_even_after_eviction()
     .await;
 
     assert_eq!(
-        outcomes,
+        pass.outcomes,
         vec![ScanOutcome::Detected(AutomaticDeposit {
             owner: holder.0.owner,
             subaccount: holder.0.subaccount,
@@ -325,7 +325,7 @@ async fn should_yield_nothing_found_for_a_below_minimum_pair() {
     seed_state(Some(latest), token, &[holder], now);
 
     let targets = due_targets(now, latest);
-    let outcomes = scan_balances(
+    let pass = scan_balances(
         &targets,
         latest,
         &stub_rpc_client(vec![ok_balances(&[below])]),
@@ -333,7 +333,7 @@ async fn should_yield_nothing_found_for_a_below_minimum_pair() {
     .await;
 
     assert_eq!(
-        outcomes,
+        pass.outcomes,
         vec![ScanOutcome::NothingFound(DepositRequest::new(
             holder.0,
             Asset::Erc20(token)
@@ -349,14 +349,18 @@ async fn should_yield_no_outcome_for_a_pair_whose_chunk_failed() {
     seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
 
     let targets = due_targets(now, latest);
-    let outcomes = scan_balances(
+    let pass = scan_balances(
         &targets,
         latest,
         &stub_rpc_client(vec![Err(IcError::CallPerformFailed)]),
     )
     .await;
 
-    assert!(outcomes.is_empty(), "a failed chunk must yield no outcome");
+    assert!(
+        pass.outcomes.is_empty(),
+        "a failed chunk must yield no outcome"
+    );
+    assert_eq!(pass.errors, ScanErrors { decode: 0, call: 1 });
 }
 
 fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<ScanTarget<Erc20Asset>> {

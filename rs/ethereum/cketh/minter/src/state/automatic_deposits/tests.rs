@@ -1166,3 +1166,215 @@ fn registration(
         scan_count: 0,
     }
 }
+
+mod sweep_pipeline_metrics {
+    use super::{
+        account, automatic_deposit, deposit_address, finalize_sweep, queue, queued, ts,
+        window_nanos,
+    };
+    use crate::asset::Asset;
+    use crate::balance_scan::batcher::Delegation;
+    use crate::eth_rpc_client::responses::TransactionStatus;
+    use crate::numeric::BlockNumber;
+    use crate::state::automatic_deposits::{AutomaticDeposits, SweepTarget};
+    use crate::test_fixtures::{deposits_with_enqueued_sweep, sweeper_contract, usdc};
+    use ic_ethereum_types::Address;
+    use icrc_ledger_types::icrc1::account::Account;
+    use std::collections::BTreeMap;
+    use std::time::Duration;
+
+    const CHAIN_ID: u64 = 11_155_111;
+
+    #[test]
+    fn should_count_as_armed_only_the_pairs_whose_window_is_open() {
+        let mut deposits = AutomaticDeposits::default();
+        deposits
+            .watch_deposit(
+                ts(0),
+                account(0),
+                Asset::Erc20(usdc()),
+                deposit_address(&account(0)),
+            )
+            .unwrap();
+        deposits
+            .watch_deposit(
+                ts(1_000),
+                account(1),
+                Asset::Eth,
+                deposit_address(&account(1)),
+            )
+            .unwrap();
+
+        assert_eq!(deposits.armed_len(ts(1_000)), 2);
+        assert_eq!(deposits.armed_len(ts(window_nanos())), 2);
+        // The first pair's window closes one nanosecond later than it stays open for.
+        assert_eq!(deposits.armed_len(ts(window_nanos() + 1)), 1);
+        assert_eq!(deposits.armed_len(ts(window_nanos() + 1_001)), 0);
+        // Expired entries are still on the watchlist until something evicts them.
+        assert_eq!(deposits.watchlist_len(), 2);
+    }
+
+    #[test]
+    fn should_report_the_age_of_the_oldest_armed_pair() {
+        let mut deposits = AutomaticDeposits::default();
+        assert_eq!(deposits.longest_armed_age(ts(0)), None);
+
+        deposits
+            .watch_deposit(
+                ts(1_000),
+                account(0),
+                Asset::Erc20(usdc()),
+                deposit_address(&account(0)),
+            )
+            .unwrap();
+        deposits
+            .watch_deposit(
+                ts(3_000),
+                account(1),
+                Asset::Eth,
+                deposit_address(&account(1)),
+            )
+            .unwrap();
+
+        assert_eq!(
+            deposits.longest_armed_age(ts(5_000)),
+            Some(Duration::from_nanos(4_000))
+        );
+        // Once the oldest pair's window closes, the next one becomes the oldest armed.
+        assert_eq!(
+            deposits.longest_armed_age(ts(window_nanos() + 1_001)),
+            Some(Duration::from_nanos(window_nanos() - 1_999))
+        );
+        assert_eq!(deposits.longest_armed_age(ts(window_nanos() + 3_001)), None);
+    }
+
+    #[test]
+    fn should_count_every_queued_deposit_as_a_balance_scan_candidate() {
+        let mut deposits = AutomaticDeposits::default();
+        assert_eq!(deposits.balance_scan_candidates(), 0);
+
+        queue(&mut deposits, &[(account(0), Asset::Eth)]);
+        queue(&mut deposits, &[(account(1), Asset::Erc20(usdc()))]);
+
+        assert_eq!(deposits.balance_scan_candidates(), 2);
+    }
+
+    #[test]
+    fn should_keep_counting_candidates_that_left_the_queue() {
+        let mut deposits = queued(&[(account(0), Asset::Eth)]);
+        deposits.record_automatic_deposit_received(&automatic_deposit(
+            account(0),
+            Asset::Erc20(usdc()),
+            10,
+            BlockNumber::new(900),
+            3,
+        ));
+
+        assert_eq!(deposits.sweep_len(), 2);
+        assert_eq!(deposits.balance_scan_candidates(), 2);
+    }
+
+    #[tokio::test]
+    async fn should_count_finalized_sweeps_by_receipt() {
+        let (mut deposits, request) =
+            deposits_with_enqueued_sweep(&[(account(0), Asset::Eth)]).await;
+        assert_eq!(deposits.successful_sweeps(), 0);
+        assert_eq!(deposits.failed_sweeps(), 0);
+
+        finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+
+        assert_eq!(deposits.successful_sweeps(), 1);
+        assert_eq!(deposits.failed_sweeps(), 0);
+
+        let (mut deposits, request) =
+            deposits_with_enqueued_sweep(&[(account(1), Asset::Eth)]).await;
+
+        finalize_sweep(&mut deposits, request, TransactionStatus::Failure);
+
+        assert_eq!(deposits.successful_sweeps(), 0);
+        assert_eq!(deposits.failed_sweeps(), 1);
+    }
+
+    #[tokio::test]
+    async fn should_report_the_oldest_sweep_awaiting_finalization() {
+        let (mut deposits, request) =
+            deposits_with_enqueued_sweep(&[(account(0), Asset::Eth)]).await;
+        let decided_at = request.created_at;
+
+        assert_eq!(deposits.oldest_unfinalized_sweep(), Some(decided_at));
+
+        finalize_sweep(&mut deposits, request, TransactionStatus::Success);
+
+        assert_eq!(deposits.oldest_unfinalized_sweep(), None);
+    }
+
+    #[test]
+    fn should_report_no_unfinalized_sweep_before_any_is_enqueued() {
+        assert_eq!(
+            AutomaticDeposits::default().oldest_unfinalized_sweep(),
+            None
+        );
+    }
+
+    #[test]
+    fn should_count_only_the_targets_delegated_to_another_contract() {
+        let deposits = AutomaticDeposits::default();
+        let targets = [
+            sweep_target(&account(0)),
+            sweep_target(&account(1)),
+            sweep_target(&account(2)),
+            sweep_target(&account(3)),
+        ];
+        let delegations = BTreeMap::from([
+            (targets[0].address(), Delegation::NotDelegated),
+            (
+                targets[1].address(),
+                Delegation::Delegated(sweeper_contract()),
+            ),
+            (
+                targets[2].address(),
+                Delegation::Delegated(Address::new([0x99; 20])),
+            ),
+            (targets[3].address(), Delegation::Other),
+        ]);
+
+        let batch =
+            deposits.sweep_delegations(&targets, &delegations, CHAIN_ID, sweeper_contract());
+
+        // The address holding contract code is left out of the sweep entirely, and is not an
+        // untracked delegation: nothing about it can be re-delegated.
+        assert_eq!(batch.targets.len(), 3);
+        assert_eq!(batch.untracked_delegations, 1);
+    }
+
+    #[test]
+    fn should_count_no_untracked_delegation_when_every_address_is_known() {
+        let deposits = AutomaticDeposits::default();
+        let targets = [sweep_target(&account(0)), sweep_target(&account(1))];
+        let delegations = BTreeMap::from([
+            (targets[0].address(), Delegation::NotDelegated),
+            (
+                targets[1].address(),
+                Delegation::Delegated(sweeper_contract()),
+            ),
+        ]);
+
+        let batch =
+            deposits.sweep_delegations(&targets, &delegations, CHAIN_ID, sweeper_contract());
+
+        assert_eq!(batch.targets.len(), 2);
+        assert_eq!(batch.untracked_delegations, 0);
+    }
+
+    fn sweep_target(account: &Account) -> SweepTarget {
+        let [target] = <[SweepTarget; 1]>::try_from(
+            queued(&[(*account, Asset::Eth)])
+                .requests_batch(1)
+                .remove(&Asset::Eth)
+                .expect("BUG: the fixture queues one ETH deposit"),
+        )
+        .expect("BUG: the fixture queues exactly one deposit");
+        assert_eq!(target.address(), deposit_address(account));
+        target
+    }
+}
