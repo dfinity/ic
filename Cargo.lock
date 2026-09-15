@@ -16373,6 +16373,7 @@ dependencies = [
  "ic-vetkeys",
  "ic_bls12_381",
  "k256",
+ "p256",
  "registry-canister",
  "serde",
  "sha2 0.10.9",
