@@ -2876,24 +2876,28 @@ impl SetupInitialDKGResponse {
 /// variant { secp256k1; secp256r1; }
 /// ```
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Debug,
-    CandidType,
-    Deserialize,
-    EnumIter,
-    Serialize,
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, EnumIter, Serialize,
 )]
 pub enum EcdsaCurve {
     #[serde(rename = "secp256k1")]
     Secp256k1,
     #[serde(rename = "secp256r1")]
     Secp256r1,
+}
+
+/// Hashed by hand rather than derived, because this type reaches `payload_hash`
+/// through `IDkgPayload`. `derive(Hash)` omits the discriminant while an enum
+/// has a single variant and starts writing it once a second one exists, so
+/// deriving here would change the hash of every block that names an ECDSA key
+/// and a replica on the old version would reject it. `Secp256k1` therefore
+/// keeps contributing nothing. Revisit only with the crypto team.
+impl std::hash::Hash for EcdsaCurve {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Secp256k1 => {}
+            Self::Secp256r1 => 1u8.hash(state),
+        }
+    }
 }
 
 impl TryFrom<u32> for EcdsaCurve {
