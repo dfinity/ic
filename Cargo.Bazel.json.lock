@@ -3,7 +3,7 @@
     "ic-gateway 0.2.0",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "c268a235286b6dfa8f0ff462e7fd46bd904b554c3c4912c26498b3d3e66e8133",
+  "checksum": "c82aa9100f8a05ac7e11aeb78185cd63401c2d242397280458a941babd2b23df",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18774,6 +18774,10 @@
             "target": "tokio_util"
           },
           {
+            "id": "tokio-vsock 0.7.2",
+            "target": "tokio_vsock"
+          },
+          {
             "id": "toml 0.5.11",
             "target": "toml"
           },
@@ -18870,7 +18874,7 @@
             "target": "virt"
           },
           {
-            "id": "vsock 0.4.0",
+            "id": "vsock 0.5.4",
             "target": "vsock"
           },
           {
@@ -37988,58 +37992,6 @@
         }
       ],
       "version": "0.4.1"
-    },
-    "nix 0.27.1": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "ioctl",
-          "memoffset",
-          "socket"
-        ],
-        "deps": [
-          {
-            "id": "bitflags 2.10.0",
-            "target": "bitflags"
-          },
-          {
-            "id": "cfg-if 1.0.0",
-            "target": "cfg_if"
-          },
-          {
-            "id": "libc 0.2.186",
-            "target": "libc"
-          },
-          {
-            "id": "memoffset 0.9.0",
-            "target": "memoffset"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "nix",
-      "license": "MIT",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "MIT"
-      ],
-      "name": "nix",
-      "package_url": "https://github.com/nix-rust/nix",
-      "repository": {
-        "Http": {
-          "sha256": "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053",
-          "url": "https://static.crates.io/crates/nix/0.27.1/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "nix",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.27.1"
     },
     "nix 0.29.0": {
       "build_script_attrs": {
@@ -59491,6 +59443,56 @@
       ],
       "version": "0.7.17"
     },
+    "tokio-vsock 0.7.2": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "bytes 1.11.1",
+            "target": "bytes"
+          },
+          {
+            "id": "futures 0.3.31",
+            "target": "futures"
+          },
+          {
+            "id": "libc 0.2.186",
+            "target": "libc"
+          },
+          {
+            "id": "tokio 1.50.0",
+            "target": "tokio"
+          },
+          {
+            "id": "vsock 0.5.4",
+            "target": "vsock"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "tokio_vsock",
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "tokio-vsock",
+      "package_url": "https://github.com/rust-vsock/tokio-vsock",
+      "repository": {
+        "Http": {
+          "sha256": "8b319ef9394889dab2e1b4f0085b45ba11d0c79dc9d1a9d1afc057d009d0f1c7",
+          "url": "https://static.crates.io/crates/tokio-vsock/0.7.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tokio_vsock",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.7.2"
+    },
     "toml 0.5.11": {
       "common_attrs": {
         "crate_features": [
@@ -63378,7 +63380,7 @@
       ],
       "version": "0.8.0"
     },
-    "vsock 0.4.0": {
+    "vsock 0.5.4": {
       "common_attrs": {
         "deps": [
           {
@@ -63386,7 +63388,7 @@
             "target": "libc"
           },
           {
-            "id": "nix 0.27.1",
+            "id": "nix 0.31.3",
             "target": "nix"
           }
         ],
@@ -63402,8 +63404,8 @@
       "package_url": "https://github.com/rust-vsock/vsock-rs",
       "repository": {
         "Http": {
-          "sha256": "2dfb6e7a74830912f1f4a7655227c9ded1ea4e9136676311fedf54bedb412f35",
-          "url": "https://static.crates.io/crates/vsock/0.4.0/download"
+          "sha256": "6ba782755fc073877e567c2253c0be48e4aa9a254c232d36d3985dfae0bd5205",
+          "url": "https://static.crates.io/crates/vsock/0.5.4/download"
         }
       },
       "targets": [
@@ -63414,7 +63416,7 @@
           }
         }
       ],
-      "version": "0.4.0"
+      "version": "0.5.4"
     },
     "wait-timeout 0.2.0": {
       "common_attrs": {
@@ -71027,6 +71029,7 @@
     "tokio-test 0.4.4",
     "tokio-tungstenite 0.29.0",
     "tokio-util 0.7.17",
+    "tokio-vsock 0.7.2",
     "toml 0.5.11",
     "tonic 0.14.6",
     "tonic-build 0.14.6",
@@ -71051,7 +71054,7 @@
     "url 2.5.4",
     "uuid 1.12.1",
     "virt 0.4.2",
-    "vsock 0.4.0",
+    "vsock 0.5.4",
     "walkdir 2.5.0",
     "walrus 0.26.4",
     "wasm-encoder 0.254.0",
