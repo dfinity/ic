@@ -867,8 +867,8 @@ impl UnpackedStreamSlice {
     /// Garbage collects the slice: drops all messages before
     /// `cutoff.message_index` and updates the witness. If all messages were
     /// dropped; and `cutoff.signal_index` is beyond `signals_end` (no new signals);
-    /// and `begin` is before `cutoff.min_useful_header_begin` or the latter is
-    /// `None` (no newly GC-ed messages); the slice is dropped altogether.
+    /// and `begin` is at or below `cutoff.covered_header_begin` (no newly GC-ed
+    /// messages); the slice is dropped altogether.
     ///
     /// Returns:
     ///  * `Ok(Some(pruned_self))` if the slice was partly pruned;
@@ -883,11 +883,7 @@ impl UnpackedStreamSlice {
         let pruned_tree = self.payload.garbage_collect(cutoff.message_index)?;
         if self.payload.messages.is_none()
             && cutoff.signal_index >= self.payload.header.signals_end()
-            && cutoff
-                .min_useful_header_begin
-                .is_none_or(|min_useful_header_begin| {
-                    self.payload.header.begin() < min_useful_header_begin
-                })
+            && self.payload.header.begin() <= cutoff.covered_header_begin
         {
             // No messages, no new signals, and no newly GC-ed messages. Drop the slice.
             return Ok(None);
@@ -1266,11 +1262,10 @@ impl CertifiedSlicePool {
                 stream_indices.message_index += StreamIndex::from(prefix_message_count as u64);
                 stream_indices.signal_index = stream_indices.signal_index.max(signals_end);
                 // Inducting the returned prefix GCs all reject signals before its
-                // `header.begin()`, so advance `min_useful_header_begin` just past it, as we
-                // don't know where the next reject signal is.
-                stream_indices.min_useful_header_begin = stream_indices
-                    .min_useful_header_begin
-                    .map(|b| b.max(header_begin.increment()));
+                // `header.begin()`, so advance `covered_header_begin` to it, as we don't
+                // know where the next reject signal is.
+                stream_indices.covered_header_begin =
+                    stream_indices.covered_header_begin.max(header_begin);
             }
             Ok(Some(prefix))
         } else {

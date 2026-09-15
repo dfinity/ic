@@ -419,9 +419,9 @@ async fn validate_slice() {
 
         // Expected indices for messages and signals from `SUBNET_1`.
         const EXPECTED: ExpectedIndices = ExpectedIndices {
-            message_index: SIGNAL_END,     // Assume no intervening payloads.
-            signal_index: MESSAGE_BEGIN,   // Assume we no signals for existing messages.
-            min_useful_header_begin: None, // Assume we hold no reject signals.
+            message_index: SIGNAL_END,              // Assume no intervening payloads.
+            signal_index: MESSAGE_BEGIN,            // Assume we no signals for existing messages.
+            covered_header_begin: STREAM_INDEX_MAX, // Assume we hold no reject signals.
         };
 
         // State with stream for `SUBNET_1`.
@@ -468,7 +468,7 @@ async fn validate_slice() {
             SliceValidationResult::Valid {
                 messages_end: EXPECTED.message_index.increment(),
                 signals_end: EXPECTED.signal_index,
-                min_useful_header_begin: None,
+                covered_header_begin: STREAM_INDEX_MAX,
                 message_count: 1,
                 byte_size: 1,
             },
@@ -556,7 +556,7 @@ async fn validate_slice_invalid_signature() {
         let expected = ExpectedIndices {
             message_index: StreamIndex::new(2),
             signal_index: StreamIndex::new(3),
-            min_useful_header_begin: None,
+            ..Default::default()
         };
 
         let validation_context = get_validation_context_for_test();
@@ -593,7 +593,7 @@ async fn validate_slice_above_msg_limit() {
         const EXPECTED: ExpectedIndices = ExpectedIndices {
             message_index: StreamIndex::new(SIGNAL_END), // Assume no intervening payloads.
             signal_index: StreamIndex::new(MESSAGE_BEGIN), // Assume no signals for existing msgs.
-            min_useful_header_begin: None,               // Assume no reject signals.
+            covered_header_begin: STREAM_INDEX_MAX,      // Assume no reject signals.
         };
 
         // State of a `System` subnet with a stream for `SUBNET_1`.
@@ -640,7 +640,7 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: expected_message.into(),
                 signals_end: (signal_index + 1).into(),
-                min_useful_header_begin: None,
+                covered_header_begin: STREAM_INDEX_MAX,
                 message_count: 0,
                 byte_size: 1,
             },
@@ -660,7 +660,7 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: (expected_message + 1).into(),
                 signals_end: signal_index.into(),
-                min_useful_header_begin: None,
+                covered_header_begin: STREAM_INDEX_MAX,
                 message_count: 1,
                 byte_size: 1,
             },
@@ -718,7 +718,7 @@ async fn validate_slice_above_signal_limit() {
                 &ExpectedIndices {
                     message_index: slice_begin.into(),
                     signal_index: SIGNALS_END.into(),
-                    min_useful_header_begin: None,
+                    ..Default::default()
                 },
                 &validation_context,
                 state,
@@ -734,7 +734,7 @@ async fn validate_slice_above_signal_limit() {
             SliceValidationResult::Valid {
                 messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
-                min_useful_header_begin: None,
+                covered_header_begin: STREAM_INDEX_MAX,
                 message_count: MAX_STREAM_MESSAGES / 2,
                 byte_size: 1,
             }
@@ -749,7 +749,7 @@ async fn validate_slice_above_signal_limit() {
             SliceValidationResult::Valid {
                 messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
-                min_useful_header_begin: None,
+                covered_header_begin: STREAM_INDEX_MAX,
                 message_count: 20,
                 byte_size: 1,
             }
@@ -781,9 +781,9 @@ async fn validate_slice_loopback_stream() {
 
         // Expected indices for loopback stream messages and signals.
         const EXPECTED: ExpectedIndices = ExpectedIndices {
-            message_index: SIGNAL_END,     // Assume no intervening payloads.
-            signal_index: MESSAGE_BEGIN,   // Assume we no signals for existing messages.
-            min_useful_header_begin: None, // Assume we hold no reject signals.
+            message_index: SIGNAL_END,              // Assume no intervening payloads.
+            signal_index: MESSAGE_BEGIN,            // Assume we no signals for existing messages.
+            covered_header_begin: STREAM_INDEX_MAX, // Assume we hold no reject signals.
         };
 
         // State with loopback stream.
@@ -926,17 +926,25 @@ fn state_manager_with_reject_signals_fixture() -> FakeStateManager {
 
 /// A message-less slice from `SUBNET_1`, with the given `header.begin()`.
 fn messageless_slice_with_begin(begin: u64) -> CertifiedStreamSlice {
-    make_certified_stream_slice(
+    messageless_slice(begin, begin)
+}
+
+/// A message-less slice from `SUBNET_1`, with the given header bounds. The
+/// messages within those bounds are all still held by `SUBNET_1`, none of them
+/// included into the slice.
+fn messageless_slice(begin: u64, end: u64) -> CertifiedStreamSlice {
+    make_certified_stream_slice_with_msg_limit(
         SUBNET_1,
         StreamConfig {
             message_begin: begin,
-            message_end: begin,
+            message_end: end,
             signal_end: 0,
         },
+        Some(0),
     )
 }
 
-/// `min_useful_header_begin` must be the first reject signal at or after the highest
+/// `covered_header_begin` must be the first reject signal at or after the highest
 /// header `begin` across the past payloads, i.e. the first reject signal we will
 /// still hold after inducting them.
 #[tokio::test]
@@ -947,44 +955,44 @@ async fn expected_indices_for_stream_reject_signal_gc() {
         let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager.clone(), log);
         let state = state_manager.get_state_at(CERTIFIED_HEIGHT).unwrap().take();
 
-        let min_useful_header_begin = |payloads: &[&XNetPayload]| {
+        let covered_header_begin = |payloads: &[&XNetPayload]| {
             xnet_payload_builder
                 .expected_indices_for_stream(SUBNET_1, &state, payloads)
-                .min_useful_header_begin
+                .covered_header_begin
         };
         let payload = |begin: u64| XNetPayload {
             stream_slices: btreemap![SUBNET_1 => messageless_slice_with_begin(begin)],
         };
 
-        // With no past payloads, one past the first reject signal we hold.
+        // With no past payloads, the first reject signal we hold.
         assert_eq!(
-            Some(StreamIndex::new(FIRST_REJECT_SIGNAL + 1)),
-            min_useful_header_begin(&[])
+            StreamIndex::new(FIRST_REJECT_SIGNAL),
+            covered_header_begin(&[])
         );
 
         // A payload not reaching the first reject signal changes nothing.
         assert_eq!(
-            Some(StreamIndex::new(FIRST_REJECT_SIGNAL + 1)),
-            min_useful_header_begin(&[&payload(FIRST_REJECT_SIGNAL)])
+            StreamIndex::new(FIRST_REJECT_SIGNAL),
+            covered_header_begin(&[&payload(FIRST_REJECT_SIGNAL)])
         );
 
         // A payload garbage collecting the first reject signal leaves the second.
         assert_eq!(
-            Some(StreamIndex::new(SECOND_REJECT_SIGNAL + 1)),
-            min_useful_header_begin(&[&payload(FIRST_REJECT_SIGNAL + 1)])
+            StreamIndex::new(SECOND_REJECT_SIGNAL),
+            covered_header_begin(&[&payload(FIRST_REJECT_SIGNAL + 1)])
         );
 
         // A payload garbage collecting both reject signals leaves none.
         assert_eq!(
-            None,
-            min_useful_header_begin(&[&payload(SECOND_REJECT_SIGNAL + 1)])
+            STREAM_INDEX_MAX,
+            covered_header_begin(&[&payload(SECOND_REJECT_SIGNAL + 1)])
         );
 
         // The highest header `begin` across the payloads is what counts, whatever the
         // order they are given in.
         assert_eq!(
-            Some(StreamIndex::new(SECOND_REJECT_SIGNAL + 1)),
-            min_useful_header_begin(&[
+            StreamIndex::new(SECOND_REJECT_SIGNAL),
+            covered_header_begin(&[
                 &payload(FIRST_REJECT_SIGNAL),
                 &payload(FIRST_REJECT_SIGNAL + 1)
             ])
@@ -1008,12 +1016,12 @@ async fn validate_slice_reject_signal_gc() {
         let state = state_manager.get_state_at(CERTIFIED_HEIGHT).unwrap().take();
 
         let slice = messageless_slice_with_begin(FIXTURE_SIGNALS_END);
-        let validate = |payloads: &[&XNetPayload]| {
+        let validate = |slice: &CertifiedStreamSlice, payloads: &[&XNetPayload]| {
             let expected =
                 xnet_payload_builder.expected_indices_for_stream(SUBNET_1, &state, payloads);
             xnet_payload_builder.validate_slice(
                 SUBNET_1,
-                &slice,
+                slice,
                 &expected,
                 &validation_context,
                 &state,
@@ -1022,15 +1030,16 @@ async fn validate_slice_reject_signal_gc() {
         };
 
         // With both reject signals outstanding, the slice garbage collects them, so it
-        // is not empty. `min_useful_header_begin` is `None`: none are left afterwards.
+        // is not empty. `covered_header_begin` is `STREAM_INDEX_MAX`: none are left
+        // afterwards.
         let valid = SliceValidationResult::Valid {
             messages_end: StreamIndex::new(FIXTURE_SIGNALS_END),
             signals_end: StreamIndex::new(0),
-            min_useful_header_begin: None,
+            covered_header_begin: STREAM_INDEX_MAX,
             message_count: 0,
             byte_size: 1,
         };
-        assert_eq!(valid, validate(&[]));
+        assert_eq!(valid, validate(&slice, &[]));
 
         // Same with a past payload that garbage collects only the first reject signal:
         // the slice still garbage collects the second.
@@ -1039,14 +1048,24 @@ async fn validate_slice_reject_signal_gc() {
         };
         assert_eq!(
             valid,
-            validate(&[&payload_with_begin(FIRST_REJECT_SIGNAL + 1)])
+            validate(&slice, &[&payload_with_begin(FIRST_REJECT_SIGNAL + 1)])
         );
 
         // But once a past payload has garbage collected both, the slice would garbage
         // collect nothing and is empty.
         assert_eq!(
             SliceValidationResult::Empty,
-            validate(&[&payload_with_begin(SECOND_REJECT_SIGNAL + 1)])
+            validate(&slice, &[&payload_with_begin(SECOND_REJECT_SIGNAL + 1)])
+        );
+
+        // Same for a slice beginning exactly at the reject signal we still hold: only a
+        // `begin` past it means `SUBNET_1` has seen the signal.
+        assert_eq!(
+            SliceValidationResult::Empty,
+            validate(
+                &messageless_slice(SECOND_REJECT_SIGNAL, FIXTURE_SIGNALS_END),
+                &[&payload_with_begin(FIRST_REJECT_SIGNAL + 1)]
+            )
         );
     });
 }
