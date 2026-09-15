@@ -2015,6 +2015,21 @@ mod tests {
         .unwrap();
     }
 
+    /// Reads an int counter from the registry by name. Used to synchronize on the manager having
+    /// made progress, which is more robust than waiting for a fixed amount of time.
+    fn int_counter_value(metrics_registry: &MetricsRegistry, name: &str) -> u64 {
+        for metric_family in metrics_registry.prometheus_registry().gather() {
+            if metric_family.name() == name {
+                return metric_family.get_metric()[0]
+                    .get_counter()
+                    .get_or_default()
+                    .value() as u64;
+            }
+        }
+
+        0
+    }
+
     /// Regression test for a held back *initial* delegation. If the very first delegation which
     /// the manager fetches is inconsistent with the certified state, it used to be discarded, and
     /// since `reactive_fetch` never fetched anything while no delegation had been published yet,
@@ -2025,6 +2040,7 @@ mod tests {
     #[tokio::test]
     async fn manager_run_publishes_held_back_initial_delegation_test() {
         let rt_handle = tokio::runtime::Handle::current();
+        let metrics_registry = MetricsRegistry::new();
         let (registry_client, tls_config, state_reader, mutable_state) =
             set_up_nns_delegation_dependencies(
                 rt_handle.clone(),
@@ -2060,7 +2076,7 @@ mod tests {
         }
 
         let (_, mut reader) = start_nns_delegation_manager(
-            &MetricsRegistry::new(),
+            &metrics_registry,
             Config::default(),
             no_op_logger(),
             rt_handle,
@@ -2073,18 +2089,30 @@ mod tests {
             CancellationToken::new(),
         );
 
-        // As long as the certified state disagrees with it, no delegation may be published. One
-        // reactive interval is enough to prove that the delegation which the first proactive fetch
-        // held back wasn't published; keeping this window short leaves a comfortable margin to the
-        // next proactive tick, so that the assertion below can only be satisfied reactively.
-        timeout(
-            DELEGATION_REACTIVE_UPDATE_INTERVAL,
-            reader.wait_until_initialized(),
-        )
+        // Wait until the first fetch has actually completed and its result was held back.
+        // Synchronizing on the metric rather than on a timeout is what makes this test
+        // deterministic: it guarantees that the state is only restored below once the manager is
+        // in the state which used to wedge it, instead of possibly while the first fetch is still
+        // in flight (in which case that fetch would see the restored state, publish normally, and
+        // the test would pass on the unfixed implementation as well).
+        timeout(DELEGATION_REACTIVE_UPDATE_INTERVAL * 2, async {
+            while int_counter_value(
+                &metrics_registry,
+                "nns_delegation_manager_held_back_delegations_total",
+            ) == 0
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
         .await
-        .expect_err(
-            "A delegation which is inconsistent with the certified state must be held back",
-        );
+        .expect("The first delegation which was fetched should have been held back");
+
+        // As long as the certified state disagrees with it, it may not be published.
+        timeout(Duration::from_millis(200), reader.wait_until_initialized())
+            .await
+            .expect_err(
+                "A delegation which is inconsistent with the certified state must be held back",
+            );
 
         // Let the state catch up with the delegation which is being held back.
         {
@@ -2094,8 +2122,10 @@ mod tests {
                 .modify_network_topology(|topology| topology.set_subnets(subnets));
         }
 
-        // The delegation should now be published by a reactive tick, well before the next
-        // proactive tick would fire.
+        // The delegation should now be published by a reactive tick. Note that by construction
+        // only a few hundred milliseconds have passed at this point, so the window below closes
+        // well before the second proactive tick (at
+        // `DELEGATION_PROACTIVE_UPDATE_INTERVAL`) could publish anything.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
             reader.wait_until_initialized(),
