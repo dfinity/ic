@@ -298,10 +298,13 @@ const SWEEP_GAS_PER_TRANSFER: GasAmount = GasAmount::new(110_000);
 ///
 /// Budgeted for the authorizations the sweep carries, which are those of the addresses it still has
 /// to delegate. An authorization the EVM skips — another sweep delegated the address in between, so
-/// the nonce it was signed for no longer matches — is charged the same 25'000 and refunded 12'500
-/// for an authority the state trie already holds. That refund lands after execution and so cannot
-/// shrink the limit the transaction had to declare, leaving 25'000 the figure to budget either way.
-/// Rounded up as its siblings are.
+/// the nonce it was signed for no longer matches — still costs the full 25'000: [EIP-7702] refunds
+/// 12'500 for an authority that already exists only once the authorization passed every check,
+/// including the nonce. That refund lands after execution and so cannot shrink the limit the
+/// transaction had to declare, leaving 25'000 the figure to budget either way. Rounded up as its
+/// siblings are.
+///
+/// [EIP-7702]: https://eips.ethereum.org/EIPS/eip-7702
 const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
 
 /// Gas one address of an ETH sweep costs beyond its authorization: the per-address dispatch

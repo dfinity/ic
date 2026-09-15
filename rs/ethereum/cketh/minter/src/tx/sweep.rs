@@ -70,7 +70,11 @@ impl<'b, C> minicbor::Decode<'b, C> for DelegatingSweep {
 
 impl SweepTransaction {
     /// The sweep `transaction`, installing the delegations `authorizations` attests to: type
-    /// `0x04` if there are any to install, and type `0x02` if there are none.
+    /// `0x04` if there are any to install, and type `0x02` if there are none. The fallback is not
+    /// a saving but a requirement: [EIP-7702] declares a type-`0x04` transaction with an empty
+    /// authorization list invalid.
+    ///
+    /// [EIP-7702]: https://eips.ethereum.org/EIPS/eip-7702
     pub fn new(
         transaction: Eip1559TransactionRequest,
         authorizations: Vec<SignedAuthorization>,
