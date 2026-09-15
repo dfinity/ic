@@ -250,3 +250,19 @@ The tool maintains a well-defined directory layout for all artifacts produced du
 - **AND** the source working directory is at the default recovery work dir path
 - **AND** the destination working directory is at `{recovery_dir}/destination_working_dir/`
 - **AND** each working directory contains `data/ic_state/checkpoints/` with checkpoint subdirectories
+
+---
+
+## Crate: `ic-subnet-tools`
+
+- **Source**: `rs/recovery/subnet_tools/`
+- **Purpose**: Helpers shared between `ic-subnet-splitting` and a subnet-merging tool: `ic-admin` command builders (`admin_helper`), agent calls to read subnet/public-key/canister-range state tree entries with NNS certificate verification (`agent_helper`), thin wrappers around `state_tool` commands run on downloaded/produced states (`state_tool_helper`), CUP/manifest utilities (`utils`), artifact validation (`validation`), and a `ReadRegistryStep` shared recovery step (`steps`).
+
+#### Scenario: Validate halted-subnet artifacts
+- **WHEN** `validation::validate_artifacts` is called for a subnet halted at a CUP
+- **THEN** it validates the NNS-signed state tree, the CUP the subnet halted at, and the manifest of the state at that CUP
+
+#### Scenario: Read and log a registry value interactively
+- **WHEN** a `ReadRegistryStep` executes
+- **THEN** it queries and logs the requested registry value, labeled for operator review
+- **AND** if run interactively, it offers to re-read the registry (for a mutation not yet applied) until the operator declines
