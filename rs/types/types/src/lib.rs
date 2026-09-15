@@ -500,7 +500,11 @@ pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 4 * GIB;
 /// The upper limit on the Wasm64 canister memory size.
 /// This constant is used by other crates to define other constants, that's why
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
-pub const MAX_WASM64_MEMORY_IN_BYTES: u64 = 6 * GIB;
+///
+/// A single message may still access at most 6 GiB of this heap; that cap is
+/// configured separately as `wasm_memory_accessed_page_limit` in the embedders
+/// config and is intentionally not derived from this constant.
+pub const MAX_WASM64_MEMORY_IN_BYTES: u64 = 18 * GIB;
 
 impl From<NumBytes> for MemoryAllocation {
     fn from(bytes: NumBytes) -> Self {
