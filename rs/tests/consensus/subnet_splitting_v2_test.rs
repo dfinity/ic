@@ -348,9 +348,19 @@ async fn check_chatting_canisters_metrics(
     .into_iter()
     .for_each(|metrics_after| aggregated_metrics.merge(&metrics_after));
 
-    assert_eq!(aggregated_metrics.call_errors, 0);
-    assert_eq!(aggregated_metrics.reject_responses, 0);
-    assert_eq!(aggregated_metrics.seq_errors, 0);
+    assert_eq!(
+        aggregated_metrics.call_errors, 0,
+        "Received some call_errors: {}",
+        aggregated_metrics.log
+    );
+    assert_eq!(
+        aggregated_metrics.seq_errors, 0,
+        "Received some seq_errors: {}",
+        aggregated_metrics.log
+    );
+    // note: We don't check `reject_responses` because it is expected that some calls are
+    // rejected with: `Ok(SysTransient) Canister migration in progress`
+    // assert_eq!(aggregated_metrics.reject_responses, 0);
 }
 
 async fn install_chatting_canisters(env: &TestEnv) -> (Vec<CanisterId>, Vec<CanisterId>) {
@@ -396,9 +406,10 @@ async fn install_chatting_canisters(env: &TestEnv) -> (Vec<CanisterId>, Vec<Cani
 
     let canister_start_arguments = StartArgs {
         network_topology: canister_groups.clone(),
-        canister_to_subnet_rate: 10,
+        canister_to_subnet_rate: 1,
         request_payload_size_bytes: 1,
-        call_timeouts_seconds: vec![None],
+        // Use best-effort messages
+        call_timeouts_seconds: vec![Some(5 * 60)],
         response_payload_size_bytes: 1,
     };
 
