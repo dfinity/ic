@@ -228,7 +228,7 @@ pub fn fake_signature_request_context_with_pre_sig(
     let rv = RegistryVersion::from(10);
     let height = Height::from(1);
     let context = SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
+        request: Arc::new(RequestBuilder::new().build()),
         args: fake_signature_request_args(key_id.into(), height, pre_signature, rv),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
@@ -245,7 +245,7 @@ pub fn fake_signature_request_context_from_id(
     let rv = RegistryVersion::from(10);
     let height = request_id.height;
     let context = SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
+        request: Arc::new(RequestBuilder::new().build()),
         args: fake_signature_request_args(key_id, height, Some(pre_sig_id), rv),
         derivation_path: Arc::new(vec![vec![]]),
         batch_time: UNIX_EPOCH,
@@ -300,7 +300,7 @@ pub fn fake_signature_request_context_with_registry_version(
 ) -> SignWithThresholdContext {
     let height = Height::from(1);
     SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
+        request: Arc::new(RequestBuilder::new().build()),
         args: fake_signature_request_args(key_id.clone(), height, pre_sig_id, rv),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,

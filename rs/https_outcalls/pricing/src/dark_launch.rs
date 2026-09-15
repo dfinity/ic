@@ -152,7 +152,7 @@ mod tests {
     /// sender (canister id) and replication kind are read by `DarkLaunchTracker`.
     fn context(replication: Replication) -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: Request {
+            request: std::sync::Arc::new(Request {
                 receiver: CanisterId::from_u64(7),
                 sender: CanisterId::from_u64(7),
                 sender_reply_callback: CallbackId::from(1),
@@ -161,10 +161,10 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
-            },
+            }),
             url: String::new(),
             max_response_bytes: None,
-            headers: vec![],
+            headers: std::sync::Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,

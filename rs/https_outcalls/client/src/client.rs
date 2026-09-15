@@ -23,7 +23,7 @@ use ic_types::{
         MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Transform, validate_http_headers_and_body,
     },
     ingress::WasmResult,
-    messages::{Query, QuerySource, Request},
+    messages::{Query, QuerySource},
 };
 use ic_utils::str::StrEllipsize;
 use std::{
@@ -160,13 +160,9 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             let mut budget = pricing_factory.new_tracker(&request_context);
             let request_size = request_context.variable_parts_size();
 
+            let request_sender = request_context.request.sender;
+            let reply_callback_id = request_context.request.sender_reply_callback;
             let CanisterHttpRequestContext {
-                request:
-                    Request {
-                        sender: request_sender,
-                        sender_reply_callback: reply_callback_id,
-                        ..
-                    },
                 url: request_url,
                 headers: request_headers,
                 body: request_body,
@@ -188,8 +184,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     &mut http_adapter_client,
                     request_url,
                     request_http_method,
-                    request_headers,
-                    request_body,
+                    &request_headers,
+                    request_body.as_deref().map(Vec::as_slice),
                     socks_proxy_addrs,
                     &mut *budget,
                     charged_response_time,
@@ -358,8 +354,8 @@ async fn execute_http_request(
     adapter_client: &mut HttpsOutcallsServiceClient<Channel>,
     url: String,
     http_method: CanisterHttpMethod,
-    headers: Vec<CanisterHttpHeader>,
-    body: Option<Vec<u8>>,
+    headers: &[CanisterHttpHeader],
+    body: Option<&[u8]>,
     socks_proxy_addrs: Vec<String>,
     budget: &mut dyn BudgetTracker,
     charged_response_time: Option<Duration>,
@@ -381,13 +377,13 @@ async fn execute_http_request(
         },
         max_response_size_bytes: max_response_size.get(),
         headers: headers
-            .into_iter()
+            .iter()
             .map(|h| HttpHeader {
-                name: h.name,
-                value: h.value,
+                name: h.name.clone(),
+                value: h.value.clone(),
             })
             .collect(),
-        body: body.unwrap_or_default(),
+        body: body.unwrap_or_default().to_vec(),
         socks_proxy_addrs,
     };
 
@@ -763,7 +759,7 @@ mod tests {
             &mut HttpsOutcallsServiceClient::new(grpc_channel),
             "http://notused.invalid".to_string(),
             CanisterHttpMethod::GET,
-            Vec::new(),
+            &[],
             None,
             Vec::new(),
             budget,
@@ -819,18 +815,22 @@ mod tests {
         CanisterHttpRequest {
             id: CallbackId::from(request_id),
             context: CanisterHttpRequestContext {
-                request: RequestBuilder::default()
-                    .receiver(CanisterId::from(1))
-                    .sender(CanisterId::from(1))
-                    .build(),
+                request: Arc::new(
+                    RequestBuilder::default()
+                        .receiver(CanisterId::from(1))
+                        .sender(CanisterId::from(1))
+                        .build(),
+                ),
                 url: "http://notused.com".to_string(),
                 max_response_bytes: None,
-                headers: Vec::new(),
+                headers: Arc::new(Vec::new()),
                 body: None,
                 http_method: CanisterHttpMethod::GET,
-                transform: transform_method.map(|method_name| Transform {
-                    method_name,
-                    context: vec![],
+                transform: transform_method.map(|method_name| {
+                    Arc::new(Transform {
+                        method_name,
+                        context: vec![],
+                    })
                 }),
                 time: UNIX_EPOCH,
                 replication: Replication::FullyReplicated,

@@ -778,12 +778,14 @@ pub mod test {
         max_response_bytes: Option<NumBytes>,
     ) -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: ic_test_utilities_types::messages::RequestBuilder::new()
-                .sender(requester())
-                .build(),
+            request: Arc::new(
+                ic_test_utilities_types::messages::RequestBuilder::new()
+                    .sender(requester())
+                    .build(),
+            ),
             url: "".to_string(),
             max_response_bytes,
-            headers: vec![],
+            headers: std::sync::Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,

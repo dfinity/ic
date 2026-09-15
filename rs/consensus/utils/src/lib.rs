@@ -804,10 +804,10 @@ mod tests {
 
     fn fake_canister_http_context(registry_version: RegistryVersion) -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: RequestBuilder::new().build(),
+            request: std::sync::Arc::new(RequestBuilder::new().build()),
             url: "https://example.com".to_string(),
             max_response_bytes: None,
-            headers: vec![],
+            headers: std::sync::Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,
