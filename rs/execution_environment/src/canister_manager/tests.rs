@@ -3073,25 +3073,14 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         NumBytes::from(MIB)
     );
 
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
     let time = state.time();
-    let subnet_cycles_config = state.get_own_subnet_cycles_config();
     let canister = state.canister_state_make_mut(&canister_test_id(0)).unwrap();
     canister_manager
         .uninstall_code(
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
             canister,
-            &mut round_limits,
             None,
             time,
-            subnet_cycles_config,
-            &ResourceSaturation::default(),
         )
         .unwrap();
 
@@ -9461,4 +9450,134 @@ fn can_retrieve_canister_metrics_for_canister_normal_schedule() {
     let canister_id = test.universal_canister().unwrap();
 
     assert_canister_metrics_can_be_retrieved(&mut test, canister_id, cost_schedule);
+}
+
+#[test]
+fn take_canister_snapshot_of_canister_without_wasm_module_is_free() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    // A snapshot cannot be taken of a canister without an installed Wasm module.
+    let args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let err = test
+        .subnet_message(Method::TakeCanisterSnapshot, args.encode())
+        .unwrap_err();
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    assert_eq!(err.code(), ErrorCode::CanisterRejectedMessage);
+    assert!(
+        err.description().contains(&format!(
+            "Failed to create snapshot for empty canister {canister_id}"
+        )),
+        "unexpected error: {err}"
+    );
+    // The check is performed before charging for taking the snapshot, so this
+    // failure does not cost the canister anything.
+    assert_eq!(balance_before, balance_after);
+    assert_eq!(test.canister_state(canister_id).canister_snapshots.len(), 0);
+}
+
+#[test]
+fn take_canister_snapshot_of_frozen_canister_fails_for_free() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
+
+    // Set the freezing threshold high to freeze the canister.
+    let payload = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1_000_000_000_000)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, payload)
+        .unwrap();
+
+    // The frozen canister cannot account for the memory of the snapshot.
+    let args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let err = test
+        .subnet_message(Method::TakeCanisterSnapshot, args.encode())
+        .unwrap_err();
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+    // The instructions of taking a snapshot are only charged for once the
+    // operation succeeded, so the canister is not charged at all.
+    assert_eq!(balance_before, balance_after);
+    assert_eq!(test.canister_state(canister_id).canister_snapshots.len(), 0);
+}
+
+#[test]
+fn failed_take_canister_snapshot_does_not_charge_for_instructions() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
+        .unwrap();
+    // Exhaust the subnet available execution memory so that the memory of the
+    // snapshot cannot be accounted for against it.
+    test.set_available_execution_memory(0);
+
+    let args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let err = test
+        .subnet_message(Method::TakeCanisterSnapshot, args.encode())
+        .unwrap_err();
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    // The operation is rolled back, so no snapshot is taken, the subnet available
+    // execution memory is unchanged and, since taking a snapshot is cheap enough
+    // for its instructions to be charged for only once the operation succeeded,
+    // the canister is not charged at all.
+    assert_eq!(test.canister_state(canister_id).canister_snapshots.len(), 0);
+    assert_eq!(test.subnet_available_memory().get_execution_memory(), 0);
+    assert_eq!(balance_before, balance_after);
+}
+
+#[test]
+fn clear_chunk_store_of_frozen_canister_with_empty_chunk_store_succeeds() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id)
+            .wasm_chunk_store_memory_usage(),
+        NumBytes::new(0)
+    );
+
+    // Set the freezing threshold high to freeze the canister.
+    let payload = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1_000_000_000_000)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, payload)
+        .unwrap();
+
+    // Clearing an already empty chunk store does not change the canister's memory
+    // usage and charges for no instructions, so the cycles and memory usage checks
+    // are skipped and the operation succeeds even though the canister is frozen.
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let clear_args = ClearChunkStoreArgs {
+        canister_id: canister_id.into(),
+    };
+    test.subnet_message(Method::ClearChunkStore, clear_args.encode())
+        .unwrap();
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    assert_eq!(balance_before, balance_after);
+    assert_eq!(
+        test.canister_state(canister_id)
+            .wasm_chunk_store_memory_usage(),
+        NumBytes::new(0)
+    );
 }
