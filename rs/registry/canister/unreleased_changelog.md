@@ -26,6 +26,9 @@ on the process that this file is part of, see
   to the destination subnet. Only the routing table is updated: neither subnet record is modified
   and the source subnet is not deleted.
 
+* Newly created `CatchUpPackageContents` records with CUP type `CupType::Genesis` will not contain a `height`
+  field anymore. You can (and should) assume that the height for `Genesis` CUPs is always 0.
+
 ## Changed
 
 * `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
