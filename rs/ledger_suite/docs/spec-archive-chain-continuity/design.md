@@ -427,11 +427,34 @@ dropped on the stack — an orphan by any definition, and two of the three windo
 Constraints table lists. Decrementing there would hand those windows back to
 `Req 9`'s backoff and defeat `Req 11.1`'s halt entirely.
 
-So `Req 11.3`'s "a failure THE Ledger observes" is a failure of `create_canister`
-itself; anything after it leaves the counter non-zero and halts. Making
-`update_settings` a bounded call (below) makes this sharper rather than looser: an
-unknown outcome there arrives as an `Err` on a call that may well have succeeded, and
-it must halt for exactly the same reason.
+`Req 11.3` is therefore the pre-creation case and `Req 11.5` the post-creation one,
+and the implementation is the same distinction: decrement only where
+`create_canister` itself returned `Err`. Making `update_settings` a bounded call
+(below) makes this sharper rather than looser — an unknown outcome there arrives as
+an `Err` on a call that may well have succeeded, and it must halt for exactly the
+same reason.
+
+### Halt conditions, and how each one clears
+
+Five conditions stop archiving, with three different recovery stories, and they are
+easy to conflate because they present identically — archiving stops and blocks
+accumulate. An operator's first question is which one it is, so the metrics must be
+distinct (they are, by `Req 8.3`, `8.4`, `9.7`, `10.1` and `11.2`) and the answer to
+"what now" must be written down:
+
+| condition | criterion | clears |
+|---|---|---|
+| the span below an archive's reported range is covered by no archive | `Req 8.3` | not on its own. No endpoint sets the archived prefix, so it needs an upgrade carrying a migration. Unreachable except from self-inconsistent ledger state |
+| an archive reports a position below the archived prefix | `Req 8.4` | never — blocks the ledger already stopped serving are held nowhere. Recovery is whatever backup exists, not this system |
+| an archive refused an append on chain or position grounds | `Req 9.7` | not on its own, and deliberately: the archive's counters say which of `1.1`, `2.2` or `2.9` fired, and they call for different investigations |
+| the tail archive reports no range | `Req 10.1` | **itself**, on the next probe once the archive is upgraded (`Req 10.2`). The only self-clearing halt |
+| an archive creation was begun and never accounted for | `Req 11.1` | operator only, explicitly not itself (`Req 11.4`), because a canister may exist that nothing will address |
+
+Two things follow for the implementation. The four non-clearing halts must be
+distinguishable from the backoff of `Req 9.1` — a ledger that is *waiting* and one
+that has *stopped* look the same from block accumulation alone. And `Req 10.1` is the
+only one whose state may be derived from a cache, since it is the only one expected
+to change without an upgrade.
 
 ### `ledger_canister_core::archive` — `node_and_capacity`
 
@@ -479,7 +502,8 @@ a bounded variant so the choice is per call site (`Req 13.1`, `Req 13.5`):
 
 An unknown outcome is handled as a failure, which is safe only because the retry is
 idempotent (`Req 13.3`, `13.4`), and is counted distinctly so D9's timeout can be
-revisited.
+revisited. The first three rows are `Req 13.7`'s "resolvable by asking again"; the
+last two are `Req 13.5`'s exception, and the table is the exhaustive reading of both.
 
 ### `ledger_canister_core::spawn`
 
@@ -601,7 +625,8 @@ everything after it.
 the chain check on the first stored block, capacity reporting, the counters, and the
 `.did`. The ledger is unchanged, so it sends no index and reads no result — which is
 why `Req 5` is in this PR and not a later one.
-*Acceptance:* `Req 1`, `Req 2`, `Req 3`, `Req 4` (4.1-4.4), `Req 5`, `Req 6`.
+*Acceptance:* `Req 1`, `Req 2`, `Req 3`, `Req 4` (4.1-4.4, 4.7, 4.8), `Req 5`,
+`Req 6`.
 
 *What this release costs.* Two things, and the second is a limit rather than a price.
 

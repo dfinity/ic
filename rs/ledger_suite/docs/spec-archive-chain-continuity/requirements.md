@@ -25,12 +25,14 @@ readable without it.*
 `trigger_threshold` is set beyond any reachable block count, as a mitigation after
 an archiving failure corrupted nothing only by luck, and blocks are accumulating in
 the ledgers instead. This document is the contract archiving must satisfy before it
-is switched back on. Four things have to hold: an archive must be able to tell where
-an incoming batch belongs and refuse one that does not fit; it must report its own
-extent, so a ledger never has to infer it; a ledger must not stop serving a block
-until an archive has confirmed holding it; and a ledger must space its attempts
-while archiving is failing. The rest of this section is why each of those is
-needed.
+is switched back on. Four things carry most of it: an archive must be able to tell
+where an incoming batch belongs and refuse one that does not fit; it must report its
+own extent, so a ledger never has to infer it; a ledger must not stop serving a block
+until an archive has confirmed holding it; and a ledger must space its attempts while
+archiving is failing. The requirements below state those four precisely and add what
+they need in order to be safe in practice — how capacity is reported, what an
+un-upgraded archive means, how a lost archive creation is detected, and what a round
+may do. The rest of this section is why the four are needed.
 
 A ledger keeps only its most recent blocks and moves older ones to archive
 canisters. Because an archive is a separate canister, moving blocks means an
@@ -110,8 +112,9 @@ comes first.
   canister from the ICRC archive and is not changed here, so the ICP ledger gains
   the ledger-side obligations but not the addressed-append ones. This leaves the ICP
   suite exposed to the divergence described above until that port lands, which is
-  accepted deliberately and tracked separately. Req 10.5 pins the behaviour that
-  makes the exemption safe rather than silent.
+  accepted deliberately and tracked separately. Req 7.5, Req 8.7, Req 10.5 and
+  Req 13.6 pin the behaviour that makes the exemption safe rather than silent — each
+  says what the ICP ledger does *instead*, so none of it is left to inference.
 - **Ensuring an archiving failure cannot contradict a transaction's reply.** On a
   ledger that waits for archiving before replying, a failure after the transaction
   has committed turns a successful transfer into a rejection, which a client that
@@ -195,8 +198,8 @@ lost track of what it sent cannot corrupt the archive by sending them again.
    SHALL store it only if it holds no blocks and its `block_index_offset` is zero,
    because a block without a parent is the genesis block and belongs at index zero
    or nowhere.
-6. WHEN THE Archive stores an Index_Less_Append while holding no blocks, THE Archive
-   SHALL count it distinctly, because it is the one append whose placement the
+6. WHEN THE Archive stores one or more blocks from an Index_Less_Append while it
+   held none, THE Archive SHALL count that append distinctly, because it is the one append whose placement the
    archive cannot verify by any means and the count reads zero once every ledger
    sends an index (per Req 2.1).
 
@@ -217,9 +220,10 @@ history I compute is correct.
 3. WHEN an Indexed_Append's Declared_Index falls at or within the Archive_Range and
    the append extends beyond the Archive_Position, THE Archive SHALL store only
    those blocks at or above the Archive_Position.
-4. WHEN every block of an Indexed_Append is at an index the archive already holds,
-   THE Archive SHALL store none of them and SHALL report success, because a ledger
-   that lost an acknowledgement must be able to retry without being told it erred.
+4. WHEN every block of an Indexed_Append is at an index the archive already holds
+   and the comparison in 2.9 finds no difference, THE Archive SHALL store none of
+   them and SHALL report success, because a ledger that lost an acknowledgement must
+   be able to retry without being told it erred.
 5. THE Archive SHALL satisfy 2.4 however far the Declared_Index falls below the
    Archive_Position, including when the archive holds more blocks than the append
    carries.
@@ -229,8 +233,8 @@ history I compute is correct.
    storing them would place them at indices they do not belong at.
 7. THE Archive SHALL NOT store a block at an index it already holds a block for.
 8. WHEN blocks are retrieved by index from an archive after any sequence of
-   appends permitted by 2.1 through 2.7, THE Archive SHALL return, for each index,
-   the block whose position in the chain is that index.
+   appends permitted by 2.1 through 2.7 and 2.9, THE Archive SHALL return, for each
+   index, the block whose position in the chain is that index.
 9. WHEN every block of an Indexed_Append is at an index the archive already holds,
    THE Archive SHALL compare the last such block against the block it holds at that
    index and SHALL refuse the append if they differ, because a ledger whose chain
@@ -271,8 +275,6 @@ makes progress under storage pressure instead of repeating work it cannot finish
    configured storage limit, THE Archive SHALL store the blocks before it and SHALL
    report the Archive_Position it reached, which it can always do because it decides
    this from its own configuration and its own usage without asking for memory.
-8. WHEN THE Archive is instead refused memory it asked for, and the refusal returns
-   control to it, THE Archive SHALL behave as in 4.1.
 2. THE Archive SHALL NOT itself discard blocks it has already stored in order to
    refuse an append, because under a persistent cause each attempt would then make
    no progress at all.
@@ -282,16 +284,18 @@ makes progress under storage pressure instead of repeating work it cannot finish
    Archive SHALL report `at_capacity` as false, because a ledger must not respond by
    creating another archive when creating one needs the same resource that was just
    refused.
-7. THE Archive SHALL NOT be held to 4.2, 4.4 or 4.8 for a storage refusal that
-   terminates its execution rather than returning to it, because it regains no
-   control and can neither keep a partial result nor report anything — the exposure
-   the corresponding non-goal accepts, and one 4.1 is untouched by, since reaching a
-   configured limit asks for no memory and so cannot be refused.
 5. IF THE Archive reports `at_capacity` as true, THEN THE Ledger SHALL create a new
    archive on a later Archiving_Round for the remaining blocks, rather than offering
    them to the same archive again.
 6. IF THE Archive reports `at_capacity` as false and stopped short, THEN THE Ledger
    SHALL offer the remaining blocks to the same archive on a later attempt.
+7. THE Archive SHALL NOT be held to 4.2, 4.4 or 4.8 for a storage refusal that
+   terminates its execution rather than returning to it, because it regains no
+   control and can neither keep a partial result nor report anything — the exposure
+   the corresponding non-goal accepts, and one 4.1 is untouched by, since reaching a
+   configured limit asks for no memory and so cannot be refused.
+8. WHEN THE Archive is instead refused memory it asked for, and the refusal returns
+   control to it, THE Archive SHALL behave as in 4.1.
 
 ### Requirement 5: An Index-Less Append Behaves As It Does Today
 
@@ -323,12 +327,8 @@ violation from a capacity problem without access to canister logs.
 
 1. THE Archive SHALL expose, over its metrics endpoint, a separate count for each
    of: a refusal per 1.1, a refusal per 2.9, a gap per 2.2, a stop at its own limit
-   per 4.3, and a platform-refused growth per 4.4.
-6. THE Archive SHALL count a refusal per 2.9 separately from one per 1.1, because
-   the two localise the divergence differently — 1.1 means the blocks offered do not
-   continue the archive's last block, while 2.9 means a range the archive already
-   holds was re-sent with different content, which points at a ledger that has been
-   rolled back.
+   per 4.3, a platform-refused growth per 4.4, an undecodable block per 6.4, and an
+   unverifiable append per 1.6.
 2. THE Archive SHALL NOT fail the call for any outcome counted under 6.1 when the
    append carried a Declared_Index, because failing the call discards the
    count along with everything else the call changed, leaving the cause invisible.
@@ -341,6 +341,11 @@ violation from a capacity problem without access to canister logs.
 5. THE Archive SHALL NOT count an append carrying no blocks under any count in 6.1,
    because such an append is how a ledger asks where an archive stands per 3.5 and
    counting it would raise an operator alarm for an ordinary question.
+6. THE Archive SHALL count a refusal per 2.9 separately from one per 1.1, because
+   the two localise the divergence differently — 1.1 means the blocks offered do not
+   continue the archive's last block, while 2.9 means a range the archive already
+   holds was re-sent with different content, which points at a ledger that has been
+   rolled back.
 
 ### Requirement 7: A New Archive Continues The Previous Archive's Range
 
@@ -416,10 +421,11 @@ per interval rather than work per transaction.
    operator action, because the cause that prompted this work cleared on its own
    in about four and a half hours and an operator-gated recovery would have turned
    that into an incident.
-5. WHEN an Archiving_Round fails, THE Ledger SHALL count the failure in the metric
-   it already exposes for archiving failures, SHALL continue to serve the blocks
-   it did not archive, and SHALL reply to the triggering transaction as it would
-   have had archiving succeeded.
+5. WHEN an Archiving_Round fails in a way THE Ledger observes, THE Ledger SHALL
+   count the failure in the metric it already exposes for archiving failures, SHALL
+   continue to serve the blocks it did not archive, and SHALL reply to the
+   triggering transaction as it would have had archiving succeeded — a failure that
+   instead ends the round's execution is the subject of the corresponding non-goal.
 6. WHEN an Archiving_Round fails, THE Ledger SHALL NOT prevent a later
    Archiving_Round from being attempted.
 7. WHEN an archive refuses an append per 1.1, 2.2 or 2.9, THE Ledger SHALL make no
@@ -463,12 +469,15 @@ unaddressable canister does not become a series of them.
    archiving attempt.
 2. WHILE the condition in 11.1 holds, THE Ledger SHALL expose a distinct non-zero
    metric.
-3. WHEN an archive creation fails in a way THE Ledger observes, THE Ledger SHALL
-   NOT enter the state in 11.1, so that an ordinary failure is subject to Req 9
-   rather than halting.
+3. WHEN THE Ledger observes an archive creation fail *before* the canister exists,
+   THE Ledger SHALL NOT enter the state in 11.1, so that an ordinary failure is
+   subject to Req 9 rather than halting.
 4. THE Ledger SHALL NOT resume archiving out of the state in 11.1 on its own,
    because the state means a canister may exist that nothing will ever address and
    an operator has to look.
+5. WHEN THE Ledger observes a failure *after* the canister exists but before its
+   identity is recorded, THE Ledger SHALL enter the state in 11.1, because the
+   canister is then unaddressable whether the failure was observed or not.
 
 ### Requirement 12: An Archiving Round Makes One Append
 
@@ -517,3 +526,6 @@ never be answered.
 6. THE ICP Ledger SHALL wait unboundedly for an append, because its archives do
    not satisfy Req 2 and a retry against them would store the blocks a second
    time (per 10.5).
+7. WHEN THE Ledger makes any other call whose unknown outcome it can resolve by
+   asking again, THE Ledger SHALL likewise stop waiting after at most
+   ARCHIVE_CALL_TIMEOUT, so that 13.5 is the exception rather than the rule.
