@@ -138,7 +138,7 @@ impl Anvil {
     }
 
     /// Places `code` as the runtime bytecode at `address` (foundry's `anvil_setCode` cheatcode).
-    pub(crate) fn set_code(&self, address: &Address, code: &[u8]) {
+    pub fn set_code(&self, address: &Address, code: &[u8]) {
         self.rpc(
             "anvil_setCode",
             serde_json::json!([to_hex(address.as_ref()), to_hex(code)]),

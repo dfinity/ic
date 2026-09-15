@@ -51,6 +51,10 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::asset::Asset;
+use ic_cketh_minter::balance_scan::batcher::{
+    Delegation, decode_delegation_batch, encode_delegation_batch,
+};
+use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::events::{
     Asset as EventAsset, Event, EventPayload, TransactionStatus,
 };
@@ -789,19 +793,38 @@ impl LiveSetup<CkErc20Setup> {
         self.assert_delegations_installed_at(deposits.iter().map(|d| d.address), delegate)
     }
 
+    /// Checks the delegations the sweep installed twice over: as the code each address holds, and
+    /// as the delegation batcher reads them back in one call, since the batcher is the minter's
+    /// only consumer that must read a designator through `EXTCODECOPY` rather than run it.
     fn assert_delegations_installed_at(
         self,
         addresses: impl IntoIterator<Item = Address>,
         delegate: &Address,
     ) -> Self {
+        let addresses: Vec<Address> = addresses.into_iter().collect();
         let designator = delegation_designator(delegate);
-        for address in addresses {
+        for address in &addresses {
             assert_eq!(
-                self.anvil.code(&address),
+                self.anvil.code(address),
                 designator,
                 "the sweep should have installed the delegation"
             );
         }
+        let deposit_addresses: Vec<DepositAddress> =
+            addresses.iter().copied().map(DepositAddress::new).collect();
+        let read = self
+            .anvil
+            .eth_call_create(
+                &address_from_hex(DEV_ACCOUNT),
+                &encode_delegation_batch(&deposit_addresses),
+            )
+            .expect("the delegation batcher must read delegated addresses without reverting");
+        assert_eq!(
+            decode_delegation_batch(&read, deposit_addresses.len())
+                .expect("the delegation batcher must return one word per address"),
+            vec![Delegation::Delegated(*delegate); deposit_addresses.len()],
+            "the delegation batcher must classify every swept address as delegated"
+        );
         self
     }
 
