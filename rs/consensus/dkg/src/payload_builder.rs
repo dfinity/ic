@@ -613,12 +613,14 @@ fn as_next_transcripts(
 
 pub fn get_dkg_summary_from_cup_contents(
     cup_contents: CatchUpPackageContents,
+    height: Height,
     subnet_id: SubnetId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<DkgSummary, String> {
     get_dkg_summary_from_cup_contents_with_subnet_splitting(
         cup_contents,
+        height,
         subnet_id,
         registry,
         registry_version,
@@ -626,8 +628,26 @@ pub fn get_dkg_summary_from_cup_contents(
     )
 }
 
+/// Returns the genesis DKG summary, i.e. the summary at height 0, derived from
+/// the given CUP contents.
+pub fn get_genesis_dkg_summary_from_cup_contents(
+    cup_contents: CatchUpPackageContents,
+    subnet_id: SubnetId,
+    registry: &dyn RegistryClient,
+    registry_version: RegistryVersion,
+) -> Result<DkgSummary, String> {
+    get_dkg_summary_from_cup_contents(
+        cup_contents,
+        Height::from(0),
+        subnet_id,
+        registry,
+        registry_version,
+    )
+}
+
 fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
     cup_contents: CatchUpPackageContents,
+    height: Height,
     subnet_id: SubnetId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
@@ -701,7 +721,6 @@ fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
     let committee = get_node_list(subnet_id, registry, registry_version)
         .map_err(|err| format!("Could not retrieve committee list: {err:?}"))?;
 
-    let height = Height::from(cup_contents.height);
     let configs = get_configs_for_local_transcripts(
         subnet_id,
         committee,
@@ -981,7 +1000,7 @@ pub fn get_post_split_dkg_summary(
     // The splitting CUP lives exactly at the `Scheduled` summary's context's registry version
     let registry_version = last_summary_block.context.registry_version;
 
-    let mut cup_contents = registry
+    let cup_contents = registry
         .get_cup_contents(new_subnet_id, registry_version)
         .map_err(|err| {
             format!("Failed to get the cup contents at registry version {registry_version}: {err}")
@@ -991,10 +1010,10 @@ pub fn get_post_split_dkg_summary(
 
     // During subnet splitting we skip one DKG interval. The pre-split chain can never reach this
     // height — see the function documentation for why, and for the limitation this implies.
-    cup_contents.height = last_summary.get_next_start_height().get();
-
+    let height = last_summary.get_next_start_height();
     get_dkg_summary_from_cup_contents_with_subnet_splitting(
         cup_contents,
+        height,
         new_subnet_id,
         registry,
         registry_version,
@@ -1461,7 +1480,7 @@ mod tests {
                 .get_cup_contents(subnet_id, registry.get_latest_version())
                 .expect("Failed to retreive the DKG transcripts from registry");
             let registry_cup_version = cup_contents.version;
-            let mut genesis_summary = get_dkg_summary_from_cup_contents(
+            let mut genesis_summary = get_genesis_dkg_summary_from_cup_contents(
                 cup_contents.value.expect("Missing CUP contents"),
                 subnet_id,
                 &*registry,
@@ -1557,7 +1576,7 @@ mod tests {
             let cup_contents = registry
                 .get_cup_contents(subnet_id, registry.get_latest_version())
                 .expect("Failed to retreive the DKG transcripts from registry");
-            let summary = get_dkg_summary_from_cup_contents(
+            let summary = get_genesis_dkg_summary_from_cup_contents(
                 cup_contents.value.expect("Missing CUP contents"),
                 subnet_id,
                 &*registry,
@@ -1857,7 +1876,7 @@ mod tests {
                 .expect("Failed to retrieve the CUP contents from the registry")
                 .value
                 .expect("Missing CUP contents");
-            let genesis_summary = get_dkg_summary_from_cup_contents(
+            let genesis_summary = get_genesis_dkg_summary_from_cup_contents(
                 cup_contents.clone(),
                 source_subnet_id,
                 &*registry,
@@ -2007,7 +2026,7 @@ mod tests {
             let cup_contents = registry
                 .get_cup_contents(subnet_id, registry.get_latest_version())
                 .expect("Failed to retreive the DKG transcripts from registry");
-            let genesis_summary = get_dkg_summary_from_cup_contents(
+            let genesis_summary = get_genesis_dkg_summary_from_cup_contents(
                 cup_contents.value.expect("Missing CUP contents"),
                 subnet_id,
                 &*registry,

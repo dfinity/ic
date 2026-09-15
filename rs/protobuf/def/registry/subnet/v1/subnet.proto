@@ -153,23 +153,14 @@ message ChainKeyInitialization {
 // a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
 // construct the genesis CUP or a recovery CUP in the event of a subnet stall.
 message CatchUpPackageContents {
+  reserved 3, 4, 5;
+  reserved "height", "time", "state_hash";
+
   // Initial non-interactive low-threshold DKG transcript
   InitialNiDkgTranscriptRecord initial_ni_dkg_transcript_low_threshold = 1;
 
   // Initial non-interactive high-threshold DKG transcript
   InitialNiDkgTranscriptRecord initial_ni_dkg_transcript_high_threshold = 2;
-
-  // The blockchain height that the CUP should have
-  // TODO(CON-1671): deprecate this field in favor of `cup_type`
-  uint64 height = 3;
-
-  // Block time for the CUP's block
-  // TODO(CON-1671): deprecate this field in favor of `cup_type`
-  uint64 time = 4;
-
-  // The hash of the state that the subnet should use
-  // TODO(CON-1671): deprecate this field in favor of `cup_type`
-  bytes state_hash = 5;
 
   // A uri from which data to replace the registry local store should be downloaded
   RegistryStoreUri registry_store_uri = 6;

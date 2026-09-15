@@ -5,7 +5,7 @@ use crate::framework::ConsensusDriver;
 use assert_matches::assert_matches;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
 use ic_consensus_certification::CertifierImpl;
-use ic_consensus_dkg::{DkgKeyManager, get_dkg_summary_from_cup_contents};
+use ic_consensus_dkg::{DkgKeyManager, get_genesis_dkg_summary_from_cup_contents};
 use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool, pool_reader::PoolReader};
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
@@ -140,7 +140,7 @@ fn consensus_produces_expected_batches() {
         let cup_contents = registry_client
             .get_cup_contents(subnet_id, registry_client.get_latest_version())
             .expect("Failed to retreive the DKG transcripts from registry");
-        let summary = get_dkg_summary_from_cup_contents(
+        let summary = get_genesis_dkg_summary_from_cup_contents(
             cup_contents.value.expect("Missing CUP contents"),
             replica_config.subnet_id,
             &*registry_client,
