@@ -19,7 +19,8 @@ use ic_protobuf::registry::{
     crypto::v1::ChainKeyEnabledSubnetList,
     subnet::v1::{
         CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, EcdsaInitialization,
-        KeyConfig as KeyConfigPb, SubnetListRecord, SubnetRecord,
+        KeyConfig as KeyConfigPb, RecoveryArgs, SubnetListRecord, SubnetRecord,
+        catch_up_package_contents::CupType,
     },
 };
 use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
@@ -203,6 +204,14 @@ fn test_recover_subnet_with_replacement_nodes() {
             assert_eq!(payload.height, updated_cup_contents.height);
             assert_eq!(payload.time_ns, updated_cup_contents.time);
             assert_eq!(payload.state_hash, updated_cup_contents.state_hash);
+            assert_eq!(
+                updated_cup_contents.cup_type,
+                Some(CupType::Recovery(RecoveryArgs {
+                    height: payload.height,
+                    time: payload.time_ns,
+                    state_hash: payload.state_hash,
+                }))
+            );
 
             // DKG should have been changed
             assert_ne!(
