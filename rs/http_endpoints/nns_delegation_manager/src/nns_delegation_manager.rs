@@ -147,12 +147,12 @@ enum FetchOutcome {
     Unchanged,
     /// A delegation which may be published, or the absence of a delegation because we are on
     /// the NNS subnet. Note that this does not guarantee consistency with the certified state:
-    /// only the proactive path holds an inconsistent delegation back, while the reactive path
-    /// deliberately republishes whatever the NNS serves once what we publish has gone stale
-    /// (see [`DelegationManager::reactive_fetch`]).
+    /// only a proactively fetched delegation is ever held back, while the reactive path never
+    /// holds back what it fetches itself and deliberately republishes whatever the NNS serves
+    /// once what we publish has gone stale (see [`DelegationManager::reactive_fetch`]).
     Publish(Option<NNSDelegationBuilder>),
     /// A delegation which was fetched successfully but which is inconsistent with the latest
-    /// certified state, and which therefore has to be held back until the state has caught up.
+    /// certified state, and which therefore has to be held back until the state agrees with it.
     /// [`DelegationManager::reactive_fetch`] re-evaluates it on every reactive tick.
     HoldBack(NNSDelegationBuilder),
 }
@@ -211,8 +211,8 @@ impl DelegationManager {
         .await
     }
 
-    /// Fetches a delegation from the NNS subnet and holds it back if it is incompatible with the
-    /// latest certified state, i.e. if it is ahead of the state.
+    /// Fetches a delegation from the NNS subnet and holds it back if it is inconsistent with the
+    /// latest certified state.
     async fn fetch_and_hold_back_if_inconsistent(&self) -> FetchOutcome {
         let Some(new_delegation) = self.fetch().await else {
             // We are on the NNS subnet, where there is no delegation to fetch. Publish the
@@ -221,17 +221,15 @@ impl DelegationManager {
         };
 
         if self.is_delegation_valid_with_respect_to_state(Some(&new_delegation)) == Some(false) {
-            // If the new delegation is incompatible with our state, hold it back. Once the state
-            // will have caught up, `reactive_fetch` will publish it.
-            // When not being able to determine this (e.g. the call above returned `None`, still
-            // accept it)
+            // If the new delegation is inconsistent with our state, hold it back;
+            // `reactive_fetch` publishes it once the state agrees with it. If consistency cannot
+            // be determined (the check above returned `None`), accept it.
             self.metrics.held_back_delegations.inc();
             warn!(
-                every_n_seconds => 30,
                 self.log,
                 "Holding back the NNS delegation which was just fetched because it is \
-                inconsistent with the latest certified state. It will be published as soon as \
-                the certified state has caught up."
+                inconsistent with the latest certified state. It will be published once the \
+                certified state agrees with it, or superseded by the next proactive fetch."
             );
             return FetchOutcome::HoldBack(new_delegation);
         }
@@ -241,25 +239,32 @@ impl DelegationManager {
 
     /// Fetches a delegation from the NNS subnet proactively, i.e. without checking if the current
     /// delegation is still valid with respect to the certified state. If the new delegation is
-    /// incompatible with the current certified state, it will be held back until the state has
-    /// caught up (i.e. returns [`FetchOutcome::HoldBack`]).
+    /// inconsistent with the current certified state, it will be held back until the state agrees
+    /// with it (i.e. returns [`FetchOutcome::HoldBack`]).
     async fn proactive_fetch(&self) -> FetchOutcome {
         self.fetch_and_hold_back_if_inconsistent().await
     }
 
     /// Publishes the delegation which a previous fetch held back as soon as the certified state
-    /// has caught up with it, without fetching it again. Otherwise fetches a delegation from the
-    /// NNS subnet, but only if the delegation which we published became incompatible with the
-    /// certified state. Returns [`FetchOutcome::Unchanged`] if neither applies.
+    /// agrees with it, without fetching it again. While the state still disagrees with it, keeps
+    /// holding it back (i.e. returns [`FetchOutcome::HoldBack`]) for as long as the delegation
+    /// which we published is still consistent with the state, and drops it otherwise. Fetches a
+    /// delegation from the NNS subnet only if the delegation which we published became
+    /// inconsistent with the certified state. Returns [`FetchOutcome::Unchanged`] only if nothing
+    /// is held back and what we published is still consistent with the state.
     async fn reactive_fetch(
         &self,
         old_delegation: Option<&NNSDelegationBuilder>,
         held_back_delegation: Option<NNSDelegationBuilder>,
     ) -> FetchOutcome {
-        // Whether the delegation which we published has become incompatible with the certified
+        // Whether the delegation which we published has become inconsistent with the certified
         // state. Note that this is `false` for as long as we haven't published one, because
         // `is_delegation_valid_with_respect_to_state` reports the absence of a delegation as
-        // valid. We determine it once, such that the decisions below can't disagree.
+        // valid. It is computed up front such that both branches below reuse the same verdict:
+        // re-evaluating it could otherwise drop the held back delegation and then return
+        // `Unchanged`. Note that the re-evaluation of the held back delegation below reads the
+        // certified state again, so the two checks may see different states. The only consequence
+        // is that we might keep holding back for one more tick.
         let published_delegation_is_stale =
             self.is_delegation_valid_with_respect_to_state(old_delegation) == Some(false);
 
@@ -272,24 +277,24 @@ impl DelegationManager {
             {
                 info!(
                     self.log,
-                    "The latest certified state caught up with the NNS delegation which was held \
-                    back. Publishing the latter."
+                    "The NNS delegation which was held back is no longer known to be \
+                    inconsistent with the latest certified state. Publishing it."
                 );
                 return FetchOutcome::Publish(Some(held_back_delegation));
             }
 
             if !published_delegation_is_stale {
-                // The certified state hasn't caught up with the delegation which we are holding
-                // back, and what we publish (if anything) is still compatible with the state, so
+                // The certified state still disagrees with the delegation which we are holding
+                // back, and what we publish (if anything) is still consistent with the state, so
                 // keep holding the newer delegation back. Note that this is also the case in which
                 // no delegation has been published yet: we keep re-evaluating the delegation which
-                // the first proactive fetch held back until the state catches up with it, instead
-                // of leaving the receivers uninitialized until the next proactive tick.
+                // the first proactive fetch held back until the state agrees with it, instead of
+                // leaving the receivers uninitialized until the next proactive tick.
                 return FetchOutcome::HoldBack(held_back_delegation);
             }
 
-            // The certified state moved past both what we publish and the delegation which we are
-            // holding back, so the latter is of no use anymore. Drop it and fall through to a
+            // The certified state disagrees with both what we publish and the delegation which we
+            // are holding back, so the latter is of no use anymore. Drop it and fall through to a
             // regular reactive fetch, otherwise we would keep serving a delegation which we know
             // to be stale until the next proactive tick.
         }
@@ -326,13 +331,14 @@ impl DelegationManager {
         let mut last_delegation = None;
 
         // A delegation which we fetched successfully but which we are holding back because it is
-        // ahead of the latest certified state. Keeping it around allows every reactive tick to
-        // re-evaluate it against the certified state and to publish it as soon as the state has
-        // caught up, without fetching it from the NNS again. This matters in particular before the
-        // first delegation has been published: `is_delegation_valid_with_respect_to_state(None)`
-        // is `Some(true)`, so a `reactive_fetch` which only looked at `last_delegation` would
-        // never fetch anything, and the replica would keep reporting `WaitingForRootDelegation`
-        // until the next proactive tick, i.e. for up to `DELEGATION_PROACTIVE_UPDATE_INTERVAL`.
+        // inconsistent with the latest certified state. Keeping it around allows every reactive
+        // tick to re-evaluate it against the certified state and to publish it as soon as the
+        // state agrees with it, without fetching it from the NNS again. This matters in particular
+        // before the first delegation has been published: since
+        // `is_delegation_valid_with_respect_to_state(None)` is `Some(true)`, a `reactive_fetch`
+        // which only looked at `last_delegation` would never fetch anything, and the replica would
+        // keep reporting `WaitingForRootDelegation` until the next proactive tick, i.e. for up to
+        // `DELEGATION_PROACTIVE_UPDATE_INTERVAL`.
         let mut held_back_delegation: Option<NNSDelegationBuilder> = None;
 
         loop {
@@ -348,8 +354,8 @@ impl DelegationManager {
             let new_delegation = match outcome {
                 // No new delegation was fetched. Retry on the next tick.
                 FetchOutcome::Unchanged => continue,
-                // The delegation is ahead of the certified state. Keep it around such that the
-                // next reactive tick can re-evaluate it against the state.
+                // The delegation is inconsistent with the certified state. Keep it around such
+                // that the next reactive tick can re-evaluate it against the state.
                 FetchOutcome::HoldBack(delegation) => {
                     held_back_delegation = Some(delegation);
                     continue;
@@ -1795,6 +1801,15 @@ mod tests {
         let old_delegation =
             fetch_initial_delegation(&rt_handle, registry_client.as_ref(), tls_config.as_ref())
                 .await;
+        // Remember the subnets which agree with the delegation, such that the state can be made to
+        // agree with it again below.
+        let subnets = mutable_state
+            .read()
+            .unwrap()
+            .metadata
+            .network_topology
+            .subnets()
+            .clone();
         {
             let mut state = mutable_state.write().unwrap();
             let subnet_id = state.metadata.own_subnet_id;
@@ -1860,9 +1875,32 @@ mod tests {
         // until the next proactive tick.
         assert_matches!(
             manager
-                .reactive_fetch(Some(&old_delegation), Some(held_back))
+                .reactive_fetch(Some(&old_delegation), Some(held_back.clone()))
                 .await,
             FetchOutcome::Publish(Some(_))
+        );
+        assert_eq!(manager.metrics.reactive_fetches.get(), 2);
+        assert_eq!(manager.metrics.held_back_delegations.get(), 1);
+
+        // Once the certified state agrees with the delegation which we are holding back, it must
+        // be published as is, i.e. without fetching it from the NNS again. (The mock NNS bumps the
+        // certificate's time on every request, so a delegation which was fetched again would not
+        // compare equal.)
+        {
+            let mut state = mutable_state.write().unwrap();
+            state
+                .metadata
+                .modify_network_topology(|topology| topology.set_subnets(subnets));
+        }
+        assert_eq!(
+            manager.is_delegation_valid_with_respect_to_state(Some(&held_back)),
+            Some(true)
+        );
+        assert_matches!(
+            manager
+                .reactive_fetch(/*old_delegation=*/ None, Some(held_back.clone()))
+                .await,
+            FetchOutcome::Publish(Some(delegation)) if delegation == held_back
         );
         assert_eq!(manager.metrics.reactive_fetches.get(), 2);
         assert_eq!(manager.metrics.held_back_delegations.get(), 1);
@@ -2122,10 +2160,18 @@ mod tests {
                 .modify_network_topology(|topology| topology.set_subnets(subnets));
         }
 
-        // The delegation should now be published by a reactive tick. Note that by construction
-        // only a few hundred milliseconds have passed at this point, so the window below closes
-        // well before the second proactive tick (at
-        // `DELEGATION_PROACTIVE_UPDATE_INTERVAL`) could publish anything.
+        // The delegation should now be published by a reactive tick. Note that at most
+        // `2 * DELEGATION_REACTIVE_UPDATE_INTERVAL + 200ms` have passed since the manager started
+        // (the two timeouts above), so the window below closes before the second proactive tick
+        // (at `DELEGATION_PROACTIVE_UPDATE_INTERVAL`) could publish anything. This is what makes
+        // the test fail on an implementation which doesn't publish the held back delegation
+        // reactively, so keep it that way when changing any of the timeouts.
+        assert!(
+            DELEGATION_REACTIVE_UPDATE_INTERVAL * 4 + Duration::from_millis(200)
+                < DELEGATION_PROACTIVE_UPDATE_INTERVAL,
+            "The timeouts in this test must add up to less than the proactive interval, \
+            otherwise it could pass thanks to the second proactive tick"
+        );
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
             reader.wait_until_initialized(),
@@ -2133,10 +2179,19 @@ mod tests {
         .await
         .expect(
             "`reactive_fetch` should publish the held back delegation as soon as the certified \
-            state caught up with it",
+            state agrees with it",
         )
         .unwrap();
         assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_some());
+        // ... and it must have been the held back delegation which was published, i.e. nothing
+        // was fetched from the NNS again.
+        assert_eq!(
+            int_counter_value(
+                &metrics_registry,
+                "nns_delegation_manager_reactive_fetches_total"
+            ),
+            0
+        );
     }
 
     #[rstest]
