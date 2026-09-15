@@ -7,7 +7,9 @@ use ic_consensus_idkg::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, warn};
-use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
+use ic_protobuf::registry::subnet::v1::{
+    CatchUpPackageContents, catch_up_package_contents::CupType,
+};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     Height, RegistryVersion, SubnetId, Time,
@@ -24,8 +26,10 @@ use ic_types::{
 };
 use phantom_newtype::Id;
 
-/// Constructs a genesis/recovery CUP from the CUP contents associated with the
-/// given subnet from the provided CUP contents
+/// Constructs a genesis/recovery CUP from the CUP contents associated with the given subnet from
+/// the provided CUP contents.
+/// Registry CUPs intended for subnet splitting are explicitly excluded here as they are used for a
+/// different purpose, directly by Consensus
 pub fn make_registry_cup_from_cup_contents(
     registry: &dyn RegistryClient,
     subnet_id: SubnetId,
@@ -33,6 +37,15 @@ pub fn make_registry_cup_from_cup_contents(
     registry_version: RegistryVersion,
     logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
+    // If the CUP we are about to build is a subnet splitting CUP, return early. It makes no sense
+    // to build a registry CUP out of subnet splitting CUP contents because the transcripts here are
+    // used directly by consensus to build the CUP themselves, i.e. nodes threshold-sign it, instead
+    // of blindly taking it from the registry here.
+    match cup_contents.cup_type {
+        Some(CupType::SubnetSplitting(..)) => return None,
+        Some(CupType::Genesis(..)) | Some(CupType::Recovery(..)) | None => {}
+    }
+
     let replica_version = match registry.get_replica_version(subnet_id, registry_version) {
         Ok(Some(replica_version)) => replica_version,
         err => {
@@ -265,8 +278,11 @@ mod tests {
     const LATEST_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(12345);
 
     /// Builds a registry client serving the CUP contents and the subnet record which
-    /// [`make_registry_cup`] needs, with the given `registry_store_uri` in the CUP contents.
-    fn setup_registry(registry_store_uri: Option<RegistryStoreUri>) -> impl RegistryClient {
+    /// [`make_registry_cup`] needs, with the given `registry_store_uri` and `cup_type`.
+    fn setup_registry_with_cup_type(
+        registry_store_uri: Option<RegistryStoreUri>,
+        cup_type: CupType,
+    ) -> impl RegistryClient {
         MockRegistryClient::new(LATEST_REGISTRY_VERSION, move |key, _| {
             use prost::Message;
             if key.starts_with("catch_up_package_contents_") {
@@ -286,11 +302,7 @@ mod tests {
                         registry_store_uri: registry_store_uri.clone(),
                         ecdsa_initializations: vec![],
                         chain_key_initializations: vec![],
-                        cup_type: Some(CupType::Recovery(RecoveryArgs {
-                            height: 54321,
-                            time: 1,
-                            state_hash: vec![1, 2, 3, 4, 5],
-                        })),
+                        cup_type: Some(cup_type.clone()),
                     };
 
                 // Encode the cup to protobuf
@@ -315,6 +327,17 @@ mod tests {
                 None
             }
         })
+    }
+
+    fn setup_registry(registry_store_uri: Option<RegistryStoreUri>) -> impl RegistryClient {
+        setup_registry_with_cup_type(
+            registry_store_uri,
+            CupType::Recovery(RecoveryArgs {
+                height: 54321,
+                time: 1,
+                state_hash: vec![1, 2, 3, 4, 5],
+            }),
+        )
     }
 
     #[test]
@@ -381,6 +404,26 @@ mod tests {
             );
             assert_eq!(cup.content.registry_version(), expected_registry_version);
         }
+    }
+
+    #[test]
+    fn test_make_registry_cup_with_subnet_splitting_cup_type() {
+        let registry_client = setup_registry_with_cup_type(
+            /*registry_store_uri=*/ None,
+            CupType::SubnetSplitting(Default::default()),
+        );
+
+        let result = make_registry_cup(
+            &registry_client,
+            subnet_test_id(0),
+            registry_client.get_latest_version(),
+            &no_op_logger(),
+        );
+
+        assert!(
+            result.is_none(),
+            "Expected None for subnet splitting CUP contents"
+        );
     }
 
     /// `RegistryClient` implementation that allows to provide a custom function
