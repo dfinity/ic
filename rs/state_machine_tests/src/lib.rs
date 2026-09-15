@@ -32,7 +32,7 @@ use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
-    canister_http::{CanisterHttpChangeAction, CanisterHttpPool, ResponseDisposition},
+    canister_http::{CanisterHttpChangeAction, CanisterHttpPool, ResponseVisibility},
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
@@ -2867,7 +2867,7 @@ impl StateMachine {
                 CanisterHttpChangeAction::AddToValidated(
                     share.clone(),
                     response.clone(),
-                    ResponseDisposition::KeepLocal,
+                    ResponseVisibility::Withhold,
                 ),
             ]);
         }

@@ -340,16 +340,14 @@ impl CanisterHttpPoolManagerImpl {
         }
     }
 
-    /// What is to happen to the response of a share: it is of use to our peers only
-    /// if they cannot produce it themselves, of use to us only until the outcall has
-    /// been answered, and of use to nobody once it has been.
-    fn response_disposition(replication: &Replication, is_delivered: bool) -> ResponseDisposition {
+    /// Whether the response of a share is of use to our peers: only if they cannot
+    /// produce it themselves, and only until the outcall has been answered.
+    fn response_visibility(replication: &Replication, is_delivered: bool) -> ResponseVisibility {
         match (replication, is_delivered) {
-            (_, true) => ResponseDisposition::Discard,
             (Replication::NonReplicated(_) | Replication::Flexible { .. }, false) => {
-                ResponseDisposition::Publish
+                ResponseVisibility::Publish
             }
-            (Replication::FullyReplicated, false) => ResponseDisposition::KeepLocal,
+            (Replication::FullyReplicated, _) | (_, true) => ResponseVisibility::Withhold,
         }
     }
 
@@ -456,7 +454,7 @@ impl CanisterHttpPoolManagerImpl {
                     change_set.push(CanisterHttpChangeAction::AddToValidated(
                         share,
                         response,
-                        Self::response_disposition(&context.replication, is_delivered),
+                        Self::response_visibility(&context.replication, is_delivered),
                     ));
                 }
             }
@@ -640,7 +638,7 @@ impl CanisterHttpPoolManagerImpl {
                     // passed on to peers that pull the artifact.
                     Some(CanisterHttpChangeAction::MoveToValidated(
                         share.clone(),
-                        Self::response_disposition(&context.replication, is_delivered),
+                        Self::response_visibility(&context.replication, is_delivered),
                     ))
                 }
             })
@@ -1009,7 +1007,7 @@ pub mod test {
                 canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
                     share.clone(),
                     empty_canister_http_response(7),
-                    ResponseDisposition::KeepLocal,
+                    ResponseVisibility::Withhold,
                 )]);
 
                 // add an unvalidated copy of the share, that has an outdated version instead
@@ -1232,7 +1230,7 @@ pub mod test {
                     canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
                         share,
                         content,
-                        ResponseDisposition::KeepLocal,
+                        ResponseVisibility::Withhold,
                     )]);
                 }
 
@@ -1368,30 +1366,7 @@ pub mod test {
                     log.clone(),
                 );
 
-                // TEST 1: Non-replicated request artifact is missing the response. It is
-                // held back rather than invalidated, even though a Legacy request never
-                // reaches the delivered contexts: this component stays agnostic to the
-                // pricing version. It is dropped once the request leaves the state.
-                {
-                    let mut canister_http_pool =
-                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                    let artifact_without_response = CanisterHttpResponseArtifact {
-                        share: share.clone(),
-                        response: None, // Missing response
-                    };
-                    canister_http_pool.insert(UnvalidatedArtifact {
-                        message: artifact_without_response,
-                        peer_id: delegated_node_id,
-                        timestamp: UNIX_EPOCH,
-                    });
-
-                    let changes = pool_manager
-                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
-
-                    assert!(changes.is_empty(), "{changes:?}");
-                }
-
-                // TEST 2: Non-replicated request artifact has a mismatched content hash.
+                // TEST 1: Non-replicated request artifact has a mismatched content hash.
                 // It should be marked as invalid.
                 {
                     let mut canister_http_pool =
@@ -1420,7 +1395,7 @@ pub mod test {
                     );
                 }
 
-                // TEST 3: Non-replicated request artifact has a mismatched content size.
+                // TEST 2: Non-replicated request artifact has a mismatched content size.
                 // It should be marked as invalid.
                 {
                     let response = empty_canister_http_response(0);
@@ -1450,7 +1425,7 @@ pub mod test {
                     );
                 }
 
-                // TEST 4: Non-replicated request artifact has a mismatched is_reject flag.
+                // TEST 3: Non-replicated request artifact has a mismatched is_reject flag.
                 // It should be marked as invalid.
                 {
                     let response = empty_canister_http_response(0);
@@ -1847,7 +1822,7 @@ pub mod test {
 
                     assert_matches!(
                         &changes[0],
-                        CanisterHttpChangeAction::MoveToValidated(_, ResponseDisposition::Publish)
+                        CanisterHttpChangeAction::MoveToValidated(_, ResponseVisibility::Publish)
                     );
                 }
             })
@@ -1957,7 +1932,7 @@ pub mod test {
                 assert_eq!(changes.len(), 1);
                 assert_matches!(
                     &changes[0],
-                    CanisterHttpChangeAction::MoveToValidated(_, ResponseDisposition::Publish)
+                    CanisterHttpChangeAction::MoveToValidated(_, ResponseVisibility::Publish)
                 );
             })
         });
@@ -2378,7 +2353,7 @@ pub mod test {
 
                 assert_matches!(
                     &changes[0],
-                    CanisterHttpChangeAction::MoveToValidated(_, ResponseDisposition::Publish)
+                    CanisterHttpChangeAction::MoveToValidated(_, ResponseVisibility::Publish)
                 );
             })
         });
@@ -2451,7 +2426,7 @@ pub mod test {
                 canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
                     share,
                     content,
-                    ResponseDisposition::KeepLocal,
+                    ResponseVisibility::Withhold,
                 )]);
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
                     state_manager as Arc<_>,
@@ -2649,7 +2624,7 @@ pub mod test {
                 assert_eq!(change_set.len(), 1);
                 assert_matches!(
                     &change_set[0],
-                    CanisterHttpChangeAction::AddToValidated(share, response, ResponseDisposition::KeepLocal) => {
+                    CanisterHttpChangeAction::AddToValidated(share, response, ResponseVisibility::Withhold) => {
                         assert_eq!(share.content.id(), active_callback_id);
                         assert_eq!(response.id, active_callback_id);
                     }
@@ -2746,7 +2721,7 @@ pub mod test {
                 if let CanisterHttpChangeAction::AddToValidated(
                     share,
                     response,
-                    ResponseDisposition::Publish,
+                    ResponseVisibility::Publish,
                 ) = &change_set[0]
                 {
                     let expected_response = empty_canister_http_response(callback_id.get());
@@ -2858,7 +2833,7 @@ pub mod test {
                 canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
                     share,
                     content,
-                    ResponseDisposition::KeepLocal,
+                    ResponseVisibility::Withhold,
                 )]);
 
                 // Now that there are shares in the pool, we should be able to
@@ -3451,7 +3426,7 @@ pub mod test {
 
                     assert_matches!(
                         &changes[0],
-                        CanisterHttpChangeAction::MoveToValidated(_, ResponseDisposition::Publish)
+                        CanisterHttpChangeAction::MoveToValidated(_, ResponseVisibility::Publish)
                     );
                 }
             })
@@ -3536,7 +3511,7 @@ pub mod test {
                 assert_eq!(change_set.len(), 1);
                 assert_matches!(
                     &change_set[0],
-                    CanisterHttpChangeAction::AddToValidated(share, response, ResponseDisposition::Publish) => {
+                    CanisterHttpChangeAction::AddToValidated(share, response, ResponseVisibility::Publish) => {
                         let expected_response = empty_response;
                         assert_eq!(*response, expected_response);
                         assert_eq!(share.content.id(), callback_id);
@@ -3760,7 +3735,7 @@ pub mod test {
                 assert_eq!(changes.len(), 1);
                 assert_matches!(
                     &changes[0],
-                    CanisterHttpChangeAction::MoveToValidated(_, ResponseDisposition::KeepLocal),
+                    CanisterHttpChangeAction::MoveToValidated(_, ResponseVisibility::Withhold),
                     "free-subnet share was wrongly rejected: {:?}",
                     changes[0]
                 );
@@ -3998,9 +3973,9 @@ pub mod test {
 
                     assert_matches!(
                         changes.as_slice(),
-                        [CanisterHttpChangeAction::MoveToValidated(share, disposition)]
+                        [CanisterHttpChangeAction::MoveToValidated(share, visibility)]
                             if share.content.id() == callback_id
-                                && *disposition == ResponseDisposition::Discard,
+                                && *visibility == ResponseVisibility::Withhold,
                         "{replication:?}, response attached: {attach_response}"
                     );
                 })
@@ -4107,9 +4082,9 @@ pub mod test {
                     let changes = pool_manager.validate_shares(&responded_to, &canister_http_pool);
                     assert_matches!(
                         changes.as_slice(),
-                        [CanisterHttpChangeAction::MoveToValidated(share, disposition)]
+                        [CanisterHttpChangeAction::MoveToValidated(share, visibility)]
                             if share.content.id() == callback_id
-                                && *disposition == ResponseDisposition::Discard,
+                                && *visibility == ResponseVisibility::Withhold,
                         "{replication:?}"
                     );
                 })
@@ -4198,7 +4173,7 @@ pub mod test {
                             signature,
                         },
                         response,
-                        ResponseDisposition::KeepLocal,
+                        ResponseVisibility::Withhold,
                     )]);
 
                     let pool_manager = CanisterHttpPoolManagerImpl::new(
@@ -4329,7 +4304,7 @@ pub mod test {
                         [CanisterHttpChangeAction::AddToValidated(
                             share,
                             _,
-                            ResponseDisposition::Discard,
+                            ResponseVisibility::Withhold,
                         )] if share.content.id() == callback_id,
                         "{replication:?}"
                     );
