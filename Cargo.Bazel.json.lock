@@ -1,9 +1,9 @@
 {
   "binary_crates": [
-    "ic-gateway 0.2.0",
+    "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "c82aa9100f8a05ac7e11aeb78185cd63401c2d242397280458a941babd2b23df",
+  "checksum": "a01b1585b418401db5ca3fd4bb94f74bac5d47128a65e5c4e79ebeaf6282efaf",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17919,7 +17919,7 @@
             "target": "ic_agent"
           },
           {
-            "id": "ic-bn-lib 0.7.0",
+            "id": "ic-bn-lib 0.9.0",
             "target": "ic_bn_lib"
           },
           {
@@ -17979,7 +17979,7 @@
             "target": "ic_doge_interface"
           },
           {
-            "id": "ic-gateway 0.2.0",
+            "id": "ic-gateway 0.0.0-git",
             "target": "ic_gateway"
           },
           {
@@ -27290,7 +27290,7 @@
       ],
       "version": "0.49.1"
     },
-    "ic-bn-lib 0.7.0": {
+    "ic-bn-lib 0.9.0": {
       "common_attrs": {
         "crate_features": [
           "acme",
@@ -27422,7 +27422,7 @@
             "target": "ic_agent"
           },
           {
-            "id": "ic-custom-domains-canister-api 0.2.4",
+            "id": "ic-custom-domains-canister-api 0.3.0",
             "target": "ic_custom_domains_canister_api"
           },
           {
@@ -27659,8 +27659,8 @@
       "package_url": "https://github.com/dfinity/ic-bn-lib",
       "repository": {
         "Http": {
-          "sha256": "5195609bb6f45c53ad2e171ee5106b001e3a553fe6ce8f1f2662563430360003",
-          "url": "https://static.crates.io/crates/ic-bn-lib/0.7.0/download"
+          "sha256": "28846ee2f665e8cb50bc5dd95ba098f01e20ffd4f9dc31622378cab3f5e286af",
+          "url": "https://static.crates.io/crates/ic-bn-lib/0.9.0/download"
         }
       },
       "targets": [
@@ -27671,7 +27671,7 @@
           }
         }
       ],
-      "version": "0.7.0"
+      "version": "0.9.0"
     },
     "ic-btc-interface 0.4.0": {
       "common_attrs": {
@@ -28425,7 +28425,7 @@
       ],
       "version": "0.3.4"
     },
-    "ic-custom-domains-canister-api 0.2.4": {
+    "ic-custom-domains-canister-api 0.3.0": {
       "common_attrs": {
         "deps": [
           {
@@ -28459,11 +28459,11 @@
         "Apache-2.0"
       ],
       "name": "ic-custom-domains-canister-api",
-      "package_url": "https://github.com/dfinity/custom-domains",
+      "package_url": "https://github.com/dfinity/ic-bn-lib",
       "repository": {
         "Http": {
-          "sha256": "268df6565445943a8cf4bd1c2d6d86c33c65e23b32e7d3f155a7be8d90a07166",
-          "url": "https://static.crates.io/crates/ic-custom-domains-canister-api/0.2.4/download"
+          "sha256": "1dd5c4195dd9e82325f95e1a07add4d09a36a2b96655b006e9f2904b640642a8",
+          "url": "https://static.crates.io/crates/ic-custom-domains-canister-api/0.3.0/download"
         }
       },
       "targets": [
@@ -28474,7 +28474,7 @@
           }
         }
       ],
-      "version": "0.2.4"
+      "version": "0.3.0"
     },
     "ic-doge-interface 0.3.0": {
       "common_attrs": {
@@ -28635,7 +28635,7 @@
       ],
       "version": "0.2.0"
     },
-    "ic-gateway 0.2.0": {
+    "ic-gateway 0.0.0-git": {
       "common_attrs": {
         "crate_features": [
           "acme",
@@ -28707,7 +28707,7 @@
             "target": "humantime"
           },
           {
-            "id": "ic-bn-lib 0.7.0",
+            "id": "ic-bn-lib 0.9.0",
             "target": "ic_bn_lib"
           },
           {
@@ -28853,7 +28853,7 @@
       "repository": {
         "Git": {
           "commitish": {
-            "Rev": "a16fb54f4c8d4407b8134d63b57f864d67520062"
+            "Rev": "c3950760e20f7e7f6402637ded1390c64ba6072f"
           },
           "remote": "https://github.com/dfinity/ic-gateway"
         }
@@ -28872,7 +28872,7 @@
           }
         }
       ],
-      "version": "0.2.0"
+      "version": "0.0.0-git"
     },
     "ic-http-certification 3.1.0": {
       "common_attrs": {
@@ -28984,7 +28984,7 @@
             "target": "ic_utils"
           },
           {
-            "id": "thiserror 1.0.68",
+            "id": "thiserror 2.0.18",
             "target": "thiserror"
           }
         ],
@@ -29000,7 +29000,7 @@
       "repository": {
         "Git": {
           "commitish": {
-            "Rev": "cf47127b978b1ed9c64cf6cbc3ce82c93cec4c6c"
+            "Rev": "a51a25539053a394f28d9a2c3486af4be69fce76"
           },
           "remote": "https://github.com/dfinity/ic-http-gateway-protocol",
           "strip_prefix": "packages/ic-http-gateway-protocol"
@@ -36566,7 +36566,10 @@
     "maxminddb 0.29.0": {
       "common_attrs": {
         "crate_features": [
-          "default"
+          "default",
+          "memmap2",
+          "mmap",
+          "simdutf8"
         ],
         "deps": [
           {
@@ -36582,8 +36585,16 @@
             "target": "memchr"
           },
           {
+            "id": "memmap2 0.9.5",
+            "target": "memmap2"
+          },
+          {
             "id": "serde 1.0.228",
             "target": "serde"
+          },
+          {
+            "id": "simdutf8 0.1.5",
+            "target": "simdutf8"
           },
           {
             "id": "thiserror 2.0.18",
@@ -70808,7 +70819,7 @@
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.20",
     "ic-agent 0.49.1",
-    "ic-bn-lib 0.7.0",
+    "ic-bn-lib 0.9.0",
     "ic-btc-interface 0.4.0",
     "ic-canister-log 0.2.0",
     "ic-canister-runtime 0.2.3",
@@ -70823,7 +70834,7 @@
     "ic-certification 3.1.0",
     "ic-certified-map 0.3.4",
     "ic-doge-interface 0.3.0",
-    "ic-gateway 0.2.0",
+    "ic-gateway 0.0.0-git",
     "ic-http-certification 3.1.0",
     "ic-identity-hsm 0.49.1",
     "ic-management-canister-types 0.8.0",
