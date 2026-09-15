@@ -804,6 +804,61 @@ fn attested_eth_sweep_rejects_a_forged_attestation() {
     );
 }
 
+/// The rule the minter's per-address delegation nonce rests on: an authorization is applied
+/// before the call it rides with runs, and the delegation it installed survives that call's
+/// revert, so the address' nonce moves even when the sweep fails.
+#[test]
+fn a_reverting_sweep_still_installs_the_delegation_it_carries() {
+    let anvil = Anvil::start();
+    let chain_id = anvil.chain_id();
+
+    let minter_key = key_from_hex(MINTER_PRIVATE_KEY);
+    let minter = eth_address(&minter_key.public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+    let attacker_key = key_from_hex(ATTACKER_PRIVATE_KEY);
+
+    let Contracts {
+        helper, attested, ..
+    } = deploy_contracts(&anvil, &minter, &cex);
+
+    let principal = Principal::self_authenticating([0xEB]);
+    let key = derive_deposit_key(&principal);
+    let deposit = eth_address(&key.public_key());
+    assert_eq!(anvil.nonce(&deposit), 0);
+    assert!(anvil.code(&deposit).is_empty());
+
+    let forged = attest(&attacker_key, chain_id, &helper, &principal, &[0_u8; 32]);
+    let receipt = anvil.send_eip7702(
+        &minter_key,
+        chain_id,
+        &deposit,
+        ICkSweeperAttested::sweepEthCall {
+            principal: B256::from(encode_principal(&principal)),
+            subaccount: B256::ZERO,
+            r: B256::from(forged.r),
+            s: B256::from(forged.s),
+            v: forged.v,
+        }
+        .abi_encode(),
+        vec![sign_authorization(&key, chain_id, &attested, 0)],
+    );
+
+    assert!(
+        !status_ok(&receipt),
+        "a forged attestation must revert the sweep"
+    );
+    assert_eq!(
+        anvil.code(&deposit),
+        [&[0xef_u8, 0x01, 0x00][..], attested.as_ref()].concat(),
+        "the delegation the reverted sweep carried must be installed"
+    );
+    assert_eq!(
+        anvil.nonce(&deposit),
+        1,
+        "the applied authorization must have spent the deposit address' nonce"
+    );
+}
+
 #[test]
 fn a_stipend_transfer_from_a_contract_reaches_a_delegated_deposit_address() {
     let anvil = Anvil::start();
