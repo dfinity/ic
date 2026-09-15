@@ -384,23 +384,34 @@ impl SubnetMerging {
     }
 
     /// The recovery CUP of the destination subnet, at the merged state.
+    ///
+    /// Builds the proposal itself rather than going through
+    /// `Recovery::update_recovery_cup`, which stamps the CUP with the current
+    /// time: the merged subnet has to resume at the time the merge computed
+    /// from the two states it assembled, which is in the past by now.
     fn propose_cup(&self) -> RecoveryResult<impl Step + use<>> {
         let params = MergedStateParams::read(self.layout.merged_state_params_file())?;
 
-        self.recovery.update_recovery_cup(
-            self.params.destination_subnet_id,
-            Height::from(params.height),
-            params.state_hash,
-            /*replacement_nodes=*/ &[],
-            /*registry_params=*/ None,
-            // The merged subnets are both unavailable while the recovery CUP is
-            // created, so its DKG is handled by whichever subnet the NNS picks
-            // by default, which is neither of them.
-            /*initial_dkg_subnet_id=*/
-            None,
-            /*chain_key_subnet_id=*/ None,
-            Some(UNIX_EPOCH + Duration::from_nanos(params.time_nanos)),
-        )
+        Ok(AdminStep {
+            logger: self.recovery.logger.clone(),
+            ic_admin_cmd: self
+                .recovery
+                .admin_helper
+                .get_propose_to_update_recovery_cup_command(
+                    self.params.destination_subnet_id,
+                    Height::from(params.height),
+                    params.state_hash,
+                    // The merged subnets are both unavailable while the recovery
+                    // CUP is created, so its DKG is handled by whichever subnet
+                    // the NNS picks by default, which is neither of them.
+                    /*initial_dkg_subnet_id=*/
+                    None,
+                    /*chain_key_config=*/ None,
+                    /*replacement_nodes=*/ &[],
+                    /*registry_params=*/ None,
+                    UNIX_EPOCH + Duration::from_nanos(params.time_nanos),
+                ),
+        })
     }
 
     fn upload_state_and_restart_step(&self) -> RecoveryResult<impl Step + use<>> {

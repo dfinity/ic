@@ -2,7 +2,7 @@ use crate::{
     layout::{CUP_FILE_NAME, Layout},
     readiness,
     target_subnet::TargetSubnet,
-    utils::{MergedStateParams, first_registry_version_where},
+    utils::{MergedStateParams, first_registry_version_where, get_subnet_record_at_version},
 };
 
 use ic_base_types::SubnetId;
@@ -23,7 +23,10 @@ use ic_subnet_tools::{
     utils::{get_batch_time_from_cup, get_cup, get_state_hash},
     validation::validate_artifacts,
 };
-use ic_types::{Height, consensus::CatchUpPackage, consensus::HasHeight};
+use ic_types::{
+    Height,
+    consensus::{CatchUpContent, CatchUpPackage, HasHeight},
+};
 use slog::{Logger, info, warn};
 use url::Url;
 
@@ -110,9 +113,10 @@ impl Step for CheckCoolingDownStep {
         let registry_helper = self.registry_helper.clone();
         let cooling_down_version =
             first_registry_version_where(&self.registry_helper, |version| {
-                Ok(registry_helper
-                    .get_subnet_record_at_version(source_subnet_id, version)?
-                    .is_some_and(|record| record.cooling_down))
+                Ok(
+                    get_subnet_record_at_version(&registry_helper, source_subnet_id, version)?
+                        .is_some_and(|record| record.cooling_down),
+                )
             })?;
 
         info!(
@@ -235,26 +239,20 @@ impl WaitForHaltingCupStep {
     /// Returns the height of the halting CUP if the node has reached it, `None`
     /// if it has not yet, and an error if the node could not be asked.
     fn check(&self) -> RecoveryResult<Option<Height>> {
-        let cup = self.served_cup()?;
-        let cup_height = cup.height();
-        let cup_registry_version = cup
-            .content
-            .block
-            .get_value()
-            .payload
-            .as_ref()
-            .as_summary()
-            .dkg
-            .registry_version;
+        let cup_content = self.served_cup_content()?;
+        let cup_height = cup_content.height();
+        let cup_registry_version = cup_content.registry_version();
 
         // The `halt_at_cup_height` flag is read at the registry version of the
         // summary block active at a height, and that version only changes at a
         // summary, so batch delivery stops exactly when the summary carrying the
         // flag becomes active.
-        let halting = self
-            .registry_helper
-            .get_subnet_record_at_version(self.subnet_id, cup_registry_version)?
-            .is_some_and(|record| record.halt_at_cup_height);
+        let halting = get_subnet_record_at_version(
+            &self.registry_helper,
+            self.subnet_id,
+            cup_registry_version,
+        )?
+        .is_some_and(|record| record.halt_at_cup_height);
         if !halting {
             info!(
                 self.logger,
@@ -298,7 +296,7 @@ impl WaitForHaltingCupStep {
         // the halting CUP, too.
         let on_disk_cup = self.on_disk_cup()?;
         if on_disk_cup.height() != cup_height
-            || on_disk_cup.content.state_hash != cup.content.state_hash
+            || on_disk_cup.content.state_hash != cup_content.state_hash
         {
             info!(
                 self.logger,
@@ -313,8 +311,11 @@ impl WaitForHaltingCupStep {
         Ok(Some(cup_height))
     }
 
-    /// The CUP the node serves at its public endpoint.
-    fn served_cup(&self) -> RecoveryResult<CatchUpPackage> {
+    /// The content of the CUP the node serves at its public endpoint.
+    ///
+    /// Only the content, which is all that is checked here; the signature of
+    /// the CUP the state is downloaded with is verified by `ValidateCupStep`.
+    fn served_cup_content(&self) -> RecoveryResult<CatchUpContent> {
         let url = Url::parse(&format!("http://[{}]:8080/", self.node_ip)).map_err(|err| {
             RecoveryError::UnexpectedError(format!(
                 "Could not parse the URL of node {}: {err}",
@@ -322,7 +323,7 @@ impl WaitForHaltingCupStep {
             ))
         })?;
 
-        let cup_proto = block_on(ic_cup_explorer::get_cup(&url))
+        let content_proto = block_on(ic_cup_explorer::get_catchup_content(&url))
             .map_err(|err| {
                 RecoveryError::UnexpectedError(format!(
                     "Failed to get the CUP of node {}: {err}",
@@ -333,7 +334,7 @@ impl WaitForHaltingCupStep {
                 RecoveryError::UnexpectedError(format!("Node {} serves no CUP", self.node_ip))
             })?;
 
-        CatchUpPackage::try_from(&cup_proto).map_err(|err| {
+        CatchUpContent::try_from(content_proto).map_err(|err| {
             RecoveryError::UnexpectedError(format!(
                 "Failed to deserialize the CUP of node {}: {err}",
                 self.node_ip
