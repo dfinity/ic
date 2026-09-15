@@ -1217,7 +1217,7 @@ pub fn get_available_nodes_heights_from_metrics(
 }
 
 /// Lookup node IDs and corresponding IP addresses of all members of the given subnet
-fn get_member_node_ids_and_ips(
+pub fn get_member_node_ids_and_ips(
     registry_helper: &RegistryHelper,
     subnet_id: SubnetId,
 ) -> RecoveryResult<BTreeMap<NodeId, IpAddr>> {

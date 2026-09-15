@@ -296,11 +296,15 @@ const SWEEP_GAS_PER_TRANSFER: GasAmount = GasAmount::new(110_000);
 /// Gas one EIP-7702 authorization costs: 25'000 (`PER_EMPTY_ACCOUNT_COST`) charged upfront for
 /// every tuple, before any of them is looked at.
 ///
-/// Budgeted for every address the sweep touches, since every one of them carries a tuple. A tuple
-/// the EVM skips — the address is already delegated, so the nonce it was signed for no longer
-/// matches — is charged the same 25'000 and refunded 12'500 for an authority the state trie
-/// already holds. That refund lands after execution and so cannot shrink the limit the transaction
-/// had to declare, leaving 25'000 the figure to budget either way. Rounded up as its siblings are.
+/// Budgeted for the authorizations the sweep carries, which are those of the addresses it still has
+/// to delegate. An authorization the EVM skips — another sweep delegated the address in between, so
+/// the nonce it was signed for no longer matches — still costs the full 25'000: [EIP-7702] refunds
+/// 12'500 for an authority that already exists only once the authorization passed every check,
+/// including the nonce. That refund lands after execution and so cannot shrink the limit the
+/// transaction had to declare, leaving 25'000 the figure to budget either way. Rounded up as its
+/// siblings are.
+///
+/// [EIP-7702]: https://eips.ethereum.org/EIPS/eip-7702
 const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
 
 /// Gas one address of an ETH sweep costs beyond its authorization: the per-address dispatch
@@ -311,31 +315,26 @@ const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
 const SWEEP_GAS_PER_ETH_DEPOSIT: GasAmount = GasAmount::new(40_000);
 
 pub fn sweep_gas_limit(asset: Asset, items: &[AuthorizedSweepItem]) -> GasAmount {
-    let addresses = u64::try_from(
-        items
-            .iter()
-            .map(|authorized| authorized.item.deposit)
-            .collect::<BTreeSet<_>>()
-            .len(),
-    )
-    .unwrap_or(u64::MAX);
+    let addresses = items
+        .iter()
+        .map(|authorized| authorized.item.deposit)
+        .collect::<BTreeSet<_>>()
+        .len() as u64;
+    let authorizations = items
+        .iter()
+        .filter(|authorized| authorized.authorization.is_some())
+        .count() as u64;
     let gas_per_address: &[GasAmount] = match asset {
-        Asset::Eth => &[SWEEP_GAS_PER_ETH_DEPOSIT, SWEEP_GAS_PER_AUTHORIZATION],
-        Asset::Erc20(_) => &[
-            SWEEP_GAS_PER_BALANCE_CHECK,
-            SWEEP_GAS_PER_TRANSFER,
-            SWEEP_GAS_PER_AUTHORIZATION,
-        ],
+        Asset::Eth => &[SWEEP_GAS_PER_ETH_DEPOSIT],
+        Asset::Erc20(_) => &[SWEEP_GAS_PER_BALANCE_CHECK, SWEEP_GAS_PER_TRANSFER],
     };
     gas_per_address
         .iter()
-        .fold(SWEEP_BASE_GAS, |total, gas_per_address| {
+        .map(|gas_each| (*gas_each, addresses))
+        .chain([(SWEEP_GAS_PER_AUTHORIZATION, authorizations)])
+        .fold(SWEEP_BASE_GAS, |total, (gas_each, occurrences)| {
             total
-                .checked_add(
-                    gas_per_address
-                        .checked_mul(addresses)
-                        .unwrap_or(GasAmount::MAX),
-                )
+                .checked_add(gas_each.checked_mul(occurrences).unwrap_or(GasAmount::MAX))
                 .unwrap_or(GasAmount::MAX)
         })
 }
@@ -356,7 +355,7 @@ impl SweepRequest {
     }
 
     /// The delegations the sweep installs on the way, one per deposit address it still has to
-    /// delegate. Signed for nonce zero, so a tuple whose delegation is already installed is
+    /// delegate. Signed for nonce zero, so an authorization another sweep's delegation raced is
     /// skipped rather than sinking the sweep. Empty once every address the sweep touches is
     /// delegated, which is what makes it a plain EIP-1559 transaction.
     pub fn authorizations(&self) -> Vec<SignedAuthorization> {

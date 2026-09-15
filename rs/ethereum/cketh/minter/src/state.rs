@@ -21,7 +21,6 @@ use crate::state::transactions::{
     Erc20WithdrawalRequest, SweepRequest, TransactionCallData, WithdrawalRequest,
 };
 use crate::timed_sized_map::{Entry, Timestamp};
-use crate::tx::AuthorizationRequest;
 use crate::tx::GasFeeEstimate;
 use crate::tx::TransactionSignature;
 use candid::Principal;
@@ -270,6 +269,14 @@ impl State {
         Some(deposit_address(&master_public_key, &chain_code, account))
     }
 
+    /// The subaccount-aware deposit helper every attestation this minter signs names, `None` while
+    /// none is configured. Without it no deposit address can be attested, hence no sweep built.
+    pub fn deposit_helper_contract(&self) -> Option<Address> {
+        self.log_scrapings
+            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)
+            .copied()
+    }
+
     /// What a ckERC20 deposit address must attest to in order to be swept: the account it credits,
     /// bound to the chain and the subaccount-aware deposit helper this minter runs against.
     /// `None` while that helper is unknown.
@@ -277,9 +284,7 @@ impl State {
     /// The only place an [`AttestationRequest`] is built outside its own module, so a caller cannot
     /// attest under a chain or a helper the minter does not use.
     pub fn attestation_request(&self, account: Account) -> Option<AttestationRequest> {
-        let deposit_helper = *self
-            .log_scrapings
-            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)?;
+        let deposit_helper = self.deposit_helper_contract()?;
         Some(AttestationRequest::new(
             self.ethereum_network.chain_id(),
             deposit_helper,
@@ -291,9 +296,7 @@ impl State {
         &self,
         accounts: &[T],
     ) -> Option<Vec<AttestationRequest>> {
-        let deposit_helper = *self
-            .log_scrapings
-            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)?;
+        let deposit_helper = self.deposit_helper_contract()?;
         Some(
             accounts
                 .iter()
@@ -302,36 +305,6 @@ impl State {
                         self.ethereum_network.chain_id(),
                         deposit_helper,
                         *account.as_ref(),
-                    )
-                })
-                .collect(),
-        )
-    }
-
-    /// What every deposit address in `accounts` authorizes to let the configured sweeper contract
-    /// sweep it: the tuple naming this minter's chain, that contract, and nonce zero. `None` while
-    /// no sweeper contract is configured.
-    ///
-    /// The nonce is always zero, whatever the address actually holds. A deposit address is at
-    /// nonce zero exactly while it has never been delegated — applying an authorization spends it
-    /// — so the tuple either installs the delegation or is skipped, and both are correct in any
-    /// order the sweeps carrying them land. That is what lets a sweep authorize every address it
-    /// touches without tracking which ones are already delegated, at the price of the intrinsic
-    /// gas a skipped tuple still costs.
-    pub fn authorization_requests<T: AsRef<Account>>(
-        &self,
-        accounts: &[T],
-    ) -> Option<Vec<AuthorizationRequest>> {
-        let delegate = self.sweeper_contract_address?;
-        Some(
-            accounts
-                .iter()
-                .map(|account| {
-                    AuthorizationRequest::new(
-                        *account.as_ref(),
-                        self.ethereum_network.chain_id(),
-                        delegate,
-                        TransactionNonce::ZERO,
                     )
                 })
                 .collect(),
