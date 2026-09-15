@@ -481,12 +481,12 @@ mod tests {
             let bouncer = bouncer_factory.new_bouncer(&dkg_pool);
 
             let height_500_id = DkgMessageId {
-                hash: CryptoHash(vec![0]).into(),
                 height: Height::from(500),
+                hash: CryptoHash(vec![0]).into(),
             };
             let height_1000_id = DkgMessageId {
-                hash: CryptoHash(vec![1]).into(),
                 height: Height::from(1000),
+                hash: CryptoHash(vec![1]).into(),
             };
             assert_eq!(bouncer(&height_500_id), BouncerValue::Wants);
             assert_eq!(bouncer(&height_1000_id), BouncerValue::MaybeWantsLater);

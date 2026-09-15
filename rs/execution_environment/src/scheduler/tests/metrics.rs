@@ -34,7 +34,8 @@ use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
+    CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RejectContext, StopCanisterCallId,
+    StopCanisterContext,
 };
 use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::{
@@ -1102,6 +1103,295 @@ fn threshold_signature_agreements_metric_is_updated() {
     // Check that the requests were removed.
     let sign_with_threshold_contexts = &test.state().signature_request_contexts();
     assert!(sign_with_threshold_contexts.is_empty());
+}
+
+/// Asserts the invariant that ties `CanisterMetrics::consumed_cycles` to its
+/// monotonic counterpart: the gauge exceeds the monotonic amount by exactly the
+/// prepayments whose refund is still outstanding. Returns the latter.
+fn assert_consumed_cycles_invariant(
+    test: &SchedulerTest,
+    canister_id: CanisterId,
+) -> NominalCycles {
+    let system_state = &test.canister_state(canister_id).system_state;
+    let outstanding = system_state
+        .outstanding_prepayments()
+        .expect("Canister has a paused execution");
+    let metrics = system_state.canister_metrics();
+    assert!(
+        outstanding <= metrics.consumed_cycles(),
+        "the {outstanding} outstanding prepayments must not exceed the consumed \
+         cycles gauge {}",
+        metrics.consumed_cycles(),
+    );
+    assert_eq!(
+        metrics.consumed_cycles() - outstanding,
+        metrics.consumed_cycles_monotonic(),
+        "consumed cycles gauge {} minus the {outstanding} outstanding prepayments \
+         must equal the monotonic {}",
+        metrics.consumed_cycles(),
+        metrics.consumed_cycles_monotonic(),
+    );
+    outstanding
+}
+
+/// Opens a call to an xnet canister, so that the caller is left with an outstanding
+/// prepayment for the response.
+fn call_xnet_canister(test: &mut SchedulerTest, canister: CanisterId) {
+    let xnet_canister = test.xnet_canister_id();
+    test.send_ingress(
+        canister,
+        ingress(1).call(other_side(xnet_canister, 1), on_response(1)),
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+}
+
+#[test]
+fn consumed_cycles_monotonic_matches_the_gauge_net_of_outstanding_prepayments() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    call_xnet_canister(&mut test, canister);
+
+    let outstanding = assert_consumed_cycles_invariant(&test, canister);
+    assert_ne!(outstanding, NominalCycles::zero());
+}
+
+#[test]
+fn checkpoint_round_backfills_consumed_cycles_monotonic() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    call_xnet_canister(&mut test, canister);
+    let outstanding = assert_consumed_cycles_invariant(&test, canister);
+    assert_ne!(outstanding, NominalCycles::zero());
+
+    // Pretend the canister was loaded from a checkpoint predating the field.
+    test.canister_state_mut(canister)
+        .system_state
+        .reset_consumed_cycles_monotonic();
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_monotonic(),
+        NominalCycles::zero()
+    );
+
+    // An ordinary round does not backfill it, a checkpoint round does.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_monotonic(),
+        NominalCycles::zero()
+    );
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+    assert_consumed_cycles_invariant(&test, canister);
+    assert_ne!(
+        test.canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_monotonic(),
+        NominalCycles::zero()
+    );
+}
+
+/// A consumed cycles gauge below the outstanding prepayments is corrupt accounting:
+/// the gauge covers every prepayment that is still outstanding. The backfill reports
+/// it and leaves the canister alone; backfilling from such a gauge would instead
+/// turn the saturating subtraction into a derived zero that compares `Equal` and
+/// passes unnoticed.
+#[test]
+#[should_panic(expected = "outstanding prepayments exceed the consumed cycles gauge")]
+fn checkpoint_round_reports_outstanding_prepayments_above_the_gauge() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    call_xnet_canister(&mut test, canister);
+    let outstanding = assert_consumed_cycles_invariant(&test, canister);
+    assert_ne!(outstanding, NominalCycles::zero());
+
+    // Break the invariant: drop the gauge below the outstanding prepayments, taking
+    // the monotonic value down with it, so that a derived zero would compare `Equal`.
+    let system_state = &mut test.canister_state_mut(canister).system_state;
+    system_state.reset_consumed_cycles();
+    system_state.reset_consumed_cycles_monotonic();
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+}
+
+/// A monotonic value above the gauge net of the outstanding prepayments is corrupt
+/// accounting too. The backfill must report it rather than lower the monotonic
+/// value, which may only ever go up.
+///
+/// Note that this needs the outstanding prepayments to be zero: with a prepayment
+/// still outstanding, dropping the gauge would trip the `outstanding > gauge` check
+/// first and never reach this arm; the assertions below pin that down.
+#[test]
+#[should_panic(expected = "above the gauge")]
+fn checkpoint_round_reports_monotonic_above_the_gauge() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    // An ingress execution that runs to completion refunds its prepayment, so the
+    // canister is left with consumed cycles and nothing outstanding.
+    test.send_ingress(canister, ingress(100));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        assert_consumed_cycles_invariant(&test, canister),
+        NominalCycles::zero()
+    );
+    assert_ne!(
+        test.canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_monotonic(),
+        NominalCycles::zero()
+    );
+
+    // Break the invariant the other way: drop the gauge but keep the monotonic
+    // value, which now exceeds it net of the zero outstanding prepayments.
+    test.canister_state_mut(canister)
+        .system_state
+        .reset_consumed_cycles();
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+}
+
+/// A paused execution holds a prepayment that is not part of the replicated state,
+/// so it cannot be backfilled; but a checkpoint round aborts all paused executions
+/// before backfilling, materializing their prepayments into the task queues.
+#[test]
+fn checkpoint_round_backfills_consumed_cycles_monotonic_of_paused_canister() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(1000),
+            max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+    let canister = test.create_canister();
+
+    test.send_ingress(canister, ingress(1000));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.canister_state(canister).has_paused_execution());
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .outstanding_prepayments(),
+        None
+    );
+
+    // Pretend the canister was loaded from a checkpoint predating the field.
+    test.canister_state_mut(canister)
+        .system_state
+        .reset_consumed_cycles_monotonic();
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+
+    assert!(test.canister_state(canister).has_aborted_execution());
+    let outstanding = assert_consumed_cycles_invariant(&test, canister);
+    // The aborted execution's prepayment is outstanding, and is not part of the
+    // backfilled amount.
+    assert_ne!(outstanding, NominalCycles::zero());
+}
+
+/// A paused response execution is aborted before a checkpoint like any other, but
+/// its prepayments end up in the task queue in a shape of their own: the task itself
+/// prepays nothing, and the callback that it carries -- no longer registered with the
+/// `CallContextManager`, so counted exactly once -- accounts for them.
+#[test]
+fn checkpoint_round_backfills_consumed_cycles_monotonic_of_aborted_response_execution() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(1000),
+            max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+    let caller = test.create_canister();
+    let callee = test.create_canister();
+
+    // The call and the callee's execution take one instruction each; the response
+    // callback takes more than a slice, so it is paused.
+    test.send_ingress(
+        caller,
+        ingress(1).call(other_side(callee, 1), on_response(1000)),
+    );
+    // One round to execute the ingress message and send the call, one to execute the
+    // callee's message and reply, and one to start the response callback.
+    for _ in 0..3 {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+    assert!(test.canister_state(caller).has_paused_execution());
+    // The prepayments of a paused response execution are not part of the replicated
+    // state: the callback was unregistered when the response was popped and the
+    // paused execution holds them in memory.
+    assert!(
+        test.canister_state(caller)
+            .system_state
+            .call_context_manager()
+            .unwrap()
+            .callbacks()
+            .is_empty()
+    );
+    assert_eq!(
+        test.canister_state(caller)
+            .system_state
+            .outstanding_prepayments(),
+        None
+    );
+
+    // Pretend the canister was loaded from a checkpoint predating the field.
+    test.canister_state_mut(caller)
+        .system_state
+        .reset_consumed_cycles_monotonic();
+
+    // A checkpoint round aborts the paused execution before backfilling, which
+    // materializes the callback, and with it the prepayments, into the task queue.
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+
+    let system_state = &test.canister_state(caller).system_state;
+    let Some(ExecutionTask::AbortedExecution {
+        input: CanisterMessageOrTask::Message(CanisterMessage::Response { callback, .. }),
+        prepaid_execution_cycles,
+    }) = system_state.task_queue.paused_or_aborted_task()
+    else {
+        panic!(
+            "Expected an aborted response execution, got {:?}",
+            system_state.task_queue.paused_or_aborted_task()
+        );
+    };
+    // The aborted response execution prepays nothing of its own...
+    assert_eq!(prepaid_execution_cycles.nominal(), NominalCycles::zero());
+    // ...and its callback is not registered any more, so it is not counted twice.
+    assert!(
+        system_state
+            .call_context_manager()
+            .unwrap()
+            .callbacks()
+            .is_empty()
+    );
+    // The prepayments the callback carries are exactly what is outstanding, and thus
+    // what the backfill left out of the monotonic amount.
+    let outstanding = assert_consumed_cycles_invariant(&test, caller);
+    assert_eq!(
+        outstanding,
+        callback.prepayment_for_response_execution.nominal()
+            + callback.prepayment_for_call_transmission.nominal()
+    );
+    assert_ne!(
+        system_state.canister_metrics().consumed_cycles_monotonic(),
+        NominalCycles::zero()
+    );
 }
 
 #[test]

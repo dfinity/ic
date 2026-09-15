@@ -12,7 +12,7 @@ single_version_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.97.1"],
+    versions = ["1.98.1"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -719,7 +719,7 @@ crate.spec(
         "pubsub",
     ],
     package = "ic-bn-lib",
-    version = "^0.7.0",
+    version = "^0.9",
 )
 crate.spec(
     package = "ic-btc-interface",
@@ -782,7 +782,7 @@ crate.spec(
     features = ["acme"],
     git = "https://github.com/dfinity/ic-gateway",
     package = "ic-gateway",
-    tag = "v0.6.5",
+    tag = "v0.6.12",
 )
 crate.spec(
     package = "ic-http-certification",
@@ -1970,7 +1970,11 @@ crate.spec(
 )
 crate.spec(
     package = "vsock",
-    version = "^0.4",
+    version = "^0.5.4",
+)
+crate.spec(
+    package = "tokio-vsock",
+    version = "0.7.2",
 )
 crate.spec(
     package = "walkdir",
@@ -1985,7 +1989,7 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-encoder",
-    version = "^0.252.0",
+    version = "^0.254.0",
 )
 crate.spec(
     default_features = False,
@@ -1993,15 +1997,15 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-smith",
-    version = "^0.252.0",
+    version = "^0.254.0",
 )
 crate.spec(
     package = "wasmparser",
-    version = "^0.252.0",
+    version = "^0.254.0",
 )
 crate.spec(
     package = "wasmprinter",
-    version = "^0.252.0",
+    version = "^0.254.0",
 )
 crate.spec(
     default_features = False,
@@ -2013,15 +2017,15 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^47.0.3",
+    version = "^48.0.1",
 )
 crate.spec(
     package = "wast",
-    version = "^252.0.0",
+    version = "^254.0.0",
 )
 crate.spec(
     package = "wat",
-    version = "~1.252.0",
+    version = "~1.254.0",
 )
 crate.spec(
     package = "webpki-roots",

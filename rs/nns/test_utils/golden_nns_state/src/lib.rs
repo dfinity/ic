@@ -186,6 +186,11 @@ fn add_canister_range_to_routing_table(
 
 #[cfg(test)]
 mod tests {
+    // `create_routing_table` takes a `Vec<RangeInclusive<u64>>`, i.e. the `Vec`s below
+    // intentionally hold canister ID ranges as elements; they are not meant to be
+    // expanded into the (astronomically many) values contained in those ranges.
+    #![allow(clippy::single_range_in_vec_init)]
+
     use super::*;
 
     #[test]

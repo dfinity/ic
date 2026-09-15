@@ -3,6 +3,7 @@ mod tests;
 
 use crate::asset::{Asset, Erc20Asset, EthAsset};
 use crate::attestation::AttestationRequest;
+use crate::balance_scan::batcher::Delegation;
 use crate::deposit_address::DepositAddress;
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -205,11 +206,11 @@ impl AutomaticDeposits {
             .sweeper_transactions
             .get_processed_request(&id)
             .expect("BUG: missing sweep request");
-        let token = request.token;
+        let asset = request.asset;
         let accounts: Vec<_> = request.items.iter().map(|item| item.item.account).collect();
 
         for account in accounts {
-            let request = DepositRequest::new(account, Asset::Erc20(token));
+            let request = DepositRequest::new(account, asset);
             let entry = self
                 .sweep
                 .remove(&request)
@@ -277,6 +278,67 @@ impl AutomaticDeposits {
         signature: TransactionSignature,
     ) {
         self.authorizations.insert(request, signature);
+    }
+
+    /// What each of `targets` needs from a sweep calling `delegate` on `chain_id`, decided from the
+    /// delegation `delegations` read on chain for its address: no authorization at all once the
+    /// address is delegated to that contract, otherwise the authorization naming the chain, the
+    /// contract, and the nonce the authorization must spend. The batch names the contract it
+    /// decided against, so the sweep can refuse to call any other.
+    ///
+    /// A target whose address holds contract code, or whose delegation the read did not yield, is
+    /// left out rather than swept: no authorization can be applied to the first, and the second is
+    /// unknown ground. Both stay queued for a later tick.
+    ///
+    /// The nonce of an authorization is zero, the nonce of an address that has never been delegated
+    /// — applying an authorization spends it — so an authorization this sweep carries either
+    /// installs the delegation or is skipped, and both are correct in any order the sweeps carrying
+    /// them land.
+    pub fn sweep_delegations(
+        &self,
+        targets: &[SweepTarget],
+        delegations: &BTreeMap<DepositAddress, Delegation>,
+        chain_id: u64,
+        delegate: Address,
+    ) -> DelegatedSweepBatch {
+        let authorize = |target: &SweepTarget, nonce| {
+            Some(AuthorizationRequest::new(
+                target.account(),
+                chain_id,
+                delegate,
+                nonce,
+            ))
+        };
+        let targets = targets
+            .iter()
+            .filter_map(|target| {
+                let authorization = match delegations.get(&target.address()) {
+                    Some(Delegation::Delegated(installed)) if *installed == delegate => None,
+                    Some(Delegation::NotDelegated) => authorize(target, TransactionNonce::ZERO),
+                    // TODO DEFI-2997: track deposit address nonce. An authorization at nonce zero
+                    // cannot apply to an address already delegated: the address spent that nonce
+                    // when it was delegated, so the protocol skips the authorization and the
+                    // address keeps the other contract. Re-delegating it needs the nonce the
+                    // address has reached, which the minter does not track yet.
+                    Some(Delegation::Delegated(_another_delegate)) => {
+                        authorize(target, TransactionNonce::ZERO)
+                    }
+                    Some(Delegation::Other) | None => {
+                        log!(
+                            INFO,
+                            "[sweep_delegations]: LEAVING OUT {}: its delegation is unknown or it holds contract code",
+                            target.address().as_address()
+                        );
+                        return None;
+                    }
+                };
+                Some(DelegatedSweepTarget {
+                    target: *target,
+                    authorization,
+                })
+            })
+            .collect();
+        DelegatedSweepBatch { delegate, targets }
     }
 
     /// Arm the `(account, asset)` pair, whose deposit `address` is derived for `account`.
@@ -554,23 +616,14 @@ impl AutomaticDeposits {
         })
     }
 
-    /// The queued deposits a sweep could take next, batched by token, skipping those a sweep
+    /// The queued deposits a sweep could take next, batched by asset, skipping those a sweep
     /// already holds: taking them twice would move a balance the minter has already accounted for.
-    /// ETH entries stay queued but are never batched yet: they wait for the `sweepEthBatch` lane
-    /// (DEFI-2931).
-    pub fn requests_batch(
-        &self,
-        requested_batch_size: usize,
-    ) -> BTreeMap<Address, Vec<SweepTarget>> {
+    pub fn requests_batch(&self, requested_batch_size: usize) -> BTreeMap<Asset, Vec<SweepTarget>> {
         let mut batches = BTreeMap::new();
         for (deposit_request, sweep_entry) in
             self.sweep.iter().filter(|(_, entry)| entry.is_sweepable())
         {
-            let token = match deposit_request.asset {
-                Asset::Erc20(token) => token,
-                Asset::Eth => continue,
-            };
-            let batch: &mut Vec<_> = batches.entry(token).or_default();
+            let batch: &mut Vec<_> = batches.entry(deposit_request.asset).or_default();
             if batch.len() < requested_batch_size {
                 batch.push(SweepTarget {
                     account: deposit_request.account,
@@ -581,7 +634,7 @@ impl AutomaticDeposits {
         batches
     }
 
-    /// Record that `sweep_id` took these accounts' deposits of `token`: each leaves the pool of
+    /// Record that `sweep_id` took these accounts' deposits of `asset`: each leaves the pool of
     /// sweepable entries until the sweep is done with it.
     ///
     /// # Panics
@@ -591,11 +644,11 @@ impl AutomaticDeposits {
     pub fn record_sweep_scheduled(
         &mut self,
         sweep_id: SweepId,
-        token: Address,
+        asset: Asset,
         accounts: impl IntoIterator<Item = Account>,
     ) {
         for account in accounts {
-            let request = DepositRequest::new(account, Asset::Erc20(token));
+            let request = DepositRequest::new(account, asset);
             let entry = self
                 .sweep
                 .get_mut(&request)
@@ -799,4 +852,28 @@ impl AsRef<Account> for SweepTarget {
     fn as_ref(&self) -> &Account {
         &self.account
     }
+}
+
+/// A [`SweepTarget`] and the EIP-7702 authorization the sweep must carry for it, `None` once its
+/// address is already delegated to the sweeper contract the sweep calls.
+#[derive(Clone, Debug)]
+pub struct DelegatedSweepTarget {
+    pub target: SweepTarget,
+    pub authorization: Option<AuthorizationRequest>,
+}
+
+impl AsRef<Account> for DelegatedSweepTarget {
+    fn as_ref(&self) -> &Account {
+        self.target.as_ref()
+    }
+}
+
+/// The targets of one sweep, and the sweeper contract their delegations were classified against.
+///
+/// The sweep may only call that contract: a target carrying no authorization was read as already
+/// delegated to it, so a sweep calling anything else would reach code no read ever checked.
+#[derive(Clone, Debug)]
+pub struct DelegatedSweepBatch {
+    pub delegate: Address,
+    pub targets: Vec<DelegatedSweepTarget>,
 }
