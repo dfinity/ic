@@ -4265,7 +4265,7 @@ dependencies = [
  "url",
  "uuid",
  "virt",
- "vsock 0.4.0",
+ "vsock",
  "walkdir",
  "walrus",
  "wasm-encoder 0.252.0",
@@ -8516,18 +8516,6 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "thiserror 1.0.68",
-]
-
-[[package]]
-name = "nix"
-version = "0.27.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
-dependencies = [
- "bitflags 2.10.0",
- "cfg-if",
- "libc",
- "memoffset",
 ]
 
 [[package]]
@@ -13210,7 +13198,7 @@ dependencies = [
  "futures",
  "libc",
  "tokio",
- "vsock 0.5.4",
+ "vsock",
 ]
 
 [[package]]
@@ -14067,16 +14055,6 @@ name = "vsimd"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c3082ca00d5a5ef149bb8b555a72ae84c9c59f7250f013ac822ac2e49b19c64"
-
-[[package]]
-name = "vsock"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dfb6e7a74830912f1f4a7655227c9ded1ea4e9136676311fedf54bedb412f35"
-dependencies = [
- "libc",
- "nix 0.27.1",
-]
 
 [[package]]
 name = "vsock"

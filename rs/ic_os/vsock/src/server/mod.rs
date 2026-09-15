@@ -23,7 +23,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tokio_vsock::{VMADDR_CID_ANY, VsockAddr, VsockListener, VsockStream};
 
 const VSOCK_VERSION: HostOSVsockVersion = HostOSVsockVersion {
-    major: 1,
+    major: 2,
     minor: 0,
     patch: 0,
 };
@@ -32,7 +32,8 @@ const VSOCK_VERSION: HostOSVsockVersion = HostOSVsockVersion {
 // that only the first guest is able to connect over VSOCK, for now.
 const VIR_VSOCK_GUEST_CID_MIN: u32 = 3;
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+// Set a long timeout, so HostOS has enough time to upgrade.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct VsockServer {

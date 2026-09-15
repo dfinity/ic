@@ -1,5 +1,5 @@
 {
-  "checksum": "80ea62bc8e56b1c802075ba3ec55e8bc9367c2a1fbd6684dbf7350d0f5cde377",
+  "checksum": "cee6652bb415a29ba440f7f6147a01f18471efbeca7996b847844f6aa81cd0a4",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -24357,7 +24357,7 @@
               "target": "virt"
             },
             {
-              "id": "vsock 0.4.0",
+              "id": "vsock 0.5.4",
               "target": "vsock"
             },
             {
@@ -49538,74 +49538,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "nix 0.27.1": {
-      "name": "nix",
-      "version": "0.27.1",
-      "package_url": "https://github.com/nix-rust/nix",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/nix/0.27.1/download",
-          "sha256": "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "nix",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "nix",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "ioctl",
-            "memoffset",
-            "socket"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 2.10.0",
-              "target": "bitflags"
-            },
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "libc 0.2.186",
-              "target": "libc"
-            },
-            {
-              "id": "memoffset 0.9.0",
-              "target": "memoffset"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.27.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "nix 0.29.0": {
       "name": "nix",
@@ -83679,57 +83611,6 @@
       ],
       "license_file": null
     },
-    "vsock 0.4.0": {
-      "name": "vsock",
-      "version": "0.4.0",
-      "package_url": "https://github.com/rust-vsock/vsock-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/vsock/0.4.0/download",
-          "sha256": "2dfb6e7a74830912f1f4a7655227c9ded1ea4e9136676311fedf54bedb412f35"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "vsock",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "vsock",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.186",
-              "target": "libc"
-            },
-            {
-              "id": "nix 0.27.1",
-              "target": "nix"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.4.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "vsock 0.5.4": {
       "name": "vsock",
       "version": "0.5.4",
@@ -94824,7 +94705,7 @@
     "url 2.5.4",
     "uuid 1.12.1",
     "virt 0.4.2",
-    "vsock 0.4.0",
+    "vsock 0.5.4",
     "walkdir 2.5.0",
     "walrus 0.26.4",
     "wasm-encoder 0.252.0",

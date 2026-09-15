@@ -73,8 +73,8 @@ fn main() -> Result<()> {
     match response {
         Ok(Payload::HostOSVsockVersion(version)) => println!("{version}"),
         Ok(Payload::HostOSVersion(version)) => println!("{version}"),
+        Ok(Payload::NoPayload) => (),
         Err(error) => bail!("Server responded with error: '{error:#}'"),
-        _ => (),
     }
 
     Ok(())
