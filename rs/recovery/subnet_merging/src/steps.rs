@@ -20,7 +20,7 @@ use ic_registry_routing_table::RoutingTable;
 use ic_subnet_tools::{
     agent_helper::AgentHelper,
     state_tool_helper,
-    utils::{get_batch_time_from_cup, get_cup, get_state_hash},
+    utils::{get_cup, get_state_hash},
     validation::validate_artifacts,
 };
 use ic_types::{
@@ -413,13 +413,17 @@ impl Step for ValidateCupStep {
     }
 }
 
+/// How long [MergeStatesStep] waits before it reports success, so that the
+/// recovery CUP proposed afterwards is stamped past the batch times of the two
+/// checkpoints the merged state was assembled from.
+const SETTLE_TIME: Duration = Duration::from_secs(30);
+
 /// Assembles the merged state from the states the two subnets halted at: the
 /// state of the destination subnet, with the canisters and canister snapshots
 /// of the source subnet added to it, as a new checkpoint that the destination
 /// subnet is then recovered at.
 pub(crate) struct MergeStatesStep {
     pub(crate) layout: Layout,
-    pub(crate) time_margin: Duration,
     pub(crate) logger: Logger,
 }
 
@@ -427,8 +431,8 @@ impl Step for MergeStatesStep {
     fn descr(&self) -> String {
         format!(
             "Assemble the merged state from the states downloaded to {} and {}, as a new \
-             checkpoint in {}, and compute the height, the batch time and the state hash the \
-             recovery of the destination subnet needs.",
+             checkpoint in {}, and compute the height and the state hash the recovery of the \
+             destination subnet needs.",
             self.layout.work_dir(TargetSubnet::Source).display(),
             self.layout.work_dir(TargetSubnet::Destination).display(),
             self.layout.work_dir(TargetSubnet::Merged).display(),
@@ -454,24 +458,10 @@ impl Step for MergeStatesStep {
             .layout
             .checkpoint_dir(TargetSubnet::Merged, merged_height);
 
-        // The block time the recovered subnet starts from has to be larger than
-        // the times of both checkpoints the merged state is assembled from.
-        // Each subnet halted at a CUP, so the batch time of the checkpoint it
-        // halted at is the block time of that CUP, which the preceding steps
-        // downloaded and validated against the NNS signed state tree.
-        let source_time =
-            get_batch_time_from_cup(&self.layout.downloaded_cup_file(TargetSubnet::Source))?;
-        let destination_time =
-            get_batch_time_from_cup(&self.layout.downloaded_cup_file(TargetSubnet::Destination))?;
-        let merged_time = source_time
-            .max(destination_time)
-            .as_nanos_since_unix_epoch()
-            + self.time_margin.as_nanos() as u64;
         info!(
             self.logger,
-            "The source subnet halted at height {source_height} and time {source_time}, the \
-             destination subnet at height {destination_height} and time {destination_time}; the \
-             merged state is the checkpoint {merged_height} and starts at time {merged_time}",
+            "The source subnet halted at height {source_height} and the destination subnet at \
+             height {destination_height}; the merged state is the checkpoint {merged_height}",
         );
 
         info!(self.logger, "Merging the states");
@@ -522,12 +512,26 @@ impl Step for MergeStatesStep {
 
         let params = MergedStateParams {
             height: merged_height.get(),
-            time_nanos: merged_time,
             state_hash,
         };
         info!(self.logger, "The merged state: {params:?}");
 
-        params.write(self.layout.merged_state_params_file())
+        params.write(self.layout.merged_state_params_file())?;
+
+        // The recovery CUP is stamped with the time it is proposed at, and the
+        // merged subnet has to resume past the batch times of both checkpoints
+        // it is assembled from: either subnet's canisters may have run ahead of
+        // the merged state's own batch time, which is the destination subnet's.
+        // Both subnets halted before this step ran, so both batch times are in
+        // the past already; this wait puts the clock clear of them.
+        info!(
+            self.logger,
+            "Waiting {SETTLE_TIME:?}, so that the recovery CUP is stamped past the batch times of \
+             both checkpoints",
+        );
+        sleep(SETTLE_TIME);
+
+        Ok(())
     }
 }
 

@@ -102,17 +102,18 @@ Runbook::
    `R`, and the result is marked as the product of a subnet merge. The ingress
    history of `M` is deliberately not merged in: the marker makes the replica
    re-register the ingress messages of the merged-in canisters that are still in
-   progress. The tool also computes the block time the merged state starts from,
-   which must be larger than the times of both checkpoints, and the hash of its
-   manifest (`Stop*Replica`, `DownloadStateFrom*Subnet`, `Validate*SubnetCup`,
-   `MergeStates`).
+   progress. The tool also computes the hash of the manifest of the merged
+   state, and then waits, so that the recovery CUP below is stamped past the
+   batch times of both checkpoints (`Stop*Replica`, `DownloadStateFrom*Subnet`,
+   `Validate*SubnetCup`, `MergeStates`).
 14. The tool submits a `MergeSubnets` proposal for `M` and `R`, which reroutes
    the canister ID ranges of `M` to `R`, and then a `RecoverSubnet` proposal for
-   `R`, which creates a recovery CUP for `R` at the merged state, running a
-   fresh DKG for `R`'s membership. Recovering a subnet that was instructed to
-   halt at its next CUP replaces that instruction with a plain halt, so `R`
-   stays halted for now (`MergeSubnets`,
-   `CheckRegistryForRoutingTableEntry`, `ProposeCupForDestinationSubnet`).
+   `R`, which creates a recovery CUP for `R` at the merged state, stamped with
+   the time it is proposed at, and running a fresh DKG for `R`'s membership.
+   Recovering a subnet that was instructed to halt at its next CUP replaces
+   that instruction with a plain halt, so `R` stays halted for now
+   (`MergeSubnets`, `CheckRegistryForRoutingTableEntry`,
+   `ProposeCupForDestinationSubnet`).
 15. The tool uploads the merged state to `R`'s node, replacing the state
    directory holding the checkpoint it halted at, and starts its replica back
    up. Deleting that checkpoint is what makes the recovery unambiguous: it does
@@ -278,11 +279,6 @@ const DKG_INTERVAL_LENGTH: u64 = 499;
 
 /// The directory the merging tool works in, relative to the test environment.
 const MERGING_DIR: &str = "subnet_merging";
-
-/// How much later than the checkpoints it is assembled from the merged state
-/// starts, i.e. the block time of the recovery CUP of `R` minus the larger of
-/// the two checkpoint times.
-const MERGED_STATE_TIME_MARGIN: Duration = Duration::from_secs(60);
 
 /// Timeout for the subnet to become "merge ready". The binding terms are the
 /// `install_code` calls of step 5, which take a couple of hundred rounds each
@@ -719,7 +715,6 @@ fn merge(env: &TestEnv, context: &Context, runtime: &Runtime) {
         download_node_source: Some(context.m_node.get_ip_addr()),
         download_node_destination: Some(context.r_node.get_ip_addr()),
         upload_node_destination: Some(context.r_node.get_ip_addr()),
-        time_margin_secs: MERGED_STATE_TIME_MARGIN.as_secs(),
         merge_ready_timeout_secs: MERGE_READY_TIMEOUT.as_secs(),
         halt_timeout_secs: HALT_TIMEOUT.as_secs(),
         registry_timeout_secs: REGISTRY_TIMEOUT.as_secs(),

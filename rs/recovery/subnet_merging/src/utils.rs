@@ -22,10 +22,6 @@ pub struct MergedStateParams {
     /// The height of the merged checkpoint, i.e. the height the destination
     /// subnet is recovered at.
     pub height: u64,
-    /// The block time the recovered destination subnet starts from, in
-    /// nanoseconds since the Epoch. Larger than the batch times of both
-    /// checkpoints the merged state was assembled from.
-    pub time_nanos: u64,
     /// The root hash of the manifest of the merged state.
     pub state_hash: String,
 }
@@ -158,7 +154,6 @@ mod tests {
 
         let params = MergedStateParams {
             height: 42_000,
-            time_nanos: 1_700_000_000_000_000_000,
             state_hash: "deadbeef".to_string(),
         };
         params.write(&path).unwrap();

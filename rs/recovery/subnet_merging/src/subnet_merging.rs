@@ -37,12 +37,7 @@ use slog::{Logger, info, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
-use std::{
-    iter::Peekable,
-    net::IpAddr,
-    path::PathBuf,
-    time::{Duration, UNIX_EPOCH},
-};
+use std::{iter::Peekable, net::IpAddr, path::PathBuf, time::Duration};
 
 const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
@@ -121,11 +116,6 @@ pub struct SubnetMergingArgs {
     /// IP address of the node of the destination subnet to upload the merged state to.
     #[clap(long)]
     pub upload_node_destination: Option<IpAddr>,
-
-    /// How much later than the checkpoints it is assembled from the merged
-    /// state starts, in seconds.
-    #[clap(long, default_value = "60")]
-    pub time_margin_secs: u64,
 
     /// How long to wait for the subnet that is cooling down to become ready to
     /// be merged, in seconds.
@@ -384,34 +374,22 @@ impl SubnetMerging {
     }
 
     /// The recovery CUP of the destination subnet, at the merged state.
-    ///
-    /// Builds the proposal itself rather than going through
-    /// `Recovery::update_recovery_cup`, which stamps the CUP with the current
-    /// time: the merged subnet has to resume at the time the merge computed
-    /// from the two states it assembled, which is in the past by now.
     fn propose_cup(&self) -> RecoveryResult<impl Step + use<>> {
         let params = MergedStateParams::read(self.layout.merged_state_params_file())?;
 
-        Ok(AdminStep {
-            logger: self.recovery.logger.clone(),
-            ic_admin_cmd: self
-                .recovery
-                .admin_helper
-                .get_propose_to_update_recovery_cup_command(
-                    self.params.destination_subnet_id,
-                    Height::from(params.height),
-                    params.state_hash,
-                    // The merged subnets are both unavailable while the recovery
-                    // CUP is created, so its DKG is handled by whichever subnet
-                    // the NNS picks by default, which is neither of them.
-                    /*initial_dkg_subnet_id=*/
-                    None,
-                    /*chain_key_config=*/ None,
-                    /*replacement_nodes=*/ &[],
-                    /*registry_params=*/ None,
-                    UNIX_EPOCH + Duration::from_nanos(params.time_nanos),
-                ),
-        })
+        self.recovery.update_recovery_cup(
+            self.params.destination_subnet_id,
+            Height::from(params.height),
+            params.state_hash,
+            /*replacement_nodes=*/ &[],
+            /*registry_params=*/ None,
+            // The merged subnets are both unavailable while the recovery CUP is
+            // created, so its DKG is handled by whichever subnet the NNS picks
+            // by default, which is neither of them.
+            /*initial_dkg_subnet_id=*/
+            None,
+            /*chain_key_subnet_id=*/ None,
+        )
     }
 
     fn upload_state_and_restart_step(&self) -> RecoveryResult<impl Step + use<>> {
@@ -662,7 +640,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
 
             StepType::MergeStates => MergeStatesStep {
                 layout: self.layout.clone(),
-                time_margin: Duration::from_secs(self.params.time_margin_secs),
                 logger: self.recovery.logger.clone(),
             }
             .into(),
