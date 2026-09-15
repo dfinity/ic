@@ -1,3 +1,6 @@
+//! Wrappers around the `state_tool` commands these tools run on the states
+//! they download and produce.
+
 use ic_base_types::SubnetId;
 use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
@@ -10,7 +13,7 @@ use ic_types::Time;
 use std::{fs::File, path::Path};
 
 /// Computes manifest of a checkpoint at `dir` and writes it to `output_path`.
-pub(crate) fn compute_manifest(dir: &Path, output_path: &Path) -> RecoveryResult<()> {
+pub fn compute_manifest(dir: &Path, output_path: &Path) -> RecoveryResult<()> {
     ic_state_tool::commands::manifest::compute_manifest(dir)
         .map_err(|err| {
             RecoveryError::StateToolError(format!("Failed to compute the state manifest: {err}"))
@@ -18,8 +21,21 @@ pub(crate) fn compute_manifest(dir: &Path, output_path: &Path) -> RecoveryResult
         .and_then(|manifest| write_file(output_path, manifest))
 }
 
+/// Verifies whether the textual representation of a manifest matches its root hash, and
+/// returns the root hash.
+pub fn verify_manifest(manifest_path: &Path) -> RecoveryResult<String> {
+    let manifest_file =
+        File::open(manifest_path).map_err(|err| RecoveryError::file_error(manifest_path, err))?;
+
+    ic_state_tool::commands::verify_manifest::verify_manifest(manifest_file)
+        .map_err(|err| {
+            RecoveryError::StateToolError(format!("Failed to verify the state manifest: {err}"))
+        })
+        .map(hex::encode)
+}
+
 /// Splits a manifest, to verify the manifests resulting from a subnet split.
-pub(crate) fn split_manifest(
+pub fn split_manifest(
     manifest_path: &Path,
     source_subnet: SubnetId,
     destination_subnet: SubnetId,
@@ -43,17 +59,4 @@ pub(crate) fn split_manifest(
     .map_err(|err| RecoveryError::StateToolError(format!("Failed to split the manifest: {err}")))?;
 
     Ok(())
-}
-
-/// Verifies whether the textual representation of a manifest matches its root hash, and
-/// returns the root hash.
-pub(crate) fn verify_manifest(manifest_path: &Path) -> RecoveryResult<String> {
-    let manifest_file =
-        File::open(manifest_path).map_err(|err| RecoveryError::file_error(manifest_path, err))?;
-
-    ic_state_tool::commands::verify_manifest::verify_manifest(manifest_file)
-        .map_err(|err| {
-            RecoveryError::StateToolError(format!("Failed to verify the state manifest: {err}"))
-        })
-        .map(hex::encode)
 }
