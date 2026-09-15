@@ -146,6 +146,10 @@ system_test_nns(
             "long_test",  # this test has a P90 duration of over 6 minutes for the week starting on 2025-08-21.
         ],
         test_name = adapter + "_adapter_basics_test",
+        # The driver's 15/20 minute per-task/overall timeouts (see adapter_basics_test.rs) only
+        # take effect if bazel's own timeout is larger; with the default "long" (15 minutes)
+        # bazel would kill the test first and no test report would be produced.
+        test_timeout = "eternal",
         runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | {
             "CKBTC_UVM_CONFIG_PATH": "//rs/tests:ckbtc_uvm_config_image",
             "UNIVERSAL_CANISTER_WASM_PATH": "//rs/universal_canister/impl:universal_canister.wasm.gz",
