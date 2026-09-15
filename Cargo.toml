@@ -342,6 +342,7 @@ members = [
     "rs/query_stats",
     "rs/recovery",
     "rs/recovery/subnet_splitting",
+    "rs/recovery/subnet_tools",
     "rs/registry/admin",
     "rs/registry/admin-derive",
     "rs/registry/canister",

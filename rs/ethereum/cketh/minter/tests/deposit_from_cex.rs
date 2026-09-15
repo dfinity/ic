@@ -10,15 +10,15 @@
 use assert_matches::assert_matches;
 use ic_cketh_minter::asset::Asset;
 use ic_cketh_minter::balance_scan::batcher::{
-    BalanceOfCall, MAX_CALLS_PER_BATCH, decode_balance_batch, encode_balance_batch,
-    encode_eth_balance_batch,
+    BalanceOfCall, Delegation, MAX_CALLS_PER_BATCH, decode_balance_batch, decode_delegation_batch,
+    encode_balance_batch, encode_delegation_batch, encode_eth_balance_batch,
 };
 use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::events::EventPayload;
 use ic_cketh_minter::endpoints::{DepositEthStatus, DepositStatus};
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{
-    Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
+    Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, delegation_designator, deploy_mock_erc20,
 };
 use ic_cketh_test_utils::ckerc20::{CkErc20Setup, Erc20Token};
 use ic_cketh_test_utils::live::{
@@ -242,6 +242,117 @@ fn should_read_many_eth_balances_in_a_single_call() {
         .map(|i| Erc20Value::new((i as u128 + 1) * 1_000))
         .collect();
     assert_eq!(balances, expected);
+}
+
+#[test]
+fn should_read_delegations_across_addresses() {
+    let anvil = Anvil::start();
+    let dev = address_from_hex(DEV_ACCOUNT);
+
+    let bare = |address_byte: u8| {
+        (
+            DepositAddress::new(Address::new([address_byte; 20])),
+            Delegation::NotDelegated,
+        )
+    };
+    let delegated = |address_byte: u8, delegate_byte: u8| {
+        let address = DepositAddress::new(Address::new([address_byte; 20]));
+        let delegate = Address::new([delegate_byte; 20]);
+        anvil.set_code(address.as_address(), &delegation_designator(&delegate));
+        (address, Delegation::Delegated(delegate))
+    };
+    let contract = || {
+        (
+            DepositAddress::new(deploy_mock_erc20(&anvil, &dev)),
+            Delegation::Other,
+        )
+    };
+    let addresses_with_expected_delegation_by_kind = [
+        [bare(0x11), bare(0x22), bare(0x33)],
+        [
+            delegated(0x44, 0xa1),
+            delegated(0x55, 0xa2),
+            delegated(0x66, 0xa3),
+        ],
+        [contract(), contract(), contract()],
+    ];
+
+    for first in 0..3 {
+        for second in 0..3 {
+            for third in 0..3 {
+                let batch = [
+                    &addresses_with_expected_delegation_by_kind[first][0],
+                    &addresses_with_expected_delegation_by_kind[second][1],
+                    &addresses_with_expected_delegation_by_kind[third][2],
+                ];
+                let addresses: Vec<DepositAddress> =
+                    batch.iter().map(|(address, _)| *address).collect();
+                let expected: Vec<Delegation> =
+                    batch.iter().map(|(_, delegation)| *delegation).collect();
+                let out = anvil
+                    .eth_call_create(&dev, &encode_delegation_batch(&addresses))
+                    .expect("the delegation batch must not revert");
+                assert_eq!(
+                    decode_delegation_batch(&out, addresses.len()).expect("decode failed"),
+                    expected,
+                    "decoding is positional: the argument order alone decides the result; in \
+                     particular a designator first must not make the returned blob look like code \
+                     starting with 0xef, which EIP-3541 forbids a create-style call to return \
+                     (batch: {addresses:?})"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn should_read_a_full_batch_of_delegations_in_a_single_call() {
+    let anvil = Anvil::start();
+    let dev = address_from_hex(DEV_ACCOUNT);
+
+    let batch_of = |num_addresses: usize| -> Vec<DepositAddress> {
+        (0..num_addresses as u64)
+            .map(|index| DepositAddress::new(holder_at(index)))
+            .collect()
+    };
+
+    let delegate = Address::new([0xcd; 20]);
+    let first = holder_at(0);
+    let last = holder_at((MAX_CALLS_PER_BATCH - 1) as u64);
+    anvil.set_code(&first, &delegation_designator(&delegate));
+    anvil.set_code(&last, &delegation_designator(&delegate));
+
+    let full_batch = batch_of(MAX_CALLS_PER_BATCH);
+    let out = anvil
+        .eth_call_create(&dev, &encode_delegation_batch(&full_batch))
+        .expect("a batch of MAX_CALLS_PER_BATCH addresses must stay within the node limits");
+    let mut expected = vec![Delegation::NotDelegated; MAX_CALLS_PER_BATCH];
+    *expected.first_mut().unwrap() = Delegation::Delegated(delegate);
+    *expected.last_mut().unwrap() = Delegation::Delegated(delegate);
+    assert_eq!(
+        decode_delegation_batch(&out, full_batch.len()).expect("decode failed"),
+        expected
+    );
+
+    const EIP_170_MAX_CODE_SIZE: usize = 24_576;
+    const RETURNED_BYTES_PER_ADDRESS: usize = 32;
+    const LEADING_ZERO_WORDS: usize = 1;
+    const ONE_ADDRESS_PAST_THE_RETURNED_BLOB_CEILING: usize =
+        EIP_170_MAX_CODE_SIZE / RETURNED_BYTES_PER_ADDRESS - LEADING_ZERO_WORDS + 1;
+    let error = anvil
+        .eth_call_create(
+            &dev,
+            &encode_delegation_batch(&batch_of(ONE_ADDRESS_PAST_THE_RETURNED_BLOB_CEILING)),
+        )
+        .expect_err(
+            "with one argument word per address the EIP-3860 initcode limit never binds; the \
+             returned blob (one leading word, then one per address) hits EIP-170 first, well \
+             above MAX_CALLS_PER_BATCH",
+        );
+    assert!(
+        error.to_lowercase().contains("contractsizelimit"),
+        "expected an EIP-170 code size error, got: {error}"
+    );
 }
 
 #[test]
