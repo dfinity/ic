@@ -2895,7 +2895,7 @@ impl std::hash::Hash for EcdsaCurve {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
             Self::Secp256k1 => {}
-            Self::Secp256r1 => 1u8.hash(state),
+            Self::Secp256r1 => 1_u8.hash(state),
         }
     }
 }
