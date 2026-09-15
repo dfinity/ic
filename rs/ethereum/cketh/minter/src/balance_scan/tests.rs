@@ -36,13 +36,6 @@ fn unsupported_token_has_an_unreachable_minimum_deposit() {
 
 #[test]
 fn should_have_a_min_deposit_for_every_deployed_supported_token() {
-    // Independently transcribed table of the ckERC20 contract addresses (hex form, so it does not
-    // share the byte-array representation of `MIN_DEPOSITS`) and expected minimum deposits the
-    // mainnet (sv3dd-oaaaa-aaaar-qacoa-cai) and Sepolia (jzenf-aiaaa-aaaar-qaa7q-cai) minters
-    // currently support, plus ckBAT — not yet deployed, but its `MIN_DEPOSITS` entry is checked
-    // here too since this is the only place a typo'd address or threshold gets caught. A supported
-    // token missing from `MIN_DEPOSITS`, or one with a wrong threshold, would be scanned but never
-    // (or wrongly) flagged, so its deposits would go undetected.
     let expected: &[(&str, &str, u128)] = &[
         // --- mainnet ---
         (

@@ -158,7 +158,7 @@ impl Bucket {
                     };
 
                     // We assume that the prefix is correct, assert is safe
-                    let net = IpNet::new_assert(ctx.ip, prefix);
+                    let net = IpNet::new_assert(ctx.ip, prefix).trunc();
                     v.acquire(net)
                 }
             };
@@ -539,6 +539,7 @@ mod test {
     async fn test_ratelimit() {
         let ip1 = IpAddr::from_str("10.0.0.1").unwrap();
         let ip2 = IpAddr::from_str("192.168.0.1").unwrap();
+        let ip3 = IpAddr::from_str("192.168.0.2").unwrap();
         let ip_local4 = IpAddr::from_str("127.0.0.1").unwrap();
         let ip_local6 = IpAddr::from_str("::1").unwrap();
 
@@ -957,6 +958,20 @@ mod test {
                     method: None,
                     request_type: RequestType::ReadStateV2,
                     ip: ip2,
+                }),
+                Decision::Limit
+            );
+        }
+        // Then all limited with IP3 too since it's in the same /24 subnet
+        for _ in 0..10 {
+            assert_eq!(
+                limiter.evaluate(Context {
+                    subnet_id,
+                    sender: None,
+                    canister_id: Some(id3),
+                    method: None,
+                    request_type: RequestType::ReadStateV2,
+                    ip: ip3,
                 }),
                 Decision::Limit
             );
