@@ -823,7 +823,6 @@ impl Recovery {
         registry_params: Option<RegistryParams>,
         initial_dkg_subnet_id: Option<SubnetId>,
         chain_key_subnet_id: Option<SubnetId>,
-        time: Option<SystemTime>,
     ) -> RecoveryResult<impl Step + use<>> {
         let chain_key_config = chain_key_subnet_id
             .map(|id| match self.registry_helper.get_chain_key_config(id) {
@@ -854,7 +853,7 @@ impl Recovery {
                     chain_key_config,
                     replacement_nodes,
                     registry_params,
-                    time.unwrap_or_else(SystemTime::now),
+                    SystemTime::now(),
                 ),
         })
     }
