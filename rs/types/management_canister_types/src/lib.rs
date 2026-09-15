@@ -2873,25 +2873,31 @@ impl SetupInitialDKGResponse {
 
 /// Types of curves that can be used for ECDSA signing.
 /// ```text
-/// variant { secp256k1; }
+/// variant { secp256k1; secp256r1; }
 /// ```
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Debug,
-    CandidType,
-    Deserialize,
-    EnumIter,
-    Serialize,
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, EnumIter, Serialize,
 )]
 pub enum EcdsaCurve {
     #[serde(rename = "secp256k1")]
     Secp256k1,
+    #[serde(rename = "secp256r1")]
+    Secp256r1,
+}
+
+/// Hashed by hand rather than derived, because this type reaches `payload_hash`
+/// through `IDkgPayload`. `derive(Hash)` omits the discriminant while an enum
+/// has a single variant and starts writing it once a second one exists, so
+/// deriving here would change the hash of every block that names an ECDSA key
+/// and a replica on the old version would reject it. `Secp256k1` therefore
+/// keeps contributing nothing. Revisit only with the crypto team.
+impl std::hash::Hash for EcdsaCurve {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Secp256k1 => {}
+            Self::Secp256r1 => 1_u8.hash(state),
+        }
+    }
 }
 
 impl TryFrom<u32> for EcdsaCurve {
@@ -2900,6 +2906,7 @@ impl TryFrom<u32> for EcdsaCurve {
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(EcdsaCurve::Secp256k1),
+            1 => Ok(EcdsaCurve::Secp256r1),
             _ => Err(format!(
                 "{value} is not a recognized EcdsaCurve variant identifier."
             )),
@@ -2911,6 +2918,7 @@ impl From<&EcdsaCurve> for pb_types::EcdsaCurve {
     fn from(item: &EcdsaCurve) -> Self {
         match item {
             EcdsaCurve::Secp256k1 => pb_types::EcdsaCurve::Secp256k1,
+            EcdsaCurve::Secp256r1 => pb_types::EcdsaCurve::Secp256r1,
         }
     }
 }
@@ -2921,6 +2929,7 @@ impl TryFrom<pb_types::EcdsaCurve> for EcdsaCurve {
     fn try_from(item: pb_types::EcdsaCurve) -> Result<Self, Self::Error> {
         match item {
             pb_types::EcdsaCurve::Secp256k1 => Ok(EcdsaCurve::Secp256k1),
+            pb_types::EcdsaCurve::Secp256r1 => Ok(EcdsaCurve::Secp256r1),
             pb_types::EcdsaCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "EcdsaCurve",
                 err: format!("Unable to convert {item:?} to an EcdsaCurve"),
@@ -2941,6 +2950,7 @@ impl FromStr for EcdsaCurve {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "secp256k1" => Ok(Self::Secp256k1),
+            "secp256r1" => Ok(Self::Secp256r1),
             _ => Err(format!("{s} is not a recognized ECDSA curve")),
         }
     }
@@ -5277,8 +5287,31 @@ mod tests {
         for curve in EcdsaCurve::iter() {
             match curve {
                 EcdsaCurve::Secp256k1 => assert_eq!(EcdsaCurve::try_from(0).unwrap(), curve),
+                EcdsaCurve::Secp256r1 => assert_eq!(EcdsaCurve::try_from(1).unwrap(), curve),
             }
         }
+    }
+
+    #[test]
+    fn secp256k1_writes_nothing_when_hashed() {
+        // If this test fails, `EcdsaCurve` is deriving `Hash` again. That makes
+        // `Secp256k1` write its discriminant and moves every `payload_hash`
+        // naming an ECDSA key; see the hand-written `impl Hash for EcdsaCurve`.
+        struct ByteCount(usize);
+        impl std::hash::Hasher for ByteCount {
+            fn write(&mut self, bytes: &[u8]) {
+                self.0 += bytes.len();
+            }
+            fn finish(&self) -> u64 {
+                0
+            }
+        }
+        let mut hasher = ByteCount(0);
+        std::hash::Hash::hash(&EcdsaCurve::Secp256k1, &mut hasher);
+        assert_eq!(hasher.0, 0);
+        let mut hasher = ByteCount(0);
+        std::hash::Hash::hash(&EcdsaCurve::Secp256r1, &mut hasher);
+        assert_ne!(hasher.0, 0);
     }
 
     #[test]

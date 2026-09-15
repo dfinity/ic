@@ -1253,6 +1253,13 @@ pub fn verify_ecdsa_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     pk.verify_prehash(msg, &signature).is_ok()
 }
 
+pub fn verify_ecdsa_p256_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+    let pk =
+        p256::ecdsa::VerifyingKey::from_sec1_bytes(pk).expect("Bytes are not a valid public key");
+    let signature = p256::ecdsa::Signature::try_from(sig).expect("Bytes are not a valid signature");
+    pk.verify_prehash(msg, &signature).is_ok()
+}
+
 pub fn verify_vetkey(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> bool {
     let dpk = DerivedPublicKey::deserialize(public_key).expect("Failed to deserialize public key");
 
@@ -1271,6 +1278,7 @@ pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: 
     let res = match key_id {
         MasterPublicKeyId::Ecdsa(key_id) => match key_id.curve {
             EcdsaCurve::Secp256k1 => verify_ecdsa_signature(pk, sig, msg),
+            EcdsaCurve::Secp256r1 => verify_ecdsa_p256_signature(pk, sig, msg),
         },
         MasterPublicKeyId::Schnorr(key_id) => match key_id.algorithm {
             SchnorrAlgorithm::Bip340Secp256k1 => verify_bip340_signature(pk, sig, msg),
@@ -1294,6 +1302,10 @@ fn cast_ecdsa_key_id(key_id: EcdsaKeyId) -> ic_cdk_management_canister::EcdsaKey
     ic_cdk_management_canister::EcdsaKeyId {
         curve: match key_id.curve {
             EcdsaCurve::Secp256k1 => ic_cdk_management_canister::EcdsaCurve::Secp256k1,
+            EcdsaCurve::Secp256r1 => unimplemented!(
+                "ic-cdk-management-canister re-exports a secp256k1-only EcdsaCurve; \
+                 needs ic-management-canister-types released and cdk-rs bumped"
+            ),
         },
         name: key_id.name,
     }
