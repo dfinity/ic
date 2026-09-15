@@ -1,4 +1,4 @@
-/var/log/libvirt/qemu/guestos-serial.log {
+/var/log/libvirt/qemu/guestos-serial*.log /var/log/libvirt/qemu/upgrade-guestos-serial*.log {
     daily
     rotate 7
     compress
