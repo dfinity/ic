@@ -2712,16 +2712,7 @@ fn ingress_message_to_cooling_down_subnet_is_rejected() {
     test.should_accept_ingress_message(canister, "update", vec![])
         .unwrap();
 
-    let own_subnet_id = test.state().metadata.own_subnet_id;
-    test.state_mut()
-        .metadata
-        .modify_network_topology(|network_topology| {
-            network_topology
-                .subnets_mut()
-                .get_mut(&own_subnet_id)
-                .unwrap()
-                .cooling_down = true;
-        });
+    test.set_cooling_down(true);
 
     // Both canister-addressed and subnet-addressed messages are now rejected.
     let err = test

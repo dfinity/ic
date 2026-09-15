@@ -1,4 +1,5 @@
 use crate::EVM_RPC_ID_STAGING;
+use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
 use crate::deposit_address::DepositAddress;
 use crate::eth_logs::LedgerSubaccount;
@@ -136,7 +137,7 @@ pub fn automatic_deposit() -> AutomaticDeposit {
         owner: account().owner,
         subaccount: account().subaccount,
         address: DepositAddress::new(Address::new([0xa1; 20])),
-        erc20_contract_address: Address::new([0x22; 20]),
+        asset: Asset::Erc20(Address::new([0x22; 20])),
         last_scanned_block: BlockNumber::new(1_000),
         scan_count: 1,
         scanned_balance: Erc20Value::from(1_000_000_u64),
@@ -146,8 +147,8 @@ pub fn automatic_deposit() -> AutomaticDeposit {
 /// An [`AutomaticDeposits`] whose sweep queue holds exactly these funded pairs, all taken by the
 /// one sweep [`create_pending_sweeper_requests`] enqueued for them, returned along with that
 /// request.
-pub async fn deposits_with_enqueued_sweep(
-    pairs: &[(Account, Address)],
+pub async fn deposits_with_enqueued_sweep<A: Into<Asset> + Copy>(
+    pairs: &[(Account, A)],
 ) -> (AutomaticDeposits, SweepRequest) {
     let (state, request) = state_with_enqueued_sweep(pairs).await;
     (state.automatic_deposits, request)
@@ -205,7 +206,9 @@ pub fn prepay_sweep_gas(state: &mut State) {
 /// [`create_pending_sweeper_requests`] enqueued for them, returned along with that request. The
 /// deposits, attestations and authorizations the enqueue pairs up arrive through the event log, so
 /// the sweep is assembled by the production path without the runtime signing anything.
-pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, SweepRequest) {
+pub async fn state_with_enqueued_sweep<A: Into<Asset> + Copy>(
+    pairs: &[(Account, A)],
+) -> (State, SweepRequest) {
     const SWEEP_DECIDED_AT: u64 = 1_620_328_630_000_000_000;
 
     let mut state = state_with_deposit_helper(deposit_helper());
@@ -213,21 +216,21 @@ pub async fn state_with_enqueued_sweep(pairs: &[(Account, Address)]) -> (State, 
     state.sweeper_contract_address = Some(sweeper_contract());
     state.last_transaction_price_estimate = Some((SWEEP_DECIDED_AT, gas_fee_estimate()));
     let chain_id = state.ethereum_network.chain_id();
-    for (account, token) in pairs {
+    for (account, asset) in pairs {
         apply_state_transition(
             &mut state,
             &EventType::AutomaticDepositReceived(AutomaticDeposit {
                 owner: account.owner,
                 subaccount: account.subaccount,
                 address: deposit_address(account),
-                erc20_contract_address: *token,
+                asset: (*asset).into(),
                 ..automatic_deposit()
             }),
         );
     }
     for account in pairs
         .iter()
-        .map(|(account, _token)| *account)
+        .map(|(account, _asset)| *account)
         .collect::<BTreeSet<_>>()
     {
         apply_state_transition(
@@ -352,6 +355,7 @@ pub mod mock {
 }
 
 pub mod arb {
+    use crate::asset::Asset;
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_logs::LedgerSubaccount;
     use crate::eth_rpc::Hash;
@@ -362,6 +366,8 @@ pub mod arb {
         array::{uniform20, uniform32},
         collection::vec,
         prelude::{Strategy, any},
+        prop_oneof,
+        strategy::Just,
     };
 
     pub fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
@@ -385,6 +391,10 @@ pub mod arb {
 
     pub fn arb_address() -> impl Strategy<Value = Address> {
         uniform20(any::<u8>()).prop_map(Address::new)
+    }
+
+    pub fn arb_asset() -> impl Strategy<Value = Asset> {
+        prop_oneof![Just(Asset::Eth), arb_address().prop_map(Asset::Erc20),]
     }
 
     pub fn arb_hash() -> impl Strategy<Value = Hash> {

@@ -366,8 +366,11 @@ def system_test(
         },
         env_inherit = env_inherit,
         tags = tags + ["local_system_test"] + (["manual"] if backend == "farm" else []),
-        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly:
-        exec_properties = {"cpu": str(reserved_cpus)} if reserved_cpus != None else {},
+        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly.
+        # The `test.` prefix scopes the reservation to the `test` exec group, i.e. to the test action only. Without it
+        # the reservation would also apply to every other action this target owns and those would needlessly reserve
+        # `reserved_cpus` cores on an RBE worker:
+        exec_properties = {"test.cpu": str(reserved_cpus)} if reserved_cpus != None else {},
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,

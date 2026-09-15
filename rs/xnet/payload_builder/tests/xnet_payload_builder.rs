@@ -76,10 +76,7 @@ impl XNetPayloadBuilderFixture {
         let state_manager = Arc::new(fixture.state_manager);
         let registry = get_registry_for_test();
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
-        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            Arc::clone(&state_manager) as Arc<_>,
-            &fixture.metrics,
-        )));
+        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&fixture.metrics)));
         let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let (refill_trigger, _refill_receiver) = mpsc::channel(100);
         let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
@@ -165,12 +162,15 @@ impl XNetPayloadBuilderFixture {
         let slice_size_bytes = UnpackedStreamSlice::try_from(certified_slice.clone())
             .unwrap()
             .count_bytes();
-        {
-            let mut slice_pool = self.certified_slice_pool.lock().unwrap();
-            slice_pool
-                .put(subnet_id, certified_slice, REGISTRY_VERSION, log.clone())
-                .unwrap();
-        }
+        CertifiedSlicePool::put(
+            &self.certified_slice_pool,
+            subnet_id,
+            certified_slice,
+            self.state_manager.as_ref(),
+            REGISTRY_VERSION,
+            log.clone(),
+        )
+        .unwrap();
         slice_size_bytes
     }
 
@@ -690,13 +690,16 @@ fn get_xnet_payload_byte_limit_too_small(
 }
 
 /// Tests payload building from a pool containing an empty slice only.
+///
+/// The outgoing stream is generated without reject signals: in the presence of
+/// reject signals, inducting the slice header might garbage collect them.
 #[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn get_xnet_payload_empty_slice(
     #[strategy(arb_stream(
         1, // min_size
         1, // max_size
         0, // min_signal_count
-        10, // max_signal_count
+        0, // max_signal_count
         CURRENT_CERTIFICATION_VERSION,
     ))]
     out_stream: Stream,
@@ -767,6 +770,54 @@ fn get_xnet_payload_empty_slice(
     });
 }
 
+/// Tests that a message-less slice carrying no new signals is still included in a
+/// payload if its header `begin` is beyond our first reject signal, as inducting it
+/// garbage collects that reject signal.
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+fn get_xnet_payload_empty_slice_garbage_collecting_reject_signals(
+    #[strategy(arb_stream_with_config(
+        0..=10000, // msg_start_range
+        1..=1, // size_range
+        0..=10000, // signal_start_range
+        1..=10, // signal_count_range
+        reject_reasons_encodable_at(CURRENT_CERTIFICATION_VERSION),
+    ))]
+    #[filter(!#out_stream.reject_signals().is_empty())]
+    out_stream: Stream,
+) {
+    // Incoming stream with no messages, its `begin` beyond our first reject signal
+    // and carrying no signals we don't already have.
+    let from = out_stream.signals_end();
+    let stream = Stream::new(
+        StreamIndexedQueue::with_begin(from),
+        out_stream.header().begin(),
+    );
+    prop_assume!(from > out_stream.reject_signals().front().unwrap().index);
+
+    with_test_replica_logger(|log| {
+        let mut state_manager = StateManagerFixture::local(log.clone());
+        state_manager = state_manager.with_stream(REMOTE_SUBNET, out_stream);
+
+        let xnet_payload_builder = XNetPayloadBuilderFixture::new(state_manager);
+        xnet_payload_builder.pool_slice(REMOTE_SUBNET, &stream, from, 0, &log);
+
+        let (payload, _, _) = xnet_payload_builder.get_xnet_payload(usize::MAX);
+
+        // The slice is not empty: it advances our reject signal garbage collection point.
+        assert_eq!(
+            1,
+            payload.len(),
+            "Expecting 1 slice in payload, got {}",
+            payload.len()
+        );
+        let slice = payload
+            .get(&REMOTE_SUBNET)
+            .expect("Expected a slice from REMOTE_SUBNET");
+        assert_eq!(from, slice.header().begin());
+        assert!(slice.messages().is_none());
+    });
+}
+
 /// Tests payload building on a system subnet when the combined sizes of the
 /// incoming stream slice and outgoing stream exceed the system subnet
 /// stream throttling limit.
@@ -809,17 +860,15 @@ fn system_subnet_stream_throttling(
 
         // Populate payload builder pool with the REMOTE_SUBNET -> OWN_SUBNET slice.
         let certified_slice = in_slice(&stream, from, from, msg_count, &log);
-        {
-            let mut slice_pool = xnet_payload_builder.certified_slice_pool.lock().unwrap();
-            slice_pool
-                .put(
-                    REMOTE_SUBNET,
-                    certified_slice,
-                    REGISTRY_VERSION,
-                    log.clone(),
-                )
-                .unwrap();
-        }
+        CertifiedSlicePool::put(
+            &xnet_payload_builder.certified_slice_pool,
+            REMOTE_SUBNET,
+            certified_slice,
+            xnet_payload_builder.state_manager.as_ref(),
+            REGISTRY_VERSION,
+            log.clone(),
+        )
+        .unwrap();
 
         let payload = xnet_payload_builder.get_xnet_payload(usize::MAX).0;
 
@@ -975,10 +1024,7 @@ enum FakeXNetClientError {
 #[test]
 fn refill_stream_slice_indices_byte_limits_empty_pool() {
     let metrics_registry = MetricsRegistry::new();
-    let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-        Arc::new(MockCertifiedStreamStore::new()) as Arc<_>,
-        &metrics_registry,
-    )));
+    let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
     // A dozen peer subnets with cached stream positions, but nothing pooled.
     pool.lock().unwrap().garbage_collect(
         (1..=12)
@@ -1010,16 +1056,18 @@ fn refill_stream_slice_indices_byte_limits_non_empty_pool() {
             .returning(move |_, _, _| Ok(stream.slice(0.into(), None)));
 
         let metrics_registry = MetricsRegistry::new();
-        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            Arc::new(certified_stream_store) as Arc<_>,
-            &metrics_registry,
-        )));
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
         // A dozen peer subnets with cached stream positions, plus a 13th with a pooled
         // slice.
-        pool.lock()
-            .unwrap()
-            .put(subnet_test_id(13), slice, REGISTRY_VERSION, log.clone())
-            .unwrap();
+        CertifiedSlicePool::put(
+            &pool,
+            subnet_test_id(13),
+            slice,
+            &certified_stream_store,
+            REGISTRY_VERSION,
+            log.clone(),
+        )
+        .unwrap();
         pool.lock().unwrap().garbage_collect(
             (1..=13)
                 .map(|i| (subnet_test_id(i), ExpectedIndices::default()))
@@ -1063,6 +1111,7 @@ fn refill_pool_empty(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1070,10 +1119,8 @@ fn refill_pool_empty(
             .expect_decode_certified_stream_slice()
             .returning(move |_, _, _| Ok(slice.clone()));
         let metrics_registry = MetricsRegistry::new();
-        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            Arc::new(certified_stream_store) as Arc<_>,
-            &metrics_registry,
-        )));
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
         pool.lock()
             .unwrap()
             .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
@@ -1110,6 +1157,7 @@ fn refill_pool_empty(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
+            Arc::clone(&store),
             runtime.handle().clone(),
             Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
             log,
@@ -1182,6 +1230,7 @@ fn refill_pool_append(
         let stream_position = ExpectedIndices {
             message_index: stream_begin,
             signal_index: stream.signals_end(),
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1190,24 +1239,23 @@ fn refill_pool_append(
             .expect_decode_certified_stream_slice()
             .returning(move |_, _, _| Ok(slice.clone()));
         let metrics_registry = MetricsRegistry::new();
-        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            Arc::new(certified_stream_store) as Arc<_>,
-            &metrics_registry,
-        )));
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
         let prefix_size_bytes = UnpackedStreamSlice::try_from(certified_prefix.clone())
             .unwrap()
             .count_bytes();
-        {
-            let mut pool = pool.lock().unwrap();
-            pool.put(
-                REMOTE_SUBNET,
-                certified_prefix,
-                REGISTRY_VERSION,
-                log.clone(),
-            )
-            .unwrap();
-            pool.garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
-        }
+        CertifiedSlicePool::put(
+            &pool,
+            REMOTE_SUBNET,
+            certified_prefix,
+            store.as_ref(),
+            REGISTRY_VERSION,
+            log.clone(),
+        )
+        .unwrap();
+        pool.lock()
+            .unwrap()
+            .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
 
         let registry = get_registry_for_test();
         let proximity_map = Arc::new(ProximityMap::new(
@@ -1244,6 +1292,7 @@ fn refill_pool_append(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
+            Arc::clone(&store),
             runtime.handle().clone(),
             Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
             log.clone(),
@@ -1297,6 +1346,7 @@ fn refill_pool_put_invalid_slice(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1304,10 +1354,8 @@ fn refill_pool_put_invalid_slice(
             .expect_decode_certified_stream_slice()
             .returning(|_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
         let metrics_registry = MetricsRegistry::new();
-        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            Arc::new(certified_stream_store) as Arc<_>,
-            &metrics_registry,
-        )));
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
         pool.lock()
             .unwrap()
             .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
@@ -1345,6 +1393,7 @@ fn refill_pool_put_invalid_slice(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
+            Arc::clone(&store),
             runtime.handle().clone(),
             Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
             log,
@@ -1411,6 +1460,7 @@ fn refill_pool_append_invalid_slice(
         let stream_position = ExpectedIndices {
             message_index: stream_begin,
             signal_index: stream.signals_end(),
+            min_useful_header_begin: None,
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1423,25 +1473,24 @@ fn refill_pool_append_invalid_slice(
             .expect_decode_certified_stream_slice()
             .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
         let metrics_registry = MetricsRegistry::new();
-        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            Arc::new(certified_stream_store) as Arc<_>,
-            &metrics_registry,
-        )));
+        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
         let prefix_size_bytes = UnpackedStreamSlice::try_from(certified_prefix.clone())
             .unwrap()
             .count_bytes();
 
-        {
-            let mut pool = pool.lock().unwrap();
-            pool.put(
-                REMOTE_SUBNET,
-                certified_prefix.clone(),
-                REGISTRY_VERSION,
-                log.clone(),
-            )
-            .unwrap();
-            pool.garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
-        }
+        CertifiedSlicePool::put(
+            &pool,
+            REMOTE_SUBNET,
+            certified_prefix.clone(),
+            store.as_ref(),
+            REGISTRY_VERSION,
+            log.clone(),
+        )
+        .unwrap();
+        pool.lock()
+            .unwrap()
+            .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
 
         let registry = get_registry_for_test();
         let proximity_map = Arc::new(ProximityMap::new(
@@ -1478,6 +1527,7 @@ fn refill_pool_append_invalid_slice(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
+            Arc::clone(&store),
             runtime.handle().clone(),
             Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
             log.clone(),

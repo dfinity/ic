@@ -4890,9 +4890,15 @@ impl ExecutionEnvironment {
                                 None => false,
                             }
                         }
-                        // Should only happen for old stop requests that existed
-                        // before call ids were added.
-                        None => false,
+                        // Only happens for old stop requests that existed before
+                        // call ids were added. There is no recorded time to
+                        // expire such a request against, but call ids predate
+                        // any replica version still in use, so these requests
+                        // are all long past the timeout: expire them
+                        // unconditionally. Otherwise they could never be timed
+                        // out at all.
+                        // TODO(EXC-1466): Remove along with the optional call id.
+                        None => true,
                     }
                 });
             if stopped {
