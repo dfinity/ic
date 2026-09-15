@@ -8,6 +8,7 @@ use evm_rpc_types::{Hex, MultiRpcResult};
 use ic_canister_runtime::IcError;
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
+use std::time::Duration;
 
 const TOKEN_A: Address = Address::new([0x22; 20]);
 
@@ -154,7 +155,7 @@ async fn should_skip_without_scanning() {
         seed_state(case.latest_block, MIN_DEPOSITS[0].0, &case.holders, now);
 
         // No stub responses: the scan must short-circuit before any outcall.
-        scan(now, stub_rpc_client(vec![]), &records_no_event()).await;
+        scan(now, stub_rpc_client(vec![]), &reads_no_time()).await;
 
         // A skipped scan advances no watchlist entry.
         for (account, _) in &case.holders {
@@ -180,7 +181,7 @@ async fn should_advance_scanned_non_candidate_pairs() {
     scan(
         now,
         stub_rpc_client(vec![ok_balances(&[below_min, below_min])]),
-        &records_no_event(),
+        &stamps_one_completed_pass(),
     )
     .await;
 
@@ -219,7 +220,7 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
             ok_balances(&vec![below_min; MAX_CALLS_PER_BATCH]),
             ok_balances(&vec![below_min; extra]),
         ]),
-        &records_no_event(),
+        &stamps_one_completed_pass(),
     )
     .await;
 
@@ -262,12 +263,7 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
         let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
         seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
 
-        scan(
-            now,
-            stub_rpc_client(vec![case.response]),
-            &records_no_event(),
-        )
-        .await;
+        scan(now, stub_rpc_client(vec![case.response]), &reads_no_time()).await;
 
         let entry = live_entry(now, &holder.0, MIN_DEPOSITS[0].0);
         assert_eq!(
@@ -294,7 +290,7 @@ async fn should_detect_a_funded_pair_from_pre_scan_targets_even_after_eviction()
 
     // The funded pair is still detected: scan_balances works off the captured targets alone, so the
     // detection is never lost to a mid-scan eviction.
-    let outcomes = scan_balances(
+    let pass = scan_balances(
         &targets,
         latest,
         &stub_rpc_client(vec![ok_balances(&[min])]),
@@ -302,7 +298,7 @@ async fn should_detect_a_funded_pair_from_pre_scan_targets_even_after_eviction()
     .await;
 
     assert_eq!(
-        outcomes,
+        pass.outcomes,
         vec![ScanOutcome::Detected(AutomaticDeposit {
             owner: holder.0.owner,
             subaccount: holder.0.subaccount,
@@ -325,7 +321,7 @@ async fn should_yield_nothing_found_for_a_below_minimum_pair() {
     seed_state(Some(latest), token, &[holder], now);
 
     let targets = due_targets(now, latest);
-    let outcomes = scan_balances(
+    let pass = scan_balances(
         &targets,
         latest,
         &stub_rpc_client(vec![ok_balances(&[below])]),
@@ -333,7 +329,7 @@ async fn should_yield_nothing_found_for_a_below_minimum_pair() {
     .await;
 
     assert_eq!(
-        outcomes,
+        pass.outcomes,
         vec![ScanOutcome::NothingFound(DepositRequest::new(
             holder.0,
             Asset::Erc20(token)
@@ -349,14 +345,18 @@ async fn should_yield_no_outcome_for_a_pair_whose_chunk_failed() {
     seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
 
     let targets = due_targets(now, latest);
-    let outcomes = scan_balances(
+    let pass = scan_balances(
         &targets,
         latest,
         &stub_rpc_client(vec![Err(IcError::CallPerformFailed)]),
     )
     .await;
 
-    assert!(outcomes.is_empty(), "a failed chunk must yield no outcome");
+    assert!(
+        pass.outcomes.is_empty(),
+        "a failed chunk must yield no outcome"
+    );
+    assert_eq!(pass.errors, ScanErrors { decode: 0, call: 1 });
 }
 
 fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<ScanTarget<Erc20Asset>> {
@@ -374,7 +374,7 @@ async fn should_timestamp_a_detected_deposit_with_the_current_time() {
     let mut time_provider = MockTimeProvider::new();
     time_provider
         .expect_time()
-        .times(1)
+        .times(2)
         .return_const(DETECTED_AT_NANOS);
 
     scan(
@@ -392,10 +392,67 @@ fn last_recorded_event() -> Option<crate::state::event::Event> {
     crate::storage::with_event_iter(|events| events.last())
 }
 
-/// A [`TimeProvider`] for scans that must not record any event: it has no expectation, so
-/// reading the time at all fails the test.
-fn records_no_event() -> MockTimeProvider {
+#[tokio::test]
+async fn should_stamp_the_scan_only_once_a_chunk_came_back() {
+    let now = ts();
+    let latest = BlockNumber::new(1_000);
+    let (token, min) = MIN_DEPOSITS[0];
+    let below_min = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
+    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
+
+    seed_state(Some(latest), token, &[holder], now);
+    scan(
+        now,
+        stub_rpc_client(vec![Err(IcError::CallPerformFailed)]),
+        &reads_no_time(),
+    )
+    .await;
+
+    assert_eq!(
+        read_state(|s| s.sweep_observations.last_balance_scan_age(now)),
+        None,
+        "a pass whose every chunk failed has read nothing, so it must not look fresh"
+    );
+    assert_eq!(
+        read_state(|s| s.sweep_observations.balance_scan_call_errors()),
+        1,
+        "the failure itself is still counted"
+    );
+
+    seed_state(Some(latest), token, &[holder], now);
+    scan(
+        now,
+        stub_rpc_client(vec![ok_balances(&[below_min])]),
+        &stamps_one_completed_pass(),
+    )
+    .await;
+
+    assert_eq!(
+        read_state(|s| s
+            .sweep_observations
+            .last_balance_scan_age(Timestamp::from_nanos(SCAN_COMPLETED_AT + 5_000))),
+        Some(Duration::from_nanos(5_000)),
+        "the stamp is the time the pass finished, not the time the tick started"
+    );
+}
+
+const SCAN_COMPLETED_AT: u64 = 1_620_328_630_000_000_000;
+
+/// A [`TimeProvider`] for scans that must reach no clock at all: they record no event, and they
+/// read no balance to stamp.
+fn reads_no_time() -> MockTimeProvider {
     MockTimeProvider::new()
+}
+
+/// A [`TimeProvider`] for a scan that reads balances but must record no event: the one time it
+/// answers is the completed pass' stamp, so a recorded deposit would ask for a second and fail.
+fn stamps_one_completed_pass() -> MockTimeProvider {
+    let mut time_provider = MockTimeProvider::new();
+    time_provider
+        .expect_time()
+        .times(1)
+        .return_const(SCAN_COMPLETED_AT);
+    time_provider
 }
 
 fn ts() -> Timestamp {
