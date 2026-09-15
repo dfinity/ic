@@ -7,7 +7,8 @@ use dfn_core::call;
 use ic_base_types::SubnetId;
 use ic_management_canister_types_private::{SetupInitialDKGArgs, SetupInitialDKGResponse};
 use ic_protobuf::registry::subnet::v1::{
-    self as pb, CanisterCyclesCostSchedule, CatchUpPackageContents, SubnetRecord,
+    CanisterCyclesCostSchedule, CatchUpPackageContents, GenesisArgs, SubnetRecord,
+    SubnetSplittingArgs, catch_up_package_contents::CupType,
 };
 use ic_registry_keys::{
     make_canister_migrations_record_key, make_catch_up_package_contents_key,
@@ -150,7 +151,7 @@ impl Registry {
         };
 
         let (
-            (destination_cup_contents, destination_dkg_response),
+            (mut destination_cup_contents, destination_dkg_response),
             (mut source_cup_contents, source_dkg_response),
         ) = futures::join!(
             create_cup_contents(payload.destination_node_ids.clone()),
@@ -168,11 +169,10 @@ impl Registry {
         })?;
 
         let destination_subnet_id = destination_dkg_response.fresh_subnet_id;
-        source_cup_contents.cup_type = Some(
-            pb::catch_up_package_contents::CupType::SubnetSplitting(pb::SubnetSplittingArgs {
-                destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
-            }),
-        );
+        source_cup_contents.cup_type = Some(CupType::SubnetSplitting(SubnetSplittingArgs {
+            destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
+        }));
+        destination_cup_contents.cup_type = Some(CupType::Genesis(GenesisArgs {}));
 
         let mut subnet_list_record = self.get_subnet_list_record();
 
