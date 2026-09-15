@@ -11,7 +11,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
     RegistryVersion, SubnetId,
-    consensus::{CatchUpContentProtobufBytes, CatchUpPackage},
+    consensus::{CatchUpContentProtobufBytes, CatchUpPackage, CupType, RecoveryArgs},
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, threshold_sig::ni_dkg::NiDkgTargetSubnet,
     },
@@ -231,27 +231,29 @@ pub fn verify(
         match client.get_cup_contents(subnet_id, version) {
             Ok(contents) => {
                 if let Some(cup_contents) = contents.value
+                    && let Ok(CupType::Recovery(RecoveryArgs {
+                        height,
+                        time,
+                        state_hash,
+                    })) = CupType::try_from(cup_contents.cup_type)
                     && contents.version == version
                 {
                     println!("Found Recovery proposal at version {version}:");
-                    println!("{:>20}: {}", "TIME", cup_contents.time);
-                    println!("{:>20}: {}", "HEIGHT", cup_contents.height);
+                    println!("{:>20}: {}", "TIME", time.as_nanos_since_unix_epoch());
+                    println!("{:>20}: {}", "HEIGHT", height);
                     println!(
                         "{:>20}: {}",
                         "HASH",
-                        hex::encode(&cup_contents.state_hash[..])
+                        hex::encode(&state_hash.get_ref().0[..])
                     );
                     println!("Ensuring recovery time is greater than CUP time...");
-                    assert!(cup_contents.time > block.context.time.as_nanos_since_unix_epoch());
+                    assert!(time > block.context.time);
                     println!("Success!");
                     println!("Ensuring recovery height is greater than CUP height...");
-                    assert!(cup_contents.height > block.height.get());
+                    assert!(height > block.height);
                     println!("Success!");
                     println!("Ensuring recovery state hash is equal to CUP state hash...");
-                    assert_eq!(
-                        cup_contents.state_hash[..],
-                        cup.content.state_hash.get_ref().0[..]
-                    );
+                    assert_eq!(state_hash, cup.content.state_hash);
                     println!("Success!");
                     println!(
                         "The subnet was correctly recovered without modifications to the state!"

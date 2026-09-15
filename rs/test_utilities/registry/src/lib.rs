@@ -5,6 +5,8 @@ use ic_protobuf::registry::crypto::v1::AlgorithmId;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::ChainKeyInitialization;
+use ic_protobuf::registry::subnet::v1::GenesisArgs;
+use ic_protobuf::registry::subnet::v1::catch_up_package_contents::CupType;
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::subnet::v1::{
     CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
@@ -151,6 +153,7 @@ pub fn insert_initial_dkg_transcript(
         initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript),
         initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript),
         chain_key_initializations,
+        cup_type: Some(CupType::Genesis(GenesisArgs {})),
         ..Default::default()
     };
 
