@@ -1118,7 +1118,11 @@ mod tests {
     };
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::log::log_entry::v1::LogEntry;
-    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
+    use ic_protobuf::registry::subnet::v1::GenesisArgs;
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, InitialNiDkgTranscriptRecord, RecoveryArgs,
+        catch_up_package_contents::CupType,
+    };
     use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
     use ic_protobuf::registry::{
         replica_version::v1::ReplicaVersionRecord,
@@ -1413,7 +1417,15 @@ mod tests {
         let cup_contents = CatchUpPackageContents {
             initial_ni_dkg_transcript_high_threshold: Some(high_initial_transcript),
             initial_ni_dkg_transcript_low_threshold: Some(low_initial_transcript),
-            height: cup_scenario.height.get(),
+            cup_type: if cup_scenario.height == Height::from(0) {
+                Some(CupType::Genesis(GenesisArgs {}))
+            } else {
+                Some(CupType::Recovery(RecoveryArgs {
+                    height: cup_scenario.height.get(),
+                    time: 123,
+                    state_hash: vec![1, 2, 3],
+                }))
+            },
             ..Default::default()
         };
 
