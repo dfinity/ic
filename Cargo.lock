@@ -6858,9 +6858,9 @@ dependencies = [
 
 [[package]]
 name = "ic-bn-lib"
-version = "0.7.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5195609bb6f45c53ad2e171ee5106b001e3a553fe6ce8f1f2662563430360003"
+checksum = "28846ee2f665e8cb50bc5dd95ba098f01e20ffd4f9dc31622378cab3f5e286af"
 dependencies = [
  "ahash",
  "anyhow",
@@ -9494,9 +9494,9 @@ dependencies = [
 
 [[package]]
 name = "ic-custom-domains-canister-api"
-version = "0.2.4"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "268df6565445943a8cf4bd1c2d6d86c33c65e23b32e7d3f155a7be8d90a07166"
+checksum = "1dd5c4195dd9e82325f95e1a07add4d09a36a2b96655b006e9f2904b640642a8"
 dependencies = [
  "candid",
  "derive-new",
@@ -9881,8 +9881,8 @@ dependencies = [
 
 [[package]]
 name = "ic-gateway"
-version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?tag=v0.6.5#a16fb54f4c8d4407b8134d63b57f864d67520062"
+version = "0.0.0-git"
+source = "git+https://github.com/dfinity/ic-gateway?tag=v0.6.12#c3950760e20f7e7f6402637ded1390c64ba6072f"
 dependencies = [
  "ahash",
  "anyhow",
@@ -10161,7 +10161,7 @@ dependencies = [
 [[package]]
 name = "ic-http-gateway-protocol"
 version = "0.0.0-git"
-source = "git+https://github.com/dfinity/ic-http-gateway-protocol?tag=v0.6.0#cf47127b978b1ed9c64cf6cbc3ce82c93cec4c6c"
+source = "git+https://github.com/dfinity/ic-http-gateway-protocol?tag=v0.6.1#a51a25539053a394f28d9a2c3486af4be69fce76"
 dependencies = [
  "bytes",
  "candid",
@@ -10173,7 +10173,7 @@ dependencies = [
  "ic-http-certification",
  "ic-response-verification",
  "ic-utils 0.49.1",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -15550,6 +15550,7 @@ dependencies = [
  "ic-btc-adapter-test-utils",
  "ic-btc-checker",
  "ic-btc-interface",
+ "ic-cdk",
  "ic-ckbtc-agent",
  "ic-ckbtc-minter",
  "ic-ckdoge-agent",
@@ -18117,7 +18118,9 @@ dependencies = [
  "ipnetwork",
  "log",
  "memchr",
+ "memmap2",
  "serde",
+ "simdutf8",
  "thiserror 2.0.18",
 ]
 
