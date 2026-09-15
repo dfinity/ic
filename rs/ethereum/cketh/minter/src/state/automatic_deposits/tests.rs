@@ -1317,7 +1317,7 @@ mod sweep_pipeline_metrics {
     }
 
     #[test]
-    fn should_count_only_the_targets_delegated_to_another_contract() {
+    fn should_sweep_every_target_whose_delegation_the_read_placed() {
         let deposits = AutomaticDeposits::default();
         let targets = [
             sweep_target(&account(0)),
@@ -1341,29 +1341,9 @@ mod sweep_pipeline_metrics {
         let batch =
             deposits.sweep_delegations(&targets, &delegations, CHAIN_ID, sweeper_contract());
 
-        // The address holding contract code is left out of the sweep entirely, and is not an
-        // untracked delegation: nothing about it can be re-delegated.
+        // Only the address holding contract code is left out: no authorization can be applied to
+        // it. The one delegated elsewhere is still swept, carrying a nonce-zero authorization.
         assert_eq!(batch.targets.len(), 3);
-        assert_eq!(batch.untracked_delegations, 1);
-    }
-
-    #[test]
-    fn should_count_no_untracked_delegation_when_every_address_is_known() {
-        let deposits = AutomaticDeposits::default();
-        let targets = [sweep_target(&account(0)), sweep_target(&account(1))];
-        let delegations = BTreeMap::from([
-            (targets[0].address(), Delegation::NotDelegated),
-            (
-                targets[1].address(),
-                Delegation::Delegated(sweeper_contract()),
-            ),
-        ]);
-
-        let batch =
-            deposits.sweep_delegations(&targets, &delegations, CHAIN_ID, sweeper_contract());
-
-        assert_eq!(batch.targets.len(), 2);
-        assert_eq!(batch.untracked_delegations, 0);
     }
 
     fn sweep_target(account: &Account) -> SweepTarget {

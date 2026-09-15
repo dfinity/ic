@@ -497,6 +497,51 @@ async fn should_read_delegations_once_for_every_asset_of_a_tick() {
 }
 
 #[tokio::test]
+async fn should_count_an_untracked_delegation_once_per_delegation_read() {
+    init_state(state_ready_to_sign(&[
+        (account(), usdc()),
+        (account(), usdt()),
+    ]));
+    let mut runtime = mock();
+    runtime.expect_time().return_const(NOW);
+    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
+    expect_signing(&mut runtime);
+    expect_delegation_read(
+        &mut runtime,
+        &[(account(), Delegation::Delegated(ANOTHER_SWEEPER_CONTRACT))],
+    );
+
+    create_pending_sweeper_requests(&runtime).await;
+
+    assert_eq!(
+        read_state(|s| s.sweep_observations.untracked_delegations()),
+        1,
+        "the tick reads an address once however many assets it has queued, so it counts once"
+    );
+}
+
+#[tokio::test]
+async fn should_count_no_untracked_delegation_for_an_address_the_read_can_place() {
+    for delegation in [
+        Delegation::NotDelegated,
+        Delegation::Delegated(SWEEPER_CONTRACT),
+    ] {
+        init_state(state_ready_to_sign(&[(account(), usdc())]));
+        let mut runtime = mock();
+        runtime.expect_time().return_const(NOW);
+        expect_signing(&mut runtime);
+        expect_delegation_read(&mut runtime, &[(account(), delegation)]);
+
+        create_pending_sweeper_requests(&runtime).await;
+
+        assert_eq!(
+            read_state(|s| s.sweep_observations.untracked_delegations()),
+            0
+        );
+    }
+}
+
+#[tokio::test]
 async fn should_skip_the_tick_when_the_sweeper_contract_changed_since_the_read() {
     for (delegation, requirement) in [
         (

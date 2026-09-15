@@ -330,7 +330,6 @@ impl AutomaticDeposits {
                 nonce,
             ))
         };
-        let mut untracked_delegations = 0;
         let targets = targets
             .iter()
             .filter_map(|target| {
@@ -343,7 +342,6 @@ impl AutomaticDeposits {
                     // address keeps the other contract. Re-delegating it needs the nonce the
                     // address has reached, which the minter does not track yet.
                     Some(Delegation::Delegated(_another_delegate)) => {
-                        untracked_delegations += 1;
                         authorize(target, TransactionNonce::ZERO)
                     }
                     Some(Delegation::Other) | None => {
@@ -361,11 +359,7 @@ impl AutomaticDeposits {
                 })
             })
             .collect();
-        DelegatedSweepBatch {
-            delegate,
-            targets,
-            untracked_delegations,
-        }
+        DelegatedSweepBatch { delegate, targets }
     }
 
     /// Arm the `(account, asset)` pair, whose deposit `address` is derived for `account`.
@@ -960,9 +954,4 @@ impl AsRef<Account> for DelegatedSweepTarget {
 pub struct DelegatedSweepBatch {
     pub delegate: Address,
     pub targets: Vec<DelegatedSweepTarget>,
-    /// How many targets were read as delegated to some other contract. The minter does not track
-    /// the nonce such an address has reached, so the authorization it carries is at nonce zero, a
-    /// nonce the address has already spent: the protocol skips it and the sweep moves nothing.
-    /// Each one is therefore a deposit that stays stuck until the minter can re-delegate it.
-    pub untracked_delegations: u64,
 }

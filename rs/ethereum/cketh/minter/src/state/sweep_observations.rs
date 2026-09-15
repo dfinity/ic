@@ -10,7 +10,11 @@
 mod tests;
 
 use crate::balance_scan::ScanErrors;
+use crate::balance_scan::batcher::Delegation;
+use crate::deposit_address::DepositAddress;
 use crate::timed_sized_map::Timestamp;
+use ic_ethereum_types::Address;
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
@@ -22,19 +26,39 @@ pub struct SweepObservations {
 }
 
 impl SweepObservations {
-    /// Records one completed pass of the balance scan: when it finished, and how many of its chunks
-    /// did not come back. A pass that read nothing still counts as completed — the scan ran, so the
-    /// staleness this stamps clears.
-    pub fn record_balance_scan_pass(&mut self, now: Timestamp, errors: &ScanErrors) {
+    /// Records the chunks of one balance-scan pass that did not come back, whether or not any
+    /// other chunk of that pass did.
+    pub fn record_balance_scan_errors(&mut self, errors: &ScanErrors) {
         self.balance_scan_call_errors = self.balance_scan_call_errors.saturating_add(errors.call);
         self.balance_scan_decode_errors = self
             .balance_scan_decode_errors
             .saturating_add(errors.decode);
-        self.last_completed_balance_scan = Some(now);
     }
 
-    pub fn record_untracked_delegations(&mut self, count: u64) {
-        self.untracked_delegations = self.untracked_delegations.saturating_add(count);
+    /// Stamps a balance-scan pass that read balances off the chain, at the time it finished. Only
+    /// such a pass moves the stamp: a pass with nothing due, or one whose every chunk failed, says
+    /// nothing about how long ago the scan last worked.
+    pub fn record_completed_balance_scan(&mut self, completed_at: Timestamp) {
+        self.last_completed_balance_scan = Some(completed_at);
+    }
+
+    /// Records the addresses one delegation read found delegated to a contract other than
+    /// `delegate`. Counted off the read's own map, whose keys are the distinct addresses the read
+    /// asked about, so an address with several assets queued counts once per read rather than once
+    /// per asset swept.
+    pub fn record_delegation_read(
+        &mut self,
+        delegations: &BTreeMap<DepositAddress, Delegation>,
+        delegate: Address,
+    ) {
+        let untracked = delegations
+            .values()
+            .filter(|delegation| match delegation {
+                Delegation::Delegated(installed) => *installed != delegate,
+                Delegation::NotDelegated | Delegation::Other => false,
+            })
+            .count() as u64;
+        self.untracked_delegations = self.untracked_delegations.saturating_add(untracked);
     }
 
     pub fn balance_scan_call_errors(&self) -> u64 {

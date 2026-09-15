@@ -75,6 +75,12 @@ fn apply_scan_pass<T: TimeProvider>(
     time_provider: &T,
 ) {
     mutate_state(|s| {
+        if pass.read_the_chain() {
+            s.sweep_observations
+                .record_completed_balance_scan(Timestamp::from_nanos(time_provider.time()));
+        }
+        s.sweep_observations
+            .record_balance_scan_errors(&pass.errors);
         for outcome in pass.outcomes {
             match outcome {
                 ScanOutcome::Detected(deposit) => process_event(
@@ -88,16 +94,25 @@ fn apply_scan_pass<T: TimeProvider>(
                 }
             }
         }
-        s.sweep_observations
-            .record_balance_scan_pass(now, &pass.errors);
     });
 }
 
 /// What one pass of the balance scan over an asset kind observed: an outcome for every pair that
-/// was read, and the failures that kept the rest from being read at all.
+/// was read, the failures that kept the rest from being read at all, and how many chunks came
+/// back.
 struct ScanPass {
     outcomes: Vec<ScanOutcome>,
     errors: ScanErrors,
+    chunks_read: usize,
+}
+
+impl ScanPass {
+    /// Whether this pass actually read balances off the chain. A pass with no due pair reads
+    /// nothing, and so does one whose every chunk failed; neither says anything about how long ago
+    /// the scan last worked.
+    fn read_the_chain(&self) -> bool {
+        self.chunks_read > 0
+    }
 }
 
 /// What a completed scan of one `(address, token)` pair implies, deliberately computed without
@@ -124,6 +139,7 @@ async fn scan_balances<R: Runtime>(
 ) -> ScanPass {
     let mut outcomes = Vec::new();
     let mut errors = ScanErrors::default();
+    let mut chunks_read = 0;
 
     // Each pair is one `balanceOf` call, so chunks split at any pair boundary; a chunk yields its
     // outcomes together once it succeeds.
@@ -139,6 +155,7 @@ async fn scan_balances<R: Runtime>(
         if let Some(balances) =
             chunk_balances(input, calls.len(), latest_block, client, &mut errors).await
         {
+            chunks_read += 1;
             for (target, balance) in chunk.iter().zip(balances) {
                 outcomes.push(scan_outcome(target, balance, latest_block));
             }
@@ -146,7 +163,11 @@ async fn scan_balances<R: Runtime>(
     }
 
     log_scan_summary("token", &outcomes, &errors);
-    ScanPass { outcomes, errors }
+    ScanPass {
+        outcomes,
+        errors,
+        chunks_read,
+    }
 }
 
 async fn scan_eth_balances<R: Runtime>(
@@ -156,6 +177,7 @@ async fn scan_eth_balances<R: Runtime>(
 ) -> ScanPass {
     let mut outcomes = Vec::new();
     let mut errors = ScanErrors::default();
+    let mut chunks_read = 0;
 
     for chunk in due.chunks(MAX_CALLS_PER_BATCH) {
         let holders: Vec<DepositAddress> = chunk.iter().map(ScanTarget::address).collect();
@@ -163,6 +185,7 @@ async fn scan_eth_balances<R: Runtime>(
         if let Some(balances) =
             chunk_balances(input, holders.len(), latest_block, client, &mut errors).await
         {
+            chunks_read += 1;
             for (target, balance) in chunk.iter().zip(balances) {
                 outcomes.push(scan_outcome(target, balance, latest_block));
             }
@@ -170,7 +193,11 @@ async fn scan_eth_balances<R: Runtime>(
     }
 
     log_scan_summary("ETH", &outcomes, &errors);
-    ScanPass { outcomes, errors }
+    ScanPass {
+        outcomes,
+        errors,
+        chunks_read,
+    }
 }
 
 /// How many chunks of one balance-scan pass did not yield balances, by where they gave up: the
