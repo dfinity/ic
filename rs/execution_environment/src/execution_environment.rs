@@ -403,9 +403,7 @@ pub(crate) enum CyclesAndMemoryUsageAccounting {
     /// check must not be unconditional: it deliberately tolerates the canister
     /// becoming frozen by the updated settings (and only fails if the compute or
     /// memory allocation increases), so that the freezing threshold can be raised
-    /// to freeze the canister. Doing the checks and updates in the operation also
-    /// keeps them consistent with the ones `update_settings` runs for the updated
-    /// memory *allocation* (which the checks and updates here do not cover).
+    /// to freeze the canister.
     InOperation,
 }
 
@@ -650,15 +648,13 @@ impl ExecutionEnvironment {
     /// `CanisterManagerResponse::instructions_to_charge_on_success`, i.e. the ones it did
     /// not already charge for itself.
     ///
-    /// If the operation fails with an error, then
+    /// If the operation fails with an error (or accounting for the memory usage
+    /// change of a successful operation fails), then
     /// - changes to the canister state, message, and round limits
     ///   are discarded;
     /// - instructions used (before the failure) are accounted for
     ///   in round limits;
     /// - cycles consumed for those instructions are charged.
-    ///
-    /// The same holds if accounting for the memory usage change of a successful
-    /// operation fails, i.e., the operation is rolled back in that case, too.
     ///
     /// Note. It is expected that the cycles consumed for instructions
     /// executed before the failure can actually be charged.
@@ -3330,11 +3326,19 @@ impl ExecutionEnvironment {
     ) -> ExecuteSubnetMessageResult {
         let canister_id = args.get_canister_id();
         let time = state.time();
+        let subnet_cycles_config = state.get_own_subnet_cycles_config();
         self.execute_mgmt_operation_on_canister(
             canister_id,
-            |canister, _msg, _round_limits, _consumed_cycles| {
-                self.canister_manager
-                    .create_snapshot_from_metadata(sender, canister, args, time)
+            |canister, _msg, round_limits, consumed_cycles| {
+                self.canister_manager.create_snapshot_from_metadata(
+                    sender,
+                    canister,
+                    args,
+                    time,
+                    round_limits,
+                    subnet_cycles_config,
+                    consumed_cycles,
+                )
             },
             CyclesAndMemoryUsageAccounting::AfterOperation,
             state,

@@ -2756,6 +2756,9 @@ impl CanisterManager {
         canister: &mut CanisterState,
         args: UploadCanisterSnapshotMetadataArgs,
         time: Time,
+        round_limits: &mut RoundLimits,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+        consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2798,12 +2801,25 @@ impl CanisterManager {
 
         let new_snapshot_size = args.snapshot_size_bytes();
 
-        // The instructions spent creating a snapshot of the given size, which are
-        // only charged for if the operation succeeds.
-        let instructions_to_charge_on_success = self
+        // Charge for creating a snapshot of the given size upfront.
+        let instructions = self
             .config
             .canister_snapshot_baseline_instructions
             .saturating_add(&new_snapshot_size.get().into());
+        let cost = self
+            .cycles_account_manager
+            .management_canister_cost(instructions, subnet_cycles_config);
+        self.cycles_account_manager
+            .consume_cycles_for_management_canister_instructions(
+                &sender,
+                canister,
+                instructions,
+                subnet_cycles_config,
+            )
+            .map_err(CanisterManagerError::NotEnoughCycles)?;
+        // Record the charge so it survives the canister state rollback on failure.
+        consumed_cycles.add(cost, instructions);
+        round_limits.instructions -= as_round_instructions(instructions);
 
         // Delete old snapshot identified by `replace_snapshot`, recording the deletion
         // so that its directory is also deleted from the tip.
@@ -2836,7 +2852,7 @@ impl CanisterManager {
             reply: Some(reply.encode()),
             heap_delta_increase: heap_delta,
             unflushed_checkpoint_ops,
-            instructions_to_charge_on_success,
+            instructions_to_charge_on_success: NumInstructions::new(0),
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],

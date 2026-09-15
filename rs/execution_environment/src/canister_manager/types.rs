@@ -322,9 +322,13 @@ pub(crate) struct CanisterManagerResponse {
     /// Unflushed checkpoint operations that must be handled
     /// before the next checkpoint.
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
-    /// Instructions used by the current request that the request does not charge
-    /// for itself. `ExecutionEnvironment::execute_mgmt_operation_on_canister`
+    /// Instructions used by the current request that should only be charged
+    /// upon success. `ExecutionEnvironment::execute_mgmt_operation_on_canister`
     /// charges for them only once the request has been processed successfully.
+    /// These cover work that is not done while executing the request itself,
+    /// but only later, at checkpoint time (e.g., writing out or copying a
+    /// snapshot's files in the tip), and thus does not happen at all if the
+    /// request fails.
     pub instructions_to_charge_on_success: NumInstructions,
     /// (Reject) responses from call contexts that were marked as "deleted" while processing the current request.
     /// Note. A call context is marked as "deleted" when a canister is uninstalled.
