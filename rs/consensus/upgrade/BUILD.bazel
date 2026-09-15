@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "upgrade",
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = select({
+        "//conditions:default": [],
+    }),
+    crate_name = "ic_consensus_upgrade",
+    proc_macro_deps = [
+        # Keep sorted.
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/consensus/utils",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/types/types",
+        "@crate_index//:num-traits",
+        "@crate_index//:slog",
+    ],
+)
+
+rust_doc(
+    name = "consensus_upgrade_doc",
+    crate = ":upgrade",
+)
+
+rust_test(
+    name = "upgrade_test",
+    crate = ":upgrade",
+    deps = [
+        # Keep sorted.
+        "//rs/interfaces/mocks",
+        "//rs/protobuf",
+        "//rs/registry/fake",
+        "//rs/registry/proto_data_provider",
+        "//rs/test_utilities/consensus",
+        "//rs/test_utilities/registry",
+        "//rs/test_utilities/types",
+    ],
+)

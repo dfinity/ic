@@ -547,6 +547,7 @@ pub(crate) mod test {
                         canister_http: settings.http_outcalls_payload_to_return,
                         query_stats: settings.query_stats_payload_to_return,
                         chain_key: settings.chain_key_payload_to_return,
+                        upgrade: vec![],
                     },
                     dkg: DkgDataPayload::new_empty(Height::from(0)),
                     idkg: None,
