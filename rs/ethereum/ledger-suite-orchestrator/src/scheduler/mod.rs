@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 mod metrics;
 #[cfg(test)]
 pub mod test_fixtures;

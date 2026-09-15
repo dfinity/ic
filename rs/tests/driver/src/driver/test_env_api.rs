@@ -304,7 +304,7 @@ impl std::fmt::Display for TopologySnapshot {
                 "\tNode id={}, ipv6={:<width$}, domain_name={}, index={}",
                 n.node_id,
                 n.get_ip_addr(),
-                n.get_domain().map_or("n/a".to_string(), |domain| domain),
+                n.get_domain().unwrap_or_else(|| "n/a".to_string()),
                 idx,
                 width = max_length_ipv6,
             )

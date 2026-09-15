@@ -1,6 +1,7 @@
 use ic_base_types::SubnetId;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
+    cli::wait_for_confirmation,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::read_file,
     util::subnet_id_from_str,
@@ -8,14 +9,13 @@ use ic_recovery::{
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
 use ic_types::{Time, consensus::CatchUpPackage};
+use slog::{Logger, error, warn};
+use url::Url;
 
 use std::{fmt::Display, path::Path};
 
-pub(crate) fn get_batch_time_from_cup(cup_path: &Path) -> RecoveryResult<Time> {
-    get_cup(cup_path).map(|cup| cup.content.block.as_ref().context.time)
-}
-
-pub(crate) fn get_cup(cup_path: &Path) -> RecoveryResult<CatchUpPackage> {
+/// Reads and deserializes the CUP at `cup_path`.
+pub fn get_cup(cup_path: &Path) -> RecoveryResult<CatchUpPackage> {
     let cup_proto = pb::CatchUpPackage::read_from_file(cup_path)
         .map_err(|err| cup_error("Failed to decode the CUP file", cup_path, err))?;
 
@@ -23,23 +23,18 @@ pub(crate) fn get_cup(cup_path: &Path) -> RecoveryResult<CatchUpPackage> {
         .map_err(|err| cup_error("Failed to deserialize the CUP file", cup_path, err))
 }
 
+/// The block time of the CUP at `cup_path`, i.e. the IC time the subnet had
+/// reached when it halted at that CUP.
+pub fn get_batch_time_from_cup(cup_path: &Path) -> RecoveryResult<Time> {
+    get_cup(cup_path).map(|cup| cup.content.block.as_ref().context.time)
+}
+
 fn cup_error(message: impl Display, cup_path: &Path, error: impl Display) -> RecoveryError {
     RecoveryError::UnexpectedError(format!("{} ({}): {}", message, cup_path.display(), error))
 }
 
-pub(crate) fn canister_id_range_to_string(canister_id_range: &CanisterIdRange) -> String {
-    format!("{}:{}", canister_id_range.start, canister_id_range.end)
-}
-
-pub fn canister_id_ranges_to_strings(canister_id_ranges: &[CanisterIdRange]) -> Vec<String> {
-    canister_id_ranges
-        .iter()
-        .map(canister_id_range_to_string)
-        .collect::<Vec<_>>()
-}
-
 /// Computes the state hash of the given checkpoint.
-pub(crate) fn get_state_hash(checkpoint_dir: impl AsRef<Path>) -> RecoveryResult<String> {
+pub fn get_state_hash(checkpoint_dir: impl AsRef<Path>) -> RecoveryResult<String> {
     let manifest = manifest_from_path(checkpoint_dir.as_ref()).map_err(|e| {
         RecoveryError::CheckpointError(
             format!(
@@ -51,6 +46,17 @@ pub(crate) fn get_state_hash(checkpoint_dir: impl AsRef<Path>) -> RecoveryResult
     })?;
 
     Ok(hex::encode(manifest_hash(&manifest)))
+}
+
+pub(crate) fn canister_id_range_to_string(canister_id_range: &CanisterIdRange) -> String {
+    format!("{}:{}", canister_id_range.start, canister_id_range.end)
+}
+
+pub fn canister_id_ranges_to_strings(canister_id_ranges: &[CanisterIdRange]) -> Vec<String> {
+    canister_id_ranges
+        .iter()
+        .map(canister_id_range_to_string)
+        .collect::<Vec<_>>()
 }
 
 /// Parses the output of `state-tool split-manifests` and finds the expected root hash of the split
@@ -72,7 +78,7 @@ pub(crate) fn get_state_hash(checkpoint_dir: impl AsRef<Path>) -> RecoveryResult
 /// (...)
 /// ROOT HASH: $root_hash_2
 /// =======
-pub(crate) fn find_expected_state_hash_for_subnet_id(
+pub fn find_expected_state_hash_for_subnet_id(
     path: &Path,
     subnet_id: SubnetId,
 ) -> RecoveryResult<String> {
@@ -94,6 +100,25 @@ pub(crate) fn find_expected_state_hash_for_subnet_id(
     Err(RecoveryError::OutputError(
         "Couldn't get the expected state hash".to_string(),
     ))
+}
+
+/// Prints a dashboard URL and waits until the operator confirms that what it
+/// shows allows the next step to be taken.
+pub fn print_url_and_ask_for_confirmation(
+    logger: &Logger,
+    url: String,
+    text_to_display: impl std::fmt::Display,
+) {
+    match Url::parse(&url) {
+        Ok(url) => {
+            warn!(logger, "{}", text_to_display);
+            warn!(logger, "{}", url);
+            wait_for_confirmation(logger);
+        }
+        Err(err) => {
+            error!(logger, "Failed to parse url {}: {}", url, err);
+        }
+    }
 }
 
 #[cfg(test)]

@@ -411,6 +411,7 @@ async fn get_minter_info() -> MinterInfo {
             ),
             erc20_balances,
             minimum_deposit_amounts,
+            minimum_eth_deposit_amount: Some(min_deposit(&Asset::Eth).into()),
             last_eth_scraped_block_number,
             last_erc20_scraped_block_number,
             last_deposit_with_subaccount_scraped_block_number,
@@ -555,6 +556,7 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
 }
 
 #[update]
+#[allow(clippy::result_large_err)]
 async fn withdraw_erc20(
     WithdrawErc20Arg {
         amount,
@@ -1079,14 +1081,14 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,
-                    token,
+                    asset,
                     items,
                     max_transaction_fee,
                     created_at,
                 }) => EP::AcceptedSweepRequest {
                     sweep_id: id.0.into(),
                     destination: destination.to_string(),
-                    asset: Asset::Erc20(token).into(),
+                    asset: asset.into(),
                     items: map_authorized_sweep_items(&items),
                     max_transaction_fee: max_transaction_fee.into(),
                     created_at,

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
@@ -54,6 +54,14 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_tests_ckbtc",
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":ckbtc",
+    deps = [
+        "@crate_index//:ic-cdk",
+    ],
 )
 
 system_test_nns(
