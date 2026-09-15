@@ -5293,6 +5293,28 @@ mod tests {
     }
 
     #[test]
+    fn secp256k1_writes_nothing_when_hashed() {
+        // If this test fails, `EcdsaCurve` is deriving `Hash` again. That makes
+        // `Secp256k1` write its discriminant and moves every `payload_hash`
+        // naming an ECDSA key; see the hand-written `impl Hash for EcdsaCurve`.
+        struct ByteCount(usize);
+        impl std::hash::Hasher for ByteCount {
+            fn write(&mut self, bytes: &[u8]) {
+                self.0 += bytes.len();
+            }
+            fn finish(&self) -> u64 {
+                0
+            }
+        }
+        let mut hasher = ByteCount(0);
+        std::hash::Hash::hash(&EcdsaCurve::Secp256k1, &mut hasher);
+        assert_eq!(hasher.0, 0);
+        let mut hasher = ByteCount(0);
+        std::hash::Hash::hash(&EcdsaCurve::Secp256r1, &mut hasher);
+        assert_ne!(hasher.0, 0);
+    }
+
+    #[test]
     fn schnorr_from_u32_exhaustive() {
         // If this test fails, make sure this trait impl covers all variants:
         // `impl TryFrom<u32> for SchnorrAlgorithm`
