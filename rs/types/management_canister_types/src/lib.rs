@@ -2873,7 +2873,7 @@ impl SetupInitialDKGResponse {
 
 /// Types of curves that can be used for ECDSA signing.
 /// ```text
-/// variant { secp256k1; }
+/// variant { secp256k1; secp256r1; }
 /// ```
 #[derive(
     Copy,
@@ -2892,6 +2892,8 @@ impl SetupInitialDKGResponse {
 pub enum EcdsaCurve {
     #[serde(rename = "secp256k1")]
     Secp256k1,
+    #[serde(rename = "secp256r1")]
+    Secp256r1,
 }
 
 impl TryFrom<u32> for EcdsaCurve {
@@ -2900,6 +2902,7 @@ impl TryFrom<u32> for EcdsaCurve {
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(EcdsaCurve::Secp256k1),
+            1 => Ok(EcdsaCurve::Secp256r1),
             _ => Err(format!(
                 "{value} is not a recognized EcdsaCurve variant identifier."
             )),
@@ -2911,6 +2914,7 @@ impl From<&EcdsaCurve> for pb_types::EcdsaCurve {
     fn from(item: &EcdsaCurve) -> Self {
         match item {
             EcdsaCurve::Secp256k1 => pb_types::EcdsaCurve::Secp256k1,
+            EcdsaCurve::Secp256r1 => pb_types::EcdsaCurve::Secp256r1,
         }
     }
 }
@@ -2921,6 +2925,7 @@ impl TryFrom<pb_types::EcdsaCurve> for EcdsaCurve {
     fn try_from(item: pb_types::EcdsaCurve) -> Result<Self, Self::Error> {
         match item {
             pb_types::EcdsaCurve::Secp256k1 => Ok(EcdsaCurve::Secp256k1),
+            pb_types::EcdsaCurve::Secp256r1 => Ok(EcdsaCurve::Secp256r1),
             pb_types::EcdsaCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "EcdsaCurve",
                 err: format!("Unable to convert {item:?} to an EcdsaCurve"),
@@ -2941,6 +2946,7 @@ impl FromStr for EcdsaCurve {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "secp256k1" => Ok(Self::Secp256k1),
+            "secp256r1" => Ok(Self::Secp256r1),
             _ => Err(format!("{s} is not a recognized ECDSA curve")),
         }
     }
@@ -5277,6 +5283,7 @@ mod tests {
         for curve in EcdsaCurve::iter() {
             match curve {
                 EcdsaCurve::Secp256k1 => assert_eq!(EcdsaCurve::try_from(0).unwrap(), curve),
+                EcdsaCurve::Secp256r1 => assert_eq!(EcdsaCurve::try_from(1).unwrap(), curve),
             }
         }
     }

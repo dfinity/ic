@@ -132,6 +132,7 @@ type http_request_result = record {
 
 type ecdsa_curve = variant {
     secp256k1;
+    secp256r1;
 };
 
 type vetkd_curve = variant {
