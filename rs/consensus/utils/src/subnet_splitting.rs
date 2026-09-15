@@ -1,12 +1,10 @@
 use ic_interfaces_registry::RegistryClient;
-use ic_protobuf::{
-    proxy::ProxyDecodeError, registry::subnet::v1::catch_up_package_contents::CupType,
-};
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_types::{
     NodeId, RegistryVersion, SubnetId,
     consensus::{
-        Block, SubnetSplittingArgs,
+        Block, CupType,
         dkg::{SplittingArgs, SubnetSplittingStatus},
     },
     registry::RegistryClientError,
@@ -124,21 +122,21 @@ pub fn get_status(
         ));
     };
 
-    let Some(CupType::SubnetSplitting(subnet_splitting_args_proto)) = contents.cup_type else {
-        return Ok(Status::NotScheduled);
-    };
-
     if versioned_record.version <= last_summary_block.context.registry_version {
         // The last summary block already references this version, so this record corresponds to a
         // past subnet split rather than a pending one.
         return Ok(Status::NotScheduled);
     }
 
-    let subnet_splitting_args = SubnetSplittingArgs::try_from(subnet_splitting_args_proto)
+    let cup_type = CupType::try_from(contents.cup_type)
         .map_err(StatusError::CatchUpContentsDeserializationError)?;
 
+    let CupType::SubnetSplitting(splitting_args) = cup_type else {
+        return Ok(Status::NotScheduled);
+    };
+
     Ok(Status::Scheduled {
-        destination_subnet_id: subnet_splitting_args.destination_subnet_id,
+        destination_subnet_id: splitting_args.destination_subnet_id,
         scheduled_at: versioned_record.version,
     })
 }
@@ -240,8 +238,9 @@ pub fn get_post_split_subnet_assignment(
 mod tests {
     use assert_matches::assert_matches;
     use ic_interfaces_registry::RegistryClientVersionedResult;
-    use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
-    use ic_protobuf::registry::subnet::v1::{GenesisArgs, RecoveryArgs};
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, GenesisArgs, RecoveryArgs, catch_up_package_contents::CupType,
+    };
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_test_utilities_consensus::fake::Fake;
     use ic_test_utilities_registry::{
