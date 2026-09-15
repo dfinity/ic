@@ -1970,7 +1970,11 @@ crate.spec(
 )
 crate.spec(
     package = "vsock",
-    version = "^0.4",
+    version = "^0.5.4",
+)
+crate.spec(
+    package = "tokio-vsock",
+    version = "0.7.2",
 )
 crate.spec(
     package = "walkdir",
