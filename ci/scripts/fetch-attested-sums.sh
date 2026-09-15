@@ -142,10 +142,6 @@ fi
 # token; (3) is statement data, trustworthy only because --signer-workflow above
 # pins who produced it. All three are checked on one entry — an attacker must
 # not be able to satisfy them with three different attestations.
-#
-# The buildConfigURI is "<workflow path>@<ref>"; the prefix match includes the
-# trailing '@' so it can only match at the end of the workflow path, never at a
-# workflow whose name merely extends <build-workflow>'s.
 digest="$(sha256sum "$out_file" | cut -d' ' -f1)"
 jq -e \
     --arg name "$expected_subject" \
