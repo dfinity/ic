@@ -8,7 +8,7 @@ mod runner;
 mod test_runner;
 mod types;
 
-use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
+use ic_consensus_dkg::get_genesis_dkg_summary_from_cup_contents;
 pub use runner::ConsensusRunner;
 pub use test_runner::{RegistryMutations, TestRunner};
 pub use types::{
@@ -213,7 +213,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     let cup_contents = registry_client
         .get_cup_contents(subnet_id, registry_client.get_latest_version())
         .expect("Failed to retreive the DKG transcripts from registry");
-    let summary = get_dkg_summary_from_cup_contents(
+    let summary = get_genesis_dkg_summary_from_cup_contents(
         cup_contents.value.expect("Missing CUP contents"),
         subnet_id,
         &*registry_client,

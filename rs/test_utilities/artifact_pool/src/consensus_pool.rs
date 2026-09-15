@@ -2,7 +2,7 @@ use batch::BatchPayload;
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
+use ic_consensus_dkg::get_genesis_dkg_summary_from_cup_contents;
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_interfaces::{
@@ -190,7 +190,7 @@ impl TestConsensusPool {
         let cup_contents = registry_client
             .get_cup_contents(subnet_id, registry_client.get_latest_version())
             .expect("Failed to retreive the DKG transcripts from registry");
-        let summary = get_dkg_summary_from_cup_contents(
+        let summary = get_genesis_dkg_summary_from_cup_contents(
             cup_contents.value.expect("Missing CUP contents"),
             subnet_id,
             &*registry_client,
