@@ -580,7 +580,7 @@ async fn should_count_no_untracked_delegation_once_the_minter_tracks_the_nonce()
 }
 
 #[tokio::test]
-async fn should_count_no_untracked_delegation_while_the_addresss_own_sweep_is_in_flight() {
+async fn should_count_no_untracked_delegation_while_its_own_sweep_is_in_flight() {
     init_state(state_ready_to_sign(&[(account(), usdc())]));
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
