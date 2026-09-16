@@ -40,7 +40,7 @@ MAINNET_BINARIES = [
 # dashboard API and from CDN-served SHA256SUMS files -- neither of which is
 # authenticated -- and the resulting PR is auto-approved and auto-merged, so a value
 # that is not exactly a commit id / sha256 / plain name must never be written to
-# mainnet-icos-revisions.json in the first place. The repository rules reject such
+# mainnet-icos-revisions.json in the first place. The Bazel rules reject such
 # values as well (see bazel/mainnet-artifact-refs.bzl, which these patterns mirror);
 # failing here means a poisoned upstream value never reaches a PR.
 COMMIT_ID_PATTERN = re.compile(r"\A[0-9a-f]{40}\Z")
