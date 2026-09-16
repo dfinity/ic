@@ -1380,6 +1380,11 @@ impl Scheduler for SchedulerImpl {
                 self.metrics
                     .round_skipped_due_to_current_heap_delta_above_limit
                     .inc();
+                // The nested scope propagates into the root only on drop, so the root
+                // total is short by whatever was drained above until it is gone — and
+                // would silently stay so if anything ever cloned it.
+                drop(measurement_scope);
+                accumulate_round_subnet_metrics(&mut state, &root_measurement_scope);
                 return state;
             }
         }
@@ -1561,10 +1566,7 @@ impl Scheduler for SchedulerImpl {
                 );
             }
 
-            final_state
-                .metadata
-                .subnet_metrics
-                .update_transactions_total += root_measurement_scope.messages().get();
+            accumulate_round_subnet_metrics(&mut final_state, &root_measurement_scope);
             final_state.metadata.subnet_metrics.num_canisters =
                 final_state.canister_states().len() as u64;
         }
@@ -1575,6 +1577,19 @@ impl Scheduler for SchedulerImpl {
     fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
         self.finish_round(state, ExecutionRoundType::CheckpointRound);
     }
+}
+
+/// Accumulates the round's totals into the subnet metrics. Both exits of
+/// `execute_round` go through here, so a round's work cannot be missed.
+fn accumulate_round_subnet_metrics(
+    state: &mut ReplicatedState,
+    root_measurement_scope: &MeasurementScope,
+) {
+    let subnet_metrics = &mut state.metadata.subnet_metrics;
+    subnet_metrics.update_transactions_total += root_measurement_scope.messages().get();
+    subnet_metrics.round_instructions_total = subnet_metrics
+        .round_instructions_total
+        .saturating_add(root_measurement_scope.instructions().get());
 }
 
 fn observe_instructions_consumed_per_message(

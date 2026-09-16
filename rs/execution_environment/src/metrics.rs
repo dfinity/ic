@@ -422,6 +422,11 @@ impl<'a> MeasurementScope<'a> {
     pub fn messages(&self) -> NumMessages {
         self.core.borrow().messages
     }
+
+    /// Returns the number of instructions associated with this measurement scope.
+    pub fn instructions(&self) -> NumInstructions {
+        self.core.borrow().instructions
+    }
 }
 
 impl<'a> Clone for MeasurementScope<'a> {

@@ -2929,7 +2929,7 @@ fn read_subnet_metrics(env: &StateMachine, caller: CanisterId) -> SubnetMetricsR
 /// Covers the semantics of every `subnet_metrics` field on a running subnet:
 /// `block_height` is the height of the block in whose execution the call is
 /// processed (asserted by `read_subnet_metrics` on each read below), while the
-/// four aggregate fields report `SystemMetadata::subnet_metrics`, which is
+/// five aggregate fields report `SystemMetadata::subnet_metrics`, which is
 /// written at the end of a round and hence lags by (at least) one round.
 #[test]
 fn subnet_metrics_reports_the_subnets_metrics() {
@@ -3010,6 +3010,32 @@ fn subnet_metrics_reports_the_subnets_metrics() {
     assert_gt!(
         response.consumed_cycles_total,
         candid::Nat::from(consumed_now.get())
+    );
+
+    // `million_round_instructions_total`: the raw counter in millions, rounded
+    // up. The raw counter has to equal what the round histogram observed, every
+    // round having observed exactly once; the reported value then lags by a
+    // round or two, so it is bracketed rather than pinned. The conversion itself
+    // is pinned exactly by `subnet_metrics_reports_round_instructions_in_millions_rounded_up`.
+    // Non-zero because installing the caller alone charges tens of millions.
+    let raw_now = env
+        .get_latest_state()
+        .metadata
+        .subnet_metrics
+        .round_instructions_total;
+    assert_eq!(raw_now, env.instructions_consumed() as u64);
+    assert_gt!(
+        response.million_round_instructions_total,
+        candid::Nat::from(0_u64)
+    );
+    assert!(
+        response.million_round_instructions_total
+            >= metrics_before.round_instructions_total.div_ceil(1_000_000)
+    );
+    assert!(
+        response.million_round_instructions_total <= raw_now.div_ceil(1_000_000),
+        "reported {} millions exceeds the {raw_now} instructions the state holds now",
+        response.million_round_instructions_total
     );
 
     // `num_canisters` follows the canister population in both directions.
