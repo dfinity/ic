@@ -76,7 +76,7 @@ use std::{
     time::Duration,
 };
 use strum::FromRepr;
-use strum_macros::EnumIter;
+use strum_macros::{EnumCount, EnumIter};
 
 /// Time after which a response is considered timed out and a timeout error will be returned to execution
 pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
@@ -237,7 +237,7 @@ impl Replication {
 }
 
 /// The kind of replication of a request.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, EnumCount, Eq, PartialEq)]
 pub enum ReplicationKind {
     FullyReplicated,
     Flexible {
@@ -255,6 +255,24 @@ impl ReplicationKind {
             ReplicationKind::Flexible { .. } => "flexible",
             ReplicationKind::NonReplicated => "non_replicated",
         }
+    }
+
+    /// Every value [`Self::as_str`] can return, e.g. to initialize the label values
+    /// of a metric labeled by replication kind.
+    pub fn all_as_str() -> [&'static str; 3] {
+        // A new variant has to be listed below, and the array's length bumped.
+        const _: () = assert!(<ReplicationKind as strum::EnumCount>::COUNT == 3);
+        [
+            Self::FullyReplicated.as_str(),
+            // `as_str` does not look at the counts, so they are irrelevant here.
+            Self::Flexible {
+                total_requests: 0,
+                min_responses: 0,
+                max_responses: 0,
+            }
+            .as_str(),
+            Self::NonReplicated.as_str(),
+        ]
     }
 
     /// The response counts for a flexible request that does not specify its own:

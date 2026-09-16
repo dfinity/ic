@@ -746,7 +746,7 @@ impl ExecutionEnvironment {
                                 new_price.nominal(),
                             );
                             self.metrics
-                                .observe_http_outcall_request(context, &response);
+                                .observe_http_outcall_delivered(context, &response);
 
                             let max_response_size = match context.max_response_bytes {
                                 Some(response_size) => response_size.get(),
@@ -2359,10 +2359,6 @@ impl ExecutionEnvironment {
                 CyclesUseCase::HTTPOutcalls,
                 nominal_consumed_cycles,
             );
-        self.metrics.observe_http_outcall_submitted(
-            &canister_http_request_context.pricing_version,
-            &canister_http_request_context.replication,
-        );
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
         );

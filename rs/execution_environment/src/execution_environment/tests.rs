@@ -4013,31 +4013,23 @@ fn execute_canister_http_request_pricing_version() {
                  flexible_http_requests enabled={flexible_http_requests_enabled}"
             );
 
-            // The outcall was admitted, so it is counted under the version it was
-            // admitted with. The request is fully replicated, `is_replicated` being
-            // unset in the args.
-            let submitted = fetch_int_counter_vec(
+            // The outcall is only counted once its response is delivered, so the
+            // counter is still zero here. Every (pricing version, replication)
+            // series is registered nonetheless, so none of them read as missing.
+            let delivered = fetch_int_counter_vec(
                 test.metrics_registry(),
-                "execution_http_outcalls_submitted_total",
+                "execution_http_outcalls_delivered_total",
             );
-            // Every (pricing version, replication) series is initialized, so the
-            // ones that were not hit are exported as zero rather than missing.
             assert_eq!(
-                submitted.len(),
+                delivered.len(),
                 6,
-                "unexpected submitted series for pricing_version={pricing_version:?} with \
+                "unexpected delivered series for pricing_version={pricing_version:?} with \
                  flexible_http_requests enabled={flexible_http_requests_enabled}"
             );
-            assert_eq!(
-                nonzero_values(submitted),
-                metric_vec(&[(
-                    &[
-                        ("pricing_version", expected.as_str()),
-                        ("replication", "fully_replicated"),
-                    ],
-                    1
-                )]),
-                "unexpected submitted metric for pricing_version={pricing_version:?} with \
+            assert!(
+                nonzero_values(delivered).is_empty(),
+                "admitting an outcall should not count it as delivered, for \
+                 pricing_version={pricing_version:?} with \
                  flexible_http_requests enabled={flexible_http_requests_enabled}"
             );
         }
