@@ -3,7 +3,7 @@ GitHub CI for the IC Repo
 ## Using custom CI labels
 CI labels trigger various behavior. You can reference the labels that start with `CI_` and see available options.
 
-The labels read by `.github/workflows/ci-main.yml` and `.github/workflows/ci-pr-only.yml` are:
+The labels read by `.github/workflows/ci-main.yml`, `.github/workflows/ci-rbe-evaluation.yml` and `.github/workflows/ci-pr-only.yml` are:
 
 | Label | Effect |
 | --- | --- |
