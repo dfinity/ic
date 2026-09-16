@@ -1271,11 +1271,11 @@ impl CanisterManager {
     /// Reports the cycles the canister has consumed, by use case.
     ///
     /// Reads the monotonic amounts rather than the gauges, as the endpoint's
-    /// contract is a total that only ever grows. They are backfilled from the gauges,
-    /// which predate them, on every checkpoint round, so they cover the canister's
-    /// full history -- with the sole exception of `HTTPOutcalls`, which has no
-    /// canister-level gauge to be backfilled from and hence only covers the outcalls
-    /// made since May 2026 (see
+    /// contract is a total that only ever grows. Every checkpoint round backfills them
+    /// from the gauges, which predate them, so they cover the canister's full history
+    /// from the first such round after an upgrade onwards -- with the sole exception
+    /// of `HTTPOutcalls`, which has no canister-level gauge to be backfilled from and
+    /// hence only ever covers the outcalls made since May 2026 (see
     /// `CanisterMetrics::consumed_cycles_by_use_cases_monotonic`).
     pub(crate) fn get_canister_metrics(
         &self,
