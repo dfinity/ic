@@ -57,6 +57,7 @@ component_files = {
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh"): "/opt/ic/bin/guestos-recovery-upgrader.sh",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-launcher.sh"): "/opt/ic/bin/guestos-recovery-launcher.sh",
     Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
+    Label("upgrade-proxy.service"): "/etc/systemd/system/upgrade-proxy.service",
 
     # monitoring
     Label("monitoring/metrics.sh"): "/opt/ic/bin/metrics.sh",

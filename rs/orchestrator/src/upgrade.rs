@@ -645,7 +645,7 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
     fn get_release_package_urls_and_hash(
         &self,
         version: &ReplicaVersion,
-    ) -> UpgradeResult<(Vec<String>, Option<String>)> {
+    ) -> UpgradeResult<(Vec<String>, String)> {
         let record = self
             .registry
             .get_replica_version_record(version.clone(), self.registry.get_latest_version())
@@ -653,7 +653,7 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
 
         Ok((
             record.release_package_urls,
-            Some(record.release_package_sha256_hex),
+            record.release_package_sha256_hex,
         ))
     }
 

@@ -1,0 +1,12 @@
+[Unit]
+Description=Upgrade Proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Environment=RUST_BACKTRACE=1
+ExecStart=/opt/ic/bin/upgrade_proxy
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

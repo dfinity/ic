@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "a01b1585b418401db5ca3fd4bb94f74bac5d47128a65e5c4e79ebeaf6282efaf",
+  "checksum": "e7cf1dfe089a3f74ce4ace70cfd5ab63052d237cbfe92d7215c1c0899f453e7d",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4743,6 +4743,40 @@
         }
       ],
       "version": "0.3.2"
+    },
+    "ascii 1.1.0": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "default",
+          "std"
+        ],
+        "edition": "2015"
+      },
+      "library_target_name": "ascii",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "ascii",
+      "package_url": "https://github.com/tomprogrammer/rust-ascii",
+      "repository": {
+        "Http": {
+          "sha256": "d92bec98840b8f03a5ff5413de5293bfcd8bf96467cf5452609f939ec6f5de16",
+          "url": "https://static.crates.io/crates/ascii/1.1.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ascii",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.1.0"
     },
     "ascii-canvas 3.0.0": {
       "common_attrs": {
@@ -11757,6 +11791,35 @@
       ],
       "version": "0.4.42"
     },
+    "chunked_transfer 1.5.0": {
+      "common_attrs": {
+        "edition": "2018"
+      },
+      "library_target_name": "chunked_transfer",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "chunked_transfer",
+      "package_url": "https://github.com/frewsxcv/rust-chunked-transfer",
+      "repository": {
+        "Http": {
+          "sha256": "6e4de3bc4ea267985becf712dc6d9eed8b04c953b3fcfb339ebc87acd9804901",
+          "url": "https://static.crates.io/crates/chunked_transfer/1.5.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "chunked_transfer",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.5.0"
+    },
     "ciborium 0.2.2": {
       "common_attrs": {
         "crate_features": [
@@ -18730,6 +18793,10 @@
             "target": "time"
           },
           {
+            "id": "tiny_http 0.12.0",
+            "target": "tiny_http"
+          },
+          {
             "id": "tokio 1.50.0",
             "target": "tokio"
           },
@@ -18860,6 +18927,10 @@
           {
             "id": "turmoil 0.6.4",
             "target": "turmoil"
+          },
+          {
+            "id": "ureq 3.4.1",
+            "target": "ureq"
           },
           {
             "id": "url 2.5.4",
@@ -58504,6 +58575,56 @@
       ],
       "version": "2.0.2"
     },
+    "tiny_http 0.12.0": {
+      "common_attrs": {
+        "crate_features": [
+          "default"
+        ],
+        "deps": [
+          {
+            "id": "ascii 1.1.0",
+            "target": "ascii"
+          },
+          {
+            "id": "chunked_transfer 1.5.0",
+            "target": "chunked_transfer"
+          },
+          {
+            "id": "httpdate 1.0.3",
+            "target": "httpdate"
+          },
+          {
+            "id": "log 0.4.33",
+            "target": "log"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "tiny_http",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "tiny_http",
+      "package_url": "https://github.com/tiny-http/tiny-http",
+      "repository": {
+        "Http": {
+          "sha256": "389915df6413a2e74fb181895f933386023c71110878cd0825588928e64cdc82",
+          "url": "https://static.crates.io/crates/tiny_http/0.12.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tiny_http",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.12.0"
+    },
     "tinystr 0.7.6": {
       "common_attrs": {
         "crate_features": [
@@ -62713,6 +62834,130 @@
       ],
       "version": "0.9.0"
     },
+    "ureq 3.4.1": {
+      "common_attrs": {
+        "crate_features": [
+          "_rustls",
+          "_tls",
+          "gzip",
+          "rustls-no-provider",
+          "rustls-webpki-roots"
+        ],
+        "deps": [
+          {
+            "id": "base64 0.23.1",
+            "target": "base64"
+          },
+          {
+            "id": "flate2 1.1.5",
+            "target": "flate2"
+          },
+          {
+            "id": "log 0.4.33",
+            "target": "log"
+          },
+          {
+            "id": "percent-encoding 2.3.1",
+            "target": "percent_encoding"
+          },
+          {
+            "id": "rustls 0.23.27",
+            "target": "rustls"
+          },
+          {
+            "id": "rustls-pki-types 1.12.0",
+            "target": "rustls_pki_types"
+          },
+          {
+            "id": "ureq-proto 0.6.2",
+            "target": "ureq_proto"
+          },
+          {
+            "id": "utf8-zero 0.8.1",
+            "target": "utf8_zero"
+          },
+          {
+            "id": "webpki-roots 1.0.6",
+            "target": "webpki_roots"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "ureq",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "ureq",
+      "package_url": "https://github.com/algesten/ureq",
+      "repository": {
+        "Http": {
+          "sha256": "af5546be8f5378d5414f83733f5c9a2526f4645829edbc1c41790aeef1b38e8b",
+          "url": "https://static.crates.io/crates/ureq/3.4.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ureq",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "3.4.1"
+    },
+    "ureq-proto 0.6.2": {
+      "common_attrs": {
+        "crate_features": [
+          "client"
+        ],
+        "deps": [
+          {
+            "id": "base64 0.23.1",
+            "target": "base64"
+          },
+          {
+            "id": "http 1.3.1",
+            "target": "http"
+          },
+          {
+            "id": "httparse 1.10.1",
+            "target": "httparse"
+          },
+          {
+            "id": "log 0.4.33",
+            "target": "log"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "ureq_proto",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE.txt",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "ureq-proto",
+      "package_url": "https://github.com/algesten/ureq-proto",
+      "repository": {
+        "Http": {
+          "sha256": "fabc3e92916c89c95b20eef7b06b00b066bc217ef9ea3a4ac9bf1a7e35261e10",
+          "url": "https://static.crates.io/crates/ureq-proto/0.6.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ureq_proto",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.6.2"
+    },
     "url 2.5.4": {
       "common_attrs": {
         "crate_features": [
@@ -62878,6 +63123,39 @@
         }
       ],
       "version": "0.1.6"
+    },
+    "utf8-zero 0.8.1": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "utf8_zero",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "utf8-zero",
+      "package_url": "https://github.com/algesten/utf8-zero",
+      "repository": {
+        "Http": {
+          "sha256": "b8c0a043c9540bae7c578c88f91dda8bd82e59ae27c21baca69c8b191aaf5a6e",
+          "url": "https://static.crates.io/crates/utf8-zero/0.8.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "utf8_zero",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.8.1"
     },
     "utf8_iter 1.0.4": {
       "common_attrs": {
@@ -71029,6 +71307,7 @@
     "tikv-jemalloc-ctl 0.7.0",
     "tikv-jemallocator 0.7.0",
     "time 0.3.47",
+    "tiny_http 0.12.0",
     "tokio 1.50.0",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.4.0",
@@ -71062,6 +71341,7 @@
     "trust-dns-resolver 0.22.0",
     "tui-textarea 0.7.0",
     "turmoil 0.6.4",
+    "ureq 3.4.1",
     "url 2.5.4",
     "uuid 1.12.1",
     "virt 0.4.2",
