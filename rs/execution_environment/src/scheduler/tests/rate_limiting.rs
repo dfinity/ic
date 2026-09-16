@@ -130,6 +130,40 @@ fn heap_delta_limit_still_counts_drained_consensus_queue_messages() {
     );
 }
 
+/// The counter tracks the round histogram across ordinary rounds too.
+#[test]
+fn round_instructions_total_tracks_the_round_histogram() {
+    use ic_test_utilities_metrics::fetch_histogram_stats;
+    use more_asserts::assert_gt;
+
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister_id = test.create_canister();
+
+    for _ in 0..3 {
+        test.send_ingress(canister_id, ingress(1000));
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        let observed =
+            fetch_histogram_stats(test.metrics_registry(), "execution_round_instructions")
+                .unwrap()
+                .sum as u64;
+        assert_eq!(
+            test.state()
+                .metadata
+                .subnet_metrics
+                .round_instructions_total,
+            observed
+        );
+    }
+    assert_gt!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .round_instructions_total,
+        0
+    );
+}
+
 #[test]
 fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached() {
     fn rounds_skipped_metric(test: &SchedulerTest) -> u64 {
