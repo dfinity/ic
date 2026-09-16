@@ -1148,9 +1148,9 @@ fn assert_consumed_cycles_invariant(
         outstanding.total(),
     );
     for (use_case, gauge) in metrics.consumed_cycles_by_use_cases() {
-        // An absent monotonic entry reads as zero: the backfill materializes the
-        // gauge map's use cases only when it actually has something to write, so a
-        // use case whose whole gauge is still outstanding can be left without one.
+        // An absent monotonic entry reads as zero, which is what it means: a canister
+        // decoded from a checkpoint predating the monotonic map has none of them at
+        // all until a checkpoint round backfills it.
         let monotonic = metrics
             .consumed_cycles_by_use_cases_monotonic()
             .get(use_case)

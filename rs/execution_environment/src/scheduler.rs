@@ -2241,14 +2241,11 @@ fn migrate_consumed_cycles_to_monotonic(
             return;
         };
 
-        // The scalar total and, driven by the gauge map, one check per use case. The
-        // monotonic map's `HTTPOutcalls` entry is thus left out, as it must be: it
-        // has no canister-level gauge to be checked or derived from (see
+        // Check the scalar total and, driven by the gauge map, one use case at a
+        // time. The monotonic map's `HTTPOutcalls` entry is thus left out, as it must
+        // be: it has no canister-level gauge to be checked or derived from (see
         // `CanisterMetrics::consumed_cycles_by_use_cases_monotonic`).
-        //
-        // Not short-circuiting: every inconsistency is worth reporting, and a single
-        // one anywhere makes the whole canister due for a backfill.
-        let mut backfill = needs_monotonic_backfill(
+        check_monotonic_consumed_cycles(
             canister_metrics.consumed_cycles(),
             canister_metrics.consumed_cycles_monotonic(),
             outstanding.total(),
@@ -2263,7 +2260,7 @@ fn migrate_consumed_cycles_to_monotonic(
                 .get(use_case)
                 .copied()
                 .unwrap_or_else(NominalCycles::zero);
-            backfill |= needs_monotonic_backfill(
+            check_monotonic_consumed_cycles(
                 *gauge,
                 monotonic,
                 outstanding.for_use_case(*use_case),
@@ -2274,14 +2271,17 @@ fn migrate_consumed_cycles_to_monotonic(
             );
         }
 
-        // Only take a mutable reference if there is something to write, so that this
-        // stays a read-only pass once every canister has been backfilled
-        // (`Arc::make_mut` clones the canister).
-        if backfill {
-            Arc::make_mut(canister)
-                .system_state
-                .migrate_consumed_cycles_to_monotonic();
-        }
+        // Backfill unconditionally, even though `Arc::make_mut` clones a canister
+        // whose state is shared: this only runs on checkpoint rounds, so paying for it
+        // once per canister per checkpoint is fine, and it keeps the pass simple.
+        //
+        // Safe to do after a check above has reported an inconsistency, too: the
+        // backfill only ever raises a monotonic amount (it takes the `max`), so it
+        // cannot compound the damage by writing a derived amount that saturated to
+        // zero.
+        Arc::make_mut(canister)
+            .system_state
+            .migrate_consumed_cycles_to_monotonic();
     });
 }
 
@@ -2290,10 +2290,9 @@ fn migrate_consumed_cycles_to_monotonic(
 /// reporting a critical error if the two are inconsistent. `use_case` is the use case
 /// whose amounts these are, or `None` for the scalar totals.
 ///
-/// Returns `true` iff the monotonic amount is below the derived one, i.e. iff it
-/// still has to be backfilled -- either because it has never been, or because a
-/// downgrade dropped it.
-fn needs_monotonic_backfill(
+/// A monotonic amount *below* the derived one is not an inconsistency: that is a
+/// canister still awaiting its backfill, or one whose amount a downgrade dropped.
+fn check_monotonic_consumed_cycles(
     gauge: NominalCycles,
     monotonic: NominalCycles,
     outstanding: NominalCycles,
@@ -2301,7 +2300,7 @@ fn needs_monotonic_backfill(
     canister_id: CanisterId,
     metrics: &SchedulerMetrics,
     log: &ReplicaLogger,
-) -> bool {
+) {
     /// Names the amounts for the error messages below, e.g. `"consumed cycles"` or
     /// `"Instructions consumed cycles"`. Only called on the error paths, so the
     /// happy path allocates nothing.
@@ -2316,7 +2315,7 @@ fn needs_monotonic_backfill(
     // gauge can never be below their sum. Checked before subtracting: the subtraction
     // saturates at zero, which would mask the violation as a derived amount of zero
     // -- and, for a canister whose monotonic amount is zero too, hide it in the
-    // `Equal` arm below. Unreachable when the invariants on
+    // comparison below. Unreachable when the invariants on
     // `SystemState::outstanding_prepayments` hold.
     if outstanding > gauge {
         debug_assert_or_critical_error!(
@@ -2330,29 +2329,23 @@ fn needs_monotonic_backfill(
             what(use_case),
             gauge,
         );
-        return false;
+        return;
     }
-    match (gauge - outstanding).cmp(&monotonic) {
-        // Not backfilled yet, or a downgrade dropped it.
-        std::cmp::Ordering::Greater => true,
-        // The invariants that make the backfill exact; see
-        // `SystemState::outstanding_prepayments`.
-        std::cmp::Ordering::Equal => false,
-        std::cmp::Ordering::Less => {
-            debug_assert_or_critical_error!(
-                false,
-                metrics.consumed_cycles_invariant_broken,
-                log,
-                "{}: Canister {}: monotonic {} {} above the gauge {} net of the {} \
-                 outstanding prepayments",
-                CONSUMED_CYCLES_INVARIANT_BROKEN,
-                canister_id,
-                what(use_case),
-                monotonic,
-                gauge,
-                outstanding,
-            );
-            false
-        }
-    }
+    // The monotonic amount may only ever go up, so it must never be above what the
+    // gauge accounts for; the backfill would have to lower it to make the invariant
+    // hold. Unreachable when the invariants on
+    // `SystemState::outstanding_prepayments` hold.
+    debug_assert_or_critical_error!(
+        gauge - outstanding >= monotonic,
+        metrics.consumed_cycles_invariant_broken,
+        log,
+        "{}: Canister {}: monotonic {} {} above the gauge {} net of the {} \
+         outstanding prepayments",
+        CONSUMED_CYCLES_INVARIANT_BROKEN,
+        canister_id,
+        what(use_case),
+        monotonic,
+        gauge,
+        outstanding,
+    );
 }
