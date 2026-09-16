@@ -583,6 +583,7 @@ impl CallOrTaskHelper {
                     round.hypervisor.metrics(),
                     round.log,
                     round.counters.state_changes_error,
+                    round.counters.charging_from_balance_error,
                     call_tree_metrics,
                     original.time,
                     // Update methods and tasks are always executed in the

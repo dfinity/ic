@@ -3681,6 +3681,7 @@ impl ExecutionEnvironment {
             Arc::clone(&state.metadata.network_topology),
             &self.log,
             &self.metrics.state_changes_error,
+            &self.metrics.charging_from_balance_error,
             metrics,
             state.get_own_subnet_cycles_config(),
         )

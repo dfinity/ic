@@ -677,6 +677,7 @@ pub fn apply_canister_state_changes(
     metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
     state_changes_error: &IntCounter,
+    charging_from_balance_error: &IntCounter,
     call_tree_metrics: &dyn CallTreeMetrics,
     call_context_creation_time: Time,
     is_composite_query: bool,
@@ -705,7 +706,9 @@ pub fn apply_canister_state_changes(
         log,
         // Applying the balance changes must not run into charges that the balance
         // cannot cover: the cycle changes were validated before they are applied.
-        state_changes_error,
+        // Reported separately from `state_changes_error` below, which covers the
+        // failures to apply the state changes rather than the charging.
+        charging_from_balance_error,
     ) {
         Ok(request_stats) => {
             if let Some(ExecutionStateChanges {
@@ -941,6 +944,8 @@ mod test {
             let metrics_registry = MetricsRegistry::new();
             let hypervisor_metrics = HypervisorMetrics::new(&metrics_registry);
             let state_changes_error = IntCounter::new("test_state_changes_error", "test").unwrap();
+            let charging_from_balance_error =
+                IntCounter::new("test_charging_from_balance_error", "test").unwrap();
 
             apply_canister_state_changes(
                 canister_state_changes,
@@ -954,6 +959,7 @@ mod test {
                 &hypervisor_metrics,
                 &log,
                 &state_changes_error,
+                &charging_from_balance_error,
                 &CallTreeMetricsNoOp,
                 UNIX_EPOCH,
                 false,
