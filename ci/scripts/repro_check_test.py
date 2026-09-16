@@ -129,9 +129,13 @@ class RunTest(unittest.TestCase):
         self.tmp_dir = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp_dir, True)
         self.addCleanup(mock.patch.stopall)
+        # A failed run sets the module-level interrupt flag; do not leak that into the next test.
+        self.addCleanup(setattr, repro_check, "interrupted", False)
         self.cdn = fake_cdn()
         # Local artifacts (keyed by their path below dev_out) that should differ from the CDN ones.
         self.local_overrides: dict[str, bytes] = {}
+        # The storage the fake build was given, to inspect after the run.
+        self.build_storage: repro_check.Dirs | None = None
 
     def build_verifier(self, payload: dict) -> "repro_check.ReproducibilityVerifier":
         verifier = repro_check.ReproducibilityVerifier(
@@ -162,6 +166,7 @@ class RunTest(unittest.TestCase):
 
     def fake_build(self, storage: "repro_check.Dirs") -> None:
         """Writes local artifacts that are byte-identical to the CDN ones, except for those in local_overrides."""
+        self.build_storage = storage
         for local, url in [
             ("guestos/update/update-img.tar.zst", GUEST_OS_IMG),
             ("guestos/update/launch-measurements.json", MEASUREMENTS_URL),
@@ -240,6 +245,8 @@ class RunTest(unittest.TestCase):
         self.assertTrue(
             any("Verification successful for Recovery-GuestOS!" in line for line in logs.output), logs.output
         )
+        # A failed run must not leave the downloaded and built images behind.
+        self.assertFalse(self.build_storage.tmp_dir.exists())
 
 
 if __name__ == "__main__":

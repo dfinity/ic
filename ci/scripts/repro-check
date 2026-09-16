@@ -712,14 +712,26 @@ class ReproducibilityVerifier:
 
         out_dir = tmpdir / "disk-images" / self.git_hash
 
-        yield Dirs(
-            tmpdir,
-            out_dir,
-            out_dir / "cdn-img",
-            out_dir / "dev-img",
-            out_dir / "proposal-img",
-        )
-        if not keep_temp:
+        try:
+            yield Dirs(
+                tmpdir,
+                out_dir,
+                out_dir / "cdn-img",
+                out_dir / "dev-img",
+                out_dir / "proposal-img",
+            )
+        except BaseException:
+            # The remaining downloads are pointless after a failure or an interrupt, so
+            # tell them to stop instead of waiting for them below.
+            global interrupted
+            interrupted = True
+            logger.warning("Stopping the remaining downloads and waiting for in-flight work to finish.")
+            raise
+        finally:
+            # The downloads and the local build write into tmpdir from executor threads, so
+            # wait for them before removing it. This also runs when a verification step
+            # raised, so a failed run does not leave the images behind (unless --debug asked).
+            self.download_executor.shutdown(wait=True, cancel_futures=True)
             cleanup()
 
     # --------------------------------------------------------------------------
@@ -935,8 +947,9 @@ class ReproducibilityVerifier:
     ) -> None:
         compile_future.result()
         logger.info("Verifying locally built artifacts against remote CDN artifacts.")
-        # Every comparison is run and logged before failing, so a mismatch in one
-        # artifact does not hide the result for the others.
+        # Mismatches between the local and remote artifacts are collected instead of
+        # raised immediately, so one does not hide the result for the others. Inconsistent
+        # CDN sources (compare_cdn_hash, get_cdn_measurements) still fail fast.
         mismatches: list[str] = []
         if guest_os_downloads:
             [f.result() for f in concurrent.futures.as_completed(guest_os_downloads)]
