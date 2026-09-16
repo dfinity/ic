@@ -163,7 +163,7 @@ pub(crate) fn get_xnet_state_for_testing_with_subnet_type(
         vec![payload_3, payload_2, payload_1],
         btreemap![
             // None of these streams hold reject signals, so nothing constrains
-            // `covered_header_begin`.
+            // `max_no_gc_header_begin`.
             // See `expected_indices_for_stream_reject_signal_gc()` for the cases where
             // reject signals actually constrain it.
             SUBNET_1 => ExpectedIndices { message_index: 21.into(), signal_index: 16.into(), ..Default::default()},

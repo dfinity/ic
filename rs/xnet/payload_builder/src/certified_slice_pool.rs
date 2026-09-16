@@ -867,7 +867,7 @@ impl UnpackedStreamSlice {
     /// Garbage collects the slice: drops all messages before
     /// `cutoff.message_index` and updates the witness. If all messages were
     /// dropped; and `cutoff.signal_index` is beyond `signals_end` (no new signals);
-    /// and `begin` is at or below `cutoff.covered_header_begin` (no newly GC-ed
+    /// and `begin` is at or below `cutoff.max_no_gc_header_begin` (no newly GC-ed
     /// messages); the slice is dropped altogether.
     ///
     /// Returns:
@@ -883,7 +883,7 @@ impl UnpackedStreamSlice {
         let pruned_tree = self.payload.garbage_collect(cutoff.message_index)?;
         if self.payload.messages.is_none()
             && cutoff.signal_index >= self.payload.header.signals_end()
-            && self.payload.header.begin() <= cutoff.covered_header_begin
+            && self.payload.header.begin() <= cutoff.max_no_gc_header_begin
         {
             // No messages, no new signals, and no newly GC-ed messages. Drop the slice.
             return Ok(None);
@@ -1262,10 +1262,10 @@ impl CertifiedSlicePool {
                 stream_indices.message_index += StreamIndex::from(prefix_message_count as u64);
                 stream_indices.signal_index = stream_indices.signal_index.max(signals_end);
                 // Inducting the returned prefix GCs all reject signals before its
-                // `header.begin()`, so advance `covered_header_begin` to it, as we don't
+                // `header.begin()`, so advance `max_no_gc_header_begin` to it, as we don't
                 // know where the next reject signal is.
-                stream_indices.covered_header_begin =
-                    stream_indices.covered_header_begin.max(header_begin);
+                stream_indices.max_no_gc_header_begin =
+                    stream_indices.max_no_gc_header_begin.max(header_begin);
             }
             Ok(Some(prefix))
         } else {

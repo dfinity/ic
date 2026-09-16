@@ -143,7 +143,7 @@ fn slice_garbage_collect(
 }
 
 /// Tests that a slice with no messages or signals is retained iff its
-/// `header.begin()` is past `covered_header_begin`, i.e. if inducting it would
+/// `header.begin()` is past `max_no_gc_header_begin`, i.e. if inducting it would
 /// garbage collect at least one of our reject signals.
 ///
 /// A stream beginning at index zero is filtered out, as it leaves no room for a
@@ -166,14 +166,14 @@ fn slice_garbage_collect_reject_signals(
         certified_slice: &CertifiedStreamSlice,
         message_index: StreamIndex,
         signal_index: StreamIndex,
-        covered_header_begin: StreamIndex,
+        max_no_gc_header_begin: StreamIndex,
     ) -> Option<CertifiedStreamSlice> {
         UnpackedStreamSlice::try_from(certified_slice.clone())
             .expect("failed to unpack certified stream")
             .garbage_collect(&ExpectedIndices {
                 message_index,
                 signal_index,
-                covered_header_begin,
+                max_no_gc_header_begin,
             })
             .unwrap()
             .map(|leftover| leftover.into())
@@ -189,11 +189,11 @@ fn slice_garbage_collect_reject_signals(
         let certified_slice = fixture.get_slice(DST_SUBNET, from, msg_count);
         let to = from + StreamIndex::from(msg_count as u64);
 
-        // Header `begin` at `covered_header_begin`: nothing left to garbage collect,
+        // Header `begin` at `max_no_gc_header_begin`: nothing left to garbage collect,
         // so the slice is dropped.
         assert_opt_slices_eq(None, gc(&certified_slice, to, signals_end, stream_begin));
 
-        // Header `begin` past `covered_header_begin`: inducting the slice would garbage
+        // Header `begin` past `max_no_gc_header_begin`: inducting the slice would garbage
         // collect the reject signal there, so an empty slice is retained.
         assert_opt_slices_eq(
             Some(fixture.get_slice(DST_SUBNET, to, 0)),
@@ -1443,10 +1443,10 @@ fn pool_take_slice_respects_signal_limit(
     });
 }
 
-/// Tests that taking a slice advances the cached `covered_header_begin` to the
+/// Tests that taking a slice advances the cached `max_no_gc_header_begin` to the
 /// taken slice's `header.begin()`, but never regresses it.
 #[test_strategy::proptest(ProptestConfig::with_cases(20))]
-fn pool_take_slice_advances_covered_header_begin(
+fn pool_take_slice_advances_max_no_gc_header_begin(
     #[strategy(arb_stream_slice(
         1, // min_size
         10, // max_size
@@ -1469,26 +1469,26 @@ fn pool_take_slice_advances_covered_header_begin(
             .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
 
         // Takes one message from a freshly populated pool, with the given
-        // `covered_header_begin`; and returns the updated value.
-        let take_one = |covered_header_begin| {
+        // `max_no_gc_header_begin`; and returns the updated value.
+        let take_one = |max_no_gc_header_begin| {
             let pool = Mutex::new(CertifiedSlicePool::new(&MetricsRegistry::new()));
             put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap();
             let stream_position = ExpectedIndices {
                 message_index: from,
                 signal_index: StreamIndex::from(0),
-                covered_header_begin,
+                max_no_gc_header_begin,
             };
             assert!(take_slice(&pool, SRC_SUBNET, Some(&stream_position), Some(1), None).is_some());
             slice_stats(&pool, SRC_SUBNET)
                 .0
                 .unwrap()
-                .covered_header_begin
+                .max_no_gc_header_begin
         };
 
-        // Taking a slice advances `covered_header_begin` to its `header.begin()`.
+        // Taking a slice advances `max_no_gc_header_begin` to its `header.begin()`.
         assert_eq!(stream_begin, take_one(StreamIndex::from(0)));
 
-        // A later `covered_header_begin` is preserved.
+        // A later `max_no_gc_header_begin` is preserved.
         let later = stream_begin + StreamIndex::from(2);
         assert_eq!(later, take_one(later));
 

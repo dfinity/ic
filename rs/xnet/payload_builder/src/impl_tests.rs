@@ -419,9 +419,9 @@ async fn validate_slice() {
 
         // Expected indices for messages and signals from `SUBNET_1`.
         const EXPECTED: ExpectedIndices = ExpectedIndices {
-            message_index: SIGNAL_END,              // Assume no intervening payloads.
-            signal_index: MESSAGE_BEGIN,            // Assume we no signals for existing messages.
-            covered_header_begin: STREAM_INDEX_MAX, // Assume we hold no reject signals.
+            message_index: SIGNAL_END,                // Assume no intervening payloads.
+            signal_index: MESSAGE_BEGIN,              // Assume we no signals for existing messages.
+            max_no_gc_header_begin: STREAM_INDEX_MAX, // Assume we hold no reject signals.
         };
 
         // State with stream for `SUBNET_1`.
@@ -468,7 +468,7 @@ async fn validate_slice() {
             SliceValidationResult::Valid {
                 messages_end: EXPECTED.message_index.increment(),
                 signals_end: EXPECTED.signal_index,
-                covered_header_begin: STREAM_INDEX_MAX,
+                max_no_gc_header_begin: STREAM_INDEX_MAX,
                 message_count: 1,
                 byte_size: 1,
             },
@@ -593,7 +593,7 @@ async fn validate_slice_above_msg_limit() {
         const EXPECTED: ExpectedIndices = ExpectedIndices {
             message_index: StreamIndex::new(SIGNAL_END), // Assume no intervening payloads.
             signal_index: StreamIndex::new(MESSAGE_BEGIN), // Assume no signals for existing msgs.
-            covered_header_begin: STREAM_INDEX_MAX,      // Assume no reject signals.
+            max_no_gc_header_begin: STREAM_INDEX_MAX,    // Assume no reject signals.
         };
 
         // State of a `System` subnet with a stream for `SUBNET_1`.
@@ -640,7 +640,7 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: expected_message.into(),
                 signals_end: (signal_index + 1).into(),
-                covered_header_begin: STREAM_INDEX_MAX,
+                max_no_gc_header_begin: STREAM_INDEX_MAX,
                 message_count: 0,
                 byte_size: 1,
             },
@@ -660,7 +660,7 @@ async fn validate_slice_above_msg_limit() {
             SliceValidationResult::Valid {
                 messages_end: (expected_message + 1).into(),
                 signals_end: signal_index.into(),
-                covered_header_begin: STREAM_INDEX_MAX,
+                max_no_gc_header_begin: STREAM_INDEX_MAX,
                 message_count: 1,
                 byte_size: 1,
             },
@@ -734,7 +734,7 @@ async fn validate_slice_above_signal_limit() {
             SliceValidationResult::Valid {
                 messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
-                covered_header_begin: STREAM_INDEX_MAX,
+                max_no_gc_header_begin: STREAM_INDEX_MAX,
                 message_count: MAX_STREAM_MESSAGES / 2,
                 byte_size: 1,
             }
@@ -749,7 +749,7 @@ async fn validate_slice_above_signal_limit() {
             SliceValidationResult::Valid {
                 messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
-                covered_header_begin: STREAM_INDEX_MAX,
+                max_no_gc_header_begin: STREAM_INDEX_MAX,
                 message_count: 20,
                 byte_size: 1,
             }
@@ -781,9 +781,9 @@ async fn validate_slice_loopback_stream() {
 
         // Expected indices for loopback stream messages and signals.
         const EXPECTED: ExpectedIndices = ExpectedIndices {
-            message_index: SIGNAL_END,              // Assume no intervening payloads.
-            signal_index: MESSAGE_BEGIN,            // Assume we no signals for existing messages.
-            covered_header_begin: STREAM_INDEX_MAX, // Assume we hold no reject signals.
+            message_index: SIGNAL_END,                // Assume no intervening payloads.
+            signal_index: MESSAGE_BEGIN,              // Assume we no signals for existing messages.
+            max_no_gc_header_begin: STREAM_INDEX_MAX, // Assume we hold no reject signals.
         };
 
         // State with loopback stream.
@@ -944,7 +944,7 @@ fn messageless_slice(begin: u64, end: u64) -> CertifiedStreamSlice {
     )
 }
 
-/// `covered_header_begin` must be the first reject signal at or after the highest
+/// `max_no_gc_header_begin` must be the first reject signal at or after the highest
 /// header `begin` across the past payloads, i.e. the first reject signal we will
 /// still hold after inducting them.
 #[tokio::test]
@@ -955,10 +955,10 @@ async fn expected_indices_for_stream_reject_signal_gc() {
         let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager.clone(), log);
         let state = state_manager.get_state_at(CERTIFIED_HEIGHT).unwrap().take();
 
-        let covered_header_begin = |payloads: &[&XNetPayload]| {
+        let max_no_gc_header_begin = |payloads: &[&XNetPayload]| {
             xnet_payload_builder
                 .expected_indices_for_stream(SUBNET_1, &state, payloads)
-                .covered_header_begin
+                .max_no_gc_header_begin
         };
         let payload = |begin: u64| XNetPayload {
             stream_slices: btreemap![SUBNET_1 => messageless_slice_with_begin(begin)],
@@ -967,32 +967,32 @@ async fn expected_indices_for_stream_reject_signal_gc() {
         // With no past payloads, the first reject signal we hold.
         assert_eq!(
             StreamIndex::new(FIRST_REJECT_SIGNAL),
-            covered_header_begin(&[])
+            max_no_gc_header_begin(&[])
         );
 
         // A payload not reaching the first reject signal changes nothing.
         assert_eq!(
             StreamIndex::new(FIRST_REJECT_SIGNAL),
-            covered_header_begin(&[&payload(FIRST_REJECT_SIGNAL)])
+            max_no_gc_header_begin(&[&payload(FIRST_REJECT_SIGNAL)])
         );
 
         // A payload garbage collecting the first reject signal leaves the second.
         assert_eq!(
             StreamIndex::new(SECOND_REJECT_SIGNAL),
-            covered_header_begin(&[&payload(FIRST_REJECT_SIGNAL + 1)])
+            max_no_gc_header_begin(&[&payload(FIRST_REJECT_SIGNAL + 1)])
         );
 
         // A payload garbage collecting both reject signals leaves none.
         assert_eq!(
             STREAM_INDEX_MAX,
-            covered_header_begin(&[&payload(SECOND_REJECT_SIGNAL + 1)])
+            max_no_gc_header_begin(&[&payload(SECOND_REJECT_SIGNAL + 1)])
         );
 
         // The highest header `begin` across the payloads is what counts, whatever the
         // order they are given in.
         assert_eq!(
             StreamIndex::new(SECOND_REJECT_SIGNAL),
-            covered_header_begin(&[
+            max_no_gc_header_begin(&[
                 &payload(FIRST_REJECT_SIGNAL),
                 &payload(FIRST_REJECT_SIGNAL + 1)
             ])
@@ -1030,12 +1030,12 @@ async fn validate_slice_reject_signal_gc() {
         };
 
         // With both reject signals outstanding, the slice garbage collects them, so it
-        // is not empty. `covered_header_begin` is `STREAM_INDEX_MAX`: none are left
+        // is not empty. `max_no_gc_header_begin` is `STREAM_INDEX_MAX`: none are left
         // afterwards.
         let valid = SliceValidationResult::Valid {
             messages_end: StreamIndex::new(FIXTURE_SIGNALS_END),
             signals_end: StreamIndex::new(0),
-            covered_header_begin: STREAM_INDEX_MAX,
+            max_no_gc_header_begin: STREAM_INDEX_MAX,
             message_count: 0,
             byte_size: 1,
         };

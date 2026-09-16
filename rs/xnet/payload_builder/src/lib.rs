@@ -64,10 +64,14 @@ use tokio::{runtime, sync::mpsc};
 /// bound that nothing reaches.
 pub const STREAM_INDEX_MAX: StreamIndex = StreamIndex::new(u64::MAX);
 
-/// Message and signal indices into a XNet stream or stream slice.
+/// Message, signal and `header.begin()` indices into a XNet stream or stream
+/// slice.
 ///
 /// Used when computing the expected indices of a stream during payload building
 /// and validation. And as cutoff points when trimming pooled stream slices.
+///
+/// The first two are the next indices we expect, the third the last one we have
+/// no use for.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ExpectedIndices {
     /// Next expected message index. This is the most recent `messages.end()` in
@@ -84,7 +88,7 @@ pub struct ExpectedIndices {
     ///
     /// A slice with a `header.begin()` past this is worth inducting even with no
     /// messages and no new signals.
-    pub covered_header_begin: StreamIndex,
+    pub max_no_gc_header_begin: StreamIndex,
 }
 
 impl Default for ExpectedIndices {
@@ -93,7 +97,7 @@ impl Default for ExpectedIndices {
             message_index: StreamIndex::from(0),
             signal_index: StreamIndex::from(0),
             // No reject signals to garbage collect.
-            covered_header_begin: STREAM_INDEX_MAX,
+            max_no_gc_header_begin: STREAM_INDEX_MAX,
         }
     }
 }
@@ -475,11 +479,11 @@ impl XNetPayloadBuilderImpl {
     /// when that exists; or `messages_begin()` of the outgoing `Stream` to
     /// `subnet_id` in `state`.
     ///
-    /// The minimum useful `header.begin()` is one past the first reject signal at
-    /// or beyond the most recent `header.begin()` from `subnet_id` in `payloads`.
+    /// The maximum no-GC `header.begin()` is the first reject signal at or beyond
+    /// the most recent `header.begin()` from `subnet_id` in `payloads`.
     ///
-    /// Returns default (zero) values when no stream to or slices from the given
-    /// subnet exist.
+    /// Returns `ExpectedIndices::default()` when no stream to or slices from the
+    /// given subnet exist.
     fn expected_indices_for_stream(
         &self,
         subnet_id: SubnetId,
@@ -491,9 +495,9 @@ impl XNetPayloadBuilderImpl {
         // signal index, if present.
         let mut most_recent_signal_index = None;
 
-        // For the minimum useful `header.begin()`, start with the most recent
-        // (max) `header.begin()` of any slice from `payloads` (or else, zero). Then
-        // find the first reject signal at or beyond that index, if any.
+        // For the maximum no-GC `header.begin()`, start with the most recent (max)
+        // `header.begin()` of any slice from `payloads` (or else, zero). Then find the
+        // first reject signal at or beyond that index, if any.
         let mut max_header_begin = StreamIndex::from(0);
 
         let stream = state.streams().get(&subnet_id);
@@ -511,7 +515,7 @@ impl XNetPayloadBuilderImpl {
                     return ExpectedIndices {
                         message_index: messages.end(),
                         signal_index: most_recent_signal_index.unwrap(),
-                        covered_header_begin: stream
+                        max_no_gc_header_begin: stream
                             .and_then(|s| s.next_reject_signal_index(max_header_begin))
                             .unwrap_or(STREAM_INDEX_MAX),
                     };
@@ -526,7 +530,7 @@ impl XNetPayloadBuilderImpl {
         ExpectedIndices {
             message_index: stream.signals_end(),
             signal_index: most_recent_signal_index.unwrap_or_else(|| stream.messages_begin()),
-            covered_header_begin: stream
+            max_no_gc_header_begin: stream
                 .next_reject_signal_index(max_header_begin)
                 .unwrap_or(STREAM_INDEX_MAX),
         }
@@ -765,7 +769,7 @@ impl XNetPayloadBuilderImpl {
 
         if slice.messages().is_none()
             && slice.header().signals_end() == expected.signal_index
-            && slice.header().begin() <= expected.covered_header_begin
+            && slice.header().begin() <= expected.max_no_gc_header_begin
         {
             // Empty slice: no messages, no additional signals and no newly GC-ed messages
             // that would allow us to GC any reject signals (in addition to what we have in
@@ -874,7 +878,7 @@ impl XNetPayloadBuilderImpl {
                     .messages()
                     .map_or(expected.message_index, |messages| messages.end()),
                 signals_end: slice.header().signals_end(),
-                covered_header_begin: state
+                max_no_gc_header_begin: state
                     .streams()
                     .get(&subnet_id)
                     .and_then(|stream| stream.next_reject_signal_index(slice.header().begin()))
@@ -1315,7 +1319,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 SliceValidationResult::Valid {
                     messages_end,
                     signals_end,
-                    covered_header_begin,
+                    max_no_gc_header_begin,
                     message_count,
                     byte_size,
                 } => {
@@ -1327,7 +1331,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                         *subnet_id,
                         messages_end,
                         signals_end,
-                        covered_header_begin,
+                        max_no_gc_header_begin,
                     ));
                     payload_byte_size += byte_size;
                 }
@@ -1338,7 +1342,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         {
             self.slice_pool.observe_pool_size_bytes();
 
-            for (subnet_id, message_index, signal_index, covered_header_begin) in
+            for (subnet_id, message_index, signal_index, max_no_gc_header_begin) in
                 new_stream_positions
             {
                 self.slice_pool.garbage_collect_slice(
@@ -1346,7 +1350,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                     ExpectedIndices {
                         message_index,
                         signal_index,
-                        covered_header_begin,
+                        max_no_gc_header_begin,
                     },
                 );
             }
@@ -1751,9 +1755,9 @@ enum SliceValidationResult {
     Valid {
         messages_end: StreamIndex,
         signals_end: StreamIndex,
-        /// See `ExpectedIndices::covered_header_begin`, computed as if this slice
+        /// See `ExpectedIndices::max_no_gc_header_begin`, computed as if this slice
         /// had been inducted.
-        covered_header_begin: StreamIndex,
+        max_no_gc_header_begin: StreamIndex,
         message_count: usize,
         byte_size: usize,
     },
