@@ -626,6 +626,8 @@ mod tests {
         assert_eq!(
             crypto.calls.into_inner(),
             vec![(
+                // The signature is verified over the original bytes of the protobuf, not the
+                // re-encoded content.
                 original_signed_bytes,
                 subnet_test_id(7),
                 LATEST_REGISTRY_VERSION
