@@ -233,17 +233,17 @@ jobs:
           # --target_pattern_file by the steps below. The bazel server this starts and
           # the packages and repositories it loads are reused by those steps.
           # (${{ runner.temp }} is not used since it expands to the host path.)
-          mkdir -p "$HOME/.cache/bazel-targets"
-          /usr/bin/time ci/scripts/targets.py "${bazel_startup_args[@]}" build "${targets_args[@]}" >"$HOME/.cache/bazel-targets/build-targets"
-          /usr/bin/time ci/scripts/targets.py "${bazel_startup_args[@]}" test "${targets_args[@]}" >"$HOME/.cache/bazel-targets/test-targets"
+          mkdir -p "$HOME/bazel-targets"
+          /usr/bin/time ci/scripts/targets.py "${bazel_startup_args[@]}" build "${targets_args[@]}" >"$HOME/bazel-targets/build-targets"
+          /usr/bin/time ci/scripts/targets.py "${bazel_startup_args[@]}" test "${targets_args[@]}" >"$HOME/bazel-targets/test-targets"
 
       - name: Upload target files to Namespace Artifact Storage
         uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
         with:
           name: bazel-rbe-targets
           path: |
-            ~/.cache/bazel-targets/build-targets
-            ~/.cache/bazel-targets/test-targets
+            ~/bazel-targets/build-targets
+            ~/bazel-targets/test-targets
           if-no-files-found: ignore
           retention-days: 14
 
@@ -264,7 +264,7 @@ jobs:
 
           read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
 
-          build_targets="$HOME/.cache/bazel-targets/build-targets"
+          build_targets="$HOME/bazel-targets/build-targets"
 
           bazel_args=(
             --noworkspace_rc
@@ -322,7 +322,7 @@ jobs:
 
           read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
 
-          test_targets="$HOME/.cache/bazel-targets/test-targets"
+          test_targets="$HOME/bazel-targets/test-targets"
 
           bazel_args=(
             --noworkspace_rc

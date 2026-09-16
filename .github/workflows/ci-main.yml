@@ -199,7 +199,7 @@ jobs:
       name: ${{ case(needs.config.outputs.release-build == 'true', 'upload-artifacts', '') }}
     runs-on: *dind-large-setup
     container: *container-setup
-    timeout-minutes: 150
+    timeout-minutes: 180
     steps:
       - *checkout
       - uses: ./.github/actions/netrc
@@ -229,6 +229,7 @@ jobs:
           echo "bazel-args=${bazel_args[@]}" >> $GITHUB_OUTPUT
 
       - name: Infer Bazel Targets
+        timeout-minutes: 30
         shell: bash
         run: |
           set -euo pipefail
@@ -256,9 +257,9 @@ jobs:
           # --target_pattern_file by the steps below. The bazel server this starts and
           # the packages and repositories it loads are reused by those steps.
           # (${{ runner.temp }} is not used since it expands to the host path.)
-          mkdir -p "$HOME/.cache/bazel-targets"
-          /usr/bin/time ci/scripts/targets.py build "${targets_args[@]}" >"$HOME/.cache/bazel-targets/build-targets"
-          /usr/bin/time ci/scripts/targets.py test "${targets_args[@]}" >"$HOME/.cache/bazel-targets/test-targets"
+          mkdir -p "$HOME/bazel-targets"
+          /usr/bin/time ci/scripts/targets.py build "${targets_args[@]}" >"$HOME/bazel-targets/build-targets"
+          /usr/bin/time ci/scripts/targets.py test "${targets_args[@]}" >"$HOME/bazel-targets/test-targets"
 
       - name: Upload target files
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -266,8 +267,8 @@ jobs:
           name: bazel-targets
           retention-days: 14
           path: |
-            ~/.cache/bazel-targets/build-targets
-            ~/.cache/bazel-targets/test-targets
+            ~/bazel-targets/build-targets
+            ~/bazel-targets/test-targets
 
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
@@ -281,7 +282,7 @@ jobs:
 
             bazel_args='${{ steps.infer-bazel-args.outputs.bazel-args }}'
 
-            build_targets="$HOME/.cache/bazel-targets/build-targets"
+            build_targets="$HOME/bazel-targets/build-targets"
             eval "bazel build $bazel_args --target_pattern_file=$build_targets"
 
       - name: Configure AWS credentials
@@ -331,7 +332,7 @@ jobs:
           run: |
             bazel_args='${{ steps.infer-bazel-args.outputs.bazel-args }}'
 
-            test_targets="$HOME/.cache/bazel-targets/test-targets"
+            test_targets="$HOME/bazel-targets/test-targets"
             if [ -s "$test_targets" ]; then # bazel errors out if no test targets are listed
               eval "bazel test $bazel_args --target_pattern_file=$test_targets"
             fi
