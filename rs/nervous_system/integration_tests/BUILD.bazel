@@ -66,6 +66,7 @@ BASE_DEPENDENCIES = [
         "@crate_index//:num-traits",
         "@crate_index//:rustc-hash",
         "@crate_index//:serde",
+        "@crate_index//:wat",
     ],
 })
 
@@ -192,6 +193,7 @@ rust_test_suite_with_extra_srcs(
             "tests/sns_release_qualification_legacy.rs",
             "tests/sns_upgrade_test_utils_legacy.rs",
             "tests/upgrade_sns_controlled_canister_with_large_wasm.rs",
+            "tests/upgrade_sns_controlled_canister_with_options.rs",
             "tests/custom_upgrade_path.rs",
             "tests/sns_topics.rs",
             "tests/sns_extension_test.rs",
@@ -201,7 +203,7 @@ rust_test_suite_with_extra_srcs(
     ),
     data = DEV_DATA,
     env = DEV_ENV,
-    exec_properties = {"cpu": "6"},
+    exec_properties = {"test.cpu": "6"},
     extra_srcs = ["tests/sns_upgrade_test_utils.rs"],
     proc_macro_deps = [
         # Keep sorted.
@@ -224,7 +226,7 @@ rust_test(
         # scenarios to keep the server's memory usage bounded.
         "RUST_TEST_THREADS": "4",
     },
-    exec_properties = {"cpu": "8"},
+    exec_properties = {"test.cpu": "8"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
@@ -242,7 +244,7 @@ rust_test(
     crate_root = "tests/upgrade_everything_test.rs",
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    exec_properties = {"cpu": "6"},
+    exec_properties = {"test.cpu": "6"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
@@ -258,7 +260,7 @@ rust_test(
     ],
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
@@ -274,7 +276,7 @@ rust_test(
     ],
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
@@ -290,7 +292,7 @@ rust_test(
     ],
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
@@ -307,7 +309,7 @@ rust_test(
     ],
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
@@ -323,7 +325,23 @@ rust_test(
     ],
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:rust_decimal_macros",
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
+)
+
+rust_test(
+    name = "upgrade_sns_controlled_canister_with_options",
+    timeout = "long",
+    srcs = [
+        "tests/upgrade_sns_controlled_canister_with_options.rs",
+    ],
+    data = DEV_DATA,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
+    exec_properties = {"test.cpu": "4"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
@@ -339,7 +357,7 @@ rust_test(
     ],
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
@@ -355,7 +373,7 @@ rust_test(
     ],
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
@@ -371,7 +389,7 @@ rust_test(
     ],
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
@@ -394,7 +412,7 @@ rust_test(
         "KONGSWAP_ADAPTOR_CANISTER_WASM_PATH": "$(rootpath @kongswap-adaptor-canister//file)",
         "RUST_TEST_NOCAPTURE": "1",
     },
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",

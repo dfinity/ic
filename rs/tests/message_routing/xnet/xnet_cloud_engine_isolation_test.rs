@@ -22,8 +22,7 @@ Runbook::
    b. Best-effort (bounded-wait), no-cycles calls succeed.
    c. Best-effort calls carrying cycles are rejected with SysFatal.
 6. Via read_state, verify that /subnet/<id>/public_key and
-   /canister_ranges/<id> are present for all subnets on every subnet
-   (full topology).
+   /canister_ranges/<id> are present for all subnets on every subnet.
 
 Success::
 All assertions pass: loopback works, non-CloudEngine XNet works,

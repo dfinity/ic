@@ -14,10 +14,12 @@ use ic_interfaces::crypto::LoadTranscriptResult;
 use ic_interfaces::crypto::NiDkgAlgorithm;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
+use ic_types::consensus::idkg::common::RequestId;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTranscript};
 use ic_types::crypto::vetkd::{VetKdArgs, VetKdEncryptedKeyShare};
-use ic_types::{NodeId, NumberOfNodes};
+use ic_types::messages::CallbackId;
+use ic_types::{Height, NodeId, NumberOfNodes};
 use ic_types_test_utils::ids::canister_test_id;
 use ic_vetkeys::TransportSecretKey;
 use rand::prelude::*;
@@ -61,6 +63,13 @@ fn vetkd_bench(criterion: &mut Criterion) {
     }
 }
 
+fn random_request_id(rng: &mut ReproducibleRng) -> RequestId {
+    RequestId {
+        callback_id: CallbackId::from(rng.r#gen::<u64>()),
+        height: Height::new(rng.r#gen::<u64>()),
+    }
+}
+
 fn bench_create_encrypted_key_share<M: Measurement, C: CryptoComponentRng>(
     group: &mut BenchmarkGroup<'_, M>,
     config: &NiDkgConfig,
@@ -72,6 +81,7 @@ fn bench_create_encrypted_key_share<M: Measurement, C: CryptoComponentRng>(
             || {
                 let vetkd_args = VetKdArgsOwned {
                     ni_dkg_id: config.dkg_id().clone(),
+                    request_id: random_request_id(rng),
                     caller: canister_test_id(rng.r#gen::<u64>()).get(),
                     context: random_n_bytes(32, rng),
                     input: random_n_bytes(32, rng),
@@ -101,6 +111,7 @@ fn bench_verify_encrypted_key_share<M: Measurement, C: CryptoComponentRng>(
             || {
                 let vetkd_args = VetKdArgsOwned {
                     ni_dkg_id: config.dkg_id().clone(),
+                    request_id: random_request_id(rng),
                     caller: canister_test_id(rng.r#gen::<u64>()).get(),
                     context: random_n_bytes(32, rng),
                     input: random_n_bytes(32, rng),
@@ -138,6 +149,7 @@ fn bench_combine_encrypted_key_shares<M: Measurement, C: CryptoComponentRng>(
                 || {
                     let vetkd_args = VetKdArgsOwned {
                         ni_dkg_id: config.dkg_id().clone(),
+                        request_id: random_request_id(rng),
                         caller: canister_test_id(rng.r#gen::<u64>()).get(),
                         context: random_n_bytes(32, rng),
                         input: random_n_bytes(32, rng),
@@ -175,6 +187,7 @@ fn bench_verify_encrypted_key<M: Measurement, C: CryptoComponentRng>(
             || {
                 let vetkd_args = VetKdArgsOwned {
                     ni_dkg_id: config.dkg_id().clone(),
+                    request_id: random_request_id(rng),
                     caller: canister_test_id(rng.r#gen::<u64>()).get(),
                     context: random_n_bytes(32, rng),
                     input: random_n_bytes(32, rng),

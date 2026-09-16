@@ -1,6 +1,9 @@
 # General
 
-All commands should be run from the repository root (`/ic`).
+All commands should be run from the repository root (`git rev-parse --show-toplevel`).
+Inside the dev container (`ci/container/container-run.sh` or the VS Code
+devcontainer) the checkout is mounted at the same absolute path as on the host
+(canonical, i.e. with symlinks resolved) and is the working directory.
 
 Never manually edit `ci/container/TAG`. It is bumped only by the
 `container-autobuild.yml` GitHub Actions workflow, which builds the new

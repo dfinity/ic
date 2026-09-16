@@ -65,6 +65,7 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
 use ic_test_utilities::state_manager::FakeStateManager;
+use ic_test_utilities_types::ids::test_replica_version;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::batch::ChainKeyData;
 use ic_types::crypto::threshold_sig::ni_dkg::{
@@ -318,7 +319,7 @@ pub struct ExecutionTest {
     current_round: ExecutionRound,
 
     // Read-only fields.
-    dirty_heap_page_overhead: u64,
+    heap_page_overhead: u64,
     instruction_limits: InstructionLimits,
     install_code_instruction_limits: InstructionLimits,
     instruction_limit_per_query_message: NumInstructions,
@@ -355,8 +356,8 @@ impl ExecutionTest {
         Arc::clone(&self.exec_env)
     }
 
-    pub fn dirty_heap_page_overhead(&self) -> u64 {
-        self.dirty_heap_page_overhead
+    pub fn heap_page_overhead(&self) -> u64 {
+        self.heap_page_overhead
     }
 
     pub fn user_id(&self) -> UserId {
@@ -373,6 +374,20 @@ impl ExecutionTest {
 
     pub fn clear_sender_info(&mut self) {
         self.sender_info = None;
+    }
+
+    /// Sets whether this subnet is cooling down.
+    pub fn set_cooling_down(&mut self, cooling_down: bool) {
+        let own_subnet_id = self.state().metadata.own_subnet_id;
+        self.state_mut()
+            .metadata
+            .modify_network_topology(|network_topology| {
+                network_topology
+                    .subnets_mut()
+                    .get_mut(&own_subnet_id)
+                    .unwrap()
+                    .cooling_down = cooling_down;
+            });
     }
 
     pub fn state(&self) -> &ReplicatedState {
@@ -2189,6 +2204,45 @@ impl ExecutionTest {
             .unwrap();
     }
 
+    /// Delivers a consensus response for `callback`, the way the scheduler drains the
+    /// consensus queue: it wraps the callback id and the payload into a `Response`,
+    /// whose other fields `execute_subnet_message()` ignores.
+    pub fn deliver_consensus_response(&mut self, callback: CallbackId, payload: ResponsePayload) {
+        let state = self.state.take().unwrap();
+        let compute_allocation_used = state.total_compute_allocation();
+        let mut round_limits = RoundLimits {
+            instructions: RoundInstructions::from(i64::MAX),
+            subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
+            compute_allocation_used,
+            subnet_memory_reservation: self.subnet_memory_reservation,
+        };
+        let (new_state, _) = self.exec_env.execute_subnet_message(
+            SubnetMessage::Response(
+                Response {
+                    originator: CanisterId::ic_00(),
+                    respondent: CanisterId::ic_00(),
+                    originator_reply_callback: callback,
+                    refund: Cycles::zero(),
+                    response_payload: payload,
+                    deadline: ic_types::messages::NO_DEADLINE,
+                }
+                .into(),
+            ),
+            state,
+            self.install_code_instruction_limits.clone(),
+            &mut mock_random_number_generator(),
+            &self.chain_key_data,
+            &self.replica_version,
+            &self.registry_settings,
+            self.current_round,
+            &mut round_limits,
+        );
+        self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
+        self.state = Some(new_state);
+    }
+
     /// Asks the canister if it is willing to accept the ingress message.
     pub fn should_accept_ingress_message<S: ToString>(
         &mut self,
@@ -2474,7 +2528,7 @@ impl Default for ExecutionTestBuilder {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             time: UNIX_EPOCH,
             current_round: ExecutionRound::new(1),
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
             precompiled_universal_canister: true,
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             subnet_admins: BTreeSet::new(),
@@ -2718,6 +2772,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_flexible_http_requests_disabled(mut self) -> Self {
+        self.execution_config.flexible_http_requests = FlagStatus::Disabled;
+        self
+    }
+
     pub fn without_composite_queries(mut self) -> Self {
         self.execution_config.composite_queries = FlagStatus::Disabled;
         self
@@ -2912,18 +2971,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_max_snapshots_per_canister(mut self, max_snapshots_per_canister: usize) -> Self {
         self.execution_config.max_number_of_snapshots_per_canister = max_snapshots_per_canister;
-        self
-    }
-
-    pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .deterministic_memory_tracker = if enabled {
-            FlagStatus::Enabled
-        } else {
-            FlagStatus::Disabled
-        };
         self
     }
 
@@ -3133,17 +3180,17 @@ impl ExecutionTestBuilder {
             })
             .collect::<BTreeMap<_, _>>();
 
-        let dirty_page_overhead = match self.subnet_type {
-            SubnetType::Application => SchedulerConfig::application_subnet().dirty_page_overhead,
-            SubnetType::System => SchedulerConfig::system_subnet().dirty_page_overhead,
+        let page_overhead = match self.subnet_type {
+            SubnetType::Application => SchedulerConfig::application_subnet().page_overhead,
+            SubnetType::System => SchedulerConfig::system_subnet().page_overhead,
             SubnetType::VerifiedApplication => {
-                SchedulerConfig::verified_application_subnet().dirty_page_overhead
+                SchedulerConfig::verified_application_subnet().page_overhead
             }
-            SubnetType::CloudEngine => SchedulerConfig::cloud_engine().dirty_page_overhead,
+            SubnetType::CloudEngine => SchedulerConfig::cloud_engine().page_overhead,
         };
 
-        let dirty_heap_page_overhead = match self.execution_config.embedders_config.metering_type {
-            MeteringType::New => dirty_page_overhead.get(),
+        let heap_page_overhead = match self.execution_config.embedders_config.metering_type {
+            MeteringType::New => page_overhead.get(),
             _ => 0,
         };
 
@@ -3193,7 +3240,7 @@ impl ExecutionTestBuilder {
             subnet_memory_reservation,
             subnet_available_callbacks: self.execution_config.subnet_callback_soft_limit as i64,
             time: self.time,
-            dirty_heap_page_overhead,
+            heap_page_overhead,
             instruction_limits: InstructionLimits::new(
                 self.subnet_config
                     .scheduler_config

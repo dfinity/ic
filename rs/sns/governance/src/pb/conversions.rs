@@ -399,6 +399,31 @@ impl From<pb::UpgradeSnsControlledCanister> for pb_api::UpgradeSnsControlledCani
             chunked_canister_wasm: item
                 .chunked_canister_wasm
                 .map(pb_api::ChunkedCanisterWasm::from),
+            canister_upgrade_options: item
+                .canister_upgrade_options
+                .map(pb_api::upgrade_sns_controlled_canister::CanisterUpgradeOptions::from),
+        }
+    }
+}
+
+impl From<pb::upgrade_sns_controlled_canister::CanisterUpgradeOptions>
+    for pb_api::upgrade_sns_controlled_canister::CanisterUpgradeOptions
+{
+    fn from(item: pb::upgrade_sns_controlled_canister::CanisterUpgradeOptions) -> Self {
+        Self {
+            skip_pre_upgrade: item.skip_pre_upgrade,
+            wasm_memory_persistence: item.wasm_memory_persistence,
+        }
+    }
+}
+
+impl From<pb_api::upgrade_sns_controlled_canister::CanisterUpgradeOptions>
+    for pb::upgrade_sns_controlled_canister::CanisterUpgradeOptions
+{
+    fn from(item: pb_api::upgrade_sns_controlled_canister::CanisterUpgradeOptions) -> Self {
+        Self {
+            skip_pre_upgrade: item.skip_pre_upgrade,
+            wasm_memory_persistence: item.wasm_memory_persistence,
         }
     }
 }
@@ -433,6 +458,9 @@ impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCani
             chunked_canister_wasm: item
                 .chunked_canister_wasm
                 .map(pb::ChunkedCanisterWasm::from),
+            canister_upgrade_options: item
+                .canister_upgrade_options
+                .map(pb::upgrade_sns_controlled_canister::CanisterUpgradeOptions::from),
         }
     }
 }

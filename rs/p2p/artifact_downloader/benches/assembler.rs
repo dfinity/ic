@@ -36,7 +36,7 @@ use ic_types::{
     signature::{BasicSignature, BasicSignatureBatch},
     time::UNIX_EPOCH,
 };
-use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_0, node_test_id};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_0, node_test_id, test_replica_version};
 use tokio::runtime::{Handle, Runtime};
 
 struct FakeIngressPool {
@@ -135,6 +135,7 @@ fn fake_block_proposal_with_ingresses_and_idkg_dealings(
         parent.as_ref().height.increment(),
         Rank(0),
         parent.as_ref().context.clone(),
+        test_replica_version(),
     );
 
     ConsensusMessage::BlockProposal(BlockProposal::fake(block, NODE_1))

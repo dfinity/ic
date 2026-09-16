@@ -38,7 +38,7 @@ message PostSplitArgs {
   SubnetId new_subnet_id = 1;
 }
 
-// next id: 16
+// next id: 17
 message Summary {
   reserved 5, 6, 8;
   reserved "transcripts_for_new_subnets";
@@ -56,6 +56,14 @@ message Summary {
     SplittingArgs scheduled = 14;
     PostSplitArgs post_split = 15;
   }
+  // Set by replica versions that no longer maintain `transcripts_for_remote_subnets` (field 10).
+  //
+  // When set, field 10 must be ignored entirely, including when hashing the summary. This is what
+  // allows the field to be removed without changing the hash of a summary: replica versions that
+  // still maintain the field and versions that have dropped it derive the same hash from the same
+  // wire bytes, because both read this marker. `repeated` fields cannot express the difference
+  // between "absent" and "empty" on the wire, hence the separate marker.
+  bool transcripts_for_remote_subnets_removed = 16;
 }
 
 message CallbackIdedNiDkgTranscript {

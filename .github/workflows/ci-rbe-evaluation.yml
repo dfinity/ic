@@ -36,11 +36,23 @@ jobs:
       diff-only: ${{ steps.config.outputs.diff-only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
       skip_buf_checks: ${{ steps.config.outputs.skip_buf_checks }}
+      skip_system_tests: ${{ steps.config.outputs.skip_system_tests }}
     steps:
       - name: Infer build config
         id: config
         run: |
           set -euo pipefail
+
+          # PR labels. Both expand to 'false' on merge_group, push and workflow_dispatch.
+          all_bazel_targets='${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}'
+          skip_system_tests='${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_SKIP_SYSTEM_TESTS') }}'
+
+          if [[ "$all_bazel_targets" == 'true' && "$skip_system_tests" == 'true' ]]; then
+              msg="The PR labels CI_ALL_BAZEL_TARGETS and CI_SKIP_SYSTEM_TESTS are mutually exclusive. Remove one of them and retrigger CI (see .github/CI_README.md)."
+              echo "::error title=Conflicting CI labels::$msg"
+              echo "**Error:** $msg" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+          fi
 
           # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
           # the full build to occur (including versioning)
@@ -64,7 +76,7 @@ jobs:
               release_build="false"
               diff_only="false"
               skip_long_tests="true"
-          elif [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}' == 'true' ]]; then
+          elif [[ "$all_bazel_targets" == 'true' ]]; then
               # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
               # branch
               release_build="false"
@@ -123,6 +135,10 @@ jobs:
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
           echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
+          echo "skip_system_tests: $skip_system_tests"
+          echo "skip_system_tests=$skip_system_tests" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_system_tests\` | \`$skip_system_tests\` |" >> "$GITHUB_STEP_SUMMARY"
+
   infer-bazel-targets:
     name: Infer Bazel Targets
     runs-on: namespace-profile-rbe-driver-amd64-linux-16x32
@@ -145,6 +161,9 @@ jobs:
             fi
             if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
               targets_args+=("--exclude_tags=buf")
+            fi
+            if [[ '${{ needs.config.outputs.skip_system_tests }}' == 'true' ]]; then
+              targets_args+=("--exclude_tags=system_test")
             fi
             if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
               targets_args+=(
@@ -172,7 +191,7 @@ jobs:
     needs: [config, infer-bazel-targets]
     runs-on: namespace-profile-rbe-driver-amd64-linux-16x32
     container:
-      image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:743ba739f6dbd1ea20f35c08420c655f512282b5ca8ade55317591f78c8a3a50
+      image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c
       # ic-os image builds run 'podman build' (rootless) and are forced to run locally in
       # this container by --strategy_regexp=ic-os[:/].*=local in bazel/conf/.bazelrc.build.
       # Rootless podman needs to create user namespaces, which fails in an unprivileged
@@ -192,7 +211,7 @@ jobs:
         NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD: ${{ env.NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD }}
     timeout-minutes: 220
     steps:
-      - uses: namespacelabs/nscloud-setup@v0
+      - uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0
       - name: Set up Bazel Remote Execution
         run: |
           nsc bazel setup --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc
@@ -238,7 +257,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:743ba739f6dbd1ea20f35c08420c655f512282b5ca8ade55317591f78c8a3a50"
+          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c"
 
           # Directory for the Build Event Protocol and execution profile files,
           # later uploaded to Namespace Artifact Storage for offline analysis.
@@ -296,7 +315,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:743ba739f6dbd1ea20f35c08420c655f512282b5ca8ade55317591f78c8a3a50"
+          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c"
 
           # Directory for the Build Event Protocol and execution profile files,
           # later uploaded to Namespace Artifact Storage for offline analysis.
@@ -431,7 +450,7 @@ jobs:
         # namespace-actions/download-artifact or `nsc artifact`. No GPG encryption
         # is needed: the storage is private to the workspace and access-controlled.
         if: ${{ !cancelled() }}
-        uses: namespace-actions/upload-artifact@v1
+        uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
         with:
           name: bazel-bep-rbe
           path: |
@@ -447,7 +466,7 @@ jobs:
         # the job is cancelled. Retrieve with namespace-actions/download-artifact
         # or `nsc artifact`.
         if: ${{ !cancelled() }}
-        uses: namespace-actions/upload-artifact@v1
+        uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
         with:
           name: failed-test-logs
           path: |

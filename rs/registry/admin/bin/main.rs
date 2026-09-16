@@ -2,6 +2,7 @@
 use crate::helpers::*;
 use anyhow::anyhow;
 use async_trait::async_trait;
+use base64::prelude::*;
 use candid::{CandidType, Decode, Encode, Principal};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, ValueEnum};
 use create_subnet::ProposeToCreateSubnetCmd;
@@ -88,6 +89,7 @@ use ic_protobuf::registry::{
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::ReplicaVersionRecord,
     routing_table::v1::CanisterMigrations,
+    standard_engine_replica_version::v1::StandardEngineReplicaVersionRecord,
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
@@ -107,8 +109,8 @@ use ic_registry_keys::{
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
-    make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
-    make_unassigned_nodes_config_record_key,
+    make_replica_version_key, make_standard_engine_replica_version_record_key,
+    make_subnet_list_record_key, make_subnet_record_key, make_unassigned_nodes_config_record_key,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -367,6 +369,9 @@ enum SubCommand {
 
     /// Get the latest routing table.
     GetRoutingTable(GetRoutingTableCmd),
+
+    /// Get the replica version(s) that Cloud Engines run by default.
+    GetStandardEngineReplicaVersion,
 
     /// Get the last version of a subnet from the registry.
     GetSubnet(GetSubnetCmd),
@@ -1792,6 +1797,9 @@ struct ProposeToUpdateCanisterSettingsCmd {
     #[clap(long)]
     /// If set, it will update the canister's snapshot visibility to this value.
     snapshot_visibility: Option<SnapshotVisibility>,
+    #[clap(long)]
+    /// If set, it will update the canister's reserved cycles limit to this value.
+    reserved_cycles_limit: Option<u64>,
 }
 
 impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
@@ -1822,6 +1830,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
         let freezing_threshold = self.freezing_threshold;
         let wasm_memory_limit = self.wasm_memory_limit;
         let wasm_memory_threshold = self.wasm_memory_threshold;
+        let reserved_cycles_limit = self.reserved_cycles_limit;
         let log_visibility = match self.log_visibility {
             Some(LogVisibility::Controllers) => Some(GovernanceLogVisibility::Controllers as i32),
             Some(LogVisibility::Public) => Some(GovernanceLogVisibility::Public as i32),
@@ -1846,6 +1855,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
                 log_visibility,
                 wasm_memory_threshold,
                 snapshot_visibility,
+                reserved_cycles_limit,
             }),
         };
 
@@ -4952,6 +4962,31 @@ async fn main() {
                 .collect();
             println!("{}", serde_json::to_string_pretty(&value).unwrap());
         }
+        SubCommand::GetStandardEngineReplicaVersion => {
+            let key = make_standard_engine_replica_version_record_key();
+            match registry_canister
+                .get_value_with_update(key.as_bytes().to_vec(), None)
+                .await
+            {
+                Ok((bytes, version)) => {
+                    let record = StandardEngineReplicaVersionRecord::decode(&bytes[..])
+                        .expect("Error decoding value from registry.");
+                    print_value(&key, version, record, opts.json);
+                }
+                Err(Error::KeyNotPresent(_)) if opts.json => {
+                    // Same shape as `print_value`, with nulls for the absent record.
+                    let entry = serde_json::json!({ "key": key, "version": null, "value": null });
+                    println!("{}", serde_json::to_string_pretty(&entry).unwrap());
+                }
+                Err(Error::KeyNotPresent(_)) => {
+                    println!(
+                        "There is no {key} record in the registry: no standard engine \
+                         replica version has been set yet."
+                    );
+                }
+                Err(error) => panic!("Error getting value from registry: {error:?}"),
+            }
+        }
         SubCommand::GetGuestOSVersion(get_guestos_version_cmd) => {
             let key = make_replica_version_key(&get_guestos_version_cmd.guestos_version_id)
                 .as_bytes()
@@ -7254,7 +7289,8 @@ fn parse_nns_public_key(
         let nns_key = if let Some(path) = nns_public_key_pem_file {
             parse_threshold_sig_key_from_pem_file(&path).expect("Failed to parse PEM file.")
         } else {
-            let decoded_nns_mainnet_key = base64::decode(IC_ROOT_PUBLIC_KEY_BASE64)
+            let decoded_nns_mainnet_key = BASE64_STANDARD
+                .decode(IC_ROOT_PUBLIC_KEY_BASE64)
                 .expect("Failed to decode mainnet public key from base64.");
             parse_threshold_sig_key_from_der(&decoded_nns_mainnet_key)
                 .expect("Failed to decode mainnet public key.")

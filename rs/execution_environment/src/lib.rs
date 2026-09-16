@@ -331,7 +331,7 @@ fn setup_execution_helper(
             own_subnet_id,
             logger.clone(),
             Arc::clone(&cycles_account_manager),
-            scheduler_config.dirty_page_overhead,
+            scheduler_config.page_overhead,
             Arc::clone(&fd_factory),
             Arc::clone(&state_reader),
             temp_dir,

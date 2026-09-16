@@ -27,7 +27,6 @@ use ic_metrics::buckets::{decimal_buckets_with_zero, exponential_buckets};
 use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary, WasmExecutionMode,
 };
-use ic_replicated_state::metrics::instructions_buckets;
 use ic_replicated_state::{
     EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
     page_map::allocated_pages_count,
@@ -149,15 +148,12 @@ struct SandboxedExecutionMetrics {
     accessed_wasm_pages: HistogramVec,
     dirty_pages: HistogramVec,
     dirty_wasm_pages: HistogramVec,
-    read_before_write_count: HistogramVec,
-    direct_write_count: HistogramVec,
     allocated_pages: IntGauge,
     sigsegv_count: HistogramVec,
     mmap_count: HistogramVec,
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
     sigsegv_handler_duration: HistogramVec,
-    dmt_projected_message_cost: HistogramVec,
 }
 
 impl SandboxedExecutionMetrics {
@@ -359,20 +355,6 @@ impl SandboxedExecutionMetrics {
                 exponential_buckets(1.0, 2.0, 22),
                 &["api_type", "memory_type"],
             ),
-            read_before_write_count: metrics_registry.histogram_vec(
-                "sandboxed_execution_read_before_write_count",
-                "Number of write accesses handled where the page had already been read \
-                    by type of memory (wasm, stable) and api type.",
-                exponential_buckets(1.0, 2.0, 22),
-                &["api_type", "memory_type"],
-            ),
-            direct_write_count: metrics_registry.histogram_vec(
-                "sandboxed_execution_direct_write_count",
-                "Number of write accesses handled where the page had not yet been read \
-                    by type of memory (wasm, stable) and api type.",
-                exponential_buckets(1.0, 2.0, 22),
-                &["api_type", "memory_type"],
-            ),
             allocated_pages: metrics_registry.int_gauge(
                 "sandboxed_execution_allocated_pages",
                 "Total number of currently allocated pages.",
@@ -411,12 +393,6 @@ impl SandboxedExecutionMetrics {
                 decimal_buckets_with_zero(-4, 1),
                 &["api_type", "memory_type"],
             ),
-            dmt_projected_message_cost: metrics_registry.histogram_vec(
-                "sandboxed_execution_dmt_projected_message_cost",
-                "Cost of a message when the DMT charges for all page accesses.",
-                instructions_buckets(), /* same as scheduler_instructions_consumed_per_message for comparison */
-                &["api_type", "memory_type"],
-            ),
         }
     }
 
@@ -451,12 +427,6 @@ impl SandboxedExecutionMetrics {
         self.dirty_wasm_pages
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_dirty_wasm_pages_count as f64);
-        self.read_before_write_count
-            .with_label_values(&[api_type_label, "wasm"])
-            .observe(instance_stats.wasm_read_before_write_count as f64);
-        self.direct_write_count
-            .with_label_values(&[api_type_label, "wasm"])
-            .observe(instance_stats.wasm_direct_write_count as f64);
         self.sigsegv_count
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_sigsegv_count as f64);
@@ -480,12 +450,6 @@ impl SandboxedExecutionMetrics {
         self.dirty_pages
             .with_label_values(&[api_type_label, "stable"])
             .observe(instance_stats.stable_dirty_pages as f64);
-        self.read_before_write_count
-            .with_label_values(&[api_type_label, "stable"])
-            .observe(instance_stats.stable_read_before_write_count as f64);
-        self.direct_write_count
-            .with_label_values(&[api_type_label, "stable"])
-            .observe(instance_stats.stable_direct_write_count as f64);
         self.sigsegv_count
             .with_label_values(&[api_type_label, "stable"])
             .observe(instance_stats.stable_sigsegv_count as f64);
@@ -501,10 +465,6 @@ impl SandboxedExecutionMetrics {
         self.sigsegv_handler_duration
             .with_label_values(&[api_type_label, "stable"])
             .observe(instance_stats.stable_sigsegv_handler_duration.as_secs_f64());
-
-        self.dmt_projected_message_cost
-            .with_label_values(&[api_type_label, "both"])
-            .observe(instance_stats.dmt_projected_message_cost as f64);
 
         self.allocated_pages.set(allocated_pages_count() as i64);
     }
@@ -1709,7 +1669,7 @@ impl SandboxedExecutionController {
                 });
                 return WasmExecutionResult::Paused(slice, paused);
             }
-            CompletionResult::Finished(mut exec_output) => {
+            CompletionResult::Finished(exec_output) => {
                 let execution_status = match exec_output.wasm.wasm_result.clone() {
                     Ok(Some(WasmResult::Reply(_))) => "Success",
                     Ok(Some(WasmResult::Reject(_))) => "Reject",
@@ -1721,19 +1681,6 @@ impl SandboxedExecutionController {
                     execution_status,
                     execution_state.wasm_execution_mode.as_str(),
                 );
-                // Temporary metric: How much will the message cost when we charge via DMT.
-                let instructions_used = message_instruction_limit
-                    .saturating_sub(&exec_output.wasm.num_instructions_left);
-                let stable_writes = exec_output.wasm.instance_stats.stable_dirty_pages;
-                let stable_reads = exec_output.wasm.instance_stats.stable_accessed_pages;
-                let heap_writes = exec_output.wasm.instance_stats.wasm_dirty_pages;
-                let heap_reads = exec_output.wasm.instance_stats.wasm_accessed_pages - heap_writes;
-                // we currently charge 1000 for stable and heap writes (plus 3000 for copy overhead, which remains separate), and 0 for everything else.
-                let additional_cost =
-                    (stable_writes + heap_writes) * 4000 + (stable_reads + heap_reads) * 5000;
-                exec_output.wasm.instance_stats.dmt_projected_message_cost =
-                    instructions_used.get() as usize + additional_cost;
-
                 self.metrics
                     .observe_instance_stats(&exec_output.wasm.instance_stats, api_type_label);
                 exec_output

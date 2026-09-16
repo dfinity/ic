@@ -117,6 +117,7 @@ rust_library(
         "@crate_index//:regex",
         "@crate_index//:reqwest",
         "@crate_index//:ring",
+        "@crate_index//:rsa",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
@@ -140,7 +141,7 @@ rust_library(
 )
 
 rust_test(
-    name = "generic_workload_engine",
+    name = "unit_tests",
     crate = ":ic-system-test-driver",
     deps = [
         "@crate_index//:assert_matches",

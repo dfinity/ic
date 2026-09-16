@@ -12,8 +12,9 @@ use ic_management_canister_types_private::{
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterState, ExecutionTask, IngressHistoryState, InputSource, OutputRequest, ReplicatedState,
-    SchedulerState, StateError, SystemState,
+    CallContext, CallOrigin, CanisterQueues, CanisterState, ExecutionTask, IngressHistoryState,
+    InputSource, OutputRequest, RefundPool, ReplicatedState, SchedulerState, StateError,
+    SystemMetadata, SystemState,
     canister_state::{
         canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
         execution_state::{CustomSection, CustomSectionType, WasmMetadata},
@@ -38,17 +39,22 @@ use ic_test_utilities_state::{ExecutionStateBuilder, arb_replicated_state_with_o
 use ic_test_utilities_types::ids::{SUBNET_1, canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
+use ic_types::batch::RawQueryStats;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{
-    CallbackId, CanisterCall, CanisterMessage, MAX_RESPONSE_COUNT_BYTES, Payload, Refund,
-    RejectContext, Request, RequestOrResponse, Response, SubnetMessage,
+    CallbackId, CanisterCall, CanisterMessage, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload,
+    Refund, RejectContext, Request, RequestMetadata, RequestOrResponse, Response, SubnetMessage,
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::StreamIndex;
 use ic_types::{CountBytes, MemoryAllocation, SnapshotId, Time};
-use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles,
+    NominalCyclesTesting,
+};
 use maplit::btreemap;
 use proptest::prelude::*;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem::size_of;
 use std::sync::Arc;
@@ -1356,25 +1362,41 @@ fn online_split() {
     take_shapshot(CANISTER_1);
     take_shapshot(CANISTER_2);
 
-    // Add aborted `install_code` tasks to both canisters.
+    // Add aborted `install_code` tasks to both canisters, with the same prepayment.
+    let prepaid_install_code_cycles = CompoundCycles::<Instructions>::new(
+        Cycles::new(1_000_000),
+        CanisterCyclesCostSchedule::Normal,
+    );
     let mut add_aborted_install_code_task = |canister_id| {
         let canister = fixture.state.canister_state_make_mut(&canister_id).unwrap();
+        let balance_before_prepayment = canister.system_state.balance();
+        canister
+            .system_state
+            .consume_cycles(prepaid_install_code_cycles);
+        // The prepayment was consumed in full: out of the balance and into the
+        // consumed cycles gauge.
+        assert_eq!(
+            canister.system_state.balance(),
+            balance_before_prepayment - prepaid_install_code_cycles.real()
+        );
+        assert_eq!(
+            canister.system_state.canister_metrics().consumed_cycles(),
+            prepaid_install_code_cycles.nominal()
+        );
         canister
             .system_state
             .task_queue
             .enqueue(ExecutionTask::AbortedInstallCode {
                 message: CanisterCall::Request(RequestBuilder::default().build().into()),
                 call_id: InstallCodeCallId::new(3_u64),
-                prepaid_execution_cycles: CompoundCycles::new(
-                    Cycles::new(3),
-                    CanisterCyclesCostSchedule::Normal,
-                ),
+                prepaid_execution_cycles: prepaid_install_code_cycles,
             });
         // Canister must be in the subnet schedule.
         fixture.state.canister_priority_mut(canister_id);
+        balance_before_prepayment
     };
     add_aborted_install_code_task(CANISTER_1);
-    add_aborted_install_code_task(CANISTER_2);
+    let canister_2_balance_before_prepayment = add_aborted_install_code_task(CANISTER_2);
 
     //
     // Split off subnet A'.
@@ -1428,8 +1450,12 @@ fn online_split() {
     canister_state
         .system_state
         .split_input_schedules(&CANISTER_2, expected.canister_states());
-    // The in-progress `install_code` task should have been silently dropped.
+    // The in-progress `install_code` task should have been dropped, with the cycles
+    // prepaid for it refunded in full.
     canister_state.system_state.task_queue = Default::default();
+    canister_state
+        .system_state
+        .refund_cycles(prepaid_install_code_cycles, prepaid_install_code_cycles);
     expected.put_canister_state(canister_state_arc);
 
     // Streams, subnet queues and refunds should be empty.
@@ -1442,6 +1468,209 @@ fn online_split() {
 
     // Everything else should be unchanged.
     assert_eq!(expected, state_b);
+
+    // And, explicitly: the prepayment was refunded in full, so `CANISTER_2` is back
+    // to the balance it had before it was charged.
+    assert_eq!(
+        state_b
+            .canister_state(&CANISTER_2)
+            .unwrap()
+            .system_state
+            .balance(),
+        canister_2_balance_before_prepayment
+    );
+}
+
+#[test]
+fn after_merge() {
+    const CANISTER_1: CanisterId = CanisterId::from_u64(1);
+    const CANISTER_2: CanisterId = CanisterId::from_u64(2);
+
+    // A time different from the state time (`UNIX_EPOCH`), so that pre-existing
+    // ingress history entries can be told apart from newly recorded ones.
+    let before = Time::from_nanos_since_unix_epoch(13);
+    // The time of the batch being processed. Different from both the state time
+    // and `before`, to ensure that newly recorded entries are timestamped with the
+    // batch time (as opposed to the time of the state resulting from the merge).
+    let batch_time = Time::from_nanos_since_unix_epoch(42);
+
+    // Makes a not yet responded call context with the given origin.
+    fn open_call_context(call_origin: CallOrigin) -> CallContext {
+        CallContext::new(
+            call_origin,
+            false, // responded
+            false, // deleted
+            Cycles::zero(),
+            UNIX_EPOCH,
+            RequestMetadata::for_new_call_tree(UNIX_EPOCH),
+            None,
+        )
+    }
+
+    // Makes an ingress call origin for the given message.
+    fn ingress_origin(message: u64) -> CallOrigin {
+        CallOrigin::Ingress(
+            user_test_id(message),
+            message_test_id(message),
+            "update".into(),
+        )
+    }
+
+    // Makes an ingress status with the given receiver, message and state.
+    let ingress_status = |receiver: CanisterId, message: u64, time, state| IngressStatus::Known {
+        receiver: receiver.get(),
+        user_id: user_test_id(message),
+        time,
+        state,
+    };
+
+    // Start off with `CANISTER_1` only, as `CANISTER_2` was hosted by another subnet
+    // before the merge.
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_1]);
+
+    // An input from `CANISTER_2` to `CANISTER_1`, enqueued while `CANISTER_2` was
+    // still remote, so it landed in `CANISTER_1`'s remote sender schedule.
+    assert!(
+        fixture
+            .push_input(
+                RequestBuilder::default()
+                    .sender(CANISTER_2)
+                    .receiver(CANISTER_1)
+                    .build()
+                    .into(),
+            )
+            .unwrap()
+    );
+    assert!(fixture.local_subnet_input_schedule(&CANISTER_1).is_empty());
+    assert_eq!(
+        &VecDeque::from(vec![CANISTER_2]),
+        fixture.remote_subnet_input_schedule(&CANISTER_1)
+    );
+
+    // `CANISTER_2` is now hosted by the merged subnet.
+    let canister_2_fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_2]);
+    let canister_2_state = canister_2_fixture
+        .state
+        .canister_state(&CANISTER_2)
+        .unwrap()
+        .clone();
+    fixture.state.put_canister_state(canister_2_state);
+
+    // An in-progress ingress message to `CANISTER_1`, with no ingress history entry.
+    let canister_1 = fixture.state.canister_state_make_mut(&CANISTER_1).unwrap();
+    canister_1
+        .system_state
+        .with_call_context(open_call_context(ingress_origin(1)));
+    // An ingress message that was already responded to; and an in-progress canister
+    // update call. Neither should be recorded in the ingress history.
+    canister_1.system_state.with_call_context(CallContext::new(
+        ingress_origin(2),
+        true,  // responded
+        false, // deleted
+        Cycles::zero(),
+        UNIX_EPOCH,
+        RequestMetadata::for_new_call_tree(UNIX_EPOCH),
+        None,
+    ));
+    canister_1
+        .system_state
+        .with_call_context(open_call_context(CallOrigin::CanisterUpdate(
+            CANISTER_2,
+            CallbackId::from(3),
+            NO_DEADLINE,
+            "update".into(),
+        )));
+
+    // Three in-progress ingress messages to `CANISTER_2`: one with no ingress
+    // history entry; one already recorded as `Processing`; and one recorded with an
+    // unexpected status.
+    let canister_2 = fixture.state.canister_state_make_mut(&CANISTER_2).unwrap();
+    for message in [4, 5, 6] {
+        canister_2
+            .system_state
+            .with_call_context(open_call_context(ingress_origin(message)));
+    }
+    let processing_5 = ingress_status(CANISTER_2, 5, before, IngressState::Processing);
+    let received_6 = ingress_status(CANISTER_2, 6, before, IngressState::Received);
+    for (message, status) in [(5, processing_5.clone()), (6, received_6.clone())] {
+        fixture.state.metadata.ingress_history.insert(
+            message_test_id(message),
+            status,
+            before,
+            NumBytes::from(u64::MAX),
+            |_| {},
+        );
+    }
+
+    let mut state = fixture.state;
+    state.metadata.subnet_merged = true;
+
+    let unexpected_statuses = RefCell::new(Vec::new());
+    state.after_merge(
+        batch_time,
+        NumBytes::from(u64::MAX),
+        |message_id, status| {
+            unexpected_statuses
+                .borrow_mut()
+                .push((message_id.clone(), status.clone()));
+        },
+    );
+
+    // The merge marker was reset.
+    assert!(!state.metadata.subnet_merged);
+
+    // And `CANISTER_2` was moved from `CANISTER_1`'s remote to its local sender
+    // schedule, now that both canisters are hosted by the same subnet.
+    let queues = state
+        .canister_state(&CANISTER_1)
+        .unwrap()
+        .system_state
+        .queues();
+    assert_eq!(
+        &VecDeque::from(vec![CANISTER_2]),
+        queues.local_sender_schedule()
+    );
+    assert!(queues.remote_sender_schedule().is_empty());
+
+    // Only the `Received` entry of message 6 was reported as unexpected.
+    assert_eq!(
+        vec![(message_test_id(6), received_6.clone())],
+        unexpected_statuses.into_inner()
+    );
+
+    // Messages 1 and 4 were recorded as `Processing` at the batch time; the existing
+    // entries of messages 5 and 6 were left alone; and nothing else was recorded.
+    let expected = BTreeMap::from([
+        (
+            message_test_id(1),
+            ingress_status(CANISTER_1, 1, batch_time, IngressState::Processing),
+        ),
+        (
+            message_test_id(4),
+            ingress_status(CANISTER_2, 4, batch_time, IngressState::Processing),
+        ),
+        (message_test_id(5), processing_5),
+        (message_test_id(6), received_6),
+    ]);
+    assert_eq!(
+        expected,
+        state
+            .metadata
+            .ingress_history
+            .statuses()
+            .map(|(message_id, status)| (message_id.clone(), status.clone()))
+            .collect::<BTreeMap<_, _>>()
+    );
+}
+
+#[test]
+#[should_panic(expected = "Not a state resulting from a subnet merge")]
+fn after_merge_without_merge_marker() {
+    ReplicatedStateFixture::new().state.after_merge(
+        UNIX_EPOCH,
+        NumBytes::from(u64::MAX),
+        |_, _| {},
+    );
 }
 
 #[test]
@@ -1537,6 +1766,79 @@ fn credit_refund() {
         fixture.canister_balance(&CANISTER_ID)
     );
     assert_eq!(None, fixture.canister_balance(&OTHER_CANISTER_ID));
+}
+
+/// A replica restarting from a checkpoint must arrive at the same
+/// `consumed_cycles_total_including_canisters` as one that keeps running:
+/// `ReplicatedState::new_from_checkpoint` re-derives the aggregate from the
+/// persisted subnet-level total and the loaded canisters, exactly as
+/// `refresh_consumed_cycles` does on every commit. Were the two to diverge, the
+/// certified `/subnet/<subnet_id>/metrics` subtree -- and hence the state hash
+/// from certification version `V29` on -- would differ across a restart.
+#[test]
+fn consumed_cycles_total_is_the_same_across_a_restart() {
+    // Non-zero subnet-level consumption, covering all three ways it accumulates:
+    // deleted canisters, the scalar outcall metrics and a subnet-only use case.
+    let mut metadata = SystemMetadata::new(SUBNET_ID, SubnetType::Application);
+    let subnet_metrics = &mut metadata.subnet_metrics;
+    subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::new(1_000));
+    subnet_metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(200));
+    subnet_metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(30));
+    subnet_metrics.observe_consumed_cycles_with_use_case(
+        CyclesUseCase::SchnorrOutcalls,
+        NominalCycles::new(4),
+    );
+    let subnet_level = metadata.subnet_metrics.consumed_cycles_total();
+    assert!(subnet_level > NominalCycles::zero());
+
+    // A still-existing canister that has consumed some cycles.
+    let mut canister = CanisterState::new(
+        SystemState::new_running_for_testing(
+            CANISTER_ID,
+            user_test_id(24).get(),
+            Cycles::new(1 << 36),
+            NumSeconds::from(100_000),
+        ),
+        None,
+        SchedulerState::default(),
+        CanisterSnapshots::default(),
+    );
+    canister
+        .system_state
+        .consume_cycles(CompoundCycles::<Instructions>::new(
+            Cycles::new(123_456),
+            CanisterCyclesCostSchedule::Normal,
+        ));
+    let consumed_by_canister = canister.system_state.canister_metrics().consumed_cycles();
+    assert!(consumed_by_canister > NominalCycles::zero());
+
+    // A running replica publishes the aggregate on every commit.
+    let mut live = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+    live.metadata.subnet_metrics = metadata.subnet_metrics.clone();
+    live.put_canister_state(canister.clone());
+    live.refresh_consumed_cycles();
+    assert_eq!(
+        live.metadata
+            .subnet_metrics
+            .consumed_cycles_total_including_canisters(),
+        subnet_level + consumed_by_canister
+    );
+
+    // A replica restarting from a checkpoint holding the same canister and the
+    // same persisted subnet metrics derives the aggregate on load.
+    let restarted = ReplicatedState::new_from_checkpoint(
+        btreemap! { CANISTER_ID => Arc::new(canister) },
+        metadata,
+        CanisterQueues::default(),
+        RefundPool::default(),
+        RawQueryStats::default(),
+    );
+
+    // Not just the aggregate: every field the certified metrics leaf encodes.
+    assert_eq!(
+        live.metadata.subnet_metrics,
+        restarted.metadata.subnet_metrics
+    );
 }
 
 #[test_strategy::proptest]

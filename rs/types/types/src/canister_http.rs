@@ -42,8 +42,9 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
+    CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
+    consensus::get_faults_tolerated,
     crypto::{BasicSigOf, CryptoHashOf},
     messages::{CallbackId, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
@@ -54,10 +55,10 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
-    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, CanisterHttpRequestArgs,
-    DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, DataSize, FlexibleCanisterHttpRequestArgs, HttpHeader,
-    HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts,
-    TransformContext,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO, CanisterHttpRequestArgs,
+    DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod,
+    PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, TransformContext,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
@@ -75,7 +76,7 @@ use std::{
     time::Duration,
 };
 use strum::FromRepr;
-use strum_macros::EnumIter;
+use strum_macros::{EnumCount, EnumIter};
 
 /// Time after which a response is considered timed out and a timeout error will be returned to execution
 pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
@@ -236,7 +237,7 @@ impl Replication {
 }
 
 /// The kind of replication of a request.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, EnumCount, Eq, PartialEq)]
 pub enum ReplicationKind {
     FullyReplicated,
     Flexible {
@@ -254,6 +255,24 @@ impl ReplicationKind {
             ReplicationKind::Flexible { .. } => "flexible",
             ReplicationKind::NonReplicated => "non_replicated",
         }
+    }
+
+    /// Every value [`Self::as_str`] can return, e.g. to initialize the label values
+    /// of a metric labeled by replication kind.
+    pub fn all_as_str() -> [&'static str; 3] {
+        // A new variant has to be listed below, and the array's length bumped.
+        const _: () = assert!(<ReplicationKind as strum::EnumCount>::COUNT == 3);
+        [
+            Self::FullyReplicated.as_str(),
+            // `as_str` does not look at the counts, so they are irrelevant here.
+            Self::Flexible {
+                total_requests: 0,
+                min_responses: 0,
+                max_responses: 0,
+            }
+            .as_str(),
+            Self::NonReplicated.as_str(),
+        ]
     }
 
     /// The response counts for a flexible request that does not specify its own:
@@ -284,6 +303,13 @@ impl ReplicationKind {
     }
 }
 
+/// The number of agreeing replicas required to deliver a fully-replicated HTTP outcall
+/// response on a canister-http committee of `committee_size` nodes.
+pub fn canister_http_threshold(committee_size: usize) -> usize {
+    let committee_size = committee_size.max(1);
+    committee_size - get_faults_tolerated(committee_size)
+}
+
 impl From<&ReplicationCounts> for ReplicationKind {
     fn from(counts: &ReplicationCounts) -> Self {
         Self::Flexible {
@@ -294,11 +320,20 @@ impl From<&ReplicationCounts> for ReplicationKind {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, EnumIter, Serialize, FromRepr)]
 #[repr(u32)]
 pub enum PricingVersion {
     Legacy = PRICING_VERSION_LEGACY,
     PayAsYouGo = PRICING_VERSION_PAY_AS_YOU_GO,
+}
+
+impl PricingVersion {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PricingVersion::Legacy => "legacy",
+            PricingVersion::PayAsYouGo => "pay_as_you_go",
+        }
+    }
 }
 
 impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {
@@ -657,6 +692,7 @@ impl CanisterHttpRequestContext {
         registry_version: RegistryVersion,
         cost_schedule: CanisterCyclesCostSchedule,
         rng: &mut dyn RngCore,
+        pay_as_you_go_enabled: bool,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
         validate_url_length(&args.url)?;
@@ -708,9 +744,14 @@ impl CanisterHttpRequestContext {
             time,
             replication,
             pricing_version: {
+                let allowed_versions = if pay_as_you_go_enabled {
+                    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO
+                } else {
+                    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS
+                };
                 let final_version_u32 = args
                     .pricing_version
-                    .filter(|v| ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS.contains(v))
+                    .filter(|v| allowed_versions.contains(v))
                     .unwrap_or(DEFAULT_HTTP_OUTCALLS_PRICING_VERSION);
                 PricingVersion::from_repr(final_version_u32).unwrap_or(PricingVersion::Legacy)
             },
@@ -959,25 +1000,20 @@ pub struct CanisterHttpRequest {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
-    pub canister_id: CanisterId,
     pub content: CanisterHttpResponseContent,
 }
 
 impl CanisterHttpResponse {
     /// Same calculation as `Self::count_bytes` but from decomposed parts.
-    pub fn count_bytes_from_parts(canister_id: &CanisterId, content_size: usize) -> usize {
-        size_of::<CanisterHttpRequestId>() + canister_id.get_ref().data_size() + content_size
+    pub const fn count_bytes_from_parts(content_size: usize) -> usize {
+        size_of::<CanisterHttpRequestId>() + content_size
     }
 }
 
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
-        let CanisterHttpResponse {
-            id: _,
-            canister_id,
-            content,
-        } = &self;
-        Self::count_bytes_from_parts(canister_id, content.count_bytes())
+        let CanisterHttpResponse { id: _, content } = &self;
+        Self::count_bytes_from_parts(content.count_bytes())
     }
 }
 
@@ -1397,7 +1433,9 @@ pub type CanisterHttpResponseShare = BasicSigned<CanisterHttpResponseReceipt>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct CanisterHttpResponseArtifact {
     pub share: CanisterHttpResponseShare,
-    // The response should not be included in the case of fully replicated outcalls.
+    // The response should not be included in the case of fully replicated outcalls, where
+    // every replica produces it itself; nor in the case of an outcall that has already been
+    // responded to, where the share is nothing but a receipt for the cycles that were spent.
     pub response: Option<CanisterHttpResponse>,
 }
 
@@ -1419,6 +1457,7 @@ impl PbArtifact for CanisterHttpResponseArtifact {
 #[cfg(test)]
 mod tests {
     use crate::{
+        CanisterId,
         crypto::{CryptoHash, SignedBytesWithoutDomainSeparator},
         messages::NO_DEADLINE,
         time::UNIX_EPOCH,
@@ -1435,7 +1474,23 @@ mod tests {
     };
     use ic_types_test_utils::ids::node_test_id;
     use rstest::rstest;
+    use std::str::FromStr;
     use strum::IntoEnumIterator;
+
+    #[test]
+    fn replication_kind_all_as_str_is_stable_and_distinct() {
+        assert_eq!(
+            ReplicationKind::all_as_str(),
+            ["fully_replicated", "flexible", "non_replicated"]
+        );
+
+        let distinct: BTreeSet<&str> = ReplicationKind::all_as_str().into_iter().collect();
+        assert_eq!(
+            distinct.len(),
+            <ReplicationKind as strum::EnumCount>::COUNT,
+            "every replication kind must have its own label value"
+        );
+    }
 
     /// The signed bytes of a [`CanisterHttpResponseReceipt`] must round-trip, for
     /// any `spent` amount in the whole `Cycles` (`u128`) range.
@@ -1475,7 +1530,7 @@ mod tests {
                     content_hash: CryptoHashOf::new(CryptoHash(vec![0; 32])),
                     content_size: 0,
                     is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                    replica_version: ReplicaVersion::from_str("foobar_version").unwrap(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt { spent },
             }
@@ -1492,6 +1547,44 @@ mod tests {
         ];
         let encodings: BTreeSet<_> = amounts.iter().map(|spent| signed_bytes(*spent)).collect();
         assert_eq!(encodings.len(), amounts.len());
+    }
+
+    #[test]
+    fn canister_http_threshold_tolerates_a_third_of_the_committee() {
+        // The concrete quorums, including the subnet sizes the pricing tests use.
+        for (committee_size, expected) in [
+            (0, 1),
+            (1, 1),
+            (2, 2),
+            (3, 3),
+            (4, 3),
+            (7, 5),
+            (13, 9),
+            (28, 19),
+            (34, 23),
+            (40, 27),
+        ] {
+            assert_eq!(
+                canister_http_threshold(committee_size),
+                expected,
+                "committee of {committee_size}"
+            );
+        }
+        for committee_size in 0..=64 {
+            let threshold = canister_http_threshold(committee_size);
+            // Never zero, so that a fee can be split into that many shares ...
+            assert!(threshold >= 1, "committee of {committee_size}");
+            // ... never more than the committee that has to reach it ...
+            assert!(
+                threshold <= committee_size.max(1),
+                "committee of {committee_size}"
+            );
+            // ... and always a strict majority, so two disjoint sets cannot both reach it.
+            assert!(
+                2 * threshold > committee_size,
+                "committee of {committee_size}"
+            );
+        }
     }
 
     #[test]
@@ -2238,6 +2331,7 @@ mod tests {
             RegistryVersion::from(1),
             CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
+            /* pay_as_you_go_enabled = */ false,
         )
     }
 
