@@ -1647,7 +1647,8 @@ pub struct SubnetMetricsResult {
     /// previous round.
     pub update_transactions_total: Nat,
     /// Total instructions the subnet accounted for across the execution phases of
-    /// all rounds, in millions rounded up, as of the end of the previous round.
+    /// all rounds, as of the end of the previous round, counted in units of one
+    /// million and rounded up: a value of 42 means 42 million instructions.
     ///
     /// Covers both executed Wasm and the fixed per-execution and per-canister
     /// scheduler overheads plus non-Wasm charges (compilation, chunk assembly,
