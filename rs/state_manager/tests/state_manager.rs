@@ -729,6 +729,26 @@ fn canister_creation_timestamp_survives_a_checkpoint() {
 }
 
 #[test]
+fn round_instructions_total_survives_a_checkpoint() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let (height, mut state) = state_manager.take_tip();
+        assert_eq!(height, Height(0));
+        state.metadata.subnet_metrics.round_instructions_total = 42_000_000;
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+
+        // Restart the state manager so the state is reloaded from the checkpoint.
+        let state_manager = restart_fn(state_manager, None);
+
+        let (height, state) = state_manager.take_tip();
+        assert_eq!(height, Height(1));
+        assert_eq!(
+            state.metadata.subnet_metrics.round_instructions_total,
+            42_000_000
+        );
+    });
+}
+
+#[test]
 fn last_install_timestamp_survives_a_checkpoint() {
     use ic_types::time::Time;
     state_manager_restart_test(|state_manager, restart_fn| {
