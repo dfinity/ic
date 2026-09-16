@@ -2491,13 +2491,18 @@ impl SystemState {
         }
 
         // A pending ingress induction cycles debit is only ever accumulated while the
-        // canister has a paused execution (see
-        // `add_postponed_charge_to_ingress_induction_cycles_debit()`) and is applied
-        // when that execution finishes or is aborted. This is what guarantees that the
-        // debit is always applied: `CanisterState::is_cold()` keeps a canister with a
-        // pending debit in the hot pool, so `abort_all_paused_executions()` is bound to
-        // apply the debit at the latest in the checkpoint round at the end of the
-        // current checkpoint interval.
+        // canister has a paused execution or paused install code, because postponing
+        // the charge until that execution finishes is the only reason
+        // `charge_ingress_induction_cost()` defers it in the first place (see
+        // `add_postponed_charge_to_ingress_induction_cycles_debit()`).
+        //
+        // This invariant pins down where a postponed charge may originate; it is not
+        // what bounds the debit in time. That bound comes from `is_cold()`, which
+        // rejects any pending debit and thereby keeps the canister in the hot pool
+        // until the debit is applied: `abort_all_paused_executions()` visits every hot
+        // canister and `ExecutionEnvironment::abort_canister()` applies a pending debit
+        // whether or not a paused task is present, so the debit is charged at the
+        // latest in the checkpoint round ending the current checkpoint interval.
         if !self.ingress_induction_cycles_debit.is_zero()
             && !self.has_paused_execution_or_install_code()
         {
