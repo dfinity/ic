@@ -6418,6 +6418,39 @@ fn subnet_metrics_ingress_query_fails() {
         );
 }
 
+/// The endpoint reports the raw counter in millions, rounded up, so that it
+/// cannot be read as a fine-grained per-block activity signal.
+#[test]
+fn subnet_metrics_reports_round_instructions_in_millions_rounded_up() {
+    for (raw, expected) in [
+        (0_u64, 0_u64),
+        (1, 1),
+        (999_999, 1),
+        (1_000_000, 1),
+        (1_000_001, 2),
+        (2_000_000, 2),
+        (u64::MAX, u64::MAX.div_ceil(1_000_000)),
+    ] {
+        let own_subnet_id = subnet_test_id(1);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet_id)
+            .with_caller(subnet_test_id(2), canister_test_id(1))
+            .build();
+        test.state_mut()
+            .metadata
+            .subnet_metrics
+            .round_instructions_total = raw;
+
+        let response = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
+
+        assert_eq!(
+            response.million_round_instructions_total,
+            candid::Nat::from(expected),
+            "raw count {raw}"
+        );
+    }
+}
+
 #[test]
 fn subnet_metrics_foreign_subnet_id_is_rejected() {
     let own_subnet_id = subnet_test_id(1);

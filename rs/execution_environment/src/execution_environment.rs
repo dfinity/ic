@@ -3440,11 +3440,12 @@ impl ExecutionEnvironment {
             // `ExecutionRound` is numerically the finalized consensus block
             // height; see `rs/messaging/src/state_machine.rs`.
             block_height: candid::Nat::from(current_round.get()),
-            // `num_canisters` and `update_transactions_total` are written at the
-            // *end* of a round (`message_routing.rs`, `scheduler.rs`), so a call
-            // executing in round N reports the end-of-round-(N-1) values. That
-            // one-round lag is what `read_state` reports for height N-1 too, so the
-            // two agree; it is nonetheless not literally "current".
+            // `num_canisters`, `update_transactions_total` and
+            // `million_round_instructions_total` are written at the *end* of a round
+            // (`message_routing.rs`, `scheduler.rs`), so a call executing in round N
+            // reports the end-of-round-(N-1) values. For the two with `read_state`
+            // counterparts that same lag applies there at height N-1, so they agree;
+            // it is nonetheless not literally "current".
             num_canisters: candid::Nat::from(metrics.num_canisters),
             // Read from the stored `SubnetMetrics` field rather than recomputed
             // live, so that the value agrees with the certified state tree. Note
@@ -3455,6 +3456,9 @@ impl ExecutionEnvironment {
             canister_state_bytes: candid::Nat::from(metrics.canister_state_bytes.get()),
             consumed_cycles_total: candid::Nat::from(consumed_cycles_total.get()),
             update_transactions_total: candid::Nat::from(metrics.update_transactions_total),
+            million_round_instructions_total: candid::Nat::from(
+                metrics.round_instructions_total.div_ceil(1_000_000),
+            ),
         };
         Ok(Encode!(&res).unwrap())
     }
