@@ -1608,19 +1608,20 @@ pub struct SubnetMetricsArgs {
 /// # Freshness
 ///
 /// Only `block_height` is current as of the block in which the call is executed.
-/// The other four are read from the subnet's aggregated metrics, which the replica
+/// The other five are read from the subnet's aggregated metrics, which the replica
 /// updates at the *end* of a round, so they describe the state as of an earlier
 /// block:
 ///
-/// - `num_canisters`, `consumed_cycles_total` and `update_transactions_total` are
-///   as of the end of the previous round.
+/// - `num_canisters`, `consumed_cycles_total`, `update_transactions_total` and
+///   `million_round_instructions_total` are as of the end of the previous round.
 /// - `canister_state_bytes` is recomputed only every 10 rounds, because summing it
 ///   over every canister is expensive and it does not need to be exact. It can
 ///   therefore be up to ten rounds stale, and reads as `0` for the first rounds
 ///   after the subnet is created.
 ///
-/// These are the same values, with the same staleness, that `read_state` returns
-/// for the `/subnet/<subnet_id>/metrics` path, so the two agree.
+/// All but `million_round_instructions_total` are the same values, with the same
+/// staleness, that `read_state` returns for the `/subnet/<subnet_id>/metrics` path,
+/// so those agree; that field has no `read_state` counterpart.
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
 )]
@@ -1645,6 +1646,13 @@ pub struct SubnetMetricsResult {
     /// number of messages executed in replicated mode, as of the end of the
     /// previous round.
     pub update_transactions_total: Nat,
+    /// Total instructions the subnet accounted for across the execution phases of
+    /// all rounds, in millions rounded up, as of the end of the previous round.
+    ///
+    /// Covers both executed Wasm and the fixed per-execution and per-canister
+    /// scheduler overheads plus non-Wasm charges (compilation, chunk assembly,
+    /// snapshots), so this is not a Wasm instruction meter.
+    pub million_round_instructions_total: Nat,
 }
 
 /// # Canister ID Range.
