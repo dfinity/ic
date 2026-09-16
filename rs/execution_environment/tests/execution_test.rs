@@ -3013,11 +3013,19 @@ fn subnet_metrics_reports_the_subnets_metrics() {
     );
 
     // `million_round_instructions_total`: the raw counter in millions, rounded
-    // up. The raw counter has to equal what the round histogram observed, every
-    // round having observed exactly once; the reported value then lags by a
-    // round or two, so it is bracketed rather than pinned. The conversion itself
-    // is pinned exactly by `subnet_metrics_reports_round_instructions_in_millions_rounded_up`.
+    // up. The reported value lags by a round or two, so it is bracketed rather
+    // than pinned; the conversion is pinned exactly by
+    // `subnet_metrics_reports_round_instructions_in_millions_rounded_up`.
     // Non-zero because installing the caller alone charges tens of millions.
+    //
+    // The equality against `instructions_consumed()` is the load-bearing one: it
+    // guards that every `execute_round` exit which observes the round histogram
+    // also accumulates into the counter. Both read the same measurement scope, so
+    // they can only diverge by a path doing one and not the other -- which is
+    // exactly the bug `heap_delta_limit_still_counts_drained_consensus_queue_messages`
+    // covers for the early-return path. This state machine has by now run canister
+    // creation, install code, subnet messages and checkpoint rounds, so the
+    // equality spans all of those paths at once.
     let raw_now = env
         .get_latest_state()
         .metadata

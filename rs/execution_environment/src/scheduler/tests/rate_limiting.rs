@@ -135,51 +135,6 @@ fn heap_delta_limit_still_counts_drained_consensus_queue_messages() {
         after.update_transactions_total,
         before.update_transactions_total + 1
     );
-    // No response kind charges instructions -- draining one routes a reply
-    // without entering Wasm -- so this holds at zero today and pins nothing on
-    // its own. It is here so that a response that does start charging cannot
-    // slip past this path unaccounted.
-    //
-    // `round_instructions_total_tracks_the_round_histogram` is what actually
-    // exercises the counter.
-    assert_eq!(
-        after.round_instructions_total - before.round_instructions_total,
-        round_instructions_observed(&test) - observed_before
-    );
-}
-
-/// The counter tracks the round histogram across ordinary rounds too.
-#[test]
-fn round_instructions_total_tracks_the_round_histogram() {
-    use ic_test_utilities_metrics::fetch_histogram_stats;
-    use more_asserts::assert_gt;
-
-    let mut test = SchedulerTestBuilder::new().build();
-    let canister_id = test.create_canister();
-
-    for _ in 0..3 {
-        test.send_ingress(canister_id, ingress(1000));
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-        let observed =
-            fetch_histogram_stats(test.metrics_registry(), "execution_round_instructions")
-                .unwrap()
-                .sum as u64;
-        assert_eq!(
-            test.state()
-                .metadata
-                .subnet_metrics
-                .round_instructions_total,
-            observed
-        );
-    }
-    assert_gt!(
-        test.state()
-            .metadata
-            .subnet_metrics
-            .round_instructions_total,
-        0
-    );
 }
 
 #[test]

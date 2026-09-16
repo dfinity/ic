@@ -484,7 +484,8 @@ type subnet_metrics_result = record {
     // previous round.
     update_transactions_total : nat;
     // Total instructions the subnet accounted for across the execution phases of
-    // all rounds, in millions rounded up, as of the end of the previous round.
+    // all rounds, as of the end of the previous round, counted in units of one
+    // million and rounded up: a value of 42 means 42 million instructions.
     // Covers both executed Wasm and the fixed per-execution and per-canister
     // scheduler overheads plus non-Wasm charges (compilation, chunk assembly,
     // snapshots), so it is not a Wasm instruction meter. Unlike the fields

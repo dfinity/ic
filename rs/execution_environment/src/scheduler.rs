@@ -1567,8 +1567,6 @@ impl Scheduler for SchedulerImpl {
             }
 
             accumulate_round_subnet_metrics(&mut final_state, &root_measurement_scope);
-            final_state.metadata.subnet_metrics.num_canisters =
-                final_state.canister_states().len() as u64;
         }
 
         final_state
@@ -1585,11 +1583,13 @@ fn accumulate_round_subnet_metrics(
     state: &mut ReplicatedState,
     root_measurement_scope: &MeasurementScope,
 ) {
+    let num_canisters = state.canister_states().len() as u64;
     let subnet_metrics = &mut state.metadata.subnet_metrics;
     subnet_metrics.update_transactions_total += root_measurement_scope.messages().get();
     subnet_metrics.round_instructions_total = subnet_metrics
         .round_instructions_total
         .saturating_add(root_measurement_scope.instructions().get());
+    subnet_metrics.num_canisters = num_canisters;
 }
 
 fn observe_instructions_consumed_per_message(
