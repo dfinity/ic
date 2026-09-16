@@ -29,6 +29,7 @@ use ic_canister_runtime::{IcError, StubRuntime};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeSet;
+use std::fmt::Debug;
 
 /// The block height every fixture pins its reads to, so a state built here can serve the
 /// delegation read the enqueue makes.
@@ -55,6 +56,13 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
         panic_message.contains(expected_message),
         "Expected panic message to contain: {expected_message}, but got: {panic_message}"
     );
+}
+
+pub fn only_one<T: Debug>(items: &[T]) -> &T {
+    let [item] = items else {
+        panic!("BUG: expected exactly one element, got {items:?}");
+    };
+    item
 }
 
 pub fn initial_state() -> State {
@@ -279,9 +287,7 @@ pub async fn state_with_enqueued_sweep<A: Into<Asset> + Copy>(
     create_pending_sweeper_requests(&runtime).await;
 
     read_state(|s| {
-        let [request] =
-            <[SweepRequest; 1]>::try_from(s.automatic_deposits.sweep_requests_batch(usize::MAX))
-                .expect("BUG: expected the pairs to become exactly one sweep");
+        let request = only_one(&s.automatic_deposits.sweep_requests_batch(usize::MAX)).clone();
         (s.clone(), request)
     })
 }
