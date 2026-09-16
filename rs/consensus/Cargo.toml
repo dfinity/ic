@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-config = { path = "../config" }
 ic-consensus-certification = { path = "./certification" }
+ic-consensus-cup-utils = { path = "./cup_utils" }
 ic-consensus-idkg = { path = "./idkg" }
 ic-consensus-dkg = { path = "./dkg" }
 ic-consensus-utils = { path = "./utils" }

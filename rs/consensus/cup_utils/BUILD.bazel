@@ -10,6 +10,7 @@ rust_library(
     deps = [
         "//rs/consensus/dkg",
         "//rs/consensus/idkg",
+        "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/monitoring/logger",
         "//rs/phantom_newtype",

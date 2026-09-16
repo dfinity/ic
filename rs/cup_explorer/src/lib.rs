@@ -4,17 +4,15 @@ use std::{
 };
 
 use ic_canister_client::{Agent, Sender};
-use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
+use ic_consensus_cup_utils::verify_catch_up_package_proto;
+use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
     RegistryVersion, SubnetId,
-    consensus::{CatchUpContentProtobufBytes, CatchUpPackage},
-    crypto::{
-        CombinedThresholdSig, CombinedThresholdSigOf, threshold_sig::ni_dkg::NiDkgTargetSubnet,
-    },
+    consensus::{CatchUpPackage, HasHeight},
+    crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet,
 };
 use prost::Message;
 use tokio::{fs, task};
@@ -33,7 +31,6 @@ pub async fn get_catchup_content(url: &Url) -> Result<Option<pb::CatchUpContent>
     let maybe_cup = get_cup(url).await?;
     match maybe_cup {
         Some(cup) => {
-            // TODO(roman): verify signatures?
             let content = pb::CatchUpContent::decode(&cup.content[..])
                 .map_err(|e| format!("failed to deserialize cup: {e}"))?;
             Ok(Some(content))
@@ -69,14 +66,39 @@ fn get_subnet_id(cup: &CatchUpPackage) -> Result<SubnetId, String> {
     }
 }
 
-/// Download the latest CUP of all nodes on the subnet at the latest registry version.
-/// Optionally persist the latest CUP under the specified file path.
-pub async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBuf>) {
-    let registry_canister = Arc::new(RegistryCanister::new(vec![registry_url]));
+/// Creates the registry client and the crypto component used to verify CUPs against the registry.
+fn registry_client_and_crypto(
+    nns_url: Url,
+    nns_pem: Option<PathBuf>,
+) -> (
+    Arc<RegistryCanisterClient>,
+    Arc<impl CryptoComponentForVerificationOnly>,
+) {
+    let client = Arc::new(RegistryCanisterClient::new(nns_url, nns_pem));
+    println!("Registry client created.");
 
-    println!("Fetching the list of nodes on subnet {subnet_id}...");
+    println!("\nCreating crypto component...");
+    let crypto = Arc::new(ic_crypto_for_verification_only::new(
+        Arc::clone(&client) as Arc<dyn RegistryClient>
+    ));
 
-    let node_records = get_nodes(&registry_canister, subnet_id).await;
+    (client, crypto)
+}
+
+/// Download the latest CUP of all nodes on the subnet at the latest registry version, and
+/// determine the latest CUP that verifies against the subnet's public key in the registry.
+/// Optionally persist that CUP under the specified file path.
+pub async fn explore(
+    nns_url: Url,
+    nns_pem: Option<PathBuf>,
+    subnet_id: SubnetId,
+    path: Option<PathBuf>,
+) {
+    let (client, crypto) = registry_client_and_crypto(nns_url, nns_pem);
+
+    println!("\nFetching the list of nodes on subnet {subnet_id}...");
+
+    let node_records = get_nodes(&client, subnet_id).await;
     println!("Found {} node(s)", node_records.len());
     for (i, (id, record)) in node_records.iter().enumerate() {
         println!("  {:2}. {} ({})", i + 1, id, http_url(record));
@@ -84,55 +106,65 @@ pub async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBu
 
     println!("\nDetecting the latest CUP...");
 
-    let tasks = node_records.into_iter().map(|(node_id, node)| {
-        task::spawn(async move { (node_id, get_cup(&http_url(&node)).await) })
-    });
+    let tasks: Vec<_> = node_records
+        .into_iter()
+        .map(|(node_id, node)| {
+            task::spawn(async move { (node_id, get_cup(&http_url(&node)).await) })
+        })
+        .collect();
 
-    let mut latest_height = 0;
-    let mut latest = None;
-
+    let mut candidates = Vec::new();
     for t in tasks {
         let (node_id, content) = t.await.unwrap();
         match content {
-            Err(err) => {
-                println!(" ✘ [{node_id}]: {err}");
-            }
-            Ok(None) => {
-                println!(" ? [{node_id}]: no cup yet");
-            }
-            Ok(Some(cup)) => {
-                let content = pb::CatchUpContent::decode(&cup.content[..]).unwrap();
-                let block = content.block.unwrap();
-                let height = block.height;
-                let hash = hex::encode(&content.state_hash[..]);
-                let time = block.time;
+            Err(err) => println!(" ✘ [{node_id}]: {err}"),
+            Ok(None) => println!(" ? [{node_id}]: no cup yet"),
+            Ok(Some(proto)) => match CatchUpPackage::try_from(&proto) {
+                Err(err) => println!(" ✘ [{node_id}]: failed to deserialize the CUP: {err}"),
+                Ok(cup) => candidates.push((node_id, proto, cup)),
+            },
+        }
+    }
 
-                println!(" ✔ [{node_id}]: time = {time}, height = {height}, state_hash: {hash}");
-                if height > latest_height {
-                    latest_height = height;
-                    latest = Some((node_id, cup));
-                }
+    println!("\nVerifying the CUPs against subnet {subnet_id}, starting with the highest one...");
+
+    // The first CUP (in descending order of height) that verifies is the latest CUP served by an
+    // honest node.
+    candidates.sort_by_key(|(_, _, cup)| std::cmp::Reverse(cup.height()));
+    let mut latest = None;
+    for (node_id, proto, cup) in candidates {
+        let height = cup.height();
+        match verify_catch_up_package_proto(crypto.as_ref(), subnet_id, &proto) {
+            Err(err) => {
+                println!(" ✘ [{node_id}]: CUP at height {height} failed verification: {err}")
+            }
+            Ok(_) => {
+                println!(" ✔ [{node_id}]: CUP at height {height} verified");
+                latest = Some((node_id, height, proto, cup));
+                break;
             }
         }
     }
 
-    if let Some((node, cup)) = latest {
-        let content = pb::CatchUpContent::decode(&cup.content[..]).unwrap();
-        let block = content.block.unwrap();
-        let hash = hex::encode(&content.state_hash[..]);
-        let time = block.time;
-        println!();
-        println!("Latest state:");
-        println!("{:>10}: {}", "TIME", time);
-        println!("{:>10}: {}", "HEIGHT", latest_height);
-        println!("{:>10}: {}", "HASH", hash);
-        println!("{:>10}: {}", "NODE", node);
+    let Some((node, height, proto, cup)) = latest else {
+        println!("No CUPs verified against the subnet public key in the registry.");
+        return;
+    };
 
-        if let Some(path) = path {
-            let bytes = cup.encode_to_vec();
-            println!("Writing cup to {path:?}");
-            fs::write(path, bytes).await.expect("Failed to write bytes");
-        }
+    let block = cup.content.block.get_value();
+    let hash = hex::encode(&cup.content.state_hash.get_ref().0[..]);
+    let time = block.context.time.as_nanos_since_unix_epoch();
+    println!();
+    println!("Latest state:");
+    println!("{:>10}: {}", "TIME", time);
+    println!("{:>10}: {}", "HEIGHT", height);
+    println!("{:>10}: {}", "HASH", hash);
+    println!("{:>10}: {}", "NODE", node);
+
+    if let Some(path) = path {
+        let bytes = proto.encode_to_vec();
+        println!("Writing cup to {path:?}");
+        fs::write(path, bytes).await.expect("Failed to write bytes");
     }
 }
 
@@ -153,43 +185,25 @@ pub fn verify(
     nns_pem: Option<PathBuf>,
     cup_path: &Path,
 ) -> Result<SubnetStatus, String> {
-    let client = Arc::new(RegistryCanisterClient::new(nns_url, nns_pem));
+    let (client, crypto) = registry_client_and_crypto(nns_url, nns_pem);
     let latest_version = client.get_latest_version();
-    println!("Registry client created. Latest registry version: {latest_version}",);
-
-    println!("\nCreating crypto component...");
-    let client_clone = Arc::clone(&client);
-    let crypto = Arc::new(ic_crypto_for_verification_only::new(client_clone));
+    println!("Latest registry version: {latest_version}");
 
     println!("\nReading CUP file at {cup_path:?}");
     let bytes = std::fs::read(cup_path).expect("Failed to read file");
     let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).expect("Failed to decode bytes");
     let cup = CatchUpPackage::try_from(&proto_cup).expect("Failed to deserialize CUP content");
 
-    if !cup.content.check_integrity() {
-        return Err(format!(
-            "Integrity check of file {cup_path:?} failed. Payload: {:?}",
-            cup.content.block.as_ref().payload.as_ref()
-        ));
-    }
-    println!("CUP integrity verified!");
-
     let subnet_id = get_subnet_id(&cup)?;
     println!("\nChecking CUP signature for subnet {subnet_id}...");
 
-    let block = cup.content.block.get_value();
-    crypto
-        .verify_combined_threshold_sig_by_public_key(
-            &CombinedThresholdSigOf::new(CombinedThresholdSig(proto_cup.signature.clone())),
-            &CatchUpContentProtobufBytes::from(&proto_cup),
-            subnet_id,
-            block.context.registry_version,
-        )
-        .map_err(|e| format!("Failed to verify CUP signature at: {cup_path:?} with: {e:?}"))?;
+    // Verifies the signer and the signature over the original protobuf bytes.
+    verify_catch_up_package_proto(crypto.as_ref(), subnet_id, &proto_cup)
+        .map_err(|e| format!("Failed to verify CUP at {cup_path:?}: {e}"))?;
     println!("CUP signature verification successful!");
 
-    let summary = block.payload.as_ref().as_summary();
-    let dkg_version = summary.dkg.registry_version;
+    let block = cup.content.block.get_value();
+    let dkg_version = cup.content.registry_version();
 
     println!("\nLatest subnet state according to CUP:");
     println!(
