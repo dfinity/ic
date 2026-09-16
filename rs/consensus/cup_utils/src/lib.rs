@@ -604,27 +604,9 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_catch_up_package_proto_returns_the_deserialized_cup() {
-        let expected_cup = cup_for_verification();
-        let proto = pb::CatchUpPackage::from(expected_cup.clone());
-        let crypto = RecordingCrypto::accepting();
-
-        let cup = verify_catch_up_package_proto(&crypto, subnet_test_id(7), &proto).unwrap();
-
-        assert_eq!(cup, expected_cup);
-        assert_eq!(
-            crypto.calls.into_inner(),
-            vec![(
-                CatchUpContentProtobufBytes::from(&proto).as_signed_bytes(),
-                subnet_test_id(7),
-                cup.content.registry_version(),
-            )]
-        );
-    }
-
-    #[test]
     fn test_verify_catch_up_package_proto_verifies_the_original_content_bytes() {
-        let mut proto = pb::CatchUpPackage::from(cup_for_verification());
+        let expected_cup = cup_for_verification();
+        let mut proto = pb::CatchUpPackage::from(expected_cup.clone());
         // Append an unknown field to the content, which is skipped when decoding, so that the
         // original bytes differ from the re-encoded content of the deserialized CUP.
         proto.content.extend_from_slice(&[0xC0, 0x3E, 0x01]);
@@ -632,13 +614,17 @@ mod tests {
 
         let cup = verify_catch_up_package_proto(&crypto, subnet_test_id(7), &proto).unwrap();
 
+        // Despite the unknown field, the bytes deserialize to the same CUP
+        assert_eq!(cup, expected_cup);
+
+        // The signature is verified over the original bytes of the protobuf, not the re-encoded
+        // content.
         let original_signed_bytes = CatchUpContentProtobufBytes::from(&proto).as_signed_bytes();
         assert_ne!(cup.content.as_signed_bytes(), original_signed_bytes);
         assert_eq!(
             crypto.calls.into_inner(),
             vec![(
-                // The signature is verified over the original bytes of the protobuf, not the
-                // re-encoded content.
+                // Original bytes of the protobuf, including the unknown field
                 original_signed_bytes,
                 subnet_test_id(7),
                 cup.content.registry_version(),
