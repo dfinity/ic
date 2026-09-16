@@ -2875,6 +2875,16 @@ impl SetupInitialDKGResponse {
 /// ```text
 /// variant { secp256k1; secp256r1; }
 /// ```
+///
+/// Deliberately implements no `Hash`, and must not. This type reaches
+/// `payload_hash` through `IDkgPayload`, and `derive(Hash)` omitted the
+/// discriminant while there was a single variant, so deriving it now would
+/// change the hash of every block naming an ECDSA key and a replica on the old
+/// version would reject it. Writing a marker byte by hand is no better on its
+/// own: whatever byte it picks, an enclosing struct's next field can reproduce
+/// it in its own hash input and the two key ids collide. Only the enclosing
+/// type knows what follows the curve, so hashing belongs there. See
+/// `impl Hash for EcdsaKeyId`.
 #[derive(
     Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, EnumIter, Serialize,
 )]
@@ -2883,21 +2893,6 @@ pub enum EcdsaCurve {
     Secp256k1,
     #[serde(rename = "secp256r1")]
     Secp256r1,
-}
-
-/// Hashed by hand rather than derived, because this type reaches `payload_hash`
-/// through `IDkgPayload`. `derive(Hash)` omits the discriminant while an enum
-/// has a single variant and starts writing it once a second one exists, so
-/// deriving here would change the hash of every block that names an ECDSA key
-/// and a replica on the old version would reject it. `Secp256k1` therefore
-/// keeps contributing nothing. Revisit only with the crypto team.
-impl std::hash::Hash for EcdsaCurve {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self {
-            Self::Secp256k1 => {}
-            Self::Secp256r1 => 1_u8.hash(state),
-        }
-    }
 }
 
 impl TryFrom<u32> for EcdsaCurve {
@@ -2962,12 +2957,29 @@ impl FromStr for EcdsaCurve {
 /// ```text
 /// record { curve : ecdsa_curve; name : text}
 /// ```
-#[derive(
-    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
-)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
 pub struct EcdsaKeyId {
     pub curve: EcdsaCurve,
     pub name: String,
+}
+
+/// Hashed by hand because `EcdsaCurve` cannot implement `Hash`; see the note
+/// there. `Secp256k1` writes nothing, which is what the derive did while the
+/// curve had a single variant, so hashes of existing keys are unchanged. The
+/// `Secp256r1` marker is `0xfe`, which never begins a UTF-8 sequence and so
+/// cannot be reproduced by `name`. The destructuring and the `&str` binding are
+/// both load-bearing: a new field, or a `name` that stops being text, has to
+/// fail to compile rather than quietly weaken that argument.
+impl Hash for EcdsaKeyId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let Self { curve, name } = self;
+        let name: &str = name.as_str();
+        match curve {
+            EcdsaCurve::Secp256k1 => {}
+            EcdsaCurve::Secp256r1 => 0xfe_u8.hash(state),
+        }
+        name.hash(state);
+    }
 }
 
 impl From<&EcdsaKeyId> for pb_types::EcdsaKeyId {
@@ -5293,25 +5305,42 @@ mod tests {
     }
 
     #[test]
-    fn secp256k1_writes_nothing_when_hashed() {
-        // If this test fails, `EcdsaCurve` is deriving `Hash` again. That makes
-        // `Secp256k1` write its discriminant and moves every `payload_hash`
-        // naming an ECDSA key; see the hand-written `impl Hash for EcdsaCurve`.
-        struct ByteCount(usize);
-        impl std::hash::Hasher for ByteCount {
+    fn ecdsa_key_id_hash_is_stable_and_unforgeable() {
+        #[derive(Default)]
+        struct Recorder(Vec<u8>);
+        impl Hasher for Recorder {
             fn write(&mut self, bytes: &[u8]) {
-                self.0 += bytes.len();
+                self.0.extend_from_slice(bytes);
             }
             fn finish(&self) -> u64 {
                 0
             }
         }
-        let mut hasher = ByteCount(0);
-        std::hash::Hash::hash(&EcdsaCurve::Secp256k1, &mut hasher);
-        assert_eq!(hasher.0, 0);
-        let mut hasher = ByteCount(0);
-        std::hash::Hash::hash(&EcdsaCurve::Secp256r1, &mut hasher);
-        assert_ne!(hasher.0, 0);
+        fn stream<T: Hash>(value: &T) -> Vec<u8> {
+            let mut recorder = Recorder::default();
+            value.hash(&mut recorder);
+            recorder.0
+        }
+        let key_id = |curve, name: &str| EcdsaKeyId {
+            curve,
+            name: name.to_string(),
+        };
+
+        // While `EcdsaCurve` had one variant the derive omitted its
+        // discriminant, so a key id hashed as nothing but its name. Every
+        // `payload_hash` naming an ECDSA key still depends on that.
+        assert_eq!(
+            stream(&key_id(EcdsaCurve::Secp256k1, "key_1")),
+            stream(&"key_1")
+        );
+
+        // A name cannot forge the secp256r1 marker.
+        let secp256r1 = stream(&key_id(EcdsaCurve::Secp256r1, "key_1"));
+        assert_ne!(secp256r1, stream(&key_id(EcdsaCurve::Secp256k1, "key_1")));
+        assert_ne!(
+            secp256r1,
+            stream(&key_id(EcdsaCurve::Secp256k1, "\u{fe}key_1"))
+        );
     }
 
     #[test]
