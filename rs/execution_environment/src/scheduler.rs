@@ -2199,7 +2199,8 @@ pub fn abort_all_paused_executions(
 /// Backfills `CanisterMetrics::consumed_cycles_monotonic` and
 /// `CanisterMetrics::consumed_cycles_by_use_cases_monotonic` of every canister from
 /// its `consumed_cycles` and `consumed_cycles_by_use_cases` gauges, which predate
-/// them and thus hold the full history. See
+/// them and thus reach further back: to the beginning for the scalar gauge, to March
+/// 2023 for the by-use-case ones. See
 /// `SystemState::migrate_consumed_cycles_to_monotonic`.
 ///
 /// Must only be called with no paused executions left (i.e. on a checkpoint round,

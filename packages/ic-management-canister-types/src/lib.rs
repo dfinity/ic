@@ -2146,11 +2146,11 @@ pub struct CyclesConsumed {
     pub canister_creation: Nat,
     /// Cycles consumed for HTTP outcalls.
     ///
-    /// The one field that never covers the canister's full history: it only covers
-    /// the outcalls made since May 2026, as no per-canister total from before then is
-    /// retained. The other fields start out that way too, and only cover the full
-    /// history once the canister's subnet has taken its first checkpoint under a
-    /// replica version that backfills them.
+    /// Covers only the outcalls made since May 2026, as no per-canister total from
+    /// before then is retained. The other fields likewise start out covering only
+    /// what was recorded since May 2026, and reach back to March 2023 -- as far as
+    /// any per-use-case record goes -- once the canister's subnet has taken its first
+    /// checkpoint under a replica version that backfills them.
     pub http_outcalls: Nat,
     /// Cycles burned (i.e. not returned to the canister).
     pub burned_cycles: Nat,

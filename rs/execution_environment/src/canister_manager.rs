@@ -1272,9 +1272,10 @@ impl CanisterManager {
     ///
     /// Reads the monotonic amounts rather than the gauges, as the endpoint's
     /// contract is a total that only ever grows. Every checkpoint round backfills them
-    /// from the gauges, which predate them, so they cover the canister's full history
-    /// from the first such round after an upgrade onwards -- with the sole exception
-    /// of `HTTPOutcalls`, which has no canister-level gauge to be backfilled from and
+    /// from the gauges, which predate them, so from the first such round after an
+    /// upgrade onwards they cover everything the canister consumed since March 2023 --
+    /// as far back as any per-use-case record goes. The sole exception is
+    /// `HTTPOutcalls`, which has no canister-level gauge to be backfilled from and
     /// hence only ever covers the outcalls made since May 2026 (see
     /// `CanisterMetrics::consumed_cycles_by_use_cases_monotonic`).
     pub(crate) fn get_canister_metrics(
@@ -1391,10 +1392,10 @@ impl CanisterManager {
         //
         // Note that it is the canister's `consumed_cycles` gauge and
         // `consumed_cycles_by_use_cases` gauges, not their monotonic counterparts,
-        // that are moved into the subnet metrics below. That is deliberate: only the
-        // gauges are guaranteed to hold the canister's full history. A canister
-        // decoded from a checkpoint that predates the monotonic amounts carries zeroes
-        // in them until a checkpoint round backfills them (see
+        // that are moved into the subnet metrics below. That is deliberate: the gauges
+        // are the ones that reach furthest back. A canister decoded from a checkpoint
+        // that predates the monotonic amounts carries zeroes in them until a
+        // checkpoint round backfills them (see
         // `migrate_consumed_cycles_to_monotonic`), and deletion is a management call,
         // so it can happen in an ordinary round before that.
         //

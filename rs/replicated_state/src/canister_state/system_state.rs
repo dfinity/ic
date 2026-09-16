@@ -348,11 +348,13 @@ impl CanisterMetrics {
     /// (e.g. for memory usage). The gauge above, in contrast, is raised by the
     /// prepayment and lowered again by the refund.
     ///
-    /// Exactly the scalar equivalent of
-    /// [`Self::consumed_cycles_by_use_cases_monotonic`], summed over the use cases
-    /// that [`Self::consumed_cycles`] covers, i.e. everything except HTTPS outcalls,
-    /// which are only tracked at the subnet level (and, for the canister, in the
-    /// by-use-case map).
+    /// The scalar equivalent of [`Self::consumed_cycles_by_use_cases_monotonic`],
+    /// summed over the use cases that [`Self::consumed_cycles`] covers, i.e.
+    /// everything except HTTPS outcalls, which are only tracked at the subnet level
+    /// (and, for the canister, in the by-use-case map). The two agree on everything
+    /// consumed from March 2023 onwards, but this amount reaches further back (see
+    /// [`Self::consumed_cycles_by_use_cases`]), so for a canister that consumed
+    /// cycles before then it exceeds what the by-use-case amounts add up to.
     ///
     /// Tracked since September 2026 (#11465) and zero in checkpoints written before
     /// that; but backfilled from the gauge above on the first checkpoint round after
@@ -368,9 +370,15 @@ impl CanisterMetrics {
     /// every prepayment for that use case and lowered again by its refund.
     ///
     /// These gauges predate their monotonic counterparts, so they are the ones that
-    /// hold the canister's full history; the monotonic amounts only catch up on the
-    /// first checkpoint round that backfills them from here (see
+    /// hold the longer history; the monotonic amounts only catch up on the first
+    /// checkpoint round that backfills them from here (see
     /// `SystemState::migrate_consumed_cycles_to_monotonic`).
+    ///
+    /// They only reach back to March 2023, when the by-use-case breakdown was
+    /// introduced (EXC-1345), so unlike the scalar [`Self::consumed_cycles`] -- which
+    /// has been tracked since the beginning -- they are not the canister's full
+    /// history. Nothing records what a canister consumed per use case before then;
+    /// that part is only present in the scalar gauge.
     ///
     /// Has no `HTTPOutcalls` entry: HTTPS outcalls are only tracked as a gauge at the
     /// subnet level.
@@ -385,7 +393,9 @@ impl CanisterMetrics {
     ///
     /// Tracked since May 2026 (#9922) and absent from checkpoints written before that;
     /// but backfilled from the gauges above on the first checkpoint round after an
-    /// upgrade, so from then on they cover the canister's full history too.
+    /// upgrade, so from then on they cover as much as those gauges do, i.e. everything
+    /// consumed since March 2023. The backfill cannot reach further back than that:
+    /// no per-use-case record of what a canister consumed before March 2023 exists.
     ///
     /// The one exception is the `HTTPOutcalls` entry, which is not backfilled and thus
     /// only ever covers the outcalls made since May 2026: it is the one entry with no
@@ -2462,11 +2472,15 @@ impl SystemState {
     /// [`CanisterMetrics::consumed_cycles_by_use_cases_monotonic`] from the
     /// [`CanisterMetrics::consumed_cycles`] and
     /// [`CanisterMetrics::consumed_cycles_by_use_cases`] gauges, which predate them
-    /// and thus hold the full history.
+    /// and thus reach further back: to the beginning for the scalar gauge, to March
+    /// 2023 for the by-use-case ones.
     ///
-    /// Both are backfilled in one go, because the scalar amount is defined as the sum
-    /// of the by-use-case amounts over the use cases that the scalar gauge covers;
-    /// backfilling one without the other would break that.
+    /// Both are backfilled in one go, as they are two faces of the same metric: the
+    /// scalar amount tracks the sum of the by-use-case amounts over the use cases the
+    /// scalar gauge covers, so moving one without the other would pull them apart.
+    /// (That sum only accounts for what was consumed from March 2023 onwards, the
+    /// scalar amount reaching further back; see
+    /// [`CanisterMetrics::consumed_cycles_by_use_cases`].)
     ///
     /// This derivation is exact, thanks to the invariants documented on
     /// [`Self::outstanding_prepayments`]: a gauge differs from its monotonic

@@ -511,9 +511,11 @@ message CanisterStateBits {
   // happens the refund amount is subtracted from consumed amount.
   //
   // These predate `consumed_cycles_by_use_cases_monotonic` below, which is
-  // backfilled from here, so these are the amounts that are guaranteed to hold
-  // the canister's full history. HTTPS outcalls have no entry here: they are
-  // only tracked as a gauge at the subnet level.
+  // backfilled from here, so these are the amounts that reach furthest back.
+  // They only reach back to March 2023, when the by-use-case breakdown was
+  // introduced, so unlike the scalar `consumed_cycles` above they are not the
+  // canister's full history. HTTPS outcalls have no entry here: they are only
+  // tracked as a gauge at the subnet level.
   repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases = 36;
   // Consumed cycles by use case, monotonic. The consumed amount is only updated
   // once the refund is known, to perform a single accounting step. These
@@ -522,7 +524,9 @@ message CanisterStateBits {
   //
   // Absent from checkpoints written before May 2026; but backfilled from the
   // gauges above on the first checkpoint round after an upgrade, so from then on
-  // they cover the canister's full history too.
+  // they cover as much as those gauges do, i.e. everything consumed since March
+  // 2023. The backfill cannot reach further back: no per-use-case record from
+  // before then exists.
   //
   // The one exception is the HTTPOutcalls entry, which is not backfilled and
   // thus only ever covers the outcalls made since May 2026: it is the one entry
