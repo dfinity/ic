@@ -518,21 +518,24 @@ mod tests {
     }
 
     /// Builds a (registry) CUP with a correct signer whose block's validation context refers to a
-    /// different registry version than its DKG summary.
+    /// different registry version than its DKG summary. The latter is chosen purposefully different
+    /// than the latest registry version
     fn cup_for_verification() -> CatchUpPackage {
+        let cup_registry_version = LATEST_REGISTRY_VERSION - RegistryVersion::from(10);
+
         let registry_client = setup_registry(/*registry_store_uri=*/ None);
         let mut cup = make_registry_cup(
             &registry_client,
             subnet_test_id(0),
-            LATEST_REGISTRY_VERSION,
+            cup_registry_version,
             &no_op_logger(),
         )
         .unwrap();
         let mut block = cup.content.block.as_ref().clone();
-        block.context.registry_version = LATEST_REGISTRY_VERSION + RegistryVersion::from(10);
+        block.context.registry_version = cup_registry_version + RegistryVersion::from(1);
         cup.content.block = HashedBlock::new(crypto_hash, block);
         assert!(cup.check_integrity());
-        assert_eq!(cup.content.registry_version(), LATEST_REGISTRY_VERSION);
+        assert_eq!(cup.content.registry_version(), cup_registry_version);
         cup
     }
 
@@ -543,12 +546,20 @@ mod tests {
 
         verify_catch_up_package(&crypto, subnet_test_id(7), &cup).unwrap();
 
+        // The signature is verified at the registry version of the DKG summary, not the block's
+        // validation context, nor the latest registry version.
+        assert_ne!(
+            cup.content.registry_version(),
+            cup.content.block.get_value().context.registry_version
+        );
+        assert_ne!(cup.content.registry_version(), LATEST_REGISTRY_VERSION);
         assert_eq!(
             crypto.calls.into_inner(),
             vec![(
                 cup.content.as_signed_bytes(),
                 subnet_test_id(7),
-                LATEST_REGISTRY_VERSION
+                // Registry version of the DKG summary
+                cup.content.registry_version(),
             )]
         );
     }
@@ -606,7 +617,7 @@ mod tests {
             vec![(
                 CatchUpContentProtobufBytes::from(&proto).as_signed_bytes(),
                 subnet_test_id(7),
-                LATEST_REGISTRY_VERSION
+                cup.content.registry_version(),
             )]
         );
     }
@@ -630,7 +641,7 @@ mod tests {
                 // re-encoded content.
                 original_signed_bytes,
                 subnet_test_id(7),
-                LATEST_REGISTRY_VERSION
+                cup.content.registry_version(),
             )]
         );
     }
