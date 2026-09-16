@@ -1,14 +1,7 @@
 use crate::balance_scan::ScanErrors;
-use crate::balance_scan::batcher::Delegation;
-use crate::deposit_address::DepositAddress;
 use crate::state::sweep_observations::SweepObservations;
 use crate::timed_sized_map::Timestamp;
-use ic_ethereum_types::Address;
-use std::collections::BTreeMap;
 use std::time::Duration;
-
-const DELEGATE: Address = Address::new([0x5e; 20]);
-const ANOTHER_DELEGATE: Address = Address::new([0x99; 20]);
 
 #[test]
 fn should_report_no_balance_scan_age_before_the_first_pass() {
@@ -67,38 +60,15 @@ fn should_accumulate_balance_scan_errors_across_passes() {
 }
 
 #[test]
-fn should_count_each_address_delegated_elsewhere_once_per_read() {
+fn should_accumulate_untracked_delegations_across_reads() {
     let mut observations = SweepObservations::default();
     assert_eq!(observations.untracked_delegations(), 0);
 
-    observations.record_delegation_read(
-        &BTreeMap::from([
-            (address(0), Delegation::NotDelegated),
-            (address(1), Delegation::Delegated(DELEGATE)),
-            (address(2), Delegation::Delegated(ANOTHER_DELEGATE)),
-            (address(3), Delegation::Delegated(Address::new([0x77; 20]))),
-            (address(4), Delegation::Other),
-        ]),
-        DELEGATE,
-    );
-
-    assert_eq!(observations.untracked_delegations(), 2);
-
-    observations.record_delegation_read(
-        &BTreeMap::from([(address(2), Delegation::Delegated(ANOTHER_DELEGATE))]),
-        DELEGATE,
-    );
+    observations.record_untracked_delegations(0);
+    observations.record_untracked_delegations(2);
+    observations.record_untracked_delegations(1);
 
     assert_eq!(observations.untracked_delegations(), 3);
-}
-
-#[test]
-fn should_count_nothing_for_a_read_that_came_back_empty() {
-    let mut observations = SweepObservations::default();
-
-    observations.record_delegation_read(&BTreeMap::new(), DELEGATE);
-
-    assert_eq!(observations.untracked_delegations(), 0);
 }
 
 #[test]
@@ -107,9 +77,12 @@ fn should_saturate_rather_than_overflow_the_counters() {
 
     observations.record_balance_scan_errors(&errors(u64::MAX, u64::MAX));
     observations.record_balance_scan_errors(&errors(1, 1));
+    observations.record_untracked_delegations(u64::MAX);
+    observations.record_untracked_delegations(1);
 
     assert_eq!(observations.balance_scan_call_errors(), u64::MAX);
     assert_eq!(observations.balance_scan_decode_errors(), u64::MAX);
+    assert_eq!(observations.untracked_delegations(), u64::MAX);
 }
 
 fn ts(nanos: u64) -> Timestamp {
@@ -118,8 +91,4 @@ fn ts(nanos: u64) -> Timestamp {
 
 fn errors(decode: u64, call: u64) -> ScanErrors {
     ScanErrors { decode, call }
-}
-
-fn address(byte: u8) -> DepositAddress {
-    DepositAddress::new(Address::new([byte; 20]))
 }

@@ -10,11 +10,7 @@
 mod tests;
 
 use crate::balance_scan::ScanErrors;
-use crate::balance_scan::batcher::Delegation;
-use crate::deposit_address::DepositAddress;
 use crate::timed_sized_map::Timestamp;
-use ic_ethereum_types::Address;
-use std::collections::BTreeMap;
 use std::time::Duration;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
@@ -42,23 +38,13 @@ impl SweepObservations {
         self.last_completed_balance_scan = Some(completed_at);
     }
 
-    /// Records the addresses one delegation read found delegated to a contract other than
-    /// `delegate`. Counted off the read's own map, whose keys are the distinct addresses the read
-    /// asked about, so an address with several assets queued counts once per read rather than once
-    /// per asset swept.
-    pub fn record_delegation_read(
-        &mut self,
-        delegations: &BTreeMap<DepositAddress, Delegation>,
-        delegate: Address,
-    ) {
-        let untracked = delegations
-            .values()
-            .filter(|delegation| match delegation {
-                Delegation::Delegated(installed) => *installed != delegate,
-                Delegation::NotDelegated | Delegation::Other => false,
-            })
-            .count() as u64;
-        self.untracked_delegations = self.untracked_delegations.saturating_add(untracked);
+    /// Records what one delegation read found delegated without the minter being able to account
+    /// for it, as counted by [`AutomaticDeposits::untracked_delegations`].
+    ///
+    /// [`AutomaticDeposits::untracked_delegations`]:
+    ///     crate::state::automatic_deposits::AutomaticDeposits::untracked_delegations
+    pub fn record_untracked_delegations(&mut self, count: u64) {
+        self.untracked_delegations = self.untracked_delegations.saturating_add(count);
     }
 
     pub fn balance_scan_call_errors(&self) -> u64 {

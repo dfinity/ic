@@ -125,9 +125,11 @@ pub async fn create_pending_sweeper_requests<R: CanisterRuntime>(runtime: &R) {
         );
         return;
     };
+    let untracked_delegations =
+        read_state(|s| s.automatic_deposits.untracked_delegations(&delegations));
     mutate_state(|s| {
         s.sweep_observations
-            .record_delegation_read(&delegations, delegate)
+            .record_untracked_delegations(untracked_delegations)
     });
 
     for (asset, targets) in batch_per_asset {

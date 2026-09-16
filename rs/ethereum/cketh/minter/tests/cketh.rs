@@ -1396,7 +1396,8 @@ fn should_export_the_stored_attestation_and_authorization_metrics() {
     CkEthSetup::default()
         .check_minter_metrics()
         .assert_contains_metric_matching(r"cketh_minter_stored_attestations 0 \d+")
-        .assert_contains_metric_matching(r"cketh_minter_stored_authorizations 0 \d+");
+        .assert_contains_metric_matching(r"cketh_minter_stored_authorizations 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_delegated_deposit_addresses 0 \d+");
 }
 
 /// Tests with the EVM RPC canister
