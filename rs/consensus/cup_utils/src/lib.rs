@@ -621,11 +621,12 @@ mod tests {
 
         let cup = verify_catch_up_package_proto(&crypto, subnet_test_id(7), &proto).unwrap();
 
-        assert_ne!(cup.content.as_signed_bytes(), proto.content);
+        let original_signed_bytes = CatchUpContentProtobufBytes::from(&proto).as_signed_bytes();
+        assert_ne!(cup.content.as_signed_bytes(), original_signed_bytes);
         assert_eq!(
             crypto.calls.into_inner(),
             vec![(
-                CatchUpContentProtobufBytes::from(&proto).as_signed_bytes(),
+                original_signed_bytes,
                 subnet_test_id(7),
                 LATEST_REGISTRY_VERSION
             )]
