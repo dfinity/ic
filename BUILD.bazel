@@ -16,7 +16,6 @@ exports_files([
     "clippy.toml",
     "rustfmt.toml",
     "mainnet-canister-revisions.json",
-    "mainnet-icos-images.bzl",
     "mainnet-routing-table.json",
 ])
 

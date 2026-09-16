@@ -156,6 +156,7 @@ exports_files(
         "canbench.sh",
         "check_endpoints_test.sh",
         "file_size_test.sh",
+        "mainnet-icos-download.sh",
     ],
     visibility = ["//visibility:public"],
 )

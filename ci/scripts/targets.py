@@ -18,7 +18,7 @@
 #
 # The script will print the bazel query to stderr which is useful for debugging:
 #   ci/scripts/targets.py --skip_long_tests --base=master test
-#   bazel query --keep_going '((((kind(".*_test", rdeps(//..., set("ci/scripts/targets.py")))) except attr(tags, long_test, //...)) + attr(tags, long_test, rdeps(//..., set("ci/scripts/targets.py"), 2))) + set(//pre-commit:ruff-lint)) except attr(tags, "manual|system_test_large|system_test_benchmark|fuzz_test|fi_tests_nightly|nns_tests_nightly|pocketic_tests_nightly", //...)'
+#   bazel query --keep_going 'filter("^//", ((((kind(".*_test", rdeps(//..., set("ci/scripts/targets.py")))) except attr(tags, long_test, //...)) + attr(tags, long_test, rdeps(//..., set("ci/scripts/targets.py"), 2))) + set(//pre-commit:ruff-lint)) except attr(tags, "manual|system_test_large|system_test_benchmark|fuzz_test|fi_tests_nightly|nns_tests_nightly|pocketic_tests_nightly", //...))'
 
 import argparse
 import fnmatch
@@ -198,6 +198,12 @@ def targets(
     # Finally, exclude targets that have any of the excluded tags:
     excluded_tags_regex = "|".join(EXCLUDED_TAGS + exclude_tags)
     query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
+
+    # rdeps over //... can also return targets of external repositories (e.g. the
+    # @mainnet_*_images//:guest-img genrules via //rs/ic_os/build_tools/partition_tools)
+    # and the tag exclusions above only cover //.... CI never intends to build external
+    # targets, so keep only main-repository labels:
+    query = f'filter("^//", {query})'
 
     args = ["bazel", "query", "--keep_going", query]
     log(shlex.join(args))
