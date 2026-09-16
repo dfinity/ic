@@ -826,14 +826,16 @@ mod test {
         use ic_registry_keys::make_catch_up_package_contents_key;
 
         // Step 1: Prepare the world: a registry with four CUP contents records — two written
-        // before `cup_type` existed (one at subnet creation, one by a recovery — the latter
-        // carrying the legacy `height`/`time`/`state_hash` fields, encoded through the mirror
-        // struct because the current proto no longer can), one genesis and one recovery.
+        // before `cup_type` existed (one genesis, one recovrey), and two written after (one
+        // genesis, one recovery).
         let mut registry = invariant_compliant_registry(0);
 
         let legacy_genesis_subnet_id = subnet_test_id(1001);
         let legacy_genesis_record = CatchUpPackageContents {
             cup_type: None,
+            height: 0,
+            time: 0,
+            state_hash: vec![],
             ..CatchUpPackageContents::default()
         };
 
@@ -847,13 +849,16 @@ mod test {
         };
 
         let genesis_subnet_id = subnet_test_id(1003);
-        let genesis_record = CatchUpPackageContents {
+        let non_legacy_genesis_record = CatchUpPackageContents {
             cup_type: Some(CupType::Genesis(GenesisArgs {})),
+            height: 0,
+            time: 0,
+            state_hash: vec![],
             ..CatchUpPackageContents::default()
         };
 
         let recovery_subnet_id = subnet_test_id(1004);
-        let recovery_record = CatchUpPackageContents {
+        let non_legacy_recovery_record = CatchUpPackageContents {
             cup_type: Some(CupType::Recovery(RecoveryArgs {
                 height: 42,
                 time: 7,
@@ -876,11 +881,11 @@ mod test {
             ),
             insert(
                 make_catch_up_package_contents_key(genesis_subnet_id),
-                genesis_record.encode_to_vec(),
+                non_legacy_genesis_record.encode_to_vec(),
             ),
             insert(
                 make_catch_up_package_contents_key(recovery_subnet_id),
-                recovery_record.encode_to_vec(),
+                non_legacy_recovery_record.encode_to_vec(),
             ),
         ]);
 
@@ -893,17 +898,15 @@ mod test {
         assert_eq!(mutations.len(), 2);
         registry.apply_mutations_for_test(mutations);
 
-        let get_record_bytes = |subnet_id| {
-            registry
+        let get_record = |subnet_id| {
+            let bytes = registry
                 .get(
                     make_catch_up_package_contents_key(subnet_id).as_bytes(),
                     registry.latest_version(),
                 )
                 .expect("CUP contents record must exist")
-                .value
-        };
-        let get_record = |subnet_id| {
-            CatchUpPackageContents::decode(get_record_bytes(subnet_id).as_slice())
+                .value;
+            CatchUpPackageContents::decode(bytes.as_slice())
                 .expect("Failed to decode CatchUpPackageContents")
         };
 
@@ -932,8 +935,8 @@ mod test {
         );
 
         // Step 3.4: Records that already carry a `cup_type` are untouched.
-        assert_eq!(get_record(genesis_subnet_id), genesis_record);
-        assert_eq!(get_record(recovery_subnet_id), recovery_record);
+        assert_eq!(get_record(genesis_subnet_id), non_legacy_genesis_record);
+        assert_eq!(get_record(recovery_subnet_id), non_legacy_recovery_record);
 
         // Step 3.5: Idempotency: a second run produces no further mutations.
         assert_eq!(
