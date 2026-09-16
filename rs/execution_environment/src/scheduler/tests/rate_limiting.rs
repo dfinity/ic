@@ -64,15 +64,9 @@ fn heap_delta_limit_still_counts_drained_consensus_queue_messages() {
     use ic_management_canister_types_private::{
         DerivationPath, MasterPublicKeyId, SignWithECDSAArgs,
     };
-    use ic_test_utilities_metrics::fetch_histogram_stats;
     use ic_types::batch::ConsensusResponse;
     use ic_types::messages::RejectContext;
 
-    fn round_instructions_observed(test: &SchedulerTest) -> u64 {
-        fetch_histogram_stats(test.metrics_registry(), "execution_round_instructions")
-            .unwrap()
-            .sum as u64
-    }
     fn rounds_skipped(test: &SchedulerTest) -> u64 {
         test.scheduler()
             .metrics
@@ -122,7 +116,6 @@ fn heap_delta_limit_still_counts_drained_consensus_queue_messages() {
         ));
 
     let before = test.state().metadata.subnet_metrics.clone();
-    let observed_before = round_instructions_observed(&test);
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
