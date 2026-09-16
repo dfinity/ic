@@ -26,8 +26,13 @@ verify() {
     echo "$sha256  $part" | sha256sum --check --status
 }
 
+# Two independent budgets: up to 5 failed transfers (network trouble) and up to
+# 2 complete transfers with the wrong checksum. Keeping them apart guarantees the
+# one clean re-download after a checksum mismatch, even when the mismatch happens
+# on the last of the 5 transfer attempts.
+failures=0
 mismatches=0
-for attempt in 1 2 3 4 5; do
+while true; do
     # --continue-at - resumes whatever an earlier attempt left in $part. curl's
     # own --retry handles short blips in-process; --speed-limit/--speed-time turn
     # a stalled connection (< 100 KB/s for 120 s) into a retryable error instead
@@ -58,10 +63,12 @@ for attempt in 1 2 3 4 5; do
             exit 1
         fi
     else
-        echo "$url: download attempt $attempt failed (curl exit $curl_status); retrying" >&2
-        sleep $((attempt * 10))
+        failures=$((failures + 1))
+        if [ "$failures" -ge 5 ]; then
+            echo "ERROR: giving up on $url after $failures failed download attempts" >&2
+            exit 1
+        fi
+        echo "$url: download attempt $failures failed (curl exit $curl_status); retrying" >&2
+        sleep $((failures * 10))
     fi
 done
-
-echo "ERROR: giving up on $url after 5 attempts" >&2
-exit 1
