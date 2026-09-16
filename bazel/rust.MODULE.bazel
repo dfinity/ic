@@ -1951,7 +1951,11 @@ crate.spec(
 )
 crate.spec(
     default_features = False,
-    features = ["rustls-no-provider", "rustls-webpki-roots", "gzip"],
+    features = [
+        "rustls-no-provider",
+        "rustls-webpki-roots",
+        "gzip",
+    ],
     package = "ureq",
     version = "^3.4.1",
 )
