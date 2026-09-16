@@ -83,9 +83,22 @@ pub struct AutomaticDeposits {
     /// tuple that delegates the old one.
     ///
     /// Nothing prunes this map: it grows with the number of accounts that have ever been swept, and
-    /// entries naming a retired helper stay behind forever. [`Self::authorizations_len`] is exported
-    /// as a metric so that growth is visible before it needs bounding.
+    /// entries naming a retired helper stay behind forever. [`Self::authorizations_len`] is
+    /// exported as a metric so that growth is visible before it needs bounding.
     authorizations: BTreeMap<AuthorizationRequest, TransactionSignature>,
+    /// The nonce each deposit address' next authorization must spend, for the addresses a sweep has
+    /// already delegated. Absent means zero: an address no finalized sweep has carried an
+    /// authorization for is still at the nonce it was derived with.
+    ///
+    /// A counter, not a chain read: it advances by one for every finalized sweep that carried an
+    /// authorization at the nonce tracked here, whether the EVM applied or skipped it. The minter
+    /// alone holds the key to a deposit address and only ever signs at the tracked nonce, so the
+    /// counter never runs ahead of the address' nonce on chain. It can run behind it: every signed
+    /// authorization is public through `get_events`, and EIP-7702 lets anyone send one, so an
+    /// authorization a stranger applied moves the address without moving the counter. The next
+    /// sweep carrying an authorization then spends a nonce the chain has passed, is skipped, and
+    /// still advances the counter, so a rotation lands one sweep late rather than never.
+    delegation_nonces: BTreeMap<DepositAddress, TransactionNonce>,
     /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
     /// its own nonce sequence, independent of the main-address withdrawal pipeline.
     sweeper_transactions: SweeperTransactionPipeline,
@@ -190,6 +203,11 @@ impl AutomaticDeposits {
     /// leave the queue on success because the funds moved, and on failure because the minter does
     /// not retry them.
     ///
+    /// Each authorization the sweep carried at the nonce its address had reached applied, so that
+    /// address advances by one — whatever the receipt says, since an authorization applies before
+    /// the call it rides with and survives its revert. An authorization carried at any other nonce
+    /// was skipped and moves nothing, which is what makes re-sending one harmless.
+    ///
     /// # Panics
     ///
     /// If the sweep has no processed request, or a deposit it named is not queued or is held by
@@ -208,6 +226,29 @@ impl AutomaticDeposits {
             .expect("BUG: missing sweep request");
         let asset = request.asset;
         let accounts: Vec<_> = request.items.iter().map(|item| item.item.account).collect();
+        let applied_authorizations: Vec<_> = request
+            .items
+            .iter()
+            .filter_map(|item| {
+                let spent = item.authorization.as_ref()?.nonce;
+                let tracked = self.delegation_nonce(&item.item.deposit);
+                assert!(
+                    spent <= tracked,
+                    "BUG: {id:?} carried an authorization of {} at nonce {spent:?}, ahead of the nonce {tracked:?} the minter tracks for it, which only the authorizations its own finalized sweeps carried move",
+                    item.item.deposit.as_address()
+                );
+                (spent == tracked).then_some((item.item.deposit, spent))
+            })
+            .collect();
+
+        for (address, spent) in applied_authorizations {
+            self.delegation_nonces.insert(
+                address,
+                spent
+                    .checked_increment()
+                    .expect("BUG: a deposit address cannot spend its last nonce"),
+            );
+        }
 
         for account in accounts {
             let request = DepositRequest::new(account, asset);
@@ -242,6 +283,7 @@ impl AutomaticDeposits {
             sweep,
             attestations,
             authorizations,
+            delegation_nonces,
             sweeper_transactions,
         } = self;
 
@@ -249,6 +291,7 @@ impl AutomaticDeposits {
         ensure_eq!(sweep, &other.sweep);
         ensure_eq!(attestations, &other.attestations);
         ensure_eq!(authorizations, &other.authorizations);
+        ensure_eq!(delegation_nonces, &other.delegation_nonces);
         sweeper_transactions.is_equivalent_to(&other.sweeper_transactions)
     }
 
@@ -290,10 +333,13 @@ impl AutomaticDeposits {
     /// left out rather than swept: no authorization can be applied to the first, and the second is
     /// unknown ground. Both stay queued for a later tick.
     ///
-    /// The nonce of an authorization is zero, the nonce of an address that has never been delegated
-    /// — applying an authorization spends it — so an authorization this sweep carries either
-    /// installs the delegation or is skipped, and both are correct in any order the sweeps carrying
-    /// them land.
+    /// An authorization is signed for the nonce the minter tracks for the address, which is the
+    /// nonce the address has reached on chain: zero until a sweep has delegated it, one more per
+    /// authorization of the minter's that has applied since. That is what rotates an address
+    /// delegated to another contract onto the configured one — the protocol applies an
+    /// authorization only at the authority's current nonce, so a rotation signed for zero would be
+    /// skipped forever. Two sweeps carrying the same authorization stay correct in any order they
+    /// land: the second one is skipped.
     pub fn sweep_delegations(
         &self,
         targets: &[SweepTarget],
@@ -314,14 +360,8 @@ impl AutomaticDeposits {
             .filter_map(|target| {
                 let authorization = match delegations.get(&target.address()) {
                     Some(Delegation::Delegated(installed)) if *installed == delegate => None,
-                    Some(Delegation::NotDelegated) => authorize(target, TransactionNonce::ZERO),
-                    // TODO DEFI-2997: track deposit address nonce. An authorization at nonce zero
-                    // cannot apply to an address already delegated: the address spent that nonce
-                    // when it was delegated, so the protocol skips the authorization and the
-                    // address keeps the other contract. Re-delegating it needs the nonce the
-                    // address has reached, which the minter does not track yet.
-                    Some(Delegation::Delegated(_another_delegate)) => {
-                        authorize(target, TransactionNonce::ZERO)
+                    Some(Delegation::NotDelegated) | Some(Delegation::Delegated(_)) => {
+                        authorize(target, self.delegation_nonce(&target.address()))
                     }
                     Some(Delegation::Other) | None => {
                         log!(
@@ -339,6 +379,16 @@ impl AutomaticDeposits {
             })
             .collect();
         DelegatedSweepBatch { delegate, targets }
+    }
+
+    /// The nonce the next authorization of `address` must be signed for, which is the nonce
+    /// the address has reached on chain: zero until a sweep has delegated it, and one more per
+    /// authorization of the minter's that applied to it since.
+    pub fn delegation_nonce(&self, address: &DepositAddress) -> TransactionNonce {
+        self.delegation_nonces
+            .get(address)
+            .copied()
+            .unwrap_or(TransactionNonce::ZERO)
     }
 
     /// Arm the `(account, asset)` pair, whose deposit `address` is derived for `account`.
@@ -511,8 +561,9 @@ impl AutomaticDeposits {
     /// # Panics
     ///
     /// If `(account, token)` is already queued. A funded pair leaves the watchlist and is never
-    /// re-scanned, so each pair reaches the queue at most once; a second entry means the log records
-    /// the same funds twice, leaving `scanned_balance` — what the sweeper acts on — ambiguous.
+    /// re-scanned, so each pair reaches the queue at most once; a second entry means the log
+    /// records the same funds twice, leaving `scanned_balance` — what the sweeper acts on —
+    /// ambiguous.
     ///
     /// Note the blast radius: [`apply_state_transition`] runs on replay as well as live, so this
     /// panic traps `post_upgrade` and no upgrade succeeds until a repairing version ships. That is
@@ -586,6 +637,10 @@ impl AutomaticDeposits {
 
     pub fn authorizations_len(&self) -> usize {
         self.authorizations.len()
+    }
+
+    pub fn delegation_nonces_len(&self) -> usize {
+        self.delegation_nonces.len()
     }
 
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
@@ -669,6 +724,7 @@ impl Default for AutomaticDeposits {
             sweep: BTreeMap::new(),
             attestations: BTreeMap::new(),
             authorizations: BTreeMap::new(),
+            delegation_nonces: BTreeMap::new(),
             sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
         }
     }
