@@ -157,3 +157,4 @@ service : (InitArg) -> {
   // Canister metrics (Http Interface)
   http_request: (HttpRequest) -> (HttpResponse) query;
 }
+// Comment added by dfinity/ic#11592 to probe the diff-only target inference; that PR is closed without merging.
