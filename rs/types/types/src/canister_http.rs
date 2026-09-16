@@ -76,7 +76,7 @@ use std::{
     time::Duration,
 };
 use strum::FromRepr;
-use strum_macros::EnumIter;
+use strum_macros::{EnumCount, EnumIter};
 
 /// Time after which a response is considered timed out and a timeout error will be returned to execution
 pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
@@ -237,7 +237,7 @@ impl Replication {
 }
 
 /// The kind of replication of a request.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, EnumCount, Eq, PartialEq)]
 pub enum ReplicationKind {
     FullyReplicated,
     Flexible {
@@ -255,6 +255,24 @@ impl ReplicationKind {
             ReplicationKind::Flexible { .. } => "flexible",
             ReplicationKind::NonReplicated => "non_replicated",
         }
+    }
+
+    /// Every value [`Self::as_str`] can return, e.g. to initialize the label values
+    /// of a metric labeled by replication kind.
+    pub fn all_as_str() -> [&'static str; 3] {
+        // A new variant has to be listed below, and the array's length bumped.
+        const _: () = assert!(<ReplicationKind as strum::EnumCount>::COUNT == 3);
+        [
+            Self::FullyReplicated.as_str(),
+            // `as_str` does not look at the counts, so they are irrelevant here.
+            Self::Flexible {
+                total_requests: 0,
+                min_responses: 0,
+                max_responses: 0,
+            }
+            .as_str(),
+            Self::NonReplicated.as_str(),
+        ]
     }
 
     /// The response counts for a flexible request that does not specify its own:
@@ -302,11 +320,20 @@ impl From<&ReplicationCounts> for ReplicationKind {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, EnumIter, Serialize, FromRepr)]
 #[repr(u32)]
 pub enum PricingVersion {
     Legacy = PRICING_VERSION_LEGACY,
     PayAsYouGo = PRICING_VERSION_PAY_AS_YOU_GO,
+}
+
+impl PricingVersion {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PricingVersion::Legacy => "legacy",
+            PricingVersion::PayAsYouGo => "pay_as_you_go",
+        }
+    }
 }
 
 impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {
@@ -1449,6 +1476,21 @@ mod tests {
     use rstest::rstest;
     use std::str::FromStr;
     use strum::IntoEnumIterator;
+
+    #[test]
+    fn replication_kind_all_as_str_is_stable_and_distinct() {
+        assert_eq!(
+            ReplicationKind::all_as_str(),
+            ["fully_replicated", "flexible", "non_replicated"]
+        );
+
+        let distinct: BTreeSet<&str> = ReplicationKind::all_as_str().into_iter().collect();
+        assert_eq!(
+            distinct.len(),
+            <ReplicationKind as strum::EnumCount>::COUNT,
+            "every replication kind must have its own label value"
+        );
+    }
 
     /// The signed bytes of a [`CanisterHttpResponseReceipt`] must round-trip, for
     /// any `spent` amount in the whole `Cycles` (`u128`) range.
