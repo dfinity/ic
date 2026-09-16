@@ -9,7 +9,8 @@ use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nns_test_utils::registry::new_current_node_crypto_keys_mutations;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord,
+    CatchUpPackageContents, GenesisArgs, InitialNiDkgTranscriptRecord, SubnetListRecord,
+    catch_up_package_contents::CupType,
 };
 use ic_registry_keys::make_catch_up_package_contents_key;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key};
@@ -555,6 +556,7 @@ fn subnet_threshold_sig_pubkey_and_cup_from_transcript(
         initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
             transcript,
         )),
+        cup_type: Some(CupType::Genesis(GenesisArgs {})),
         ..Default::default()
     };
     (threshold_sig_pk, cup_contents)

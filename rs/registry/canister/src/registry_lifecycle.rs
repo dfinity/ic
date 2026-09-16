@@ -6,10 +6,14 @@ use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+use ic_protobuf::registry::subnet::v1::{
+    CatchUpPackageContents, GenesisArgs, RecoveryArgs, SubnetListRecord,
+    catch_up_package_contents::CupType,
+};
 use ic_registry_keys::{
-    REPLICA_VERSION_KEY_PREFIX, make_node_operator_record_key, make_node_record_key,
-    make_replica_version_key, make_subnet_list_record_key,
+    CATCH_UP_PACKAGE_CONTENTS_KEY_PREFIX, REPLICA_VERSION_KEY_PREFIX,
+    make_node_operator_record_key, make_node_record_key, make_replica_version_key,
+    make_subnet_list_record_key,
 };
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use ic_types::NodeId;
@@ -34,6 +38,15 @@ pub fn canister_post_upgrade(
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
         let mut total_batches = 0;
+
+        // This migration must run before any other mutation batch: every batch checks the
+        // global state invariants, and the crypto invariants reject `CatchUpPackageContents`
+        // records without a `cup_type` — exactly what this migration backfills.
+        let mutations = backfill_cup_type_on_catch_up_package_contents(registry);
+        if !mutations.is_empty() {
+            registry.maybe_apply_mutation_internal(mutations);
+            total_batches += 1;
+        }
 
         let mutations = fix_node_operators_corrupted(registry);
         if !mutations.is_empty() {
@@ -405,6 +418,56 @@ fn add_version_id_to_replica_versions(registry: &Registry) -> Vec<RegistryMutati
     mutations
 }
 
+/// One-time migration stamping a `cup_type` on every `CatchUpPackageContents` record that
+/// has none.
+///
+/// `cup_type` did not always exist: records written before it was introduced carry none and
+/// instead describe the CUP through the legacy `height`, `time` and `state_hash` fields.
+/// Replicas will derive the CUP from `cup_type` and treat a record without one as unusable,
+/// so each such record is stamped as what its legacy fields say it is:
+///
+/// * all of them unset — the record was written at subnet creation: [`CupType::Genesis`],
+///   matching what `do_create_subnet` writes today;
+/// * any of them set — the record was written by a recovery: [`CupType::Recovery`],
+///   preserving the legacy values.
+///
+/// The migration is idempotent and self-guarding: a record is only mutated while its
+/// `cup_type` is still unset, so re-running it on a subsequent upgrade produces no
+/// mutations (and therefore no extra changelog batch).
+fn backfill_cup_type_on_catch_up_package_contents(registry: &Registry) -> Vec<RegistryMutation> {
+    let mut mutations = Vec::new();
+
+    for (subnet_id, mut cup_contents) in get_key_family_iter::<CatchUpPackageContents>(
+        registry,
+        CATCH_UP_PACKAGE_CONTENTS_KEY_PREFIX,
+    ) {
+        if cup_contents.cup_type.is_some() {
+            continue;
+        }
+
+        let cup_type = if cup_contents.height == 0
+            && cup_contents.time == 0
+            && cup_contents.state_hash.is_empty()
+        {
+            CupType::Genesis(GenesisArgs {})
+        } else {
+            CupType::Recovery(RecoveryArgs {
+                height: cup_contents.height,
+                time: cup_contents.time,
+                state_hash: cup_contents.state_hash.clone(),
+            })
+        };
+
+        cup_contents.cup_type = Some(cup_type);
+        mutations.push(update(
+            format!("{CATCH_UP_PACKAGE_CONTENTS_KEY_PREFIX}{subnet_id}"),
+            cup_contents.encode_to_vec(),
+        ));
+    }
+
+    mutations
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -755,6 +818,130 @@ mod test {
         assert_eq!(
             record_2rqo7_got, expected_record_2rqo7,
             "Assertion for NodeOperator {node_operator_2rqo7} failed"
+        );
+    }
+
+    #[test]
+    fn test_backfill_cup_type_on_catch_up_package_contents() {
+        use ic_registry_keys::make_catch_up_package_contents_key;
+
+        // Step 1: Prepare the world: a registry with four CUP contents records — two written
+        // before `cup_type` existed (one genesis, one recovrey), and two written after (one
+        // genesis, one recovery).
+        let mut registry = invariant_compliant_registry(0);
+
+        let legacy_genesis_subnet_id = subnet_test_id(1001);
+        let legacy_genesis_record = CatchUpPackageContents {
+            cup_type: None,
+            height: 0,
+            time: 0,
+            state_hash: vec![],
+            ..CatchUpPackageContents::default()
+        };
+
+        let legacy_recovery_subnet_id = subnet_test_id(1002);
+        let legacy_recovery_record = CatchUpPackageContents {
+            cup_type: None,
+            height: 42,
+            time: 7,
+            state_hash: vec![1, 2, 3],
+            ..CatchUpPackageContents::default()
+        };
+
+        let genesis_subnet_id = subnet_test_id(1003);
+        let non_legacy_genesis_record = CatchUpPackageContents {
+            cup_type: Some(CupType::Genesis(GenesisArgs {})),
+            height: 0,
+            time: 0,
+            state_hash: vec![],
+            ..CatchUpPackageContents::default()
+        };
+
+        let recovery_subnet_id = subnet_test_id(1004);
+        let non_legacy_recovery_record = CatchUpPackageContents {
+            cup_type: Some(CupType::Recovery(RecoveryArgs {
+                height: 42,
+                time: 7,
+                state_hash: vec![1, 2, 3],
+            })),
+            height: 42,
+            time: 7,
+            state_hash: vec![1, 2, 3],
+            ..CatchUpPackageContents::default()
+        };
+
+        registry.apply_mutations_for_test(vec![
+            insert(
+                make_catch_up_package_contents_key(legacy_genesis_subnet_id),
+                legacy_genesis_record.encode_to_vec(),
+            ),
+            insert(
+                make_catch_up_package_contents_key(legacy_recovery_subnet_id),
+                legacy_recovery_record.encode_to_vec(),
+            ),
+            insert(
+                make_catch_up_package_contents_key(genesis_subnet_id),
+                non_legacy_genesis_record.encode_to_vec(),
+            ),
+            insert(
+                make_catch_up_package_contents_key(recovery_subnet_id),
+                non_legacy_recovery_record.encode_to_vec(),
+            ),
+        ]);
+
+        // Step 2: Run the code under test.
+        let mutations = backfill_cup_type_on_catch_up_package_contents(&registry);
+
+        // Step 3: Verify result(s).
+
+        // Step 3.1: Only the two records without a `cup_type` must be mutated.
+        assert_eq!(mutations.len(), 2);
+        registry.apply_mutations_for_test(mutations);
+
+        let get_record = |subnet_id| {
+            let bytes = registry
+                .get(
+                    make_catch_up_package_contents_key(subnet_id).as_bytes(),
+                    registry.latest_version(),
+                )
+                .expect("CUP contents record must exist")
+                .value;
+            CatchUpPackageContents::decode(bytes.as_slice())
+                .expect("Failed to decode CatchUpPackageContents")
+        };
+
+        // Step 3.2: The legacy record with unset legacy fields is now stamped as genesis;
+        // everything else about it is unchanged.
+        assert_eq!(
+            get_record(legacy_genesis_subnet_id),
+            CatchUpPackageContents {
+                cup_type: Some(CupType::Genesis(GenesisArgs {})),
+                ..legacy_genesis_record
+            }
+        );
+
+        // Step 3.3: The legacy record with set legacy fields is now stamped as a recovery
+        // preserving those values.
+        assert_eq!(
+            get_record(legacy_recovery_subnet_id),
+            CatchUpPackageContents {
+                cup_type: Some(CupType::Recovery(RecoveryArgs {
+                    height: 42,
+                    time: 7,
+                    state_hash: vec![1, 2, 3],
+                })),
+                ..legacy_recovery_record
+            }
+        );
+
+        // Step 3.4: Records that already carry a `cup_type` are untouched.
+        assert_eq!(get_record(genesis_subnet_id), non_legacy_genesis_record);
+        assert_eq!(get_record(recovery_subnet_id), non_legacy_recovery_record);
+
+        // Step 3.5: Idempotency: a second run produces no further mutations.
+        assert_eq!(
+            backfill_cup_type_on_catch_up_package_contents(&registry),
+            vec![]
         );
     }
 
