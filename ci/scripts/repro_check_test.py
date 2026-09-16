@@ -1,4 +1,4 @@
-"""Tests for the proposal handling in ci/scripts/repro-check."""
+"""Tests for the proposal handling and the local-build verification in ci/scripts/repro-check."""
 
 import hashlib
 import importlib.machinery
@@ -130,6 +130,8 @@ class RunTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp_dir, True)
         self.addCleanup(mock.patch.stopall)
         self.cdn = fake_cdn()
+        # Local artifacts (keyed by their path below dev_out) that should differ from the CDN ones.
+        self.local_overrides: dict[str, bytes] = {}
 
     def build_verifier(self, payload: dict) -> "repro_check.ReproducibilityVerifier":
         verifier = repro_check.ReproducibilityVerifier(
@@ -159,7 +161,7 @@ class RunTest(unittest.TestCase):
         return dest_path
 
     def fake_build(self, storage: "repro_check.Dirs") -> None:
-        """Writes local artifacts that are byte-identical to the CDN ones."""
+        """Writes local artifacts that are byte-identical to the CDN ones, except for those in local_overrides."""
         for local, url in [
             ("guestos/update/update-img.tar.zst", GUEST_OS_IMG),
             ("guestos/update/launch-measurements.json", MEASUREMENTS_URL),
@@ -169,7 +171,7 @@ class RunTest(unittest.TestCase):
         ]:
             dest = storage.dev_out / local
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(self.cdn[url])
+            dest.write_bytes(self.local_overrides.get(local, self.cdn[url]))
 
     def guestos_payload(self, measurements: dict) -> dict:
         return {
@@ -209,6 +211,35 @@ class RunTest(unittest.TestCase):
 
         with self.assertRaises(repro_check.VerificationError):
             verifier.run()
+
+    def test_guestos_proposal_run_detects_local_build_mismatch(self):
+        """
+        Locally built artifacts that differ from the CDN ones must fail the run, and the run must
+        report every mismatch rather than stop at the first one.
+        """
+        mismatched = {"guest_launch_measurements": [{"measurement": "ffff", "metadata": {}}]}
+        self.local_overrides = {
+            "guestos/update/update-img.tar.zst": b"locally built guest-os image",
+            "guestos/update/launch-measurements.json": json.dumps(to_byte_measurements(mismatched)).encode(),
+            "setupos/disk-img.tar.zst": b"locally built setup-os image",
+        }
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+
+        with self.assertLogs(repro_check.logger, level="INFO") as logs, self.assertRaises(
+            repro_check.VerificationError
+        ) as raised:
+            verifier.run()
+
+        self.assertEqual(
+            str(raised.exception),
+            "The locally built artifacts do not match the remote CDN artifacts for: "
+            "GuestOS update image, GuestOS launch measurements, SetupOS disk image",
+        )
+        # The artifacts after the first mismatch were still compared, and they matched.
+        self.assertTrue(any("Verification successful for HostOS!" in line for line in logs.output), logs.output)
+        self.assertTrue(
+            any("Verification successful for Recovery-GuestOS!" in line for line in logs.output), logs.output
+        )
 
 
 if __name__ == "__main__":
