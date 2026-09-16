@@ -1,12 +1,10 @@
 use ic_interfaces_registry::RegistryClient;
-use ic_protobuf::{
-    proxy::ProxyDecodeError, registry::subnet::v1::catch_up_package_contents::CupType,
-};
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_types::{
     NodeId, RegistryVersion, SubnetId,
     consensus::{
-        Block, SubnetSplittingArgs,
+        Block, CupType,
         dkg::{SplittingArgs, SubnetSplittingStatus},
     },
     registry::RegistryClientError,
@@ -124,21 +122,21 @@ pub fn get_status(
         ));
     };
 
-    let Some(CupType::SubnetSplitting(subnet_splitting_args_proto)) = contents.cup_type else {
-        return Ok(Status::NotScheduled);
-    };
-
     if versioned_record.version <= last_summary_block.context.registry_version {
         // The last summary block already references this version, so this record corresponds to a
         // past subnet split rather than a pending one.
         return Ok(Status::NotScheduled);
     }
 
-    let subnet_splitting_args = SubnetSplittingArgs::try_from(subnet_splitting_args_proto)
+    let cup_type = CupType::try_from(contents.cup_type)
         .map_err(StatusError::CatchUpContentsDeserializationError)?;
 
+    let CupType::SubnetSplitting(splitting_args) = cup_type else {
+        return Ok(Status::NotScheduled);
+    };
+
     Ok(Status::Scheduled {
-        destination_subnet_id: subnet_splitting_args.destination_subnet_id,
+        destination_subnet_id: splitting_args.destination_subnet_id,
         scheduled_at: versioned_record.version,
     })
 }
@@ -240,8 +238,9 @@ pub fn get_post_split_subnet_assignment(
 mod tests {
     use assert_matches::assert_matches;
     use ic_interfaces_registry::RegistryClientVersionedResult;
-    use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
-    use ic_protobuf::registry::subnet::v1::{GenesisArgs, RecoveryArgs};
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, GenesisArgs, RecoveryArgs, catch_up_package_contents::CupType,
+    };
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_test_utilities_consensus::fake::Fake;
     use ic_test_utilities_registry::{
@@ -269,7 +268,7 @@ mod tests {
 
     use super::*;
 
-    fn set_up_registry(cup_type: Option<CupType>) -> Arc<dyn RegistryClient> {
+    fn set_up_registry(cup_type: CupType) -> Arc<dyn RegistryClient> {
         let (registry_data_provider, registry) = setup_registry_non_final(
             SOURCE_SUBNET_ID,
             (1..=REGISTRY_CUP_REGISTRY_VERSION.increment().get())
@@ -281,7 +280,7 @@ mod tests {
                 &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
                 REGISTRY_CUP_REGISTRY_VERSION,
                 Some(CatchUpPackageContents {
-                    cup_type,
+                    cup_type: Some(cup_type),
                     ..Default::default()
                 }),
             )
@@ -315,15 +314,14 @@ mod tests {
     )]
     fn get_status_should_return_not_scheduled_when_latest_cup_is_not_subnet_splitting_test(
         #[values(
-            None,
-            Some(CupType::Genesis(GenesisArgs {})),
-            Some(CupType::Recovery(RecoveryArgs {
+            CupType::Genesis(GenesisArgs {}),
+            CupType::Recovery(RecoveryArgs {
                 height: 1_000,
                 time: 1,
                 state_hash: vec![],
-            })),
+            }),
         )]
-        cup_type: Option<CupType>,
+        cup_type: CupType,
         #[values(
             SubnetSplittingStatus::NotScheduled,
             SubnetSplittingStatus::PostSplit(PostSplitArgs {
@@ -370,11 +368,11 @@ mod tests {
         #[case] last_summary_block_registry_version: RegistryVersion,
         #[case] looked_up_registry_version: RegistryVersion,
     ) {
-        let registry = set_up_registry(Some(CupType::SubnetSplitting(
+        let registry = set_up_registry(CupType::SubnetSplitting(
             ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
                 destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
             },
-        )));
+        ));
 
         let status = get_status(
             registry.as_ref(),
@@ -428,11 +426,11 @@ mod tests {
         #[case] last_summary_block_registry_version: RegistryVersion,
         #[case] looked_up_registry_version: RegistryVersion,
     ) {
-        let registry = set_up_registry(Some(CupType::SubnetSplitting(
+        let registry = set_up_registry(CupType::SubnetSplitting(
             ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
                 destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
             },
-        )));
+        ));
 
         let status = get_status(
             registry.as_ref(),
@@ -466,20 +464,19 @@ mod tests {
     )]
     fn get_status_should_fail_when_looked_up_version_is_smaller_than_last_summary_version_test(
         #[values(
-            None,
-            Some(CupType::Genesis(GenesisArgs {})),
-            Some(CupType::Recovery(RecoveryArgs {
+            CupType::Genesis(GenesisArgs {}),
+            CupType::Recovery(RecoveryArgs {
                 height: 1_000,
                 time: 1,
                 state_hash: vec![],
-            })),
-            Some(CupType::SubnetSplitting(
+            }),
+            CupType::SubnetSplitting(
                 ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
                     destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
                 },
-            )),
+            ),
         )]
-        cup_type: Option<CupType>,
+        cup_type: CupType,
         #[values(
             SubnetSplittingStatus::NotScheduled,
             SubnetSplittingStatus::Scheduled(SplittingArgs {
@@ -524,20 +521,19 @@ mod tests {
     #[rstest]
     fn get_status_should_return_scheduled_when_last_summary_block_starts_the_split_test(
         #[values(
-            None,
-            Some(CupType::Genesis(GenesisArgs {})),
-            Some(CupType::Recovery(RecoveryArgs {
+            CupType::Genesis(GenesisArgs {}),
+            CupType::Recovery(RecoveryArgs {
                 height: 1_000,
                 time: 1,
                 state_hash: vec![],
-            })),
-            Some(CupType::SubnetSplitting(
+            }),
+            CupType::SubnetSplitting(
                 ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
                     destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
                 },
-            )),
+            ),
         )]
-        cup_type: Option<CupType>,
+        cup_type: CupType,
         #[values(REGISTRY_CUP_REGISTRY_VERSION, REGISTRY_CUP_REGISTRY_VERSION.increment())]
         looked_up_registry_version: RegistryVersion,
     ) {

@@ -10,17 +10,18 @@ use ic_logger::{ReplicaLogger, warn};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    Height, RegistryVersion, SubnetId, Time,
+    CryptoHashOfState, Height, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
-        Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon,
-        Payload, RandomBeaconContent, Rank, SummaryPayload, idkg,
+        Block, BlockPayload, CatchUpContent, CatchUpPackage, CupType, HashedBlock,
+        HashedRandomBeacon, Payload, RandomBeaconContent, Rank, RecoveryArgs, SummaryPayload, idkg,
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed, crypto_hash,
         threshold_sig::ni_dkg::NiDkgTag,
     },
     signature::ThresholdSignature,
+    time::UNIX_EPOCH,
 };
 use phantom_newtype::Id;
 
@@ -33,6 +34,29 @@ pub fn make_registry_cup_from_cup_contents(
     registry_version: RegistryVersion,
     logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
+    let (cup_height, time, state_hash) = match CupType::try_from(cup_contents.cup_type.clone()) {
+        Ok(CupType::Genesis) => (
+            Height::new(0),
+            UNIX_EPOCH,
+            CryptoHashOfState::from(CryptoHash(Vec::new())),
+        ),
+        Ok(CupType::Recovery(RecoveryArgs {
+            height,
+            time,
+            state_hash,
+        })) => (height, time, state_hash),
+        // A subnet splitting record never describes a registry CUP: the post-split CUP is
+        // produced by the source subnet's consensus instead.
+        Ok(CupType::SubnetSplitting(..)) => return None,
+        Err(err) => {
+            warn!(
+                logger,
+                "Failed to get the CUP type from the registry CUP contents: {}", err
+            );
+            return None;
+        }
+    };
+
     let replica_version = match registry.get_replica_version(subnet_id, registry_version) {
         Ok(Some(replica_version)) => replica_version,
         err => {
@@ -47,6 +71,7 @@ pub fn make_registry_cup_from_cup_contents(
     };
     let dkg_summary = match get_dkg_summary_from_cup_contents(
         cup_contents.clone(),
+        cup_height,
         subnet_id,
         registry,
         registry_version,
@@ -61,10 +86,10 @@ pub fn make_registry_cup_from_cup_contents(
             return None;
         }
     };
-    let cup_height = Height::new(cup_contents.height);
 
     let idkg_summary = match bootstrap_idkg_summary(
         cup_contents.clone(),
+        cup_height,
         subnet_id,
         registry_version,
         registry,
@@ -124,7 +149,7 @@ pub fn make_registry_cup_from_cup_contents(
         context: ValidationContext {
             certified_height: cup_height,
             registry_version: block_registry_version,
-            time: Time::from_nanos_since_unix_epoch(cup_contents.time),
+            time,
         },
     };
     let random_beacon = Signed {
@@ -143,7 +168,7 @@ pub fn make_registry_cup_from_cup_contents(
         content: CatchUpContent::new(
             HashedBlock::new(crypto_hash, block),
             HashedRandomBeacon::new(crypto_hash, random_beacon),
-            Id::from(CryptoHash(cup_contents.state_hash)),
+            state_hash,
             /* oldest_registry_version_in_use_by_replicated_state */ None,
         ),
         signature: ThresholdSignature {
@@ -191,6 +216,7 @@ pub fn make_registry_cup(
 
 fn bootstrap_idkg_summary_from_cup_contents(
     cup_contents: CatchUpPackageContents,
+    height: Height,
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
@@ -202,25 +228,20 @@ fn bootstrap_idkg_summary_from_cup_contents(
         return Ok(None);
     };
 
-    make_bootstrap_summary_with_initial_dealings(
-        subnet_id,
-        Height::new(cup_contents.height),
-        initial_dealings,
-        logger,
-    )
-    .map_err(|err| format!("Failed to create IDKG summary block: {err:?}"))
+    make_bootstrap_summary_with_initial_dealings(subnet_id, height, initial_dealings, logger)
+        .map_err(|err| format!("Failed to create IDKG summary block: {err:?}"))
 }
 
 fn bootstrap_idkg_summary(
     cup_contents: CatchUpPackageContents,
+    height: Height,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
-    let height = Height::new(cup_contents.height);
     if let Some(summary) =
-        bootstrap_idkg_summary_from_cup_contents(cup_contents, subnet_id, logger)?
+        bootstrap_idkg_summary_from_cup_contents(cup_contents, height, subnet_id, logger)?
     {
         return Ok(Some(summary));
     }
@@ -281,9 +302,6 @@ mod tests {
                         initial_ni_dkg_transcript_high_threshold: Some(
                             dummy_initial_dkg_transcript(committee, NiDkgTag::HighThreshold),
                         ),
-                        height: 54321,
-                        time: 1,
-                        state_hash: vec![1, 2, 3, 4, 5],
                         registry_store_uri: registry_store_uri.clone(),
                         ecdsa_initializations: vec![],
                         chain_key_initializations: vec![],
