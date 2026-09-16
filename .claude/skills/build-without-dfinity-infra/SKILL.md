@@ -11,9 +11,9 @@ at DFINITY's internal remote cache and remote downloader
 inside DFINITY's internal network — in practice that essentially means a
 **devenv** machine. They are **not** available on, e.g., a namespace.so devbox,
 a sandbox, or CI without those credentials, where a plain `bazel build` will fail
-or stall, and a plain `bazel query` or `bazel fetch` downloads every repository from
-origin only after a failed attempt against the internal remote downloader (one
-`Remote Cache:` warning per fetch).
+or stall, and a plain `bazel query` or `bazel fetch` downloads each repository it
+needs from origin only after a failed attempt against the internal remote downloader
+(one `Remote Cache:` warning per fetch).
 
 If you're unsure whether the infra is reachable from where you are, probe it:
 
