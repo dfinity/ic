@@ -36,11 +36,23 @@ jobs:
       diff-only: ${{ steps.config.outputs.diff-only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
       skip_buf_checks: ${{ steps.config.outputs.skip_buf_checks }}
+      skip_system_tests: ${{ steps.config.outputs.skip_system_tests }}
     steps:
       - name: Infer build config
         id: config
         run: |
           set -euo pipefail
+
+          # PR labels. Both expand to 'false' on merge_group, push and workflow_dispatch.
+          all_bazel_targets='${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}'
+          skip_system_tests='${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_SKIP_SYSTEM_TESTS') }}'
+
+          if [[ "$all_bazel_targets" == 'true' && "$skip_system_tests" == 'true' ]]; then
+              msg="The PR labels CI_ALL_BAZEL_TARGETS and CI_SKIP_SYSTEM_TESTS are mutually exclusive. Remove one of them and retrigger CI (see .github/CI_README.md)."
+              echo "::error title=Conflicting CI labels::$msg"
+              echo "**Error:** $msg" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+          fi
 
           # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
           # the full build to occur (including versioning)
@@ -64,7 +76,7 @@ jobs:
               release_build="false"
               diff_only="false"
               skip_long_tests="true"
-          elif [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}' == 'true' ]]; then
+          elif [[ "$all_bazel_targets" == 'true' ]]; then
               # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
               # branch
               release_build="false"
@@ -123,6 +135,10 @@ jobs:
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
           echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
+          echo "skip_system_tests: $skip_system_tests"
+          echo "skip_system_tests=$skip_system_tests" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_system_tests\` | \`$skip_system_tests\` |" >> "$GITHUB_STEP_SUMMARY"
+
   infer-bazel-targets:
     name: Infer Bazel Targets
     runs-on: namespace-profile-rbe-driver-amd64-linux-16x32
@@ -145,6 +161,9 @@ jobs:
             fi
             if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
               targets_args+=("--exclude_tags=buf")
+            fi
+            if [[ '${{ needs.config.outputs.skip_system_tests }}' == 'true' ]]; then
+              targets_args+=("--exclude_tags=system_test")
             fi
             if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
               targets_args+=(
