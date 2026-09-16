@@ -302,11 +302,20 @@ impl From<&ReplicationCounts> for ReplicationKind {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, EnumIter, Serialize, FromRepr)]
 #[repr(u32)]
 pub enum PricingVersion {
     Legacy = PRICING_VERSION_LEGACY,
     PayAsYouGo = PRICING_VERSION_PAY_AS_YOU_GO,
+}
+
+impl PricingVersion {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PricingVersion::Legacy => "legacy",
+            PricingVersion::PayAsYouGo => "pay_as_you_go",
+        }
+    }
 }
 
 impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {

@@ -2359,6 +2359,10 @@ impl ExecutionEnvironment {
                 CyclesUseCase::HTTPOutcalls,
                 nominal_consumed_cycles,
             );
+        self.metrics.observe_http_outcall_submitted(
+            &canister_http_request_context.pricing_version,
+            &canister_http_request_context.replication,
+        );
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
         );

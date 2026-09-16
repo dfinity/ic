@@ -33,7 +33,9 @@ use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, expect_canister_did_not_reply,
     get_reject, get_reply,
 };
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
+use ic_test_utilities_metrics::{
+    fetch_histogram_vec_count, fetch_int_counter_vec, metric_vec, nonzero_values,
+};
 use ic_types::{
     CanisterId, CountBytes, NumInstructions, PrincipalId, RegistryVersion,
     canister_http::{CanisterHttpMethod, PricingVersion, Replication, Transform},
@@ -4008,6 +4010,34 @@ fn execute_canister_http_request_pricing_version() {
             assert_eq!(
                 http_request_context.pricing_version, expected,
                 "unexpected pricing version for pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
+
+            // The outcall was admitted, so it is counted under the version it was
+            // admitted with. The request is fully replicated, `is_replicated` being
+            // unset in the args.
+            let submitted = fetch_int_counter_vec(
+                test.metrics_registry(),
+                "execution_http_outcalls_submitted_total",
+            );
+            // Every (pricing version, replication) series is initialized, so the
+            // ones that were not hit are exported as zero rather than missing.
+            assert_eq!(
+                submitted.len(),
+                6,
+                "unexpected submitted series for pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
+            assert_eq!(
+                nonzero_values(submitted),
+                metric_vec(&[(
+                    &[
+                        ("pricing_version", expected.as_str()),
+                        ("replication", "fully_replicated"),
+                    ],
+                    1
+                )]),
+                "unexpected submitted metric for pricing_version={pricing_version:?} with \
                  flexible_http_requests enabled={flexible_http_requests_enabled}"
             );
         }

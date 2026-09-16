@@ -8,16 +8,23 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_types::CanisterId;
-use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES};
+use ic_types::canister_http::{
+    CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, Replication,
+};
 use ic_types::messages::Response;
 use ic_types_cycles::NominalCycles;
-use prometheus::{Histogram, HistogramVec, IntCounter};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::str::FromStr;
+use strum::IntoEnumIterator;
 
 pub const FINISHED_OUTCOME_LABEL: &str = "finished";
 pub const SUBMITTED_OUTCOME_LABEL: &str = "submitted";
 pub const ERROR_OUTCOME_LABEL: &str = "error";
 pub const SUCCESS_STATUS_LABEL: &str = "success";
+
+const HTTP_OUTCALL_PRICING_VERSION_LABEL: &str = "pricing_version";
+const HTTP_OUTCALL_REPLICATION_LABEL: &str = "replication";
+const HTTP_OUTCALL_REPLICATIONS: &[&str] = &["fully_replicated", "non_replicated", "flexible"];
 
 pub const CRITICAL_ERROR_CALL_ID_WITHOUT_INSTALL_CODE_CALL: &str =
     "execution_environment_call_id_without_install_code_call";
@@ -79,6 +86,7 @@ pub(crate) struct HttpOutcallMetrics {
     pub(crate) request_size: Histogram,
     pub(crate) max_response_bytes: Histogram,
     pub(crate) payload_size: Histogram,
+    pub(crate) submitted: IntCounterVec,
 }
 
 impl ExecutionEnvironmentMetrics {
@@ -183,6 +191,24 @@ impl ExecutionEnvironmentMetrics {
                     "Size of HTTP outcall payloads, in bytes.",
                     decimal_buckets_with_zero(0, 6),
                 ),
+                submitted: {
+                    let submitted = metrics_registry.int_counter_vec(
+                        "execution_http_outcalls_submitted_total",
+                        "HTTP outcalls accepted into the replicated state, by the pricing \
+                         version and replication kind. Outcalls rejected at admission are not counted.",
+                        &[
+                            HTTP_OUTCALL_PRICING_VERSION_LABEL,
+                            HTTP_OUTCALL_REPLICATION_LABEL,
+                        ],
+                    );
+                    // Initialize all time series to zero.
+                    for pricing_version in PricingVersion::iter() {
+                        for replication in HTTP_OUTCALL_REPLICATIONS {
+                            submitted.with_label_values(&[pricing_version.as_str(), replication]);
+                        }
+                    }
+                    submitted
+                },
             },
         }
     }
@@ -227,6 +253,17 @@ impl ExecutionEnvironmentMetrics {
         };
 
         self.observe_message_with_label(method_name, duration, outcome_label, status_label)
+    }
+
+    pub(crate) fn observe_http_outcall_submitted(
+        &self,
+        pricing_version: &PricingVersion,
+        replication: &Replication,
+    ) {
+        self.http_outcalls_metrics
+            .submitted
+            .with_label_values(&[pricing_version.as_str(), replication.kind().as_str()])
+            .inc();
     }
 
     pub(crate) fn observe_http_outcall_request(
