@@ -746,7 +746,7 @@ impl ExecutionEnvironment {
                                 new_price.nominal(),
                             );
                             self.metrics
-                                .observe_http_outcall_request(context, &response);
+                                .observe_http_outcall_delivered(context, &response);
 
                             let max_response_size = match context.max_response_bytes {
                                 Some(response_size) => response_size.get(),
