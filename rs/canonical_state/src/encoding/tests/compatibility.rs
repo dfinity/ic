@@ -343,6 +343,12 @@ fn canonical_encoding_subnet_metrics() {
         metrics.threshold_signature_agreements =
             BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
 
+        // As the scheduler does once per round, fold the scalar outcall fields
+        // into the corresponding `consumed_cycles_by_use_case` entries, which is
+        // where the totals below read them from. The scalar fields are left in
+        // place, as they still are in production.
+        metrics.migrate_outcalls_cycles_to_use_cases();
+
         metrics.refresh_consumed_cycles(NominalCycles::new(50_000_000_000));
 
         let expected = if certification_version >= CertificationVersion::V29 {
