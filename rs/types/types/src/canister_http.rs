@@ -1477,6 +1477,21 @@ mod tests {
     use std::str::FromStr;
     use strum::IntoEnumIterator;
 
+    #[test]
+    fn replication_kind_all_as_str_is_stable_and_distinct() {
+        assert_eq!(
+            ReplicationKind::all_as_str(),
+            ["fully_replicated", "flexible", "non_replicated"]
+        );
+
+        let distinct: BTreeSet<&str> = ReplicationKind::all_as_str().into_iter().collect();
+        assert_eq!(
+            distinct.len(),
+            <ReplicationKind as strum::EnumCount>::COUNT,
+            "every replication kind must have its own label value"
+        );
+    }
+
     /// The signed bytes of a [`CanisterHttpResponseReceipt`] must round-trip, for
     /// any `spent` amount in the whole `Cycles` (`u128`) range.
     ///

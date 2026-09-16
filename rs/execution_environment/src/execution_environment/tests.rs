@@ -4032,6 +4032,25 @@ fn execute_canister_http_request_pricing_version() {
                  pricing_version={pricing_version:?} with \
                  flexible_http_requests enabled={flexible_http_requests_enabled}"
             );
+
+            // Delivering the response counts the outcall under the version it was
+            // priced with. It is fully replicated, `is_replicated` being unset above.
+            test.deliver_consensus_response(CallbackId::from(0), Payload::Data(vec![]));
+            assert_eq!(
+                nonzero_values(fetch_int_counter_vec(
+                    test.metrics_registry(),
+                    "execution_http_outcalls_delivered_total"
+                )),
+                metric_vec(&[(
+                    &[
+                        ("pricing_version", expected.as_str()),
+                        ("replication", "fully_replicated"),
+                    ],
+                    1
+                )]),
+                "unexpected delivered metric for pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
         }
     }
 }
