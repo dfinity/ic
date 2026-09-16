@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-#   targets.py [-h] [--skip_long_tests] [--base BASE] [--head HEAD] {build,test,check}
+#   targets.py [-h] [--skip_long_tests] [--exclude_tags TAG]... [--bazel_startup_arg=ARG]... [--base BASE] [--head HEAD] {build,test,check}
 #
 # This script determines which Bazel targets should be built or tested and writes them separated by newlines to stdout.
 #
@@ -10,6 +10,9 @@
 # If --skip_long_tests is passed, tests tagged with 'long_test' will be excluded.
 #
 # However, long_tests of which a direct source file has been modified will be included.
+#
+# If --bazel_startup_arg=ARG is passed (repeatable) the bazel startup options ARG (e.g. --noworkspace_rc or
+# --bazelrc=FILE) are placed before the `query` subcommand of every bazel invocation.
 #
 # Finally ./PULL_REQUEST_BAZEL_TARGETS is taken into account to explicitly return targets based on modified files
 # even though they're not an explicit dependency of a bazel target or are tagged as `long_test`.
@@ -64,6 +67,11 @@ def log(*args, **kwargs):
 def die(*args, **kwargs):
     log(*args, **kwargs)
     sys.exit(1)
+
+
+def bazel_query_command(bazel_startup_args: list[str], *query_args: str) -> list[str]:
+    """Return the `bazel <STARTUP_ARGS> query <QUERY_ARGS>` command line."""
+    return ["bazel", *bazel_startup_args, "query", *query_args]
 
 
 def load_explicit_targets() -> dict[str, Set[str]]:
@@ -180,6 +188,7 @@ def targets(
     command: str,
     skip_long_tests: bool,
     exclude_tags: list[str],
+    bazel_startup_args: list[str],
     base: str | None,
     head: str | None,
 ):
@@ -199,14 +208,16 @@ def targets(
     excluded_tags_regex = "|".join(EXCLUDED_TAGS + exclude_tags)
     query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
 
-    args = ["bazel", "query", "--keep_going", query]
+    args = bazel_query_command(bazel_startup_args, "--keep_going", query)
     log(shlex.join(args))
-    result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # bazel's stderr is passed through so that its warnings (e.g. remote downloader fallbacks),
+    # the files ignored by --keep_going and the "Starting local Bazel server" line end up in our log.
+    result = subprocess.run(args, stdout=subprocess.PIPE, text=True)
 
     # As described above, when the query contains files not tracked by bazel,
     # --keep_going will ignore them but will return the special exit code 3 which we ignore:
     if result.returncode not in (0, 3):
-        log(f"Error running `bazel query --keep_going '{query}'`:\n" + result.stderr)
+        log(f"`{shlex.join(args)}` failed with exit code {result.returncode}!")
         sys.exit(result.returncode)
 
     result_targets = result.stdout.splitlines()
@@ -218,7 +229,7 @@ def targets(
         print("\n".join(result_targets))
 
 
-def check():
+def check(bazel_startup_args: list[str]):
     """
     Exit successfully with 0 if PULL_REQUEST_BAZEL_TARGETS:
     * can be read and parsed.
@@ -255,7 +266,7 @@ def check():
         for target in explicit_targets_for_pattern:
             excluded_tags_regex = "|".join(EXCLUDED_TAGS)
             query = f'({target}) except attr(tags, "{excluded_tags_regex}", //...)'
-            result = subprocess.run(["bazel", "query", query], capture_output=True, text=True)
+            result = subprocess.run(bazel_query_command(bazel_startup_args, query), capture_output=True, text=True)
             if result.returncode != 0:
                 indented_error_msg = f"{indentation}" + f"\n{indentation}".join(result.stderr.strip().splitlines())
                 errors.append(f"Pattern '{pattern}' has problematic target '{target}':\n{indented_error_msg}")
@@ -289,6 +300,12 @@ def main():
         "--exclude_tags", action="append", default=[], help="Exclude targets tagged with the specified tags"
     )
     parser.add_argument(
+        "--bazel_startup_arg",
+        action="append",
+        default=[],
+        help="Bazel startup option to place before the `query` subcommand, e.g. --bazel_startup_arg=--noworkspace_rc. Can be repeated.",
+    )
+    parser.add_argument(
         "--base",
         help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE [$HEAD]` where $HEAD is from --head if specified.",
     )
@@ -296,9 +313,9 @@ def main():
     args = parser.parse_args()
 
     if args.command == "check":
-        check()
+        check(args.bazel_startup_arg)
 
-    targets(args.command, args.skip_long_tests, args.exclude_tags, args.base, args.head)
+    targets(args.command, args.skip_long_tests, args.exclude_tags, args.bazel_startup_arg, args.base, args.head)
 
 
 if __name__ == "__main__":
