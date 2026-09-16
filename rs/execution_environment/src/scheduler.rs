@@ -2199,7 +2199,7 @@ pub fn abort_all_paused_executions(
 /// Backfills `CanisterMetrics::consumed_cycles_monotonic` and
 /// `CanisterMetrics::consumed_cycles_by_use_cases_monotonic` of every canister from
 /// its `consumed_cycles` and `consumed_cycles_by_use_cases` gauges, which predate
-/// them and thus reach further back: to the beginning for the scalar gauge, to March
+/// them and thus reach further back: to the beginning for the scalar gauge, to April
 /// 2023 for the by-use-case ones. See
 /// `SystemState::migrate_consumed_cycles_to_monotonic`.
 ///
@@ -2242,9 +2242,12 @@ fn migrate_consumed_cycles_to_monotonic(
         };
 
         // Check the scalar total and, driven by the gauge map, one use case at a
-        // time. The monotonic map's `HTTPOutcalls` entry is thus left out, as it must
-        // be: it has no canister-level gauge to be checked or derived from (see
-        // `CanisterMetrics::consumed_cycles_by_use_cases_monotonic`).
+        // time. The monotonic map's `HTTPOutcalls` entry is left out, as it must be:
+        // it has no canister-level gauge to be checked or derived from (see
+        // `CanisterMetrics::consumed_cycles_by_use_cases_monotonic`). The skip below
+        // makes that explicit, rather than relying on the gauge map never holding
+        // such an entry (which `observe_consumed_cycles_with_use_case` only asserts
+        // in debug builds).
         check_monotonic_consumed_cycles(
             canister_metrics.consumed_cycles(),
             canister_metrics.consumed_cycles_monotonic(),
@@ -2255,6 +2258,9 @@ fn migrate_consumed_cycles_to_monotonic(
             log,
         );
         for (use_case, gauge) in canister_metrics.consumed_cycles_by_use_cases() {
+            if *use_case == CyclesUseCase::HTTPOutcalls {
+                continue;
+            }
             let monotonic = canister_metrics
                 .consumed_cycles_by_use_cases_monotonic()
                 .get(use_case)

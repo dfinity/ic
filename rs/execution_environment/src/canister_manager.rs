@@ -1273,7 +1273,7 @@ impl CanisterManager {
     /// Reads the monotonic amounts rather than the gauges, as the endpoint's
     /// contract is a total that only ever grows. Every checkpoint round backfills them
     /// from the gauges, which predate them, so from the first such round after an
-    /// upgrade onwards they cover everything the canister consumed since March 2023 --
+    /// upgrade onwards they cover everything the canister consumed since April 2023 --
     /// as far back as any per-use-case record goes. The sole exception is
     /// `HTTPOutcalls`, which has no canister-level gauge to be backfilled from and
     /// hence only ever covers the outcalls made since May 2026 (see

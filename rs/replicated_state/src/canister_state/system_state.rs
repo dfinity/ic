@@ -352,7 +352,7 @@ impl CanisterMetrics {
     /// summed over the use cases that [`Self::consumed_cycles`] covers, i.e.
     /// everything except HTTPS outcalls, which are only tracked at the subnet level
     /// (and, for the canister, in the by-use-case map). The two agree on everything
-    /// consumed from March 2023 onwards, but this amount reaches further back (see
+    /// consumed from April 2023 onwards, but this amount reaches further back (see
     /// [`Self::consumed_cycles_by_use_cases`]), so for a canister that consumed
     /// cycles before then it exceeds what the by-use-case amounts add up to.
     ///
@@ -374,10 +374,12 @@ impl CanisterMetrics {
     /// checkpoint round that backfills them from here (see
     /// `SystemState::migrate_consumed_cycles_to_monotonic`).
     ///
-    /// They only reach back to March 2023, when the by-use-case breakdown was
-    /// introduced (EXC-1345), so unlike the scalar [`Self::consumed_cycles`] -- which
-    /// has been tracked since the beginning -- they are not the canister's full
-    /// history. Nothing records what a canister consumed per use case before then;
+    /// They only reach back to April 2023, so unlike the scalar
+    /// [`Self::consumed_cycles`] -- which has been tracked since the beginning -- they
+    /// are not the canister's full history. The by-use-case breakdown was introduced
+    /// in March 2023 (EXC-1345), but the fix that followed (EXC-1376, rolled out in
+    /// April 2023) moved it to a new proto field, discarding what the first month had
+    /// recorded. Nothing records what a canister consumed per use case before then;
     /// that part is only present in the scalar gauge.
     ///
     /// Has no `HTTPOutcalls` entry: HTTPS outcalls are only tracked as a gauge at the
@@ -394,8 +396,8 @@ impl CanisterMetrics {
     /// Tracked since May 2026 (#9922) and absent from checkpoints written before that;
     /// but backfilled from the gauges above on the first checkpoint round after an
     /// upgrade, so from then on they cover as much as those gauges do, i.e. everything
-    /// consumed since March 2023. The backfill cannot reach further back than that:
-    /// no per-use-case record of what a canister consumed before March 2023 exists.
+    /// consumed since April 2023. The backfill cannot reach further back than that:
+    /// no per-use-case record of what a canister consumed before April 2023 exists.
     ///
     /// The one exception is the `HTTPOutcalls` entry, which is not backfilled and thus
     /// only ever covers the outcalls made since May 2026: it is the one entry with no
@@ -2472,13 +2474,13 @@ impl SystemState {
     /// [`CanisterMetrics::consumed_cycles_by_use_cases_monotonic`] from the
     /// [`CanisterMetrics::consumed_cycles`] and
     /// [`CanisterMetrics::consumed_cycles_by_use_cases`] gauges, which predate them
-    /// and thus reach further back: to the beginning for the scalar gauge, to March
+    /// and thus reach further back: to the beginning for the scalar gauge, to April
     /// 2023 for the by-use-case ones.
     ///
     /// Both are backfilled in one go, as they are two faces of the same metric: the
     /// scalar amount tracks the sum of the by-use-case amounts over the use cases the
     /// scalar gauge covers, so moving one without the other would pull them apart.
-    /// (That sum only accounts for what was consumed from March 2023 onwards, the
+    /// (That sum only accounts for what was consumed from April 2023 onwards, the
     /// scalar amount reaching further back; see
     /// [`CanisterMetrics::consumed_cycles_by_use_cases`].)
     ///
@@ -2526,8 +2528,14 @@ impl SystemState {
             (*consumed_cycles_monotonic).max(*consumed_cycles - outstanding.total());
 
         // Driven by the gauge map, which leaves the monotonic map's `HTTPOutcalls`
-        // entry alone: it has no gauge counterpart at the canister level.
+        // entry alone: it has no gauge counterpart at the canister level. The skip
+        // below makes that explicit, rather than relying on the gauge map never
+        // holding such an entry (which `observe_consumed_cycles_with_use_case` only
+        // asserts in debug builds).
         for (use_case, gauge) in consumed_cycles_by_use_cases.iter() {
+            if *use_case == CyclesUseCase::HTTPOutcalls {
+                continue;
+            }
             let monotonic = consumed_cycles_by_use_cases_monotonic
                 .entry(*use_case)
                 .or_insert_with(NominalCycles::zero);
