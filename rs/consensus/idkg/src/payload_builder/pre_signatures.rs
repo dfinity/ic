@@ -999,7 +999,16 @@ pub(super) mod tests {
             /*should_create_key_transcript=*/ true,
         );
 
-        let payload_capacity = 20;
+        let pre_sigs_per_key = 5;
+        // A round of the priority queue costs one pre-signature per key, and an ECDSA one
+        // costs two transcripts against a Schnorr one's single transcript. The capacity is
+        // derived so that it buys whole rounds for whatever key set the fixture returns; a
+        // constant would leave a remainder and land it on one arbitrary key.
+        let payload_capacity = pre_sigs_per_key
+            * key_ids
+                .iter()
+                .map(|key_id| key_id.required_pre_sig_capacity() as u32)
+                .sum::<u32>();
         make_new_pre_signatures_by_priority(
             &make_config(Some(payload_capacity), stash_capacity.clone()),
             &mut payload,
@@ -1015,7 +1024,7 @@ pub(super) mod tests {
         // The same amount of pre-signatures should be started for each key
         assert_eq!(count.len(), key_ids.len());
         for key_id in key_ids {
-            assert_eq!(count[&key_id], 5);
+            assert_eq!(count[&key_id], pre_sigs_per_key as usize);
         }
 
         // The payload capacity was reduced (i.e. via proposal)
