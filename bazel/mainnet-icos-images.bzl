@@ -82,16 +82,23 @@ genrule(
     outs = ["{out}"],
     cmd = "$(location @@//bazel:mainnet-icos-download.sh) {url} {sha256} $@",
     # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
-    # so we need this Namespace.so-specific execution property to open up the network on RBE.
-    # Running the download on a worker puts the image straight into the remote CAS, where
-    # the remotely executed consumers need it. Without a remote executor the property is inert.
+    # so this Namespace.so-specific execution property is what would open up the network for
+    # the action on an RBE worker. Without a remote executor the property is inert.
     exec_properties = {{"namespace_requires_network": "true"}},
     # requires-network: bazel/conf/.bazelrc.build sets --nosandbox_default_allow_network,
     #   so a locally sandboxed run needs it to leave the sandbox's network namespace.
+    # no-remote-exec: run the download on the machine driving the build (the RBE driver
+    #   container on CI), not on an RBE worker. On 2026-09-16 the worker sandbox had no
+    #   network at all despite the execution property above (every curl failed instantly
+    #   with "Could not resolve host", see
+    #   https://github.com/dfinity/ic/actions/runs/35143842952/job/104955157611), while the
+    #   driver has downloaded these images for months. Remotely executed consumers still
+    #   get the image: Bazel uploads a locally produced output to the remote CAS when a
+    #   remote action needs it as an input. Drop the tag again once a non-cached network
+    #   action has been shown to work on the workers.
     # manual: never pulled in by a wildcard.
-    # Deliberately no no-cache / no-remote-cache / no-remote-exec: caching and remote
-    #   execution of this action are the point.
-    tags = ["manual", "requires-network"],
+    # Deliberately no no-cache / no-remote-cache: caching this action is the point.
+    tags = ["manual", "no-remote-exec", "requires-network"],
     target_compatible_with = ["@platforms//os:linux"],
     tools = ["@@//bazel:mainnet-icos-download.sh"],
 )
@@ -105,8 +112,8 @@ genrule(
     outs = ["guest-img.tar.zst"],
     # no-remote-exec: extract-guestos unpacks the multi-GB SetupOS image under
     # `tempdir()`, i.e. /tmp, and the RBE workers only have a 1 GB /tmp (#10797).
-    # The other half of #10797's rationale, copying a multi-GB *local* input to
-    # the worker, no longer applies now that the input is produced remotely.
+    # #10797's other reason, copying the multi-GB *local* SetupOS image to the
+    # worker, applies as well while the download above runs locally.
     tags = ["manual", "no-remote-exec"],
     cmd = \"""#!/bin/bash
         $(location @@//rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
