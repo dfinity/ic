@@ -517,10 +517,16 @@ pub(crate) async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
         }
     }
     let actual_finalized_ids: BTreeSet<Id> = receipts.keys().copied().collect();
-    assert_eq!(
-        expected_finalized_ids, actual_finalized_ids,
-        "ERROR: unexpected transaction receipts for some ids"
-    );
+    if expected_finalized_ids != actual_finalized_ids {
+        log!(
+            INFO,
+            "Mismatch between expected finalized ids {:?} and actual {:?}. \
+             A receipt may not yet be indexed by the RPC provider. Will retry later.",
+            expected_finalized_ids,
+            actual_finalized_ids,
+        );
+        return None;
+    }
     Some(receipts)
 }
 
