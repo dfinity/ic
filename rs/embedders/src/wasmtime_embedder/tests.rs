@@ -271,27 +271,26 @@ fn test_accessed_os_and_wasm_pages() {
 
 #[test]
 fn test_dirty_os_and_wasm_pages() {
-    let speculatively_dirty: Vec<PageIndex> = vec![];
     let dirty: Vec<PageIndex> = vec![];
-    let (os_pages, wasm_pages) = dirty_os_and_wasm_pages(&speculatively_dirty, &dirty);
+    let (os_pages, wasm_pages) = dirty_os_and_wasm_pages(&dirty);
     assert_eq!(os_pages, 0);
     assert_eq!(wasm_pages, 0);
 
-    let speculatively_dirty: Vec<PageIndex> = vec![];
     let dirty: Vec<PageIndex> = vec![PageIndex::new(0)];
-    let (os_pages, wasm_pages) = dirty_os_and_wasm_pages(&speculatively_dirty, &dirty);
+    let (os_pages, wasm_pages) = dirty_os_and_wasm_pages(&dirty);
     assert_eq!(os_pages, 1);
     assert_eq!(wasm_pages, 1);
 
-    let speculatively_dirty: Vec<PageIndex> = vec![PageIndex::new(0)];
-    let dirty: Vec<PageIndex> = vec![PageIndex::new(1)];
-    let (os_pages, wasm_pages) = dirty_os_and_wasm_pages(&speculatively_dirty, &dirty);
+    let dirty: Vec<PageIndex> = vec![PageIndex::new(0), PageIndex::new(1)];
+    let (os_pages, wasm_pages) = dirty_os_and_wasm_pages(&dirty);
     assert_eq!(os_pages, 2);
     assert_eq!(wasm_pages, 1);
 
-    let speculatively_dirty: Vec<PageIndex> = vec![PageIndex::new(OS_PAGES_PER_WASM_PAGE as u64)];
-    let dirty: Vec<PageIndex> = vec![PageIndex::new(0)];
-    let (os_pages, wasm_pages) = dirty_os_and_wasm_pages(&speculatively_dirty, &dirty);
+    let dirty: Vec<PageIndex> = vec![
+        PageIndex::new(0),
+        PageIndex::new(OS_PAGES_PER_WASM_PAGE as u64),
+    ];
+    let (os_pages, wasm_pages) = dirty_os_and_wasm_pages(&dirty);
     assert_eq!(os_pages, 2);
     assert_eq!(wasm_pages, 2);
 }

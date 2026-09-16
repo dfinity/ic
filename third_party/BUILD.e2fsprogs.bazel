@@ -41,6 +41,7 @@ configure_make(
     },
     lib_source = ":all_srcs",
     out_binaries = [
+        "debugfs",
         "fuse2fs",
         "mke2fs",
     ],
@@ -48,8 +49,9 @@ configure_make(
     # exported binaries.
     out_shared_libs = [],
     out_static_libs = [],
-    # mke2fs is installed under sbin/ by autotools (it's a sysadmin tool);
-    # rules_foreign_cc only picks up out_binaries from bin/, so move it.
+    # mke2fs and debugfs are installed under sbin/ by autotools (they're
+    # sysadmin tools); rules_foreign_cc only picks up out_binaries from bin/,
+    # so move them.
     #
     # Then drop the rest of the install tree (unused & non-reproducible).
     # The headers under include/ are kept since rules_foreign_cc declares them
@@ -57,8 +59,9 @@ configure_make(
     postfix_script = (
         "mkdir -p $$INSTALLDIR/bin" +
         " && cp $$INSTALLDIR/sbin/mke2fs $$INSTALLDIR/bin/mke2fs" +
+        " && cp $$INSTALLDIR/sbin/debugfs $$INSTALLDIR/bin/debugfs" +
         " && find $$INSTALLDIR -mindepth 1 -maxdepth 1 ! -name bin ! -name include -exec rm -rf {} +" +
-        " && find $$INSTALLDIR/bin -mindepth 1 ! -name fuse2fs ! -name mke2fs -delete"
+        " && find $$INSTALLDIR/bin -mindepth 1 ! -name debugfs ! -name fuse2fs ! -name mke2fs -delete"
     ),
     # These tools are only ever used to build Linux filesystem images.
     target_compatible_with = [
@@ -74,6 +77,13 @@ filegroup(
     name = "fuse2fs",
     srcs = [":e2fsprogs"],
     output_group = "fuse2fs",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "debugfs",
+    srcs = [":e2fsprogs"],
+    output_group = "debugfs",
     visibility = ["//visibility:public"],
 )
 

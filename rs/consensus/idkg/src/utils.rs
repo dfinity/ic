@@ -32,7 +32,6 @@ use ic_types::{
     },
     registry::RegistryClientError,
 };
-use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -500,16 +499,6 @@ impl<T: Ord + Copy> IDkgSchedule<T> {
     }
 }
 
-/// Builds a rayon thread pool with the given number of threads.
-pub(crate) fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
-    Arc::new(
-        ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .expect("Failed to create thread pool"),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -532,7 +521,7 @@ mod tests {
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_consensus::{fake::Fake, idkg::*};
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
         batch::ValidationContext,
         consensus::{
@@ -924,6 +913,7 @@ mod tests {
                 certified_height: Height::from(42),
                 time: UNIX_EPOCH,
             },
+            test_replica_version(),
         )
     }
 

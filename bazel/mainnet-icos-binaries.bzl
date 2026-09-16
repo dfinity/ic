@@ -9,6 +9,17 @@ network-isolated sandbox. Declaring the binaries as Bazel dependencies instead
 makes them available offline, so the `_local` variants can run too.
 """
 
+load(
+    "//bazel:mainnet-artifact-refs.bzl",
+    "check",
+    "checked_artifact_name",
+    "checked_commit_id",
+    "checked_url",
+    "icos_record_error",
+)
+
+_CDN_PREFIX = "https://download.dfinity.systems/ic/"
+
 def binary_download_url(git_commit_id, name):
     """URL of the gzipped release binary `name` published for `git_commit_id`.
 
@@ -18,6 +29,10 @@ def binary_download_url(git_commit_id, name):
     the directory whose SHA256SUMS ci/src/mainnet_revisions/mainnet_revisions.py
     reads to record the hashes verified below -- the two must agree.
 
+    Both components come from the auto-merged mainnet-icos-revisions.json and are
+    validated here, so that no caller can assemble a URL that leaves the pinned CDN
+    prefix (see //bazel:mainnet-artifact-refs.bzl).
+
     Args:
       git_commit_id: the revision the binary was published for.
       name: the name of the binary, e.g. "ic-replay".
@@ -25,10 +40,10 @@ def binary_download_url(git_commit_id, name):
     Returns:
       The download URL.
     """
-    return "https://download.dfinity.systems/ic/{git_commit_id}/binaries/x86_64-linux/{name}.gz".format(
-        git_commit_id = git_commit_id,
-        name = name,
-    )
+    return checked_url("https://download.dfinity.systems/ic/{git_commit_id}/binaries/x86_64-linux/{name}.gz".format(
+        git_commit_id = checked_commit_id(git_commit_id, "the mainnet ICOS version"),
+        name = checked_artifact_name(name, "a mainnet ICOS binary name"),
+    ), _CDN_PREFIX)
 
 # One genrule per binary, decompressing the downloaded artifact and making it
 # executable.
@@ -42,6 +57,9 @@ def binary_download_url(git_commit_id, name):
 #
 # `gunzip -c > $@` creates a non-executable file and genrules don't mark their
 # outputs executable, hence the explicit `chmod +x`.
+#
+# `{name}` is interpolated verbatim into this Starlark, so it must have been
+# validated (see the icos_record_error() call below) before it gets here.
 _GUNZIP_GENRULE = """
 genrule(
     name = "gunzip_{name}",
@@ -78,6 +96,11 @@ def _mainnet_icos_binaries_impl(repository_ctx):
             parts = "/".join(parts),
             path = json_path,
         ))
+
+    # The JSON is not reviewed by a human before it is merged, so validate it before
+    # any of it is used: the binary names end up in download URLs, in the names of
+    # the downloaded files and -- verbatim -- in the BUILD file generated below.
+    check(icos_record_error(info), "%s: %s" % (json_path, "/".join(parts)))
 
     git_commit_id = info["version"]
     binaries = info["binaries"]

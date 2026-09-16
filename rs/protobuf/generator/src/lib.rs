@@ -258,6 +258,10 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
+        ".registry.standard_engine_replica_version",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
         ".registry.node.v1.ConnectionEndpoint",
         "#[derive(PartialOrd, Ord)]",
     );

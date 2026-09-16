@@ -821,6 +821,7 @@ async fn set_subnet_halted(
         start_as_nns: None,
         subnet_type: None,
         halt_at_cup_height: None,
+        cooling_down: None,
         features: None,
         resource_limits: None,
         chain_key_config: None,

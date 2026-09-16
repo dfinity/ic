@@ -4,27 +4,31 @@ use crate::flow::{
     ProcessWithdrawal, encode_principal,
 };
 use crate::mock::{
-    JsonRpcMethod, JsonRpcRequestMatcher, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
+    JsonRpcMethod, JsonRpcRequestMatcher, MatchRequestParams, MockJsonRpcProviders,
+    MockJsonRpcProvidersBuilder,
 };
 use crate::response::{balance_scan_response, block_response, empty_logs, fee_history};
 use crate::{
     CkEthSetup, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, ERC20_HELPER_CONTRACT_ADDRESS,
-    ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, LedgerBalance, MAX_TICKS,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC, assert_reply,
+    ETH_HELPER_CONTRACT_ADDRESS, JsonRpcProvider, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
+    LedgerBalance, MAX_TICKS, RECEIVED_ERC20_EVENT_TOPIC,
+    RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC, assert_reply,
     format_ethereum_address_to_eip_55,
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use evm_rpc_types::Hex32;
 use ic_base_types::PrincipalId;
+use ic_cketh_minter::balance_scan::batcher::{BATCHER_INITCODE, ETH_BATCHER_INITCODE};
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{
-    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode, MinterInfo,
+    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositEthArg,
+    DepositEthError, DepositEthResponse, DepositMode, MinterInfo,
 };
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
 use ic_cketh_minter::{
@@ -33,6 +37,7 @@ use ic_cketh_minter::{
 use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
+pub use ic_ledger_suite_orchestrator::candid::{Erc20Contract, LedgerInitArg};
 use ic_ledger_suite_orchestrator_test_utils::pocket_ic::LedgerSuiteOrchestrator;
 use ic_ledger_suite_orchestrator_test_utils::supported_erc20_tokens;
 use icrc_ledger_types::icrc1::account::Account;
@@ -40,7 +45,7 @@ use num_traits::ToPrimitive;
 use pocket_ic::common::rest::RawMessageId;
 use pocket_ic::{ErrorCode, PocketIc};
 use serde_json::json;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::convert::identity;
 use std::iter::{once, zip};
 use std::str::FromStr;
@@ -72,13 +77,34 @@ impl AsRef<CkEthSetup> for CkErc20Setup {
     }
 }
 
+/// Mainnet ckWBTC. Its `MIN_DEPOSITS` entry (0.00015 WBTC) differs from the stablecoins', so
+/// registering it gives a test a supported token whose minimum deposit amount is distinguishable
+/// from ckUSDC's and ckUSDT's.
+pub const CKWBTC_CONTRACT_ADDRESS: &str = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599";
+
+pub fn ckwbtc() -> Erc20Token {
+    Erc20Token {
+        contract: Erc20Contract {
+            chain_id: Nat::from(1_u8),
+            address: CKWBTC_CONTRACT_ADDRESS.to_string(),
+        },
+        ledger_init_arg: LedgerInitArg {
+            transfer_fee: 2_000_000_u32.into(),
+            decimals: 8,
+            token_name: "Chain-Key Wrapped Bitcoin".to_string(),
+            token_symbol: "ckWBTC".to_string(),
+            token_logo: "".to_string(),
+        },
+    }
+}
+
 impl CkErc20Setup {
     pub fn new() -> Self {
         Self::with_cketh(CkEthSetup::default())
     }
 
     /// Activates the ckERC20 feature on an existing ckETH fixture: the balance-scan harness in
-    /// [`crate::live_scan`] supplies one backed by a live anvil node rather than the mocked default.
+    /// [`crate::live`] supplies one backed by a live anvil node rather than the mocked default.
     pub(crate) fn with_cketh(cketh: CkEthSetup) -> Self {
         let mut ckerc20 = Self::without_ckerc20_active(cketh);
         ckerc20.cketh = ckerc20
@@ -116,34 +142,46 @@ impl CkErc20Setup {
     }
 
     pub fn add_supported_erc20_tokens(mut self) -> Self {
-        self.supported_erc20_tokens = supported_erc20_tokens();
-        for token in self.supported_erc20_tokens.iter() {
-            self.orchestrator = self
-                .orchestrator
-                .add_erc20_token(token.clone())
-                .expect_new_ledger_and_index_canisters()
-                .setup;
-            let new_ledger_id = self
-                .orchestrator
-                .call_orchestrator_canister_ids(&token.contract)
-                .unwrap()
-                .ledger
-                .unwrap();
-
-            self.cketh =
-                self.cketh
-                    .assert_has_unique_events_in_order(&[EventPayload::AddedCkErc20Token {
-                        chain_id: token.contract.chain_id.clone(),
-                        address: format_ethereum_address_to_eip_55(&token.contract.address),
-                        ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
-                        ckerc20_ledger_id: new_ledger_id,
-                    }]);
+        for token in supported_erc20_tokens() {
+            self = self.add_supported_erc20_token(token);
         }
+        self
+    }
+
+    /// Registers one more ckERC20 token with the orchestrator and the minter, on top of whatever
+    /// [`Self::add_supported_erc20_tokens`] already added.
+    pub fn add_supported_erc20_token(mut self, token: Erc20Token) -> Self {
+        self.orchestrator = self
+            .orchestrator
+            .add_erc20_token(token.clone())
+            .expect_new_ledger_and_index_canisters()
+            .setup;
+        let new_ledger_id = self
+            .orchestrator
+            .call_orchestrator_canister_ids(&token.contract)
+            .unwrap()
+            .ledger
+            .unwrap();
+
+        self.cketh =
+            self.cketh
+                .assert_has_unique_events_in_order(&[EventPayload::AddedCkErc20Token {
+                    chain_id: token.contract.chain_id.clone(),
+                    address: format_ethereum_address_to_eip_55(&token.contract.address),
+                    ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
+                    ckerc20_ledger_id: new_ledger_id,
+                }]);
+        self.supported_erc20_tokens.push(token);
         self
     }
 
     pub fn add_support_for_subaccount(mut self) -> Self {
         self.cketh = self.cketh.add_support_for_subaccount();
+        self
+    }
+
+    pub fn add_support_for_subaccount_helper(mut self, helper: Address) -> Self {
+        self.cketh = self.cketh.add_support_for_subaccount_helper(helper);
         self
     }
 
@@ -163,19 +201,61 @@ impl CkErc20Setup {
         }
     }
 
-    /// Advance the balance-scan timer and answer the resulting deployless-batcher `eth_call` with
-    /// `balances` — one entry per scanned `(deposit address, supported token)` pair, in scan order
-    /// (i.e. `live-due addresses × supported tokens`). Settles the reply so the per-address scan
-    /// schedule is advanced before returning.
-    pub fn run_balance_scan(&self, balances: &[u128]) {
+    /// Advance the balance-scan timer and answer the tick's single batch — the pending
+    /// `eth_call`'s calldata says which batcher program it runs — with each scanned address'
+    /// balance looked up in `balances` by address (an address absent from `balances` reports 0).
+    /// Settles the reply so the per-address scan schedule is advanced before returning. For a
+    /// tick where both ERC-20 and ETH pairs are due use [`Self::run_balance_scan_with_eth`].
+    pub fn run_balance_scan(&self, balances: &[(&str, u128)]) {
         self.env.advance_time(BALANCE_SCAN_INTERVAL);
+        self.answer_balance_scan_batch(None, balances);
+    }
+
+    /// Like [`Self::run_balance_scan`], but for a tick where both ERC-20 and ETH pairs are
+    /// due: each batch is identified by the batcher program in its calldata and answered from
+    /// its own balances.
+    pub fn run_balance_scan_with_eth(
+        &self,
+        erc20_balances: &[(&str, u128)],
+        eth_balances: &[(&str, u128)],
+    ) {
+        self.answer_erc20_balance_scan(erc20_balances);
+        self.answer_eth_balance_scan(eth_balances);
+    }
+
+    /// Advance the balance-scan timer and answer only the ERC-20 batch of a mixed tick,
+    /// leaving the scanner suspended on its ETH batch until
+    /// [`Self::answer_eth_balance_scan`] runs.
+    pub fn answer_erc20_balance_scan(&self, balances: &[(&str, u128)]) {
+        self.env.advance_time(BALANCE_SCAN_INTERVAL);
+        self.answer_balance_scan_batch(Some(ScanBatchKind::Erc20), balances);
+    }
+
+    /// Answer the ETH batch a mixed tick is suspended on and settle the reply.
+    pub fn answer_eth_balance_scan(&self, balances: &[(&str, u128)]) {
+        self.answer_balance_scan_batch(Some(ScanBatchKind::Eth), balances);
+    }
+
+    fn answer_balance_scan_batch(&self, kind: Option<ScanBatchKind>, balances: &[(&str, u128)]) {
+        let request =
+            JsonRpcRequestMatcher::new(JsonRpcProvider::Provider1, JsonRpcMethod::EthCall)
+                .with_request_params(
+                    kind.map(|kind| EthCallInputStartsWith::batcher(kind).into_filter()),
+                )
+                .find_rpc_call(&self.env)
+                .expect("BUG: no balance-scan eth_call pending");
+        let (kind, holders) = parse_scan_batch(&eth_call_input_bytes(&request));
+        let response: Vec<u128> = holders
+            .iter()
+            .map(|holder| scanned_balance(balances, holder))
+            .collect();
         MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
-            .respond_for_all_with(balance_scan_response(balances))
+            .with_request_params_filter(EthCallInputStartsWith::batcher(kind))
+            .respond_for_all_with(balance_scan_response(&response))
             .build()
             .expect_rpc_calls(self);
-        for _ in 0..MAX_TICKS {
-            self.env.tick();
-        }
+        self.env.tick();
+        self.env.tick();
     }
 
     pub fn check_events(self) -> MinterEventAssert<Self> {
@@ -377,6 +457,29 @@ impl CkErc20Setup {
         }
     }
 
+    pub fn call_minter_deposit_eth(
+        self,
+        from: Principal,
+        subaccount: Option<[u8; 32]>,
+    ) -> DepositEthFlow {
+        let arg = DepositEthArg {
+            mode: DepositMode::Unsponsored { subaccount },
+        };
+        let message_id = self
+            .env
+            .submit_call(
+                self.cketh.minter_id,
+                from,
+                "deposit_eth",
+                Encode!(&arg).expect("failed to encode deposit_eth args"),
+            )
+            .expect("failed to submit deposit_eth call");
+        DepositEthFlow {
+            setup: self,
+            message_id,
+        }
+    }
+
     pub fn call_minter_deposit_erc20(
         self,
         from: Principal,
@@ -513,7 +616,7 @@ impl DepositCkErc20 {
         }
     }
 
-    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+    pub fn to_log_entry(&self) -> alloy_rpc_types_eth::Log {
         match self {
             Self::CkErc20(params) => params.to_log_entry(),
             Self::CkErc20WithSubaccount(params) => params.to_log_entry(),
@@ -543,7 +646,7 @@ impl DepositCkErc20Params {
         }
     }
 
-    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+    pub fn to_log_entry(&self) -> alloy_rpc_types_eth::Log {
         let amount_hex = format!("0x{:0>64x}", self.ckerc20_amount);
         let topics = vec![
             RECEIVED_ERC20_EVENT_TOPIC.to_string(),
@@ -608,7 +711,7 @@ impl DepositCkErc20WithSubaccountParams {
         }
     }
 
-    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+    pub fn to_log_entry(&self) -> alloy_rpc_types_eth::Log {
         let data = {
             let amount_hex = format!("{:0>64x}", self.ckerc20_amount);
             assert_eq!(amount_hex.len(), 64);
@@ -630,7 +733,7 @@ impl DepositCkErc20WithSubaccountParams {
             ),
             format!(
                 "0x000000000000000000000000{}",
-                ethers_core::utils::hex::encode(self.from_address.as_ref())
+                hex::encode(self.from_address.as_ref())
             ),
             encode_principal(self.recipient),
         ];
@@ -667,7 +770,7 @@ fn erc20_default_deposit_transaction_data() -> DepositTransactionData {
 pub struct CkErc20DepositFlow {
     pub setup: CkErc20Setup,
     params: DepositCkErc20,
-    override_erc20_log_entry: Box<dyn Fn(ethers_core::types::Log) -> ethers_core::types::Log>,
+    override_erc20_log_entry: Box<dyn Fn(alloy_rpc_types_eth::Log) -> alloy_rpc_types_eth::Log>,
 }
 
 impl AsRef<CkEthSetup> for CkErc20DepositFlow {
@@ -686,7 +789,7 @@ impl CkErc20DepositFlow {
     }
 
     pub fn with_override_erc20_log_entry<
-        F: Fn(ethers_core::types::Log) -> ethers_core::types::Log + 'static,
+        F: Fn(alloy_rpc_types_eth::Log) -> alloy_rpc_types_eth::Log + 'static,
     >(
         mut self,
         override_mock: F,
@@ -966,12 +1069,15 @@ impl RefreshGasFeeEstimate {
     }
 
     pub fn expect_no_refresh_gas_fee_estimate(self) -> Erc20WithdrawalFlow {
-        assert_eq!(
+        let providers_with_pending_call: Vec<JsonRpcProvider> =
             JsonRpcRequestMatcher::new_for_all_providers(JsonRpcMethod::EthFeeHistory)
-                .iter()
+                .into_iter()
                 .filter(|(_provider, matcher)| matcher.find_rpc_call(&self.setup.env).is_some())
-                .collect::<BTreeMap<_, _>>(),
-            BTreeMap::new(),
+                .map(|(provider, _matcher)| provider)
+                .collect();
+        assert_eq!(
+            providers_with_pending_call,
+            Vec::new(),
             "BUG: unexpected EthFeeHistory RPC call"
         );
 
@@ -1025,6 +1131,29 @@ impl Erc20WithdrawalFlow {
     }
 }
 
+pub struct DepositEthFlow {
+    pub setup: CkErc20Setup,
+    pub message_id: RawMessageId,
+}
+
+impl DepositEthFlow {
+    pub fn expect_trap(self, error_substring: &str) -> CkErc20Setup {
+        let result = self.setup.env.await_call(self.message_id.clone());
+        assert_matches!(result, Err(e) if e.error_code == ErrorCode::CanisterCalledTrap && e.reject_message.contains(error_substring));
+        self.setup
+    }
+
+    pub fn expect_deposit_response(self) -> (CkErc20Setup, DepositEthResponse) {
+        let response = Decode!(
+            &assert_reply(self.setup.env.await_call(self.message_id.clone())),
+            Result<DepositEthResponse, DepositEthError>
+        )
+        .unwrap()
+        .expect("BUG: unexpected error from minter during deposit_eth");
+        (self.setup, response)
+    }
+}
+
 pub struct DepositErc20Flow {
     pub setup: CkErc20Setup,
     pub message_id: RawMessageId,
@@ -1062,40 +1191,113 @@ impl DepositErc20Flow {
     }
 }
 
-#[allow(deprecated)]
-pub fn erc20_transfer_data(expected_address: &Address, expected_amount: &Erc20Value) -> Vec<u8> {
-    use ethers_core::abi::{Param, ParamType, Token};
+#[derive(Clone, Copy)]
+enum ScanBatchKind {
+    Erc20,
+    Eth,
+}
 
-    let erc20_transfer = ethers_core::abi::Function {
-        name: "transfer".to_string(),
-        inputs: vec![
-            Param {
-                name: "_to".to_string(),
-                kind: ParamType::Address,
-                internal_type: None,
-            },
-            Param {
-                name: "_value".to_string(),
-                kind: ParamType::Uint(256),
-                internal_type: None,
-            },
-        ],
-        outputs: vec![Param {
-            name: "success".to_string(),
-            kind: ParamType::Bool,
-            internal_type: None,
-        }],
-        constant: None,
-        state_mutability: ethers_core::abi::StateMutability::NonPayable,
+impl ScanBatchKind {
+    fn initcode(self) -> &'static [u8] {
+        match self {
+            ScanBatchKind::Erc20 => &BATCHER_INITCODE,
+            ScanBatchKind::Eth => &ETH_BATCHER_INITCODE,
+        }
+    }
+
+    fn words_per_entry(self) -> usize {
+        match self {
+            ScanBatchKind::Erc20 => 2,
+            ScanBatchKind::Eth => 1,
+        }
+    }
+
+    fn holder_word_index(self) -> usize {
+        match self {
+            ScanBatchKind::Erc20 => 1,
+            ScanBatchKind::Eth => 0,
+        }
+    }
+}
+
+/// Matches an `eth_call` whose `input` calldata starts with the given bytes, e.g. one of the
+/// deployless balance-batcher programs.
+#[derive(Debug)]
+struct EthCallInputStartsWith(String);
+
+impl EthCallInputStartsWith {
+    fn batcher(kind: ScanBatchKind) -> Self {
+        Self(format!("0x{}", hex::encode(kind.initcode())))
+    }
+
+    fn into_filter(self) -> Arc<dyn MatchRequestParams> {
+        Arc::new(self)
+    }
+}
+
+impl MatchRequestParams for EthCallInputStartsWith {
+    fn matches(&self, params: &serde_json::Value) -> bool {
+        eth_call_input(params)
+            .map(|input| input.to_lowercase().starts_with(&self.0))
+            .unwrap_or(false)
+    }
+}
+
+fn eth_call_input(params: &serde_json::Value) -> Option<&str> {
+    params.get(0)?.get("input")?.as_str()
+}
+
+fn eth_call_input_bytes(request: &pocket_ic::common::rest::CanisterHttpRequest) -> Vec<u8> {
+    let body: serde_json::Value =
+        serde_json::from_slice(&request.body).expect("BUG: request body is not JSON");
+    let input = eth_call_input(&body["params"]).expect("BUG: eth_call request without input");
+    hex::decode(input.trim_start_matches("0x")).expect("BUG: input is not hex")
+}
+
+fn parse_scan_batch(input: &[u8]) -> (ScanBatchKind, Vec<String>) {
+    let kind = if input.starts_with(&BATCHER_INITCODE) {
+        ScanBatchKind::Erc20
+    } else if input.starts_with(&ETH_BATCHER_INITCODE) {
+        ScanBatchKind::Eth
+    } else {
+        panic!("BUG: eth_call input is not a balance-scan batch");
     };
+    let args = &input[kind.initcode().len()..];
+    let n = u64::from_be_bytes(args[24..32].try_into().unwrap()) as usize;
+    let holders = (0..n)
+        .map(|i| {
+            let word = 32 * (1 + i * kind.words_per_entry() + kind.holder_word_index());
+            format_ethereum_address_to_eip_55(&format!(
+                "0x{}",
+                hex::encode(&args[word + 12..word + 32])
+            ))
+        })
+        .collect();
+    (kind, holders)
+}
+
+fn scanned_balance(balances: &[(&str, u128)], holder: &str) -> u128 {
+    balances
+        .iter()
+        .find(|(address, _)| address.eq_ignore_ascii_case(holder))
+        .map(|(_, balance)| *balance)
+        .unwrap_or(0)
+}
+
+pub fn erc20_transfer_data(expected_address: &Address, expected_amount: &Erc20Value) -> Vec<u8> {
+    use alloy_sol_types::{SolCall, sol};
+
+    sol! {
+        function transfer(address to, uint256 value) external returns (bool success);
+    }
+
     assert_eq!(
-        erc20_transfer.short_signature().to_vec(),
+        transferCall::SELECTOR.to_vec(),
         hex::decode("a9059cbb").unwrap()
     );
-    erc20_transfer
-        .encode_input(&[
-            Token::Address(expected_address.to_string().parse().unwrap()),
-            Token::Uint(expected_amount.to_be_bytes().into()),
-        ])
-        .expect("failed to encode transfer data")
+    transferCall {
+        to: alloy_primitives::Address::from(expected_address.into_bytes()),
+        value: alloy_primitives::U256::from_be_bytes(expected_amount.to_be_bytes()),
+    }
+    .abi_encode()
 }

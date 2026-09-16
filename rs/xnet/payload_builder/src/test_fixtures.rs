@@ -45,7 +45,7 @@ pub(crate) const SRC_CANISTER: u64 = 2;
 pub(crate) const DST_CANISTER: u64 = 3;
 pub(crate) const CALLBACK_ID: u64 = 4;
 
-pub(crate) const PAYLOAD_BYTES_LIMIT: NumBytes = NumBytes::new(POOL_SLICE_BYTE_SIZE_MAX as u64);
+pub(crate) const PAYLOAD_BYTES_LIMIT: NumBytes = NumBytes::new(4 << 20);
 
 pub(crate) const LOCAL_NODE_1_OPERATOR_1: NodeId = NODE_1;
 pub(crate) const REMOTE_NODE_1_OPERATOR_1: NodeId = NODE_2;
@@ -162,11 +162,15 @@ pub(crate) fn get_xnet_state_for_testing_with_subnet_type(
     (
         vec![payload_3, payload_2, payload_1],
         btreemap![
-            SUBNET_1 => ExpectedIndices {message_index:StreamIndex::new(21), signal_index:StreamIndex::new(16)},
-            SUBNET_2 => ExpectedIndices {message_index:StreamIndex::new(7), signal_index:StreamIndex::new(3)},
-            SUBNET_3 => ExpectedIndices {message_index:StreamIndex::new(2), signal_index:StreamIndex::new(0)},
-            SUBNET_4 => ExpectedIndices {message_index:StreamIndex::new(1), signal_index:StreamIndex::new(0)},
-            SUBNET_5 => ExpectedIndices {message_index:StreamIndex::new(0), signal_index:StreamIndex::new(0)},
+            // None of these streams hold reject signals, so nothing constrains
+            // `max_no_gc_header_begin`.
+            // See `expected_indices_for_stream_reject_signal_gc()` for the cases where
+            // reject signals actually constrain it.
+            SUBNET_1 => ExpectedIndices { message_index: 21.into(), signal_index: 16.into(), ..Default::default()},
+            SUBNET_2 => ExpectedIndices { message_index: 7.into(), signal_index: 3.into(), ..Default::default()},
+            SUBNET_3 => ExpectedIndices { message_index: 2.into(), signal_index: 0.into(), ..Default::default()},
+            SUBNET_4 => ExpectedIndices { message_index: 1.into(), signal_index: 0.into(), ..Default::default()},
+            SUBNET_5 => ExpectedIndices { message_index: 0.into(), signal_index: 0.into(), ..Default::default()},
         ],
     )
 }
@@ -202,6 +206,16 @@ pub(crate) fn make_certified_stream_slice(
     from: SubnetId,
     config: StreamConfig,
 ) -> CertifiedStreamSlice {
+    make_certified_stream_slice_with_msg_limit(from, config, None)
+}
+
+/// As `make_certified_stream_slice()`, but including at most `msg_limit`
+/// messages, e.g. `Some(0)` for a header-only slice of a non-empty stream.
+pub(crate) fn make_certified_stream_slice_with_msg_limit(
+    from: SubnetId,
+    config: StreamConfig,
+    msg_limit: Option<usize>,
+) -> CertifiedStreamSlice {
     let state_manager = FakeStateManager::new();
     let (mut height, mut state) = state_manager.take_tip();
     while height < CERTIFIED_HEIGHT.decrement() {
@@ -216,7 +230,7 @@ pub(crate) fn make_certified_stream_slice(
             from,
             Some(StreamIndex::new(config.message_begin)),
             Some(StreamIndex::new(config.message_begin)),
-            Some((config.message_end - config.message_begin) as usize),
+            msg_limit.or(Some((config.message_end - config.message_begin) as usize)),
             None,
         )
         .unwrap()
@@ -339,7 +353,7 @@ pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
             LOCAL_SUBNET,
             expected_index,
             expected_index,
-            (POOL_SLICE_BYTE_SIZE_MAX - 350) * 98 / 100
+            adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX)
         ));
     }
 

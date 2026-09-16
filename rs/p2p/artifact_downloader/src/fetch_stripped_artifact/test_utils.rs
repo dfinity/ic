@@ -1,8 +1,3 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
-
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
 use ic_protobuf::types::v1 as pb;
 use ic_test_utilities_consensus::{
@@ -36,7 +31,11 @@ use ic_types::{
     signature::BasicSignatureBatch,
     time::UNIX_EPOCH,
 };
-use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_0, node_test_id};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_0, node_test_id, test_replica_version};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use crate::fetch_stripped_artifact::types::{
     StrippedMessage, StrippedMessageId, stripped::StrippedIDkgDealings,
@@ -150,6 +149,7 @@ pub(crate) fn fake_block_proposal_with_ingresses_and_idkg(
         parent.as_ref().height.increment(),
         Rank(0),
         parent.as_ref().context.clone(),
+        test_replica_version(),
     );
     BlockProposal::fake(block, node_test_id(0))
 }

@@ -304,7 +304,7 @@ impl std::fmt::Display for TopologySnapshot {
                 "\tNode id={}, ipv6={:<width$}, domain_name={}, index={}",
                 n.node_id,
                 n.get_ip_addr(),
-                n.get_domain().map_or("n/a".to_string(), |domain| domain),
+                n.get_domain().unwrap_or_else(|| "n/a".to_string()),
                 idx,
                 width = max_length_ipv6,
             )
@@ -1436,16 +1436,6 @@ pub fn get_mainnet_application_subnet_revision() -> Result<ReplicaVersion> {
     )?;
 
     Ok(replica_version)
-}
-
-pub fn get_empty_disk_img_url() -> Result<Url> {
-    let url = Url::parse(&std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?)?;
-
-    Ok(url)
-}
-
-pub fn get_empty_disk_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
 pub fn get_build_setupos_config_image_tool() -> PathBuf {

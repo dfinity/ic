@@ -51,6 +51,7 @@ x509-cert = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 pretty_assertions = { workspace = true }
 
 [lib]

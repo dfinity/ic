@@ -13,11 +13,21 @@ on:
         default: ''
         type: string
 
-permissions:
-  actions: write # needed for uploading artifacts to github
-  contents: read
-  id-token: write
-  pull-requests: read
+# This reusable workflow declares no `permissions:` of its own: its jobs run with
+# exactly the GITHUB_TOKEN permissions the calling job grants. Callers that run
+# release builds (ci-kickoff.yml, release-testing.yml) grant on their `ci-main` job:
+#   actions: write        # Actions artifacts (bazel-targets, BEP, execlogs)
+#   attestations: write   # Attest steps of bazel-test-all / upload-external-artifacts
+#   contents: read
+#   id-token: write       # AWS OIDC role assumption and Sigstore signing
+#   pull-requests: read
+# ci-kickoff-manual.yml (CI for pull requests from forks) grants the same set WITHOUT
+# `attestations: write`: it never runs a release build. A permission declared here
+# would be validated against every caller's grant at parse time regardless of `if:`
+# (https://github.com/orgs/community/discussions/155062) and so would force that
+# grant onto fork-PR runs. Not declaring it keeps fork-PR builds unable to store
+# attestations; the price is that a caller missing a grant fails at runtime (HTTP
+# 403 in the Attest step) rather than at parse time.
 
 env:
   CI_COMMIT_SHA: ${{ inputs.commit-sha }}
@@ -33,7 +43,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:631b89b4b353889b5ab845fe0305cfed185091efe16bf6c79029cf083db4e42c
+      image: ghcr.io/dfinity/ic-build@sha256:0b6a915e614105c632a0c7a0f6e530ed506decfbd0316b297b28e9c555c532a2
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -81,11 +91,23 @@ jobs:
       diff-only: ${{ steps.config.outputs.diff-only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
       skip_buf_checks: ${{ steps.config.outputs.skip_buf_checks }}
+      skip_system_tests: ${{ steps.config.outputs.skip_system_tests }}
     steps:
       - name: Infer build config
         id: config
         run: |
           set -euo pipefail
+
+          # PR labels. Both expand to 'false' on merge_group, push and workflow_dispatch.
+          all_bazel_targets='${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}'
+          skip_system_tests='${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_SKIP_SYSTEM_TESTS') }}'
+
+          if [[ "$all_bazel_targets" == 'true' && "$skip_system_tests" == 'true' ]]; then
+              msg="The PR labels CI_ALL_BAZEL_TARGETS and CI_SKIP_SYSTEM_TESTS are mutually exclusive. Remove one of them and retrigger CI (see .github/CI_README.md)."
+              echo "::error title=Conflicting CI labels::$msg"
+              echo "**Error:** $msg" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+          fi
 
           # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
           # the full build to occur (including versioning)
@@ -109,7 +131,7 @@ jobs:
               release_build="false"
               diff_only="false"
               skip_long_tests="true"
-          elif [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}' == 'true' ]]; then
+          elif [[ "$all_bazel_targets" == 'true' ]]; then
               # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
               # branch
               release_build="false"
@@ -168,6 +190,10 @@ jobs:
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
           echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
+          echo "skip_system_tests: $skip_system_tests"
+          echo "skip_system_tests=$skip_system_tests" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_system_tests\` | \`$skip_system_tests\` |" >> "$GITHUB_STEP_SUMMARY"
+
   infer-bazel-targets:
     name: Infer Bazel Targets
     runs-on: ubuntu-latest
@@ -187,6 +213,9 @@ jobs:
             fi
             if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
               targets_args+=("--exclude_tags=buf")
+            fi
+            if [[ '${{ needs.config.outputs.skip_system_tests }}' == 'true' ]]; then
+              targets_args+=("--exclude_tags=system_test")
             fi
             if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
               targets_args+=(
@@ -278,6 +307,7 @@ jobs:
           aws-region: eu-central-1
 
       - name: Upload artifacts
+        id: upload-artifacts
         uses: ./.github/actions/upload-artifacts
         if: needs.config.outputs.release-build == 'true'
         env:
@@ -289,6 +319,18 @@ jobs:
           # to be uploaded were not built in the build step above
           # (this ensures that the exact artifacts built above are uploaded)
           upload-command: bazel run --check_up_to_date //:upload-artifacts
+
+      - name: Attest
+        # Mint the build-provenance attestation for the files the step above
+        # uploaded, from the manifest it wrote, in this same job: no artifact
+        # hop, so nothing has to be re-verified against a job output.
+        # Attestations exist only for the public repo: a build from ic-private
+        # gets attested when its branch is pushed to dfinity/ic as a hotfix-*
+        # branch and is re-built and re-uploaded byte-identically there.
+        if: needs.config.outputs.release-build == 'true' && github.repository == 'dfinity/ic'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: ${{ steps.upload-artifacts.outputs.manifest-path }}
 
       # GitHub runners override the container's entrypoint which is ci/container/init.sh
       # so we run it explicitly here to ensure the system is set up correctly for running local system-tests.
@@ -325,6 +367,10 @@ jobs:
     timeout-minutes: 120
     needs: [config]
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
+    outputs:
+      arm64-linux-sums: ${{ steps.sums.outputs.arm64-linux-sums }}
+      arm64-darwin-sums: ${{ steps.sums.outputs.arm64-darwin-sums }}
+      x86_64-darwin-sums: ${{ steps.sums.outputs.x86_64-darwin-sums }}
     steps:
       - name: Set up Bazel cache
         run: |
@@ -366,6 +412,46 @@ jobs:
           cp \
             ./bazel-bin/publish/binaries/pocket-ic.gz \
             ./build/pocket-ic-server-x86_64-darwin.gz
+
+      - name: Record artifact checksums
+        id: sums
+        if: ${{ needs.config.outputs.release-build == 'true' }}
+        shell: bash
+        env:
+          OS: ${{ matrix.os }}
+        run: |
+          set -euo pipefail
+          cd build
+
+          # Record the sha256sum lines of every file uploaded as an Actions
+          # artifact below in this job's outputs. The
+          # upload-external-artifacts job re-checks the downloaded artifacts
+          # against them before re-uploading anything to the CDN: an Actions
+          # artifact can be replaced mid-run by anything holding an
+          # `actions: write` token, but job outputs cannot be tampered with
+          # by other jobs. Recording happens right after the builds so the
+          # whole-codebase build and test steps below stay outside this
+          # trust chain: should any of them overwrite these files, the
+          # uploaded artifact no longer matches its recorded sums and
+          # verification fails loudly.
+          shasum -a 256 \
+            "pocket-ic-server-arm64-$OS.gz" \
+            "ic-admin-arm64-$OS.gz" \
+            "sns-arm64-$OS.gz" \
+            | LC_ALL=C sort -k2 >"$RUNNER_TEMP/arm64-sums"
+          {
+            echo "arm64-$OS-sums<<SUMS"
+            cat "$RUNNER_TEMP/arm64-sums"
+            echo "SUMS"
+          } >>"$GITHUB_OUTPUT"
+
+          if [[ "$OS" == darwin ]]; then
+            {
+              echo "x86_64-darwin-sums<<SUMS"
+              shasum -a 256 pocket-ic-server-x86_64-darwin.gz
+              echo "SUMS"
+            } >>"$GITHUB_OUTPUT"
+          fi
 
       # Ensures that local development works on arm64-darwin.
       - name: Build the entire codebase on darwin
@@ -451,6 +537,32 @@ jobs:
           # avoid downloading to workspace to avoid version being marked as dirty
           path: ~/.cache/pocket-ic-server-x86_64-darwin
 
+      - name: Verify downloaded artifacts
+        shell: bash
+        env:
+          ARM64_LINUX_SUMS: ${{ needs.bazel-test-arm64.outputs.arm64-linux-sums }}
+          ARM64_DARWIN_SUMS: ${{ needs.bazel-test-arm64.outputs.arm64-darwin-sums }}
+          X86_64_DARWIN_SUMS: ${{ needs.bazel-test-arm64.outputs.x86_64-darwin-sums }}
+        run: |
+          set -euo pipefail
+
+          # Re-check every file downloaded above against the sha256sum lines
+          # the producing bazel-test-arm64 legs recorded in their job
+          # outputs, before anything is bundled and re-uploaded to the CDN:
+          # an Actions artifact can be replaced mid-run by anything holding
+          # an `actions: write` token, but job outputs cannot be tampered
+          # with by other jobs. A missing or empty output also fails here:
+          # sha256sum rejects input without valid checksum lines.
+          check() { # <download-dir> <recorded sha256sum lines>
+            echo "$2" | (cd "$1" && sha256sum --check --strict)
+            # Also reject artifacts carrying anything beyond the recorded files
+            diff <(echo "$2" | awk '{print $2}' | LC_ALL=C sort) \
+              <(cd "$1" && find . -mindepth 1 | sed 's|^\./||' | LC_ALL=C sort)
+          }
+          check ~/.cache/arm64-binaries-linux "$ARM64_LINUX_SUMS"
+          check ~/.cache/arm64-binaries-darwin "$ARM64_DARWIN_SUMS"
+          check ~/.cache/pocket-ic-server-x86_64-darwin "$X86_64_DARWIN_SUMS"
+
       - name: Prepare bundle
         id: prepare-bundle
         run: |
@@ -470,6 +582,13 @@ jobs:
           mkdir -p "$bundledir/binaries/x86_64-darwin/"
           cp ~/.cache/pocket-ic-server-x86_64-darwin/pocket-ic-server-x86_64-darwin.gz "$bundledir/binaries/x86_64-darwin/pocket-ic.gz"
 
+          # Give these hand-assembled directories the same SHA256SUMS file that the bazel-built bundles get
+          # from the artifact_bundle rule so every binaries/<platform>/ directory on the CDN carries a
+          # checksum manifest that release workflows can verify against its attestation.
+          (cd "$bundledir/binaries/arm64-linux" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
+          (cd "$bundledir/binaries/arm64-darwin" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
+          (cd "$bundledir/binaries/x86_64-darwin" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
+
           echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
@@ -480,6 +599,7 @@ jobs:
           aws-region: eu-central-1
 
       - name: Upload artifacts
+        id: upload-artifacts
         uses: ./.github/actions/upload-artifacts
         env:
           CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
@@ -487,6 +607,13 @@ jobs:
         with:
           name: arm64 artifacts
           upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
+
+      - name: Attest
+        # See the Attest step of bazel-test-all.
+        if: needs.config.outputs.release-build == 'true' && github.repository == 'dfinity/ic'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: ${{ steps.upload-artifacts.outputs.manifest-path }}
 
   python-ci-tests:
     name: Python CI Tests

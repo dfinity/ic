@@ -179,14 +179,13 @@ impl NNSDelegationBuilder {
     /// Checks whether the delegation is consistent with the given view of the subnet
     /// information recorded in a replicated state.
     ///
-    /// `routing_table` should be the state's routing table used for certification, i.e.
-    /// `network_topology.routing_table_for_certification()`. `public_key_for_subnet`
-    /// should resolve the threshold public key which the state assigns to the delegated
-    /// subnet, e.g.
+    /// `routing_table` should be the state's routing table, i.e.
+    /// `network_topology.routing_table()`. `public_key_for_subnet` should resolve
+    /// the threshold public key which the state assigns to the delegated subnet, e.g.
     /// ```ignore
     /// |subnet_id| {
     ///     network_topology
-    ///         .subnets_for_certification()
+    ///         .subnets()
     ///         .get(&subnet_id)
     ///         .map(|topology| topology.public_key.as_slice())
     /// }

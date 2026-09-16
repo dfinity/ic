@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use base64::prelude::*;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nns_governance_api::{
@@ -326,7 +327,7 @@ fn parse_image_path(
     let image_content = std::fs::read(image).map_err(|err| {
         format!("An error occurred while reading the image file ({image_path:?}): {err}",)
     })?;
-    let image_content = base64::encode(image_content);
+    let image_content = BASE64_STANDARD.encode(image_content);
     let base64_encoding = Some(format!("data:image/png;base64,{image_content}"));
     Ok(nervous_system_pb::Image { base64_encoding })
 }

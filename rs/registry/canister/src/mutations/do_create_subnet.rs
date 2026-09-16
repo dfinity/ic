@@ -574,6 +574,7 @@ impl From<CreateSubnetPayload> for SubnetRecord {
 
             is_halted: val.is_halted,
             halt_at_cup_height: false,
+            cooling_down: false,
 
             features: Some(SubnetFeatures::from(val.features).into()),
             max_number_of_canisters: val.max_number_of_canisters,
@@ -620,8 +621,7 @@ mod test {
     use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, VetKdCurve, VetKdKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
-    use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::ReplicaVersion;
+    use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
 
     // Note: this can only be unit-tested b/c it fails before we hit inter-canister calls
     // for DKG + ECDSA
@@ -632,7 +632,7 @@ mod test {
     fn should_panic_if_ecdsa_keys_non_existing() {
         let mut registry = invariant_compliant_registry(0);
         let payload = CreateSubnetPayload {
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {
@@ -697,7 +697,7 @@ mod test {
 
         // Make a request for the key from a subnet that does not have the key
         let payload = CreateSubnetPayload {
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {
@@ -761,7 +761,7 @@ mod test {
 
         // Make a request for the key from a subnet that does not have the key
         let payload = CreateSubnetPayload {
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {
@@ -833,7 +833,7 @@ mod test {
             subnet_id: Some(*TEST_USER1_PRINCIPAL),
         };
         let payload = CreateSubnetPayload {
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![key_config_request; 2],
                 signature_request_timeout_ns: None,
@@ -896,7 +896,7 @@ mod test {
         pre_signatures_to_create_in_advance: Option<u32>,
     ) -> CreateSubnetPayload {
         CreateSubnetPayload {
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {

@@ -9,17 +9,28 @@ on the process that this file is part of, see
 
 ## Added
 
-* Invariant requiring that SEV-enabled subnets may only run a GuestOS version that has
-  `guest_launch_measurements`.
+* A subnet-split request will now fail if a concurrent call modified the `StandardEngineReplicaVersionRecord`
+  while the fresh key material was being generated for the splitting subnet.
+
+* A subnet-split request whose source subnet is a cloud engine that derives its replica version from the
+  `StandardEngineReplicaVersionRecord` will now be rejected while a deployment of a new replica version is
+  in progress. This guarantees that both subnets run the same replica version after the split.
+
+* Invariant requiring that every elected GuestOS and HostOS version ID is well-formed, i.e. that it consists
+  only of alphanumeric characters, dots, dashes and underscores.  Such IDs are what `ReplicaVersion` and
+  `HostosVersion` accept, so until now, it was possible to elect a version that consumers could not read
+  back out of the Registry.
+
+* `merge_subnets` endpoint, callable through a `MergeSubnets` proposal. It merges a subnet into
+  another subnet: in the routing table, reassigns all canister ranges hosted by the source subnet
+  to the destination subnet. Only the routing table is updated: neither subnet record is modified
+  and the source subnet is not deleted.
 
 ## Changed
 
-* `deploy_guestos_to_all_subnet_nodes` now accepts a blank `replica_version_id`
-  for Cloud Engines, provided a `StandardEngineReplicaVersionRecord` exists.
-  This is how a Cloud Engine that pins a version goes back to following the
-  standard engine version. Previously, only engine *creation* could leave
-  `replica_version_id` blank, because this endpoint required the version to be
-  elected, and a blank version never is.
+* `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
+  fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward
+  (`deployment_progress == 1.0`).
 
 ## Deprecated
 

@@ -532,6 +532,35 @@ mod verify_sigs_batch {
     }
 
     #[test]
+    fn should_resolve_a_repeated_signers_key_at_each_entrys_own_registry_version() {
+        // The same signer twice, at two different registry versions, only one of which has
+        // its key. Resolving a signer's key once per signer (rather than once per signer
+        // and registry version) would let the entry at REG_V2 satisfy the one at REG_V1,
+        // so this fails whichever order the two are batched in.
+        let crypto = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
+            .with_node_id(NODE_1)
+            .build();
+
+        let msg = SignableMock::new(b"Hello World!".to_vec());
+        let sig = crypto.sign_basic(&msg).unwrap();
+        let at = |registry_version| BasicSigBatchEntry {
+            signer: NODE_1,
+            signature: &sig,
+            message: &msg,
+            registry_version,
+        };
+
+        for inputs in [vec![at(REG_V2), at(REG_V1)], vec![at(REG_V1), at(REG_V2)]] {
+            assert_matches!(
+                crypto.verify_basic_sig_batch_multi_msg(&inputs),
+                Err(CryptoError::PublicKeyNotFound { node_id, registry_version, .. })
+                if node_id == NODE_1 && registry_version == REG_V1
+            );
+        }
+    }
+
+    #[test]
     fn should_correctly_verify_batch_with_same_message_on_different_signers() {
         let (crypto_1, crypto_2) = two_node_crypto_components();
 

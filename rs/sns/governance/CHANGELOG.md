@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-08-31: Proposal 143747
+
+http://dashboard.internetcomputer.org/proposal/143747
+
+## Added
+
+* Added support for upgrade options to `UpgradeSnsControlledCanister` proposals.
+  In particular, added `wasm_memory_persistence` and `skip_pre_upgrade`. The
+  former is of particular interest to Motoko canisters.
+
+
 # 2026-04-10: Proposal 141333
 
 http://dashboard.internetcomputer.org/proposal/141333
