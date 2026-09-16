@@ -11,7 +11,9 @@ at DFINITY's internal remote cache and remote downloader
 inside DFINITY's internal network — in practice that essentially means a
 **devenv** machine. They are **not** available on, e.g., a namespace.so devbox,
 a sandbox, or CI without those credentials, where a plain `bazel build` will fail
-or stall.
+or stall, and a plain `bazel query` or `bazel fetch` downloads each repository it
+needs from origin only after a failed attempt against the internal remote downloader
+(one `Remote Cache:` warning per fetch).
 
 If you're unsure whether the infra is reachable from where you are, probe it:
 
@@ -26,11 +28,12 @@ When it's not reachable, build with one of the two approaches below.
 ## Option 1 — `--config=local` (recommended)
 
 Keeps the full workspace configuration but empties `--remote_cache=` and
-`--experimental_remote_downloader=` (see the `build:local` lines in
-`bazel/conf/.bazelrc.internal`), so nothing contacts the internal endpoints:
+`--experimental_remote_downloader=` (see the `common:local` lines in
+`bazel/conf/.bazelrc.internal`), so no command contacts the internal endpoints:
 
 ```sh
 bazel build --config=local //my:target
+bazel query --config=local 'deps(//my:target)'
 ```
 
 Use this when you want the normal build config minus the remote cache. It is also
