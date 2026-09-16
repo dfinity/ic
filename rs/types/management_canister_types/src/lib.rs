@@ -2876,14 +2876,10 @@ impl SetupInitialDKGResponse {
 /// variant { secp256k1; secp256r1; }
 /// ```
 ///
-/// Deliberately implements no `Hash`, and must not. This type reaches
-/// `payload_hash` through `IDkgPayload`, and `derive(Hash)` omitted the
-/// discriminant while there was a single variant, so deriving it now would
-/// change the hash of every block naming an ECDSA key and a replica on the old
-/// version would reject it. Writing a marker byte by hand is no better on its
-/// own: whatever byte it picks, an enclosing struct's next field can reproduce
-/// it in its own hash input and the two key ids collide. Only the enclosing
-/// type knows what follows the curve, so hashing belongs there. See
+/// Must not implement `Hash`. `derive(Hash)` omitted the discriminant while
+/// there was one variant, so deriving now moves the `payload_hash` of every
+/// block naming an ECDSA key and old replicas reject it. A marker byte belongs
+/// in the enclosing type, which knows what follows it: see
 /// `impl Hash for EcdsaKeyId`.
 #[derive(
     Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, EnumIter, Serialize,
@@ -2963,13 +2959,11 @@ pub struct EcdsaKeyId {
     pub name: String,
 }
 
-/// Hashed by hand because `EcdsaCurve` cannot implement `Hash`; see the note
-/// there. `Secp256k1` writes nothing, which is what the derive did while the
-/// curve had a single variant, so hashes of existing keys are unchanged. The
-/// `Secp256r1` marker is `0xfe`, which never begins a UTF-8 sequence and so
-/// cannot be reproduced by `name`. The destructuring and the `&str` binding are
-/// both load-bearing: a new field, or a `name` that stops being text, has to
-/// fail to compile rather than quietly weaken that argument.
+/// `EcdsaCurve` cannot implement `Hash`; see the note there. `Secp256k1` writes
+/// nothing, matching the old derive, so existing key hashes are unchanged, and
+/// `0xfe` never begins a UTF-8 sequence so `name` cannot forge it. The
+/// destructuring and `&str` binding make a new field or a non-text `name` fail
+/// to compile rather than void that.
 impl Hash for EcdsaKeyId {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let Self { curve, name } = self;
@@ -5326,9 +5320,7 @@ mod tests {
             name: name.to_string(),
         };
 
-        // While `EcdsaCurve` had one variant the derive omitted its
-        // discriminant, so a key id hashed as nothing but its name. Every
-        // `payload_hash` naming an ECDSA key still depends on that.
+        // Every `payload_hash` naming an ECDSA key depends on this.
         assert_eq!(
             stream(&key_id(EcdsaCurve::Secp256k1, "key_1")),
             stream(&"key_1")

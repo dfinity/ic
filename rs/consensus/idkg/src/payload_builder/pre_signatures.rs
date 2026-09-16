@@ -1000,10 +1000,9 @@ pub(super) mod tests {
         );
 
         let pre_sigs_per_key = 5;
-        // A round of the priority queue costs one pre-signature per key, and an ECDSA one
-        // costs two transcripts against a Schnorr one's single transcript. The capacity is
-        // derived so that it buys whole rounds for whatever key set the fixture returns; a
-        // constant would leave a remainder and land it on one arbitrary key.
+        // ECDSA pre-signatures cost two transcripts to a Schnorr one's single
+        // transcript, so a constant capacity leaves a remainder for some key sets
+        // and the split stops being even.
         let payload_capacity = pre_sigs_per_key
             * key_ids
                 .iter()

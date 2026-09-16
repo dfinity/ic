@@ -368,10 +368,8 @@ impl ExhaustiveSet for ReplicaVersion {
 
 impl ExhaustiveSet for EcdsaCurve {
     fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
-        // Secp256r1 is withheld for the first rollout: a replica on the old
-        // version cannot decode a CUP naming it. The replica only writes it once
-        // an r1 key exists in the registry, which is a later governance step.
-        // Restore `EcdsaCurve::iter()` then.
+        // A replica on the old version cannot decode a CUP naming Secp256r1.
+        // Restore `EcdsaCurve::iter()` once an r1 key exists in the registry.
         vec![EcdsaCurve::Secp256k1]
     }
 }
