@@ -408,9 +408,18 @@ pub async fn get_ecdsa_public_key_with_retries(
             }
         }
     };
-    let pk =
-        VerifyingKey::from_sec1_bytes(&public_key[..]).expect("Bytes are not a valid public key");
-    info!(logger, "ecdsa_public_key returns {:?}", pk);
+    match key_id.curve {
+        EcdsaCurve::Secp256k1 => {
+            let pk = VerifyingKey::from_sec1_bytes(&public_key[..])
+                .expect("Bytes are not a valid public key");
+            info!(logger, "ecdsa_public_key returns {:?}", pk);
+        }
+        EcdsaCurve::Secp256r1 => {
+            let pk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&public_key[..])
+                .expect("Bytes are not a valid public key");
+            info!(logger, "ecdsa_public_key returns {:?}", pk);
+        }
+    }
     Ok(public_key)
 }
 
@@ -1247,13 +1256,13 @@ pub fn verify_ed25519_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     vk.verify(msg, &signature).is_ok()
 }
 
-pub fn verify_ecdsa_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+pub fn verify_ecdsa_secp256k1_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     let pk = VerifyingKey::from_sec1_bytes(pk).expect("Bytes are not a valid public key");
     let signature = Signature::try_from(sig).expect("Bytes are not a valid signature");
     pk.verify_prehash(msg, &signature).is_ok()
 }
 
-pub fn verify_ecdsa_p256_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+pub fn verify_ecdsa_secp256r1_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     let pk =
         p256::ecdsa::VerifyingKey::from_sec1_bytes(pk).expect("Bytes are not a valid public key");
     let signature = p256::ecdsa::Signature::try_from(sig).expect("Bytes are not a valid signature");
@@ -1277,8 +1286,8 @@ pub fn verify_vetkey(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> b
 pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: &[u8]) {
     let res = match key_id {
         MasterPublicKeyId::Ecdsa(key_id) => match key_id.curve {
-            EcdsaCurve::Secp256k1 => verify_ecdsa_signature(pk, sig, msg),
-            EcdsaCurve::Secp256r1 => verify_ecdsa_p256_signature(pk, sig, msg),
+            EcdsaCurve::Secp256k1 => verify_ecdsa_secp256k1_signature(pk, sig, msg),
+            EcdsaCurve::Secp256r1 => verify_ecdsa_secp256r1_signature(pk, sig, msg),
         },
         MasterPublicKeyId::Schnorr(key_id) => match key_id.algorithm {
             SchnorrAlgorithm::Bip340Secp256k1 => verify_bip340_signature(pk, sig, msg),
