@@ -689,7 +689,10 @@ sufficient rather than a dead end.
 (`icrc1/archive/src/main.rs:387`), so the ledger could poll and repair its ranges.
 Superseded by `Req 3`, which reports on every append — no extra round trip, nothing to
 forget — and which needs no new block-count endpoint on the ICP archive. Polling
-remains the only way to fix a ledger that has *already* diverged; see D10.
+remains the only way to fix a ledger that has *already* diverged, which is judged not
+to apply — not because the divergence is impossible, since both exposure windows are
+open, but because none has been observed and DEFI-2967 could not induce the trap even
+deliberately. See D10 for what repairing one would take.
 
 **Advancing on a refusal.** Treat a refusal as "already archived" and advance by the
 batch just attempted, making a trapped round resumable with no interface change. Its

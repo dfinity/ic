@@ -22,9 +22,10 @@ readable without it.*
 ## Introduction
 
 **Archiving is switched off today.** On the ckBTC and ckDOGE ledgers
-`trigger_threshold` is set beyond any reachable block count, as a mitigation after
-an archiving failure corrupted nothing only by luck, and blocks are accumulating in
-the ledgers instead. This document is the contract archiving must satisfy before it
+`trigger_threshold` is set beyond any reachable block count, so blocks accumulate in
+the ledgers instead. That was the mitigation after 2026-09-01, when an archive was
+refused a memory growth and archiving stopped until the cause cleared on its own.
+This document is the contract archiving must satisfy before it
 is switched back on. Four things carry most of it: an archive must be able to tell
 where an incoming batch belongs and refuse one that does not fit; it must report its
 own extent, so a ledger never has to infer it; a ledger must not stop serving a block
@@ -49,6 +50,16 @@ by the length of the duplicate, and because an archive maps a global block index
 to its own storage by a fixed offset chosen when it was created, the shift is
 permanent and silent. `icrc3_get_blocks` returns a block that is internally valid
 and belongs at a different index.
+
+**This has not happened.** No divergence has been observed on any of our suites, and
+DEFI-2967 could not induce the trap that causes it even deliberately. Nor was
+2026-09-01 a near miss: a refused memory growth ends the *archive's* execution, which
+reaches the ledger as a rejected call and takes the path it already handles — the
+corrupting sequence instead needs the *ledger* to fail after the archive committed,
+which is a different failure and did not occur. So this work is preventive. What
+justifies it is not a close call but the combination of a reachable mechanism, a
+result the ledger cannot detect in its own state, and a consequence that cannot be
+undone once an archive has stored a block at the wrong index.
 
 Two clients read those blocks and are harmed differently. Rosetta verifies that
 returned indices match the ones it requested and that each block's parent hash
