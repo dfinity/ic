@@ -2145,6 +2145,9 @@ pub struct CyclesConsumed {
     /// Cycles consumed for canister creation.
     pub canister_creation: Nat,
     /// Cycles consumed for HTTP outcalls.
+    ///
+    /// Unlike the other fields, which cover the canister's full history, this only
+    /// covers the outcalls the canister made since May 2026.
     pub http_outcalls: Nat,
     /// Cycles burned (i.e. not returned to the canister).
     pub burned_cycles: Nat,
