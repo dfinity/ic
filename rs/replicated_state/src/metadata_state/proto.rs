@@ -288,6 +288,7 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
             num_canisters: Some(item.num_canisters),
             canister_state_bytes: Some(item.canister_state_bytes.get()),
             update_transactions_total: Some(item.update_transactions_total),
+            round_instructions_total: Some(item.round_instructions_total),
         }
     }
 }
@@ -366,6 +367,9 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 item.update_transactions_total,
                 "SubnetMetrics::update_transactions_total",
             )?,
+            // Absent from every checkpoint written before this field existed, so it
+            // must default rather than fail like its neighbours above.
+            round_instructions_total: item.round_instructions_total.unwrap_or_default(),
         })
     }
 }

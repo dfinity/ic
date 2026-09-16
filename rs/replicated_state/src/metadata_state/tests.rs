@@ -3048,6 +3048,29 @@ fn migrate_outcalls_scalar_fields_without_any_observation() {
     assert_eq!(subnet_metrics.get_consumed_cycles_by_use_case(), &before);
 }
 
+#[test]
+fn subnet_metrics_round_instructions_total_decodes_as_zero_when_absent() {
+    let populated = SubnetMetrics {
+        round_instructions_total: 42,
+        ..Default::default()
+    };
+    let proto = pb_metadata::SubnetMetrics::from(&populated);
+    assert_eq!(proto.round_instructions_total, Some(42));
+
+    // Checkpoints written before the field existed carry no field 13, and must
+    // still load.
+    let without_field = pb_metadata::SubnetMetrics {
+        round_instructions_total: None,
+        ..proto
+    };
+    assert_eq!(
+        SubnetMetrics::try_from(without_field)
+            .unwrap()
+            .round_instructions_total,
+        0
+    );
+}
+
 impl From<(u64, u64)> for BlockmakerStats {
     fn from(item: (u64, u64)) -> Self {
         Self {

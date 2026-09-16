@@ -327,6 +327,7 @@ message SubnetMetrics {
   optional uint64 update_transactions_total = 10;
   repeated ThresholdSignatureAgreementsEntry threshold_signature_agreements = 11;
   repeated canister_state_bits.v1.ConsumedCyclesByUseCase consumed_cycles_by_use_case_monotonic = 12;
+  optional uint64 round_instructions_total = 13;
 }
 
 message BitcoinGetSuccessorsFollowUpResponses {

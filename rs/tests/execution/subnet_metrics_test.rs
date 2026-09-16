@@ -119,6 +119,11 @@ pub fn subnet_metrics_another_subnet_succeeds(env: TestEnv) {
             // negative.
             assert!(after.block_height > before.block_height);
             assert!(after.update_transactions_total > before.update_transactions_total);
+            // Creating and installing a canister charges tens of millions of
+            // instructions, well past the one-million reporting quantum.
+            assert!(
+                after.million_round_instructions_total > before.million_round_instructions_total
+            );
 
             // `canister_state_bytes` is refreshed only on rounds whose batch number
             // is a multiple of 10 (`rs/messaging/src/message_routing.rs`), so it

@@ -444,6 +444,12 @@ pub struct SubnetMetrics {
     /// Transactions here refer to all messages processed in replicated mode.
     pub update_transactions_total: u64,
 
+    /// The total number of instructions this subnet accounted for across the
+    /// execution phases of all rounds. Covers both executed Wasm and the fixed
+    /// per-execution and per-canister scheduler overheads plus non-Wasm charges
+    /// (compilation, chunk assembly, snapshots), so it is not a Wasm meter.
+    pub round_instructions_total: u64,
+
     /// Backing store of [`Self::consumed_cycles_total_including_canisters()`]; zero
     /// until [`Self::refresh_consumed_cycles`] derives it.
     #[validate_eq(Ignore)]
@@ -1297,8 +1303,8 @@ impl SystemMetadata {
             subnet_call_context_manager = Default::default();
 
             // The canister count and state size will both be updated just before
-            // `commit_and_certify()` is called. All counters (cycles burned and update
-            // transactions) should start at zero.
+            // `commit_and_certify()` is called. All counters (cycles burned, update
+            // transactions and round instructions) should start at zero.
             subnet_metrics = Default::default();
         }
 
