@@ -492,7 +492,7 @@ impl StreamHandlerImpl {
     /// message of (an earlier state of) the remote stream).
     ///
     /// For received `CertifiedStreamSlice` _s_:
-    ///  * remove all outgoing signals at i <=_s.begin()_
+    ///  * remove all outgoing signals at i < _s.begin()_
     ///
     /// Panics if the outgoing `Signals` do not left overlap or touch the
     /// `[stream_slice.header.begin, stream_slice.messages.end)` range; or

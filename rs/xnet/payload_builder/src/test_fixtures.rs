@@ -162,14 +162,15 @@ pub(crate) fn get_xnet_state_for_testing_with_subnet_type(
     (
         vec![payload_3, payload_2, payload_1],
         btreemap![
-            // None of these streams hold reject signals, so `min_useful_header_begin` is `None`.
+            // None of these streams hold reject signals, so nothing constrains
+            // `max_no_gc_header_begin`.
             // See `expected_indices_for_stream_reject_signal_gc()` for the cases where
             // reject signals actually constrain it.
-            SUBNET_1 => ExpectedIndices { message_index: 21.into(), signal_index: 16.into(), min_useful_header_begin: None},
-            SUBNET_2 => ExpectedIndices { message_index: 7.into(), signal_index: 3.into(), min_useful_header_begin: None},
-            SUBNET_3 => ExpectedIndices { message_index: 2.into(), signal_index: 0.into(), min_useful_header_begin: None},
-            SUBNET_4 => ExpectedIndices { message_index: 1.into(), signal_index: 0.into(), min_useful_header_begin: None},
-            SUBNET_5 => ExpectedIndices { message_index: 0.into(), signal_index: 0.into(), min_useful_header_begin: None},
+            SUBNET_1 => ExpectedIndices { message_index: 21.into(), signal_index: 16.into(), ..Default::default()},
+            SUBNET_2 => ExpectedIndices { message_index: 7.into(), signal_index: 3.into(), ..Default::default()},
+            SUBNET_3 => ExpectedIndices { message_index: 2.into(), signal_index: 0.into(), ..Default::default()},
+            SUBNET_4 => ExpectedIndices { message_index: 1.into(), signal_index: 0.into(), ..Default::default()},
+            SUBNET_5 => ExpectedIndices { message_index: 0.into(), signal_index: 0.into(), ..Default::default()},
         ],
     )
 }
@@ -205,6 +206,16 @@ pub(crate) fn make_certified_stream_slice(
     from: SubnetId,
     config: StreamConfig,
 ) -> CertifiedStreamSlice {
+    make_certified_stream_slice_with_msg_limit(from, config, None)
+}
+
+/// As `make_certified_stream_slice()`, but including at most `msg_limit`
+/// messages, e.g. `Some(0)` for a header-only slice of a non-empty stream.
+pub(crate) fn make_certified_stream_slice_with_msg_limit(
+    from: SubnetId,
+    config: StreamConfig,
+    msg_limit: Option<usize>,
+) -> CertifiedStreamSlice {
     let state_manager = FakeStateManager::new();
     let (mut height, mut state) = state_manager.take_tip();
     while height < CERTIFIED_HEIGHT.decrement() {
@@ -219,7 +230,7 @@ pub(crate) fn make_certified_stream_slice(
             from,
             Some(StreamIndex::new(config.message_begin)),
             Some(StreamIndex::new(config.message_begin)),
-            Some((config.message_end - config.message_begin) as usize),
+            msg_limit.or(Some((config.message_end - config.message_begin) as usize)),
             None,
         )
         .unwrap()
