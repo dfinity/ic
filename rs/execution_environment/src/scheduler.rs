@@ -1156,9 +1156,9 @@ impl SchedulerImpl {
                 // those prepayments into the canisters' task queues.
                 //
                 // Unconditional and idempotent, like
-                // `migrate_outcalls_cycles_to_use_cases` above: it is a no-op once a
-                // canister has been backfilled, and self-healing if a downgrade
-                // dropped the monotonic amounts.
+                // `migrate_outcalls_cycles_to_use_cases` above: it is a no-op once the
+                // monotonic amounts have been backfilled, and self-healing if a
+                // downgrade dropped them.
                 migrate_consumed_cycles_to_monotonic(state, &self.metrics, &self.log);
             }
             ExecutionRoundType::OrdinaryRound => {

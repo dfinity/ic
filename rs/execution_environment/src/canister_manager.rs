@@ -1393,15 +1393,11 @@ impl CanisterManager {
         // Note that it is the canister's `consumed_cycles` gauge and
         // `consumed_cycles_by_use_cases` gauges, not their monotonic counterparts,
         // that are moved into the subnet metrics below. That is deliberate: the gauges
-        // are the ones that reach furthest back. A canister decoded from a checkpoint
-        // that predates the monotonic amounts carries zeroes in them until a
-        // checkpoint round backfills them (see
-        // `migrate_consumed_cycles_to_monotonic`), and deletion is a management call,
-        // so it can happen in an ordinary round before that.
+        // are the ones that reach furthest back.
         //
-        // Once the canister has been backfilled the two agree anyway: a canister can
-        // only be deleted while `Stopped` and with empty queues, so it has no callback
-        // and no execution left holding an outstanding prepayment (see
+        // Once the monotonic amounts have been backfilled the two agree anyway: a
+        // canister can only be deleted while `Stopped` and with empty queues, so it
+        // has no callback and no execution left holding an outstanding prepayment (see
         // `SystemState::outstanding_prepayments`).
         let leftover_cycles = self
             .cycles_account_manager

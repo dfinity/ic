@@ -2386,8 +2386,8 @@ impl SystemState {
     ///     == consumed_cycles_by_use_cases_monotonic[u]
     /// ```
     ///
-    /// which hold whenever no execution is in progress or paused, once the canister
-    /// has been backfilled. They are not a precondition of
+    /// which hold whenever no execution is in progress or paused, once the monotonic
+    /// amounts have been backfilled. They are not a precondition of
     /// [`Self::migrate_consumed_cycles_to_monotonic`] but what that method
     /// establishes: a canister decoded from a checkpoint predating the monotonic
     /// amounts starts out with zeroes in them, so the left-hand sides are exactly the
