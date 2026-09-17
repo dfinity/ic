@@ -93,6 +93,7 @@ fn test(env: TestEnv) {
         || {
             block_on(explore(
                 nns_node.get_public_url(),
+                Some(nns_public_key.clone()),
                 app_subnet.subnet_id,
                 Some(cup_path.into()),
             ));
@@ -141,6 +142,7 @@ fn test(env: TestEnv) {
         || {
             block_on(explore(
                 nns_node.get_public_url(),
+                Some(nns_public_key.clone()),
                 app_subnet.subnet_id,
                 Some(cup_path.into()),
             ));

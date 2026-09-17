@@ -1542,12 +1542,17 @@ mod withdrawal_transactions {
                 gas_fee_estimate(),
             );
             let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
-            let maybe_reimburse_request = transactions
-                .maybe_reimburse_requests_iter()
-                .find(|r| r.cketh_ledger_burn_index() == cketh_ledger_burn_index)
-                .expect("maybe reimburse request not found");
-            assert_eq!(maybe_reimburse_request, &withdrawal_request);
-            assert!(!transactions.maybe_reimburse.is_empty());
+            assert!(
+                transactions
+                    .maybe_reimburse
+                    .contains(&cketh_ledger_burn_index)
+            );
+            assert_eq!(
+                transactions
+                    .pipeline
+                    .get_processed_request(&cketh_ledger_burn_index),
+                Some(&withdrawal_request)
+            );
 
             let receipt = transaction_receipt(&signed_tx, TransactionStatus::Success);
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
@@ -1684,11 +1689,17 @@ mod withdrawal_transactions {
                 gas_fee_estimate(),
             );
             let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
-            let maybe_reimburse_request = transactions
-                .maybe_reimburse_requests_iter()
-                .find(|r| r.cketh_ledger_burn_index() == cketh_ledger_burn_index)
-                .expect("maybe reimburse request not found");
-            assert_eq!(maybe_reimburse_request, &withdrawal_request.clone().into());
+            assert!(
+                transactions
+                    .maybe_reimburse
+                    .contains(&cketh_ledger_burn_index)
+            );
+            assert_eq!(
+                transactions
+                    .pipeline
+                    .get_processed_request(&cketh_ledger_burn_index),
+                Some(&withdrawal_request.clone().into())
+            );
 
             let receipt = transaction_receipt(&signed_tx, TransactionStatus::Failure);
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
@@ -2440,6 +2451,18 @@ mod oldest_incomplete_request_timestamp {
         create_and_record_transaction(&mut transactions, first_request, gas_fee_estimate());
 
         assert_eq!(transactions.oldest_incomplete_request_timestamp(), Some(10),);
+    }
+
+    #[test]
+    fn should_include_a_sweeper_funding_awaiting_finalization() {
+        let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
+        let mut funding = cketh_withdrawal_request_with_index(LedgerBurnIndex::new(15));
+        funding.created_at = Some(10);
+        let funding = WithdrawalRequest::SweeperFunding(funding);
+        transactions.record_request(funding.clone());
+        create_and_record_transaction(&mut transactions, funding, gas_fee_estimate());
+
+        assert_eq!(transactions.oldest_incomplete_request_timestamp(), Some(10));
     }
 
     #[test]

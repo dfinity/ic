@@ -1,23 +1,28 @@
 use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
 use crate::balance_scan::batcher::Delegation;
-use crate::deposit_address::{AddressSchema, DepositAddress};
+use crate::deposit_address::DepositAddress;
+use crate::eth_rpc::Hash;
+use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::management::{CallError, Reason};
 use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
-use crate::state::audit::{EventType, apply_state_transition};
+use crate::state::audit::{EventType, apply_state_transition, process_event};
 use crate::state::eth_logs_scraping::LogScrapings;
 use crate::state::event::AutomaticDeposit;
-use crate::state::transactions::{SweepId, SweepRequest};
+use crate::state::transactions::{PipelineRequest, SweepId, SweepRequest};
 use crate::state::{State, mutate_state, read_state};
 use crate::storage::with_event_iter;
 use crate::sweep::create_pending_sweeper_requests;
 use crate::test_fixtures::mock::MockCanisterRuntime;
 use crate::test_fixtures::{
     LATEST_BLOCK, account, another_account, automatic_deposit, delegation_response,
-    deposit_address, init_state, initial_state, prepay_sweep_gas, state_with_deposit_helper,
-    stub_rpc_client, usdc, usdt,
+    deposit_address, gas_fee_estimate, init_state, initial_state, only_one, prepay_sweep_gas,
+    state_with_deposit_helper, stub_rpc_client, transaction_signature, usdc, usdt,
 };
-use crate::tx::{Authorization, AuthorizationRequest, GasFeeEstimate, TransactionSignature};
+use crate::tx::{
+    AuthorizationRequest, GasFeeEstimate, SignableTransaction, Signed, SignedAuthorization,
+    TransactionSignature,
+};
 use ethnum::u256;
 use evm_rpc_types::{Hex, MultiRpcResult};
 use ic_canister_runtime::IcError;
@@ -110,7 +115,10 @@ async fn should_sign_and_record_one_authorization_for_every_account() {
     ]));
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
-    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
+    expect_authorization_signing(
+        &mut runtime,
+        &authorization_request(SWEEPER_CONTRACT, TransactionNonce::ZERO),
+    );
     expect_signing(&mut runtime);
     expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
 
@@ -131,7 +139,10 @@ async fn should_reuse_the_recorded_authorization_on_a_later_sweep() {
     init_state(state_ready_to_sign(&[(account(), usdc())]));
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
-    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
+    expect_authorization_signing(
+        &mut runtime,
+        &authorization_request(SWEEPER_CONTRACT, TransactionNonce::ZERO),
+    );
     expect_signing(&mut runtime);
     expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
 
@@ -152,8 +163,14 @@ async fn should_sign_a_fresh_authorization_when_the_sweeper_contract_changes() {
     init_state(state_ready_to_sign(&[(account(), usdc())]));
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
-    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
-    expect_authorization_signing(&mut runtime, ANOTHER_SWEEPER_CONTRACT, 1);
+    expect_authorization_signing(
+        &mut runtime,
+        &authorization_request(SWEEPER_CONTRACT, TransactionNonce::ZERO),
+    );
+    expect_authorization_signing(
+        &mut runtime,
+        &authorization_request(ANOTHER_SWEEPER_CONTRACT, TransactionNonce::ZERO),
+    );
     expect_signing(&mut runtime);
     expect_delegation_read(&mut runtime, &[(account(), Delegation::NotDelegated)]);
 
@@ -229,13 +246,8 @@ async fn should_carry_the_signed_attestation_and_authorization_of_every_swept_ac
 
     create_pending_sweeper_requests(&runtime).await;
 
-    let enqueued = pending_sweeps();
-    let [sweep] = enqueued.as_slice() else {
-        panic!("BUG: expected exactly one sweep, got {enqueued:?}");
-    };
-    let [item] = sweep.items.as_slice() else {
-        panic!("BUG: expected exactly one item, got {:?}", sweep.items);
-    };
+    let sweep = one_pending_sweep();
+    let item = only_one(&sweep.items);
     assert_eq!(item.item.deposit, deposit_address(&account()));
     assert_eq!(
         item.item.attestation,
@@ -243,12 +255,10 @@ async fn should_carry_the_signed_attestation_and_authorization_of_every_swept_ac
     );
     assert_eq!(
         item.authorization,
-        read_state(|s| s
-            .automatic_deposits
-            .authorization(&authorization_request(SWEEPER_CONTRACT))
-            .map(
-                |signature| authorization_request(SWEEPER_CONTRACT).signed_with(signature.clone())
-            ))
+        signed_stored_authorization(&authorization_request(
+            SWEEPER_CONTRACT,
+            TransactionNonce::ZERO
+        ))
     );
 }
 
@@ -316,10 +326,7 @@ async fn should_leave_out_a_deposit_whose_attestation_could_not_be_signed() {
 
     create_pending_sweeper_requests(&runtime).await;
 
-    let enqueued = pending_sweeps();
-    let [sweep] = enqueued.as_slice() else {
-        panic!("BUG: expected exactly one sweep, got {enqueued:?}");
-    };
+    let sweep = one_pending_sweep();
     assert_eq!(
         sweep
             .items
@@ -347,15 +354,10 @@ async fn should_sweep_a_delegated_address_without_an_authorization() {
 
     create_pending_sweeper_requests(&runtime).await;
 
-    let enqueued = pending_sweeps();
-    let [sweep] = enqueued.as_slice() else {
-        panic!("BUG: expected exactly one sweep, got {enqueued:?}");
-    };
-    let [item] = sweep.items.as_slice() else {
-        panic!("BUG: expected exactly one item, got {:?}", sweep.items);
-    };
+    let sweep = one_pending_sweep();
     assert_eq!(
-        item.authorization, None,
+        only_one(&sweep.items).authorization,
+        None,
         "an address already delegated to the sweeper contract must be swept carrying no authorization"
     );
     assert_eq!(
@@ -378,7 +380,10 @@ async fn should_sweep_an_address_delegated_elsewhere_with_a_nonce_zero_authoriza
     init_state(state_ready_to_sign(&[(account(), usdc())]));
     let mut runtime = mock();
     runtime.expect_time().return_const(NOW);
-    expect_authorization_signing(&mut runtime, SWEEPER_CONTRACT, 1);
+    expect_authorization_signing(
+        &mut runtime,
+        &authorization_request(SWEEPER_CONTRACT, TransactionNonce::ZERO),
+    );
     expect_signing(&mut runtime);
     expect_delegation_read(
         &mut runtime,
@@ -387,19 +392,15 @@ async fn should_sweep_an_address_delegated_elsewhere_with_a_nonce_zero_authoriza
 
     create_pending_sweeper_requests(&runtime).await;
 
-    let enqueued = pending_sweeps();
-    let [sweep] = enqueued.as_slice() else {
-        panic!("BUG: expected exactly one sweep, got {enqueued:?}");
-    };
-    let [item] = sweep.items.as_slice() else {
-        panic!("BUG: expected exactly one item, got {:?}", sweep.items);
-    };
+    let sweep = one_pending_sweep();
     let signature = stored_authorization(SWEEPER_CONTRACT)
         .expect("BUG: expected a signed authorization for the configured sweeper contract");
     assert_eq!(
-        item.authorization,
-        Some(authorization_request(SWEEPER_CONTRACT).signed_with(signature)),
-        "an address delegated to another contract must keep a nonce-0 authorization for the configured one"
+        only_one(&sweep.items).authorization,
+        Some(
+            authorization_request(SWEEPER_CONTRACT, TransactionNonce::ZERO).signed_with(signature)
+        ),
+        "an address delegated to another contract must get an authorization for the configured one at its tracked nonce, zero while none of its authorizations ever applied"
     );
     assert_eq!(
         sweep.gas_limit(),
@@ -427,10 +428,7 @@ async fn should_leave_out_an_address_holding_other_code() {
 
     create_pending_sweeper_requests(&runtime).await;
 
-    let enqueued = pending_sweeps();
-    let [sweep] = enqueued.as_slice() else {
-        panic!("BUG: expected exactly one sweep, got {enqueued:?}");
-    };
+    let sweep = one_pending_sweep();
     assert_eq!(
         sweep
             .items
@@ -533,26 +531,147 @@ async fn should_skip_the_tick_when_the_sweeper_contract_changed_since_the_read()
     }
 }
 
+#[tokio::test]
+async fn should_sign_a_rotation_authorization_at_the_tracked_nonce() {
+    let rotation = authorization_request(SWEEPER_CONTRACT, TransactionNonce::ONE);
+    let mut runtime = mock();
+    expect_authorization_signing(&mut runtime, &rotation);
+    finalize_a_first_sweep(&mut runtime).await;
+    queue_deposit(&account(), &usdc());
+
+    expect_delegation_read(
+        &mut runtime,
+        &[(account(), Delegation::Delegated(ANOTHER_SWEEPER_CONTRACT))],
+    );
+    create_pending_sweeper_requests(&runtime).await;
+
+    assert_eq!(
+        recorded_events()
+            .into_iter()
+            .filter(|event| matches!(event, EventType::AuthorizedDepositAddress { request, .. } if *request == rotation))
+            .count(),
+        1,
+        "rotating an address onto the configured contract must sign an authorization for the nonce the \
+         address has reached"
+    );
+    let sweep = one_pending_sweep();
+    assert_eq!(
+        only_one(&sweep.items).authorization,
+        signed_stored_authorization(&rotation),
+        "the sweep must carry the rotation, which is what makes it a type-0x04 transaction"
+    );
+}
+
+#[tokio::test]
+async fn should_rebuild_the_delegation_nonce_from_the_event_log() {
+    let mut runtime = mock();
+
+    finalize_a_first_sweep(&mut runtime).await;
+
+    let live = read_state(|s| s.automatic_deposits.clone());
+    assert_eq!(
+        live.delegation_nonce(&deposit_address(&account())),
+        TransactionNonce::ONE
+    );
+    let mut replayed = state_ready_to_sign(&[(account(), usdc())]);
+    for event in recorded_events() {
+        apply_state_transition(&mut replayed, &event);
+    }
+    assert_eq!(
+        replayed.automatic_deposits.is_equivalent_to(&live),
+        Ok(()),
+        "the nonce a sweep spent must be rebuilt by replaying the log, without an event of its own"
+    );
+}
+
+async fn finalize_a_first_sweep(runtime: &mut MockCanisterRuntime) {
+    init_state(state_ready_to_sign(&[(account(), usdc())]));
+    runtime.expect_time().return_const(NOW);
+    expect_signing(runtime);
+    expect_delegation_read(runtime, &[(account(), Delegation::NotDelegated)]);
+    create_pending_sweeper_requests(runtime).await;
+    finalize_sweep_through_the_event_log(&one_pending_sweep(), runtime);
+}
+
+fn finalize_sweep_through_the_event_log(request: &SweepRequest, runtime: &MockCanisterRuntime) {
+    let free_gas = GasFeeEstimate {
+        base_fee_per_gas: WeiPerGas::ZERO,
+        max_priority_fee_per_gas: WeiPerGas::ZERO,
+    };
+    let create = |estimate, nonce| {
+        request
+            .create_transaction(
+                nonce,
+                estimate,
+                request.gas_limit(),
+                initial_state().ethereum_network,
+            )
+            .expect("BUG: the sweep must be priced for the estimate it is created with")
+    };
+    let transaction = mutate_state(|s| {
+        let nonce = s.automatic_deposits.next_sweeper_transaction_nonce();
+        let transaction = create(free_gas, nonce);
+        process_event(
+            s,
+            EventType::CreatedSweeperTransaction {
+                sweep_id: request.id,
+                transaction: transaction.clone(),
+            },
+            runtime,
+        );
+        transaction
+    });
+    let signed = Signed::from((transaction.clone(), transaction_signature()));
+    let receipt = TransactionReceipt {
+        block_hash: Hash([0x11; 32]),
+        block_number: BlockNumber::new(4_190_269),
+        effective_gas_price: signed.transaction().max_fee_per_gas(),
+        gas_used: signed.transaction().gas_limit(),
+        status: TransactionStatus::Success,
+        transaction_hash: signed.hash(),
+    };
+    let bumped = create(gas_fee_estimate(), transaction.nonce());
+    mutate_state(|s| {
+        for event in [
+            EventType::SignedSweeperTransaction {
+                sweep_id: request.id,
+                transaction: signed,
+            },
+            EventType::ReplacedSweeperTransaction {
+                sweep_id: request.id,
+                transaction: bumped,
+            },
+            EventType::FinalizedSweeperTransaction {
+                sweep_id: request.id,
+                transaction_receipt: receipt,
+            },
+        ] {
+            process_event(s, event, runtime);
+        }
+    });
+}
+
+fn one_pending_sweep() -> SweepRequest {
+    only_one(&pending_sweeps()).clone()
+}
+
 fn pending_sweeps() -> Vec<SweepRequest> {
     read_state(|s| s.automatic_deposits.sweep_requests_batch(usize::MAX))
 }
 
-/// Expects `times` signatures over the authorization tuple every deposit address delegates with:
-/// the minter's chain, `delegate`, and nonce 0, signed along the deposit address' own derivation
-/// path.
-fn expect_authorization_signing(
-    runtime: &mut MockCanisterRuntime,
-    delegate: Address,
-    times: usize,
-) {
-    let digest = authorization_digest(delegate);
-    let path = derivation_path_bytes();
+fn expect_authorization_signing(runtime: &mut MockCanisterRuntime, request: &AuthorizationRequest) {
+    let digest = request.authorization().hash().0;
+    let path: Vec<Vec<u8>> = request
+        .derivation_path()
+        .into_iter()
+        .map(|index| index.into_vec())
+        .collect();
     runtime
         .expect_sign_with_ecdsa()
         .withf(move |_, derivation_path, message_hash| {
             *message_hash == digest && *derivation_path == path
         })
-        .times(times)
+        .times(1)
         .returning(sign_digest_with_derived_key);
 }
 
@@ -584,36 +703,26 @@ fn sign_digest_with_derived_key(
 fn stored_authorization(delegate: Address) -> Option<TransactionSignature> {
     read_state(|s| {
         s.automatic_deposits
-            .authorization(&authorization_request(delegate))
+            .authorization(&authorization_request(delegate, TransactionNonce::ZERO))
             .cloned()
     })
 }
 
-fn authorization_request(delegate: Address) -> AuthorizationRequest {
+fn signed_stored_authorization(request: &AuthorizationRequest) -> Option<SignedAuthorization> {
+    read_state(|s| {
+        s.automatic_deposits
+            .authorization(request)
+            .map(|signature| request.signed_with(signature.clone()))
+    })
+}
+
+fn authorization_request(delegate: Address, nonce: TransactionNonce) -> AuthorizationRequest {
     AuthorizationRequest::new(
         account(),
         initial_state().ethereum_network.chain_id(),
         delegate,
-        TransactionNonce::ZERO,
+        nonce,
     )
-}
-
-fn authorization_digest(delegate: Address) -> [u8; 32] {
-    Authorization {
-        chain_id: initial_state().ethereum_network.chain_id(),
-        delegate,
-        nonce: TransactionNonce::ZERO,
-    }
-    .hash()
-    .0
-}
-
-fn derivation_path_bytes() -> Vec<Vec<u8>> {
-    AddressSchema::Deposit(account())
-        .derivation_path()
-        .into_iter()
-        .map(|index| index.into_vec())
-        .collect()
 }
 
 fn state_ready_to_sign(deposits: &[(Account, Address)]) -> State {
@@ -626,13 +735,8 @@ fn state_ready_to_sign_with_unfunded_sweeper(deposits: &[(Account, Address)]) ->
     let mut state = state_with_deposit_helper(DEPOSIT_HELPER);
     state.sweeper_contract_address = Some(SWEEPER_CONTRACT);
     state.latest_block_height = Some(LATEST_BLOCK);
-    state.last_transaction_price_estimate = Some((
-        NOW - GAS_FEE_ESTIMATE_AGE_NANOS,
-        GasFeeEstimate {
-            base_fee_per_gas: WeiPerGas::ONE,
-            max_priority_fee_per_gas: WeiPerGas::ONE,
-        },
-    ));
+    state.last_transaction_price_estimate =
+        Some((NOW - GAS_FEE_ESTIMATE_AGE_NANOS, gas_fee_estimate()));
     for (account, token) in deposits {
         apply_state_transition(&mut state, &deposit_received(account, token));
     }

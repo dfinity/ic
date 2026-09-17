@@ -354,10 +354,12 @@ impl SweepRequest {
         }
     }
 
-    /// The delegations the sweep installs on the way, one per deposit address it still has to
-    /// delegate. Signed for nonce zero, so an authorization another sweep's delegation raced is
-    /// skipped rather than sinking the sweep. Empty once every address the sweep touches is
-    /// delegated, which is what makes it a plain EIP-1559 transaction.
+    /// The delegations the sweep installs on the way, one per deposit address it still has to point
+    /// at the configured sweeper contract, an address delegated to another contract included.
+    /// Signed for the nonce the minter tracks for the address, so an authorization another sweep's
+    /// delegation raced is skipped rather than sinking the sweep. Empty once every address the
+    /// sweep touches is delegated to that contract, which is what makes it a plain EIP-1559
+    /// transaction.
     pub fn authorizations(&self) -> Vec<SignedAuthorization> {
         self.items
             .iter()
@@ -889,6 +891,26 @@ where
         self.pending_requests.iter()
     }
 
+    /// When the oldest request the pipeline still owes a finalized transaction was recorded, or
+    /// `None` when every request it holds has finalized.
+    pub fn oldest_unfinalized_request_timestamp(&self) -> Option<u64> {
+        self.unfinalized_requests_iter()
+            .filter_map(PipelineRequest::created_at)
+            .min()
+    }
+
+    /// Every request the pipeline still owes a finalized transaction: those queued, and those whose
+    /// transaction has been created or sent but not finalized. A resubmitted request is yielded
+    /// once per stage it sits in, which callers that only aggregate do not care about.
+    fn unfinalized_requests_iter(&self) -> impl Iterator<Item = &R> {
+        self.pending_requests.iter().chain(
+            self.created_tx
+                .alt_keys()
+                .chain(self.sent_tx.alt_keys())
+                .filter_map(|id| self.processed_requests.get(id)),
+        )
+    }
+
     pub fn requests_len(&self) -> usize {
         self.pending_requests.len()
     }
@@ -1415,18 +1437,10 @@ impl WithdrawalTransactions {
         );
     }
 
-    fn maybe_reimburse_requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
-        self.maybe_reimburse
-            .iter()
-            .filter_map(|index| self.pipeline.get_processed_request(index))
-    }
-
-    /// Whether any request is still in flight, either awaiting a transaction or a reimbursement.
+    /// When the oldest withdrawal still awaiting a finalized transaction was recorded, or `None`
+    /// when none is outstanding.
     pub fn oldest_incomplete_request_timestamp(&self) -> Option<u64> {
-        self.requests_iter()
-            .chain(self.maybe_reimburse_requests_iter())
-            .flat_map(|req| req.created_at().into_iter())
-            .min()
+        self.pipeline.oldest_unfinalized_request_timestamp()
     }
 
     pub fn withdrawal_status(
