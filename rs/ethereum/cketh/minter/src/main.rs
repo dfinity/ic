@@ -1395,7 +1395,8 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                         .map(|age| age.as_secs() as f64)
                         .unwrap_or(0.0),
                     "Age of the oldest armed pair still waiting for a deposit to be detected; 0 if \
-                     none is armed.",
+                     none is armed. For dashboards, not alerts: a pair armed and never funded \
+                     keeps it near the scan window, which is ordinary user behaviour.",
                 )?;
                 w.encode_gauge(
                     "cketh_minter_queued_deposits",
