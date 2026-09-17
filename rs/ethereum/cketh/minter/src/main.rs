@@ -1231,6 +1231,13 @@ fn decode_ledger_memo(args: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
     memo::decode_ledger_memo(args)
 }
 
+/// Whole seconds elapsed at `now_nanos` since `since_nanos`, or zero when there is nothing to age.
+fn age_seconds(now_nanos: u64, since_nanos: Option<u64>) -> f64 {
+    since_nanos
+        .map(|since_nanos| (now_nanos.saturating_sub(since_nanos) / 1_000_000_000) as f64)
+        .unwrap_or(0.0)
+}
+
 #[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     use ic_metrics_encoder::MetricsEncoder;
@@ -1346,14 +1353,13 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
 
                 let now_nanos = ic_cdk::api::time();
-                let age_nanos = now_nanos.saturating_sub(
-                    s.withdrawal_transactions
-                        .oldest_incomplete_request_timestamp()
-                        .unwrap_or(now_nanos),
-                );
                 w.encode_gauge(
                     "cketh_oldest_incomplete_eth_withdrawal_request_age_seconds",
-                    (age_nanos / 1_000_000_000) as f64,
+                    age_seconds(
+                        now_nanos,
+                        s.withdrawal_transactions
+                            .oldest_incomplete_request_timestamp(),
+                    ),
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
@@ -1405,12 +1411,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
                 w.encode_gauge(
                     "cketh_minter_unfinalized_sweep_age_seconds",
-                    s.automatic_deposits
-                        .oldest_unfinalized_sweep()
-                        .map(|created_at| {
-                            (now_nanos.saturating_sub(created_at) / 1_000_000_000) as f64
-                        })
-                        .unwrap_or(0.0),
+                    age_seconds(now_nanos, s.automatic_deposits.oldest_unfinalized_sweep()),
                     "Age of the oldest sweep awaiting finalization; 0 if none is outstanding.",
                 )?;
                 w.encode_counter(
@@ -1503,13 +1504,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
                 w.encode_gauge(
                     "cketh_minter_sweeper_funding_in_flight_age_seconds",
-                    s.withdrawal_transactions
-                        .outstanding_sweeper_funding()
-                        .map(|funding| {
-                            (now_nanos.saturating_sub(funding.created_at.unwrap_or(now_nanos))
-                                / 1_000_000_000) as f64
-                        })
-                        .unwrap_or(0.0),
+                    age_seconds(
+                        now_nanos,
+                        s.withdrawal_transactions
+                            .outstanding_sweeper_funding()
+                            .and_then(|funding| funding.created_at),
+                    ),
                     "Age of the sweeper funding awaiting finalization; 0 if none is outstanding.",
                 )?;
 

@@ -719,9 +719,7 @@ impl AutomaticDeposits {
     /// the pipeline holds has finalized.
     pub fn oldest_unfinalized_sweep(&self) -> Option<u64> {
         self.sweeper_transactions
-            .unfinalized_requests_iter()
-            .map(|request| request.created_at)
-            .min()
+            .oldest_unfinalized_request_timestamp()
     }
 
     pub fn balance_scan_candidates(&self) -> u64 {
