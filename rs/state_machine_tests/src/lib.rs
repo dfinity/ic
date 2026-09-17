@@ -4589,8 +4589,12 @@ impl StateMachine {
             query: user_query,
             nns_delegation_builder: delegation.map(|delegation| {
                 Arc::new(
-                    NNSDelegationBuilder::try_new(delegation.certificate, self.get_subnet_id())
-                        .expect("failed to parse the delegation certificate"),
+                    NNSDelegationBuilder::try_new(
+                        delegation.certificate,
+                        self.get_subnet_id(),
+                        &self.replica_logger,
+                    )
+                    .expect("failed to parse the delegation certificate"),
                 )
             }),
             // Test fixture delegations are not guaranteed to be consistent with the test

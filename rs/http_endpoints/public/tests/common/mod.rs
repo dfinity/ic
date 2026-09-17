@@ -539,7 +539,7 @@ impl HttpEndpointBuilder {
         let (certified_height_watcher_tx, certified_height_watcher_rx) =
             watch::channel(self.certified_height.unwrap_or_default());
         let builder = self.delegation_from_nns.map(|delegation| {
-            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id).unwrap()
+            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &log).unwrap()
         });
         // Start the channel empty and *publish* the initial delegation below.
         // Publishing (rather than seeding the channel with the initial value)

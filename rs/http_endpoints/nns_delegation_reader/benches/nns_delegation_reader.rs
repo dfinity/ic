@@ -3,6 +3,7 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use ic_crypto_tree_hash::{LabeledTree, lookup_path};
+use ic_logger::no_op_logger;
 use ic_nns_delegation_reader::{CanisterRangesCheck, NNSDelegationBuilder};
 use ic_nns_delegation_reader_test_utils::create_fake_certificate_delegation;
 use ic_registry_routing_table::CanisterIdRange;
@@ -76,7 +77,13 @@ fn build_delegation_bench(
             .try_into()
             .unwrap();
 
-        let builder = NNSDelegationBuilder::new(certificate, labeled_tree, Blob(vec![]), SUBNET_0);
+        let builder = NNSDelegationBuilder::new(
+            certificate,
+            labeled_tree,
+            Blob(vec![]),
+            SUBNET_0,
+            &no_op_logger(),
+        );
 
         let build_verified = || {
             builder
@@ -86,6 +93,7 @@ fn build_delegation_bench(
                     |_subnet_id| {
                         Some(&certified_public_key)
                     },
+                    &no_op_logger(),
                 )
                 .unwrap_or_else(|err| panic!("Failed to build verified delegation (ranges check: {ranges_check:?}): {err:?}"))
         };

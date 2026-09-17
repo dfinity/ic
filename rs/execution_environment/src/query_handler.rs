@@ -88,6 +88,7 @@ fn get_latest_certified_state_and_data_certificate(
     nns_delegation_builder: Option<Arc<NNSDelegationBuilder>>,
     canister_ranges_check: CanisterRangesCheck,
     canister_id: CanisterId,
+    log: &ReplicaLogger,
 ) -> Result<CertifiedStateWithDataCertificate, QueryExecutionError> {
     // The path to fetch the data certificate for the canister.
     let path = SubTree(flatmap! {
@@ -121,6 +122,7 @@ fn get_latest_certified_state_and_data_certificate(
                             .get(&subnet_id)
                             .map(|subnet_topology| subnet_topology.public_key.as_slice())
                     },
+                    log,
                 )
                 .map_err(QueryExecutionError::DelegationInconsistentWithState)?;
             (Some(delegation), Some(metadata))
@@ -447,6 +449,7 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                     nns_delegation_builder,
                     canister_ranges_check,
                     query.receiver,
+                    &internal.log,
                 )
                 .map(
                     |CertifiedStateWithDataCertificate {

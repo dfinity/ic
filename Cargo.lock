@@ -11803,6 +11803,7 @@ dependencies = [
  "ic-canonical-state",
  "ic-certification 0.9.0",
  "ic-crypto-tree-hash",
+ "ic-logger",
  "ic-nns-delegation-reader-test-utils",
  "ic-registry-routing-table",
  "ic-test-utilities-types",

@@ -40,6 +40,7 @@ use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_logger::no_op_logger;
 use ic_nns_delegation_manager::{
     DelegationValidationError, DelegationVerificationError, NNSDelegationBuilder,
 };
@@ -2280,9 +2281,12 @@ fn drift_delegation_away_from_certified_state(
             // no longer matches the key in the certified state.
             let (new_delegation, _new_public_key) =
                 nns_delegation_and_public_key(None, existing_ranges);
-            let builder =
-                NNSDelegationBuilder::try_new(new_delegation.certificate, subnet_test_id(1))
-                    .unwrap();
+            let builder = NNSDelegationBuilder::try_new(
+                new_delegation.certificate,
+                subnet_test_id(1),
+                &no_op_logger(),
+            )
+            .unwrap();
             nns_delegation_watcher
                 .send(Some(Arc::new(builder)))
                 .unwrap();
@@ -2292,9 +2296,12 @@ fn drift_delegation_away_from_certified_state(
             // that no longer match the routing table in the certified state.
             let (new_delegation, _new_public_key) =
                 nns_delegation_and_public_key(Some(existing_public_key), new_ranges.as_ref());
-            let builder =
-                NNSDelegationBuilder::try_new(new_delegation.certificate, subnet_test_id(1))
-                    .unwrap();
+            let builder = NNSDelegationBuilder::try_new(
+                new_delegation.certificate,
+                subnet_test_id(1),
+                &no_op_logger(),
+            )
+            .unwrap();
             nns_delegation_watcher
                 .send(Some(Arc::new(builder)))
                 .unwrap();

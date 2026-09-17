@@ -334,6 +334,7 @@ pub(crate) fn get_verified_delegation(
                         .get(&subnet_id)
                         .map(|subnet_topology| subnet_topology.public_key.as_slice())
                 },
+                log,
             ) {
                 Ok((delegation, _metadata)) => Some(delegation),
                 Err(err) => {

@@ -500,6 +500,7 @@ async fn try_fetch_delegation_from_nns(
         labeled_tree,
         response.certificate,
         subnet_id,
+        log,
     );
 
     observe_delegation_sizes(&nns_delegation_builder, metrics);
@@ -1268,6 +1269,7 @@ mod tests {
                             .get(&subnet_id)
                             .map(|subnet_topology| subnet_topology.public_key.as_slice())
                     },
+                    &no_op_logger(),
                 )
                 .expect("Should return a valid delegation");
             let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
@@ -1478,6 +1480,7 @@ mod tests {
                             .get(&subnet_id)
                             .map(|subnet_topology| subnet_topology.public_key.as_slice())
                     },
+                    &no_op_logger(),
                 )
                 .expect("Should return a valid delegation");
             let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)

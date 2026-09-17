@@ -4942,8 +4942,12 @@ impl Operation for CallRequest {
                         let subnet_id = subnet.get_subnet_id();
                         let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
                         let builder = delegation.map(|delegation| {
-                            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id)
-                                .unwrap()
+                            NNSDelegationBuilder::try_new(
+                                delegation.certificate,
+                                subnet_id,
+                                &subnet.replica_logger,
+                            )
+                            .unwrap()
                         });
                         let (_, delegation_rx) = watch::channel(builder.map(Arc::new));
                         let metrics_registry = MetricsRegistry::new();
@@ -5064,7 +5068,12 @@ impl Operation for QueryRequest {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
                 let builder = delegation.map(|delegation| {
-                    NNSDelegationBuilder::try_new(delegation.certificate, subnet_id).unwrap()
+                    NNSDelegationBuilder::try_new(
+                        delegation.certificate,
+                        subnet_id,
+                        &subnet.replica_logger,
+                    )
+                    .unwrap()
                 });
                 let (_, delegation_rx) = watch::channel(builder.map(Arc::new));
                 let node = &subnet.nodes[0];
@@ -5155,7 +5164,12 @@ impl Operation for CanisterReadStateRequest {
                         "The NNS subnet should already exist if we are already executing requests",
                     );
                 let builder = delegation.map(|delegation| {
-                    NNSDelegationBuilder::try_new(delegation.certificate, subnet_id).unwrap()
+                    NNSDelegationBuilder::try_new(
+                        delegation.certificate,
+                        subnet_id,
+                        &subnet.replica_logger,
+                    )
+                    .unwrap()
                 });
                 let (_, delegation_rx) = watch::channel(builder.map(Arc::new));
                 subnet.certify_latest_state();
@@ -5236,7 +5250,12 @@ impl Operation for SubnetReadStateRequest {
                     );
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
                 let builder = delegation.map(|delegation| {
-                    NNSDelegationBuilder::try_new(delegation.certificate, subnet_id).unwrap()
+                    NNSDelegationBuilder::try_new(
+                        delegation.certificate,
+                        subnet_id,
+                        &subnet.replica_logger,
+                    )
+                    .unwrap()
                 });
                 let (_, delegation_rx) = watch::channel(builder.map(Arc::new));
                 subnet.certify_latest_state();

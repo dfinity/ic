@@ -11,6 +11,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_logger::no_op_logger;
 use ic_management_canister_types_private::{
     CanisterIdRange, CanisterIdRecord, CanisterMetricsArgs, CanisterMetricsResult,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
@@ -1724,7 +1725,7 @@ fn fake_delegation_builder(
             other => panic!("The fake delegation should certify a public key, got: {other:?}"),
         };
 
-    let builder = NNSDelegationBuilder::try_new(delegation.certificate, subnet_id)
+    let builder = NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &no_op_logger())
         .expect("The fake delegation should parse");
 
     (Arc::new(builder), certified_public_key)
@@ -1793,6 +1794,7 @@ fn query_handler_embeds_nns_delegation_matching_the_certified_state() {
             Some(Arc::clone(&builder)),
             ranges_check,
             canister_test_id(0),
+            &no_op_logger(),
         )
         .unwrap_or_else(|err| {
             panic!("The delegation matches the certified state, so the {ranges_check:?} check should succeed, got: {err:?}")
@@ -1836,6 +1838,7 @@ fn query_handler_returns_an_error_when_the_certified_public_key_drifts() {
             Some(Arc::clone(&builder)),
             ranges_check,
             canister_test_id(0),
+            &no_op_logger(),
         )
         .map(|_| ());
 
@@ -1876,6 +1879,7 @@ fn query_handler_returns_an_error_when_the_certified_canister_ranges_drift() {
             Some(Arc::clone(&builder)),
             ranges_check,
             canister_test_id(0),
+            &no_op_logger(),
         )
         .map(|_| ());
 
@@ -1901,6 +1905,7 @@ fn query_handler_returns_an_error_when_the_certified_canister_ranges_drift() {
         Some(builder),
         CanisterRangesCheck::NoCheck,
         canister_test_id(0),
+        &no_op_logger(),
     );
     assert!(
         result.is_ok(),
@@ -1919,6 +1924,7 @@ fn query_handler_without_nns_delegation_embeds_no_delegation() {
         None,
         CanisterRangesCheck::NoCheck,
         canister_test_id(0),
+        &no_op_logger(),
     )
     .unwrap_or_else(|err| panic!("Without a delegation there is nothing to verify: {err:?}"));
 
