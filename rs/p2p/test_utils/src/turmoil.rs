@@ -211,7 +211,9 @@ const WAIT_FOR_TIMEOUT: Duration = Duration::from_secs(60);
 ///
 /// `Sim::step` advances the *simulated* clock by `tick_duration` as fast as the
 /// CPU can step it, so a bare `while !f() { sim.step()?; }` loop runs simulated
-/// time at hundreds of thousands of times real speed.
+/// time orders of magnitude faster than real time -- measured at ~11000x for
+/// the 100 ms tick in `consensus_manager`'s tests, and higher still for the
+/// 1 ms default tick.
 ///
 /// That matters because not everything under test runs on the simulated clock.
 /// The artifact processor (`ic_artifact_manager`'s `process_messages`) runs on
@@ -250,13 +252,16 @@ pub fn wait_for<F>(sim: &mut Sim, mut f: F) -> turmoil::Result
 where
     F: FnMut() -> bool,
 {
+    let simulated_start = sim.elapsed();
     let deadline = Instant::now() + WAIT_FOR_TIMEOUT;
     while !f() {
         if Instant::now() >= deadline {
             return Err(format!(
                 "Condition not satisfied within {WAIT_FOR_TIMEOUT:?} of real time \
-                 ({:?} of simulated time)",
-                sim.elapsed()
+                 and {:?} of simulated time (the simulation is {:?} old, of the \
+                 `simulation_duration` configured on the `Builder`)",
+                sim.elapsed().saturating_sub(simulated_start),
+                sim.elapsed(),
             )
             .into());
         }
