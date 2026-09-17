@@ -41,9 +41,7 @@ use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::no_op_logger;
-use ic_nns_delegation_manager::{
-    DelegationValidationError, DelegationVerificationError, NNSDelegationBuilder,
-};
+use ic_nns_delegation_manager::NNSDelegationBuilder;
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
 };
@@ -2142,7 +2140,7 @@ fn test_call_v4_subnet_wrong_canister_or_method(
 }
 
 // ---------------------------------------------------------------------------
-// NNS delegation vs. certified state: the `call`, `read_state` and `query`
+// NNS delegation vs. certified state: the `call` and `read_state`
 // endpoints must reply with `503 SERVICE_UNAVAILABLE` when the NNS delegation the
 // replica would serve does not match its certified state. Otherwise the client
 // would receive a certificate whose delegation it cannot verify against the
@@ -2270,7 +2268,7 @@ enum DelegationDrift {
 /// according to `drift`, so that subsequent requests must return `503`.
 fn drift_delegation_away_from_certified_state(
     drift: &DelegationDrift,
-    nns_delegation_watcher: &watch::Sender<Option<Arc<NNSDelegationBuilder>>>,
+    nns_delegation_watcher: &watch::Sender<Option<NNSDelegationBuilder>>,
     latest_state: &Arc<Mutex<Labeled<Arc<ReplicatedState>>>>,
     existing_public_key: ThresholdSigPublicKey,
     existing_ranges: &[(CanisterId, CanisterId)],
@@ -2287,9 +2285,7 @@ fn drift_delegation_away_from_certified_state(
                 &no_op_logger(),
             )
             .unwrap();
-            nns_delegation_watcher
-                .send(Some(Arc::new(builder)))
-                .unwrap();
+            nns_delegation_watcher.send(Some(builder)).unwrap();
         }
         DelegationDrift::DelegationCanisterRangesChange { new_ranges } => {
             // The NNS pushes a fresh delegation certifying different canister ranges
@@ -2302,9 +2298,7 @@ fn drift_delegation_away_from_certified_state(
                 &no_op_logger(),
             )
             .unwrap();
-            nns_delegation_watcher
-                .send(Some(Arc::new(builder)))
-                .unwrap();
+            nns_delegation_watcher.send(Some(builder)).unwrap();
         }
         DelegationDrift::StateKeyChanges => {
             // The certified state starts certifying a different key (the routing
@@ -2659,55 +2653,5 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
                 );
             }
         }
-    });
-}
-
-/// The `query` endpoints reply with `503 SERVICE_UNAVAILABLE` when the query
-/// handler reports that the delegation does not match the certified state, i.e.
-/// when the [`QueryExecutionService`](ic_interfaces::execution_environment::QueryExecutionService)
-/// returns [`QueryExecutionError::OutdatedDelegation`] or
-/// [`QueryExecutionError::InvalidDelegation`].
-#[rstest]
-#[case(
-    QueryExecutionError::DelegationInconsistentWithState(
-        DelegationVerificationError::Inconsistent
-    ),
-    "This replica has an outdated delegation. Please try again."
-)]
-#[case(
-    QueryExecutionError::DelegationInconsistentWithState(DelegationVerificationError::Validation(
-        DelegationValidationError::UnexpectedTreeShape("missing public_key leaf".to_string())
-    )),
-    "This replica has an invalid delegation. Please try again."
-)]
-fn test_query_endpoint_returns_service_unavailable_on_delegation_mismatch(
-    #[values(query::Version::V2, query::Version::V3, query::Version::SubnetV3)]
-    version: query::Version,
-    #[case] query_execution_error: QueryExecutionError,
-    #[case] expected_message: &str,
-) {
-    let rt = Runtime::new().unwrap();
-    let addr = get_free_localhost_socket_addr();
-    let config = Config {
-        listen_addr: addr,
-        ..Default::default()
-    };
-
-    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
-
-    // The query execution service reports that the delegation is out of sync with
-    // the certified state.
-    rt.spawn(async move {
-        let (_, resp) = handlers.query_execution.next_request().await.unwrap();
-        resp.send_response(Err(query_execution_error));
-    });
-
-    rt.block_on(async {
-        wait_for_status_healthy(&addr).await.unwrap();
-
-        let response = query_endpoint(version, addr).await;
-
-        assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
-        assert_eq!(expected_message, response.text().await.unwrap());
     });
 }

@@ -97,6 +97,7 @@ pub fn start_nns_delegation_manager(
     tls_config: Arc<dyn TlsConfig>,
     cancellation_token: CancellationToken,
 ) -> (JoinHandle<()>, NNSDelegationReader) {
+    let logger = log.clone();
     let manager = DelegationManager {
         config,
         log,
@@ -119,7 +120,7 @@ pub fn start_nns_delegation_manager(
             .await
     });
 
-    (join_handle, NNSDelegationReader::new(rx))
+    (join_handle, NNSDelegationReader::new(rx, logger))
 }
 
 struct DelegationManager {
@@ -172,7 +173,7 @@ impl DelegationManager {
             .ok()
     }
 
-    async fn fetch(&self) -> Option<Arc<NNSDelegationBuilder>> {
+    async fn fetch(&self) -> Option<NNSDelegationBuilder> {
         let _timer = self.metrics.fetch_duration.start_timer();
 
         load_root_delegation(
@@ -187,17 +188,15 @@ impl DelegationManager {
             &self.metrics,
         )
         .await
-        .map(Arc::new)
     }
 
     /// Fetches a delegation from the NNS subnet proactively, i.e. without checking if the current
     /// delegation is still valid with respect to the certified state. If the new delegation is
     /// incompatible with the current certified state, it will be held back until the state has
     /// caught up (i.e. returns `None`).
-    async fn proactive_fetch(&self) -> Option<Option<Arc<NNSDelegationBuilder>>> {
+    async fn proactive_fetch(&self) -> Option<Option<NNSDelegationBuilder>> {
         let new_delegation = self.fetch().await;
-        if self.is_delegation_valid_with_respect_to_state(new_delegation.as_deref()) == Some(false)
-        {
+        if self.is_delegation_valid_with_respect_to_state(new_delegation.as_ref()) == Some(false) {
             // If the new delegation is incompatible with our state, hold it back. Once the state
             // will have caught up, `reactive_fetch` will fetch the new delegation.
             // When not being able to determine this (e.g. the call above returned `None`, still
@@ -215,7 +214,7 @@ impl DelegationManager {
     async fn reactive_fetch(
         &self,
         old_delegation: Option<&NNSDelegationBuilder>,
-    ) -> Option<Option<Arc<NNSDelegationBuilder>>> {
+    ) -> Option<Option<NNSDelegationBuilder>> {
         if self.is_delegation_valid_with_respect_to_state(old_delegation) == Some(false) {
             // If the old delegation is incompatible with our state, reactively fetch a new one.
             self.metrics.reactive_fetches.inc();
@@ -225,7 +224,7 @@ impl DelegationManager {
         None
     }
 
-    async fn run(self, sender: watch::Sender<Option<Arc<NNSDelegationBuilder>>>) {
+    async fn run(self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
         let mut proactive_interval = tokio::time::interval(DELEGATION_PROACTIVE_UPDATE_INTERVAL);
         let mut reactive_interval = tokio::time::interval(DELEGATION_REACTIVE_UPDATE_INTERVAL);
         // If we miss a tick because fetching the delegation took too long (f.ex. because the NNS
@@ -242,17 +241,17 @@ impl DelegationManager {
             // Fetch the delegation if enough time has passed
             let Some(new_delegation) = select!(
                 _ = proactive_interval.tick() => self.proactive_fetch().await,
-                _ = reactive_interval.tick() => self.reactive_fetch(last_delegation.as_deref()).await,
+                _ = reactive_interval.tick() => self.reactive_fetch(last_delegation.as_ref()).await,
             ) else {
                 // No new delegation was fetched. Retry on the next tick.
                 continue;
             };
 
-            sender.send_modify(|old_delegation: &mut Option<Arc<NNSDelegationBuilder>>| {
-                old_delegation.clone_from(&new_delegation);
+            if new_delegation != last_delegation {
                 self.metrics.updates.inc();
-            });
+            }
 
+            sender.send_replace(new_delegation.clone());
             last_delegation = new_delegation;
         }
     }
@@ -1259,7 +1258,7 @@ mod tests {
                 .expect("Should return some delegation on non NNS subnet");
 
             let network_topology = &mutable_state.read().unwrap().metadata.network_topology;
-            let (delegation, _metadata) = builder
+            let delegation = builder
                 .build_verified(
                     CanisterRangesCheck::AllSubnetRanges,
                     network_topology.routing_table_for_certification(),
@@ -1470,7 +1469,7 @@ mod tests {
             let builder = builder.expect("Should return Some delegation on non NNS subnet");
 
             let network_topology = &mutable_state.read().unwrap().metadata.network_topology;
-            let (delegation, _metadata) = builder
+            let delegation = builder
                 .build_verified(
                     CanisterRangesCheck::AllSubnetRanges,
                     network_topology.routing_table_for_certification(),

@@ -22,7 +22,7 @@ use crate::validation::{
 
 #[derive(Clone, Copy, Debug)]
 /// Filter for the canister ranges in the NNS delegation.
-enum CanisterRangesFilter {
+pub enum CanisterRangesFilter {
     /// Keep the `/subnet/<subnet_id>/canister_ranges` leaf and purge
     /// the whole `/canister_ranges` subtree.
     Flat,
@@ -34,18 +34,6 @@ enum CanisterRangesFilter {
     /// Purge both the `/canister_ranges` subtree and the `/subnet/<subnet_id>/canister_ranges`
     /// leaf.
     None,
-}
-
-impl From<CanisterRangesFilter> for CertificateDelegationMetadata {
-    fn from(canister_ranges_filter: CanisterRangesFilter) -> Self {
-        Self {
-            format: match canister_ranges_filter {
-                CanisterRangesFilter::Flat => CertificateDelegationFormat::Flat,
-                CanisterRangesFilter::Tree(_canister_id) => CertificateDelegationFormat::Tree,
-                CanisterRangesFilter::None => CertificateDelegationFormat::Pruned,
-            },
-        }
-    }
 }
 
 impl From<CanisterRangesCheck> for CanisterRangesFilter {
@@ -65,23 +53,50 @@ impl From<CanisterRangesCheck> for CanisterRangesFilter {
 /// Wrapper around [`tokio::sync::watch::Receiver`] with some utility methods.
 // TODO(CON-1487): Consider caching the delegations per canister range.
 pub struct NNSDelegationReader {
-    receiver: watch::Receiver<Option<Arc<NNSDelegationBuilder>>>,
+    receiver: watch::Receiver<Option<NNSDelegationBuilder>>,
+    logger: ReplicaLogger,
 }
 
 impl NNSDelegationReader {
-    pub fn new(receiver: watch::Receiver<Option<Arc<NNSDelegationBuilder>>>) -> Self {
-        Self { receiver }
+    pub fn new(
+        receiver: watch::Receiver<Option<NNSDelegationBuilder>>,
+        logger: ReplicaLogger,
+    ) -> Self {
+        Self { receiver, logger }
+    }
+
+    /// Returns the most recent NNS delegation known to the replica together with some metadata.
+    /// Consecutive calls might return different delegations.
+    /// Note: on the NNS subnet this always returns `None`.
+    pub fn get_delegation_with_metadata(
+        &self,
+        canister_ranges_filter: CanisterRangesFilter,
+    ) -> Option<(CertificateDelegation, CertificateDelegationMetadata)> {
+        let metadata = CertificateDelegationMetadata {
+            format: match canister_ranges_filter {
+                CanisterRangesFilter::Flat => CertificateDelegationFormat::Flat,
+                CanisterRangesFilter::Tree(_canister_id) => CertificateDelegationFormat::Tree,
+                CanisterRangesFilter::None => CertificateDelegationFormat::Pruned,
+            },
+        };
+
+        self.receiver.borrow().as_ref().map(|builder| {
+            (
+                builder.build_unverified(canister_ranges_filter, &self.logger),
+                metadata,
+            )
+        })
     }
 
     /// Returns a snapshot of the most recent NNS delegation known to the replica.
     /// Consecutive calls might return different delegations.
     /// Note: on the NNS subnet this always returns `None`.
     ///
-    /// The snapshot is immutable, so it can be used to verify the delegation against a
-    /// certified state and to build exactly the verified delegation (see
-    /// [`NNSDelegationBuilder::build_verified`]), without having to worry about the
+    /// The snapshot is immutable and cheap to clone, so it can be used to verify the
+    /// delegation against a certified state and to build exactly the verified delegation
+    /// (see [`NNSDelegationBuilder::build_verified`]), without having to worry about the
     /// delegation being concurrently replaced.
-    pub fn builder(&self) -> Option<Arc<NNSDelegationBuilder>> {
+    pub fn builder(&self) -> Option<NNSDelegationBuilder> {
         self.receiver.borrow().clone()
     }
 
@@ -90,12 +105,25 @@ impl NNSDelegationReader {
     }
 }
 
-#[derive(Debug)]
+/// Builds NNS delegations, in the different canister ranges formats, out of the
+/// delegation certificate received from the NNS.
+/// Cloning is cheap: every field is behind an `Arc`.
+#[derive(Clone, Debug)]
 pub struct NNSDelegationBuilder {
-    builder: NNSDelegationBuilderInner,
-    precomputed_delegation_with_flat_canister_ranges: CertificateDelegation,
-    precomputed_delegation_without_canister_ranges: CertificateDelegation,
+    builder: Arc<NNSDelegationBuilderInner>,
+    precomputed_delegation_with_flat_canister_ranges: Arc<CertificateDelegation>,
+    precomputed_delegation_without_canister_ranges: Arc<CertificateDelegation>,
 }
+
+/// Shortcut equality check since everything is derived deterministically from the original
+/// delegation
+impl PartialEq for NNSDelegationBuilder {
+    fn eq(&self, other: &Self) -> bool {
+        self.builder.original_delegation == other.builder.original_delegation
+    }
+}
+
+impl Eq for NNSDelegationBuilder {}
 
 impl NNSDelegationBuilder {
     pub fn try_new(
@@ -137,9 +165,13 @@ impl NNSDelegationBuilder {
             builder.build_uncached_or_original(CanisterRangesFilter::Flat, logger);
 
         Self {
-            builder,
-            precomputed_delegation_with_flat_canister_ranges,
-            precomputed_delegation_without_canister_ranges,
+            builder: Arc::new(builder),
+            precomputed_delegation_with_flat_canister_ranges: Arc::new(
+                precomputed_delegation_with_flat_canister_ranges,
+            ),
+            precomputed_delegation_without_canister_ranges: Arc::new(
+                precomputed_delegation_without_canister_ranges,
+            ),
         }
     }
 
@@ -158,15 +190,9 @@ impl NNSDelegationBuilder {
         routing_table: &RoutingTable,
         public_key_for_subnet: impl FnOnce(SubnetId) -> Option<&'a [u8]>,
         logger: &ReplicaLogger,
-    ) -> Result<(CertificateDelegation, CertificateDelegationMetadata), DelegationVerificationError>
-    {
-        let ranges_filter = CanisterRangesFilter::from(ranges_check);
-
+    ) -> Result<CertificateDelegation, DelegationVerificationError> {
         match self.is_consistent_with(ranges_check, routing_table, public_key_for_subnet) {
-            Ok(true) => Ok((
-                self.build_unverified(ranges_filter, logger),
-                ranges_filter.into(),
-            )),
+            Ok(true) => Ok(self.build_unverified(ranges_check.into(), logger)),
             Ok(false) => Err(DelegationVerificationError::Inconsistent),
             Err(err) => Err(DelegationVerificationError::Validation(err)),
         }
@@ -220,17 +246,17 @@ impl NNSDelegationBuilder {
     /// If for some reasons the delegation cannot be built, it returns the full delegation
     /// as received from the NNS. This means the returned delegation might contain
     /// both formats of the canister ranges.
-    fn build_unverified(
+    pub fn build_unverified(
         &self,
         canister_ranges_filter: CanisterRangesFilter,
         logger: &ReplicaLogger,
     ) -> CertificateDelegation {
         match canister_ranges_filter {
-            CanisterRangesFilter::Flat => self
-                .precomputed_delegation_with_flat_canister_ranges
-                .clone(),
+            CanisterRangesFilter::Flat => {
+                (*self.precomputed_delegation_with_flat_canister_ranges).clone()
+            }
             CanisterRangesFilter::None => {
-                self.precomputed_delegation_without_canister_ranges.clone()
+                (*self.precomputed_delegation_without_canister_ranges).clone()
             }
             CanisterRangesFilter::Tree(_canister_id) => self
                 .builder
@@ -422,7 +448,6 @@ mod tests {
     use ic_registry_routing_table::CanisterIdRange;
     use ic_test_utilities_types::ids::SUBNET_0;
 
-    /// Returns whether the given path exists in the delegation's certificate tree.
     fn path_exists(delegation: &CertificateDelegation, path: &[&[u8]]) -> bool {
         let parsed_delegation: Certificate =
             serde_cbor::from_slice(&delegation.certificate).unwrap();
@@ -704,7 +729,7 @@ mod tests {
     fn build_verified_returns_a_consistent_delegation() {
         let (builder, public_key) = create_consistency_check_fixture();
 
-        let (delegation, metadata) = builder
+        let delegation = builder
             .build_verified(
                 CanisterRangesCheck::AllSubnetRanges,
                 &routing_table_with(RANGES),
@@ -713,12 +738,6 @@ mod tests {
             )
             .expect("the delegation should be consistent with the state view");
 
-        assert_eq!(
-            metadata,
-            CertificateDelegationMetadata {
-                format: CertificateDelegationFormat::Flat
-            }
-        );
         // The returned delegation should be built with the requested filter.
         assert!(
             path_exists(

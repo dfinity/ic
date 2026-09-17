@@ -336,7 +336,7 @@ pub(crate) fn get_verified_delegation(
                 },
                 log,
             ) {
-                Ok((delegation, _metadata)) => Some(delegation),
+                Ok(delegation) => Some(delegation),
                 Err(err) => {
                     warn!(
                         every_n_seconds => LOG_EVERY_N_SECONDS,

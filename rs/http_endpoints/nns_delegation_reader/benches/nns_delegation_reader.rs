@@ -101,7 +101,7 @@ fn build_delegation_bench(
         println!(
             "The delegation size in bytes with {} canister ranges: {}",
             canister_id_ranges_count,
-            build_verified().0.certificate.len()
+            build_verified().certificate.len()
         );
 
         group.bench_function(

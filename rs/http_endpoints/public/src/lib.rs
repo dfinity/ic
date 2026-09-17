@@ -334,7 +334,6 @@ pub fn start_server(
     let query_router = |version| {
         QueryServiceBuilder::builder(
             log.clone(),
-            metrics.clone(),
             node_id,
             query_signer.clone(),
             registry_client.clone(),

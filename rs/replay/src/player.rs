@@ -21,8 +21,7 @@ use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
     certification::CertificationPool,
     execution_environment::{
-        CanisterRangesCheck, IngressHistoryReader, QueryExecutionError, QueryExecutionInput,
-        QueryExecutionService,
+        IngressHistoryReader, QueryExecutionError, QueryExecutionInput, QueryExecutionService,
     },
     messaging::{MessageRouting, MessageRoutingError},
     time_source::SysTimeSource,
@@ -903,8 +902,7 @@ impl Player {
         self.certify_state_with_dummy_certification();
         let input = QueryExecutionInput {
             query,
-            nns_delegation_builder: None,
-            canister_ranges_check: CanisterRangesCheck::NoCheck,
+            certificate_delegation_with_metadata: None,
         };
         match self
             .runtime
@@ -918,8 +916,8 @@ impl Player {
                 WasmResult::Reject(e) => Err(format!("Query rejected: {e}")),
             },
             Ok((Err(err), _)) => Err(format!("Query failed: {err:?}")),
-            Err(err) => {
-                panic!("Query failed: {err}.")
+            Err(QueryExecutionError::CertifiedStateUnavailable) => {
+                panic!("Certified state unavailable for query call.")
             }
         }
     }
@@ -1215,8 +1213,7 @@ impl PerformQuery for Arc<Mutex<QueryExecutionService>> {
             .clone();
         let input = QueryExecutionInput {
             query,
-            nns_delegation_builder: None,
-            canister_ranges_check: CanisterRangesCheck::NoCheck,
+            certificate_delegation_with_metadata: None,
         };
         query_execution_service.oneshot(input).await
     }
@@ -1272,7 +1269,9 @@ async fn get_changes_since(
             WasmResult::Reject(e) => Err(format!("Query rejected: {e}")),
         },
         Ok((Err(err), _)) => Err(format!("Query failed: {err:?}")),
-        Err(err) => Err(format!("Query failed: {err}.")),
+        Err(QueryExecutionError::CertifiedStateUnavailable) => {
+            Err("Certified state unavailable for query call.".to_string())
+        }
     }
 }
 
@@ -1311,9 +1310,10 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
         // Handle problems with sending.
         let result = match result {
             Ok((ok, _version)) => ok,
-            Err(err) => {
+            Err(QueryExecutionError::CertifiedStateUnavailable) => {
                 return Err(format!(
-                    "Registry get_chunk query call with key={:?} failed: {err}.",
+                    "Certified state unavailable for Registry get_chunk query \
+                     call with key={:?}.",
                     String::from_utf8_lossy(chunk_content_sha256),
                 ));
             }

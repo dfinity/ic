@@ -438,7 +438,7 @@ pub struct HttpEndpointHandles {
     /// Sender feeding the NNS delegation the endpoint serves. Sending a new
     /// value swaps the delegation the running endpoint uses, which lets tests
     /// simulate the NNS delegation changing at runtime.
-    pub nns_delegation_watcher: watch::Sender<Option<Arc<NNSDelegationBuilder>>>,
+    pub nns_delegation_watcher: watch::Sender<Option<NNSDelegationBuilder>>,
 }
 
 pub struct HttpEndpointBuilder {
@@ -548,9 +548,10 @@ impl HttpEndpointBuilder {
         // sender alive (and hand it back to the test) so that tests can swap the
         // delegation at runtime, instead of dropping it.
         let (nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(None);
-        let nns_delegation_reader = NNSDelegationReader::new(nns_delegation_watcher_rx);
+        let nns_delegation_reader =
+            NNSDelegationReader::new(nns_delegation_watcher_rx, log.clone());
         nns_delegation_watcher_tx
-            .send(builder.map(Arc::new))
+            .send(builder)
             .expect("The NNS delegation receiver should be alive.");
 
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
