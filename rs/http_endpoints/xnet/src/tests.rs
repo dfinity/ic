@@ -813,11 +813,12 @@ async fn handle_advert_from_non_member() {
     );
 }
 
-/// An advert that fails to verify is attributed to the subnet that sent it.
+/// An advert the handler cannot decode is not a verification failure: it is
+/// only counted as a `decode_error` status.
 #[tokio::test]
-async fn handle_advert_invalid() {
+async fn handle_advert_handler_decode_error() {
     let fixture = EndpointTestFixture::with_advert_outcome(|| {
-        Err(XNetAdvertError::Invalid("invalid signature".into()))
+        Err(XNetAdvertError::DecodeError("not a stream slice".into()))
     });
 
     let response = fixture.post_advert(
@@ -828,7 +829,27 @@ async fn handle_advert_invalid() {
 
     assert_eq!(400, response.status().as_u16());
     assert_eq!(
-        metric_vec(&[(&[("status", &"invalid".to_string())], 1)]),
+        metric_vec(&[(&[("status", &"decode_error".to_string())], 1)]),
+        fixture.advert_counts()
+    );
+    assert!(fixture.advert_verification_failure_counts().is_empty());
+}
+
+/// An advert that fails to verify is attributed to the subnet that sent it.
+#[tokio::test]
+async fn handle_advert_invalid_signature() {
+    let fixture =
+        EndpointTestFixture::with_advert_outcome(|| Err(XNetAdvertError::InvalidSignature));
+
+    let response = fixture.post_advert(
+        NO_STREAM_SUBNET,
+        &header_only_slice(),
+        Some(NO_STREAM_SUBNET_NODE),
+    );
+
+    assert_eq!(400, response.status().as_u16());
+    assert_eq!(
+        metric_vec(&[(&[("status", &"invalid_signature".to_string())], 1)]),
         fixture.advert_counts()
     );
     assert_eq!(
