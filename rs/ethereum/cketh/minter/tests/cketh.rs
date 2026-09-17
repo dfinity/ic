@@ -1385,10 +1385,13 @@ fn should_export_the_sweep_pipeline_metrics() {
         .assert_contains_metric_matching(r"cketh_minter_unfinalized_sweep_age_seconds 0 \d+")
         .assert_contains_metric_matching(r"cketh_minter_balance_scan_candidates_total 0 \d+")
         .assert_contains_metric_matching(
-            r#"cketh_minter_balance_scan_errors_total\{kind="eth_call"\} 0 \d+"#,
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="ok"\} 0 \d+"#,
         )
         .assert_contains_metric_matching(
-            r#"cketh_minter_balance_scan_errors_total\{kind="decode"\} 0 \d+"#,
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="eth_call_error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="decode_error"\} 0 \d+"#,
         )
         .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds 90 \d+");
 }

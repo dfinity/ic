@@ -12,6 +12,7 @@ use std::time::Duration;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
 pub struct SweepObservations {
+    balance_scan_chunks_read: u64,
     balance_scan_call_errors: u64,
     balance_scan_decode_errors: u64,
     balance_scan_fresh_since: Option<Timestamp>,
@@ -27,9 +28,15 @@ impl SweepObservations {
         }
     }
 
-    /// Records the chunks of one balance-scan pass that did not come back, whether or not any
-    /// other chunk of that pass did.
-    pub fn record_balance_scan_errors(&mut self, ScanErrors { call, decode }: ScanErrors) {
+    /// Records how the chunks of one balance-scan pass fared: `read` came back with balances, the
+    /// rest failed at the call or at decoding what it returned. Together they are the chunks the
+    /// pass attempted, so the failures can be read as a share of them.
+    pub fn record_balance_scan_chunks(
+        &mut self,
+        read: u64,
+        ScanErrors { call, decode }: ScanErrors,
+    ) {
+        self.balance_scan_chunks_read = self.balance_scan_chunks_read.saturating_add(read);
         self.balance_scan_call_errors = self.balance_scan_call_errors.saturating_add(call);
         self.balance_scan_decode_errors = self.balance_scan_decode_errors.saturating_add(decode);
     }
@@ -39,6 +46,10 @@ impl SweepObservations {
     /// failed, says nothing about how long ago the scan last worked.
     pub fn record_completed_balance_scan(&mut self, started_at: Timestamp) {
         self.balance_scan_fresh_since = Some(started_at);
+    }
+
+    pub fn balance_scan_chunks_read(&self) -> u64 {
+        self.balance_scan_chunks_read
     }
 
     pub fn balance_scan_call_errors(&self) -> u64 {

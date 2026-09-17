@@ -1427,16 +1427,20 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                      entered the sweep queue.",
                 )?;
                 w.counter_vec(
-                    "cketh_minter_balance_scan_errors_total",
-                    "Balance-scan batches that yielded no balances, by where they failed. Resets \
-                     on upgrade.",
+                    "cketh_minter_balance_scan_chunks_total",
+                    "Balance-scan batches attempted, by outcome: `ok` returned balances, the \
+                     others yielded none. Resets on upgrade.",
                 )?
                 .value(
-                    &[("kind", "eth_call")],
+                    &[("outcome", "ok")],
+                    s.sweep_observations.balance_scan_chunks_read() as f64,
+                )?
+                .value(
+                    &[("outcome", "eth_call_error")],
                     s.sweep_observations.balance_scan_call_errors() as f64,
                 )?
                 .value(
-                    &[("kind", "decode")],
+                    &[("outcome", "decode_error")],
                     s.sweep_observations.balance_scan_decode_errors() as f64,
                 )?;
                 w.encode_gauge(

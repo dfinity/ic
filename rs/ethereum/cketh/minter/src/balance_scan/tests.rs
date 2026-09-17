@@ -195,6 +195,10 @@ async fn should_advance_scanned_non_candidate_pairs() {
         read_state(|s| s.sweep_observations.last_balance_scan_age(now)),
         Some(Duration::ZERO)
     );
+    assert_eq!(
+        read_state(|s| s.sweep_observations.balance_scan_chunks_read()),
+        1
+    );
 }
 
 #[tokio::test]
@@ -291,6 +295,12 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
             read_state(|s| s.sweep_observations.last_balance_scan_age(now)),
             None,
             "case '{}': a pass that read nothing must not look fresh",
+            case.name
+        );
+        assert_eq!(
+            read_state(|s| s.sweep_observations.balance_scan_chunks_read()),
+            0,
+            "case: {}",
             case.name
         );
         assert_eq!(
